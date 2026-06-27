@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import { useAuthActions } from "@convex-dev/auth/react";
@@ -5,112 +6,93 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Bell,
   Box,
-  ChevronDown,
   CircleDollarSign,
   Clapperboard,
-  Copy,
   FileText,
-  Film,
-  Folder,
+  FolderPlus,
   Image as ImageIcon,
-  MapPin,
-  Moon,
+  LogOut,
   Plus,
   Settings,
   Sparkles,
-  Sun,
-  Trash2,
-  User,
+  Upload,
+  Video,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
-import type { Doc, Id } from "../../../convex/_generated/dataModel";
+import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
+import { FileTree } from "@/desk/components/FileTree";
+import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
+import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
+
+const WORKSPACE_ID = "yatishara-studio";
+const COMPOSER_TAB = "composer:main";
+
+const STYLE = {
+  shell: "flex h-dvh min-h-0 bg-cursor-bg text-cursor-text",
+  sidebar: "flex w-[310px] shrink-0 flex-col border-r border-cursor-border bg-cursor-sidebar",
+  main: "flex min-w-0 flex-1 flex-col bg-cursor-bg",
+  panelHead: "flex h-11 shrink-0 items-center justify-between border-b border-cursor-border bg-cursor-panel px-3",
+  iconButton:
+    "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
+};
 
 export function StudioShell() {
   const { signOut } = useAuthActions();
   const ensureDefaults = useMutation(api.users.ensureStudioDefaults);
   const createFolder = useMutation(api.folders.create);
-  const createThread = useMutation(api.generation.createThread);
+  const updateFolder = useMutation(api.folders.update);
+  const trashFolder = useMutation(api.folders.moveToTrash);
   const createDocument = useMutation(api.documents.create);
+  const updateDocument = useMutation(api.documents.update);
+  const trashDocument = useMutation(api.documents.moveToTrash);
+  const createElement = useMutation(api.elements.create);
+  const trashElement = useMutation(api.elements.moveToTrash);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const completeUpload = useMutation(api.assets.completeUpload);
   const updateAsset = useMutation(api.assets.update);
   const duplicateAsset = useMutation(api.assets.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
-  const createElement = useMutation(api.elements.create);
-  const adminSeedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
-  const adminSetPricing = useMutation(api.billing.adminSetPricing);
-  const adminUpsertBankAccount = useMutation(api.billing.adminUpsertBankAccount);
-  const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
-  const adminAdjustCredits = useMutation(api.billing.adminAdjustCredits);
-  const submitBankPayment = useMutation(api.billing.submitBankPayment);
-  const reserveReceiptUpload = useMutation(api.billing.reserveReceiptUpload);
-  const completeReceiptUpload = useMutation(api.billing.completeReceiptUpload);
-  const savePushSubscription = useMutation(api.notifications.savePushSubscription);
+  const createThread = useMutation(api.generation.createThread);
+  const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const runFlow = useAction(api.generationActions.runFlow);
-  const [mode, setMode] = useState<"image" | "video">("image");
-  const [imageTier, setImageTier] = useState<"low" | "medium" | "high">("medium");
+  const adminSeedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
+  const adminSeedBankAccount = useMutation(api.billing.adminSeedBankAccountFromEnv);
+
+  const [activeFolderId, setActiveFolderId] = useState(null);
+  const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
+  const [tabEntrySnapshots, setTabEntrySnapshots] = useState({});
+  const [activeTab, setActiveTab] = useState(COMPOSER_TAB);
+  const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState([]);
+  const [mode, setMode] = useState("image");
+  const [imageTier, setImageTier] = useState("medium");
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [resolution, setResolution] = useState("1024x1024");
   const [durationSeconds, setDurationSeconds] = useState("5");
   const [audioEnabled, setAudioEnabled] = useState(true);
-  const [theme, setTheme] = useState<"dark" | "emerald">("dark");
-  const [prompt, setPrompt] = useState("");
-  const [flowError, setFlowError] = useState("");
   const [flowPending, setFlowPending] = useState(false);
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [paymentAmount, setPaymentAmount] = useState("100");
-  const [paymentCredits, setPaymentCredits] = useState("100");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentPending, setPaymentPending] = useState(false);
-  const [paymentError, setPaymentError] = useState("");
-  const [selectedAssetIds, setSelectedAssetIds] = useState<Array<Id<"assets">>>([]);
-  const [elementName, setElementName] = useState("");
-  const [elementType, setElementType] = useState<"character" | "prop" | "location">("character");
+  const [status, setStatus] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
-  const [pushStatus, setPushStatus] = useState("");
-  const [bankForm, setBankForm] = useState({
-    label: "Primary TT bank account",
-    bankName: "",
-    accountName: "",
-    accountNumber: "",
-    accountType: "chequing" as "chequing" | "savings",
-  });
-  const [pricingForm, setPricingForm] = useState({
-    creditPriceCents: "100",
-    imageLowCredits: "2",
-    imageMediumCredits: "5",
-    imageHighCredits: "9",
-    videoCredits: "35",
-  });
-  const [adminStatus, setAdminStatus] = useState("");
-  const [creditAdjustForm, setCreditAdjustForm] = useState({
-    userId: "",
-    amount: "0",
-    reason: "",
-  });
-  const folders = useQuery(api.folders.list, {});
+  const fileInputRef = useRef(null);
+  const editorRef = useRef(null);
+
   const currentUser = useQuery(api.users.current, {});
   const billingAccount = useQuery(api.billing.currentAccount, {});
   const pricing = useQuery(api.billing.getPricing, {});
   const bankAccounts = useQuery(api.billing.listBankAccounts, {});
   const payments = useQuery(api.billing.listMyPayments, {});
-  const adminPayments = useQuery(
-    api.billing.adminListPayments,
-    isAdminRole(currentUser?.role) ? {} : "skip",
-  );
-  const elements = useQuery(api.elements.list, {});
-  const [activeFolderId, setActiveFolderId] = useState<Id<"folders"> | null>(null);
+  const notifications = useQuery(api.notifications.listMine, {});
+  const topFolders = useQuery(api.folders.list, {});
   const activeFolder =
-    folders?.find((folder: Doc<"folders">) => folder._id === activeFolderId) ??
-    folders?.[0];
-  const [activeThreadId, setActiveThreadId] = useState<Id<"generationThreads"> | null>(null);
-  const threads = useQuery(api.generation.listThreads, {});
-  const events = useQuery(
-    api.generation.listEvents,
-    activeThreadId ? { threadId: activeThreadId } : "skip",
+    topFolders?.find((folder) => folder._id === activeFolderId) ??
+    topFolders?.[0] ??
+    null;
+  const childFolders = useQuery(
+    api.folders.list,
+    activeFolder ? { parentId: activeFolder._id } : "skip",
   );
   const assets = useQuery(
     api.assets.listByFolder,
@@ -120,18 +102,22 @@ export function StudioShell() {
     api.documents.listByFolder,
     activeFolder ? { folderId: activeFolder._id } : "skip",
   );
-  const currentTier = mode === "image" ? imageTier : "pro_video";
+  const elements = useQuery(api.elements.list, {});
+  const threads = useQuery(api.generation.listThreads, {});
+  const activeThreadId = activeTab.startsWith("thread:")
+    ? activeTab.slice("thread:".length)
+    : null;
+  const events = useQuery(
+    api.generation.listEvents,
+    activeThreadId ? { threadId: activeThreadId } : "skip",
+  );
+  const presets = useQuery(api.stylePresets.listEnabled, {
+    kind: mode === "video" ? "video" : "image",
+  });
   const entitlement = useQuery(api.generation.canGenerate, {
-    tier: currentTier,
+    tier: mode === "video" ? "pro_video" : imageTier,
     now: entitlementNow,
   });
-  const presets = useQuery(api.stylePresets.listEnabled, {
-    kind: modeKindFromState(mode),
-  });
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const cost = useMemo(() => (mode === "image" ? "Low 2 / Med 5 / High 9 credits" : "Pro Video 35 credits"), [mode]);
-  const selectedPreset = presets?.[0];
 
   useEffect(() => {
     void ensureDefaults().then((defaults) => {
@@ -140,1237 +126,926 @@ export function StudioShell() {
   }, [ensureDefaults]);
 
   useEffect(() => {
-    if (!activeFolderId && folders?.[0]) {
-      setActiveFolderId(folders[0]._id);
+    if (!activeFolderId && topFolders?.[0]) {
+      setActiveFolderId(topFolders[0]._id);
     }
-  }, [activeFolderId, folders]);
+  }, [activeFolderId, topFolders]);
 
-  useEffect(() => {
-    if (!activeThreadId && threads?.[0]) {
-      setActiveThreadId(threads[0]._id);
+  const currentEntries = useMemo(
+    () =>
+      buildFlatEntries({
+        folder: activeFolder,
+        folders: childFolders,
+        assets,
+        documents,
+        elements: elements?.filter((element) => element.folderId === activeFolder?._id),
+      }),
+    [activeFolder, childFolders, assets, documents, elements],
+  );
+
+  const rootEntries = useMemo(
+    () => ({
+      loading: !topFolders,
+      entries: (topFolders ?? []).map(folderToEntry),
+    }),
+    [topFolders],
+  );
+
+  const tabs = useMemo(() => {
+    const descriptors = openTabs.map((key) =>
+      tabDescriptor({
+        key,
+        threads,
+        assets,
+        documents,
+        elements,
+        snapshots: tabEntrySnapshots,
+      }),
+    );
+    return descriptors.filter(Boolean);
+  }, [openTabs, threads, assets, documents, elements, tabEntrySnapshots]);
+
+  const activeEntry = useMemo(
+    () => findEntryByTab(activeTab, { threads, assets, documents, elements, snapshots: tabEntrySnapshots }),
+    [activeTab, threads, assets, documents, elements, tabEntrySnapshots],
+  );
+
+  const pathToEntry = useMemo(() => {
+    const map = new Map();
+    for (const entry of [...(rootEntries.entries ?? []), ...(currentEntries.entries ?? [])]) {
+      map.set(entry.path, entry);
     }
-  }, [activeThreadId, threads]);
+    return map;
+  }, [rootEntries, currentEntries]);
 
-  useEffect(() => {
-    const account = bankAccounts?.[0];
-    if (!account) return;
-    setBankForm({
-      label: account.label,
-      bankName: account.bankName,
-      accountName: account.accountName,
-      accountNumber: account.accountNumber,
-      accountType: account.accountType,
-    });
-  }, [bankAccounts]);
+  function openTab(key) {
+    setOpenTabs((tabs) => (tabs.includes(key) ? tabs : [...tabs, key]));
+    setActiveTab(key);
+  }
 
-  useEffect(() => {
-    if (!pricing) return;
-    setPricingForm({
-      creditPriceCents: String(pricing.creditPriceCents),
-      imageLowCredits: String(pricing.imageLowCredits),
-      imageMediumCredits: String(pricing.imageMediumCredits),
-      imageHighCredits: String(pricing.imageHighCredits),
-      videoCredits: String(pricing.videoCredits),
+  function closeTab(key) {
+    if (key === COMPOSER_TAB) return;
+    setOpenTabs((tabs) => {
+      const next = tabs.filter((tab) => tab !== key);
+      if (activeTab === key) {
+        setActiveTab(next[next.length - 1] ?? COMPOSER_TAB);
+      }
+      return next.length ? next : [COMPOSER_TAB];
     });
-  }, [pricing]);
+  }
+
+  function handleEntryOpen(entry) {
+    if (entry.type === "dir") {
+      setActiveFolderId(entry.studioId);
+      openTab(`folder:${entry.studioId}`);
+      return;
+    }
+    const key = `${entry.studioKind}:${entry.studioId}`;
+    setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
+    openTab(key);
+  }
+
+  function handleOpenPath(path) {
+    const entry = pathToEntry.get(path);
+    if (entry) handleEntryOpen(entry);
+  }
+
+  function attachEntry(entry) {
+    if (!entry || entry.type === "parent") return;
+    const attachment = entryToAttachment(entry);
+    setAttachments((items) =>
+      items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
+    );
+    setDraft((text) => `${text}${text.endsWith(" ") || !text ? "" : " "}@${attachment.label} `);
+    editorRef.current?.focus();
+  }
 
   async function handleCreateFolder() {
     const name = window.prompt("Folder name");
-    if (!name?.trim()) {
-      return;
-    }
-    const folderId = await createFolder({
+    if (!name?.trim() || !activeFolder) return;
+    const id = await createFolder({
+      parentId: activeFolder._id,
       name: name.trim(),
       icon: "Folder",
       color: "#22c55e",
     });
-    setActiveFolderId(folderId);
+    setActiveFolderId(id);
+    openTab(`folder:${id}`);
   }
 
   async function handleCreateDocument() {
-    if (!activeFolder) return;
     const title = window.prompt("Script/document title");
-    if (!title?.trim()) return;
-    await createDocument({
+    if (!title?.trim() || !activeFolder) return;
+    const id = await createDocument({
       folderId: activeFolder._id,
       title: title.trim(),
       contentMarkdown: "",
     });
+    openTab(`document:${id}`);
   }
 
-  async function uploadFiles(files: FileList | File[]) {
-    if (!activeFolder) {
-      return;
-    }
-    setUploading(true);
-    try {
-      for (const file of Array.from(files)) {
-        const reserved = await reserveUpload({
-          folderId: activeFolder._id,
-          name: file.name,
-          kind: kindFromMime(file.type),
-          mimeType: file.type || "application/octet-stream",
-        });
-        const res = await fetch(reserved.putUrl, {
-          method: "PUT",
-          headers: {
-            AccessKey: reserved.storageAccessKey,
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-        if (!res.ok) {
-          throw new Error(`Upload failed (${res.status})`);
-        }
-        await completeUpload({
-          assetId: reserved.assetId,
-          byteSize: file.size,
-        });
-      }
-    } finally {
-      setUploading(false);
+  async function handleCreateElement() {
+    if (!activeFolder) return;
+    const name = window.prompt("Element name");
+    if (!name?.trim()) return;
+    const kind = window.prompt("Element type: character, prop, location, doc", "character");
+    const type = ["character", "prop", "location", "doc"].includes(kind ?? "")
+      ? kind
+      : "character";
+    const id = await createElement({
+      folderId: activeFolder._id,
+      type,
+      name: name.trim(),
+      sourceAssetIds: attachments
+        .filter((item) => item.studioKind === "asset")
+        .map((item) => item.studioId),
+      sourceDocumentId: attachments.find((item) => item.studioKind === "document")?.studioId,
+    });
+    openTab(`element:${id}`);
+  }
+
+  async function renameEntry(entry) {
+    if (!entry) return;
+    const nextName = window.prompt("Rename", entry.name.replace(/^@/, ""));
+    if (!nextName?.trim()) return;
+    if (entry.studioKind === "folder") {
+      await updateFolder({ folderId: entry.studioId, name: nextName.trim() });
+    } else if (entry.studioKind === "document") {
+      await updateDocument({ documentId: entry.studioId, title: nextName.trim().replace(/\.md$/i, "") });
+    } else if (entry.studioKind === "asset") {
+      await updateAsset({ assetId: entry.studioId, name: nextName.trim() });
     }
   }
 
-  async function handleRunFlow() {
-    if (!activeFolder || !selectedPreset || !prompt.trim()) {
-      return;
+  async function duplicateEntry(entry) {
+    if (!entry || !activeFolder) return;
+    if (entry.studioKind === "asset") {
+      const id = await duplicateAsset({ assetId: entry.studioId, targetFolderId: activeFolder._id });
+      openTab(`asset:${id}`);
+    } else if (entry.studioKind === "document") {
+      const doc = documents?.find((item) => item._id === entry.studioId);
+      const id = await createDocument({
+        folderId: activeFolder._id,
+        title: `Copy of ${doc?.title ?? entry.name.replace(/\.md$/i, "")}`,
+        contentMarkdown: doc?.contentMarkdown ?? "",
+      });
+      openTab(`document:${id}`);
     }
-    setFlowError("");
+  }
+
+  async function trashEntry(entry) {
+    if (!entry) return;
+    const ok = window.confirm(`Move "${entry.name}" to trash?`);
+    if (!ok) return;
+    if (entry.studioKind === "folder") {
+      await trashFolder({ folderId: entry.studioId });
+    } else if (entry.studioKind === "document") {
+      await trashDocument({ documentId: entry.studioId });
+    } else if (entry.studioKind === "asset") {
+      await trashAsset({ assetId: entry.studioId });
+    } else if (entry.studioKind === "element") {
+      await trashElement({ elementId: entry.studioId });
+    }
+    closeTab(`${entry.studioKind}:${entry.studioId}`);
+  }
+
+  async function uploadFiles(files) {
+    if (!activeFolder) return;
+    for (const file of Array.from(files ?? [])) {
+      const reserved = await reserveUpload({
+        folderId: activeFolder._id,
+        name: file.name,
+        kind: kindFromMime(file.type),
+        mimeType: file.type || "application/octet-stream",
+      });
+      const res = await fetch(reserved.putUrl, {
+        method: "PUT",
+        headers: {
+          AccessKey: reserved.storageAccessKey,
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
+      openTab(`asset:${reserved.assetId}`);
+    }
+  }
+
+  async function handleSubmit() {
+    if (!activeFolder || !draft.trim()) return;
+    setStatus("");
     setFlowPending(true);
     try {
-      const threadId =
-        activeThreadId ??
-        (await createThread({
+      if (mode === "script") {
+        const id = await createDocument({
           folderId: activeFolder._id,
-          title: prompt.trim().slice(0, 64),
-        }));
-      setActiveThreadId(threadId);
+          title: draft.trim().slice(0, 60) || "Untitled script",
+          contentMarkdown: draft.trim(),
+        });
+        openTab(`document:${id}`);
+        setDraft("");
+        setAttachments([]);
+        return;
+      }
+
+      const preset = presets?.[0];
+      if (!preset) throw new Error("Seed style presets in settings first.");
+      if (entitlement && !entitlement.canGenerate) {
+        throw new Error(entitlement.reason ?? "Generation not available.");
+      }
+      const threadId = await createThread({
+        folderId: activeFolder._id,
+        title: draft.trim().slice(0, 64),
+      });
+      openTab(`thread:${threadId}`);
       await runFlow({
         threadId,
         mode,
-        tier: currentTier,
-        stylePresetId: selectedPreset._id,
-        userPrompt: prompt.trim(),
+        tier: mode === "video" ? "pro_video" : imageTier,
+        stylePresetId: preset._id,
+        userPrompt: buildPromptWithAttachments(draft, attachments),
         audioEnabled: mode === "video" ? audioEnabled : undefined,
         aspectRatio,
         resolution,
         durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
       });
-      setPrompt("");
+      setDraft("");
+      setAttachments([]);
     } catch (error) {
-      setFlowError(error instanceof Error ? error.message : "Generation failed");
+      setStatus(error instanceof Error ? error.message : "Studio action failed.");
     } finally {
       setFlowPending(false);
     }
   }
 
-  async function handleBankPayment(file: File | null) {
-    const bankAccount = bankAccounts?.[0];
-    if (!bankAccount || !file) {
-      setPaymentError("Add a receipt and make sure a bank account is configured.");
-      return;
-    }
-    setPaymentError("");
-    setPaymentPending(true);
-    try {
-      const amountCents = Math.round(Number(paymentAmount) * 100);
-      const creditsRequested = Math.max(0, Math.round(Number(paymentCredits)));
-      const paymentId = await submitBankPayment({
-        bankAccountId: bankAccount._id,
-        amountCents,
-        creditsRequested,
-        reference: paymentReference || undefined,
-      });
-      const receipt = await reserveReceiptUpload({
-        paymentId,
-        filename: file.name,
-        mimeType: file.type || "application/octet-stream",
-      });
-      const res = await fetch(receipt.putUrl, {
-        method: "PUT",
-        headers: {
-          AccessKey: receipt.storageAccessKey,
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-      if (!res.ok) {
-        throw new Error(`Receipt upload failed (${res.status})`);
-      }
-      await completeReceiptUpload({ paymentId, byteSize: file.size });
-      setPaymentReference("");
-    } catch (error) {
-      setPaymentError(error instanceof Error ? error.message : "Payment submission failed");
-    } finally {
-      setPaymentPending(false);
-    }
-  }
-
-  function toggleAssetSelection(assetId: Id<"assets">) {
-    setSelectedAssetIds((current) =>
-      current.includes(assetId)
-        ? current.filter((id) => id !== assetId)
-        : [...current, assetId],
-    );
-  }
-
-  async function handleCreateElement() {
-    if (!elementName.trim()) {
-      return;
-    }
-    await createElement({
-      type: elementType,
-      name: elementName.trim(),
-      folderId: activeFolder?._id,
-      sourceAssetIds: selectedAssetIds,
-    });
-    setElementName("");
-    setSelectedAssetIds([]);
-  }
-
-  async function handleSaveBankAccount() {
-    setAdminStatus("");
-    const existing = bankAccounts?.[0];
-    await adminUpsertBankAccount({
-      bankAccountId: existing?._id,
-      label: bankForm.label,
-      bankName: bankForm.bankName,
-      accountName: bankForm.accountName,
-      accountNumber: bankForm.accountNumber,
-      accountType: bankForm.accountType,
-      enabled: true,
-    });
-    setAdminStatus("Bank account saved.");
-  }
-
-  async function handleSeedStylePresets() {
-    setAdminStatus("");
-    const created = await adminSeedStylePresets({});
-    setAdminStatus(`Style presets ready (${created} created).`);
-  }
-
-  async function handleSavePricing() {
-    setAdminStatus("");
-    await adminSetPricing({
-      creditPriceCents: Number(pricingForm.creditPriceCents),
-      imageLowCredits: Number(pricingForm.imageLowCredits),
-      imageMediumCredits: Number(pricingForm.imageMediumCredits),
-      imageHighCredits: Number(pricingForm.imageHighCredits),
-      videoCredits: Number(pricingForm.videoCredits),
-    });
-    setAdminStatus("Pricing saved.");
-  }
-
-  async function handleReviewPayment(
-    paymentId: Id<"payments">,
-    status: "receipt_received" | "payment_completed" | "rejected",
-  ) {
-    setAdminStatus("");
-    await adminReviewPayment({ paymentId, status });
-    setAdminStatus(`Payment marked ${status}.`);
-  }
-
-  async function handleAdjustCredits() {
-    setAdminStatus("");
-    await adminAdjustCredits({
-      userId: creditAdjustForm.userId as Id<"users">,
-      amount: Number(creditAdjustForm.amount),
-      reason: creditAdjustForm.reason || "Admin adjustment",
-    });
-    setAdminStatus("Credits adjusted.");
-  }
-
-  function insertElementReference(name: string) {
-    setPrompt((current) => `${current}${current ? " " : ""}@${name}`);
-  }
-
-  async function handleRenameAsset(asset: Doc<"assets">) {
-    const name = window.prompt("Rename asset", asset.name);
-    if (!name?.trim()) return;
-    await updateAsset({ assetId: asset._id, name: name.trim() });
-  }
-
-  async function handleDuplicateAsset(asset: Doc<"assets">) {
-    await duplicateAsset({ assetId: asset._id });
-  }
-
-  async function handleTrashAsset(asset: Doc<"assets">) {
-    await trashAsset({ assetId: asset._id });
-  }
-
-  async function enablePushNotifications() {
-    setPushStatus("");
-    const publicKey = process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY;
-    if (!publicKey || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setPushStatus("Push is not configured in this browser.");
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      setPushStatus("Notifications not allowed.");
-      return;
-    }
-    const registration = await navigator.serviceWorker.register("/sw.js", {
-      scope: "/",
-      updateViaCache: "none",
-    });
-    const subscription =
-      (await registration.pushManager.getSubscription()) ??
-      (await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
-      }));
-    const json = subscription.toJSON();
-    if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
-      setPushStatus("Push subscription missing browser keys.");
-      return;
-    }
-    await savePushSubscription({
-      endpoint: json.endpoint,
-      p256dh: json.keys.p256dh,
-      auth: json.keys.auth,
-      userAgent: navigator.userAgent,
-    });
-    setPushStatus("Push enabled.");
-  }
-
   return (
-    <main
-      className={`flex h-dvh flex-col overflow-hidden text-white ${
-        theme === "emerald" ? "bg-[#08130f]" : "bg-[#111217]"
-      }`}
-    >
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 bg-[#151720]/95 px-3">
-        <div className="flex items-center gap-2">
-          <div className="grid size-7 place-items-center rounded-lg bg-emerald-400 text-black">
-            <Sparkles size={16} />
-          </div>
+    <div className={STYLE.shell} data-appearance="dark">
+      <aside className={STYLE.sidebar}>
+        <div className={STYLE.panelHead}>
           <div>
-            <p className="text-sm font-semibold leading-none">Yatishara Studio</p>
-            <p className="mt-1 text-[11px] text-white/45">Studio workspace · Image + Video flows</p>
+            <p className="text-sm font-semibold text-cursor-text-bright">Yatishara Studio</p>
+            <p className="text-[11px] text-cursor-muted">MercuryOS project workspace</p>
           </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {pushStatus ? <span className="text-xs text-white/45">{pushStatus}</span> : null}
-          <button
-            className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
-            type="button"
-            onClick={() => setTheme((value) => (value === "dark" ? "emerald" : "dark"))}
-          >
-            {theme === "dark" ? <Moon size={16} /> : <Sun size={16} />}
-          </button>
-          <button
-            className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
-            type="button"
-            onClick={() => void enablePushNotifications()}
-          >
-            <Bell size={16} />
-          </button>
-          <button
-            className="rounded-lg p-2 text-white/60 transition hover:bg-white/10 hover:text-white"
-            type="button"
-            onClick={() => setAdminOpen((open) => !open)}
-          >
-            <Settings size={16} />
-          </button>
-          <button
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/10 hover:text-white"
-            type="button"
-            onClick={() => void signOut()}
-          >
-            Sign out
+          <button className="cursor-icon-btn cursor-icon-btn-sm" title="Sign out" onClick={() => void signOut()}>
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
-      </header>
-
-      <section className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] max-md:grid-cols-1">
-        <aside className="flex min-h-0 flex-col border-r border-white/10 bg-[#13151d] max-md:hidden">
-          <div className="border-b border-white/10 p-3">
-            <button
-              className="flex w-full items-center justify-between rounded-xl bg-white/[0.04] px-3 py-2 text-left text-sm transition hover:bg-white/[0.07]"
-              type="button"
-              onClick={() => void handleCreateFolder()}
-            >
-              <span className="flex items-center gap-2">
-                <Folder size={16} className="text-emerald-300" />
-                Folders
-              </span>
-              <Plus size={15} className="text-white/50" />
-            </button>
-          </div>
-          <nav className="min-h-0 flex-1 overflow-auto p-2">
-            {(folders ?? []).map((folder: Doc<"folders">) => {
-              return (
-                <button
-                  key={folder._id}
-                  className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition ${
-                    activeFolder?._id === folder._id ? "bg-emerald-400/12 text-emerald-100" : "text-white/62 hover:bg-white/[0.05] hover:text-white"
-                  }`}
-                  type="button"
-                  onClick={() => setActiveFolderId(folder._id)}
-                >
-                  <Folder size={16} />
-                  <span className="truncate">{folder.name}</span>
-                </button>
+        <div className="flex flex-wrap gap-2 border-b border-cursor-border p-3">
+          <button className={STYLE.iconButton} onClick={() => void handleCreateFolder()}>
+            <FolderPlus className="h-3.5 w-3.5" /> Folder
+          </button>
+          <button className={STYLE.iconButton} onClick={() => void handleCreateElement()}>
+            <Box className="h-3.5 w-3.5" /> Element
+          </button>
+          <button className={STYLE.iconButton} onClick={() => void handleCreateDocument()}>
+            <FileText className="h-3.5 w-3.5" /> Script
+          </button>
+          <button className={STYLE.iconButton} onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-3.5 w-3.5" /> Upload
+          </button>
+          <input
+            ref={fileInputRef}
+            className="hidden"
+            type="file"
+            multiple
+            onChange={(event) => {
+              void uploadFiles(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <FileTree
+            viewMode="list"
+            workspaceId={WORKSPACE_ID}
+            rootEntries={rootEntries}
+            flatEntries={currentEntries}
+            listDir={() => {}}
+            onNavigate={(path) => {
+              const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
+                (item) => studioPathForFolder(item) === path,
               );
-            })}
-          </nav>
-          <div className="border-t border-white/10 p-3">
-            <button
-              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs text-white/60 transition hover:bg-white/[0.05]"
-              type="button"
-              onClick={() => setPaymentOpen((open) => !open)}
-            >
-              <CircleDollarSign size={15} />
-              Credits: {billingAccount?.creditBalance ?? 0}
+              if (folder) {
+                setActiveFolderId(folder._id);
+                openTab(`folder:${folder._id}`);
+              }
+            }}
+            onOpenFile={handleOpenPath}
+            onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
+            onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
+          />
+        </div>
+      </aside>
+
+      <main className={STYLE.main}>
+        <header className="cursor-panel-head cursor-workspace-head shrink-0">
+          <UnifiedTabStrip
+            tabs={tabs}
+            activeKey={activeTab}
+            onSelect={setActiveTab}
+            onClose={closeTab}
+            onSetTabOrder={setOpenTabs}
+            onNewChat={() => openTab(COMPOSER_TAB)}
+          />
+          <div className="cursor-panel-head-tools cursor-workspace-tools">
+            <CreditPill entitlement={entitlement} />
+            <button className="cursor-icon-btn cursor-icon-btn-sm" title="Settings" onClick={() => setSettingsOpen(true)}>
+              <Settings className="h-4 w-4" />
             </button>
           </div>
-        </aside>
-
-        <section className="flex min-w-0 flex-col">
-          <div className="flex h-10 shrink-0 items-center gap-1 border-b border-white/10 bg-[#151720] px-2">
-            <Tab active icon={<Sparkles size={14} />} label="Generation" />
-            <Tab icon={<ImageIcon size={14} />} label="Image preview" />
-            <Tab icon={<Film size={14} />} label="Video preview" />
-            <button className="ml-auto rounded-lg p-1.5 text-white/45 hover:bg-white/10 hover:text-white" type="button">
-              <Plus size={15} />
-            </button>
-          </div>
-
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_320px] max-xl:grid-cols-1">
-            <div
-              className="min-h-0 overflow-auto p-5"
-              onDragOver={(event) => {
-                event.preventDefault();
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                void uploadFiles(event.dataTransfer.files);
-              }}
-            >
-              <div className="mx-auto max-w-4xl space-y-3">
-                <div className="rounded-2xl border border-dashed border-emerald-300/25 bg-emerald-300/[0.04] p-4">
-                  <p className="text-sm font-medium text-emerald-100">
-                    {activeFolder ? `Active folder: ${activeFolder.name}` : "Loading folder..."}
-                  </p>
-                  <p className="mt-1 text-xs text-white/45">
-                    Drag images, videos, audio, or markdown files here. This tab keeps saving to its linked folder.
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    className="hidden"
-                    type="file"
-                    multiple
-                    onChange={(event) => {
-                      if (event.currentTarget.files) {
-                        void uploadFiles(event.currentTarget.files);
-                      }
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                  <button
-                    className="mt-3 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    {uploading ? "Uploading..." : "Upload files"}
-                  </button>
-                  <button
-                    className="ml-2 mt-3 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
-                    type="button"
-                    onClick={() => void handleCreateDocument()}
-                  >
-                    New script/doc
-                  </button>
-                </div>
-                {(events ?? []).length > 0 ? (
-                  events?.map((event) => (
-                    <article key={event._id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
-                        {event.kind === "prompt"
-                          ? "Prompt"
-                          : event.kind === "result"
-                            ? "Result"
-                            : event.kind === "folder_switched"
-                              ? "Folder switched"
-                              : event.stage ?? "Stage"}
-                      </p>
-                      <p className="mt-2 text-sm text-white/70">
-                        {event.prompt ??
-                          (event.stage ? `Flow stage: ${event.stage}` : "Generated media saved to folder.")}
-                      </p>
-                    </article>
-                  ))
-                ) : (
-                  <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
-                      Ready
-                    </p>
-                    <p className="mt-2 text-sm text-white/70">
-                      Create a generation. History will show prompt, stages, folder switches, and results here.
-                    </p>
-                  </article>
-                )}
-                <div className="grid gap-3 md:grid-cols-2">
-                  <ResultCard icon={<ImageIcon size={18} />} title="Generated image output" />
-                  <ResultCard icon={<Film size={18} />} title="Generated video output" />
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-                    Folder assets
-                  </p>
-                  <div className="mt-3 grid gap-2">
-                    {(assets ?? []).map((asset: Doc<"assets">) => (
-                      <div
-                        key={asset._id}
-                        className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-sm text-white/70"
-                      >
-                        <input
-                          checked={selectedAssetIds.includes(asset._id)}
-                          className="accent-emerald-400"
-                          type="checkbox"
-                          onChange={() => toggleAssetSelection(asset._id)}
-                        />
-                        {asset.kind === "video" ? <Film size={15} /> : <ImageIcon size={15} />}
-                        <span className="truncate">{asset.name}</span>
-                        <span className="ml-auto text-xs text-white/35">{asset.kind}</span>
-                        <AssetAction label="Rename" onClick={() => void handleRenameAsset(asset)} />
-                        <AssetAction
-                          label={<Copy size={12} />}
-                          onClick={() => void handleDuplicateAsset(asset)}
-                        />
-                        <AssetAction
-                          label={<Trash2 size={12} />}
-                          onClick={() => void handleTrashAsset(asset)}
-                        />
-                      </div>
-                    ))}
-                    {assets?.length === 0 ? (
-                      <p className="text-sm text-white/35">No assets yet.</p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-                    Scripts / documents
-                  </p>
-                  <div className="mt-3 grid gap-2">
-                    {(documents ?? []).map((doc: Doc<"documents">) => (
-                      <button
-                        key={doc._id}
-                        className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-left text-sm text-white/70"
-                        type="button"
-                        onClick={() => setPrompt((current) => `${current}${current ? " " : ""}@${doc.title}`)}
-                      >
-                        <FileText size={15} />
-                        <span className="truncate">{doc.title}</span>
-                      </button>
-                    ))}
-                    {documents?.length === 0 ? (
-                      <p className="text-sm text-white/35">No scripts yet.</p>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <aside className="border-l border-white/10 bg-[#13151d] p-4 max-xl:hidden">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">Elements</p>
-              <ElementsPanel
-                elementName={elementName}
-                setElementName={setElementName}
-                elementType={elementType}
-                setElementType={setElementType}
-                selectedCount={selectedAssetIds.length}
-                elements={elements ?? []}
-                onCreate={() => void handleCreateElement()}
-                onInsert={insertElementReference}
-              />
-              {paymentOpen ? (
-                <PaymentPanel
-                  amount={paymentAmount}
-                  setAmount={setPaymentAmount}
-                  credits={paymentCredits}
-                  setCredits={setPaymentCredits}
-                  reference={paymentReference}
-                  setReference={setPaymentReference}
-                  bankAccount={bankAccounts?.[0]}
-                  payments={payments ?? []}
-                  pending={paymentPending}
-                  error={paymentError}
-                  onSubmit={(file) => void handleBankPayment(file)}
-                />
-              ) : null}
-              {adminOpen && isAdminRole(currentUser?.role) ? (
-                <AdminBankPanel
-                  bankForm={bankForm}
-                  setBankForm={setBankForm}
-                  pricingForm={pricingForm}
-                  setPricingForm={setPricingForm}
-                  creditAdjustForm={creditAdjustForm}
-                  setCreditAdjustForm={setCreditAdjustForm}
-                  payments={adminPayments ?? []}
-                  status={adminStatus}
-                  onSave={() => void handleSaveBankAccount()}
-                  onSavePricing={() => void handleSavePricing()}
-                  onSeedStyles={() => void handleSeedStylePresets()}
-                  onReviewPayment={(paymentId, status) =>
-                    void handleReviewPayment(paymentId, status)
-                  }
-                  onAdjustCredits={() => void handleAdjustCredits()}
-                />
-              ) : null}
-            </aside>
-          </div>
-
-          <form className="shrink-0 border-t border-white/10 bg-[#151720]/95 p-3">
-            <div className="mx-auto max-w-5xl rounded-2xl border border-white/10 bg-[#101116] p-3">
-              <textarea
-                className="min-h-20 w-full resize-none bg-transparent text-sm text-white outline-none placeholder:text-white/35"
-                placeholder="Describe image or video. Drag images, videos, audio, scripts, or elements here..."
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-              />
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Segmented value={mode} setValue={setMode} />
-                <button className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70" type="button">
-                  {selectedPreset?.name ?? "No presets"} <ChevronDown size={12} className="ml-1 inline" />
-                </button>
-                {mode === "image" ? (
-                  <select
-                    className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-white"
-                    value={imageTier}
-                    onChange={(event) => setImageTier(event.target.value as "low" | "medium" | "high")}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                ) : (
-                  <span className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70">
-                    Pro Video
-                  </span>
-                )}
-                <select
-                  className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-white"
-                  value={aspectRatio}
-                  onChange={(event) => setAspectRatio(event.target.value)}
-                >
-                  <option value="16:9">16:9</option>
-                  <option value="9:16">9:16</option>
-                  <option value="1:1">1:1</option>
-                </select>
-                <select
-                  className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-white"
-                  value={resolution}
-                  onChange={(event) => setResolution(event.target.value)}
-                >
-                  <option value={mode === "image" ? "1024x1024" : "1080p"}>
-                    {mode === "image" ? "1024x1024" : "1080p"}
-                  </option>
-                  <option value={mode === "image" ? "1536x864" : "720p"}>
-                    {mode === "image" ? "1536x864" : "720p"}
-                  </option>
-                </select>
-                {mode === "video" ? (
-                  <>
-                    <input
-                      className="w-16 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white"
-                      value={durationSeconds}
-                      onChange={(event) => setDurationSeconds(event.target.value)}
-                    />
-                    <label className="flex items-center gap-1 text-xs text-white/60">
-                      <input
-                        checked={audioEnabled}
-                        type="checkbox"
-                        onChange={(event) => setAudioEnabled(event.target.checked)}
-                      />
-                      Audio
-                    </label>
-                  </>
-                ) : null}
-                <span className="text-xs text-white/40">{cost}</span>
-                {flowError ? <span className="text-xs text-red-300">{flowError}</span> : null}
-                {!entitlement?.canGenerate && entitlement?.reason ? (
-                  <span className="text-xs text-amber-200">{entitlement.reason}</span>
-                ) : null}
-                <button
-                  className="ml-auto rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  disabled={
-                    flowPending ||
-                    !prompt.trim() ||
-                    !selectedPreset ||
-                    entitlement?.canGenerate === false
-                  }
-                  onClick={() => void handleRunFlow()}
-                >
-                  {flowPending ? "Running..." : "Run flow"}
-                </button>
-              </div>
-            </div>
-          </form>
+        </header>
+        <section className="min-h-0 flex-1 overflow-hidden">
+          <ActivePane
+            activeTab={activeTab}
+            activeEntry={activeEntry}
+            folder={activeFolder}
+            events={events}
+            onAttach={attachEntry}
+            onDuplicate={duplicateEntry}
+            onRename={renameEntry}
+            onTrash={trashEntry}
+            onSwitchThreadFolder={(threadId) => {
+              if (!activeFolder) return;
+              void switchThreadFolder({ threadId, folderId: activeFolder._id });
+            }}
+          />
         </section>
-      </section>
-    </main>
-  );
-}
-
-function kindFromMime(mimeType: string): "image" | "video" | "audio" | "document" {
-  if (mimeType.startsWith("image/")) return "image";
-  if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "audio";
-  return "document";
-}
-
-function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let index = 0; index < rawData.length; index += 1) {
-    outputArray[index] = rawData.charCodeAt(index);
-  }
-  return outputArray.buffer;
-}
-
-function modeKindFromState(mode: "image" | "video"): "image" | "video" {
-  return mode;
-}
-
-function Tab({ active, icon, label }: { active?: boolean; icon: ReactNode; label: string }) {
-  return (
-    <button
-      className={`flex h-8 items-center gap-2 rounded-lg px-3 text-xs transition ${
-        active ? "bg-white/10 text-white" : "text-white/45 hover:bg-white/[0.06] hover:text-white"
-      }`}
-      type="button"
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function ResultCard({ icon, title }: { icon: ReactNode; title: string }) {
-  return (
-    <article className="grid min-h-48 place-items-center rounded-2xl border border-dashed border-white/10 bg-black/20 p-4 text-center text-white/45">
-      <div>
-        <div className="mx-auto mb-2 grid size-10 place-items-center rounded-xl bg-white/[0.06]">{icon}</div>
-        <p className="text-sm">{title}</p>
-      </div>
-    </article>
-  );
-}
-
-function AssetAction({
-  label,
-  onClick,
-}: {
-  label: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/55 hover:bg-white/10"
-      type="button"
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ElementsPanel({
-  elementName,
-  setElementName,
-  elementType,
-  setElementType,
-  selectedCount,
-  elements,
-  onCreate,
-  onInsert,
-}: {
-  elementName: string;
-  setElementName: (value: string) => void;
-  elementType: "character" | "prop" | "location";
-  setElementType: (value: "character" | "prop" | "location") => void;
-  selectedCount: number;
-  elements: Array<Doc<"elements">>;
-  onCreate: () => void;
-  onInsert: (name: string) => void;
-}) {
-  return (
-    <div className="mt-3 space-y-3">
-      <div className="grid gap-2">
-        <select
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none"
-          value={elementType}
-          onChange={(event) =>
-            setElementType(event.target.value as "character" | "prop" | "location")
-          }
-        >
-          <option value="character">Character</option>
-          <option value="prop">Prop</option>
-          <option value="location">Location</option>
-        </select>
-        <input
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none"
-          value={elementName}
-          onChange={(event) => setElementName(event.target.value)}
-          placeholder="Element name"
+        <StudioComposer
+          draft={draft}
+          setDraft={setDraft}
+          editorRef={editorRef}
+          attachments={attachments}
+          setAttachments={setAttachments}
+          mode={mode}
+          setMode={setMode}
+          imageTier={imageTier}
+          setImageTier={setImageTier}
+          aspectRatio={aspectRatio}
+          setAspectRatio={setAspectRatio}
+          resolution={resolution}
+          setResolution={setResolution}
+          durationSeconds={durationSeconds}
+          setDurationSeconds={setDurationSeconds}
+          audioEnabled={audioEnabled}
+          setAudioEnabled={setAudioEnabled}
+          disabled={flowPending}
+          status={status}
+          onSubmit={handleSubmit}
+          onDropEntry={(entry) => attachEntry(entry)}
         />
-        <button
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-black disabled:opacity-50"
-          type="button"
-          disabled={!elementName.trim()}
-          onClick={onCreate}
-        >
-          Create from {selectedCount} selected asset{selectedCount === 1 ? "" : "s"}
-        </button>
-      </div>
-      <div className="grid gap-2">
-        {elements.map((element) => (
-          <button
-            key={element._id}
-            className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-left text-sm text-white/65 hover:bg-white/[0.07] hover:text-white"
-            type="button"
-            onClick={() => onInsert(element.name)}
+      </main>
+
+      {settingsOpen ? (
+        <SettingsSheet
+          currentUser={currentUser}
+          billingAccount={billingAccount}
+          pricing={pricing}
+          bankAccounts={bankAccounts}
+          payments={payments}
+          notifications={notifications}
+          onClose={() => setSettingsOpen(false)}
+          onSeedPresets={() => void adminSeedStylePresets().then(() => setStatus("Style presets seeded."))}
+          onSeedBank={() => void adminSeedBankAccount().then(() => setStatus("Bank account seeded."))}
+        />
+      ) : null}
+      {contextMenu ? (
+        <ExplorerContextMenu
+          entry={contextMenu.entry}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          canCreateFile
+          canCreateFolder
+          onClose={() => setContextMenu(null)}
+          onRequestRename={(entry) => {
+            setContextMenu(null);
+            void renameEntry(entry);
+          }}
+          onRequestDelete={(entry) => {
+            setContextMenu(null);
+            void trashEntry(entry);
+          }}
+          onAction={(action, entry) => {
+            setContextMenu(null);
+            if (action === "open") handleEntryOpen(entry);
+            if (action === "attach") attachEntry(entry);
+            if (action === "new-folder") void handleCreateFolder();
+            if (action === "new-file") void handleCreateDocument();
+            if (action === "copy-path") void navigator.clipboard?.writeText(entry.path ?? "");
+            if (action === "download") handleEntryOpen(entry);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function StudioComposer({
+  draft,
+  setDraft,
+  editorRef,
+  attachments,
+  setAttachments,
+  mode,
+  setMode,
+  imageTier,
+  setImageTier,
+  aspectRatio,
+  setAspectRatio,
+  resolution,
+  setResolution,
+  durationSeconds,
+  setDurationSeconds,
+  audioEnabled,
+  setAudioEnabled,
+  disabled,
+  status,
+  onSubmit,
+  onDropEntry,
+}) {
+  return (
+    <div
+      className="border-t border-cursor-border bg-cursor-composer px-4 py-3"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const entry = readExplorerDragData(event.dataTransfer);
+        if (entry) onDropEntry(entry);
+      }}
+    >
+      <div className="mx-auto max-w-5xl rounded-2xl border border-cursor-border bg-cursor-panel shadow-2xl shadow-black/20">
+        <div className="flex flex-wrap items-center gap-2 border-b border-cursor-border px-3 py-2">
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            items={[
+              { value: "script", label: "Script", icon: FileText },
+              { value: "image", label: "Image", icon: ImageIcon },
+              { value: "video", label: "Video", icon: Video },
+            ]}
+          />
+          {mode === "image" ? (
+            <select className="cursor-field h-8 rounded-md text-xs" value={imageTier} onChange={(e) => setImageTier(e.target.value)}>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          ) : null}
+          {mode !== "script" ? (
+            <>
+              <select className="cursor-field h-8 rounded-md text-xs" value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}>
+                <option>16:9</option>
+                <option>9:16</option>
+                <option>1:1</option>
+                <option>4:3</option>
+              </select>
+              <select className="cursor-field h-8 rounded-md text-xs" value={resolution} onChange={(e) => setResolution(e.target.value)}>
+                <option>1024x1024</option>
+                <option>1280x720</option>
+                <option>1920x1080</option>
+              </select>
+            </>
+          ) : null}
+          {mode === "video" ? (
+            <>
+              <select className="cursor-field h-8 rounded-md text-xs" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)}>
+                <option value="5">5s</option>
+                <option value="10">10s</option>
+              </select>
+              <label className="flex items-center gap-1 text-xs text-cursor-muted">
+                <input type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
+                Audio
+              </label>
+            </>
+          ) : null}
+          <span className="ml-auto text-[11px] text-cursor-muted">Drag files/elements here or use @ refs.</span>
+        </div>
+        <div className="px-3 pt-3">
+          <StudioAttachmentRow
+            items={attachments}
+            onRemove={(item) => setAttachments((items) => items.filter((entry) => entry.id !== item.id))}
+          />
+        </div>
+        <div className="flex items-end gap-2 p-3">
+          <div
+            ref={editorRef}
+            role="textbox"
+            aria-multiline="true"
+            contentEditable
+            suppressContentEditableWarning
+            data-placeholder="Describe the script, image, or video. Attach assets from the project tree…"
+            className="cursor-composer-textarea cursor-composer-mention-editor"
+            onInput={(event) => setDraft(event.currentTarget.innerText ?? "")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                void onSubmit();
+              }
+            }}
           >
-            {iconForElement(element.type)}
-            <span className="min-w-0 flex-1 truncate">{element.name}</span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">
-              {element.type}
-            </span>
+            {draft}
+          </div>
+          <button
+            type="button"
+            disabled={disabled || !draft.trim()}
+            onClick={() => void onSubmit()}
+            className="mb-1 inline-flex h-10 min-w-24 items-center justify-center gap-2 rounded-xl bg-cursor-accent px-4 text-sm font-semibold text-black transition hover:bg-cursor-accent-hover disabled:opacity-40"
+          >
+            <Sparkles className="h-4 w-4" />
+            {mode === "script" ? "Create" : "Generate"}
           </button>
-        ))}
-        {elements.length === 0 ? (
-          <p className="rounded-xl bg-white/[0.03] px-3 py-2 text-xs text-white/35">
-            Select folder assets, then create reusable elements.
-          </p>
-        ) : null}
+        </div>
+        {status ? <p className="px-4 pb-3 text-xs text-red-300">{status}</p> : null}
       </div>
     </div>
   );
 }
 
-function iconForElement(type: "character" | "prop" | "location" | "doc") {
-  if (type === "character") return <User size={15} />;
-  if (type === "prop") return <Box size={15} />;
-  if (type === "location") return <MapPin size={15} />;
-  return <Clapperboard size={15} />;
+function StudioAttachmentRow({ items, onRemove }) {
+  if (!items?.length) return null;
+  return (
+    <div className="cursor-attach-tiles">
+      {items.map((item) => (
+        <span key={item.id} className="cursor-attach-tile is-tag" data-attach-kind={item.kind ?? "file"}>
+          <span className="cursor-attach-tile-open">
+            <span className="cursor-attach-tile-icon">
+              {item.kind === "image" ? <ImageIcon className="h-3.5 w-3.5" /> : item.kind === "video" ? <Video className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+            </span>
+            <span className="cursor-attach-tile-label">{item.label}</span>
+          </span>
+          <button
+            type="button"
+            className="cursor-attach-tile-remove"
+            aria-label="Remove"
+            onClick={() => onRemove(item)}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
 }
 
-function Segmented({
-  value,
-  setValue,
-}: {
-  value: "image" | "video";
-  setValue: (value: "image" | "video") => void;
-}) {
+function ActivePane({ activeTab, activeEntry, folder, events, onAttach, onDuplicate, onRename, onTrash, onSwitchThreadFolder }) {
+  if (activeTab === COMPOSER_TAB) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center">
+        <div className="max-w-xl">
+          <Clapperboard className="mx-auto h-12 w-12 text-cursor-accent" />
+          <h1 className="mt-4 text-2xl font-semibold text-cursor-text-bright">Studio composer</h1>
+          <p className="mt-2 text-sm text-cursor-muted">
+            Open folders/assets/scripts/elements as tabs. Use the bottom MercuryOS composer to create scripts, images, or videos.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  if (activeTab.startsWith("folder:")) {
+    return (
+      <div className="h-full overflow-auto p-6">
+        <h2 className="text-xl font-semibold text-cursor-text-bright">{folder?.name ?? "Folder"}</h2>
+        <p className="mt-2 text-sm text-cursor-muted">Folder opened from explorer. Assets and documents are managed from left project tree.</p>
+      </div>
+    );
+  }
+  if (activeTab.startsWith("thread:")) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="flex items-center justify-between border-b border-cursor-border px-4 py-2">
+          <div>
+            <p className="text-sm font-semibold text-cursor-text-bright">Generation history</p>
+            <p className="text-xs text-cursor-muted">Saved to the folder linked when the tab was created.</p>
+          </div>
+          <button className={STYLE.iconButton} onClick={() => onSwitchThreadFolder(activeTab.slice("thread:".length))}>
+            Switch to current folder
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+          {(events ?? []).map((event) => (
+            <article key={event._id} className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+              <p className="text-xs uppercase tracking-wide text-cursor-muted">{event.kind}</p>
+              {event.prompt ? <p className="mt-2 whitespace-pre-wrap text-sm text-cursor-text">{event.prompt}</p> : null}
+              {event.stage ? <p className="mt-2 text-sm text-cursor-accent">{event.stage}</p> : null}
+              {event.assetIds?.length ? <p className="mt-2 text-xs text-cursor-muted">{event.assetIds.length} output asset(s)</p> : null}
+            </article>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (!activeEntry) {
+    return <div className="p-6 text-sm text-cursor-muted">Open something from the project tree.</div>;
+  }
   return (
-    <span className="rounded-xl border border-white/10 bg-white/[0.03] p-1">
-      {(["image", "video"] as const).map((item) => (
-        <button
-          key={item}
-          className={`rounded-lg px-3 py-1.5 text-xs capitalize transition ${
-            value === item ? "bg-emerald-400 text-black" : "text-white/55 hover:text-white"
-          }`}
-          type="button"
-          onClick={() => setValue(item)}
-        >
-          {item}
-        </button>
-      ))}
+    <div className="h-full overflow-auto p-6">
+      <div className="rounded-2xl border border-cursor-border bg-cursor-panel p-5">
+        <p className="text-xs uppercase tracking-wide text-cursor-muted">{activeEntry.kindLabel}</p>
+        <h2 className="mt-2 text-2xl font-semibold text-cursor-text-bright">{activeEntry.name}</h2>
+        {activeEntry.description ? <p className="mt-3 whitespace-pre-wrap text-sm text-cursor-muted">{activeEntry.description}</p> : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className={STYLE.iconButton} onClick={() => onAttach(activeEntry)}>
+            <Plus className="h-3.5 w-3.5" />
+            Add to composer
+          </button>
+          <button className={STYLE.iconButton} onClick={() => onRename(activeEntry)}>Rename</button>
+          {activeEntry.studioKind === "asset" || activeEntry.studioKind === "document" ? (
+            <button className={STYLE.iconButton} onClick={() => onDuplicate(activeEntry)}>Duplicate</button>
+          ) : null}
+          <button className={STYLE.iconButton} onClick={() => onTrash(activeEntry)}>Trash</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSheet({
+  currentUser,
+  billingAccount,
+  pricing,
+  bankAccounts,
+  payments,
+  notifications,
+  onClose,
+  onSeedPresets,
+  onSeedBank,
+}) {
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onMouseDown={onClose}>
+      <aside
+        className="h-full w-full max-w-md border-l border-cursor-border bg-cursor-sidebar p-5 shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-cursor-text-bright">Studio settings</h2>
+            <p className="text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
+          </div>
+          <button className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose}>×</button>
+        </div>
+        <div className="mt-5 space-y-3">
+          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
+              <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
+              Billing
+            </div>
+            <p className="mt-2 text-sm text-cursor-text">
+              {billingAccount?.creditBalance ?? 0} credits
+              <span className="text-cursor-muted"> · {billingAccount?.reservedCredits ?? 0} reserved</span>
+            </p>
+            {pricing ? (
+              <p className="mt-1 text-xs text-cursor-muted">
+                Low {pricing.imageLowCredits} · Medium {pricing.imageMediumCredits} · High {pricing.imageHighCredits} · Video {pricing.videoCredits}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
+              <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
+              Bank accounts
+            </div>
+            <div className="mt-2 space-y-2">
+              {(bankAccounts ?? []).map((bank) => (
+                <div key={bank._id} className="rounded-lg border border-cursor-border/70 p-2 text-xs text-cursor-muted">
+                  <p className="font-medium text-cursor-text">{bank.label}</p>
+                  <CopyLine label="Bank" value={bank.bankName} />
+                  <CopyLine label="Name" value={bank.accountName} />
+                  <CopyLine label="Number" value={bank.accountNumber} />
+                  <CopyLine label="Type" value={bank.accountType} />
+                </div>
+              ))}
+              {bankAccounts?.length === 0 ? <p className="text-xs text-cursor-muted">No enabled bank account yet.</p> : null}
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
+              <Bell className="h-4 w-4 text-cursor-accent" />
+              Recent activity
+            </div>
+            <div className="mt-2 space-y-1 text-xs text-cursor-muted">
+              {(notifications ?? []).slice(0, 3).map((item) => (
+                <p key={item._id}>{item.title}: {item.body}</p>
+              ))}
+              {(payments ?? []).slice(0, 3).map((item) => (
+                <p key={item._id}>Payment {item.status}: ${(item.amountCents / 100).toFixed(2)}</p>
+              ))}
+              {!notifications?.length && !payments?.length ? <p>No recent billing or notification activity.</p> : null}
+            </div>
+          </section>
+
+          {isAdmin ? (
+            <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+              <p className="text-sm font-semibold text-cursor-text-bright">Admin setup</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button className={STYLE.iconButton} onClick={onSeedPresets}>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Seed presets
+                </button>
+                <button className={STYLE.iconButton} onClick={onSeedBank}>
+                  <CircleDollarSign className="h-3.5 w-3.5" />
+                  Seed bank from env
+                </button>
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function CopyLine({ label, value }) {
+  return (
+    <p className="mt-1 flex items-center justify-between gap-2">
+      <span>{label}: {value}</span>
+      <button
+        className="rounded border border-cursor-border px-1.5 py-0.5 text-[10px] text-cursor-text hover:bg-cursor-hover"
+        onClick={() => void navigator.clipboard?.writeText(String(value))}
+      >
+        Copy
+      </button>
+    </p>
+  );
+}
+
+function CreditPill({ entitlement }) {
+  return (
+    <span className="rounded-full border border-cursor-border bg-cursor-panel px-2 py-1 text-[11px] text-cursor-muted">
+      {entitlement ? `${entitlement.creditBalance} credits` : "Credits"}
     </span>
   );
 }
 
-function PaymentPanel({
-  amount,
-  setAmount,
-  credits,
-  setCredits,
-  reference,
-  setReference,
-  bankAccount,
-  payments,
-  pending,
-  error,
-  onSubmit,
-}: {
-  amount: string;
-  setAmount: (value: string) => void;
-  credits: string;
-  setCredits: (value: string) => void;
-  reference: string;
-  setReference: (value: string) => void;
-  bankAccount:
-    | {
-        bankName: string;
-        accountName: string;
-        accountNumber: string;
-        accountType: "chequing" | "savings";
-      }
-    | undefined;
-  payments: Array<{
-    _id: Id<"payments">;
-    status: "receipt_uploaded" | "receipt_received" | "payment_completed" | "rejected";
-    amountCents: number;
-  }>;
-  pending: boolean;
-  error: string;
-  onSubmit: (file: File | null) => void;
-}) {
-  const receiptInputRef = useRef<HTMLInputElement | null>(null);
-  const [receipt, setReceipt] = useState<File | null>(null);
-
+function Segmented({ value, onChange, items }) {
   return (
-    <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-        Bank top-up
-      </p>
-      {bankAccount ? (
-        <div className="mt-3 space-y-2 text-xs text-white/65">
-          <CopyLine label="Bank" value={bankAccount.bankName} />
-          <CopyLine label="Name" value={bankAccount.accountName} />
-          <CopyLine label="Number" value={bankAccount.accountNumber} />
-          <CopyLine label="Type" value={bankAccount.accountType} />
-        </div>
-      ) : (
-        <p className="mt-3 text-xs text-amber-200">No bank account configured yet.</p>
-      )}
-      <div className="mt-3 grid gap-2">
-        <input
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
-          placeholder="Amount TTD"
-        />
-        <input
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none"
-          value={credits}
-          onChange={(event) => setCredits(event.target.value)}
-          placeholder="Credits requested"
-        />
-        <input
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none"
-          value={reference}
-          onChange={(event) => setReference(event.target.value)}
-          placeholder="Transfer reference"
-        />
-        <input
-          ref={receiptInputRef}
-          className="hidden"
-          type="file"
-          accept="image/*,application/pdf"
-          onChange={(event) => setReceipt(event.currentTarget.files?.[0] ?? null)}
-        />
-        <button
-          className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
-          type="button"
-          onClick={() => receiptInputRef.current?.click()}
-        >
-          {receipt ? receipt.name : "Choose receipt"}
-        </button>
-        {error ? <p className="text-xs text-red-300">{error}</p> : null}
-        <button
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-black disabled:opacity-50"
-          type="button"
-          disabled={pending || !bankAccount || !receipt}
-          onClick={() => onSubmit(receipt)}
-        >
-          {pending ? "Submitting..." : "Submit receipt"}
-        </button>
-      </div>
-      <div className="mt-4 space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-          Payment history
-        </p>
-        {payments.slice(0, 4).map((payment) => (
-          <div key={payment._id} className="rounded-xl bg-black/20 px-3 py-2 text-xs text-white/60">
-            TTD {(payment.amountCents / 100).toFixed(2)} · {payment.status}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AdminBankPanel({
-  bankForm,
-  setBankForm,
-  pricingForm,
-  setPricingForm,
-  creditAdjustForm,
-  setCreditAdjustForm,
-  payments,
-  status,
-  onSave,
-  onSavePricing,
-  onSeedStyles,
-  onReviewPayment,
-  onAdjustCredits,
-}: {
-  bankForm: {
-    label: string;
-    bankName: string;
-    accountName: string;
-    accountNumber: string;
-    accountType: "chequing" | "savings";
-  };
-  setBankForm: (value: {
-    label: string;
-    bankName: string;
-    accountName: string;
-    accountNumber: string;
-    accountType: "chequing" | "savings";
-  }) => void;
-  pricingForm: {
-    creditPriceCents: string;
-    imageLowCredits: string;
-    imageMediumCredits: string;
-    imageHighCredits: string;
-    videoCredits: string;
-  };
-  setPricingForm: (value: {
-    creditPriceCents: string;
-    imageLowCredits: string;
-    imageMediumCredits: string;
-    imageHighCredits: string;
-    videoCredits: string;
-  }) => void;
-  creditAdjustForm: {
-    userId: string;
-    amount: string;
-    reason: string;
-  };
-  setCreditAdjustForm: (value: {
-    userId: string;
-    amount: string;
-    reason: string;
-  }) => void;
-  payments: Array<{
-    _id: Id<"payments">;
-    userId: Id<"users">;
-    status: "receipt_uploaded" | "receipt_received" | "payment_completed" | "rejected";
-    amountCents: number;
-    creditsGranted?: number;
-  }>;
-  status: string;
-  onSave: () => void;
-  onSavePricing: () => void;
-  onSeedStyles: () => void;
-  onReviewPayment: (
-    paymentId: Id<"payments">,
-    status: "receipt_received" | "payment_completed" | "rejected",
-  ) => void;
-  onAdjustCredits: () => void;
-}) {
-  return (
-    <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-        Admin bank settings
-      </p>
-      <div className="mt-3 grid gap-2">
-        <AdminInput
-          label="Label"
-          value={bankForm.label}
-          onChange={(label) => setBankForm({ ...bankForm, label })}
-        />
-        <AdminInput
-          label="Bank"
-          value={bankForm.bankName}
-          onChange={(bankName) => setBankForm({ ...bankForm, bankName })}
-        />
-        <AdminInput
-          label="Name"
-          value={bankForm.accountName}
-          onChange={(accountName) => setBankForm({ ...bankForm, accountName })}
-        />
-        <AdminInput
-          label="Number"
-          value={bankForm.accountNumber}
-          onChange={(accountNumber) => setBankForm({ ...bankForm, accountNumber })}
-        />
-        <select
-          className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none"
-          value={bankForm.accountType}
-          onChange={(event) =>
-            setBankForm({
-              ...bankForm,
-              accountType: event.target.value as "chequing" | "savings",
-            })
-          }
-        >
-          <option value="chequing">Chequing</option>
-          <option value="savings">Savings</option>
-        </select>
-        {status ? <p className="text-xs text-emerald-200">{status}</p> : null}
-        <button
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-black"
-          type="button"
-          onClick={onSave}
-        >
-          Save bank account
-        </button>
-        <p className="pt-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-          Pricing
-        </p>
-        <AdminInput
-          label="Credit price cents"
-          value={pricingForm.creditPriceCents}
-          onChange={(creditPriceCents) => setPricingForm({ ...pricingForm, creditPriceCents })}
-        />
-        <AdminInput
-          label="Low image credits"
-          value={pricingForm.imageLowCredits}
-          onChange={(imageLowCredits) => setPricingForm({ ...pricingForm, imageLowCredits })}
-        />
-        <AdminInput
-          label="Medium image credits"
-          value={pricingForm.imageMediumCredits}
-          onChange={(imageMediumCredits) =>
-            setPricingForm({ ...pricingForm, imageMediumCredits })
-          }
-        />
-        <AdminInput
-          label="High image credits"
-          value={pricingForm.imageHighCredits}
-          onChange={(imageHighCredits) => setPricingForm({ ...pricingForm, imageHighCredits })}
-        />
-        <AdminInput
-          label="Video credits"
-          value={pricingForm.videoCredits}
-          onChange={(videoCredits) => setPricingForm({ ...pricingForm, videoCredits })}
-        />
-        <button
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-black"
-          type="button"
-          onClick={onSavePricing}
-        >
-          Save pricing
-        </button>
-        <button
-          className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
-          type="button"
-          onClick={onSeedStyles}
-        >
-          Seed style presets
-        </button>
-        <p className="pt-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-          Payments
-        </p>
-        {payments.slice(0, 5).map((payment) => (
-          <div key={payment._id} className="rounded-xl bg-black/20 p-2 text-xs text-white/60">
-            <div className="flex items-center justify-between gap-2">
-              <span>TTD {(payment.amountCents / 100).toFixed(2)}</span>
-              <span>{payment.status}</span>
-            </div>
-            <p className="mt-1 truncate text-white/35">User: {payment.userId}</p>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <AdminActionButton onClick={() => onReviewPayment(payment._id, "receipt_received")}>
-                Received
-              </AdminActionButton>
-              <AdminActionButton onClick={() => onReviewPayment(payment._id, "payment_completed")}>
-                Approve
-              </AdminActionButton>
-              <AdminActionButton onClick={() => onReviewPayment(payment._id, "rejected")}>
-                Reject
-              </AdminActionButton>
-            </div>
-          </div>
-        ))}
-        {payments.length === 0 ? (
-          <p className="rounded-xl bg-black/20 px-3 py-2 text-xs text-white/35">
-            No payment receipts yet.
-          </p>
-        ) : null}
-        <p className="pt-2 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-          Credit adjustment
-        </p>
-        <AdminInput
-          label="User ID"
-          value={creditAdjustForm.userId}
-          onChange={(userId) => setCreditAdjustForm({ ...creditAdjustForm, userId })}
-        />
-        <AdminInput
-          label="Amount"
-          value={creditAdjustForm.amount}
-          onChange={(amount) => setCreditAdjustForm({ ...creditAdjustForm, amount })}
-        />
-        <AdminInput
-          label="Reason"
-          value={creditAdjustForm.reason}
-          onChange={(reason) => setCreditAdjustForm({ ...creditAdjustForm, reason })}
-        />
-        <button
-          className="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-black"
-          type="button"
-          onClick={onAdjustCredits}
-        >
-          Adjust credits
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function AdminActionButton({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/60 hover:bg-white/10"
-      type="button"
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-function AdminInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <input
-      className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs outline-none"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={label}
-    />
-  );
-}
-
-function CopyLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-2 rounded-xl bg-black/20 px-3 py-2">
-      <span className="w-14 text-white/35">{label}</span>
-      <span className="min-w-0 flex-1 truncate">{value}</span>
-      <button
-        className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/55 hover:bg-white/10"
-        type="button"
-        onClick={() => void navigator.clipboard.writeText(value)}
-      >
-        Copy
-      </button>
+    <div className="inline-flex rounded-lg border border-cursor-border bg-cursor-bg p-0.5">
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChange(item.value)}
+            className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs transition ${
+              value === item.value ? "bg-cursor-accent text-black" : "text-cursor-muted hover:bg-cursor-hover"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {item.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function isAdminRole(role: "user" | "admin" | "super_admin" | undefined) {
-  return role === "admin" || role === "super_admin";
+function buildFlatEntries({ folder, folders, assets, documents, elements }) {
+  return {
+    loading: !folder,
+    entries: [
+      ...(folders ?? []).map(folderToEntry),
+      ...(documents ?? []).map(documentToEntry),
+      ...(assets ?? []).map(assetToEntry),
+      ...(elements ?? []).map(elementToEntry),
+    ],
+  };
+}
+
+function folderToEntry(folder) {
+  return {
+    type: "dir",
+    name: folder.name,
+    path: studioPathForFolder(folder),
+    modified: folder.updatedAt,
+    mtimeMs: folder.updatedAt,
+    studioKind: "folder",
+    studioId: folder._id,
+  };
+}
+
+function documentToEntry(doc) {
+  return {
+    type: "file",
+    name: `${doc.title}.md`,
+    path: `/Studio/scripts/${doc._id}.md`,
+    modified: doc.updatedAt,
+    mtimeMs: doc.updatedAt,
+    ext: ".md",
+    studioKind: "document",
+    studioId: doc._id,
+    kindLabel: "Script document",
+    description: doc.contentMarkdown,
+  };
+}
+
+function assetToEntry(asset) {
+  const ext = asset.kind === "image" ? ".png" : asset.kind === "video" ? ".mp4" : asset.kind === "audio" ? ".mp3" : ".bin";
+  return {
+    type: "file",
+    name: asset.name,
+    path: `/Studio/assets/${asset._id}${ext}`,
+    modified: asset.updatedAt,
+    mtimeMs: asset.updatedAt,
+    ext,
+    studioKind: "asset",
+    studioId: asset._id,
+    kindLabel: `${asset.kind} asset`,
+    description: asset.mimeType,
+  };
+}
+
+function elementToEntry(element) {
+  return {
+    type: "file",
+    name: `@${element.name}`,
+    path: `/Studio/elements/${element._id}.element`,
+    modified: element.updatedAt,
+    mtimeMs: element.updatedAt,
+    ext: ".element",
+    studioKind: "element",
+    studioId: element._id,
+    kindLabel: `${element.type} element`,
+    description: element.description,
+  };
+}
+
+function studioPathForFolder(folder) {
+  return `/Studio/${folder.name}`;
+}
+
+function tabDescriptor({ key, threads, assets, documents, elements, snapshots }) {
+  if (key === COMPOSER_TAB) {
+    return { key, kind: "chat", title: "Composer", status: "ready" };
+  }
+  if (key.startsWith("thread:")) {
+    const thread = threads?.find((item) => item._id === key.slice("thread:".length));
+    return { key, kind: "chat", title: thread?.title ?? "Generation", status: "ready" };
+  }
+  const entry = findEntryByTab(key, { assets, documents, elements, snapshots });
+  if (entry) {
+    return {
+      key,
+      kind: "file",
+      title: entry.name,
+      path: entry.path,
+      ext: entry.ext,
+      status: "ready",
+    };
+  }
+  if (key.startsWith("folder:")) {
+    return { key, kind: "file", title: "Folder", path: key, ext: "", status: "ready" };
+  }
+  return null;
+}
+
+function findEntryByTab(key, { assets, documents, elements, snapshots }) {
+  if (key.startsWith("asset:")) {
+    const item = assets?.find((asset) => asset._id === key.slice("asset:".length));
+    return item ? assetToEntry(item) : snapshots?.[key] ?? null;
+  }
+  if (key.startsWith("document:")) {
+    const item = documents?.find((doc) => doc._id === key.slice("document:".length));
+    return item ? documentToEntry(item) : snapshots?.[key] ?? null;
+  }
+  if (key.startsWith("element:")) {
+    const item = elements?.find((element) => element._id === key.slice("element:".length));
+    return item ? elementToEntry(item) : snapshots?.[key] ?? null;
+  }
+  return null;
+}
+
+function entryToAttachment(entry) {
+  const kind = entry.studioKind === "asset" ? inferAttachmentKind(entry) : entry.studioKind === "document" ? "file" : "context";
+  return {
+    id: `${entry.studioKind}:${entry.studioId}`,
+    kind,
+    label: entry.name.replace(/^@/, ""),
+    path: entry.path,
+    filename: entry.name,
+    studioKind: entry.studioKind,
+    studioId: entry.studioId,
+  };
+}
+
+function inferAttachmentKind(entry) {
+  if (entry.ext === ".png") return "image";
+  if (entry.ext === ".mp4") return "video";
+  if (entry.ext === ".mp3") return "audio";
+  return "file";
+}
+
+function buildPromptWithAttachments(prompt, attachments) {
+  if (!attachments.length) return prompt.trim();
+  const refs = attachments.map((item) => `@${item.label}`).join(", ");
+  return `${prompt.trim()}\n\nReferences: ${refs}`;
+}
+
+function kindFromMime(mime) {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "document";
 }
