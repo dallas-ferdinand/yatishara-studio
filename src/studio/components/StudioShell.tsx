@@ -6,36 +6,38 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp,
   Bell,
-  Box,
   ChevronDown,
   CircleDollarSign,
-  Clapperboard,
   FileText,
   Image as ImageIcon,
-  Infinity,
-  LogOut,
+  Loader2,
+  Mic,
   Plus,
   Settings,
   Sparkles,
   Upload,
   Video,
 } from "lucide-react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { ExplorerViewMenu } from "@/desk/components/ExplorerViewMenu";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
+import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { mercuryLogoAssets } from "@/lib/brand-assets";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
+const MERCURY_LOGO = mercuryLogoAssets(48);
 
 const STYLE = {
   shell: "flex h-dvh min-h-0 bg-cursor-bg text-cursor-text",
-  sidebar: "flex w-[310px] shrink-0 flex-col border-r border-cursor-border bg-cursor-sidebar",
+  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border bg-cursor-sidebar",
   main: "flex min-w-0 flex-1 flex-col bg-cursor-bg",
   panelHead: "flex h-11 shrink-0 items-center justify-between border-b border-cursor-border bg-cursor-panel px-3",
   iconButton:
@@ -88,6 +90,8 @@ export function StudioShell() {
   const [entitlementNow] = useState(() => Date.now());
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
+  const composerKeyRef = useRef(COMPOSER_TAB);
+  const composerContextsRef = useRef({});
 
   const currentUser = useQuery(api.users.current, {});
   const billingAccount = useQuery(api.billing.currentAccount, {});
@@ -133,6 +137,34 @@ export function StudioShell() {
     tier: mode === "video" ? "pro_video" : imageTier,
     now: entitlementNow,
   });
+
+  const composerContextKey = activeTab.startsWith("composer:") || activeTab.startsWith("thread:")
+    ? activeTab
+    : COMPOSER_TAB;
+
+  useEffect(() => {
+    const prevKey = composerKeyRef.current;
+    composerContextsRef.current[prevKey] = {
+      draft,
+      attachments,
+      mode,
+      imageTier,
+      aspectRatio,
+      resolution,
+      durationSeconds,
+      audioEnabled,
+    };
+    const next = composerContextsRef.current[composerContextKey];
+    setDraft(next?.draft ?? "");
+    setAttachments(next?.attachments ?? []);
+    setMode(next?.mode ?? "image");
+    setImageTier(next?.imageTier ?? "medium");
+    setAspectRatio(next?.aspectRatio ?? "16:9");
+    setResolution(next?.resolution ?? "1024x1024");
+    setDurationSeconds(next?.durationSeconds ?? "5");
+    setAudioEnabled(next?.audioEnabled ?? true);
+    composerKeyRef.current = composerContextKey;
+  }, [composerContextKey]);
 
   useEffect(() => {
     void ensureDefaults().then((defaults) => {
@@ -425,25 +457,29 @@ export function StudioShell() {
 
   return (
     <div className={STYLE.shell} data-appearance="dark">
+      <style jsx global>{`
+        .cursor-panel-search-input:focus {
+          outline: none !important;
+          box-shadow: none !important;
+          border-color: transparent !important;
+        }
+      `}</style>
+      <PanelGroup direction="horizontal" autoSaveId="studio-main-h" className="min-w-0 flex-1">
+        <Panel defaultSize={24} minSize={16} maxSize={42}>
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
           <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg border border-cursor-border bg-cursor-bg text-cursor-accent">
-              <Infinity className="h-4 w-4" />
+            <span className="grid h-7 w-7 place-items-center rounded-lg border border-cursor-border bg-cursor-bg">
+              <img src={MERCURY_LOGO.src} srcSet={MERCURY_LOGO.srcSet} sizes={MERCURY_LOGO.sizes} alt="" className="h-5 w-5 rounded-md" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-cursor-text-bright">Studio</p>
-              <p className="truncate text-[11px] text-cursor-muted">
-                {currentUser?.name ?? currentUser?.email ?? currentUser?.phone ?? "Creator"}
+              <p className="truncate text-sm font-semibold text-cursor-text-bright">
+                Studio <span className="font-normal text-cursor-muted">· {currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator"}</span>
               </p>
             </div>
           </div>
-          <button className="cursor-icon-btn cursor-icon-btn-sm" title="Sign out" onClick={() => void signOut()}>
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex items-center gap-1 border-b border-cursor-border px-2 py-2">
-          <div className="relative">
+          <div className="flex items-center gap-1">
+            <div className="relative">
             <button className="cursor-icon-btn" title="Add" onClick={() => setAddMenuOpen((open) => !open)}>
               <Plus className="h-4 w-4" />
             </button>
@@ -451,14 +487,13 @@ export function StudioShell() {
               <div className="cursor-tab-context-menu absolute left-0 top-9 z-40 w-44">
                 <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "folder" }); setAddMenuOpen(false); }}>Folder</button>
                 <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "element" }); setAddMenuOpen(false); }}>Element</button>
-                <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "script" }); setAddMenuOpen(false); }}>Script/document</button>
+                <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "script" }); setAddMenuOpen(false); }}>Script</button>
               </div>
             ) : null}
-          </div>
-          <button className="cursor-icon-btn" title="Upload" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-4 w-4" />
-          </button>
-          <div className="ml-auto">
+            </div>
+            <button className="cursor-icon-btn" title="Upload" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="h-4 w-4" />
+            </button>
             <ExplorerViewMenu viewMode={viewMode} onChange={setViewMode} />
           </div>
           <input
@@ -472,8 +507,8 @@ export function StudioShell() {
             }}
           />
         </div>
-        <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
         <PanelSearchBar value={search} onChange={setSearch} placeholder="Search Studio" aria-label="Search Studio" />
+        <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <FileTree
             viewMode={viewMode}
@@ -499,6 +534,9 @@ export function StudioShell() {
           />
         </div>
       </aside>
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel defaultSize={76} minSize={42}>
 
       <main className={STYLE.main}>
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
@@ -526,6 +564,9 @@ export function StudioShell() {
             onDuplicate={duplicateEntry}
             onRename={renameEntry}
             onTrash={trashEntry}
+            onDocumentChange={(entry, contentMarkdown) => {
+              void updateDocument({ documentId: entry.studioId, contentMarkdown });
+            }}
             onSwitchThreadFolder={(threadId) => {
               if (!activeFolder) return;
               void switchThreadFolder({ threadId, folderId: activeFolder._id });
@@ -556,6 +597,8 @@ export function StudioShell() {
           onDropEntry={(entry) => attachEntry(entry)}
         />
       </main>
+        </Panel>
+      </PanelGroup>
 
       {settingsOpen ? (
         <SettingsSheet
@@ -565,6 +608,7 @@ export function StudioShell() {
           bankAccounts={bankAccounts}
           payments={payments}
           notifications={notifications}
+          onSignOut={() => void signOut()}
           onClose={() => setSettingsOpen(false)}
           onSeedPresets={() => void adminSeedStylePresets().then(() => setStatus("Style presets seeded."))}
           onSeedBank={() => void adminSeedBankAccount().then(() => setStatus("Bank account seeded."))}
@@ -633,9 +677,32 @@ function StudioComposer({
   onSubmit,
   onDropEntry,
 }) {
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+
+  async function toggleVoice() {
+    try {
+      const voice = await import("@/desk/lib/voice-desk");
+      if (recording) {
+        setRecording(false);
+        setTranscribing(true);
+        const data = await voice.stopRecording();
+        const text = await voice.transcribeRecording(data);
+        if (text?.trim()) setDraft((value) => `${value}${value ? " " : ""}${text.trim()}`);
+        return;
+      }
+      await voice.startRecording();
+      setRecording(true);
+    } catch (error) {
+      console.error("Voice input failed", error);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
   return (
     <div
-      className="border-t border-cursor-border bg-cursor-composer px-4 py-3"
+      className="cursor-composer-shell"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -643,7 +710,8 @@ function StudioComposer({
         if (entry) onDropEntry(entry);
       }}
     >
-      <div className="mx-auto max-w-5xl rounded-2xl border border-cursor-border bg-cursor-panel p-2 shadow-2xl shadow-black/20">
+      <div className="cursor-composer">
+      <div className={`cursor-composer-box p-2 ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}`}>
         <div className="px-2 pt-2">
           <StudioAttachmentRow
             items={attachments}
@@ -723,9 +791,18 @@ function StudioComposer({
           ) : null}
           <button
             type="button"
+            className={`cursor-toolbar-icon ${recording ? "is-recording" : ""}`}
+            title={transcribing ? "Transcribing..." : recording ? "Stop recording" : "Voice input"}
+            onClick={() => void toggleVoice()}
+            disabled={transcribing}
+          >
+            {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+          </button>
+          <button
+            type="button"
             disabled={disabled || !draft.trim()}
             onClick={() => void onSubmit()}
-            className="ml-auto grid h-8 w-8 place-items-center rounded-full bg-cursor-accent text-black transition hover:bg-cursor-accent-hover disabled:opacity-40"
+            className="cursor-toolbar-icon cursor-composer-submit ml-auto"
             title="Send"
           >
             <ArrowUp className="h-4 w-4" />
@@ -733,16 +810,34 @@ function StudioComposer({
         </div>
         {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
       </div>
+      </div>
     </div>
   );
 }
 
 function StudioDropdown({ value, onChange, items }) {
   const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
   const active = items.find((item) => item.value === value) ?? items[0];
   const ActiveIcon = active?.icon;
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event) => {
+      if (wrapRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <button
         type="button"
         className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cursor-border bg-cursor-bg px-2 text-xs text-cursor-text hover:bg-cursor-hover"
@@ -778,7 +873,7 @@ function StudioDropdown({ value, onChange, items }) {
 }
 
 function CreateStudioDialog({ initialKind, onClose, onCreate }) {
-  const [kind, setKind] = useState(initialKind ?? "folder");
+  const kind = initialKind ?? "folder";
   const [name, setName] = useState("");
   const [elementType, setElementType] = useState("character");
   return (
@@ -793,15 +888,9 @@ function CreateStudioDialog({ initialKind, onClose, onCreate }) {
       >
         <h2 className="text-base font-semibold text-cursor-text-bright">Add to Studio</h2>
         <div className="mt-4 flex gap-2">
-          <StudioDropdown
-            value={kind}
-            onChange={setKind}
-            items={[
-              { value: "folder", label: "Folder", icon: Plus },
-              { value: "element", label: "Element", icon: Box },
-              { value: "script", label: "Script/document", icon: FileText },
-            ]}
-          />
+          <span className="inline-flex h-8 items-center rounded-lg border border-cursor-border bg-cursor-bg px-2 text-xs text-cursor-text">
+            {kind === "folder" ? "Folder" : kind === "element" ? "Element" : "Script"}
+          </span>
           {kind === "element" ? (
             <StudioDropdown
               value={elementType}
@@ -866,17 +955,30 @@ function StudioAttachmentRow({ items, onRemove }) {
   );
 }
 
-function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onSwitchThreadFolder }) {
+function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onDocumentChange, onSwitchThreadFolder }) {
   if (activeTab.startsWith("composer:")) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center">
         <div className="max-w-xl">
-          <Clapperboard className="mx-auto h-12 w-12 text-cursor-accent" />
+          <div className="mx-auto grid h-20 w-20 place-items-center rounded-[2rem] bg-[radial-gradient(circle_at_50%_20%,rgba(196,165,116,0.30),rgba(124,58,237,0.16),transparent_70%)] shadow-[0_0_60px_rgba(196,165,116,0.28)]">
+            <img src={MERCURY_LOGO.src} srcSet={MERCURY_LOGO.srcSet} sizes={MERCURY_LOGO.sizes} alt="" className="h-12 w-12 rounded-2xl" />
+          </div>
           <h1 className="mt-4 text-2xl font-semibold text-cursor-text-bright">Studio composer</h1>
           <p className="mt-2 text-sm text-cursor-muted">
             Open folders/assets/scripts/elements as tabs. Use the bottom MercuryOS composer to create scripts, images, or videos.
           </p>
         </div>
+      </div>
+    );
+  }
+  if (activeEntry?.studioKind === "document") {
+    return (
+      <div className="h-full min-h-0">
+        <MarkdownDocEditor
+          value={activeEntry.description ?? ""}
+          onChange={(contentMarkdown) => onDocumentChange(activeEntry, contentMarkdown)}
+          onSave={() => {}}
+        />
       </div>
     );
   }
@@ -937,6 +1039,7 @@ function SettingsSheet({
   bankAccounts,
   payments,
   notifications,
+  onSignOut,
   onClose,
   onSeedPresets,
   onSeedBank,
@@ -956,6 +1059,12 @@ function SettingsSheet({
           <button className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose}>×</button>
         </div>
         <div className="mt-5 space-y-3">
+          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+            <p className="text-sm font-semibold text-cursor-text-bright">Account</p>
+            <p className="mt-1 text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
+            <button className={`${STYLE.iconButton} mt-3`} onClick={onSignOut}>Sign out</button>
+          </section>
+
           <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
               <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
