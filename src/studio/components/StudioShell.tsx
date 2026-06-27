@@ -30,6 +30,13 @@ import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { mercuryLogoAssets } from "@/lib/brand-assets";
+import {
+  SCHEMES,
+  getAppearanceMode,
+  getSchemeId,
+  setAppearanceMode,
+  setColorScheme,
+} from "@/mos-app/theme.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
@@ -456,12 +463,30 @@ export function StudioShell() {
   }
 
   return (
-    <div className={STYLE.shell} data-appearance="dark">
+    <div className={STYLE.shell}>
       <style jsx global>{`
         .cursor-panel-search-input:focus {
           outline: none !important;
           box-shadow: none !important;
           border-color: transparent !important;
+        }
+        .cursor-composer-box.is-drop-target {
+          border-style: dashed !important;
+          border-color: color-mix(in srgb, var(--cursor-accent) 72%, var(--cursor-border-subtle)) !important;
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, transparent) inset,
+            0 0 24px color-mix(in srgb, var(--cursor-accent) 24%, transparent) !important;
+        }
+        .cursor-attach-tile-open {
+          transition:
+            background 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            transform 180ms ease !important;
+        }
+        .cursor-attach-tile-open:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border)) !important;
+          box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
       `}</style>
       <PanelGroup direction="horizontal" autoSaveId="studio-main-h" className="min-w-0 flex-1">
@@ -679,6 +704,7 @@ function StudioComposer({
 }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   async function toggleVoice() {
     try {
@@ -703,15 +729,23 @@ function StudioComposer({
   return (
     <div
       className="cursor-composer-shell"
-      onDragOver={(event) => event.preventDefault()}
+      onDragEnter={() => setDragOver(true)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false);
+      }}
       onDrop={(event) => {
         event.preventDefault();
+        setDragOver(false);
         const entry = readExplorerDragData(event.dataTransfer);
         if (entry) onDropEntry(entry);
       }}
     >
       <div className="cursor-composer">
-      <div className={`cursor-composer-box p-2 ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}`}>
+      <div className={`cursor-composer-box p-2 ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
         <div className="px-2 pt-2">
           <StudioAttachmentRow
             items={attachments}
@@ -932,26 +966,61 @@ function CreateStudioDialog({ initialKind, onClose, onCreate }) {
 function StudioAttachmentRow({ items, onRemove }) {
   if (!items?.length) return null;
   return (
-    <div className="cursor-attach-tiles">
+    <div className="cursor-attach-tiles px-2 pb-1">
       {items.map((item) => (
-        <span key={item.id} className="cursor-attach-tile is-tag" data-attach-kind={item.kind ?? "file"}>
-          <span className="cursor-attach-tile-open">
-            <span className="cursor-attach-tile-icon">
-              {item.kind === "image" ? <ImageIcon className="h-3.5 w-3.5" /> : item.kind === "video" ? <Video className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
-            </span>
-            <span className="cursor-attach-tile-label">{item.label}</span>
-          </span>
-          <button
-            type="button"
-            className="cursor-attach-tile-remove"
-            aria-label="Remove"
-            onClick={() => onRemove(item)}
-          >
-            ×
-          </button>
-        </span>
+        <StudioAttachmentChip key={item.id} item={item} onRemove={onRemove} />
       ))}
     </div>
+  );
+}
+
+function StudioAttachmentChip({ item, onRemove }) {
+  const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
+  const canPreview = item.studioKind === "asset" && (item.kind === "image" || item.kind === "video");
+  const previewUrl = useQuery(
+    api.assets.signedReadUrl,
+    canPreview ? { assetId: item.studioId, expiresUnix } : "skip",
+  );
+  const tileClass =
+    item.kind === "image" ? "is-square" : item.kind === "video" ? "is-video" : "is-tag";
+  return (
+    <span className={`cursor-attach-tile ${tileClass}`} data-attach-kind={item.kind ?? "file"}>
+      <span className="cursor-attach-tile-open">
+        {item.kind === "image" ? (
+          previewUrl ? (
+            <img className="cursor-attach-tile-img" src={previewUrl} alt={item.label} loading="lazy" />
+          ) : (
+            <span className="cursor-attach-tile-fallback">
+              <ImageIcon className="h-4 w-4" />
+            </span>
+          )
+        ) : item.kind === "video" ? (
+          previewUrl ? (
+            <video className="cursor-attach-tile-img" src={previewUrl} muted playsInline preload="metadata" />
+          ) : (
+            <span className="cursor-attach-tile-fallback">
+              <Video className="h-4 w-4" />
+            </span>
+          )
+        ) : (
+          <>
+            <span className="cursor-attach-tile-icon">
+              <FileText className="h-3.5 w-3.5" />
+            </span>
+            <span className="cursor-attach-tile-label">{item.label}</span>
+            <span className="cursor-attach-tile-badge">{item.studioKind ?? item.kind}</span>
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        className="cursor-attach-tile-remove"
+        aria-label="Remove"
+        onClick={() => onRemove(item)}
+      >
+        ×
+      </button>
+    </span>
   );
 }
 
@@ -1065,6 +1134,8 @@ function SettingsSheet({
             <button className={`${STYLE.iconButton} mt-3`} onClick={onSignOut}>Sign out</button>
           </section>
 
+          <StudioThemeSettings />
+
           <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
               <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
@@ -1134,6 +1205,61 @@ function SettingsSheet({
         </div>
       </aside>
     </div>
+  );
+}
+
+function StudioThemeSettings() {
+  const [appearance, setAppearance] = useState(() => getAppearanceMode());
+  const [scheme, setScheme] = useState(() => getSchemeId());
+
+  useEffect(() => {
+    const handleThemeChange = (event) => {
+      setAppearance(event.detail?.mode ?? getAppearanceMode());
+      setScheme(event.detail?.schemeId ?? getSchemeId());
+    };
+    window.addEventListener("mercuryos-theme-change", handleThemeChange);
+    return () => window.removeEventListener("mercuryos-theme-change", handleThemeChange);
+  }, []);
+
+  return (
+    <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
+      <p className="text-sm font-semibold text-cursor-text-bright">Appearance</p>
+      <div className="mt-3 inline-flex rounded-lg border border-cursor-border bg-cursor-bg p-1">
+        {["dark", "light"].map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            className={`seg-btn rounded-md px-3 py-1.5 text-xs capitalize transition ${
+              appearance === mode
+                ? "bg-cursor-accent/20 text-cursor-text-bright"
+                : "text-cursor-muted hover:bg-cursor-hover hover:text-cursor-text"
+            }`}
+            onClick={() => {
+              setAppearance(mode);
+              setAppearanceMode(mode);
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </div>
+      <div className="cursor-theme-grid mt-3">
+        {Object.entries(SCHEMES).map(([id, theme]) => (
+          <button
+            key={id}
+            type="button"
+            className={`theme-chip${scheme === id ? " active" : ""}`}
+            onClick={() => {
+              setScheme(id);
+              setColorScheme(id);
+            }}
+          >
+            <span className="theme-chip-swatch" style={{ background: theme.accent }} />
+            <span className="theme-chip-label">{theme.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
