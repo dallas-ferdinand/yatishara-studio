@@ -127,7 +127,6 @@ export function StudioShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
-  const [assetUrlExpires] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
   const composerUploadInputRef = useRef(null);
@@ -157,7 +156,7 @@ export function StudioShell() {
   );
   const assets = useQuery(
     api.assets.listByFolder,
-    activeFolder ? { folderId: activeFolder._id, expiresUnix: assetUrlExpires } : "skip",
+    activeFolder ? { folderId: activeFolder._id } : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
@@ -1202,15 +1201,17 @@ export function StudioShell() {
         }
         .studio-composer-cost {
           display: inline-flex;
-          height: 28px;
+          height: 24px;
           align-items: center;
           border-radius: var(--cursor-radius-pill);
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
-          padding: 0 9px;
+          padding: 0 6px;
           color: var(--cursor-accent);
-          font-size: 11px;
+          font-size: 10px;
           font-weight: 700;
+          line-height: 1;
+          letter-spacing: -0.01em;
           white-space: nowrap;
         }
         .studio-pricing-grid,
@@ -1948,7 +1949,7 @@ function StudioComposer({
               </>
             ) : null}
             <span className="studio-composer-cost" title="Estimated generation cost">
-              {mode === "script" ? "No credits" : `${cost} credits`}
+              {mode === "script" ? "Free" : `${cost} cr`}
             </span>
           </div>
           <div className="studio-composer-actions">
