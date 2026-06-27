@@ -3,7 +3,6 @@ import Script from "next/script";
 import { Bricolage_Grotesque, JetBrains_Mono, Onest } from "next/font/google";
 import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
-import { getDeskBuildGuardInlineScript } from "@/mos-app/desk-build-guard.js";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
 import "./globals.css";
 
@@ -51,7 +50,7 @@ export default function RootLayout({
       className={`${onest.variable} ${bricolage.variable} ${jetbrains.variable} h-full`}
     >
       <head>
-        <meta name="x-desk-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? ""} />
+        <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? ""} />
         {MERCURY_LOGO_PRELOAD.map((asset) => (
           <link
             key={asset.href}
@@ -61,9 +60,6 @@ export default function RootLayout({
             type={asset.type}
           />
         ))}
-        <Script id="mos-desk-build-guard" strategy="beforeInteractive">
-          {getDeskBuildGuardInlineScript()}
-        </Script>
         <Script id="mos-theme-boot" strategy="beforeInteractive">
           {getThemeBootInlineScript()}
         </Script>

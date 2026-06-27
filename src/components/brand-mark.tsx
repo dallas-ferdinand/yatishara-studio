@@ -8,7 +8,7 @@ type Props = {
   subtle?: boolean;
 };
 
-/** MercuryOS logo — WebP @ correct DPR, soft ambient breathe (no cheap blob pulse). */
+/** Studio logo — WebP @ correct DPR, soft ambient breathe. */
 export function BrandMark({ size = 48, subtle = false }: Props) {
   const [loaded, setLoaded] = useState(false);
   const assets = mercuryLogoAssets(size);
@@ -27,7 +27,7 @@ export function BrandMark({ size = 48, subtle = false }: Props) {
         />
         <img
           src={assets.src}
-          alt="MercuryOS"
+          alt="Yatishara Studio"
           width={size}
           height={size}
           decoding="async"
