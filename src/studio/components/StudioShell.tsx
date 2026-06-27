@@ -302,10 +302,20 @@ export function StudioShell() {
   function attachEntry(entry) {
     if (!entry || entry.type === "parent") return;
     const attachment = entryToAttachment(entry);
-    setAttachments((items) =>
-      items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
-    );
-    editorRef.current?.focus();
+    const exists = attachments.some((item) => item.id === attachment.id);
+    if (!exists) {
+      setAttachments((items) => [...items, attachment]);
+    }
+    if (!activeTab.startsWith("composer:")) {
+      setActiveTab(COMPOSER_TAB);
+    }
+    window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      if (!exists) insertComposerAttachmentToken(editor, attachment);
+      setDraft(readComposerEditorText(editor));
+    });
   }
 
   async function createStudioItem(values) {
@@ -455,8 +465,143 @@ export function StudioShell() {
   }
 
   return (
-    <div className={STYLE.shell}>
+    <div className={`${STYLE.shell} studio-polish`}>
       <style jsx global>{`
+        .studio-polish {
+          --studio-glow-soft: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          --studio-glow-mid: color-mix(in srgb, var(--cursor-accent) 24%, transparent);
+          --studio-surface-hover: color-mix(in srgb, var(--cursor-accent) 5%, var(--color-cursor-hover));
+        }
+        .studio-polish :where(button, [role="button"], .cursor-tab, .cursor-agent-chat-tab, .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip, .theme-chip) {
+          transition:
+            background 180ms ease,
+            border-color 180ms ease,
+            color 180ms ease,
+            box-shadow 180ms ease,
+            transform 180ms ease,
+            opacity 180ms ease;
+        }
+        .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip) {
+          -webkit-tap-highlight-color: transparent;
+        }
+        .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip):focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
+          outline-offset: 2px;
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):hover:not(:disabled) {
+          box-shadow: 0 0 18px var(--studio-glow-soft);
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active:not(:disabled),
+        .studio-polish :where(.cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip):active {
+          transform: translateY(1px);
+        }
+        .studio-polish .cursor-panel-head {
+          backdrop-filter: blur(10px);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 92%, transparent), color-mix(in srgb, var(--mos-bg) 98%, transparent));
+        }
+        .studio-polish .cursor-sidebar-brand-logo-img {
+          filter: drop-shadow(0 0 8px var(--studio-glow-soft));
+        }
+        .studio-polish .cursor-tree-row:hover,
+        .studio-polish .desk-file-grid-item:hover {
+          background: var(--studio-surface-hover);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-polish .desk-file-grid-item:hover {
+          transform: translateY(-1px);
+        }
+        .studio-polish .cursor-tree-row[aria-selected="true"],
+        .studio-polish .desk-file-grid-item[aria-selected="true"],
+        .studio-polish .cursor-tree-row.is-selected,
+        .studio-polish .desk-file-grid-item.is-selected {
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-hover));
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 20%, transparent);
+        }
+        .studio-polish .desk-file-breadcrumbs-chip:hover {
+          background: var(--cursor-overlay-subtle);
+          box-shadow: 0 0 12px var(--studio-glow-soft);
+        }
+        .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover {
+          background: var(--studio-surface-hover);
+        }
+        .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active) {
+          box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--cursor-accent) 42%, transparent);
+        }
+        .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
+          border-color: color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border));
+          box-shadow:
+            0 18px 50px rgba(0, 0, 0, 0.34),
+            0 0 0 1px rgba(255, 255, 255, 0.025),
+            0 0 30px var(--studio-glow-soft);
+        }
+        .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item):hover {
+          background: var(--studio-surface-hover);
+        }
+        .studio-polish .cursor-settings-tab:hover {
+          background: var(--cursor-overlay-subtle);
+          color: var(--color-cursor-text);
+        }
+        .studio-polish .cursor-settings-section {
+          border-radius: 14px;
+          padding: 10px;
+          background: color-mix(in srgb, var(--mos-surface) 34%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 66%, transparent);
+        }
+        .studio-polish .cursor-settings-action:hover,
+        .studio-polish .theme-chip:hover {
+          box-shadow: 0 0 18px var(--studio-glow-soft);
+        }
+        .studio-polish .cursor-composer-box:focus-within {
+          border-color: color-mix(in srgb, var(--cursor-accent) 56%, var(--cursor-border-subtle));
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent) inset,
+            0 0 28px var(--studio-glow-mid);
+        }
+        .studio-polish .studio-inline-tag:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 38%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 14px var(--studio-glow-soft);
+        }
+        .studio-polish .cursor-resize {
+          transition: background 180ms ease, box-shadow 180ms ease;
+        }
+        .studio-polish .cursor-resize:hover {
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          box-shadow: 0 0 18px var(--studio-glow-soft);
+        }
+        .studio-polish .desk-file-list-head {
+          margin-top: 2px;
+        }
+        .studio-polish .desk-file-list-row {
+          min-height: 30px;
+        }
+        .studio-polish .desk-file-search-divider {
+          display: flex;
+          align-items: center;
+          min-height: 26px;
+          padding-top: 6px;
+          padding-bottom: 4px;
+        }
+        .studio-polish .cursor-file-grid .desk-file-search-divider,
+        .studio-polish .desk-file-preview-grid .desk-file-search-divider {
+          grid-column: 1 / -1;
+          height: auto;
+          min-height: 28px;
+        }
+        .studio-polish .cursor-chat-empty.thread-empty.cursor-chat-empty-logo-only {
+          min-height: 100%;
+          justify-content: center;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .studio-polish *,
+          .studio-polish *::before,
+          .studio-polish *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+          }
+        }
         .cursor-panel-search-input:focus {
           outline: none !important;
           box-shadow: none !important;
@@ -481,7 +626,7 @@ export function StudioShell() {
           box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
         .studio-composer .cursor-composer {
-          padding: 2px 10px max(12px, env(safe-area-inset-bottom, 12px));
+          padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
         }
         .studio-composer .cursor-composer-box {
           padding: 0 !important;
@@ -500,25 +645,18 @@ export function StudioShell() {
           flex-wrap: wrap;
           padding: 10px 12px 4px;
         }
-        .studio-inline-tags {
-          display: inline-flex;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 4px;
-          min-width: 0;
-        }
         .studio-inline-tag {
           display: inline-flex;
-          height: 20px;
+          height: 22px;
           max-width: min(220px, 48vw);
           align-items: center;
-          gap: 4px;
+          gap: 5px;
           border-radius: var(--cursor-radius-pill);
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-hover));
-          padding: 0 6px;
+          padding: 0 7px;
           color: var(--color-cursor-text);
-          font-size: 11px;
+          font-size: 12px;
           line-height: 1;
           white-space: nowrap;
           vertical-align: middle;
@@ -529,33 +667,26 @@ export function StudioShell() {
           text-overflow: ellipsis;
         }
         .studio-inline-tag-media {
-          width: 14px;
-          height: 14px;
+          width: 15px;
+          height: 15px;
           border-radius: 999px;
           object-fit: cover;
           flex-shrink: 0;
           background: var(--cursor-overlay-subtle);
         }
-        .studio-inline-tag-remove {
+        .studio-inline-tag-kind {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 13px;
-          height: 13px;
-          margin-right: -2px;
-          border: 0;
+          width: 14px;
+          height: 14px;
           border-radius: 999px;
-          background: transparent;
+          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
           color: var(--color-cursor-muted);
-          cursor: pointer;
-          padding: 0;
-        }
-        .studio-inline-tag-remove:hover {
-          background: var(--cursor-overlay-hover);
-          color: var(--color-cursor-text);
-        }
-        .studio-composer .cursor-composer-mention-editor.has-inline-tags:empty::before {
-          content: "";
+          flex-shrink: 0;
+          font-size: 9px;
+          font-weight: 700;
+          line-height: 1;
         }
         .studio-composer-toolbar {
           display: flex;
@@ -910,14 +1041,14 @@ function StudioComposer({
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
-    if (!draft) {
-      if (el.innerText) el.innerText = "";
+    if (!draft && !attachments.length) {
+      if (el.textContent) el.replaceChildren();
       return;
     }
-    if (document.activeElement !== el && el.innerText !== draft) {
+    if (document.activeElement !== el && !attachments.length && el.innerText !== draft) {
       el.innerText = draft;
     }
-  }, [draft, editorRef]);
+  }, [attachments.length, draft, editorRef]);
 
   function setEditorText(next) {
     const el = editorRef.current;
@@ -942,7 +1073,7 @@ function StudioComposer({
         const data = await voice.stopRecording();
         const text = await voice.transcribeRecording(data);
         if (text?.trim()) {
-          const current = editorRef.current?.innerText ?? draft;
+          const current = editorRef.current ? readComposerEditorText(editorRef.current) : draft;
           setEditorText(`${current}${current ? " " : ""}${text.trim()}`);
         }
         return;
@@ -977,10 +1108,6 @@ function StudioComposer({
       <div className="cursor-composer">
       <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
         <div className="studio-composer-inputline">
-          <StudioInlineAttachmentTags
-            items={attachments}
-            onRemove={(item) => setAttachments((items) => items.filter((entry) => entry.id !== item.id))}
-          />
           <div
             ref={editorRef}
             role="textbox"
@@ -988,9 +1115,14 @@ function StudioComposer({
             contentEditable
             suppressContentEditableWarning
             data-placeholder="Message Studio"
-            className={`cursor-composer-textarea cursor-composer-mention-editor${attachments.length ? " has-inline-tags" : ""}`}
-            onInput={(event) => setDraft(event.currentTarget.innerText ?? "")}
+            className="cursor-composer-textarea cursor-composer-mention-editor"
+            onInput={(event) => setDraft(readComposerEditorText(event.currentTarget))}
             onKeyDown={(event) => {
+              if (event.key === "Backspace" && removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
+                event.preventDefault();
+                setDraft(readComposerEditorText(editorRef.current));
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void onSubmit();
@@ -1200,45 +1332,115 @@ function CreateStudioDialog({ initialKind, onClose, onCreate }) {
   );
 }
 
-function StudioInlineAttachmentTags({ items, onRemove }) {
-  if (!items?.length) return null;
-  return (
-    <span className="studio-inline-tags">
-      {items.map((item) => (
-        <StudioInlineAttachmentTag key={item.id} item={item} onRemove={onRemove} />
-      ))}
-    </span>
-  );
+function createComposerAttachmentToken(attachment) {
+  const token = document.createElement("span");
+  token.className = "studio-inline-tag";
+  token.contentEditable = "false";
+  token.dataset.attachmentId = attachment.id;
+  token.dataset.label = attachment.label;
+  token.dataset.kind = attachment.kind ?? "file";
+
+  const kind = document.createElement("span");
+  kind.className = "studio-inline-tag-kind";
+  kind.textContent = (attachment.kind ?? attachment.studioKind ?? "file").slice(0, 1).toUpperCase();
+
+  const label = document.createElement("span");
+  label.className = "studio-inline-tag-label";
+  label.textContent = attachment.label;
+
+  token.append(kind, label);
+  return token;
 }
 
-function StudioInlineAttachmentTag({ item, onRemove }) {
-  const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
-  const canPreview = item.studioKind === "asset" && (item.kind === "image" || item.kind === "video");
-  const previewUrl = useQuery(
-    api.assets.signedReadUrl,
-    canPreview ? { assetId: item.studioId, expiresUnix } : "skip",
-  );
-  const Icon = item.kind === "image" ? ImageIcon : item.kind === "video" ? Video : FileText;
-  return (
-    <span className="studio-inline-tag" contentEditable={false}>
-      {previewUrl && item.kind === "image" ? (
-        <img className="studio-inline-tag-media" src={previewUrl} alt="" loading="lazy" />
-      ) : previewUrl && item.kind === "video" ? (
-        <video className="studio-inline-tag-media" src={previewUrl} muted playsInline preload="metadata" />
-      ) : (
-        <Icon className="h-3 w-3 shrink-0 text-cursor-muted" />
-      )}
-      <span className="studio-inline-tag-label">{item.label}</span>
-      <button
-        type="button"
-        className="studio-inline-tag-remove"
-        aria-label={`Remove ${item.label}`}
-        onClick={() => onRemove(item)}
-      >
-        ×
-      </button>
-    </span>
-  );
+function ensureSelectionInEditor(editor) {
+  const selection = window.getSelection();
+  if (selection?.rangeCount && editor.contains(selection.anchorNode)) {
+    return selection.getRangeAt(0);
+  }
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return range;
+}
+
+function insertComposerAttachmentToken(editor, attachment) {
+  const range = ensureSelectionInEditor(editor);
+  const token = createComposerAttachmentToken(attachment);
+  const spacer = document.createTextNode(" ");
+  range.deleteContents();
+  range.insertNode(spacer);
+  range.insertNode(token);
+  range.setStartAfter(spacer);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function isComposerAttachmentToken(node) {
+  return node?.nodeType === Node.ELEMENT_NODE && node.classList?.contains("studio-inline-tag");
+}
+
+function previousTokenFromSelection(editor) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !selection.isCollapsed || !editor?.contains(selection.anchorNode)) return null;
+  const { anchorNode, anchorOffset } = selection;
+
+  if (anchorNode === editor) {
+    return editor.childNodes[anchorOffset - 1] ?? null;
+  }
+  if (anchorNode?.nodeType === Node.TEXT_NODE) {
+    const textBeforeCaret = anchorNode.nodeValue?.slice(0, anchorOffset) ?? "";
+    if (textBeforeCaret.length && !/^\s+$/.test(textBeforeCaret)) return null;
+    let node = anchorNode.previousSibling;
+    if (!node && anchorNode.parentNode !== editor) node = anchorNode.parentNode?.previousSibling;
+    if (isComposerAttachmentToken(node)) return node;
+    if (anchorOffset === 0 && isComposerAttachmentToken(anchorNode.previousSibling)) return anchorNode.previousSibling;
+    return null;
+  }
+  if (anchorNode?.nodeType === Node.ELEMENT_NODE) {
+    return anchorNode.childNodes?.[anchorOffset - 1] ?? anchorNode.previousSibling ?? null;
+  }
+  return null;
+}
+
+function removeComposerTokenBeforeCaret(editor, setAttachments) {
+  const token = previousTokenFromSelection(editor);
+  if (!isComposerAttachmentToken(token)) return false;
+  const id = token.dataset.attachmentId;
+  const after = token.nextSibling;
+  const range = document.createRange();
+  range.setStartBefore(token);
+  range.collapse(true);
+  token.remove();
+  if (after?.nodeType === Node.TEXT_NODE && /^\s*$/.test(after.nodeValue ?? "")) {
+    after.remove();
+  }
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  if (id) setAttachments((items) => items.filter((item) => item.id !== id));
+  return true;
+}
+
+function readComposerEditorText(editor) {
+  if (!editor) return "";
+  const parts = [];
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.nodeValue ?? "");
+      return;
+    }
+    if (isComposerAttachmentToken(node)) {
+      parts.push(`@${node.dataset.label ?? node.textContent ?? ""} `);
+      return;
+    }
+    node.childNodes?.forEach(walk);
+  };
+  editor.childNodes.forEach(walk);
+  return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\s{2,}/g, " ");
 }
 
 function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onDocumentChange, onSwitchThreadFolder }) {
