@@ -6,20 +6,20 @@
 - Coolify app UUID: `y2po9nswpdem975f1zo47u19`
 - Coolify project: `My first project`
 - Coolify environment: `production`
-- Source repo: pending dedicated Studio repo
-- Branch: pending
+- Source repo: `https://github.com/dallas-ferdinand/yatishara-studio`
+- Branch: `main`
 - Base directory: `/`
 - Build pack: Dockerfile
 - Port: `3000`
 
 ## Required Human Gates
 
-1. Create/approve a dedicated Git repo for `/opt/yatishara-studio`, then push it.
+1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
 2. In BytePlus Ark Console, activate the configured ModelArk models:
    - enhancement: `BYTEPLUS_ENHANCEMENT_MODEL_ID`
    - image: `BYTEPLUS_IMAGE_LOW_MODEL_ID`, `BYTEPLUS_IMAGE_MEDIUM_MODEL_ID`, `BYTEPLUS_IMAGE_HIGH_MODEL_ID`
    - video: `BYTEPLUS_VIDEO_MODEL_ID`
-3. Update Coolify app `y2po9nswpdem975f1zo47u19` to the dedicated Studio repo, then deploy.
+3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.
 4. Complete first OTP login with `STUDIO_SUPER_ADMIN_EMAIL`, then use Settings to:
    - seed style presets,
    - confirm pricing,
