@@ -5,7 +5,6 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp,
-  Bell,
   ChevronDown,
   CircleDollarSign,
   FileText,
@@ -27,20 +26,14 @@ import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
-import { mercuryLogoAssets } from "@/lib/brand-assets";
-import {
-  SCHEMES,
-  getAppearanceMode,
-  getSchemeId,
-  setAppearanceMode,
-  setColorScheme,
-} from "@/mos-app/theme.js";
+import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
-const MERCURY_LOGO = mercuryLogoAssets(48);
+const MERCURY_EMPTY_LOGO = mercuryLogoAssets(96);
 
 const STYLE = {
   shell: "flex h-dvh min-h-0 bg-cursor-bg text-cursor-text",
@@ -488,20 +481,155 @@ export function StudioShell() {
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border)) !important;
           box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
+        .studio-composer .cursor-composer {
+          padding: 2px 10px max(12px, env(safe-area-inset-bottom, 12px));
+        }
+        .studio-composer .cursor-composer-box {
+          padding: 0 !important;
+        }
+        .studio-composer .cursor-composer-textarea {
+          min-height: 24px !important;
+          max-height: 168px;
+          padding: 10px 12px 4px !important;
+        }
+        .studio-composer-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: nowrap;
+          gap: 8px;
+          padding: 4px 8px 8px;
+          min-width: 0;
+        }
+        .studio-composer-controls {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          overflow-x: auto;
+          overflow-y: visible;
+          scrollbar-width: none;
+        }
+        .studio-composer-controls::-webkit-scrollbar {
+          display: none;
+        }
+        .studio-composer-actions {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+          margin-left: auto;
+        }
+        .studio-pill-btn {
+          display: inline-flex;
+          height: 28px;
+          align-items: center;
+          gap: 6px;
+          border-radius: var(--cursor-radius-pill);
+          border: 1px solid var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-surface) 92%, transparent);
+          padding: 0 9px;
+          color: var(--color-cursor-text);
+          font-size: 11px;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: background var(--cursor-ease), border-color var(--cursor-ease), box-shadow var(--cursor-ease);
+        }
+        .studio-pill-btn:hover,
+        .studio-pill-btn[aria-expanded="true"] {
+          background: var(--color-cursor-hover);
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+        }
+        .studio-dropdown-menu {
+          min-width: max-content;
+          max-width: min(240px, calc(100vw - 24px));
+          border-radius: 12px !important;
+          padding: 4px !important;
+        }
+        .studio-audio-switch {
+          position: relative;
+          width: 34px;
+          height: 18px;
+          border-radius: var(--cursor-radius-pill);
+          border: 1px solid var(--color-cursor-border-soft);
+          background: var(--cursor-overlay-subtle);
+          transition: background var(--cursor-ease), border-color var(--cursor-ease);
+        }
+        .studio-audio-switch::after {
+          content: "";
+          position: absolute;
+          top: 2px;
+          left: 2px;
+          width: 12px;
+          height: 12px;
+          border-radius: 999px;
+          background: var(--color-cursor-muted);
+          transition: transform var(--cursor-ease), background var(--cursor-ease);
+        }
+        .studio-audio-switch.is-on {
+          border-color: color-mix(in srgb, var(--cursor-accent) 44%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+        }
+        .studio-audio-switch.is-on::after {
+          transform: translateX(16px);
+          background: var(--cursor-accent);
+        }
+        .studio-empty-logo {
+          position: relative;
+          display: grid;
+          place-items: center;
+          width: 96px;
+          height: 96px;
+          margin: 0 auto;
+        }
+        .studio-empty-logo::before {
+          content: "";
+          position: absolute;
+          inset: -32px;
+          border-radius: 999px;
+          background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent) 26%, transparent), transparent 65%);
+          filter: blur(10px);
+          animation: studio-logo-breathe 3.8s ease-in-out infinite;
+        }
+        .studio-empty-logo img {
+          position: relative;
+          width: 72px;
+          height: 72px;
+          object-fit: contain;
+          filter: drop-shadow(0 0 18px color-mix(in srgb, var(--cursor-accent) 26%, transparent));
+        }
+        @keyframes studio-logo-breathe {
+          0%, 100% { opacity: 0.48; transform: scale(0.96); }
+          50% { opacity: 0.9; transform: scale(1.05); }
+        }
       `}</style>
       <PanelGroup direction="horizontal" autoSaveId="studio-main-h" className="min-w-0 flex-1">
         <Panel defaultSize={24} minSize={16} maxSize={42}>
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-lg border border-cursor-border bg-cursor-bg">
-              <img src={MERCURY_LOGO.src} srcSet={MERCURY_LOGO.srcSet} sizes={MERCURY_LOGO.sizes} alt="" className="h-5 w-5 rounded-md" />
+          <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand min-w-0">
+            <span className="cursor-sidebar-brand-logo" aria-hidden="true">
+              <img
+                src={MERCURY_LOGO_SIDEBAR}
+                alt=""
+                width={16}
+                height={16}
+                decoding="async"
+                loading="eager"
+                className="cursor-sidebar-brand-logo-img"
+              />
             </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-cursor-text-bright">
-                Studio <span className="font-normal text-cursor-muted">· {currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator"}</span>
-              </p>
-            </div>
+            <span className="cursor-sidebar-brand-text truncate">
+              <span className="cursor-sidebar-brand-os">Studio</span>
+              <span className="cursor-sidebar-brand-sep" aria-hidden="true">·</span>
+              <span className="cursor-sidebar-brand-user">
+                <span className="cursor-sidebar-brand-user-name truncate">
+                  {currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator"}
+                </span>
+              </span>
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <div className="relative">
@@ -598,29 +726,31 @@ export function StudioShell() {
             }}
           />
         </section>
-        <StudioComposer
-          draft={draft}
-          setDraft={setDraft}
-          editorRef={editorRef}
-          attachments={attachments}
-          setAttachments={setAttachments}
-          mode={mode}
-          setMode={setMode}
-          imageTier={imageTier}
-          setImageTier={setImageTier}
-          aspectRatio={aspectRatio}
-          setAspectRatio={setAspectRatio}
-          resolution={resolution}
-          setResolution={setResolution}
-          durationSeconds={durationSeconds}
-          setDurationSeconds={setDurationSeconds}
-          audioEnabled={audioEnabled}
-          setAudioEnabled={setAudioEnabled}
-          disabled={flowPending}
-          status={status}
-          onSubmit={handleSubmit}
-          onDropEntry={(entry) => attachEntry(entry)}
-        />
+        {activeTab.startsWith("composer:") ? (
+          <StudioComposer
+            draft={draft}
+            setDraft={setDraft}
+            editorRef={editorRef}
+            attachments={attachments}
+            setAttachments={setAttachments}
+            mode={mode}
+            setMode={setMode}
+            imageTier={imageTier}
+            setImageTier={setImageTier}
+            aspectRatio={aspectRatio}
+            setAspectRatio={setAspectRatio}
+            resolution={resolution}
+            setResolution={setResolution}
+            durationSeconds={durationSeconds}
+            setDurationSeconds={setDurationSeconds}
+            audioEnabled={audioEnabled}
+            setAudioEnabled={setAudioEnabled}
+            disabled={flowPending}
+            status={status}
+            onSubmit={handleSubmit}
+            onDropEntry={(entry) => attachEntry(entry)}
+          />
+        ) : null}
       </main>
         </Panel>
       </PanelGroup>
@@ -728,7 +858,7 @@ function StudioComposer({
 
   return (
     <div
-      className="cursor-composer-shell"
+      className="cursor-composer-shell studio-composer"
       onDragEnter={() => setDragOver(true)}
       onDragOver={(event) => {
         event.preventDefault();
@@ -745,14 +875,14 @@ function StudioComposer({
       }}
     >
       <div className="cursor-composer">
-      <div className={`cursor-composer-box p-2 ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
+      <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
         <div className="px-2 pt-2">
           <StudioAttachmentRow
             items={attachments}
             onRemove={(item) => setAttachments((items) => items.filter((entry) => entry.id !== item.id))}
           />
         </div>
-        <div className="px-2 pt-1">
+        <div>
           <div
             ref={editorRef}
             role="textbox"
@@ -760,7 +890,7 @@ function StudioComposer({
             contentEditable
             suppressContentEditableWarning
             data-placeholder="Message Studio"
-            className="cursor-composer-textarea cursor-composer-mention-editor min-h-16"
+            className="cursor-composer-textarea cursor-composer-mention-editor"
             onInput={(event) => setDraft(event.currentTarget.innerText ?? "")}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -772,75 +902,85 @@ function StudioComposer({
             {draft}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 px-2 pb-1 pt-2">
-          <StudioDropdown
-            value={mode}
-            onChange={setMode}
-            items={[
-              { value: "script", label: "Script", icon: FileText },
-              { value: "image", label: "Image", icon: ImageIcon },
-              { value: "video", label: "Video", icon: Video },
-            ]}
-          />
-          {mode === "image" ? (
+        <div className="studio-composer-toolbar">
+          <div className="studio-composer-controls">
             <StudioDropdown
-              value={imageTier}
-              onChange={setImageTier}
+              value={mode}
+              onChange={setMode}
               items={[
-                { value: "low", label: "Low" },
-                { value: "medium", label: "Medium" },
-                { value: "high", label: "High" },
+                { value: "script", label: "Script", icon: FileText },
+                { value: "image", label: "Image", icon: ImageIcon },
+                { value: "video", label: "Video", icon: Video },
               ]}
             />
-          ) : null}
-          {mode !== "script" ? (
-            <>
+            {mode === "image" ? (
               <StudioDropdown
-                value={aspectRatio}
-                onChange={setAspectRatio}
-                items={["16:9", "9:16", "1:1", "4:3"].map((value) => ({ value, label: value }))}
-              />
-              <StudioDropdown
-                value={resolution}
-                onChange={setResolution}
-                items={["1024x1024", "1280x720", "1920x1080"].map((value) => ({ value, label: value }))}
-              />
-            </>
-          ) : null}
-          {mode === "video" ? (
-            <>
-              <StudioDropdown
-                value={durationSeconds}
-                onChange={setDurationSeconds}
+                value={imageTier}
+                onChange={setImageTier}
                 items={[
-                  { value: "5", label: "5s" },
-                  { value: "10", label: "10s" },
+                  { value: "low", label: "Low" },
+                  { value: "medium", label: "Medium" },
+                  { value: "high", label: "High" },
                 ]}
               />
-              <label className="flex items-center gap-1 text-xs text-cursor-muted">
-                <input type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
-                Audio
-              </label>
-            </>
-          ) : null}
-          <button
-            type="button"
-            className={`cursor-toolbar-icon ${recording ? "is-recording" : ""}`}
-            title={transcribing ? "Transcribing..." : recording ? "Stop recording" : "Voice input"}
-            onClick={() => void toggleVoice()}
-            disabled={transcribing}
-          >
-            {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
-          </button>
-          <button
-            type="button"
-            disabled={disabled || !draft.trim()}
-            onClick={() => void onSubmit()}
-            className="cursor-toolbar-icon cursor-composer-submit ml-auto"
-            title="Send"
-          >
-            <ArrowUp className="h-4 w-4" />
-          </button>
+            ) : null}
+            {mode !== "script" ? (
+              <>
+                <StudioDropdown
+                  value={aspectRatio}
+                  onChange={setAspectRatio}
+                  items={["16:9", "9:16", "1:1", "4:3"].map((value) => ({ value, label: value }))}
+                />
+                <StudioDropdown
+                  value={resolution}
+                  onChange={setResolution}
+                  items={["1024x1024", "1280x720", "1920x1080"].map((value) => ({ value, label: value }))}
+                />
+              </>
+            ) : null}
+            {mode === "video" ? (
+              <>
+                <StudioDropdown
+                  value={durationSeconds}
+                  onChange={setDurationSeconds}
+                  items={[
+                    { value: "5", label: "5s" },
+                    { value: "10", label: "10s" },
+                  ]}
+                />
+                <button
+                  type="button"
+                  className="studio-pill-btn"
+                  onClick={() => setAudioEnabled(!audioEnabled)}
+                  aria-pressed={audioEnabled}
+                  title={audioEnabled ? "Audio on" : "Audio off"}
+                >
+                  Audio
+                  <span className={`studio-audio-switch${audioEnabled ? " is-on" : ""}`} aria-hidden="true" />
+                </button>
+              </>
+            ) : null}
+          </div>
+          <div className="studio-composer-actions">
+            <button
+              type="button"
+              className={`cursor-toolbar-icon ${recording ? "is-recording" : ""}`}
+              title={transcribing ? "Transcribing..." : recording ? "Stop recording" : "Voice input"}
+              onClick={() => void toggleVoice()}
+              disabled={transcribing}
+            >
+              {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              disabled={disabled || !draft.trim()}
+              onClick={() => void onSubmit()}
+              className="cursor-toolbar-icon cursor-composer-submit"
+              title="Send"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
       </div>
@@ -874,7 +1014,8 @@ function StudioDropdown({ value, onChange, items }) {
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cursor-border bg-cursor-bg px-2 text-xs text-cursor-text hover:bg-cursor-hover"
+        className="studio-pill-btn"
+        aria-expanded={open}
         onClick={() => setOpen((state) => !state)}
       >
         {ActiveIcon ? <ActiveIcon className="h-3.5 w-3.5" /> : null}
@@ -882,7 +1023,7 @@ function StudioDropdown({ value, onChange, items }) {
         <ChevronDown className="h-3 w-3 text-cursor-muted" />
       </button>
       {open ? (
-        <div className="cursor-tab-context-menu absolute bottom-9 left-0 z-40 min-w-36">
+        <div className="cursor-tab-context-menu studio-dropdown-menu absolute bottom-9 left-0 z-40">
           {items.map((item) => {
             const ItemIcon = item.icon;
             return (
@@ -1027,15 +1168,16 @@ function StudioAttachmentChip({ item, onRemove }) {
 function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onDocumentChange, onSwitchThreadFolder }) {
   if (activeTab.startsWith("composer:")) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-center">
-        <div className="max-w-xl">
-          <div className="mx-auto grid h-20 w-20 place-items-center rounded-[2rem] bg-[radial-gradient(circle_at_50%_20%,rgba(196,165,116,0.30),rgba(124,58,237,0.16),transparent_70%)] shadow-[0_0_60px_rgba(196,165,116,0.28)]">
-            <img src={MERCURY_LOGO.src} srcSet={MERCURY_LOGO.srcSet} sizes={MERCURY_LOGO.sizes} alt="" className="h-12 w-12 rounded-2xl" />
-          </div>
-          <h1 className="mt-4 text-2xl font-semibold text-cursor-text-bright">Studio composer</h1>
-          <p className="mt-2 text-sm text-cursor-muted">
-            Open folders/assets/scripts/elements as tabs. Use the bottom MercuryOS composer to create scripts, images, or videos.
-          </p>
+      <div className="cursor-chat-empty thread-empty cursor-chat-empty-logo-only">
+        <div className="studio-empty-logo" aria-hidden="true">
+          <img
+            src={MERCURY_EMPTY_LOGO.src}
+            srcSet={MERCURY_EMPTY_LOGO.srcSet}
+            sizes={MERCURY_EMPTY_LOGO.sizes}
+            alt=""
+            width={72}
+            height={72}
+          />
         </div>
       </div>
     );
@@ -1114,88 +1256,104 @@ function SettingsSheet({
   onSeedBank,
 }) {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+  const [tab, setTab] = useState("general");
+  const tabs = [
+    ["general", "General"],
+    ["billing", "Billing"],
+    ["activity", "Activity"],
+    ...(isAdmin ? [["admin", "Admin"]] : []),
+  ];
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onMouseDown={onClose}>
-      <aside
-        className="h-full w-full max-w-md border-l border-cursor-border bg-cursor-sidebar p-5 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-cursor-text-bright">Studio settings</h2>
-            <p className="text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
+    <div className="cursor-settings-overlay" role="dialog" aria-label="Studio settings">
+      <button type="button" className="cursor-settings-backdrop" onClick={onClose} aria-label="Close settings" />
+      <aside className="cursor-settings-panel">
+        <header className="cursor-panel-head cursor-settings-head">
+          <h2 className="min-w-0 flex-1 text-sm font-medium">Studio settings</h2>
+          <div className="cursor-panel-head-tools">
+            <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">×</button>
           </div>
-          <button className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose}>×</button>
-        </div>
-        <div className="mt-5 space-y-3">
-          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-            <p className="text-sm font-semibold text-cursor-text-bright">Account</p>
-            <p className="mt-1 text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
-            <button className={`${STYLE.iconButton} mt-3`} onClick={onSignOut}>Sign out</button>
-          </section>
+        </header>
+        <nav className="cursor-settings-tabs">
+          {tabs.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={`cursor-settings-tab ${tab === id ? "active" : ""}`}
+              onClick={() => setTab(id)}
+            >
+              <span className="cursor-settings-tab-label">{label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="cursor-settings-body">
+          {tab === "general" ? (
+            <>
+              <section className="cursor-settings-section">
+                <h3>Account</h3>
+                <p className="mb-2 text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
+                <button className="cursor-settings-action muted" onClick={onSignOut}>Sign out</button>
+              </section>
+              <ThemeSettings />
+            </>
+          ) : null}
 
-          <StudioThemeSettings />
+          {tab === "billing" ? (
+            <>
+              <section className="cursor-settings-section">
+                <h3>Billing</h3>
+                <p className="text-sm text-cursor-text">
+                  {billingAccount?.creditBalance ?? 0} credits
+                  <span className="text-cursor-muted"> · {billingAccount?.reservedCredits ?? 0} reserved</span>
+                </p>
+                {pricing ? (
+                  <p className="mt-1 text-xs text-cursor-muted">
+                    Low {pricing.imageLowCredits} · Medium {pricing.imageMediumCredits} · High {pricing.imageHighCredits} · Video {pricing.videoCredits}
+                  </p>
+                ) : null}
+              </section>
 
-          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
-              <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
-              Billing
-            </div>
-            <p className="mt-2 text-sm text-cursor-text">
-              {billingAccount?.creditBalance ?? 0} credits
-              <span className="text-cursor-muted"> · {billingAccount?.reservedCredits ?? 0} reserved</span>
-            </p>
-            {pricing ? (
-              <p className="mt-1 text-xs text-cursor-muted">
-                Low {pricing.imageLowCredits} · Medium {pricing.imageMediumCredits} · High {pricing.imageHighCredits} · Video {pricing.videoCredits}
-              </p>
-            ) : null}
-          </section>
-
-          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
-              <CircleDollarSign className="h-4 w-4 text-cursor-accent" />
-              Bank accounts
-            </div>
-            <div className="mt-2 space-y-2">
-              {(bankAccounts ?? []).map((bank) => (
-                <div key={bank._id} className="rounded-lg border border-cursor-border/70 p-2 text-xs text-cursor-muted">
-                  <p className="font-medium text-cursor-text">{bank.label}</p>
-                  <CopyLine label="Bank" value={bank.bankName} />
-                  <CopyLine label="Name" value={bank.accountName} />
-                  <CopyLine label="Number" value={bank.accountNumber} />
-                  <CopyLine label="Type" value={bank.accountType} />
+              <section className="cursor-settings-section">
+                <h3>Bank accounts</h3>
+                <div className="space-y-2">
+                  {(bankAccounts ?? []).map((bank) => (
+                    <div key={bank._id} className="rounded-lg border border-cursor-border/70 p-2 text-xs text-cursor-muted">
+                      <p className="font-medium text-cursor-text">{bank.label}</p>
+                      <CopyLine label="Bank" value={bank.bankName} />
+                      <CopyLine label="Name" value={bank.accountName} />
+                      <CopyLine label="Number" value={bank.accountNumber} />
+                      <CopyLine label="Type" value={bank.accountType} />
+                    </div>
+                  ))}
+                  {bankAccounts?.length === 0 ? <p className="text-xs text-cursor-muted">No enabled bank account yet.</p> : null}
                 </div>
-              ))}
-              {bankAccounts?.length === 0 ? <p className="text-xs text-cursor-muted">No enabled bank account yet.</p> : null}
-            </div>
-          </section>
+              </section>
+            </>
+          ) : null}
 
-          <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-cursor-text-bright">
-              <Bell className="h-4 w-4 text-cursor-accent" />
-              Recent activity
-            </div>
-            <div className="mt-2 space-y-1 text-xs text-cursor-muted">
-              {(notifications ?? []).slice(0, 3).map((item) => (
-                <p key={item._id}>{item.title}: {item.body}</p>
-              ))}
-              {(payments ?? []).slice(0, 3).map((item) => (
-                <p key={item._id}>Payment {item.status}: ${(item.amountCents / 100).toFixed(2)}</p>
-              ))}
-              {!notifications?.length && !payments?.length ? <p>No recent billing or notification activity.</p> : null}
-            </div>
-          </section>
+          {tab === "activity" ? (
+            <section className="cursor-settings-section">
+              <h3>Recent activity</h3>
+              <div className="space-y-1 text-xs text-cursor-muted">
+                {(notifications ?? []).slice(0, 3).map((item) => (
+                  <p key={item._id}>{item.title}: {item.body}</p>
+                ))}
+                {(payments ?? []).slice(0, 3).map((item) => (
+                  <p key={item._id}>Payment {item.status}: ${(item.amountCents / 100).toFixed(2)}</p>
+                ))}
+                {!notifications?.length && !payments?.length ? <p>No recent billing or notification activity.</p> : null}
+              </div>
+            </section>
+          ) : null}
 
-          {isAdmin ? (
-            <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-              <p className="text-sm font-semibold text-cursor-text-bright">Admin setup</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button className={STYLE.iconButton} onClick={onSeedPresets}>
+          {tab === "admin" && isAdmin ? (
+            <section className="cursor-settings-section">
+              <h3>Admin setup</h3>
+              <div className="flex flex-wrap gap-2">
+                <button className="cursor-settings-action" onClick={onSeedPresets}>
                   <Sparkles className="h-3.5 w-3.5" />
                   Seed presets
                 </button>
-                <button className={STYLE.iconButton} onClick={onSeedBank}>
+                <button className="cursor-settings-action" onClick={onSeedBank}>
                   <CircleDollarSign className="h-3.5 w-3.5" />
                   Seed bank from env
                 </button>
@@ -1205,61 +1363,6 @@ function SettingsSheet({
         </div>
       </aside>
     </div>
-  );
-}
-
-function StudioThemeSettings() {
-  const [appearance, setAppearance] = useState(() => getAppearanceMode());
-  const [scheme, setScheme] = useState(() => getSchemeId());
-
-  useEffect(() => {
-    const handleThemeChange = (event) => {
-      setAppearance(event.detail?.mode ?? getAppearanceMode());
-      setScheme(event.detail?.schemeId ?? getSchemeId());
-    };
-    window.addEventListener("mercuryos-theme-change", handleThemeChange);
-    return () => window.removeEventListener("mercuryos-theme-change", handleThemeChange);
-  }, []);
-
-  return (
-    <section className="rounded-xl border border-cursor-border bg-cursor-panel p-3">
-      <p className="text-sm font-semibold text-cursor-text-bright">Appearance</p>
-      <div className="mt-3 inline-flex rounded-lg border border-cursor-border bg-cursor-bg p-1">
-        {["dark", "light"].map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            className={`seg-btn rounded-md px-3 py-1.5 text-xs capitalize transition ${
-              appearance === mode
-                ? "bg-cursor-accent/20 text-cursor-text-bright"
-                : "text-cursor-muted hover:bg-cursor-hover hover:text-cursor-text"
-            }`}
-            onClick={() => {
-              setAppearance(mode);
-              setAppearanceMode(mode);
-            }}
-          >
-            {mode}
-          </button>
-        ))}
-      </div>
-      <div className="cursor-theme-grid mt-3">
-        {Object.entries(SCHEMES).map(([id, theme]) => (
-          <button
-            key={id}
-            type="button"
-            className={`theme-chip${scheme === id ? " active" : ""}`}
-            onClick={() => {
-              setScheme(id);
-              setColorScheme(id);
-            }}
-          >
-            <span className="theme-chip-swatch" style={{ background: theme.accent }} />
-            <span className="theme-chip-label">{theme.label}</span>
-          </button>
-        ))}
-      </div>
-    </section>
   );
 }
 
