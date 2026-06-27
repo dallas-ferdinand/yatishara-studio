@@ -7,6 +7,7 @@ export const current = authedQuery({
     userId: v.id("users"),
     name: v.optional(v.string()),
     email: v.optional(v.string()),
+    phone: v.optional(v.string()),
     role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
   }),
   handler: async (ctx) => {
@@ -14,6 +15,7 @@ export const current = authedQuery({
       userId: ctx.user._id,
       name: ctx.user.name,
       email: ctx.user.email,
+      phone: ctx.user.phone,
       role: ctx.user.role,
     };
   },

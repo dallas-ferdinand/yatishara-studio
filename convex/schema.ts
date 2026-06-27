@@ -82,6 +82,8 @@ export default defineSchema({
   users: defineTable({
     name: v.optional(v.string()),
     email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    phoneVerifiedAt: v.optional(v.number()),
     image: v.optional(v.string()),
     role: userRole,
     createdAt: v.number(),
@@ -89,6 +91,7 @@ export default defineSchema({
     lastSeenAt: v.optional(v.number()),
   })
     .index("email", ["email"])
+    .index("by_phone", ["phone"])
     .index("by_role", ["role"]),
 
   adminInvites: defineTable({
@@ -400,6 +403,25 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
+
+  whatsappAuthRequests: defineTable({
+    phone: v.string(),
+    code: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("verified"),
+      v.literal("consumed"),
+      v.literal("expired"),
+    ),
+    attempts: v.number(),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+    verifiedAt: v.optional(v.number()),
+    consumedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+  })
+    .index("by_phone_and_created", ["phone", "createdAt"])
+    .index("by_status_and_expires", ["status", "expiresAt"]),
 
   adminAuditEvents: defineTable({
     adminId: v.id("users"),

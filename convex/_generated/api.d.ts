@@ -27,6 +27,7 @@ import type * as notifications from "../notifications.js";
 import type * as notificationsActions from "../notificationsActions.js";
 import type * as stylePresets from "../stylePresets.js";
 import type * as users from "../users.js";
+import type * as whatsappAuth from "../whatsappAuth.js";
 
 import type {
   ApiFromModules,
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   notificationsActions: typeof notificationsActions;
   stylePresets: typeof stylePresets;
   users: typeof users;
+  whatsappAuth: typeof whatsappAuth;
 }>;
 
 /**

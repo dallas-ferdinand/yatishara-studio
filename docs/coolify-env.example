@@ -1,12 +1,19 @@
 NEXT_PUBLIC_CONVEX_URL=https://convex-studio-api.yatishara.com
+NEXT_PUBLIC_CONVEX_SITE_URL=https://convex-studio.yatishara.com
 CONVEX_SITE_URL=https://convex-studio.yatishara.com
+SITE_URL=https://studio.yatishara.com
 AUTH_RESEND_FROM=Yatishara Studio <noreply@yatishara.com>
+EVOLUTION_API_URL=https://evolution.yatishara.com
+EVOLUTION_INSTANCE=yatishara
+STUDIO_SUPER_ADMIN_PHONE=18683377338
+STUDIO_WHATSAPP_NUMBER=18683034621
 WEB_PUSH_SUBJECT=mailto:admin@yatishara.com
 
 # Set these as Coolify secrets:
-CONVEX_DEPLOYMENT=
+CONVEX_SELF_HOSTED_URL=https://convex-studio-api.yatishara.com
 AUTH_SECRET=
 AUTH_RESEND_KEY=
+EVOLUTION_API_KEY=
 STUDIO_SUPER_ADMIN_EMAIL=
 BYTEPLUS_ARK_API_KEY=
 BYTEPLUS_ARK_BASE_URL=https://ark.ap-southeast.bytepluses.com

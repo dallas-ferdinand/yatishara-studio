@@ -2,9 +2,31 @@ import {
   convexAuth,
   type AuthProviderMaterializedConfig,
 } from "@convex-dev/auth/server";
+import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials";
+import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { ResendOTP } from "./ResendOTP";
+
+type ConsumeWhatsAppArgs = {
+  requestId: Id<"whatsappAuthRequests">;
+  phone: string;
+};
+
+type ConsumeWhatsAppReturn = {
+  userId: Id<"users">;
+} | null;
+
+const consumeVerifiedWhatsAppRef = makeFunctionReference<
+  "mutation",
+  ConsumeWhatsAppArgs,
+  ConsumeWhatsAppReturn
+>("whatsappAuth:consumeVerifiedForSignIn") as unknown as FunctionReference<
+  "mutation",
+  "internal",
+  ConsumeWhatsAppArgs,
+  ConsumeWhatsAppReturn
+>;
 
 async function createOrUpdateUser(
   ctx: MutationCtx,
@@ -71,8 +93,22 @@ function normalizeEmail(email: unknown): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+const WhatsAppOTP = ConvexCredentials({
+  id: "whatsapp-otp",
+  authorize: async (credentials, ctx) => {
+    if (typeof credentials.requestId !== "string" || typeof credentials.phone !== "string") {
+      return null;
+    }
+
+    return await ctx.runMutation(consumeVerifiedWhatsAppRef, {
+      requestId: credentials.requestId as Id<"whatsappAuthRequests">,
+      phone: credentials.phone,
+    });
+  },
+});
+
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [ResendOTP],
+  providers: [ResendOTP, WhatsAppOTP],
   callbacks: {
     createOrUpdateUser,
   },
