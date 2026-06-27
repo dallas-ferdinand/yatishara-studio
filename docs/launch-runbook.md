@@ -37,6 +37,17 @@ docker run --rm --env-file .env.local -p 3007:3000 yatishara-studio:launch-check
 
 Local Docker smoke should return HTTP 200 from `http://127.0.0.1:3007/`.
 
+## Convex Auth Server Env
+
+Set these on the dedicated Studio Convex deployment (`https://convex-studio-api.yatishara.com`), not only in Coolify:
+
+- `JWT_PRIVATE_KEY`
+- `JWKS`
+- `SITE_URL=https://studio.yatishara.com`
+- `CONVEX_SITE_URL=https://convex-studio.yatishara.com`
+- `AUTH_RESEND_KEY`
+- `EVOLUTION_API_KEY`
+
 ## Provider Smoke Status
 
 - Bunny Storage: live tiny upload returned `201`.
