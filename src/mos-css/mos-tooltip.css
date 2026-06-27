@@ -1,0 +1,64 @@
+/* Floating glass tooltips — replaces native title= bubbles via mos-tooltip.js */
+
+.mos-tooltip {
+  position: fixed;
+  z-index: 100000;
+  max-width: min(300px, calc(100vw - 20px));
+  padding: 7px 11px;
+  border-radius: 10px;
+  font-family: var(--font-onest), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--mos-text-bright);
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(5px) scale(0.985);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border: 1px solid color-mix(in srgb, var(--mos-border) 65%, rgba(255, 255, 255, 0.14));
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.mos-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.mos-tooltip.is-below {
+  transform: translateY(-5px) scale(0.985);
+}
+
+.mos-tooltip.is-below.is-visible {
+  transform: translateY(0) scale(1);
+}
+
+[data-appearance="light"] .mos-tooltip {
+  color: #18181b;
+  background: color-mix(in srgb, #ffffff 82%, transparent);
+  border-color: color-mix(in srgb, rgba(0, 0, 0, 0.08) 70%, rgba(255, 255, 255, 0.9));
+  box-shadow:
+    0 10px 36px rgba(15, 23, 42, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mos-tooltip {
+    transition: opacity 0.01s linear;
+    transform: none;
+  }
+  .mos-tooltip.is-visible,
+  .mos-tooltip.is-below.is-visible {
+    transform: none;
+  }
+}

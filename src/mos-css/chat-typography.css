@@ -1,0 +1,157 @@
+/**
+ * Cursor-like chat typography — shared phone (.chat) + desk (.mos-chat).
+ * 14px body, Inter/system sans, grayscale antialiasing, even rhythm.
+ */
+
+.chat,
+.mos-chat {
+  --chat-text-size: 14px;
+  --chat-text-leading: 1.65;
+  --chat-ui-size: 13px;
+  --chat-ui-leading: 1.45;
+  --chat-text-color: var(--mos-text, var(--text, #d4d4d4));
+  --chat-text-muted: var(--mos-muted, var(--text-muted, #8a8a8a));
+  --chat-text-faint: var(--mos-faint, var(--text-faint, #666));
+  --chat-sheen-base: var(--mos-muted, var(--text-muted, #8a8a8a));
+  --chat-sheen-highlight: var(--mos-text-bright, var(--text, #e8e8e8));
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Assistant reply prose */
+.chat .md-prose,
+.mos-chat .md-prose,
+.chat .flow-text,
+.mos-chat .flow-text {
+  font-size: var(--chat-text-size);
+  line-height: var(--chat-text-leading);
+  font-weight: 400;
+  letter-spacing: -0.006em;
+  color: var(--chat-text-color, var(--text, #d4d4d4));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.chat .md-prose > :first-child,
+.mos-chat .md-prose > :first-child {
+  margin-top: 0;
+}
+
+.chat .md-prose > :last-child,
+.mos-chat .md-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.chat .md-prose h1,
+.chat .md-prose h2,
+.chat .md-prose h3,
+.chat .md-prose h4,
+.mos-chat .md-prose h1,
+.mos-chat .md-prose h2,
+.mos-chat .md-prose h3,
+.mos-chat .md-prose h4 {
+  font-family: var(--font-body);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  color: var(--chat-text-color, var(--mos-text-bright, var(--text)));
+}
+
+.chat .md-prose h1,
+.mos-chat .md-prose h1 {
+  font-size: 1.14em;
+  margin: 1.1em 0 0.45em;
+}
+
+.chat .md-prose h2,
+.mos-chat .md-prose h2 {
+  font-size: 1.08em;
+  margin: 1em 0 0.4em;
+}
+
+.chat .md-prose h3,
+.mos-chat .md-prose h3 {
+  font-size: 1.02em;
+  margin: 0.95em 0 0.35em;
+  color: var(--chat-text-color, var(--mos-text, var(--text)));
+}
+
+.chat .md-prose h4,
+.mos-chat .md-prose h4 {
+  font-size: 0.98em;
+  margin: 0.85em 0 0.3em;
+  color: var(--chat-text-muted, var(--mos-muted, var(--text-muted)));
+}
+
+.chat .md-prose p,
+.mos-chat .md-prose p {
+  margin: 0.55em 0;
+}
+
+.chat .md-prose p + ul,
+.chat .md-prose p + ol,
+.mos-chat .md-prose p + ul,
+.mos-chat .md-prose p + ol {
+  margin-top: 0.35em;
+}
+
+.chat .md-prose ul,
+.chat .md-prose ol,
+.mos-chat .md-prose ul,
+.mos-chat .md-prose ol {
+  margin: 0.5em 0;
+}
+
+.chat .md-prose ul > li::before,
+.mos-chat .md-prose ul > li::before {
+  width: 4px;
+  height: 4px;
+  top: 0.62em;
+  background: var(--chat-text-muted, var(--mos-muted, var(--text-muted)));
+  opacity: 0.7;
+}
+
+.chat .md-prose strong,
+.mos-chat .md-prose strong {
+  font-weight: 600;
+  color: var(--chat-text-color, var(--mos-text-bright, var(--text)));
+}
+
+.chat .md-prose code,
+.mos-chat .md-prose code {
+  font-size: 0.9em;
+  font-family: var(--font-mono);
+}
+
+.chat .md-prose pre code,
+.mos-chat .md-prose pre code {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Status / planning labels — Cursor UI size */
+.chat .flow-planning-text,
+.mos-chat .flow-planning-text,
+.chat .flow-status-line,
+.mos-chat .flow-status-line,
+.chat .flow-tool-bar,
+.mos-chat .flow-tool-bar {
+  font-size: var(--chat-ui-size);
+  line-height: var(--chat-ui-leading);
+  font-weight: 400;
+  letter-spacing: -0.004em;
+}
+
+.chat .flow-tool-bar,
+.mos-chat .flow-tool-bar {
+  color: var(--chat-text-muted, var(--mos-muted, var(--text-muted)));
+}
+
+.chat .flow-tool-bar.is-live,
+.mos-chat .flow-tool-bar.is-live {
+  color: var(--chat-text-color, var(--mos-text, var(--text)));
+}

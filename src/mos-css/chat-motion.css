@@ -1,0 +1,385 @@
+/**
+ * Shared chat motion — keyframes + spin utilities for mobile + desk.
+ * Import after chat-ui.css (desk) or with styles.css (mobile).
+ */
+
+@keyframes chat-typing-wave {
+  0%, 60%, 100% { transform: translateY(0) scale(0.85); opacity: 0.35; }
+  30% { transform: translateY(-6px) scale(1); opacity: 1; }
+}
+
+@keyframes chat-blink {
+  50% { opacity: 0; }
+}
+
+@keyframes chat-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes chat-tool-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 98, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(250, 204, 98, 0.12); }
+}
+
+@keyframes chat-await-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes chat-pulse-await-border {
+  0%, 100% { border-color: rgba(250, 204, 98, 0.35); }
+  50% { border-color: rgba(250, 204, 98, 0.65); }
+}
+
+@keyframes chat-msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes chat-status-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Map legacy names used in chat-ui.css */
+@keyframes typing-wave {
+  0%, 60%, 100% { transform: translateY(0) scale(0.85); opacity: 0.35; }
+  30% { transform: translateY(-6px) scale(1); opacity: 1; }
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes tool-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 98, 0); }
+  50% { box-shadow: 0 0 0 3px rgba(250, 204, 98, 0.12); }
+}
+
+@keyframes await-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes pulse-await-border {
+  0%, 100% { border-color: rgba(250, 204, 98, 0.35); }
+  50% { border-color: rgba(250, 204, 98, 0.65); }
+}
+
+/* Voice mic — recording pulse + transcribe ring */
+@keyframes mic-record-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0);
+  }
+}
+
+@keyframes mic-record-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  75%, 100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+
+@keyframes mic-composer-glow {
+  0%, 100% {
+    border-top-color: rgba(248, 113, 113, 0.26);
+    box-shadow: inset 0 1px 0 rgba(248, 113, 113, 0.06);
+  }
+  50% {
+    border-top-color: rgba(248, 113, 113, 0.48);
+    box-shadow: inset 0 1px 0 rgba(248, 113, 113, 0.14);
+  }
+}
+
+@keyframes mic-transcribe-ring {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes chat-sheen-slide {
+  0% { background-position: 150% center; }
+  100% { background-position: -50% center; }
+}
+
+@keyframes planning-shimmer-slide {
+  0% { background-position: 150% center; }
+  100% { background-position: -50% center; }
+}
+
+/* Cursor-style text sheen — muted base, narrow light band sweeps through glyphs */
+.chat .chat-sheen-text,
+.mos-chat .chat-sheen-text {
+  display: inline;
+  background: linear-gradient(
+    90deg,
+    var(--chat-sheen-base, #8a8a8a) 0%,
+    var(--chat-sheen-base, #8a8a8a) 38%,
+    var(--chat-sheen-highlight, #e4e4e4) 50%,
+    var(--chat-sheen-base, #8a8a8a) 62%,
+    var(--chat-sheen-base, #8a8a8a) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: chat-sheen-slide 2s linear infinite;
+}
+
+.chat .chat-sheen-text--subtle,
+.mos-chat .chat-sheen-text--subtle {
+  background: linear-gradient(
+    90deg,
+    var(--chat-sheen-base, #8a8a8a) 0%,
+    var(--chat-sheen-base, #8a8a8a) 42%,
+    rgba(228, 228, 228, 0.82) 50%,
+    var(--chat-sheen-base, #8a8a8a) 58%,
+    var(--chat-sheen-base, #8a8a8a) 100%
+  );
+  background-size: 250% 100%;
+  animation-duration: 2.2s;
+}
+
+@keyframes chat-tool-bar-breathe {
+  0%, 100% {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+  50% {
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: none;
+  }
+}
+
+@keyframes chat-tool-icon-pulse {
+  0%, 100% { opacity: 0.62; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes flow-status-chev-pulse {
+  0%, 100% { opacity: 0.35; transform: translateX(0); }
+  50% { opacity: 0.85; transform: translateX(2px); }
+}
+
+/* Sheen text — planning + running tools (see chat-typography.css for type) */
+
+/* Planning — Cursor / ChatGPT-style shimmer on the label text only */
+.chat .flow-planning,
+.mos-chat .flow-planning {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 1px 0 2px;
+}
+
+.chat .flow-planning--tight,
+.mos-chat .flow-planning--tight {
+  margin-top: 4px;
+}
+
+.chat .flow-planning-text,
+.mos-chat .flow-planning-text {
+  letter-spacing: -0.004em;
+}
+
+.chat .flow-planning-text--live,
+.mos-chat .flow-planning-text--live {
+  display: inline;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--chat-sheen-base, #8a8a8a) 0%,
+    var(--chat-sheen-base, #8a8a8a) 38%,
+    var(--chat-sheen-highlight, #e8e8e8) 50%,
+    var(--chat-sheen-base, #8a8a8a) 62%,
+    var(--chat-sheen-base, #8a8a8a) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: planning-shimmer-slide 2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat .flow-planning-text--live,
+  .mos-chat .flow-planning-text--live {
+    color: var(--chat-text-muted, #8a8a8a);
+    -webkit-text-fill-color: var(--chat-text-muted, #8a8a8a);
+    background: none;
+    animation: none;
+  }
+}
+
+/* Live tool bars — text sheen via .chat-sheen-text; no bar overlay */
+.chat .flow-tool-bar.is-live,
+.mos-chat .flow-tool-bar.is-live {
+  animation: chat-tool-bar-breathe 2.6s ease-in-out infinite !important;
+}
+
+.chat .flow-tool-bar-icon--live,
+.mos-chat .flow-tool-bar-icon--live {
+  animation: chat-tool-icon-pulse 1.7s ease-in-out infinite;
+}
+
+.chat .flow-tool-bar-chev--live,
+.mos-chat .flow-tool-bar-chev--live {
+  animation: flow-status-chev-pulse 1.4s ease-in-out infinite;
+}
+
+.chat .flow-status-line.is-active,
+.mos-chat .flow-status-line.is-active {
+  animation: chat-msg-in 0.2s ease-out;
+}
+
+.chat .flow-status-line.is-live,
+.mos-chat .flow-status-line.is-live {
+  position: relative;
+}
+
+.chat .flow-status-chev,
+.mos-chat .flow-status-chev {
+  animation: flow-status-chev-pulse 1.5s ease-in-out infinite;
+}
+
+.chat .flow-status-line.is-planning,
+.mos-chat .flow-status-line.is-planning {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* Spinning loader icons (header, activity, inbox) */
+.chat-spin svg,
+.mos-animate-spin svg,
+.icon-inline.chat-spin svg {
+  animation: chat-spin 0.85s linear infinite !important;
+  transform-origin: center;
+}
+
+/* Typing / waiting — mobile (.chat) + desk (.mos-chat) */
+.chat .typing-dots span,
+.mos-chat .typing-dots span {
+  animation: chat-typing-wave 1.4s ease-in-out infinite !important;
+  will-change: transform, opacity;
+}
+
+.chat .typing-dots span:nth-child(2),
+.mos-chat .typing-dots span:nth-child(2) {
+  animation-delay: 0.2s !important;
+}
+
+.chat .typing-dots span:nth-child(3),
+.mos-chat .typing-dots span:nth-child(3) {
+  animation-delay: 0.4s !important;
+}
+
+.chat .stream-cursor,
+.mos-chat .stream-cursor {
+  animation: chat-blink 0.8s step-end infinite !important;
+}
+
+.chat .agent-wait,
+.mos-chat .agent-wait {
+  animation: chat-msg-in 0.22s ease-out;
+}
+
+.chat .flow-status,
+.mos-chat .flow-status {
+  animation: chat-status-in 0.2s ease-out;
+}
+
+/* Message entrance */
+.chat .msg-assistant.streaming-live,
+.mos-chat .msg-assistant.streaming-live {
+  animation: chat-msg-in 0.28s ease-out;
+}
+
+/* Live tool cards — match mobile chat-ui.css */
+.mos-chat .flow-tool-card.is-live,
+.chat .flow-tool-card.is-live {
+  animation: tool-pulse 1.2s ease-in-out infinite !important;
+}
+
+.mos-chat .flow-tool-group.is-live,
+.chat .flow-tool-group.is-live {
+  animation: tool-pulse 1.4s ease-in-out infinite !important;
+}
+
+.mos-chat .flow-tool-card.is-live .flow-tool-icon-spin svg,
+.mos-chat .flow-tool-icon-spin svg,
+.chat .flow-tool-icon-spin svg {
+  animation: spin 0.9s linear infinite !important;
+  transform-origin: center;
+}
+
+.mos-chat .flow-tool-await-bar::after,
+.chat .flow-tool-await-bar::after {
+  animation: await-shimmer 1.2s ease-in-out infinite !important;
+}
+
+.mos-chat .flow-question.is-pending,
+.chat .flow-question.is-pending {
+  animation: pulse-await-border 2.4s ease-in-out infinite !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat *,
+  .mos-chat * {
+    scroll-behavior: auto !important;
+  }
+  .chat .typing-dots span,
+  .mos-chat .typing-dots span,
+  .chat .stream-cursor,
+  .mos-chat .stream-cursor,
+  .chat-spin svg,
+  .mos-animate-spin svg,
+  .mos-chat .flow-tool-icon-spin svg,
+  .chat .flow-tool-icon-spin svg,
+  .mos-chat .flow-tool-card.is-live,
+  .chat .flow-tool-card.is-live,
+  .mos-chat .flow-tool-group.is-live,
+  .chat .flow-tool-group.is-live,
+  .mos-chat .flow-tool-await-bar::after,
+  .chat .flow-tool-await-bar::after,
+  .mos-chat .flow-question.is-pending,
+  .chat .flow-question.is-pending,
+  .mos-chat .flow-planning-text--live,
+  .chat .flow-planning-text--live,
+  .mos-chat .chat-sheen-text,
+  .chat .chat-sheen-text,
+  .mos-chat .flow-tool-bar.is-live,
+  .chat .flow-tool-bar.is-live,
+  .mos-chat .flow-tool-bar-icon--live,
+  .chat .flow-tool-bar-icon--live,
+  .mos-chat .flow-tool-bar-chev--live,
+  .chat .flow-tool-bar-chev--live,
+  .mos-chat .flow-status-chev,
+  .chat .flow-status-chev {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  .mos-chat .flow-planning-text--live,
+  .chat .flow-planning-text--live,
+  .mos-chat .chat-sheen-text,
+  .chat .chat-sheen-text {
+    background: none !important;
+    color: var(--chat-text-muted, #8a8a8a) !important;
+    -webkit-text-fill-color: var(--chat-text-muted, #8a8a8a) !important;
+  }
+
+  .mos-chat .flow-tool-await-bar::after,
+  .chat .flow-tool-await-bar::after {
+    display: none !important;
+  }
+}

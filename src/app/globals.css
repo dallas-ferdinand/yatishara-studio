@@ -1,0 +1,258 @@
+@import "tailwindcss";
+@import "../mos-css/scrollbars.css";
+@import "../mos-css/chat-typography.css";
+@import "../mos-css/chat-ui.css";
+@import "../mos-css/mos-markdown.css";
+@import "katex/dist/katex.min.css";
+@import "../mos-css/chat-motion.css";
+@import "../mos-css/mos-tooltip.css";
+@import "../desk/desk-shell.css";
+@import "../desk/chat-overrides.css";
+@import "../desk/mos-ui-polish.css";
+
+/*
+ * Runtime theme tokens — theme.js updates --mos-* on <html> at boot + on change.
+ * Tailwind cursor/mos utilities MUST reference var(--mos-*) so colors stay dynamic.
+ */
+:root {
+  --mos-bg: #020617;
+  --mos-sidebar: #020617;
+  --mos-panel: #0f172a;
+  --mos-composer: #07111f;
+  --mos-surface: #111c2f;
+  --mos-border: rgba(148, 163, 184, 0.13);
+  --mos-border-soft: rgba(148, 163, 184, 0.08);
+  --mos-border-subtle: rgba(148, 163, 184, 0.1);
+  --mos-text: #e2e8f0;
+  --mos-text-soft: #cbd5e1;
+  --mos-text-bright: #f8fafc;
+  --mos-muted: #94a3b8;
+  --mos-faint: #64748b;
+  --mos-accent: #22c55e;
+  --mos-accent-hover: #4ade80;
+  --mos-hover: #162033;
+  --mos-active: #1e293b;
+  --mos-success: #22c55e;
+  --mos-error: #f87171;
+  --mos-ai-glow: 0 0 0 1px rgba(34, 197, 94, 0.12), 0 18px 55px rgba(2, 6, 23, 0.42);
+  --mos-ai-glow-strong: 0 0 0 1px rgba(34, 197, 94, 0.22), 0 20px 70px rgba(34, 197, 94, 0.12);
+  --cursor-sidebar: var(--mos-sidebar);
+  --cursor-overlay-subtle: rgba(255, 255, 255, 0.05);
+  --cursor-overlay-hover: rgba(255, 255, 255, 0.08);
+  --cursor-overlay-muted: rgba(255, 255, 255, 0.03);
+  --font-cursor: var(--font-onest), system-ui, sans-serif;
+  --desk-composer-max: 680px;
+  --desk-chat-thread-max: var(--desk-composer-max);
+  --desk-mobile-head-h: 44px;
+  --desk-mobile-tab-h: 56px;
+  --desk-mobile-inset-x: 12px;
+  --desk-mobile-inset-y: 8px;
+  --desk-mobile-pane-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --desk-composer-radius: 10px;
+  --desk-gap-chat-turn: 18px;
+}
+
+@theme inline {
+  --color-mos-bg: var(--mos-bg);
+  --color-mos-sidebar: var(--mos-sidebar);
+  --color-mos-panel: var(--mos-panel);
+  --color-mos-composer: var(--mos-composer);
+  --color-mos-surface: var(--mos-surface);
+  --color-mos-border: var(--mos-border);
+  --color-mos-border-soft: var(--mos-border-soft);
+  --color-mos-text: var(--mos-text);
+  --color-mos-text-soft: var(--mos-text-soft);
+  --color-mos-text-bright: var(--mos-text-bright);
+  --color-mos-muted: var(--mos-muted);
+  --color-mos-faint: var(--mos-faint);
+  --color-mos-accent: var(--mos-accent);
+  --color-mos-accent-hover: var(--mos-accent-hover);
+  --color-mos-hover: var(--mos-hover);
+  --color-mos-active: var(--mos-active);
+  --color-mos-success: var(--mos-success);
+  --color-mos-error: var(--mos-error);
+  --color-cursor-bg: var(--mos-bg);
+  --color-cursor-sidebar: var(--mos-sidebar);
+  --color-cursor-editor: var(--mos-panel);
+  --color-cursor-chat: var(--mos-bg);
+  --color-cursor-border: var(--mos-border);
+  --color-cursor-border-soft: var(--mos-border-soft);
+  --color-cursor-border-subtle: var(--mos-border-subtle);
+  --color-cursor-muted: var(--mos-muted);
+  --color-cursor-text: var(--mos-text);
+  --color-cursor-text-soft: var(--mos-text-soft);
+  --color-cursor-hover: var(--mos-hover);
+  --color-cursor-active: var(--mos-active);
+  --color-cursor-accent: var(--mos-accent);
+  --color-cursor-composer: var(--mos-composer);
+  --font-sans: var(--font-onest);
+  --font-mono: var(--font-jetbrains);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--mos-bg);
+  color: var(--mos-text);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-onest), system-ui, sans-serif;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--mos-accent) 35%, transparent);
+}
+
+.mos-toast {
+  animation: mos-toast-in 0.2s ease-out;
+}
+
+@keyframes mos-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes mos-brand-halo-outer {
+  0%,
+  100% {
+    opacity: 0.32;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes mos-brand-halo-inner {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes mos-brand-logo-breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--mos-accent) 16%, transparent))
+      drop-shadow(0 2px 14px rgba(0, 0, 0, 0.35))
+      brightness(1);
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 22px color-mix(in srgb, var(--mos-accent) 34%, transparent))
+      drop-shadow(0 4px 20px rgba(0, 0, 0, 0.4))
+      brightness(1.05);
+    transform: scale(1.012);
+  }
+}
+
+@keyframes mos-slim-progress {
+  0% {
+    transform: translateX(-130%);
+  }
+  100% {
+    transform: translateX(330%);
+  }
+}
+
+.mos-brand-mark--ambient::before,
+.mos-brand-mark--ambient::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.mos-brand-mark--ambient::before {
+  width: 118%;
+  height: 118%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--mos-accent) 28%, transparent) 0%,
+    color-mix(in srgb, var(--mos-accent) 8%, transparent) 42%,
+    transparent 72%
+  );
+  filter: blur(10px);
+  animation: mos-brand-halo-outer 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.mos-brand-mark--ambient::after {
+  width: 72%;
+  height: 72%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--mos-accent) 22%, transparent) 0%,
+    transparent 68%
+  );
+  filter: blur(4px);
+  animation: mos-brand-halo-inner 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation-delay: 0.55s;
+}
+
+.mos-brand-logo--breathe {
+  animation: mos-brand-logo-breathe 3.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mos-brand-mark--ambient::before,
+  .mos-brand-mark--ambient::after,
+  .mos-brand-logo--breathe {
+    animation: none;
+  }
+  .mos-brand-mark--ambient::before {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  .mos-brand-mark--ambient::after {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+  .mos-brand-logo--breathe {
+    filter: drop-shadow(0 0 14px color-mix(in srgb, var(--mos-accent) 22%, transparent));
+  }
+}
+
+.mos-slim-progress-track {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mos-accent) 12%, transparent);
+}
+
+.mos-slim-progress {
+  animation: mos-slim-progress 1.15s ease-in-out infinite;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--mos-accent) 35%, transparent);
+}
+
+.mos-brand-logo {
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+}
+
+.mos-brand-logo.is-loaded {
+  opacity: 1;
+}
+
+.cursor-sidebar-brand-logo-img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  display: block;
+}

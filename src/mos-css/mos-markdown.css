@@ -1,0 +1,363 @@
+/**
+ * MercuryOS Markdown — single source for AI reply typography (phone + desk).
+ * Wrapper: .mos-md (alias .md-prose for legacy hooks)
+ */
+
+.mos-md,
+.md-prose {
+  --mos-text: var(--chat-text-color, var(--text, #d8d8d8));
+  --mos-muted: var(--chat-text-muted, var(--text-muted, #9a9a9a));
+  --mos-accent: var(--accent, #facc62);
+  --mos-font: var(--font-body, "Onest", ui-sans-serif, system-ui, sans-serif);
+  --mos-mono: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+
+  font-family: var(--mos-font);
+  font-size: var(--chat-text-size, 15px);
+  line-height: var(--chat-text-leading, 1.68);
+  font-weight: 400;
+  letter-spacing: -0.008em;
+  color: var(--mos-text);
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.mos-md > :first-child,
+.md-prose > :first-child {
+  margin-top: 0;
+}
+
+.mos-md > :last-child,
+.md-prose > :last-child {
+  margin-bottom: 0;
+}
+
+/* Headings — calm hierarchy for chat, not document titles */
+.mos-md h1,
+.mos-md h2,
+.mos-md h3,
+.mos-md h4,
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4 {
+  font-family: var(--mos-font);
+  font-weight: 600;
+  line-height: 1.32;
+  letter-spacing: -0.018em;
+  color: var(--mos-text);
+}
+
+.mos-md h1,
+.md-prose h1 {
+  font-size: 1.12em;
+  margin: 1.15em 0 0.42em;
+}
+
+.mos-md h2,
+.md-prose h2 {
+  font-size: 1.06em;
+  margin: 1.05em 0 0.38em;
+}
+
+.mos-md h3,
+.md-prose h3 {
+  font-size: 1em;
+  margin: 0.95em 0 0.34em;
+  color: color-mix(in srgb, var(--mos-text) 88%, var(--mos-accent));
+}
+
+.mos-md h4,
+.md-prose h4 {
+  font-size: 0.96em;
+  margin: 0.85em 0 0.3em;
+  color: var(--mos-muted);
+}
+
+/* Paragraphs */
+.mos-md p,
+.md-prose p {
+  margin: 0.62em 0;
+}
+
+.mos-md p + ul,
+.mos-md p + ol,
+.md-prose p + ul,
+.md-prose p + ol {
+  margin-top: 0.32em;
+}
+
+/* Lists */
+.mos-md ul,
+.mos-md ol,
+.md-prose ul,
+.md-prose ol {
+  margin: 0.58em 0;
+  padding-left: 0;
+}
+
+.mos-md ul,
+.md-prose ul {
+  list-style: none;
+}
+
+.mos-md ul > li,
+.md-prose ul > li {
+  position: relative;
+  padding-left: 1.15em;
+  margin: 0.38em 0;
+}
+
+.mos-md ul > li::before,
+.md-prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0.15em;
+  top: 0.68em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mos-accent);
+  opacity: 0.72;
+}
+
+.mos-md ol,
+.md-prose ol {
+  padding-left: 1.35em;
+}
+
+.mos-md ol > li,
+.md-prose ol > li {
+  margin: 0.38em 0;
+  padding-left: 0.12em;
+}
+
+.mos-md li > p,
+.md-prose li > p {
+  margin: 0.22em 0;
+}
+
+.mos-md li.mos-task,
+.md-prose li.mos-task {
+  list-style: none;
+  padding-left: 0;
+}
+
+.mos-md li.mos-task::before,
+.md-prose li.mos-task::before {
+  display: none;
+}
+
+.mos-md input[type="checkbox"],
+.md-prose input[type="checkbox"] {
+  margin: 0 0.5em 0 0;
+  vertical-align: -0.15em;
+  accent-color: var(--mos-accent);
+}
+
+/* Divider */
+.mos-md hr,
+.md-prose hr {
+  border: none;
+  height: 1px;
+  margin: 1.1em 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--mos-text) 18%, transparent),
+    transparent
+  );
+}
+
+/* Emphasis */
+.mos-md strong,
+.md-prose strong {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--mos-text) 96%, white);
+}
+
+.mos-md em,
+.md-prose em {
+  color: var(--mos-muted);
+  font-style: italic;
+}
+
+/* Inline code */
+.mos-md code,
+.md-prose code {
+  font-family: var(--mos-mono);
+  font-size: 0.86em;
+  background: color-mix(in srgb, var(--mos-text) 7%, transparent);
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+  border: 1px solid var(--mos-border-soft, var(--border));
+}
+
+/* Code blocks — rendered complete by mos-markdown.js */
+.mos-code,
+.code-shell {
+  margin: 0.82em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--mos-border, var(--border));
+  background: color-mix(in srgb, var(--mos-panel, var(--surface)) 88%, var(--mos-bg, var(--bg)));
+  box-shadow: none;
+}
+
+.mos-code-bar,
+.code-shell-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--mos-border-soft, var(--border));
+  background: color-mix(in srgb, var(--mos-panel, var(--surface)) 72%, var(--mos-bg, var(--bg)));
+}
+
+.mos-code-lang,
+.code-lang {
+  font-family: var(--mos-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+  color: var(--mos-muted);
+}
+
+.mos-code-body,
+.mos-md pre,
+.md-prose pre,
+.mos-md .code-block,
+.md-prose .code-block {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.mos-code-body code,
+.mos-md pre code,
+.md-prose pre code {
+  font-family: var(--mos-mono);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  background: none;
+  border: none;
+  padding: 0;
+  white-space: pre;
+}
+
+/* Links */
+.mos-md a,
+.md-prose a {
+  color: color-mix(in srgb, var(--mos-accent) 78%, #7eb8ff);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--mos-accent) 32%, transparent);
+}
+
+.mos-md a:active,
+.md-prose a:active {
+  opacity: 0.85;
+}
+
+/* Blockquote */
+.mos-md blockquote,
+.md-prose blockquote {
+  margin: 0.78em 0;
+  padding: 0.55em 0 0.55em 0.95em;
+  border-left: 3px solid color-mix(in srgb, var(--mos-accent) 45%, transparent);
+  color: var(--mos-muted);
+}
+
+.mos-md blockquote p,
+.md-prose blockquote p {
+  margin: 0.28em 0;
+}
+
+/* Images */
+.mos-md img,
+.md-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 0.72em 0;
+}
+
+/* Tables — border grid, no zebra stripes */
+.mos-table-wrap,
+.md-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  margin: 0.78em 0;
+  border-radius: 8px;
+  border: 1px solid var(--mos-border, var(--border));
+  background: transparent;
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+}
+
+.mos-md table,
+.md-prose table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  line-height: 1.48;
+}
+
+.mos-md thead th,
+.md-prose thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: transparent;
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-align: left;
+  color: var(--mos-text);
+}
+
+.mos-md th,
+.mos-md td,
+.md-prose th,
+.md-prose td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--mos-border-soft, var(--border));
+  border-right: 1px solid var(--mos-border-soft, var(--border));
+  vertical-align: top;
+  background: transparent;
+}
+
+.mos-md th:last-child,
+.mos-md td:last-child,
+.md-prose th:last-child,
+.md-prose td:last-child {
+  border-right: none;
+}
+
+.mos-md tbody tr:last-child td,
+.md-prose tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Streaming fallback */
+.mos-md.stream-plain,
+.md-prose.stream-plain {
+  white-space: normal;
+}
+
+.mos-md.stream-plain p,
+.md-prose.stream-plain p {
+  margin: 0;
+  white-space: pre-wrap;
+}

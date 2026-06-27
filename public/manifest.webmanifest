@@ -1,0 +1,10 @@
+{
+  "name": "MercuryOS Desk",
+  "short_name": "Desk",
+  "description": "Minimal MercuryOS agent desk",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1b1c23",
+  "theme_color": "#1b1c23",
+  "icons": []
+}

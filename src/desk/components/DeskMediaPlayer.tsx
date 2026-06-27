@@ -1,0 +1,311 @@
+// @ts-nocheck
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Download,
+  FastForward,
+  Music,
+  Pause,
+  Play,
+  Rewind,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
+import { useVideoChunkPrefetch } from "@/desk/lib/use-video-chunk-prefetch.js";
+
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+const mediaIcon = (size = 14) => ({
+  size,
+  strokeWidth: 2,
+  "aria-hidden": true,
+});
+
+export function DeskMediaPlayer({
+  kind = "video",
+  src,
+  name,
+  onDownload,
+  poster,
+  fileSize = null,
+  prefetch = true,
+}) {
+  const mediaRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [seeking, setSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [aspect, setAspect] = useState(null);
+  const [buffering, setBuffering] = useState(false);
+
+  const isVideo = kind === "video";
+  const Tag = isVideo ? "video" : "audio";
+  const shouldPrefetch = prefetch && Boolean(src) && !String(src).startsWith("blob:");
+
+  useVideoChunkPrefetch({
+    url: src,
+    mediaRef,
+    enabled: shouldPrefetch,
+    fileSize,
+  });
+
+  useEffect(() => {
+    setPlaying(false);
+    setCurrent(0);
+    setDuration(0);
+    setSeekValue(0);
+    setReady(false);
+    setAspect(null);
+    setBuffering(false);
+  }, [src]);
+
+  useEffect(() => {
+    const el = mediaRef.current;
+    if (!el) return undefined;
+
+    const onTime = () => {
+      if (!seeking) {
+        setCurrent(el.currentTime);
+        setSeekValue(el.currentTime);
+      }
+    };
+    const onMeta = () => {
+      setDuration(el.duration || 0);
+      setReady(true);
+      if (isVideo && el.videoWidth > 0 && el.videoHeight > 0) {
+        setAspect(el.videoWidth / el.videoHeight);
+      }
+    };
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onEnded = () => setPlaying(false);
+    const onWaiting = () => setBuffering(true);
+    const onCanPlay = () => setBuffering(false);
+    const onPlaying = () => setBuffering(false);
+
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("durationchange", onMeta);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("ended", onEnded);
+    el.addEventListener("waiting", onWaiting);
+    el.addEventListener("canplay", onCanPlay);
+    el.addEventListener("playing", onPlaying);
+
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("durationchange", onMeta);
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("ended", onEnded);
+      el.removeEventListener("waiting", onWaiting);
+      el.removeEventListener("canplay", onCanPlay);
+      el.removeEventListener("playing", onPlaying);
+    };
+  }, [isVideo, seeking, src]);
+
+  const togglePlay = useCallback(() => {
+    const el = mediaRef.current;
+    if (!el) return;
+    if (el.paused) void el.play().catch(() => {});
+    else el.pause();
+  }, []);
+
+  const skip = useCallback((delta) => {
+    const el = mediaRef.current;
+    if (!el || !Number.isFinite(el.duration)) return;
+    const next = Math.min(Math.max(0, el.currentTime + delta), el.duration);
+    el.currentTime = next;
+    setCurrent(next);
+    setSeekValue(next);
+  }, []);
+
+  const onSeekStart = useCallback(() => setSeeking(true), []);
+
+  const onSeek = useCallback((e) => {
+    const v = Number(e.target.value);
+    setSeekValue(v);
+  }, []);
+
+  const onSeekEnd = useCallback(
+    (e) => {
+      const el = mediaRef.current;
+      const v = Number(e.target.value);
+      if (el && Number.isFinite(v)) el.currentTime = v;
+      setCurrent(v);
+      setSeeking(false);
+    },
+    [],
+  );
+
+  const onVolume = useCallback((e) => {
+    const el = mediaRef.current;
+    const v = Number(e.target.value);
+    if (!el) return;
+    el.volume = v;
+    el.muted = v === 0;
+    setVolume(v);
+    setMuted(v === 0);
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const el = mediaRef.current;
+    if (!el) return;
+    el.muted = !el.muted;
+    setMuted(el.muted);
+    if (!el.muted && el.volume === 0) {
+      el.volume = 0.8;
+      setVolume(0.8);
+    }
+  }, []);
+
+  const progressPct = duration > 0 ? Math.min(100, (seekValue / duration) * 100) : 0;
+  const VolumeIcon = muted || volume === 0 ? VolumeX : Volume2;
+  const aspectClass =
+    aspect != null && aspect < 0.9
+      ? " desk-media-player--portrait"
+      : aspect != null && aspect > 1.1
+        ? " desk-media-player--landscape"
+        : "";
+  const playerStyle = aspect ? { "--desk-media-aspect": String(aspect) } : undefined;
+
+  const controls = (
+    <div className="desk-media-player-controls">
+      <div className="desk-media-player-scrub">
+        <div
+          className="desk-media-player-scrub-track"
+          style={{ "--desk-media-progress": `${progressPct}%` }}
+        >
+          <input
+            type="range"
+            className="desk-media-player-scrub-input"
+            min={0}
+            max={duration || 0}
+            step={0.05}
+            value={seekValue}
+            disabled={!duration}
+            onPointerDown={onSeekStart}
+            onChange={onSeek}
+            onPointerUp={onSeekEnd}
+            onBlur={onSeekEnd}
+            aria-label="Seek"
+          />
+        </div>
+      </div>
+      <div className="desk-media-player-toolbar">
+        <div className="desk-media-player-toolbar-left">
+          <button type="button" className="cursor-icon-btn" title="Back 10s" onClick={() => skip(-10)}>
+            <Rewind {...mediaIcon(14)} />
+          </button>
+          <button
+            type="button"
+            className="cursor-icon-btn desk-media-player-play"
+            title={playing ? "Pause" : "Play"}
+            onClick={togglePlay}
+          >
+            {playing ? <Pause {...mediaIcon(16)} /> : <Play {...mediaIcon(16)} />}
+          </button>
+          <button type="button" className="cursor-icon-btn" title="Forward 10s" onClick={() => skip(10)}>
+            <FastForward {...mediaIcon(14)} />
+          </button>
+          <span className="desk-media-player-time">
+            {formatTime(current)}
+            <span className="desk-media-player-time-sep">/</span>
+            {ready ? formatTime(duration) : "—"}
+          </span>
+        </div>
+        <div className="desk-media-player-toolbar-right">
+          <span className="desk-media-player-name truncate" title={name}>
+            {name}
+          </span>
+          <button type="button" className="cursor-icon-btn" title={muted ? "Unmute" : "Mute"} onClick={toggleMute}>
+            <VolumeIcon {...mediaIcon(14)} />
+          </button>
+          <input
+            type="range"
+            className="desk-media-player-volume"
+            min={0}
+            max={1}
+            step={0.02}
+            value={muted ? 0 : volume}
+            onChange={onVolume}
+            aria-label="Volume"
+          />
+          {onDownload ? (
+            <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
+              <Download {...mediaIcon(14)} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className={`desk-media-player desk-media-player--${kind}${aspectClass}`}
+      style={playerStyle}
+    >
+      {isVideo ? (
+        <div className="desk-media-player-stage" onClick={togglePlay}>
+          <Tag
+            ref={mediaRef}
+            src={src}
+            poster={poster}
+            playsInline
+            preload={shouldPrefetch ? "auto" : "metadata"}
+            className="desk-media-player-video"
+          />
+          {buffering && playing ? (
+            <div className="desk-media-player-buffering" aria-hidden>
+              <span className="desk-media-player-buffering-spin" />
+            </div>
+          ) : null}
+          {!playing ? (
+            <button
+              type="button"
+              className="desk-media-player-overlay-play"
+              title="Play"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePlay();
+              }}
+            >
+              <Play size={28} strokeWidth={2} aria-hidden />
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="desk-media-player-audio-body">
+          <div className="desk-media-player-audio-art" aria-hidden>
+            <Music size={32} strokeWidth={1.75} />
+          </div>
+          <Tag
+            ref={mediaRef}
+            src={src}
+            preload={shouldPrefetch ? "auto" : "metadata"}
+            className="desk-media-player-audio-el"
+          />
+        </div>
+      )}
+      {controls}
+    </div>
+  );
+}

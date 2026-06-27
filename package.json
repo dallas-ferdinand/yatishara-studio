@@ -1,0 +1,56 @@
+{
+  "name": "yatishara-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n convex,next -c blue,green \"npm run dev:convex\" \"npm run dev:next\"",
+    "dev:next": "next dev",
+    "dev:convex": "npx convex dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "export": "next build",
+    "check:launch-env": "node scripts/check-launch-env.mjs"
+  },
+  "dependencies": {
+    "@auth/core": "^0.37.0",
+    "@convex-dev/auth": "^0.0.92",
+    "@motionone/dom": "^10.18.0",
+    "@oslojs/crypto": "^1.0.1",
+    "convex": "^1.39.1",
+    "convex-helpers": "^0.1.118",
+    "dompurify": "^3.2.4",
+    "fflate": "^0.8.3",
+    "katex": "^0.16.22",
+    "lucide-react": "^1.18.0",
+    "mermaid": "^11.12.0",
+    "next": "16.2.9",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-resizable-panels": "^2.1.7",
+    "resend": "^6.16.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/dompurify": "^3.2.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "concurrently": "^9.2.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "sharp",
+    "unrs-resolver"
+  ]
+}
