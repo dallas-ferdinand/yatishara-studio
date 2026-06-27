@@ -448,7 +448,7 @@ export function StudioShell() {
           </div>
           <div>
             <p className="text-sm font-semibold leading-none">Yatishara Studio</p>
-            <p className="mt-1 text-[11px] text-white/45">MercuryOS workspace · Image + Video flows</p>
+            <p className="mt-1 text-[11px] text-white/45">Studio workspace · Image + Video flows</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">

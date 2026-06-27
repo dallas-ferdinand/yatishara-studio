@@ -1,25 +1,22 @@
 "use client";
 
-import { useAuthActions } from "@convex-dev/auth/react";
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { StudioShell } from "./StudioShell";
 
 export function StudioAuthGate() {
-  return (
-    <>
-      <AuthLoading>
-        <AuthFrame eyebrow="Starting" title="Loading Studio..." />
-      </AuthLoading>
-      <Unauthenticated>
-        <StudioSignIn />
-      </Unauthenticated>
-      <Authenticated>
-        <StudioShell />
-      </Authenticated>
-    </>
-  );
+  const auth = useConvexAuth();
+  if (!auth) {
+    return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
+  }
+  if (auth.isLoading) {
+    return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
+  }
+  if (!auth.isAuthenticated) {
+    return <StudioSignIn />;
+  }
+  return <StudioShell />;
 }
 
 function StudioSignIn() {
@@ -119,7 +116,7 @@ function AuthFrame({
         </p>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight">{title}</h1>
         <p className="mt-2 text-sm leading-6 text-white/55">
-          Create image and video generations from a MercuryOS-style workspace.
+          Create image and video generations from a Yatishara Studio workspace.
         </p>
         {children}
         {footer ? <p className="mt-5 text-xs text-white/40">{footer}</p> : null}
