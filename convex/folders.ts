@@ -35,6 +35,18 @@ export const list = authedQuery({
   },
 });
 
+export const get = authedQuery({
+  args: { folderId: v.id("folders") },
+  returns: v.union(folderReturn, v.null()),
+  handler: async (ctx, args) => {
+    const folder = await ctx.db.get("folders", args.folderId);
+    if (!folder || folder.ownerId !== ctx.user._id || folder.deletedAt) {
+      return null;
+    }
+    return folder;
+  },
+});
+
 export const create = authedMutation({
   args: {
     parentId: v.optional(v.id("folders")),

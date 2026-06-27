@@ -4,13 +4,15 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  ArrowUp,
   Bell,
   Box,
+  ChevronDown,
   CircleDollarSign,
   Clapperboard,
   FileText,
-  FolderPlus,
   Image as ImageIcon,
+  Infinity,
   LogOut,
   Plus,
   Settings,
@@ -21,7 +23,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
+import { ExplorerViewMenu } from "@/desk/components/ExplorerViewMenu";
+import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
+import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
 
@@ -63,6 +68,11 @@ export function StudioShell() {
   const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
   const [tabEntrySnapshots, setTabEntrySnapshots] = useState({});
   const [activeTab, setActiveTab] = useState(COMPOSER_TAB);
+  const [navTrail, setNavTrail] = useState([]);
+  const [viewMode, setViewMode] = useState("list");
+  const [search, setSearch] = useState("");
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [createDialog, setCreateDialog] = useState(null);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [mode, setMode] = useState("image");
@@ -86,7 +96,12 @@ export function StudioShell() {
   const payments = useQuery(api.billing.listMyPayments, {});
   const notifications = useQuery(api.notifications.listMine, {});
   const topFolders = useQuery(api.folders.list, {});
+  const selectedFolder = useQuery(
+    api.folders.get,
+    activeFolderId ? { folderId: activeFolderId } : "skip",
+  );
   const activeFolder =
+    selectedFolder ??
     topFolders?.find((folder) => folder._id === activeFolderId) ??
     topFolders?.[0] ??
     null;
@@ -122,12 +137,16 @@ export function StudioShell() {
   useEffect(() => {
     void ensureDefaults().then((defaults) => {
       setActiveFolderId((current) => current ?? defaults.rootFolderId);
+      setNavTrail((trail) =>
+        trail.length ? trail : [{ id: defaults.rootFolderId, name: "Studio" }],
+      );
     });
   }, [ensureDefaults]);
 
   useEffect(() => {
     if (!activeFolderId && topFolders?.[0]) {
       setActiveFolderId(topFolders[0]._id);
+      setNavTrail([{ id: topFolders[0]._id, name: topFolders[0].name }]);
     }
   }, [activeFolderId, topFolders]);
 
@@ -178,9 +197,26 @@ export function StudioShell() {
     return map;
   }, [rootEntries, currentEntries]);
 
+  const visibleEntries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return (currentEntries.entries ?? []).filter((entry) =>
+      String(entry.name ?? "").toLowerCase().includes(q),
+    );
+  }, [currentEntries, search]);
+
+  const breadcrumbPath = useMemo(
+    () => navTrail.map((crumb) => crumb.name).join("/"),
+    [navTrail],
+  );
+
   function openTab(key) {
     setOpenTabs((tabs) => (tabs.includes(key) ? tabs : [...tabs, key]));
     setActiveTab(key);
+  }
+
+  function openNewComposerTab() {
+    openTab(`composer:${Date.now()}`);
   }
 
   function closeTab(key) {
@@ -197,7 +233,11 @@ export function StudioShell() {
   function handleEntryOpen(entry) {
     if (entry.type === "dir") {
       setActiveFolderId(entry.studioId);
-      openTab(`folder:${entry.studioId}`);
+      setNavTrail((trail) => {
+        const existing = trail.findIndex((crumb) => crumb.id === entry.studioId);
+        if (existing >= 0) return trail.slice(0, existing + 1);
+        return [...trail, { id: entry.studioId, name: entry.name }];
+      });
       return;
     }
     const key = `${entry.studioKind}:${entry.studioId}`;
@@ -210,6 +250,23 @@ export function StudioShell() {
     if (entry) handleEntryOpen(entry);
   }
 
+  function handleBreadcrumbNavigate(path) {
+    if (!path || path === "Studio") {
+      const root = navTrail[0] ?? (topFolders?.[0] ? { id: topFolders[0]._id, name: topFolders[0].name } : null);
+      if (!root) return;
+      setActiveFolderId(root.id);
+      setNavTrail([root]);
+      return;
+    }
+    const parts = path.split("/").filter(Boolean);
+    const index = parts.length - 1;
+    const target = navTrail[index];
+    if (!target) return;
+    const nextTrail = navTrail.slice(0, index + 1);
+    setNavTrail(nextTrail);
+    setActiveFolderId(target.id);
+  }
+
   function attachEntry(entry) {
     if (!entry || entry.type === "parent") return;
     const attachment = entryToAttachment(entry);
@@ -220,46 +277,33 @@ export function StudioShell() {
     editorRef.current?.focus();
   }
 
-  async function handleCreateFolder() {
-    const name = window.prompt("Folder name");
-    if (!name?.trim() || !activeFolder) return;
-    const id = await createFolder({
-      parentId: activeFolder._id,
-      name: name.trim(),
-      icon: "Folder",
-      color: "#22c55e",
-    });
-    setActiveFolderId(id);
-    openTab(`folder:${id}`);
-  }
-
-  async function handleCreateDocument() {
-    const title = window.prompt("Script/document title");
-    if (!title?.trim() || !activeFolder) return;
-    const id = await createDocument({
-      folderId: activeFolder._id,
-      title: title.trim(),
-      contentMarkdown: "",
-    });
-    openTab(`document:${id}`);
-  }
-
-  async function handleCreateElement() {
-    if (!activeFolder) return;
-    const name = window.prompt("Element name");
-    if (!name?.trim()) return;
-    const kind = window.prompt("Element type: character, prop, location, doc", "character");
-    const type = ["character", "prop", "location", "doc"].includes(kind ?? "")
-      ? kind
-      : "character";
+  async function createStudioItem(values) {
+    if (!activeFolder || !values?.name?.trim()) return;
+    if (values.kind === "folder") {
+      const id = await createFolder({
+        parentId: activeFolder._id,
+        name: values.name.trim(),
+        icon: "Folder",
+        color: "#22c55e",
+      });
+      setActiveFolderId(id);
+      setNavTrail((trail) => [...trail, { id, name: values.name.trim() }]);
+      return;
+    }
+    if (values.kind === "script") {
+      const id = await createDocument({
+        folderId: activeFolder._id,
+        title: values.name.trim(),
+        contentMarkdown: "",
+      });
+      openTab(`document:${id}`);
+      return;
+    }
     const id = await createElement({
       folderId: activeFolder._id,
-      type,
-      name: name.trim(),
-      sourceAssetIds: attachments
-        .filter((item) => item.studioKind === "asset")
-        .map((item) => item.studioId),
-      sourceDocumentId: attachments.find((item) => item.studioKind === "document")?.studioId,
+      type: values.elementType,
+      name: values.name.trim(),
+      sourceAssetIds: [],
     });
     openTab(`element:${id}`);
   }
@@ -383,27 +427,40 @@ export function StudioShell() {
     <div className={STYLE.shell} data-appearance="dark">
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
-          <div>
-            <p className="text-sm font-semibold text-cursor-text-bright">Yatishara Studio</p>
-            <p className="text-[11px] text-cursor-muted">MercuryOS project workspace</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="grid h-7 w-7 place-items-center rounded-lg border border-cursor-border bg-cursor-bg text-cursor-accent">
+              <Infinity className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-cursor-text-bright">Studio</p>
+              <p className="truncate text-[11px] text-cursor-muted">
+                {currentUser?.name ?? currentUser?.email ?? currentUser?.phone ?? "Creator"}
+              </p>
+            </div>
           </div>
           <button className="cursor-icon-btn cursor-icon-btn-sm" title="Sign out" onClick={() => void signOut()}>
             <LogOut className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex flex-wrap gap-2 border-b border-cursor-border p-3">
-          <button className={STYLE.iconButton} onClick={() => void handleCreateFolder()}>
-            <FolderPlus className="h-3.5 w-3.5" /> Folder
+        <div className="flex items-center gap-1 border-b border-cursor-border px-2 py-2">
+          <div className="relative">
+            <button className="cursor-icon-btn" title="Add" onClick={() => setAddMenuOpen((open) => !open)}>
+              <Plus className="h-4 w-4" />
+            </button>
+            {addMenuOpen ? (
+              <div className="cursor-tab-context-menu absolute left-0 top-9 z-40 w-44">
+                <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "folder" }); setAddMenuOpen(false); }}>Folder</button>
+                <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "element" }); setAddMenuOpen(false); }}>Element</button>
+                <button className="cursor-tab-context-item" onClick={() => { setCreateDialog({ kind: "script" }); setAddMenuOpen(false); }}>Script/document</button>
+              </div>
+            ) : null}
+          </div>
+          <button className="cursor-icon-btn" title="Upload" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-4 w-4" />
           </button>
-          <button className={STYLE.iconButton} onClick={() => void handleCreateElement()}>
-            <Box className="h-3.5 w-3.5" /> Element
-          </button>
-          <button className={STYLE.iconButton} onClick={() => void handleCreateDocument()}>
-            <FileText className="h-3.5 w-3.5" /> Script
-          </button>
-          <button className={STYLE.iconButton} onClick={() => fileInputRef.current?.click()}>
-            <Upload className="h-3.5 w-3.5" /> Upload
-          </button>
+          <div className="ml-auto">
+            <ExplorerViewMenu viewMode={viewMode} onChange={setViewMode} />
+          </div>
           <input
             ref={fileInputRef}
             className="hidden"
@@ -415,9 +472,11 @@ export function StudioShell() {
             }}
           />
         </div>
+        <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
+        <PanelSearchBar value={search} onChange={setSearch} placeholder="Search Studio" aria-label="Search Studio" />
         <div className="min-h-0 flex-1 overflow-hidden">
           <FileTree
-            viewMode="list"
+            viewMode={viewMode}
             workspaceId={WORKSPACE_ID}
             rootEntries={rootEntries}
             flatEntries={currentEntries}
@@ -428,10 +487,13 @@ export function StudioShell() {
               );
               if (folder) {
                 setActiveFolderId(folder._id);
-                openTab(`folder:${folder._id}`);
+                setNavTrail((trail) => [...trail, { id: folder._id, name: folder.name }]);
               }
             }}
             onOpenFile={handleOpenPath}
+            searchQuery={search}
+            searchScope={breadcrumbPath}
+            searchResults={visibleEntries}
             onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
             onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
           />
@@ -446,7 +508,7 @@ export function StudioShell() {
             onSelect={setActiveTab}
             onClose={closeTab}
             onSetTabOrder={setOpenTabs}
-            onNewChat={() => openTab(COMPOSER_TAB)}
+            onNewChat={openNewComposerTab}
           />
           <div className="cursor-panel-head-tools cursor-workspace-tools">
             <CreditPill entitlement={entitlement} />
@@ -459,7 +521,6 @@ export function StudioShell() {
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
-            folder={activeFolder}
             events={events}
             onAttach={attachEntry}
             onDuplicate={duplicateEntry}
@@ -529,10 +590,19 @@ export function StudioShell() {
             setContextMenu(null);
             if (action === "open") handleEntryOpen(entry);
             if (action === "attach") attachEntry(entry);
-            if (action === "new-folder") void handleCreateFolder();
-            if (action === "new-file") void handleCreateDocument();
+            if (action === "new-folder") setCreateDialog({ kind: "folder" });
+            if (action === "new-file") setCreateDialog({ kind: "script" });
             if (action === "copy-path") void navigator.clipboard?.writeText(entry.path ?? "");
             if (action === "download") handleEntryOpen(entry);
+          }}
+        />
+      ) : null}
+      {createDialog ? (
+        <CreateStudioDialog
+          initialKind={createDialog.kind}
+          onClose={() => setCreateDialog(null)}
+          onCreate={(values) => {
+            void createStudioItem(values).then(() => setCreateDialog(null));
           }}
         />
       ) : null}
@@ -573,68 +643,22 @@ function StudioComposer({
         if (entry) onDropEntry(entry);
       }}
     >
-      <div className="mx-auto max-w-5xl rounded-2xl border border-cursor-border bg-cursor-panel shadow-2xl shadow-black/20">
-        <div className="flex flex-wrap items-center gap-2 border-b border-cursor-border px-3 py-2">
-          <Segmented
-            value={mode}
-            onChange={setMode}
-            items={[
-              { value: "script", label: "Script", icon: FileText },
-              { value: "image", label: "Image", icon: ImageIcon },
-              { value: "video", label: "Video", icon: Video },
-            ]}
-          />
-          {mode === "image" ? (
-            <select className="cursor-field h-8 rounded-md text-xs" value={imageTier} onChange={(e) => setImageTier(e.target.value)}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          ) : null}
-          {mode !== "script" ? (
-            <>
-              <select className="cursor-field h-8 rounded-md text-xs" value={aspectRatio} onChange={(e) => setAspectRatio(e.target.value)}>
-                <option>16:9</option>
-                <option>9:16</option>
-                <option>1:1</option>
-                <option>4:3</option>
-              </select>
-              <select className="cursor-field h-8 rounded-md text-xs" value={resolution} onChange={(e) => setResolution(e.target.value)}>
-                <option>1024x1024</option>
-                <option>1280x720</option>
-                <option>1920x1080</option>
-              </select>
-            </>
-          ) : null}
-          {mode === "video" ? (
-            <>
-              <select className="cursor-field h-8 rounded-md text-xs" value={durationSeconds} onChange={(e) => setDurationSeconds(e.target.value)}>
-                <option value="5">5s</option>
-                <option value="10">10s</option>
-              </select>
-              <label className="flex items-center gap-1 text-xs text-cursor-muted">
-                <input type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
-                Audio
-              </label>
-            </>
-          ) : null}
-          <span className="ml-auto text-[11px] text-cursor-muted">Drag files/elements here or use @ refs.</span>
-        </div>
-        <div className="px-3 pt-3">
+      <div className="mx-auto max-w-5xl rounded-2xl border border-cursor-border bg-cursor-panel p-2 shadow-2xl shadow-black/20">
+        <div className="px-2 pt-2">
           <StudioAttachmentRow
             items={attachments}
             onRemove={(item) => setAttachments((items) => items.filter((entry) => entry.id !== item.id))}
           />
         </div>
-        <div className="flex items-end gap-2 p-3">
+        <div className="px-2 pt-1">
           <div
             ref={editorRef}
             role="textbox"
             aria-multiline="true"
             contentEditable
             suppressContentEditableWarning
-            data-placeholder="Describe the script, image, or video. Attach assets from the project tree…"
-            className="cursor-composer-textarea cursor-composer-mention-editor"
+            data-placeholder="Message Studio"
+            className="cursor-composer-textarea cursor-composer-mention-editor min-h-16"
             onInput={(event) => setDraft(event.currentTarget.innerText ?? "")}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -645,18 +669,173 @@ function StudioComposer({
           >
             {draft}
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 px-2 pb-1 pt-2">
+          <StudioDropdown
+            value={mode}
+            onChange={setMode}
+            items={[
+              { value: "script", label: "Script", icon: FileText },
+              { value: "image", label: "Image", icon: ImageIcon },
+              { value: "video", label: "Video", icon: Video },
+            ]}
+          />
+          {mode === "image" ? (
+            <StudioDropdown
+              value={imageTier}
+              onChange={setImageTier}
+              items={[
+                { value: "low", label: "Low" },
+                { value: "medium", label: "Medium" },
+                { value: "high", label: "High" },
+              ]}
+            />
+          ) : null}
+          {mode !== "script" ? (
+            <>
+              <StudioDropdown
+                value={aspectRatio}
+                onChange={setAspectRatio}
+                items={["16:9", "9:16", "1:1", "4:3"].map((value) => ({ value, label: value }))}
+              />
+              <StudioDropdown
+                value={resolution}
+                onChange={setResolution}
+                items={["1024x1024", "1280x720", "1920x1080"].map((value) => ({ value, label: value }))}
+              />
+            </>
+          ) : null}
+          {mode === "video" ? (
+            <>
+              <StudioDropdown
+                value={durationSeconds}
+                onChange={setDurationSeconds}
+                items={[
+                  { value: "5", label: "5s" },
+                  { value: "10", label: "10s" },
+                ]}
+              />
+              <label className="flex items-center gap-1 text-xs text-cursor-muted">
+                <input type="checkbox" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
+                Audio
+              </label>
+            </>
+          ) : null}
           <button
             type="button"
             disabled={disabled || !draft.trim()}
             onClick={() => void onSubmit()}
-            className="mb-1 inline-flex h-10 min-w-24 items-center justify-center gap-2 rounded-xl bg-cursor-accent px-4 text-sm font-semibold text-black transition hover:bg-cursor-accent-hover disabled:opacity-40"
+            className="ml-auto grid h-8 w-8 place-items-center rounded-full bg-cursor-accent text-black transition hover:bg-cursor-accent-hover disabled:opacity-40"
+            title="Send"
           >
-            <Sparkles className="h-4 w-4" />
-            {mode === "script" ? "Create" : "Generate"}
+            <ArrowUp className="h-4 w-4" />
           </button>
         </div>
-        {status ? <p className="px-4 pb-3 text-xs text-red-300">{status}</p> : null}
+        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
       </div>
+    </div>
+  );
+}
+
+function StudioDropdown({ value, onChange, items }) {
+  const [open, setOpen] = useState(false);
+  const active = items.find((item) => item.value === value) ?? items[0];
+  const ActiveIcon = active?.icon;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-cursor-border bg-cursor-bg px-2 text-xs text-cursor-text hover:bg-cursor-hover"
+        onClick={() => setOpen((state) => !state)}
+      >
+        {ActiveIcon ? <ActiveIcon className="h-3.5 w-3.5" /> : null}
+        <span>{active?.label}</span>
+        <ChevronDown className="h-3 w-3 text-cursor-muted" />
+      </button>
+      {open ? (
+        <div className="cursor-tab-context-menu absolute bottom-9 left-0 z-40 min-w-36">
+          {items.map((item) => {
+            const ItemIcon = item.icon;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={`cursor-tab-context-item${item.value === value ? " active" : ""}`}
+                onClick={() => {
+                  onChange(item.value);
+                  setOpen(false);
+                }}
+              >
+                {ItemIcon ? <ItemIcon className="h-3.5 w-3.5" /> : null}
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CreateStudioDialog({ initialKind, onClose, onCreate }) {
+  const [kind, setKind] = useState(initialKind ?? "folder");
+  const [name, setName] = useState("");
+  const [elementType, setElementType] = useState("character");
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onMouseDown={onClose}>
+      <form
+        className="w-full max-w-sm rounded-2xl border border-cursor-border bg-cursor-sidebar p-4 shadow-2xl"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onCreate({ kind, name, elementType });
+        }}
+      >
+        <h2 className="text-base font-semibold text-cursor-text-bright">Add to Studio</h2>
+        <div className="mt-4 flex gap-2">
+          <StudioDropdown
+            value={kind}
+            onChange={setKind}
+            items={[
+              { value: "folder", label: "Folder", icon: Plus },
+              { value: "element", label: "Element", icon: Box },
+              { value: "script", label: "Script/document", icon: FileText },
+            ]}
+          />
+          {kind === "element" ? (
+            <StudioDropdown
+              value={elementType}
+              onChange={setElementType}
+              items={[
+                { value: "character", label: "Character" },
+                { value: "prop", label: "Prop" },
+                { value: "location", label: "Location" },
+                { value: "doc", label: "Doc" },
+              ]}
+            />
+          ) : null}
+        </div>
+        <label className="mt-4 block text-xs font-medium text-cursor-muted">
+          Name
+          <input
+            autoFocus
+            className="mt-1 h-9 w-full rounded-lg border border-cursor-border bg-cursor-bg px-3 text-sm text-cursor-text outline-none focus:border-cursor-accent"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder={kind === "folder" ? "Folder name" : kind === "script" ? "Script title" : "Element name"}
+          />
+        </label>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={STYLE.iconButton} onClick={onClose}>Cancel</button>
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="inline-flex h-8 items-center rounded-lg bg-cursor-accent px-3 text-xs font-semibold text-black disabled:opacity-40"
+          >
+            Create
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -687,8 +866,8 @@ function StudioAttachmentRow({ items, onRemove }) {
   );
 }
 
-function ActivePane({ activeTab, activeEntry, folder, events, onAttach, onDuplicate, onRename, onTrash, onSwitchThreadFolder }) {
-  if (activeTab === COMPOSER_TAB) {
+function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onSwitchThreadFolder }) {
+  if (activeTab.startsWith("composer:")) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center">
         <div className="max-w-xl">
@@ -698,14 +877,6 @@ function ActivePane({ activeTab, activeEntry, folder, events, onAttach, onDuplic
             Open folders/assets/scripts/elements as tabs. Use the bottom MercuryOS composer to create scripts, images, or videos.
           </p>
         </div>
-      </div>
-    );
-  }
-  if (activeTab.startsWith("folder:")) {
-    return (
-      <div className="h-full overflow-auto p-6">
-        <h2 className="text-xl font-semibold text-cursor-text-bright">{folder?.name ?? "Folder"}</h2>
-        <p className="mt-2 text-sm text-cursor-muted">Folder opened from explorer. Assets and documents are managed from left project tree.</p>
       </div>
     );
   }
@@ -879,29 +1050,6 @@ function CreditPill({ entitlement }) {
   );
 }
 
-function Segmented({ value, onChange, items }) {
-  return (
-    <div className="inline-flex rounded-lg border border-cursor-border bg-cursor-bg p-0.5">
-      {items.map((item) => {
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => onChange(item.value)}
-            className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs transition ${
-              value === item.value ? "bg-cursor-accent text-black" : "text-cursor-muted hover:bg-cursor-hover"
-            }`}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {item.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function buildFlatEntries({ folder, folders, assets, documents, elements }) {
   return {
     loading: !folder,
@@ -977,8 +1125,8 @@ function studioPathForFolder(folder) {
 }
 
 function tabDescriptor({ key, threads, assets, documents, elements, snapshots }) {
-  if (key === COMPOSER_TAB) {
-    return { key, kind: "chat", title: "Composer", status: "ready" };
+  if (key.startsWith("composer:")) {
+    return { key, kind: "chat", title: key === COMPOSER_TAB ? "Composer" : "New composer", status: "ready" };
   }
   if (key.startsWith("thread:")) {
     const thread = threads?.find((item) => item._id === key.slice("thread:".length));
@@ -994,9 +1142,6 @@ function tabDescriptor({ key, threads, assets, documents, elements, snapshots })
       ext: entry.ext,
       status: "ready",
     };
-  }
-  if (key.startsWith("folder:")) {
-    return { key, kind: "file", title: "Folder", path: key, ext: "", status: "ready" };
   }
   return null;
 }
