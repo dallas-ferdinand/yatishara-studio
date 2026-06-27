@@ -1042,6 +1042,8 @@ export function StudioShell() {
         .studio-composer .cursor-composer {
           display: flex;
           width: 100%;
+          max-width: min(640px, calc(100% - 24px));
+          margin: 0 auto;
           padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
         }
         .studio-composer-row {
@@ -1063,14 +1065,18 @@ export function StudioShell() {
           flex: 0 0 116px;
           width: 116px;
           min-height: 108px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, rgba(255, 255, 255, 0.08));
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border-soft));
           border-radius: 16px;
           background:
             radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 38%),
-            linear-gradient(180deg, rgba(40, 48, 26, 0.92), rgba(24, 29, 18, 0.94));
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--mos-surface) 94%, var(--mos-bg) 6%),
+              color-mix(in srgb, var(--mos-panel) 88%, var(--mos-bg) 12%)
+            );
           box-shadow:
-            0 16px 38px rgba(0, 0, 0, 0.2),
-            inset 0 1px 0 rgba(255, 255, 255, 0.045);
+            0 16px 38px color-mix(in srgb, var(--mos-bg) 32%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
           padding: 5px;
           backdrop-filter: blur(18px);
         }
@@ -1082,9 +1088,9 @@ export function StudioShell() {
           min-width: 0;
           border: 1px solid transparent;
           border-radius: 11px;
-          background: rgba(255, 255, 255, 0.028);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
           padding: 0 9px;
-          color: rgba(219, 220, 202, 0.58);
+          color: var(--color-cursor-muted);
           font-size: 12px;
           font-weight: 650;
           line-height: 1;
@@ -1098,18 +1104,18 @@ export function StudioShell() {
             transform var(--cursor-ease);
         }
         .studio-mode-row:hover {
-          background: rgba(255, 255, 255, 0.058);
-          color: rgba(244, 244, 232, 0.9);
+          background: var(--color-cursor-hover);
+          color: var(--color-cursor-text);
         }
         .studio-mode-row.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 30%, rgba(255, 255, 255, 0.08));
+          border-color: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
           background:
             radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 48%),
-            rgba(255, 255, 255, 0.085);
+            color-mix(in srgb, var(--cursor-accent-dim) 48%, var(--color-cursor-hover));
           box-shadow:
-            0 7px 18px rgba(0, 0, 0, 0.22),
-            inset 0 1px 0 rgba(255, 255, 255, 0.06);
-          color: rgba(255, 255, 248, 0.96);
+            0 7px 18px color-mix(in srgb, var(--mos-bg) 28%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          color: var(--color-cursor-text-bright);
           transform: translateY(-1px);
         }
         .studio-mode-row svg {
@@ -1291,13 +1297,17 @@ export function StudioShell() {
           width: 268px;
           max-width: min(268px, calc(100vw - 24px)) !important;
           border-radius: 16px !important;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, rgba(255, 255, 255, 0.08)) !important;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft)) !important;
           background:
             radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 34%),
-            linear-gradient(180deg, rgba(47, 55, 29, 0.92), rgba(32, 38, 22, 0.94)) !important;
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--mos-surface) 94%, var(--mos-bg) 6%),
+              color-mix(in srgb, var(--mos-panel) 90%, var(--mos-bg) 10%)
+            ) !important;
           box-shadow:
-            0 18px 46px rgba(0, 0, 0, 0.38),
-            inset 0 1px 0 rgba(255, 255, 255, 0.04);
+            0 18px 46px color-mix(in srgb, var(--mos-bg) 42%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
           padding: 7px !important;
         }
         .studio-settings-stack {
@@ -1313,9 +1323,9 @@ export function StudioShell() {
           min-height: 43px;
           border: 0;
           border-radius: 9px;
-          background: rgba(255, 255, 255, 0.035);
+          background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
           padding: 0 8px 0 10px;
-          color: rgba(245, 244, 235, 0.94);
+          color: var(--color-cursor-text);
           cursor: pointer;
           text-align: left;
           transition:
@@ -1324,36 +1334,36 @@ export function StudioShell() {
             transform var(--cursor-ease);
         }
         .studio-settings-row + .studio-settings-row {
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 3%, transparent);
         }
         .studio-settings-row:hover,
         .studio-settings-row.is-open {
-          background: rgba(255, 255, 255, 0.07);
+          background: var(--color-cursor-hover);
           box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
         .studio-settings-row:active {
           transform: translateY(1px);
         }
         .studio-settings-icon {
-          color: rgba(210, 215, 188, 0.58);
+          color: var(--color-cursor-muted);
         }
         .studio-settings-label {
           overflow: hidden;
-          color: rgba(219, 220, 202, 0.67);
+          color: var(--color-cursor-muted);
           font-size: 13px;
           line-height: 1;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
         .studio-settings-value {
-          color: rgba(255, 255, 250, 0.96);
+          color: var(--color-cursor-text-bright);
           font-size: 16px;
           font-weight: 500;
           line-height: 1;
           white-space: nowrap;
         }
         .studio-settings-chevron {
-          color: rgba(210, 215, 188, 0.42);
+          color: color-mix(in srgb, var(--color-cursor-muted) 74%, transparent);
         }
         .studio-settings-options {
           display: flex;
@@ -1363,11 +1373,11 @@ export function StudioShell() {
         }
         .studio-settings-option {
           min-height: 25px;
-          border: 1px solid rgba(255, 255, 255, 0.055);
+          border: 1px solid var(--color-cursor-border-soft);
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.04);
+          background: color-mix(in srgb, var(--mos-surface) 78%, transparent);
           padding: 0 9px;
-          color: rgba(230, 232, 212, 0.72);
+          color: var(--color-cursor-muted);
           font-size: 11px;
           cursor: pointer;
           transition:
@@ -1378,8 +1388,8 @@ export function StudioShell() {
         .studio-settings-option:hover,
         .studio-settings-option.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, transparent);
-          background: color-mix(in srgb, var(--cursor-accent) 13%, rgba(255, 255, 255, 0.05));
-          color: rgba(255, 255, 248, 0.95);
+          background: color-mix(in srgb, var(--cursor-accent-dim) 68%, var(--color-cursor-hover));
+          color: var(--color-cursor-text-bright);
         }
         .studio-composer-cost {
           display: inline-flex;
@@ -1396,24 +1406,35 @@ export function StudioShell() {
           letter-spacing: -0.01em;
           white-space: nowrap;
         }
+        .studio-generate-column {
+          display: flex;
+          align-self: stretch;
+          flex: 0 0 118px;
+          min-height: 108px;
+        }
         .studio-generate-btn {
           display: inline-flex;
-          min-width: 118px;
-          height: 54px;
+          width: 100%;
+          min-width: 0;
+          min-height: 100%;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 3px;
-          border: 1px solid rgba(255, 255, 255, 0.42);
-          border-radius: 13px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          border-radius: 16px;
           background:
-            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.4), transparent 42%),
-            linear-gradient(180deg, #eaff79 0%, #d8ff00 100%);
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--mos-text-bright) 22%, transparent), transparent 42%),
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--cursor-accent-hover) 86%, var(--mos-text-bright) 14%),
+              var(--cursor-accent)
+            );
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.5),
-            inset 0 -12px 20px rgba(151, 189, 0, 0.12),
-            0 0 22px rgba(217, 255, 0, 0.18);
-          color: #11170b;
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 28%, transparent),
+            inset 0 -12px 20px color-mix(in srgb, var(--mos-bg) 12%, transparent),
+            0 0 22px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          color: var(--mos-bg);
           cursor: pointer;
           text-align: center;
           transition:
@@ -1424,16 +1445,16 @@ export function StudioShell() {
         .studio-generate-btn:hover:not(:disabled) {
           filter: brightness(1.04) saturate(1.05);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.58),
-            inset 0 -12px 20px rgba(151, 189, 0, 0.14),
-            0 0 28px rgba(217, 255, 0, 0.28);
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 34%, transparent),
+            inset 0 -12px 20px color-mix(in srgb, var(--mos-bg) 14%, transparent),
+            0 0 28px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
         }
         .studio-generate-btn:active:not(:disabled) {
           transform: translateY(1px) scale(0.99);
         }
         .studio-generate-btn:disabled {
           cursor: not-allowed;
-          filter: grayscale(0.45) brightness(0.75);
+          filter: grayscale(0.35) brightness(0.82);
           opacity: 0.62;
         }
         .studio-generate-label {
@@ -1459,6 +1480,9 @@ export function StudioShell() {
           stroke-width: 2.4;
         }
         @media (max-width: 640px) {
+          .studio-composer .cursor-composer {
+            max-width: 100%;
+          }
           .studio-composer-row {
             flex-direction: column;
             gap: 6px;
@@ -1469,6 +1493,10 @@ export function StudioShell() {
             width: 100%;
             min-height: 44px;
             flex: 0 0 auto;
+          }
+          .studio-generate-column {
+            flex: 0 0 auto;
+            min-height: 58px;
           }
           .studio-mode-row {
             min-height: 34px;
@@ -2182,6 +2210,12 @@ function StudioComposer({
             >
               {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
             </button>
+          </div>
+        </div>
+        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
+        {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
+          </div>
+          <div className="studio-generate-column">
             <button
               type="button"
               disabled={disabled || !draft.trim()}
@@ -2195,10 +2229,6 @@ function StudioComposer({
                 {mode === "script" ? "Free" : `${cost} cr`}
               </span>
             </button>
-          </div>
-        </div>
-        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
-        {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
           </div>
         </div>
       <input
