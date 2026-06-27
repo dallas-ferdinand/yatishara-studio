@@ -53,10 +53,10 @@ function isPinnedEntry(entry, pinnedPaths) {
 
 function ExplorerEmpty({ flatEntries, rootEntries }) {
   if (!rootEntries && !flatEntries) {
-    return <div className="cursor-tree-empty">Loading…</div>;
+    return <FileTreeSkeleton />;
   }
   if (rootEntries?.loading || flatEntries?.loading) {
-    return <div className="cursor-tree-empty">Loading…</div>;
+    return <FileTreeSkeleton />;
   }
   if (rootEntries?.error || flatEntries?.error) {
     return (
@@ -66,6 +66,26 @@ function ExplorerEmpty({ flatEntries, rootEntries }) {
     );
   }
   return null;
+}
+
+function FileTreeSkeleton() {
+  return (
+    <div className="flex-1 overflow-hidden min-h-0 desk-file-skeleton" aria-label="Loading files">
+      <div className="desk-file-list-head" aria-hidden>
+        <span className="desk-file-list-head-name">Name</span>
+        <span className="desk-file-list-head-meta">Modified</span>
+      </div>
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div key={index} className="desk-file-list-row desk-file-skeleton-row" aria-hidden>
+          <span className="desk-file-list-name">
+            <span className="desk-file-skeleton-icon" />
+            <span className="desk-file-skeleton-line" style={{ width: `${58 + (index % 3) * 11}%` }} />
+          </span>
+          <span className="desk-file-skeleton-meta" />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function FileEntryButton({

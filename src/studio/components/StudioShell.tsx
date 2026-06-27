@@ -4,6 +4,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
+  ArrowLeft,
   ArrowUp,
   ChevronDown,
   CircleDollarSign,
@@ -18,7 +19,8 @@ import {
   Video,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { ExplorerViewMenu } from "@/desk/components/ExplorerViewMenu";
@@ -65,6 +67,7 @@ export function StudioShell() {
   const runFlow = useAction(api.generationActions.runFlow);
   const adminSeedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const adminSeedBankAccount = useMutation(api.billing.adminSeedBankAccountFromEnv);
+  const adminSeedLaunchPricing = useMutation(api.billing.adminSeedLaunchPricing);
 
   const [activeFolderId, setActiveFolderId] = useState(null);
   const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
@@ -88,7 +91,9 @@ export function StudioShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
+  const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
+  const composerUploadInputRef = useRef(null);
   const editorRef = useRef(null);
   const composerKeyRef = useRef(COMPOSER_TAB);
   const composerContextsRef = useRef({});
@@ -182,16 +187,25 @@ export function StudioShell() {
     }
   }, [activeFolderId, topFolders]);
 
+  const folderContentLoading = Boolean(
+    activeFolder &&
+      (childFolders === undefined ||
+        assets === undefined ||
+        documents === undefined ||
+        elements === undefined),
+  );
+
   const currentEntries = useMemo(
     () =>
       buildFlatEntries({
         folder: activeFolder,
+        loading: !activeFolder || folderContentLoading,
         folders: childFolders,
         assets,
         documents,
         elements: elements?.filter((element) => element.folderId === activeFolder?._id),
       }),
-    [activeFolder, childFolders, assets, documents, elements],
+    [activeFolder, childFolders, assets, documents, elements, folderContentLoading],
   );
 
   const rootEntries = useMemo(
@@ -220,6 +234,7 @@ export function StudioShell() {
     () => findEntryByTab(activeTab, { threads, assets, documents, elements, snapshots: tabEntrySnapshots }),
     [activeTab, threads, assets, documents, elements, tabEntrySnapshots],
   );
+  const activeAdminTab = activeTab.startsWith("admin:") ? activeTab.slice("admin:".length) : null;
 
   const pathToEntry = useMemo(() => {
     const map = new Map();
@@ -229,13 +244,21 @@ export function StudioShell() {
     return map;
   }, [rootEntries, currentEntries]);
 
-  const visibleEntries = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return (currentEntries.entries ?? []).filter((entry) =>
-      String(entry.name ?? "").toLowerCase().includes(q),
-    );
-  }, [currentEntries, search]);
+  const searchState = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    if (!q) return { entries: [], truncated: false };
+    const entries = [];
+    let truncated = false;
+    for (const entry of currentEntries.entries ?? []) {
+      if (!String(entry.name ?? "").toLowerCase().includes(q)) continue;
+      if (entries.length >= 80) {
+        truncated = true;
+        break;
+      }
+      entries.push(entry);
+    }
+    return { entries, truncated };
+  }, [currentEntries, deferredSearch]);
 
   const breadcrumbPath = useMemo(
     () => navTrail.slice(1).map((crumb) => crumb.name).join("/"),
@@ -249,6 +272,10 @@ export function StudioShell() {
 
   function openNewComposerTab() {
     openTab(`composer:${Date.now()}`);
+  }
+
+  function openAdminTab(kind) {
+    openTab(`admin:${kind}`);
   }
 
   function closeTab(key) {
@@ -299,7 +326,16 @@ export function StudioShell() {
     setActiveFolderId(target.id);
   }
 
-  function attachEntry(entry) {
+  function handleFolderBack() {
+    if (navTrail.length <= 1) return;
+    const nextTrail = navTrail.slice(0, -1);
+    const target = nextTrail[nextTrail.length - 1];
+    if (!target) return;
+    setNavTrail(nextTrail);
+    setActiveFolderId(target.id);
+  }
+
+  function attachEntry(entry, insertRange = null) {
     if (!entry || entry.type === "parent") return;
     const attachment = entryToAttachment(entry);
     const exists = attachments.some((item) => item.id === attachment.id);
@@ -313,7 +349,7 @@ export function StudioShell() {
       const editor = editorRef.current;
       if (!editor) return;
       editor.focus();
-      if (!exists) insertComposerAttachmentToken(editor, attachment);
+      insertComposerAttachmentToken(editor, attachment, insertRange);
       setDraft(readComposerEditorText(editor));
     });
   }
@@ -417,6 +453,55 @@ export function StudioShell() {
     }
   }
 
+  async function uploadComposerFiles(files) {
+    if (!activeFolder) return;
+    setStatus("");
+    try {
+      for (const file of Array.from(files ?? [])) {
+        const reserved = await reserveUpload({
+          folderId: activeFolder._id,
+          name: file.name,
+          kind: kindFromMime(file.type),
+          mimeType: file.type || "application/octet-stream",
+        });
+        const res = await fetch(reserved.putUrl, {
+          method: "PUT",
+          headers: {
+            AccessKey: reserved.storageAccessKey,
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+        await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
+        attachComposerUpload({
+          id: `asset:${reserved.assetId}`,
+          kind: kindFromMime(file.type),
+          label: file.name,
+          path: `/Studio/assets/${reserved.assetId}`,
+          filename: file.name,
+          studioKind: "asset",
+          studioId: reserved.assetId,
+        });
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Upload failed.");
+    }
+  }
+
+  function attachComposerUpload(attachment) {
+    setAttachments((items) =>
+      items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
+    );
+    window.requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      insertComposerAttachmentToken(editor, attachment);
+      setDraft(readComposerEditorText(editor));
+    });
+  }
+
   async function handleSubmit() {
     if (!activeFolder || !draft.trim()) return;
     setStatus("");
@@ -465,12 +550,58 @@ export function StudioShell() {
   }
 
   return (
-    <div className={`${STYLE.shell} studio-polish`}>
+    <div
+      className={`${STYLE.shell} studio-polish`}
+      onPointerDownCapture={(event) => {
+        if (event.button !== 0) return;
+        if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
+          playStudioTapFeedback();
+        }
+      }}
+    >
       <style jsx global>{`
         .studio-polish {
           --studio-glow-soft: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           --studio-glow-mid: color-mix(in srgb, var(--cursor-accent) 24%, transparent);
           --studio-surface-hover: color-mix(in srgb, var(--cursor-accent) 5%, var(--color-cursor-hover));
+          position: relative;
+          overflow: hidden;
+          isolation: isolate;
+        }
+        .studio-polish::before,
+        .studio-polish::after {
+          content: "";
+          position: fixed;
+          z-index: 0;
+          pointer-events: none;
+          border-radius: 999px;
+          filter: blur(32px);
+          opacity: 0.34;
+          mix-blend-mode: screen;
+          animation: studio-ambient-drift 9s ease-in-out infinite alternate;
+        }
+        .studio-polish::before {
+          width: 36vw;
+          height: 36vw;
+          right: -12vw;
+          top: -14vw;
+          background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent) 28%, transparent), transparent 68%);
+        }
+        .studio-polish::after {
+          width: 30vw;
+          height: 30vw;
+          left: 18vw;
+          bottom: -16vw;
+          background: radial-gradient(circle, color-mix(in srgb, #06b6d4 16%, transparent), transparent 70%);
+          animation-duration: 12s;
+        }
+        .studio-polish > :not(style) {
+          position: relative;
+          z-index: 1;
+        }
+        @keyframes studio-ambient-drift {
+          from { transform: translate3d(0, 0, 0) scale(0.96); }
+          to { transform: translate3d(-18px, 12px, 0) scale(1.05); }
         }
         .studio-polish :where(button, [role="button"], .cursor-tab, .cursor-agent-chat-tab, .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip, .theme-chip) {
           transition:
@@ -484,6 +615,9 @@ export function StudioShell() {
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip) {
           -webkit-tap-highlight-color: transparent;
         }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn) {
+          position: relative;
+        }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip):focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
           outline-offset: 2px;
@@ -494,6 +628,22 @@ export function StudioShell() {
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active:not(:disabled),
         .studio-polish :where(.cursor-tree-row, .desk-file-grid-item, .desk-file-breadcrumbs-chip):active {
           transform: translateY(1px);
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn)::after {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          border-radius: inherit;
+          border: 1px solid transparent;
+          opacity: 0;
+          transform: scale(0.86);
+          transition: opacity 160ms ease, transform 160ms ease, border-color 160ms ease;
+          pointer-events: none;
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active::after {
+          opacity: 1;
+          transform: scale(1.08);
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, transparent);
         }
         .studio-polish .cursor-panel-head {
           backdrop-filter: blur(10px);
@@ -548,6 +698,113 @@ export function StudioShell() {
           background: color-mix(in srgb, var(--mos-surface) 34%, transparent);
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 66%, transparent);
         }
+        .studio-section-head,
+        .studio-billing-hero {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-section-kicker {
+          margin-bottom: 3px;
+          color: var(--cursor-accent);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .studio-rate-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
+          min-width: 190px;
+          font-size: 10px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-rate-grid span,
+        .studio-admin-chip {
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 9%, transparent);
+          padding: 5px 8px;
+        }
+        .studio-rate-grid b {
+          color: var(--color-cursor-text);
+        }
+        .studio-plan-grid,
+        .studio-admin-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 10px;
+        }
+        .studio-plan-card,
+        .studio-bank-card {
+          position: relative;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 16px;
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 58%, transparent), color-mix(in srgb, var(--mos-bg) 88%, transparent));
+          padding: 10px;
+        }
+        .studio-plan-card.is-featured {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 26px color-mix(in srgb, var(--cursor-accent) 13%, transparent);
+        }
+        .studio-plan-badge {
+          display: inline-flex;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          padding: 3px 7px;
+          color: var(--cursor-accent);
+          font-size: 10px;
+          font-weight: 700;
+        }
+        .studio-plan-card h4 {
+          margin-top: 8px;
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .studio-plan-price {
+          margin-top: 4px;
+          color: var(--color-cursor-text-bright);
+          font-size: 20px;
+          font-weight: 750;
+        }
+        .studio-plan-sub,
+        .studio-plan-card li {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-plan-card ul {
+          margin-top: 8px;
+          display: grid;
+          gap: 4px;
+        }
+        .studio-bank-card {
+          padding: 12px;
+          font-size: 12px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-admin-panel {
+          background:
+            radial-gradient(circle at top right, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 44%),
+            color-mix(in srgb, var(--mos-surface) 38%, transparent) !important;
+        }
+        @media (max-width: 760px) {
+          .studio-billing-hero,
+          .studio-section-head {
+            flex-direction: column;
+          }
+          .studio-rate-grid,
+          .studio-plan-grid,
+          .studio-admin-grid {
+            grid-template-columns: 1fr;
+            width: 100%;
+          }
+        }
         .studio-polish .cursor-settings-action:hover,
         .studio-polish .theme-chip:hover {
           box-shadow: 0 0 18px var(--studio-glow-soft);
@@ -591,6 +848,27 @@ export function StudioShell() {
         .studio-polish .cursor-chat-empty.thread-empty.cursor-chat-empty-logo-only {
           min-height: 100%;
           justify-content: center;
+        }
+        .studio-folder-pathbar {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 76%, transparent);
+        }
+        .studio-folder-back {
+          width: 26px;
+          height: 26px;
+          margin-left: 6px;
+          flex-shrink: 0;
+          border-radius: 999px;
+        }
+        .studio-folder-back:disabled {
+          opacity: 0.34;
+          cursor: default;
+        }
+        .studio-folder-back:disabled:hover {
+          background: transparent;
+          box-shadow: none;
         }
         @media (prefers-reduced-motion: reduce) {
           .studio-polish *,
@@ -638,12 +916,30 @@ export function StudioShell() {
           padding: 2px 4px !important;
         }
         .studio-composer-inputline {
+          position: relative;
           display: flex;
           min-height: 42px;
           align-items: flex-start;
           gap: 6px;
           flex-wrap: wrap;
           padding: 10px 12px 4px;
+        }
+        .studio-composer-drop-caret {
+          position: absolute;
+          z-index: 4;
+          width: 2px;
+          min-height: 20px;
+          border-radius: 999px;
+          background: var(--cursor-accent);
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 35%, transparent),
+            0 0 14px color-mix(in srgb, var(--cursor-accent) 52%, transparent);
+          pointer-events: none;
+          animation: studio-drop-caret-pulse 860ms ease-in-out infinite;
+        }
+        @keyframes studio-drop-caret-pulse {
+          0%, 100% { opacity: 0.58; transform: scaleY(0.9); }
+          50% { opacity: 1; transform: scaleY(1.08); }
         }
         .studio-inline-tag {
           display: inline-flex;
@@ -660,6 +956,11 @@ export function StudioShell() {
           line-height: 1;
           white-space: nowrap;
           vertical-align: middle;
+          cursor: grab;
+        }
+        .studio-inline-tag.is-dragging {
+          opacity: 0.45;
+          cursor: grabbing;
         }
         .studio-inline-tag-label {
           min-width: 0;
@@ -687,6 +988,11 @@ export function StudioShell() {
           font-size: 9px;
           font-weight: 700;
           line-height: 1;
+        }
+        .studio-inline-tag-kind svg {
+          width: 10px;
+          height: 10px;
+          stroke-width: 2.5;
         }
         .studio-composer-toolbar {
           display: flex;
@@ -716,6 +1022,7 @@ export function StudioShell() {
           margin-left: auto;
         }
         .studio-pill-btn {
+          position: relative;
           display: inline-flex;
           height: 28px;
           align-items: center;
@@ -744,6 +1051,188 @@ export function StudioShell() {
           padding: 4px !important;
           bottom: calc(100% + 6px) !important;
           left: 0 !important;
+        }
+        .studio-dropdown-menu.is-fixed {
+          position: fixed !important;
+          bottom: auto !important;
+          left: auto !important;
+          z-index: 10000 !important;
+          backdrop-filter: blur(18px);
+          animation: studio-menu-pop 130ms ease-out;
+        }
+        .studio-dropdown-menu .cursor-tab-context-item {
+          min-height: 28px;
+          white-space: nowrap;
+        }
+        .studio-pricing-grid,
+        .studio-admin-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
+        }
+        .studio-admin-workspace {
+          display: grid;
+          gap: 14px;
+          max-width: 1040px;
+          margin: 0 auto;
+        }
+        .studio-admin-grid-large {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 12px;
+        }
+        .studio-admin-hero-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border-radius: 22px;
+          background:
+            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 36%),
+            color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          padding: 18px;
+          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), 0 0 30px var(--studio-glow-soft);
+        }
+        .studio-admin-hero-card h2,
+        .studio-admin-card h3 {
+          color: var(--color-cursor-text-bright);
+          font-weight: 720;
+        }
+        .studio-admin-hero-card h2 {
+          font-size: 22px;
+        }
+        .studio-admin-hero-card p {
+          margin-top: 4px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
+        .studio-price-card,
+        .studio-bank-card,
+        .studio-admin-card {
+          position: relative;
+          overflow: hidden;
+          border-radius: 16px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 42%),
+            color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+          padding: 12px;
+          transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+        }
+        .studio-price-card:hover,
+        .studio-bank-card:hover,
+        .studio-admin-card:hover {
+          transform: translateY(-1px);
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 22px var(--studio-glow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .studio-price-card.is-featured {
+          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 28% 0%, color-mix(in srgb, var(--cursor-accent) 24%, transparent), transparent 48%),
+            color-mix(in srgb, var(--mos-surface) 80%, transparent);
+        }
+        .studio-price-card-kicker,
+        .studio-admin-card-kicker {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .studio-plan-badge {
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+          color: var(--cursor-accent);
+          padding: 2px 6px;
+          font-size: 9px;
+          letter-spacing: 0;
+          text-transform: none;
+        }
+        .studio-price-card-title {
+          margin-top: 8px;
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+          font-weight: 650;
+        }
+        .studio-price-card-credits {
+          margin-top: 4px;
+          color: var(--cursor-accent);
+          font-size: 22px;
+          font-weight: 720;
+          line-height: 1;
+          text-shadow: 0 0 14px var(--studio-glow-soft);
+        }
+        .studio-price-card-meta,
+        .studio-bank-meta,
+        .studio-admin-card p {
+          margin-top: 6px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.45;
+        }
+        .studio-credit-costs {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px;
+          margin-top: 10px;
+        }
+        .studio-credit-cost {
+          border-radius: 12px;
+          background: var(--cursor-overlay-subtle);
+          padding: 8px;
+        }
+        .studio-credit-cost span {
+          display: block;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+        }
+        .studio-credit-cost strong {
+          color: var(--color-cursor-text);
+          font-size: 12px;
+        }
+        .studio-bank-card {
+          display: grid;
+          gap: 6px;
+        }
+        .studio-bank-card-title {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-bank-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--mos-bg) 40%, transparent);
+          padding: 6px 8px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-bank-row strong {
+          color: var(--color-cursor-text);
+          font-weight: 520;
+          text-align: right;
+        }
+        .studio-upload-popover {
+          min-width: 190px;
+        }
+        .studio-upload-hint {
+          padding: 6px 8px 4px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          line-height: 1.25;
+        }
+        @keyframes studio-menu-pop {
+          from { opacity: 0; transform: translateY(4px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .studio-audio-switch {
           position: relative;
@@ -858,7 +1347,19 @@ export function StudioShell() {
           />
         </div>
         <PanelSearchBar value={search} onChange={setSearch} placeholder="Search Studio" aria-label="Search Studio" />
-        <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
+        <div className="studio-folder-pathbar">
+          <button
+            type="button"
+            className="cursor-icon-btn studio-folder-back"
+            title="Back to previous folder"
+            aria-label="Back to previous folder"
+            disabled={navTrail.length <= 1}
+            onClick={handleFolderBack}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
+          <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
+        </div>
         <div className="min-h-0 flex-1 overflow-hidden">
           <FileTree
             viewMode={viewMode}
@@ -883,7 +1384,9 @@ export function StudioShell() {
             onOpenFile={handleOpenPath}
             searchQuery={search}
             searchScope={breadcrumbPath}
-            searchResults={visibleEntries}
+            searchResults={searchState.entries}
+            searchBusy={search !== deferredSearch || currentEntries.loading}
+            searchTruncated={searchState.truncated}
             onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
             onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
           />
@@ -926,6 +1429,14 @@ export function StudioShell() {
               if (!activeFolder) return;
               void switchThreadFolder({ threadId, folderId: activeFolder._id });
             }}
+            adminTab={activeAdminTab}
+            currentUser={currentUser}
+            billingAccount={billingAccount}
+            pricing={pricing}
+            bankAccounts={bankAccounts}
+            payments={payments}
+            notifications={notifications}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         </section>
         {activeTab.startsWith("composer:") ? (
@@ -950,7 +1461,9 @@ export function StudioShell() {
             disabled={flowPending}
             status={status}
             onSubmit={handleSubmit}
-            onDropEntry={(entry) => attachEntry(entry)}
+            onDropEntry={(entry, range) => attachEntry(entry, range)}
+            onUploadFiles={(files) => uploadComposerFiles(files)}
+            uploadInputRef={composerUploadInputRef}
           />
         ) : null}
       </main>
@@ -969,6 +1482,8 @@ export function StudioShell() {
           onClose={() => setSettingsOpen(false)}
           onSeedPresets={() => void adminSeedStylePresets().then(() => setStatus("Style presets seeded."))}
           onSeedBank={() => void adminSeedBankAccount().then(() => setStatus("Bank account seeded."))}
+          onSeedPricing={() => void adminSeedLaunchPricing({}).then(() => setStatus("Launch pricing seeded."))}
+          onOpenAdminTab={openAdminTab}
         />
       ) : null}
       {contextMenu ? (
@@ -1033,10 +1548,16 @@ function StudioComposer({
   status,
   onSubmit,
   onDropEntry,
+  onUploadFiles,
+  uploadInputRef,
 }) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const [dropMarker, setDropMarker] = useState(null);
+  const inputLineRef = useRef(null);
 
   useEffect(() => {
     const el = editorRef.current;
@@ -1066,6 +1587,7 @@ function StudioComposer({
 
   async function toggleVoice() {
     try {
+      setVoiceError("");
       const voice = await import("@/desk/lib/voice-desk");
       if (recording) {
         setRecording(false);
@@ -1073,8 +1595,13 @@ function StudioComposer({
         const data = await voice.stopRecording();
         const text = await voice.transcribeRecording(data);
         if (text?.trim()) {
-          const current = editorRef.current ? readComposerEditorText(editorRef.current) : draft;
-          setEditorText(`${current}${current ? " " : ""}${text.trim()}`);
+          const editor = editorRef.current;
+          if (editor) {
+            insertComposerTextAtCaret(editor, text.trim());
+            setDraft(readComposerEditorText(editor));
+          } else {
+            setEditorText(`${draft}${draft ? " " : ""}${text.trim()}`);
+          }
         }
         return;
       }
@@ -1082,6 +1609,7 @@ function StudioComposer({
       setRecording(true);
     } catch (error) {
       console.error("Voice input failed", error);
+      setVoiceError(error instanceof Error ? error.message : "Voice input failed.");
     } finally {
       setTranscribing(false);
     }
@@ -1094,20 +1622,38 @@ function StudioComposer({
       onDragOver={(event) => {
         event.preventDefault();
         setDragOver(true);
+        updateComposerDropMarker(event, editorRef.current, inputLineRef.current, setDropMarker);
       }}
       onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setDragOver(false);
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setDragOver(false);
+          setDropMarker(null);
+        }
       }}
       onDrop={(event) => {
         event.preventDefault();
         setDragOver(false);
+        setDropMarker(null);
+        const tokenAttachment = readComposerTokenDragData(event.dataTransfer);
         const entry = readExplorerDragData(event.dataTransfer);
-        if (entry) onDropEntry(entry);
+        if (tokenAttachment) {
+          moveComposerDraggedToken(editorRef.current, tokenAttachment.tokenId);
+          const range = rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY);
+          insertComposerAttachmentToken(editorRef.current, tokenAttachment, range);
+          setDraft(readComposerEditorText(editorRef.current));
+        } else if (entry) {
+          const range = rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY);
+          if (range) setSelectionToRange(range);
+          onDropEntry(entry, range);
+        }
       }}
     >
       <div className="cursor-composer">
       <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
-        <div className="studio-composer-inputline">
+        <div className="studio-composer-inputline" ref={inputLineRef}>
+          {dropMarker ? (
+            <span className="studio-composer-drop-caret" style={{ left: dropMarker.left, top: dropMarker.top, height: dropMarker.height }} />
+          ) : null}
           <div
             ref={editorRef}
             role="textbox"
@@ -1190,6 +1736,11 @@ function StudioComposer({
             ) : null}
           </div>
           <div className="studio-composer-actions">
+            <StudioUploadMenu
+              open={uploadMenuOpen}
+              setOpen={setUploadMenuOpen}
+              inputRef={uploadInputRef}
+            />
             <button
               type="button"
               className={`cursor-toolbar-icon ${recording ? "is-recording" : ""}`}
@@ -1210,9 +1761,80 @@ function StudioComposer({
             </button>
           </div>
         </div>
-        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
+        {status || voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{status || voiceError}</p> : null}
       </div>
+      <input
+        ref={uploadInputRef}
+        className="sr-only"
+        type="file"
+        multiple
+        accept="image/*,video/*,.md,text/markdown"
+        onChange={(event) => {
+          void onUploadFiles(event.currentTarget.files);
+          event.currentTarget.value = "";
+        }}
+      />
       </div>
+    </div>
+  );
+}
+
+function StudioUploadMenu({ open, setOpen, inputRef }) {
+  const wrapRef = useRef(null);
+  const menuRef = useRef(null);
+  const menuStyle = useFixedMenuPosition(open, wrapRef, 190);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event) => {
+      if (wrapRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, setOpen]);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        className={`cursor-toolbar-icon cursor-composer-mobile-menu${open ? " active" : ""}`}
+        title="Attach/upload files"
+        aria-expanded={open}
+        onClick={() => setOpen((state) => !state)}
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+      {open && menuStyle
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="cursor-tab-context-menu studio-dropdown-menu studio-upload-popover is-fixed"
+              style={menuStyle}
+            >
+              <button
+                type="button"
+                className="cursor-tab-context-item"
+                onClick={() => {
+                  inputRef.current?.click();
+                  setOpen(false);
+                }}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Upload image/video/md
+              </button>
+              <p className="studio-upload-hint">Files attach inline to this composer prompt.</p>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -1220,12 +1842,14 @@ function StudioComposer({
 function StudioDropdown({ value, onChange, items }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
+  const menuRef = useRef(null);
+  const menuStyle = useFixedMenuPosition(open, wrapRef, 180);
   const active = items.find((item) => item.value === value) ?? items[0];
   const ActiveIcon = active?.icon;
   useEffect(() => {
     if (!open) return;
     const onDoc = (event) => {
-      if (wrapRef.current?.contains(event.target)) return;
+      if (wrapRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
       setOpen(false);
     };
     const onKey = (event) => {
@@ -1250,29 +1874,67 @@ function StudioDropdown({ value, onChange, items }) {
         <span>{active?.label}</span>
         <ChevronDown className="h-3 w-3 text-cursor-muted" />
       </button>
-      {open ? (
-        <div className="cursor-tab-context-menu studio-dropdown-menu absolute bottom-9 left-0 z-40">
-          {items.map((item) => {
-            const ItemIcon = item.icon;
-            return (
-              <button
-                key={item.value}
-                type="button"
-                className={`cursor-tab-context-item${item.value === value ? " active" : ""}`}
-                onClick={() => {
-                  onChange(item.value);
-                  setOpen(false);
-                }}
-              >
-                {ItemIcon ? <ItemIcon className="h-3.5 w-3.5" /> : null}
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {open && menuStyle
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="cursor-tab-context-menu studio-dropdown-menu is-fixed"
+              style={menuStyle}
+            >
+              {items.map((item) => {
+                const ItemIcon = item.icon;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`cursor-tab-context-item${item.value === value ? " active" : ""}`}
+                    onClick={() => {
+                      onChange(item.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {ItemIcon ? <ItemIcon className="h-3.5 w-3.5" /> : null}
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
+}
+
+function useFixedMenuPosition(open, anchorRef, minWidth = 180) {
+  const [style, setStyle] = useState(null);
+
+  useEffect(() => {
+    if (!open) {
+      setStyle(null);
+      return;
+    }
+    const update = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(minWidth, rect.width);
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      setStyle({
+        left,
+        bottom: Math.max(8, window.innerHeight - rect.top + 8),
+        minWidth: width,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchorRef, minWidth, open]);
+
+  return style;
 }
 
 function CreateStudioDialog({ initialKind, onClose, onCreate }) {
@@ -1336,13 +1998,35 @@ function createComposerAttachmentToken(attachment) {
   const token = document.createElement("span");
   token.className = "studio-inline-tag";
   token.contentEditable = "false";
+  token.draggable = true;
   token.dataset.attachmentId = attachment.id;
   token.dataset.label = attachment.label;
   token.dataset.kind = attachment.kind ?? "file";
+  token.dataset.tokenId = attachment.tokenId ?? `tag-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  token.dataset.attachment = JSON.stringify({
+    id: attachment.id,
+    kind: attachment.kind,
+    label: attachment.label,
+    path: attachment.path,
+    filename: attachment.filename,
+    studioKind: attachment.studioKind,
+    studioId: attachment.studioId,
+  });
+  token.addEventListener("dragstart", (event) => {
+    token.classList.add("is-dragging");
+    event.dataTransfer?.setData("application/x-studio-composer-token", JSON.stringify({
+      ...JSON.parse(token.dataset.attachment ?? "{}"),
+      tokenId: token.dataset.tokenId,
+    }));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+  });
+  token.addEventListener("dragend", () => {
+    token.classList.remove("is-dragging");
+  });
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
-  kind.textContent = (attachment.kind ?? attachment.studioKind ?? "file").slice(0, 1).toUpperCase();
+  kind.appendChild(createComposerTokenIcon(attachment.kind ?? attachment.studioKind ?? "file"));
 
   const label = document.createElement("span");
   label.className = "studio-inline-tag-label";
@@ -1350,6 +2034,29 @@ function createComposerAttachmentToken(attachment) {
 
   token.append(kind, label);
   return token;
+}
+
+function createComposerTokenIcon(kind) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const paths =
+    kind === "image"
+      ? ["M4 5h16v14H4z", "m4 15 5-5 4 4 2-2 5 5", "M14 8h.01"]
+      : kind === "video"
+        ? ["M4 6h11v12H4z", "m15 10 4-3v10l-4-3z"]
+        : kind === "context" || kind === "element"
+          ? ["M12 3v18", "M3 12h18", "m7 7 9-14", "m5 5 14 5"]
+          : ["M7 3h7l5 5v13H7z", "M14 3v6h6"];
+  for (const d of paths) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
 }
 
 function ensureSelectionInEditor(editor) {
@@ -1365,8 +2072,8 @@ function ensureSelectionInEditor(editor) {
   return range;
 }
 
-function insertComposerAttachmentToken(editor, attachment) {
-  const range = ensureSelectionInEditor(editor);
+function insertComposerAttachmentToken(editor, attachment, insertRange = null) {
+  const range = normalizeComposerInsertRange(editor, insertRange ? insertRange.cloneRange() : ensureSelectionInEditor(editor));
   const token = createComposerAttachmentToken(attachment);
   const spacer = document.createTextNode(" ");
   range.deleteContents();
@@ -1377,6 +2084,95 @@ function insertComposerAttachmentToken(editor, attachment) {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function normalizeComposerInsertRange(editor, range) {
+  if (!editor || !range) return range;
+  let node = range.startContainer;
+  if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+  const token = node?.closest?.(".studio-inline-tag");
+  if (!token || !editor.contains(token)) return range;
+  const next = document.createRange();
+  next.setStartAfter(token);
+  next.collapse(true);
+  return next;
+}
+
+function readComposerTokenDragData(dataTransfer) {
+  try {
+    const raw = dataTransfer?.getData("application/x-studio-composer-token");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function moveComposerDraggedToken(editor, tokenId) {
+  if (!editor || !tokenId) return;
+  const token = editor.querySelector(`[data-token-id="${CSS.escape(tokenId)}"]`);
+  const next = token?.nextSibling;
+  token?.remove();
+  if (next?.nodeType === Node.TEXT_NODE && /^\s*$/.test(next.nodeValue ?? "")) {
+    next.remove();
+  }
+}
+
+function rangeFromPointInEditor(editor, clientX, clientY) {
+  if (!editor) return null;
+  let range = null;
+  if (document.caretRangeFromPoint) {
+    range = document.caretRangeFromPoint(clientX, clientY);
+  } else if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(clientX, clientY);
+    if (pos) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  }
+  if (!range || !editor.contains(range.startContainer)) {
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  return range;
+}
+
+function setSelectionToRange(range) {
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function updateComposerDropMarker(event, editor, inputLine, setDropMarker) {
+  const range = rangeFromPointInEditor(editor, event.clientX, event.clientY);
+  if (!range || !inputLine) return;
+  const markerRect = range.getClientRects?.()[0] ?? range.startContainer?.parentElement?.getBoundingClientRect?.();
+  const hostRect = inputLine.getBoundingClientRect();
+  if (!markerRect) {
+    setDropMarker({ left: Math.max(12, event.clientX - hostRect.left), top: 10, height: 22 });
+    return;
+  }
+  setDropMarker({
+    left: Math.max(8, markerRect.left - hostRect.left),
+    top: Math.max(8, markerRect.top - hostRect.top),
+    height: Math.max(20, markerRect.height || 22),
+  });
+}
+
+function insertComposerTextAtCaret(editor, text) {
+  const range = ensureSelectionInEditor(editor);
+  const before = readComposerEditorText(editor).trim();
+  const prefix = before ? " " : "";
+  const textNode = document.createTextNode(`${prefix}${text}`);
+  range.deleteContents();
+  range.insertNode(textNode);
+  range.setStartAfter(textNode);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editor.focus();
 }
 
 function isComposerAttachmentToken(node) {
@@ -1421,7 +2217,9 @@ function removeComposerTokenBeforeCaret(editor, setAttachments) {
   const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
-  if (id) setAttachments((items) => items.filter((item) => item.id !== id));
+  if (id && !editor.querySelector(`[data-attachment-id="${CSS.escape(id)}"]`)) {
+    setAttachments((items) => items.filter((item) => item.id !== id));
+  }
   return true;
 }
 
@@ -1443,7 +2241,58 @@ function readComposerEditorText(editor) {
   return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\s{2,}/g, " ");
 }
 
-function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onRename, onTrash, onDocumentChange, onSwitchThreadFolder }) {
+let studioTapAudioCtx = null;
+let studioTapLast = 0;
+
+function playStudioTapFeedback() {
+  if (typeof window === "undefined") return;
+  const now = performance.now();
+  if (now - studioTapLast < 55) return;
+  studioTapLast = now;
+  try {
+    navigator.vibrate?.(8);
+  } catch {
+    // best-effort tactile feedback
+  }
+  try {
+    studioTapAudioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = studioTapAudioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(620, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.045);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.018, ctx.currentTime + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.055);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.06);
+  } catch {
+    // sound unavailable or blocked
+  }
+}
+
+function ActivePane({
+  activeTab,
+  activeEntry,
+  events,
+  onAttach,
+  onDuplicate,
+  onRename,
+  onTrash,
+  onDocumentChange,
+  onSwitchThreadFolder,
+  adminTab,
+  currentUser,
+  billingAccount,
+  pricing,
+  bankAccounts,
+  payments,
+  notifications,
+  onOpenSettings,
+}) {
   if (activeTab.startsWith("composer:")) {
     return (
       <div className="cursor-chat-empty thread-empty cursor-chat-empty-logo-only">
@@ -1496,6 +2345,20 @@ function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onR
       </div>
     );
   }
+  if (adminTab) {
+    return (
+      <AdminWorkspacePane
+        tab={adminTab}
+        currentUser={currentUser}
+        billingAccount={billingAccount}
+        pricing={pricing}
+        bankAccounts={bankAccounts}
+        payments={payments}
+        notifications={notifications}
+        onOpenSettings={onOpenSettings}
+      />
+    );
+  }
   if (!activeEntry) {
     return <div className="p-6 text-sm text-cursor-muted">Open something from the project tree.</div>;
   }
@@ -1521,6 +2384,89 @@ function ActivePane({ activeTab, activeEntry, events, onAttach, onDuplicate, onR
   );
 }
 
+function AdminWorkspacePane({ tab, currentUser, billingAccount, pricing, bankAccounts, payments, notifications, onOpenSettings }) {
+  const plans = pricingPlans(pricing);
+  const pendingPayments = (payments ?? []).filter((payment) => payment.status !== "payment_completed");
+  return (
+    <div className="h-full overflow-auto p-6">
+      <div className="studio-admin-workspace">
+        <section className="studio-admin-hero-card">
+          <div>
+            <p className="studio-section-kicker">Admin workspace</p>
+            <h2>{tab === "payments" ? "Payments and receipts" : "Launch pricing"}</h2>
+            <p>Logged in as {currentUser?.email ?? currentUser?.phone ?? currentUser?.name ?? "admin"}.</p>
+          </div>
+          <button type="button" className="cursor-settings-action" onClick={onOpenSettings}>
+            <Settings className="h-3.5 w-3.5" />
+            Settings
+          </button>
+        </section>
+
+        {tab === "pricing" ? (
+          <>
+            <section className="studio-admin-grid-large">
+              {plans.map((plan) => (
+                <article key={plan.name} className={`studio-plan-card${plan.featured ? " is-featured" : ""}`}>
+                  <span className="studio-plan-badge">{plan.badge}</span>
+                  <h4>{plan.name}</h4>
+                  <p className="studio-plan-price">{plan.price}</p>
+                  <p className="studio-plan-sub">{plan.credits} credits</p>
+                  <ul>
+                    {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+                  </ul>
+                </article>
+              ))}
+            </section>
+            <section className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Generation costs</p>
+              <div className="studio-credit-costs">
+                <div className="studio-credit-cost"><span>Low image</span><strong>{pricing?.imageLowCredits ?? 2} credits</strong></div>
+                <div className="studio-credit-cost"><span>Medium image</span><strong>{pricing?.imageMediumCredits ?? 5} credits</strong></div>
+                <div className="studio-credit-cost"><span>High image</span><strong>{pricing?.imageHighCredits ?? 9} credits</strong></div>
+                <div className="studio-credit-cost"><span>Video draft</span><strong>{pricing?.videoCredits ?? 35} credits</strong></div>
+              </div>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="studio-admin-grid-large">
+              <article className="studio-admin-card">
+                <p className="studio-admin-card-kicker">Credits</p>
+                <h3>{billingAccount?.creditBalance ?? 0}</h3>
+                <p>{billingAccount?.reservedCredits ?? 0} reserved for active generations.</p>
+              </article>
+              <article className="studio-admin-card">
+                <p className="studio-admin-card-kicker">Pending payments</p>
+                <h3>{pendingPayments.length}</h3>
+                <p>Receipt review queue for bank transfers.</p>
+              </article>
+              <article className="studio-admin-card">
+                <p className="studio-admin-card-kicker">Notifications</p>
+                <h3>{notifications?.length ?? 0}</h3>
+                <p>Recent account and generation notices.</p>
+              </article>
+            </section>
+            <section className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Bank accounts</p>
+              <div className="space-y-2">
+                {(bankAccounts ?? []).map((bank) => (
+                  <div key={bank._id} className="studio-bank-card">
+                    <p className="studio-bank-card-title">{bank.label}</p>
+                    <BankLine label="Bank" value={bank.bankName} />
+                    <BankLine label="Name" value={bank.accountName} />
+                    <BankLine label="Number" value={bank.accountNumber} />
+                    <BankLine label="Type" value={bank.accountType} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SettingsSheet({
   currentUser,
   billingAccount,
@@ -1532,9 +2478,12 @@ function SettingsSheet({
   onClose,
   onSeedPresets,
   onSeedBank,
+  onSeedPricing,
+  onOpenAdminTab,
 }) {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const [tab, setTab] = useState("general");
+  const plans = pricingPlans(pricing);
   const tabs = [
     ["general", "General"],
     ["billing", "Billing"],
@@ -1577,24 +2526,55 @@ function SettingsSheet({
 
           {tab === "billing" ? (
             <>
-              <section className="cursor-settings-section">
-                <h3>Billing</h3>
-                <p className="text-sm text-cursor-text">
-                  {billingAccount?.creditBalance ?? 0} credits
-                  <span className="text-cursor-muted"> · {billingAccount?.reservedCredits ?? 0} reserved</span>
-                </p>
+              <section className="cursor-settings-section studio-billing-hero">
+                <div>
+                  <p className="studio-section-kicker">Credit balance</p>
+                  <h3>{billingAccount?.creditBalance ?? 0} credits</h3>
+                  <p className="text-xs text-cursor-muted">{billingAccount?.reservedCredits ?? 0} reserved for active generations</p>
+                </div>
                 {pricing ? (
-                  <p className="mt-1 text-xs text-cursor-muted">
-                    Low {pricing.imageLowCredits} · Medium {pricing.imageMediumCredits} · High {pricing.imageHighCredits} · Video {pricing.videoCredits}
-                  </p>
+                  <div className="studio-rate-grid">
+                    <span>Low image <b>{pricing.imageLowCredits}</b></span>
+                    <span>Medium <b>{pricing.imageMediumCredits}</b></span>
+                    <span>High <b>{pricing.imageHighCredits}</b></span>
+                    <span>Video <b>{pricing.videoCredits}</b></span>
+                  </div>
                 ) : null}
               </section>
 
               <section className="cursor-settings-section">
-                <h3>Bank accounts</h3>
+                <div className="studio-section-head">
+                  <div>
+                    <p className="studio-section-kicker">Plans</p>
+                    <h3>Creator credit packs</h3>
+                  </div>
+                  <span className="studio-admin-chip">Most choose Studio</span>
+                </div>
+                <div className="studio-plan-grid">
+                  {plans.map((plan) => (
+                    <article key={plan.name} className={`studio-plan-card${plan.featured ? " is-featured" : ""}`}>
+                      <span className="studio-plan-badge">{plan.badge}</span>
+                      <h4>{plan.name}</h4>
+                      <p className="studio-plan-price">{plan.price}</p>
+                      <p className="studio-plan-sub">{plan.credits} credits</p>
+                      <ul>
+                        {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+                      </ul>
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section className="cursor-settings-section">
+                <div className="studio-section-head">
+                  <div>
+                    <p className="studio-section-kicker">Bank transfer</p>
+                    <h3>Payment account</h3>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   {(bankAccounts ?? []).map((bank) => (
-                    <div key={bank._id} className="rounded-lg border border-cursor-border/70 p-2 text-xs text-cursor-muted">
+                    <div key={bank._id} className="studio-bank-card">
                       <p className="font-medium text-cursor-text">{bank.label}</p>
                       <CopyLine label="Bank" value={bank.bankName} />
                       <CopyLine label="Name" value={bank.accountName} />
@@ -1624,18 +2604,43 @@ function SettingsSheet({
           ) : null}
 
           {tab === "admin" && isAdmin ? (
-            <section className="cursor-settings-section">
-              <h3>Admin setup</h3>
-              <div className="flex flex-wrap gap-2">
+            <section className="cursor-settings-section studio-admin-panel">
+              <div className="studio-section-head">
+                <div>
+                  <p className="studio-section-kicker">Admin control</p>
+                  <h3>Launch operations</h3>
+                </div>
+                <span className="studio-admin-chip">{currentUser?.role}</span>
+              </div>
+              <div className="studio-admin-grid">
                 <button className="cursor-settings-action" onClick={onSeedPresets}>
                   <Sparkles className="h-3.5 w-3.5" />
                   Seed presets
                 </button>
                 <button className="cursor-settings-action" onClick={onSeedBank}>
                   <CircleDollarSign className="h-3.5 w-3.5" />
-                  Seed bank from env
+                  Seed First Citizens bank
+                </button>
+                <button className="cursor-settings-action" onClick={onSeedPricing}>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Seed launch pricing
+                </button>
+                <button className="cursor-settings-action" onClick={() => setTab("billing")}>
+                  <CircleDollarSign className="h-3.5 w-3.5" />
+                  Open billing plans
+                </button>
+                <button className="cursor-settings-action" onClick={() => onOpenAdminTab("pricing")}>
+                  <Settings className="h-3.5 w-3.5" />
+                  Open pricing tab
+                </button>
+                <button className="cursor-settings-action" onClick={() => onOpenAdminTab("payments")}>
+                  <CircleDollarSign className="h-3.5 w-3.5" />
+                  Open payments tab
                 </button>
               </div>
+              <p className="mt-3 text-xs text-cursor-muted">
+                Admin bank seed creates First Citizens · Tishara Sophia Aaron · 2617327 · Savings when no enabled account exists.
+              </p>
             </section>
           ) : null}
         </div>
@@ -1658,6 +2663,44 @@ function CopyLine({ label, value }) {
   );
 }
 
+function BankLine({ label, value }) {
+  return (
+    <p className="studio-bank-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </p>
+  );
+}
+
+function pricingPlans(pricing) {
+  const pricePerCredit = (pricing?.creditPriceCents ?? 100) / 100;
+  const makePrice = (credits) => `$${Math.round(credits * pricePerCredit).toLocaleString()}`;
+  return [
+    {
+      name: "Starter",
+      badge: "Try",
+      credits: 25,
+      price: makePrice(25),
+      features: ["5 medium images", "Folder context", "Bank top-up"],
+    },
+    {
+      name: "Studio",
+      badge: "Popular",
+      credits: 100,
+      price: makePrice(100),
+      featured: true,
+      features: ["20 medium images", "2-3 video drafts", "Best creator value"],
+    },
+    {
+      name: "Production",
+      badge: "Scale",
+      credits: 300,
+      price: makePrice(300),
+      features: ["High-res iteration", "8+ video drafts", "Team-ready balance"],
+    },
+  ];
+}
+
 function CreditPill({ entitlement }) {
   return (
     <span className="rounded-full border border-cursor-border bg-cursor-panel px-2 py-1 text-[11px] text-cursor-muted">
@@ -1666,9 +2709,9 @@ function CreditPill({ entitlement }) {
   );
 }
 
-function buildFlatEntries({ folder, folders, assets, documents, elements }) {
+function buildFlatEntries({ folder, loading, folders, assets, documents, elements }) {
   return {
-    loading: !folder,
+    loading: loading ?? !folder,
     entries: [
       ...(folders ?? []).map(folderToEntry),
       ...(documents ?? []).map(documentToEntry),
@@ -1743,6 +2786,11 @@ function studioPathForFolder(folder) {
 function tabDescriptor({ key, threads, assets, documents, elements, snapshots }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Composer" : "New composer", status: "ready" };
+  }
+  if (key.startsWith("admin:")) {
+    const kind = key.slice("admin:".length);
+    const title = kind === "payments" ? "Admin payments" : kind === "pricing" ? "Admin pricing" : "Admin";
+    return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("thread:")) {
     const thread = threads?.find((item) => item._id === key.slice("thread:".length));

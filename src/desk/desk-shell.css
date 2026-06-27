@@ -904,6 +904,52 @@
   text-align: center;
 }
 
+.desk-file-skeleton {
+  padding-top: 2px;
+}
+
+.desk-file-skeleton-row {
+  pointer-events: none;
+}
+
+.desk-file-skeleton-icon,
+.desk-file-skeleton-line,
+.desk-file-skeleton-meta {
+  display: inline-block;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent),
+      color-mix(in srgb, var(--cursor-accent) 14%, transparent),
+      color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent)
+    );
+  background-size: 220% 100%;
+  animation: desk-file-skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+.desk-file-skeleton-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.desk-file-skeleton-line {
+  height: 10px;
+  max-width: 190px;
+}
+
+.desk-file-skeleton-meta {
+  width: 54px;
+  height: 9px;
+  justify-self: end;
+}
+
+@keyframes desk-file-skeleton-shimmer {
+  0% { background-position: 120% 0; opacity: 0.52; }
+  50% { opacity: 0.92; }
+  100% { background-position: -120% 0; opacity: 0.52; }
+}
+
 .cursor-file-grid .desk-file-search-divider,
 .desk-file-preview-grid .desk-file-search-divider {
   width: 100%;

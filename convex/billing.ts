@@ -283,24 +283,53 @@ export const adminSeedBankAccountFromEnv = adminMutation({
   args: {},
   returns: v.union(v.id("bankAccounts"), v.null()),
   handler: async (ctx) => {
-    const bankName = process.env.STUDIO_BANK_NAME;
-    const accountName = process.env.STUDIO_BANK_ACCOUNT_NAME;
-    const accountNumber = process.env.STUDIO_BANK_ACCOUNT_NUMBER;
-    const rawAccountType = process.env.STUDIO_BANK_ACCOUNT_TYPE;
+    const bankName = process.env.STUDIO_BANK_NAME ?? "First Citizens";
+    const accountName = process.env.STUDIO_BANK_ACCOUNT_NAME ?? "Tishara Sophia Aaron";
+    const accountNumber = process.env.STUDIO_BANK_ACCOUNT_NUMBER ?? "2617327";
+    const rawAccountType = process.env.STUDIO_BANK_ACCOUNT_TYPE ?? "savings";
     if (!bankName || !accountName || !accountNumber) {
       return null;
     }
     const accountType = rawAccountType === "savings" ? "savings" : "chequing";
+    const now = Date.now();
     const existing = await ctx.db
       .query("bankAccounts")
       .withIndex("by_enabled_and_sort", (q) => q.eq("enabled", true))
-      .first();
-    if (existing) {
-      return existing._id;
+      .collect();
+    const matching = existing.find((account) => account.accountNumber === accountNumber);
+    if (matching) {
+      await ctx.db.patch(matching._id, {
+        label: "Primary Studio bank account",
+        bankName,
+        accountName,
+        accountNumber,
+        accountType,
+        enabled: true,
+        sortOrder: 0,
+        updatedAt: now,
+      });
+      await audit(ctx, "bank_account_seeded");
+      return matching._id;
     }
-    const now = Date.now();
+    const primary = existing.find((account) => account.sortOrder === 0);
+    if (primary && primary.bankName === bankName && primary.accountName === accountName) {
+      await ctx.db.patch(primary._id, {
+        accountNumber,
+        accountType,
+        enabled: true,
+        updatedAt: now,
+      });
+      await audit(ctx, "bank_account_seeded");
+      return primary._id;
+    }
+    if (existing) {
+      for (const account of existing) {
+        if (account.sortOrder >= 1) continue;
+        await ctx.db.patch(account._id, { sortOrder: account.sortOrder + 1, updatedAt: now });
+      }
+    }
     const bankAccountId = await ctx.db.insert("bankAccounts", {
-      label: "Primary TT bank account",
+      label: "Primary Studio bank account",
       bankName,
       accountName,
       accountNumber,
@@ -312,6 +341,35 @@ export const adminSeedBankAccountFromEnv = adminMutation({
     });
     await audit(ctx, "bank_account_seeded");
     return bankAccountId;
+  },
+});
+
+export const adminSeedLaunchPricing = adminMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const data = {
+      key: "default",
+      creditPriceCents: 100,
+      imageLowCredits: 2,
+      imageMediumCredits: 5,
+      imageHighCredits: 9,
+      videoCredits: 35,
+      updatedBy: ctx.user._id,
+      updatedAt: now,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, data);
+    } else {
+      await ctx.db.insert("pricingSettings", data);
+    }
+    await audit(ctx, "pricing_seeded");
+    return null;
   },
 });
 
