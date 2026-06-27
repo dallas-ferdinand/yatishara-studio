@@ -4,18 +4,22 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
-  ArrowUp,
+  ChevronRight,
   ChevronDown,
   CircleDollarSign,
+  Clock3,
   FileText,
+  Gauge,
   Image as ImageIcon,
   Loader2,
   Mic,
   Plus,
+  RectangleHorizontal,
   Settings,
   Sparkles,
   Upload,
   Video,
+  Volume2,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -1036,10 +1040,89 @@ export function StudioShell() {
           box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
         .studio-composer .cursor-composer {
+          display: flex;
+          width: 100%;
           padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
         }
+        .studio-composer-row {
+          display: flex;
+          align-items: stretch;
+          gap: 8px;
+          width: 100%;
+          min-width: 0;
+        }
         .studio-composer .cursor-composer-box {
+          flex: 1 1 auto;
+          min-width: 0;
           padding: 0 !important;
+        }
+        .studio-mode-switcher {
+          display: grid;
+          grid-template-rows: repeat(3, minmax(32px, 1fr));
+          gap: 4px;
+          flex: 0 0 116px;
+          width: 116px;
+          min-height: 108px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, rgba(255, 255, 255, 0.08));
+          border-radius: 16px;
+          background:
+            radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 38%),
+            linear-gradient(180deg, rgba(40, 48, 26, 0.92), rgba(24, 29, 18, 0.94));
+          box-shadow:
+            0 16px 38px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.045);
+          padding: 5px;
+          backdrop-filter: blur(18px);
+        }
+        .studio-mode-row {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          width: 100%;
+          min-width: 0;
+          border: 1px solid transparent;
+          border-radius: 11px;
+          background: rgba(255, 255, 255, 0.028);
+          padding: 0 9px;
+          color: rgba(219, 220, 202, 0.58);
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1;
+          text-align: left;
+          cursor: pointer;
+          transition:
+            background var(--cursor-ease),
+            border-color var(--cursor-ease),
+            box-shadow var(--cursor-ease),
+            color var(--cursor-ease),
+            transform var(--cursor-ease);
+        }
+        .studio-mode-row:hover {
+          background: rgba(255, 255, 255, 0.058);
+          color: rgba(244, 244, 232, 0.9);
+        }
+        .studio-mode-row.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 30%, rgba(255, 255, 255, 0.08));
+          background:
+            radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 48%),
+            rgba(255, 255, 255, 0.085);
+          box-shadow:
+            0 7px 18px rgba(0, 0, 0, 0.22),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+          color: rgba(255, 255, 248, 0.96);
+          transform: translateY(-1px);
+        }
+        .studio-mode-row svg {
+          width: 15px;
+          height: 15px;
+          flex: 0 0 auto;
+          stroke-width: 2.25;
+        }
+        .studio-mode-row span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .studio-composer .cursor-composer-textarea {
           flex: 1 1 160px;
@@ -1199,6 +1282,105 @@ export function StudioShell() {
           min-height: 34px;
           white-space: nowrap;
         }
+        .studio-settings-trigger {
+          width: 30px;
+          justify-content: center;
+          padding: 0;
+        }
+        .studio-settings-menu {
+          width: 268px;
+          max-width: min(268px, calc(100vw - 24px)) !important;
+          border-radius: 16px !important;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, rgba(255, 255, 255, 0.08)) !important;
+          background:
+            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 34%),
+            linear-gradient(180deg, rgba(47, 55, 29, 0.92), rgba(32, 38, 22, 0.94)) !important;
+          box-shadow:
+            0 18px 46px rgba(0, 0, 0, 0.38),
+            inset 0 1px 0 rgba(255, 255, 255, 0.04);
+          padding: 7px !important;
+        }
+        .studio-settings-stack {
+          display: grid;
+          gap: 4px;
+        }
+        .studio-settings-row {
+          display: grid;
+          grid-template-columns: 18px minmax(0, 1fr) auto 12px;
+          align-items: center;
+          gap: 7px;
+          width: 100%;
+          min-height: 43px;
+          border: 0;
+          border-radius: 9px;
+          background: rgba(255, 255, 255, 0.035);
+          padding: 0 8px 0 10px;
+          color: rgba(245, 244, 235, 0.94);
+          cursor: pointer;
+          text-align: left;
+          transition:
+            background var(--cursor-ease),
+            box-shadow var(--cursor-ease),
+            transform var(--cursor-ease);
+        }
+        .studio-settings-row + .studio-settings-row {
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+        }
+        .studio-settings-row:hover,
+        .studio-settings-row.is-open {
+          background: rgba(255, 255, 255, 0.07);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-settings-row:active {
+          transform: translateY(1px);
+        }
+        .studio-settings-icon {
+          color: rgba(210, 215, 188, 0.58);
+        }
+        .studio-settings-label {
+          overflow: hidden;
+          color: rgba(219, 220, 202, 0.67);
+          font-size: 13px;
+          line-height: 1;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-settings-value {
+          color: rgba(255, 255, 250, 0.96);
+          font-size: 16px;
+          font-weight: 500;
+          line-height: 1;
+          white-space: nowrap;
+        }
+        .studio-settings-chevron {
+          color: rgba(210, 215, 188, 0.42);
+        }
+        .studio-settings-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          padding: 1px 4px 5px 35px;
+        }
+        .studio-settings-option {
+          min-height: 25px;
+          border: 1px solid rgba(255, 255, 255, 0.055);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.04);
+          padding: 0 9px;
+          color: rgba(230, 232, 212, 0.72);
+          font-size: 11px;
+          cursor: pointer;
+          transition:
+            background var(--cursor-ease),
+            border-color var(--cursor-ease),
+            color var(--cursor-ease);
+        }
+        .studio-settings-option:hover,
+        .studio-settings-option.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 13%, rgba(255, 255, 255, 0.05));
+          color: rgba(255, 255, 248, 0.95);
+        }
         .studio-composer-cost {
           display: inline-flex;
           height: 24px;
@@ -1213,6 +1395,86 @@ export function StudioShell() {
           line-height: 1;
           letter-spacing: -0.01em;
           white-space: nowrap;
+        }
+        .studio-generate-btn {
+          display: inline-flex;
+          min-width: 118px;
+          height: 54px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          border: 1px solid rgba(255, 255, 255, 0.42);
+          border-radius: 13px;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.4), transparent 42%),
+            linear-gradient(180deg, #eaff79 0%, #d8ff00 100%);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.5),
+            inset 0 -12px 20px rgba(151, 189, 0, 0.12),
+            0 0 22px rgba(217, 255, 0, 0.18);
+          color: #11170b;
+          cursor: pointer;
+          text-align: center;
+          transition:
+            filter var(--cursor-ease),
+            transform var(--cursor-ease),
+            box-shadow var(--cursor-ease);
+        }
+        .studio-generate-btn:hover:not(:disabled) {
+          filter: brightness(1.04) saturate(1.05);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.58),
+            inset 0 -12px 20px rgba(151, 189, 0, 0.14),
+            0 0 28px rgba(217, 255, 0, 0.28);
+        }
+        .studio-generate-btn:active:not(:disabled) {
+          transform: translateY(1px) scale(0.99);
+        }
+        .studio-generate-btn:disabled {
+          cursor: not-allowed;
+          filter: grayscale(0.45) brightness(0.75);
+          opacity: 0.62;
+        }
+        .studio-generate-label {
+          font-size: 11px;
+          font-weight: 900;
+          line-height: 1;
+          letter-spacing: -0.03em;
+          text-transform: uppercase;
+        }
+        .studio-generate-cost {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          letter-spacing: -0.02em;
+        }
+        .studio-generate-cost svg {
+          width: 10px;
+          height: 10px;
+          fill: currentColor;
+          stroke-width: 2.4;
+        }
+        @media (max-width: 640px) {
+          .studio-composer-row {
+            flex-direction: column;
+            gap: 6px;
+          }
+          .studio-mode-switcher {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: none;
+            width: 100%;
+            min-height: 44px;
+            flex: 0 0 auto;
+          }
+          .studio-mode-row {
+            min-height: 34px;
+            justify-content: center;
+            padding: 0 7px;
+          }
         }
         .studio-pricing-grid,
         .studio-admin-grid {
@@ -1858,7 +2120,9 @@ function StudioComposer({
       }}
     >
       <div className="cursor-composer">
-      <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
+        <div className="studio-composer-row">
+          <StudioModeSwitcher mode={mode} setMode={setMode} />
+          <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
         <div className="studio-composer-inputline" ref={inputLineRef}>
           {dropMarker ? (
             <span className="studio-composer-drop-caret" style={{ left: dropMarker.left, top: dropMarker.top, height: dropMarker.height }} />
@@ -1892,65 +2156,21 @@ function StudioComposer({
               setOpen={setUploadMenuOpen}
               inputRef={uploadInputRef}
             />
-            <StudioDropdown
-              value={mode}
-              onChange={setMode}
-              items={[
-                { value: "script", label: "Script", icon: FileText },
-                { value: "image", label: "Image", icon: ImageIcon },
-                { value: "video", label: "Video", icon: Video },
-              ]}
-            />
-            {mode === "image" ? (
-              <StudioDropdown
-                value={imageTier}
-                onChange={setImageTier}
-                items={[
-                  { value: "low", label: "Low" },
-                  { value: "medium", label: "Medium" },
-                  { value: "high", label: "High" },
-                ]}
+            {mode !== "script" ? (
+              <StudioSettingsMenu
+                mode={mode}
+                imageTier={imageTier}
+                setImageTier={setImageTier}
+                aspectRatio={aspectRatio}
+                setAspectRatio={setAspectRatio}
+                resolution={resolution}
+                setResolution={setResolution}
+                durationSeconds={durationSeconds}
+                setDurationSeconds={setDurationSeconds}
+                audioEnabled={audioEnabled}
+                setAudioEnabled={setAudioEnabled}
               />
             ) : null}
-            {mode !== "script" ? (
-              <>
-                <StudioDropdown
-                  value={aspectRatio}
-                  onChange={setAspectRatio}
-                  items={["16:9", "9:16", "1:1", "4:3"].map((value) => ({ value, label: value }))}
-                />
-                <StudioDropdown
-                  value={resolution}
-                  onChange={setResolution}
-                  items={["1024x1024", "1280x720", "1920x1080"].map((value) => ({ value, label: value }))}
-                />
-              </>
-            ) : null}
-            {mode === "video" ? (
-              <>
-                <StudioDropdown
-                  value={durationSeconds}
-                  onChange={setDurationSeconds}
-                  items={[
-                    { value: "5", label: "5s" },
-                    { value: "10", label: "10s" },
-                  ]}
-                />
-                <button
-                  type="button"
-                  className="studio-pill-btn"
-                  onClick={() => setAudioEnabled(!audioEnabled)}
-                  aria-pressed={audioEnabled}
-                  title={audioEnabled ? "Audio on" : "Audio off"}
-                >
-                  Audio
-                  <span className={`studio-audio-switch${audioEnabled ? " is-on" : ""}`} aria-hidden="true" />
-                </button>
-              </>
-            ) : null}
-            <span className="studio-composer-cost" title="Estimated generation cost">
-              {mode === "script" ? "Free" : `${cost} cr`}
-            </span>
           </div>
           <div className="studio-composer-actions">
             <button
@@ -1966,16 +2186,21 @@ function StudioComposer({
               type="button"
               disabled={disabled || !draft.trim()}
               onClick={() => void onSubmit()}
-              className="cursor-toolbar-icon cursor-composer-submit"
-              title="Send"
+              className="studio-generate-btn"
+              title="Generate"
             >
-              <ArrowUp className="h-4 w-4" />
+              <span className="studio-generate-label">Generate</span>
+              <span className="studio-generate-cost">
+                <Sparkles aria-hidden="true" />
+                {mode === "script" ? "Free" : `${cost} cr`}
+              </span>
             </button>
           </div>
         </div>
         {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
         {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
-      </div>
+          </div>
+        </div>
       <input
         ref={uploadInputRef}
         className="sr-only"
@@ -1988,6 +2213,36 @@ function StudioComposer({
         }}
       />
       </div>
+    </div>
+  );
+}
+
+function StudioModeSwitcher({ mode, setMode }) {
+  const items = [
+    { value: "image", label: "Image", icon: ImageIcon },
+    { value: "video", label: "Video", icon: Video },
+    { value: "script", label: "Script", icon: FileText },
+  ];
+
+  return (
+    <div className="studio-mode-switcher" role="radiogroup" aria-label="Composer mode">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const active = mode === item.value;
+        return (
+          <button
+            key={item.value}
+            type="button"
+            className={`studio-mode-row${active ? " is-active" : ""}`}
+            role="radio"
+            aria-checked={active}
+            onClick={() => setMode(item.value)}
+          >
+            <Icon aria-hidden="true" />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -2044,6 +2299,179 @@ function StudioUploadMenu({ open, setOpen, inputRef }) {
                 Upload image/video/md
               </button>
               <p className="studio-upload-hint">Files attach inline to this composer prompt.</p>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+function StudioSettingsMenu({
+  mode,
+  imageTier,
+  setImageTier,
+  aspectRatio,
+  setAspectRatio,
+  resolution,
+  setResolution,
+  durationSeconds,
+  setDurationSeconds,
+  audioEnabled,
+  setAudioEnabled,
+}) {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState("aspect");
+  const wrapRef = useRef(null);
+  const menuRef = useRef(null);
+  const menuStyle = useFixedMenuPosition(open, wrapRef, 268);
+  const aspectItems = ["16:9", "9:16", "1:1", "4:3"].map((value) => ({ value, label: value }));
+  const imageQualityItems = [
+    { value: "low", label: "Low" },
+    { value: "medium", label: "Medium" },
+    { value: "high", label: "High" },
+  ];
+  const resolutionItems = [
+    { value: "1024x1024", label: "1024" },
+    { value: "1280x720", label: "720p" },
+    { value: "1920x1080", label: "1080p" },
+  ];
+  const durationItems = [
+    { value: "5", label: "5s" },
+    { value: "10", label: "10s" },
+  ];
+  const rows = [
+    {
+      key: "aspect",
+      label: "Aspect ratio",
+      value: aspectRatio,
+      icon: RectangleHorizontal,
+      items: aspectItems,
+      current: aspectRatio,
+      onChange: setAspectRatio,
+    },
+    mode === "image"
+      ? {
+          key: "quality",
+          label: "Quality",
+          value: imageQualityItems.find((item) => item.value === imageTier)?.label ?? imageTier,
+          icon: Gauge,
+          items: imageQualityItems,
+          current: imageTier,
+          onChange: setImageTier,
+        }
+      : {
+          key: "quality",
+          label: "Quality",
+          value: resolutionItems.find((item) => item.value === resolution)?.label ?? resolution,
+          icon: Gauge,
+          items: resolutionItems,
+          current: resolution,
+          onChange: setResolution,
+        },
+    mode === "video"
+      ? {
+          key: "duration",
+          label: "Duration",
+          value: `${durationSeconds}s`,
+          icon: Clock3,
+          items: durationItems,
+          current: durationSeconds,
+          onChange: setDurationSeconds,
+        }
+      : null,
+    mode === "video"
+      ? {
+          key: "audio",
+          label: "Audio",
+          value: audioEnabled ? "On" : "Off",
+          icon: Volume2,
+          onClick: () => setAudioEnabled(!audioEnabled),
+        }
+      : null,
+  ].filter(Boolean);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event) => {
+      if (wrapRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        type="button"
+        className="studio-pill-btn studio-settings-trigger"
+        aria-label="Generation settings"
+        aria-expanded={open}
+        title="Generation settings"
+        onClick={() => setOpen((state) => !state)}
+      >
+        <Settings className="h-3.5 w-3.5" />
+      </button>
+      {open && menuStyle
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="cursor-tab-context-menu studio-dropdown-menu studio-settings-menu is-fixed"
+              style={menuStyle}
+              role="menu"
+              aria-label="Generation settings"
+            >
+              <div className="studio-settings-stack">
+                {rows.map((row) => {
+                  const RowIcon = row.icon;
+                  const isExpanded = expanded === row.key && row.items;
+                  return (
+                    <div key={row.key}>
+                      <button
+                        type="button"
+                        className={`studio-settings-row${isExpanded ? " is-open" : ""}`}
+                        aria-expanded={Boolean(isExpanded)}
+                        onClick={() => {
+                          if (row.onClick) {
+                            row.onClick();
+                            return;
+                          }
+                          setExpanded((current) => (current === row.key ? "" : row.key));
+                        }}
+                      >
+                        <RowIcon className="studio-settings-icon h-4 w-4" />
+                        <span className="studio-settings-label">{row.label}</span>
+                        <span className="studio-settings-value">{row.value}</span>
+                        <ChevronRight className="studio-settings-chevron h-3 w-3" />
+                      </button>
+                      {isExpanded ? (
+                        <div className="studio-settings-options" role="group" aria-label={`${row.label} options`}>
+                          {row.items.map((item) => (
+                            <button
+                              key={item.value}
+                              type="button"
+                              className={`studio-settings-option${item.value === row.current ? " is-active" : ""}`}
+                              onClick={() => {
+                                row.onChange(item.value);
+                              }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>,
             document.body,
           )
