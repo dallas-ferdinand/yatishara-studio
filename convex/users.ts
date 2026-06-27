@@ -21,6 +21,65 @@ export const current = authedQuery({
   },
 });
 
+export const updateAccountDetails = authedMutation({
+  args: {
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
+  }),
+  handler: async (ctx, args) => {
+    const name = normalizeOptional(args.name);
+    const email = normalizeEmail(args.email);
+    const phone = normalizeOptional(args.phone);
+
+    if (email) {
+      const existingEmail = await ctx.db
+        .query("users")
+        .withIndex("email", (q) => q.eq("email", email))
+        .unique();
+      if (existingEmail && existingEmail._id !== ctx.user._id) {
+        throw new Error("Email already belongs to another account");
+      }
+    }
+
+    if (phone) {
+      const existingPhone = await ctx.db
+        .query("users")
+        .withIndex("by_phone", (q) => q.eq("phone", phone))
+        .unique();
+      if (existingPhone && existingPhone._id !== ctx.user._id) {
+        throw new Error("Phone already belongs to another account");
+      }
+    }
+
+    await ctx.db.patch(ctx.user._id, {
+      name,
+      email,
+      phone,
+      updatedAt: Date.now(),
+    });
+
+    const updated = await ctx.db.get(ctx.user._id);
+    if (!updated) {
+      throw new Error("User not found");
+    }
+    return {
+      userId: updated._id,
+      name: updated.name,
+      email: updated.email,
+      phone: updated.phone,
+      role: updated.role,
+    };
+  },
+});
+
 export const ensureStudioDefaults = authedMutation({
   args: {},
   returns: v.object({
@@ -67,3 +126,12 @@ export const ensureStudioDefaults = authedMutation({
     return { rootFolderId, billingAccountId };
   },
 });
+
+function normalizeOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeEmail(value: string | undefined): string | undefined {
+  return normalizeOptional(value)?.toLowerCase();
+}

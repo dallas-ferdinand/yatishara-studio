@@ -67,13 +67,15 @@ export function FileEntryThumb({
   const kind = entryKind(entry);
   const icon = entry?.type === "parent" ? "chevL" : explorerEntryIcon(entry);
   const mediaUrl =
-    entry?.path && kind !== "dir" && kind !== "parent"
+    entry?.mediaUrl ??
+    (entry?.path && kind !== "dir" && kind !== "parent"
       ? workspaceFileRawUrl(entry.path, workspaceId, entry.mtimeMs ?? null)
-      : null;
+      : null);
   const thumbUrl =
-    entry?.path && (kind === "image" || kind === "video")
+    entry?.thumbnailUrl ??
+    (entry?.path && (kind === "image" || kind === "video")
       ? workspaceFileThumbUrl(entry.path, workspaceId, size === "preview" ? 640 : 420)
-      : null;
+      : null);
   const previewUrl =
     entry?.path && (kind === "pdf" || kind === "html")
       ? externalPreviewUrl(entry.path, workspaceId)

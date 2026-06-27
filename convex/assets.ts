@@ -27,12 +27,15 @@ const assetReturn = v.object({
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
+  signedReadUrl: v.optional(v.string()),
+  signedThumbnailUrl: v.optional(v.string()),
 });
 
 export const listByFolder = authedQuery({
   args: {
     folderId: v.id("folders"),
     includeDeleted: v.optional(v.boolean()),
+    expiresUnix: v.optional(v.number()),
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
@@ -41,7 +44,24 @@ export const listByFolder = authedQuery({
       .query("assets")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
-    return args.includeDeleted ? assets : assets.filter((asset) => !asset.deletedAt);
+    const visibleAssets = args.includeDeleted ? assets : assets.filter((asset) => !asset.deletedAt);
+    if (args.expiresUnix === undefined) {
+      return visibleAssets;
+    }
+    const expiresUnix = args.expiresUnix;
+    return await Promise.all(
+      visibleAssets.map(async (asset) => ({
+        ...asset,
+        signedReadUrl: asset.bunnyPath
+          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+          : undefined,
+        signedThumbnailUrl: asset.thumbnailPath
+          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
+          : asset.bunnyPath && asset.kind === "image"
+            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+            : undefined,
+      })),
+    );
   },
 });
 

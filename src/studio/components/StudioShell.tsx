@@ -4,7 +4,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
-  ArrowLeft,
   ArrowUp,
   ChevronDown,
   CircleDollarSign,
@@ -26,15 +25,21 @@ import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { ExplorerViewMenu } from "@/desk/components/ExplorerViewMenu";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
+import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
+import { ImageZoomViewer } from "@/desk/components/ImageZoomViewer";
 import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
+import { getDeviceId, loadSession } from "@/lib/session";
+import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
+const STUDIO_VOICE_NOT_CONNECTED =
+  "Voice transcription needs a connected MercuryOS gateway with Deepgram enabled. Connect Desk first, then try voice again.";
 const MERCURY_EMPTY_LOGO = mercuryLogoAssets(96);
 
 const STYLE = {
@@ -45,6 +50,36 @@ const STYLE = {
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
 };
+
+function ensureStudioVoiceSession() {
+  const current = mosApi.getSession?.();
+  if (current?.gatewayUrl) return true;
+
+  const stored = loadSession();
+  if (!stored?.gatewayUrl || !stored?.token) return false;
+
+  mosApi.setDeviceIdProvider?.(getDeviceId);
+  mosApi.setSession({
+    gatewayUrl: stored.gatewayUrl.replace(/\/+$/, ""),
+    token: stored.token,
+    deviceId: stored.deviceId,
+    userId: stored.userId,
+    clientTag: "desk",
+  });
+  return true;
+}
+
+function studioVoiceErrorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const clean = message.trim() || "Voice input failed.";
+  if (clean === "Not connected") {
+    return STUDIO_VOICE_NOT_CONNECTED;
+  }
+  if (mosApi.isNetworkError?.(error)) {
+    return "Voice transcription could not reach the gateway. Check connection, then try again.";
+  }
+  return clean;
+}
 
 export function StudioShell() {
   const { signOut } = useAuthActions();
@@ -64,6 +99,7 @@ export function StudioShell() {
   const trashAsset = useMutation(api.assets.moveToTrash);
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
+  const updateAccountDetails = useMutation(api.users.updateAccountDetails);
   const runFlow = useAction(api.generationActions.runFlow);
   const adminSeedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const adminSeedBankAccount = useMutation(api.billing.adminSeedBankAccountFromEnv);
@@ -91,6 +127,7 @@ export function StudioShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
+  const [assetUrlExpires] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
   const composerUploadInputRef = useRef(null);
@@ -120,7 +157,7 @@ export function StudioShell() {
   );
   const assets = useQuery(
     api.assets.listByFolder,
-    activeFolder ? { folderId: activeFolder._id } : "skip",
+    activeFolder ? { folderId: activeFolder._id, expiresUnix: assetUrlExpires } : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
@@ -199,13 +236,22 @@ export function StudioShell() {
     () =>
       buildFlatEntries({
         folder: activeFolder,
+        parent:
+          navTrail.length > 1
+            ? {
+                type: "parent",
+                name: "Parent folder",
+                path: `/Studio/${navTrail[navTrail.length - 2].name}`,
+                studioId: navTrail[navTrail.length - 2].id,
+              }
+            : null,
         loading: !activeFolder || folderContentLoading,
         folders: childFolders,
         assets,
         documents,
         elements: elements?.filter((element) => element.folderId === activeFolder?._id),
       }),
-    [activeFolder, childFolders, assets, documents, elements, folderContentLoading],
+    [activeFolder, navTrail, childFolders, assets, documents, elements, folderContentLoading],
   );
 
   const rootEntries = useMemo(
@@ -235,6 +281,7 @@ export function StudioShell() {
     [activeTab, threads, assets, documents, elements, tabEntrySnapshots],
   );
   const activeAdminTab = activeTab.startsWith("admin:") ? activeTab.slice("admin:".length) : null;
+  const activeBillingTab = activeTab.startsWith("billing:") ? activeTab.slice("billing:".length) : null;
 
   const pathToEntry = useMemo(() => {
     const map = new Map();
@@ -276,6 +323,11 @@ export function StudioShell() {
 
   function openAdminTab(kind) {
     openTab(`admin:${kind}`);
+  }
+
+  function openBillingTab(kind) {
+    openTab(`billing:${kind}`);
+    setSettingsOpen(false);
   }
 
   function closeTab(key) {
@@ -322,15 +374,6 @@ export function StudioShell() {
     const target = navTrail[index + 1];
     if (!target) return;
     const nextTrail = navTrail.slice(0, index + 2);
-    setNavTrail(nextTrail);
-    setActiveFolderId(target.id);
-  }
-
-  function handleFolderBack() {
-    if (navTrail.length <= 1) return;
-    const nextTrail = navTrail.slice(0, -1);
-    const target = nextTrail[nextTrail.length - 1];
-    if (!target) return;
     setNavTrail(nextTrail);
     setActiveFolderId(target.id);
   }
@@ -482,6 +525,7 @@ export function StudioShell() {
           filename: file.name,
           studioKind: "asset",
           studioId: reserved.assetId,
+          thumbnailUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
         });
       }
     } catch (error) {
@@ -698,6 +742,110 @@ export function StudioShell() {
           background: color-mix(in srgb, var(--mos-surface) 34%, transparent);
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 66%, transparent);
         }
+        .studio-settings-menu-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+          gap: 12px;
+          margin-top: 14px;
+        }
+        .studio-settings-menu-card {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          min-height: 92px;
+          border-radius: 20px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 16%, transparent), transparent 45%),
+            color-mix(in srgb, var(--mos-surface) 70%, transparent);
+          padding: 16px;
+          color: var(--color-cursor-text);
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-settings-menu-icon,
+        .studio-account-avatar {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          width: 50px;
+          height: 50px;
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          color: var(--cursor-accent);
+          box-shadow: 0 0 22px var(--studio-glow-soft);
+        }
+        .studio-settings-menu-copy {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+        .studio-settings-menu-copy strong {
+          font-size: 14px;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-settings-menu-copy small {
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+        .studio-account-card {
+          display: grid;
+          gap: 16px;
+          padding: 16px !important;
+        }
+        .studio-account-hero {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+        .studio-account-avatar {
+          width: 58px;
+          height: 58px;
+          border-radius: 22px;
+          font-size: 22px;
+          font-weight: 800;
+        }
+        .studio-account-fields {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-account-fields label {
+          display: grid;
+          gap: 6px;
+        }
+        .studio-account-fields span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .studio-account-fields input {
+          height: 38px;
+          border-radius: 12px;
+          border: 1px solid var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-bg) 46%, transparent);
+          padding: 0 12px;
+          color: var(--color-cursor-text);
+          outline: none;
+        }
+        .studio-account-fields input:focus {
+          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-account-actions {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+        }
+        .studio-account-saved {
+          color: var(--cursor-accent);
+          font-size: 12px;
+          font-weight: 700;
+        }
         .studio-section-head,
         .studio-billing-hero {
           display: flex;
@@ -854,21 +1002,6 @@ export function StudioShell() {
           align-items: center;
           gap: 4px;
           border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 76%, transparent);
-        }
-        .studio-folder-back {
-          width: 26px;
-          height: 26px;
-          margin-left: 6px;
-          flex-shrink: 0;
-          border-radius: 999px;
-        }
-        .studio-folder-back:disabled {
-          opacity: 0.34;
-          cursor: default;
-        }
-        .studio-folder-back:disabled:hover {
-          background: transparent;
-          box-shadow: none;
         }
         @media (prefers-reduced-motion: reduce) {
           .studio-polish *,
@@ -1055,13 +1188,29 @@ export function StudioShell() {
         .studio-dropdown-menu.is-fixed {
           position: fixed !important;
           bottom: auto !important;
+          top: auto;
           left: auto !important;
           z-index: 10000 !important;
           backdrop-filter: blur(18px);
           animation: studio-menu-pop 130ms ease-out;
+          overflow: auto;
+          pointer-events: auto;
         }
         .studio-dropdown-menu .cursor-tab-context-item {
-          min-height: 28px;
+          min-height: 34px;
+          white-space: nowrap;
+        }
+        .studio-composer-cost {
+          display: inline-flex;
+          height: 28px;
+          align-items: center;
+          border-radius: var(--cursor-radius-pill);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          padding: 0 9px;
+          color: var(--cursor-accent);
+          font-size: 11px;
+          font-weight: 700;
           white-space: nowrap;
         }
         .studio-pricing-grid,
@@ -1076,10 +1225,65 @@ export function StudioShell() {
           max-width: 1040px;
           margin: 0 auto;
         }
+        .studio-asset-preview {
+          display: grid;
+          grid-template-rows: auto minmax(0, 1fr);
+          gap: 14px;
+          height: 100%;
+          padding: 18px;
+        }
+        .studio-asset-preview-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-border-soft));
+          border-radius: 22px;
+          background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
+          padding: 16px;
+        }
+        .studio-asset-preview-head h2 {
+          color: var(--color-cursor-text-bright);
+          font-size: 22px;
+          font-weight: 760;
+        }
+        .studio-asset-preview-head p:not(.studio-section-kicker) {
+          margin-top: 4px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
+        .studio-asset-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 8px;
+        }
+        .studio-asset-lightbox {
+          min-height: 0;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border-soft));
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 38%),
+            color-mix(in srgb, var(--mos-bg) 92%, #03040a);
+          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
+        }
+        .studio-asset-player {
+          height: 100%;
+          align-items: center;
+        }
+        .studio-asset-empty {
+          display: grid;
+          place-items: center;
+          align-content: center;
+          gap: 10px;
+          height: 100%;
+          color: var(--color-cursor-muted);
+        }
         .studio-admin-grid-large {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
         }
         .studio-admin-hero-card {
           display: flex;
@@ -1091,7 +1295,7 @@ export function StudioShell() {
           background:
             radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 36%),
             color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          padding: 18px;
+          padding: 20px;
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), 0 0 30px var(--studio-glow-soft);
         }
         .studio-admin-hero-card h2,
@@ -1100,25 +1304,25 @@ export function StudioShell() {
           font-weight: 720;
         }
         .studio-admin-hero-card h2 {
-          font-size: 22px;
+          font-size: 24px;
         }
         .studio-admin-hero-card p {
           margin-top: 4px;
           color: var(--color-cursor-muted);
-          font-size: 12px;
+          font-size: 13px;
         }
         .studio-price-card,
         .studio-bank-card,
         .studio-admin-card {
           position: relative;
           overflow: hidden;
-          border-radius: 16px;
+          border-radius: 18px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
           background:
             radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 42%),
             color-mix(in srgb, var(--mos-surface) 72%, transparent);
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-          padding: 12px;
+          padding: 16px;
           transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
         }
         .studio-price-card:hover,
@@ -1141,7 +1345,7 @@ export function StudioShell() {
           justify-content: space-between;
           gap: 8px;
           color: var(--color-cursor-muted);
-          font-size: 10px;
+          font-size: 11px;
           text-transform: uppercase;
           letter-spacing: 0.06em;
         }
@@ -1149,21 +1353,21 @@ export function StudioShell() {
           border-radius: 999px;
           background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
           color: var(--cursor-accent);
-          padding: 2px 6px;
-          font-size: 9px;
+          padding: 4px 8px;
+          font-size: 10px;
           letter-spacing: 0;
           text-transform: none;
         }
         .studio-price-card-title {
           margin-top: 8px;
           color: var(--color-cursor-text-bright);
-          font-size: 14px;
+          font-size: 16px;
           font-weight: 650;
         }
         .studio-price-card-credits {
           margin-top: 4px;
           color: var(--cursor-accent);
-          font-size: 22px;
+          font-size: 26px;
           font-weight: 720;
           line-height: 1;
           text-shadow: 0 0 14px var(--studio-glow-soft);
@@ -1173,7 +1377,7 @@ export function StudioShell() {
         .studio-admin-card p {
           margin-top: 6px;
           color: var(--color-cursor-muted);
-          font-size: 11px;
+          font-size: 12px;
           line-height: 1.45;
         }
         .studio-credit-costs {
@@ -1348,16 +1552,6 @@ export function StudioShell() {
         </div>
         <PanelSearchBar value={search} onChange={setSearch} placeholder="Search Studio" aria-label="Search Studio" />
         <div className="studio-folder-pathbar">
-          <button
-            type="button"
-            className="cursor-icon-btn studio-folder-back"
-            title="Back to previous folder"
-            aria-label="Back to previous folder"
-            disabled={navTrail.length <= 1}
-            onClick={handleFolderBack}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </button>
           <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
@@ -1367,7 +1561,12 @@ export function StudioShell() {
             rootEntries={rootEntries}
             flatEntries={currentEntries}
             listDir={() => {}}
-            onNavigate={(path) => {
+            onNavigate={(path, navEntry) => {
+              if (navEntry?.type === "parent" && navEntry.studioId) {
+                setActiveFolderId(navEntry.studioId);
+                setNavTrail((trail) => trail.slice(0, -1));
+                return;
+              }
               const entry = pathToEntry.get(path);
               if (entry) {
                 handleEntryOpen(entry);
@@ -1430,6 +1629,7 @@ export function StudioShell() {
               void switchThreadFolder({ threadId, folderId: activeFolder._id });
             }}
             adminTab={activeAdminTab}
+            billingTab={activeBillingTab}
             currentUser={currentUser}
             billingAccount={billingAccount}
             pricing={pricing}
@@ -1458,6 +1658,7 @@ export function StudioShell() {
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
+            pricing={pricing}
             disabled={flowPending}
             status={status}
             onSubmit={handleSubmit}
@@ -1475,7 +1676,6 @@ export function StudioShell() {
           currentUser={currentUser}
           billingAccount={billingAccount}
           pricing={pricing}
-          bankAccounts={bankAccounts}
           payments={payments}
           notifications={notifications}
           onSignOut={() => void signOut()}
@@ -1484,6 +1684,8 @@ export function StudioShell() {
           onSeedBank={() => void adminSeedBankAccount().then(() => setStatus("Bank account seeded."))}
           onSeedPricing={() => void adminSeedLaunchPricing({}).then(() => setStatus("Launch pricing seeded."))}
           onOpenAdminTab={openAdminTab}
+          onOpenBillingTab={openBillingTab}
+          onSaveAccount={(values) => void updateAccountDetails(values).then(() => setStatus("Account updated."))}
         />
       ) : null}
       {contextMenu ? (
@@ -1544,6 +1746,7 @@ function StudioComposer({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  pricing,
   disabled,
   status,
   onSubmit,
@@ -1558,6 +1761,7 @@ function StudioComposer({
   const [voiceError, setVoiceError] = useState("");
   const [dropMarker, setDropMarker] = useState(null);
   const inputLineRef = useRef(null);
+  const cost = composerCreditCost({ mode, imageTier, pricing });
 
   useEffect(() => {
     const el = editorRef.current;
@@ -1605,11 +1809,15 @@ function StudioComposer({
         }
         return;
       }
+      if (!ensureStudioVoiceSession()) {
+        throw new Error(STUDIO_VOICE_NOT_CONNECTED);
+      }
       await voice.startRecording();
       setRecording(true);
     } catch (error) {
       console.error("Voice input failed", error);
-      setVoiceError(error instanceof Error ? error.message : "Voice input failed.");
+      setRecording(false);
+      setVoiceError(studioVoiceErrorMessage(error));
     } finally {
       setTranscribing(false);
     }
@@ -1678,6 +1886,11 @@ function StudioComposer({
         </div>
         <div className="studio-composer-toolbar">
           <div className="studio-composer-controls">
+            <StudioUploadMenu
+              open={uploadMenuOpen}
+              setOpen={setUploadMenuOpen}
+              inputRef={uploadInputRef}
+            />
             <StudioDropdown
               value={mode}
               onChange={setMode}
@@ -1734,13 +1947,11 @@ function StudioComposer({
                 </button>
               </>
             ) : null}
+            <span className="studio-composer-cost" title="Estimated generation cost">
+              {mode === "script" ? "No credits" : `${cost} credits`}
+            </span>
           </div>
           <div className="studio-composer-actions">
-            <StudioUploadMenu
-              open={uploadMenuOpen}
-              setOpen={setUploadMenuOpen}
-              inputRef={uploadInputRef}
-            />
             <button
               type="button"
               className={`cursor-toolbar-icon ${recording ? "is-recording" : ""}`}
@@ -1761,7 +1972,8 @@ function StudioComposer({
             </button>
           </div>
         </div>
-        {status || voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{status || voiceError}</p> : null}
+        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
+        {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
       </div>
       <input
         ref={uploadInputRef}
@@ -1793,10 +2005,10 @@ function StudioUploadMenu({ open, setOpen, inputRef }) {
     const onKey = (event) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("pointerdown", onDoc);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("pointerdown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
   }, [open, setOpen]);
@@ -1855,10 +2067,10 @@ function StudioDropdown({ value, onChange, items }) {
     const onKey = (event) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("pointerdown", onDoc);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("pointerdown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -1919,9 +2131,14 @@ function useFixedMenuPosition(open, anchorRef, minWidth = 180) {
       if (!rect) return;
       const width = Math.max(minWidth, rect.width);
       const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 12;
+      const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
       setStyle({
         left,
-        bottom: Math.max(8, window.innerHeight - rect.top + 8),
+        top: openUp ? undefined : rect.bottom + 8,
+        bottom: openUp ? window.innerHeight - rect.top + 8 : undefined,
+        maxHeight: Math.max(160, openUp ? spaceAbove : spaceBelow),
         minWidth: width,
       });
     };
@@ -2011,6 +2228,8 @@ function createComposerAttachmentToken(attachment) {
     filename: attachment.filename,
     studioKind: attachment.studioKind,
     studioId: attachment.studioId,
+    thumbnailUrl: attachment.thumbnailUrl,
+    mediaUrl: attachment.mediaUrl,
   });
   token.addEventListener("dragstart", (event) => {
     token.classList.add("is-dragging");
@@ -2026,7 +2245,15 @@ function createComposerAttachmentToken(attachment) {
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
-  kind.appendChild(createComposerTokenIcon(attachment.kind ?? attachment.studioKind ?? "file"));
+  if (attachment.thumbnailUrl && (attachment.kind === "image" || attachment.kind === "video")) {
+    const img = document.createElement("img");
+    img.className = "studio-inline-tag-media";
+    img.src = attachment.thumbnailUrl;
+    img.alt = "";
+    kind.appendChild(img);
+  } else {
+    kind.appendChild(createComposerTokenIcon(attachment.kind ?? attachment.studioKind ?? "file"));
+  }
 
   const label = document.createElement("span");
   label.className = "studio-inline-tag-label";
@@ -2043,14 +2270,17 @@ function createComposerTokenIcon(kind) {
   svg.setAttribute("stroke", "currentColor");
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("stroke-width", "2");
   const paths =
     kind === "image"
-      ? ["M4 5h16v14H4z", "m4 15 5-5 4 4 2-2 5 5", "M14 8h.01"]
+      ? ["M15 8h.01", "M3 6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z", "m3 16 5-5a2 2 0 0 1 3 0l5 5", "m14 14 1-1a2 2 0 0 1 3 0l3 3"]
       : kind === "video"
-        ? ["M4 6h11v12H4z", "m15 10 4-3v10l-4-3z"]
-        : kind === "context" || kind === "element"
-          ? ["M12 3v18", "M3 12h18", "m7 7 9-14", "m5 5 14 5"]
-          : ["M7 3h7l5 5v13H7z", "M14 3v6h6"];
+        ? ["m16 13 5 3V8l-5 3", "M3 6a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"]
+        : kind === "audio"
+          ? ["M9 18V5l12-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z", "M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"]
+          : kind === "context" || kind === "element"
+            ? ["M12 3v18", "M3 12h18", "m7 7 9-14", "m5 5 14 5"]
+            : ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v6h6"];
   for (const d of paths) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
@@ -2149,22 +2379,31 @@ function updateComposerDropMarker(event, editor, inputLine, setDropMarker) {
   if (!range || !inputLine) return;
   const markerRect = range.getClientRects?.()[0] ?? range.startContainer?.parentElement?.getBoundingClientRect?.();
   const hostRect = inputLine.getBoundingClientRect();
+  const emptyComposer = !readComposerEditorText(editor).trim() && !editor.querySelector(".studio-inline-tag");
   if (!markerRect) {
-    setDropMarker({ left: Math.max(12, event.clientX - hostRect.left), top: 10, height: 22 });
+    setDropMarker({ left: Math.max(12, event.clientX - hostRect.left), top: 10, height: emptyComposer ? 44 : 22 });
     return;
   }
   setDropMarker({
     left: Math.max(8, markerRect.left - hostRect.left),
     top: Math.max(8, markerRect.top - hostRect.top),
-    height: Math.max(20, markerRect.height || 22),
+    height: emptyComposer ? 44 : Math.min(24, Math.max(18, markerRect.height || 22)),
   });
 }
 
 function insertComposerTextAtCaret(editor, text) {
   const range = ensureSelectionInEditor(editor);
-  const before = readComposerEditorText(editor).trim();
-  const prefix = before ? " " : "";
-  const textNode = document.createTextNode(`${prefix}${text}`);
+  const beforeRange = document.createRange();
+  beforeRange.selectNodeContents(editor);
+  beforeRange.setEnd(range.startContainer, range.startOffset);
+  const afterRange = document.createRange();
+  afterRange.selectNodeContents(editor);
+  afterRange.setStart(range.endContainer, range.endOffset);
+  const before = beforeRange.toString();
+  const after = afterRange.toString();
+  const prefix = before.trim() && !/\s$/.test(before) ? " " : "";
+  const suffix = after.trim() && !/^\s/.test(after) ? " " : "";
+  const textNode = document.createTextNode(`${prefix}${text}${suffix}`);
   range.deleteContents();
   range.insertNode(textNode);
   range.setStartAfter(textNode);
@@ -2285,10 +2524,10 @@ function ActivePane({
   onDocumentChange,
   onSwitchThreadFolder,
   adminTab,
+  billingTab,
   currentUser,
   billingAccount,
   pricing,
-  bankAccounts,
   payments,
   notifications,
   onOpenSettings,
@@ -2359,8 +2598,30 @@ function ActivePane({
       />
     );
   }
+  if (billingTab) {
+    return (
+      <BillingWorkspacePane
+        tab={billingTab}
+        billingAccount={billingAccount}
+        pricing={pricing}
+        bankAccounts={bankAccounts}
+        payments={payments}
+      />
+    );
+  }
   if (!activeEntry) {
     return <div className="p-6 text-sm text-cursor-muted">Open something from the project tree.</div>;
+  }
+  if (activeEntry.studioKind === "asset") {
+    return (
+      <StudioAssetPreview
+        entry={activeEntry}
+        onAttach={onAttach}
+        onRename={onRename}
+        onDuplicate={onDuplicate}
+        onTrash={onTrash}
+      />
+    );
   }
   return (
     <div className="h-full overflow-auto p-6">
@@ -2379,6 +2640,116 @@ function ActivePane({
           ) : null}
           <button className={STYLE.iconButton} onClick={() => onTrash(activeEntry)}>Trash</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function StudioAssetPreview({ entry, onAttach, onRename, onDuplicate, onTrash }) {
+  const kind = inferAttachmentKind(entry);
+  const mediaUrl = entry.mediaUrl;
+  const thumbUrl = entry.thumbnailUrl ?? mediaUrl;
+  return (
+    <div className="studio-asset-preview">
+      <header className="studio-asset-preview-head">
+        <div>
+          <p className="studio-section-kicker">{entry.kindLabel}</p>
+          <h2>{entry.name}</h2>
+          <p>{entry.mimeType ?? entry.description}</p>
+        </div>
+        <div className="studio-asset-actions">
+          <button className={STYLE.iconButton} onClick={() => onAttach(entry)}>
+            <Plus className="h-4 w-4" />
+            Add to composer
+          </button>
+          <button className={STYLE.iconButton} onClick={() => onRename(entry)}>Rename</button>
+          <button className={STYLE.iconButton} onClick={() => onDuplicate(entry)}>Duplicate</button>
+          <button className={STYLE.iconButton} onClick={() => onTrash(entry)}>Trash</button>
+        </div>
+      </header>
+      <div className="studio-asset-lightbox">
+        {kind === "image" && mediaUrl ? (
+          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} />
+        ) : kind === "video" && mediaUrl ? (
+          <div className="desk-media-player-embed studio-asset-player">
+            <DeskMediaPlayer kind="video" src={mediaUrl} name={entry.name} poster={thumbUrl} fileSize={entry.byteSize ?? null} />
+          </div>
+        ) : kind === "audio" && mediaUrl ? (
+          <div className="desk-media-player-embed studio-asset-player">
+            <DeskMediaPlayer kind="audio" src={mediaUrl} name={entry.name} fileSize={entry.byteSize ?? null} />
+          </div>
+        ) : (
+          <div className="studio-asset-empty">
+            <FileText className="h-10 w-10" />
+            <p>No inline preview for this asset yet.</p>
+            {mediaUrl ? <a href={mediaUrl} target="_blank" rel="noreferrer">Open file</a> : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BillingWorkspacePane({ tab, billingAccount, pricing, bankAccounts, payments }) {
+  const plans = pricingPlans(pricing);
+  return (
+    <div className="h-full overflow-auto p-6">
+      <div className="studio-admin-workspace">
+        <section className="studio-admin-hero-card">
+          <div>
+            <p className="studio-section-kicker">{tab === "top-up" ? "Credit top up" : "Billing"}</p>
+            <h2>{tab === "top-up" ? "Choose a credit pack" : "Subscription and balance"}</h2>
+            <p>{billingAccount?.creditBalance ?? 0} credits available, {billingAccount?.reservedCredits ?? 0} reserved.</p>
+          </div>
+          <span className="studio-admin-chip">{billingAccount?.subscription?.planName ?? "No active plan"}</span>
+        </section>
+        {tab === "top-up" ? (
+          <>
+            <section className="studio-admin-grid-large">
+              {plans.map((plan) => (
+                <article key={plan.name} className={`studio-plan-card studio-plan-card-large${plan.featured ? " is-featured" : ""}`}>
+                  <span className="studio-plan-badge">{plan.badge}</span>
+                  <h4>{plan.name}</h4>
+                  <p className="studio-plan-price">{plan.price}</p>
+                  <p className="studio-plan-sub">{plan.credits} credits</p>
+                  <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
+                </article>
+              ))}
+            </section>
+            <section className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Bank transfer</p>
+              <div className="space-y-2">
+                {(bankAccounts ?? []).map((bank) => (
+                  <div key={bank._id} className="studio-bank-card">
+                    <p className="studio-bank-card-title">{bank.label}</p>
+                    <BankLine label="Bank" value={bank.bankName} />
+                    <BankLine label="Name" value={bank.accountName} />
+                    <BankLine label="Number" value={bank.accountNumber} />
+                    <BankLine label="Type" value={bank.accountType} />
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        ) : (
+          <section className="studio-admin-grid-large">
+            <article className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Subscription</p>
+              <h3>{billingAccount?.subscription?.planName ?? "None"}</h3>
+              <p>{billingAccount?.subscription ? `Renews ${formatDate(billingAccount.subscription.currentPeriodEnd)}` : "Top up credits or activate a plan."}</p>
+            </article>
+            <article className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Balance</p>
+              <h3>{billingAccount?.creditBalance ?? 0}</h3>
+              <p>{billingAccount?.reservedCredits ?? 0} reserved for active generations.</p>
+            </article>
+            <article className="studio-admin-card">
+              <p className="studio-admin-card-kicker">Recent payments</p>
+              <h3>{payments?.length ?? 0}</h3>
+              <p>{(payments ?? [])[0] ? `Latest: ${(payments ?? [])[0].status}` : "No payments yet."}</p>
+            </article>
+          </section>
+        )}
       </div>
     </div>
   );
@@ -2471,7 +2842,6 @@ function SettingsSheet({
   currentUser,
   billingAccount,
   pricing,
-  bankAccounts,
   payments,
   notifications,
   onSignOut,
@@ -2480,12 +2850,14 @@ function SettingsSheet({
   onSeedBank,
   onSeedPricing,
   onOpenAdminTab,
+  onOpenBillingTab,
+  onSaveAccount,
 }) {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
-  const [tab, setTab] = useState("general");
-  const plans = pricingPlans(pricing);
+  const [tab, setTab] = useState("menu");
   const tabs = [
-    ["general", "General"],
+    ["menu", "Menu"],
+    ["account", "Account"],
     ["billing", "Billing"],
     ["activity", "Activity"],
     ...(isAdmin ? [["admin", "Admin"]] : []),
@@ -2513,13 +2885,20 @@ function SettingsSheet({
           ))}
         </nav>
         <div className="cursor-settings-body">
-          {tab === "general" ? (
+          {tab === "menu" ? (
+            <SettingsMenuGrid
+              isAdmin={isAdmin}
+              onOpenAccount={() => setTab("account")}
+              onOpenBilling={() => setTab("billing")}
+              onOpenTopUp={() => onOpenBillingTab("top-up")}
+              onOpenActivity={() => setTab("activity")}
+              onOpenAdmin={() => setTab("admin")}
+            />
+          ) : null}
+
+          {tab === "account" ? (
             <>
-              <section className="cursor-settings-section">
-                <h3>Account</h3>
-                <p className="mb-2 text-xs text-cursor-muted">{currentUser?.email ?? currentUser?.phone ?? "Signed in"}</p>
-                <button className="cursor-settings-action muted" onClick={onSignOut}>Sign out</button>
-              </section>
+              <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} onSignOut={onSignOut} />
               <ThemeSettings />
             </>
           ) : null}
@@ -2545,44 +2924,33 @@ function SettingsSheet({
               <section className="cursor-settings-section">
                 <div className="studio-section-head">
                   <div>
-                    <p className="studio-section-kicker">Plans</p>
-                    <h3>Creator credit packs</h3>
+                    <p className="studio-section-kicker">Subscription</p>
+                    <h3>{billingAccount?.subscription?.planName ?? "No active subscription"}</h3>
+                    <p className="text-xs text-cursor-muted">
+                      {billingAccount?.subscription
+                        ? `Renews ${formatDate(billingAccount.subscription.currentPeriodEnd)}`
+                        : "Credit top-up is available in a dedicated workspace tab."}
+                    </p>
                   </div>
-                  <span className="studio-admin-chip">Most choose Studio</span>
-                </div>
-                <div className="studio-plan-grid">
-                  {plans.map((plan) => (
-                    <article key={plan.name} className={`studio-plan-card${plan.featured ? " is-featured" : ""}`}>
-                      <span className="studio-plan-badge">{plan.badge}</span>
-                      <h4>{plan.name}</h4>
-                      <p className="studio-plan-price">{plan.price}</p>
-                      <p className="studio-plan-sub">{plan.credits} credits</p>
-                      <ul>
-                        {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
-                      </ul>
-                    </article>
-                  ))}
+                  <button type="button" className="cursor-settings-action" onClick={() => onOpenBillingTab("top-up")}>
+                    <CircleDollarSign className="h-4 w-4" />
+                    Open top up
+                  </button>
                 </div>
               </section>
 
               <section className="cursor-settings-section">
                 <div className="studio-section-head">
                   <div>
-                    <p className="studio-section-kicker">Bank transfer</p>
-                    <h3>Payment account</h3>
+                    <p className="studio-section-kicker">Rates</p>
+                    <h3>Generation pricing</h3>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  {(bankAccounts ?? []).map((bank) => (
-                    <div key={bank._id} className="studio-bank-card">
-                      <p className="font-medium text-cursor-text">{bank.label}</p>
-                      <CopyLine label="Bank" value={bank.bankName} />
-                      <CopyLine label="Name" value={bank.accountName} />
-                      <CopyLine label="Number" value={bank.accountNumber} />
-                      <CopyLine label="Type" value={bank.accountType} />
-                    </div>
-                  ))}
-                  {bankAccounts?.length === 0 ? <p className="text-xs text-cursor-muted">No enabled bank account yet.</p> : null}
+                <div className="studio-credit-costs">
+                  <div className="studio-credit-cost"><span>Low image</span><strong>{pricing?.imageLowCredits ?? 2} credits</strong></div>
+                  <div className="studio-credit-cost"><span>Medium image</span><strong>{pricing?.imageMediumCredits ?? 5} credits</strong></div>
+                  <div className="studio-credit-cost"><span>High image</span><strong>{pricing?.imageHighCredits ?? 9} credits</strong></div>
+                  <div className="studio-credit-cost"><span>Video draft</span><strong>{pricing?.videoCredits ?? 35} credits</strong></div>
                 </div>
               </section>
             </>
@@ -2625,9 +2993,9 @@ function SettingsSheet({
                   <Sparkles className="h-3.5 w-3.5" />
                   Seed launch pricing
                 </button>
-                <button className="cursor-settings-action" onClick={() => setTab("billing")}>
+                <button className="cursor-settings-action" onClick={() => onOpenBillingTab("top-up")}>
                   <CircleDollarSign className="h-3.5 w-3.5" />
-                  Open billing plans
+                  Open top up
                 </button>
                 <button className="cursor-settings-action" onClick={() => onOpenAdminTab("pricing")}>
                   <Settings className="h-3.5 w-3.5" />
@@ -2649,17 +3017,97 @@ function SettingsSheet({
   );
 }
 
-function CopyLine({ label, value }) {
+function SettingsMenuGrid({ isAdmin, onOpenAccount, onOpenBilling, onOpenTopUp, onOpenActivity, onOpenAdmin }) {
+  const items = [
+    { label: "Account details", body: "Name, email, phone, sign out", icon: Settings, onClick: onOpenAccount },
+    { label: "Billing", body: "Subscription, renewal, credits", icon: CircleDollarSign, onClick: onOpenBilling },
+    { label: "Credit top up", body: "Open packs and bank transfer", icon: Plus, onClick: onOpenTopUp },
+    { label: "Activity", body: "Payments and notifications", icon: Sparkles, onClick: onOpenActivity },
+    ...(isAdmin ? [{ label: "Admin", body: "Pricing and receipts tools", icon: Settings, onClick: onOpenAdmin }] : []),
+  ];
   return (
-    <p className="mt-1 flex items-center justify-between gap-2">
-      <span>{label}: {value}</span>
-      <button
-        className="rounded border border-cursor-border px-1.5 py-0.5 text-[10px] text-cursor-text hover:bg-cursor-hover"
-        onClick={() => void navigator.clipboard?.writeText(String(value))}
-      >
-        Copy
-      </button>
-    </p>
+    <section className="cursor-settings-section studio-settings-menu">
+      <div className="studio-section-head">
+        <div>
+          <p className="studio-section-kicker">Settings home</p>
+          <h3>Choose what to manage</h3>
+        </div>
+      </div>
+      <div className="studio-settings-menu-grid">
+        {items.map((item) => {
+          const ItemIcon = item.icon;
+          return (
+            <button key={item.label} type="button" className="studio-settings-menu-card" onClick={item.onClick}>
+              <span className="studio-settings-menu-icon"><ItemIcon className="h-6 w-6" /></span>
+              <span className="studio-settings-menu-copy">
+                <strong>{item.label}</strong>
+                <small>{item.body}</small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AccountDetailsCard({ currentUser, onSave, onSignOut }) {
+  const [name, setName] = useState(currentUser?.name ?? "");
+  const [email, setEmail] = useState(currentUser?.email ?? "");
+  const [phone, setPhone] = useState(currentUser?.phone ?? "");
+  const [saved, setSaved] = useState("");
+  useEffect(() => {
+    setName(currentUser?.name ?? "");
+    setEmail(currentUser?.email ?? "");
+    setPhone(currentUser?.phone ?? "");
+  }, [currentUser?.name, currentUser?.email, currentUser?.phone]);
+  return (
+    <section className="cursor-settings-section studio-account-card">
+      <div className="studio-account-hero">
+        <div className="studio-account-avatar" aria-hidden>
+          {(name || email || phone || "C").slice(0, 1).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="studio-section-kicker">Account details</p>
+          <h3>{name || "Creator account"}</h3>
+          <p>{currentUser?.role ?? "user"} · {email || phone || "Add contact details"}</p>
+        </div>
+      </div>
+      <div className="studio-account-fields">
+        <label>
+          <span>Name</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your creator name" />
+        </label>
+        <label>
+          <span>Email</span>
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
+        </label>
+        <label>
+          <span>Phone / WhatsApp</span>
+          <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 868 337 7338" type="tel" />
+        </label>
+        <label>
+          <span>Role</span>
+          <input value={currentUser?.role ?? "user"} readOnly />
+        </label>
+      </div>
+      <div className="studio-account-actions">
+        <button
+          type="button"
+          className="cursor-settings-action"
+          onClick={() => {
+            onSave?.({ name, email, phone });
+            setSaved("Saved");
+          }}
+        >
+          Save account
+        </button>
+        <button type="button" className="cursor-settings-action muted" onClick={onSignOut}>
+          Sign out
+        </button>
+        {saved ? <span className="studio-account-saved">{saved}</span> : null}
+      </div>
+    </section>
   );
 }
 
@@ -2701,6 +3149,19 @@ function pricingPlans(pricing) {
   ];
 }
 
+function composerCreditCost({ mode, imageTier, pricing }) {
+  if (mode === "script") return 0;
+  if (mode === "video") return pricing?.videoCredits ?? 35;
+  if (imageTier === "low") return pricing?.imageLowCredits ?? 2;
+  if (imageTier === "high") return pricing?.imageHighCredits ?? 9;
+  return pricing?.imageMediumCredits ?? 5;
+}
+
+function formatDate(value) {
+  if (!value) return "Not scheduled";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
 function CreditPill({ entitlement }) {
   return (
     <span className="rounded-full border border-cursor-border bg-cursor-panel px-2 py-1 text-[11px] text-cursor-muted">
@@ -2709,9 +3170,10 @@ function CreditPill({ entitlement }) {
   );
 }
 
-function buildFlatEntries({ folder, loading, folders, assets, documents, elements }) {
+function buildFlatEntries({ folder, parent, loading, folders, assets, documents, elements }) {
   return {
     loading: loading ?? !folder,
+    parent,
     entries: [
       ...(folders ?? []).map(folderToEntry),
       ...(documents ?? []).map(documentToEntry),
@@ -2761,6 +3223,10 @@ function assetToEntry(asset) {
     studioId: asset._id,
     kindLabel: `${asset.kind} asset`,
     description: asset.mimeType,
+    mediaUrl: asset.signedReadUrl,
+    thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+    mimeType: asset.mimeType,
+    byteSize: asset.byteSize,
   };
 }
 
@@ -2790,6 +3256,11 @@ function tabDescriptor({ key, threads, assets, documents, elements, snapshots })
   if (key.startsWith("admin:")) {
     const kind = key.slice("admin:".length);
     const title = kind === "payments" ? "Admin payments" : kind === "pricing" ? "Admin pricing" : "Admin";
+    return { key, kind: "settings", title, status: "ready" };
+  }
+  if (key.startsWith("billing:")) {
+    const kind = key.slice("billing:".length);
+    const title = kind === "top-up" ? "Credit top up" : "Billing";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("thread:")) {
@@ -2836,6 +3307,8 @@ function entryToAttachment(entry) {
     filename: entry.name,
     studioKind: entry.studioKind,
     studioId: entry.studioId,
+    thumbnailUrl: entry.thumbnailUrl,
+    mediaUrl: entry.mediaUrl,
   };
 }
 

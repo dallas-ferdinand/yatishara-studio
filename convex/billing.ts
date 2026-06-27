@@ -68,15 +68,48 @@ export const currentAccount = authedQuery({
   returns: v.object({
     creditBalance: v.number(),
     reservedCredits: v.number(),
+    subscription: v.union(
+      v.object({
+        status: v.union(
+          v.literal("active"),
+          v.literal("past_due"),
+          v.literal("cancelled"),
+          v.literal("expired"),
+        ),
+        currentPeriodStart: v.number(),
+        currentPeriodEnd: v.number(),
+        planName: v.optional(v.string()),
+        includedMonthlyCredits: v.optional(v.number()),
+        monthlyPriceCents: v.optional(v.number()),
+      }),
+      v.null(),
+    ),
   }),
   handler: async (ctx) => {
     const account = await ctx.db
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .unique();
+    const subscription = account?.activeSubscriptionId
+      ? await ctx.db.get(account.activeSubscriptionId)
+      : await ctx.db
+          .query("subscriptions")
+          .withIndex("by_user_and_status", (q) => q.eq("userId", ctx.user._id).eq("status", "active"))
+          .first();
+    const plan = subscription ? await ctx.db.get(subscription.planId) : null;
     return {
       creditBalance: account?.creditBalance ?? 0,
       reservedCredits: account?.reservedCredits ?? 0,
+      subscription: subscription
+        ? {
+            status: subscription.status,
+            currentPeriodStart: subscription.currentPeriodStart,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            planName: plan?.name,
+            includedMonthlyCredits: plan?.includedMonthlyCredits,
+            monthlyPriceCents: plan?.monthlyPriceCents,
+          }
+        : null,
     };
   },
 });

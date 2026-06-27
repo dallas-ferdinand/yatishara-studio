@@ -51,6 +51,16 @@ function isPinnedEntry(entry, pinnedPaths) {
   return entry.type === "dir" && pinnedPaths?.has?.(entry.path);
 }
 
+function setCompactDragImage(dataTransfer, entry) {
+  if (!dataTransfer || typeof document === "undefined") return;
+  const ghost = document.createElement("div");
+  ghost.className = "desk-file-drag-ghost";
+  ghost.textContent = entry.name ?? entry.path?.split("/").pop() ?? "Item";
+  document.body.appendChild(ghost);
+  dataTransfer.setDragImage(ghost, 18, 16);
+  window.requestAnimationFrame(() => ghost.remove());
+}
+
 function ExplorerEmpty({ flatEntries, rootEntries }) {
   if (!rootEntries && !flatEntries) {
     return <FileTreeSkeleton />;
@@ -312,13 +322,15 @@ export function FileTree({
   const onEntry = (e) => {
     const isDir = e.type === "dir";
     const name = e.name ?? e.path?.split("/").pop() ?? "?";
-    if (isDir) onNavigate(e.path);
+    if (e.type === "parent") onNavigate(e.path, e);
+    else if (isDir) onNavigate(e.path, e);
     else onOpenFile(e.path, name, { size: e.size, mtimeMs: e.mtimeMs });
   };
 
   const onEntryDragStart = (e, entry) => {
     if (entry.type === "parent") return;
     writeExplorerDragData(e.dataTransfer, entry);
+    setCompactDragImage(e.dataTransfer, entry);
   };
 
   const onContext = (ev, entry) => {
@@ -327,7 +339,7 @@ export function FileTree({
     onEntryContextMenu(entry, ev.clientX, ev.clientY);
   };
 
-  const entryLabel = (e) => (e.type === "parent" ? ".." : (e.name ?? e.path?.split("/").pop() ?? "?"));
+  const entryLabel = (e) => (e.type === "parent" ? (e.name ?? "Parent folder") : (e.name ?? e.path?.split("/").pop() ?? "?"));
 
   const entryMeta = (e, searching, scope) => {
     if (e.type === "parent") return "";
@@ -346,7 +358,7 @@ export function FileTree({
 
   const rowClass = (e, base) => {
     const pinned = isPinnedEntry(e, pinnedPaths);
-    return `${base}${pinned ? " is-folder-pinned" : ""}`;
+    return `${base}${pinned ? " is-folder-pinned" : ""}${e.type === "parent" ? " is-parent-row" : ""}`;
   };
 
   const rows = renderEntryRows({
