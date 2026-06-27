@@ -39,7 +39,7 @@ const STYLE = {
   shell: "flex h-dvh min-h-0 bg-cursor-bg text-cursor-text",
   sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border bg-cursor-sidebar",
   main: "flex min-w-0 flex-1 flex-col bg-cursor-bg",
-  panelHead: "flex h-11 shrink-0 items-center justify-between border-b border-cursor-border bg-cursor-panel px-3",
+  panelHead: "cursor-panel-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
 };
@@ -238,7 +238,7 @@ export function StudioShell() {
   }, [currentEntries, search]);
 
   const breadcrumbPath = useMemo(
-    () => navTrail.map((crumb) => crumb.name).join("/"),
+    () => navTrail.slice(1).map((crumb) => crumb.name).join("/"),
     [navTrail],
   );
 
@@ -283,7 +283,7 @@ export function StudioShell() {
   }
 
   function handleBreadcrumbNavigate(path) {
-    if (!path || path === "Studio") {
+    if (!path) {
       const root = navTrail[0] ?? (topFolders?.[0] ? { id: topFolders[0]._id, name: topFolders[0].name } : null);
       if (!root) return;
       setActiveFolderId(root.id);
@@ -292,9 +292,9 @@ export function StudioShell() {
     }
     const parts = path.split("/").filter(Boolean);
     const index = parts.length - 1;
-    const target = navTrail[index];
+    const target = navTrail[index + 1];
     if (!target) return;
-    const nextTrail = navTrail.slice(0, index + 1);
+    const nextTrail = navTrail.slice(0, index + 2);
     setNavTrail(nextTrail);
     setActiveFolderId(target.id);
   }
@@ -305,7 +305,6 @@ export function StudioShell() {
     setAttachments((items) =>
       items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
     );
-    setDraft((text) => `${text}${text.endsWith(" ") || !text ? "" : " "}@${attachment.label} `);
     editorRef.current?.focus();
   }
 
@@ -488,9 +487,75 @@ export function StudioShell() {
           padding: 0 !important;
         }
         .studio-composer .cursor-composer-textarea {
+          flex: 1 1 160px;
           min-height: 24px !important;
           max-height: 168px;
-          padding: 10px 12px 4px !important;
+          padding: 2px 4px !important;
+        }
+        .studio-composer-inputline {
+          display: flex;
+          min-height: 42px;
+          align-items: flex-start;
+          gap: 6px;
+          flex-wrap: wrap;
+          padding: 10px 12px 4px;
+        }
+        .studio-inline-tags {
+          display: inline-flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-inline-tag {
+          display: inline-flex;
+          height: 20px;
+          max-width: min(220px, 48vw);
+          align-items: center;
+          gap: 4px;
+          border-radius: var(--cursor-radius-pill);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-hover));
+          padding: 0 6px;
+          color: var(--color-cursor-text);
+          font-size: 11px;
+          line-height: 1;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+        .studio-inline-tag-label {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .studio-inline-tag-media {
+          width: 14px;
+          height: 14px;
+          border-radius: 999px;
+          object-fit: cover;
+          flex-shrink: 0;
+          background: var(--cursor-overlay-subtle);
+        }
+        .studio-inline-tag-remove {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 13px;
+          height: 13px;
+          margin-right: -2px;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-inline-tag-remove:hover {
+          background: var(--cursor-overlay-hover);
+          color: var(--color-cursor-text);
+        }
+        .studio-composer .cursor-composer-mention-editor.has-inline-tags:empty::before {
+          content: "";
         }
         .studio-composer-toolbar {
           display: flex;
@@ -506,8 +571,7 @@ export function StudioShell() {
           align-items: center;
           gap: 6px;
           min-width: 0;
-          overflow-x: auto;
-          overflow-y: visible;
+          overflow: visible;
           scrollbar-width: none;
         }
         .studio-composer-controls::-webkit-scrollbar {
@@ -547,6 +611,8 @@ export function StudioShell() {
           max-width: min(240px, calc(100vw - 24px));
           border-radius: 12px !important;
           padding: 4px !important;
+          bottom: calc(100% + 6px) !important;
+          left: 0 !important;
         }
         .studio-audio-switch {
           position: relative;
@@ -580,14 +646,14 @@ export function StudioShell() {
           position: relative;
           display: grid;
           place-items: center;
-          width: 96px;
-          height: 96px;
+          width: 176px;
+          height: 176px;
           margin: 0 auto;
         }
         .studio-empty-logo::before {
           content: "";
           position: absolute;
-          inset: -32px;
+          inset: -48px;
           border-radius: 999px;
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent) 26%, transparent), transparent 65%);
           filter: blur(10px);
@@ -595,8 +661,8 @@ export function StudioShell() {
         }
         .studio-empty-logo img {
           position: relative;
-          width: 72px;
-          height: 72px;
+          width: 148px;
+          height: 148px;
           object-fit: contain;
           filter: drop-shadow(0 0 18px color-mix(in srgb, var(--cursor-accent) 26%, transparent));
         }
@@ -670,6 +736,11 @@ export function StudioShell() {
             flatEntries={currentEntries}
             listDir={() => {}}
             onNavigate={(path) => {
+              const entry = pathToEntry.get(path);
+              if (entry) {
+                handleEntryOpen(entry);
+                return;
+              }
               const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
                 (item) => studioPathForFolder(item) === path,
               );
@@ -836,6 +907,32 @@ function StudioComposer({
   const [transcribing, setTranscribing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    if (!draft) {
+      if (el.innerText) el.innerText = "";
+      return;
+    }
+    if (document.activeElement !== el && el.innerText !== draft) {
+      el.innerText = draft;
+    }
+  }, [draft, editorRef]);
+
+  function setEditorText(next) {
+    const el = editorRef.current;
+    if (el) {
+      el.innerText = next;
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    setDraft(next);
+  }
+
   async function toggleVoice() {
     try {
       const voice = await import("@/desk/lib/voice-desk");
@@ -844,7 +941,10 @@ function StudioComposer({
         setTranscribing(true);
         const data = await voice.stopRecording();
         const text = await voice.transcribeRecording(data);
-        if (text?.trim()) setDraft((value) => `${value}${value ? " " : ""}${text.trim()}`);
+        if (text?.trim()) {
+          const current = editorRef.current?.innerText ?? draft;
+          setEditorText(`${current}${current ? " " : ""}${text.trim()}`);
+        }
         return;
       }
       await voice.startRecording();
@@ -876,13 +976,11 @@ function StudioComposer({
     >
       <div className="cursor-composer">
       <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
-        <div className="px-2 pt-2">
-          <StudioAttachmentRow
+        <div className="studio-composer-inputline">
+          <StudioInlineAttachmentTags
             items={attachments}
             onRemove={(item) => setAttachments((items) => items.filter((entry) => entry.id !== item.id))}
           />
-        </div>
-        <div>
           <div
             ref={editorRef}
             role="textbox"
@@ -890,7 +988,7 @@ function StudioComposer({
             contentEditable
             suppressContentEditableWarning
             data-placeholder="Message Studio"
-            className="cursor-composer-textarea cursor-composer-mention-editor"
+            className={`cursor-composer-textarea cursor-composer-mention-editor${attachments.length ? " has-inline-tags" : ""}`}
             onInput={(event) => setDraft(event.currentTarget.innerText ?? "")}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -898,9 +996,7 @@ function StudioComposer({
                 void onSubmit();
               }
             }}
-          >
-            {draft}
-          </div>
+          />
         </div>
         <div className="studio-composer-toolbar">
           <div className="studio-composer-controls">
@@ -1104,59 +1200,39 @@ function CreateStudioDialog({ initialKind, onClose, onCreate }) {
   );
 }
 
-function StudioAttachmentRow({ items, onRemove }) {
+function StudioInlineAttachmentTags({ items, onRemove }) {
   if (!items?.length) return null;
   return (
-    <div className="cursor-attach-tiles px-2 pb-1">
+    <span className="studio-inline-tags">
       {items.map((item) => (
-        <StudioAttachmentChip key={item.id} item={item} onRemove={onRemove} />
+        <StudioInlineAttachmentTag key={item.id} item={item} onRemove={onRemove} />
       ))}
-    </div>
+    </span>
   );
 }
 
-function StudioAttachmentChip({ item, onRemove }) {
+function StudioInlineAttachmentTag({ item, onRemove }) {
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const canPreview = item.studioKind === "asset" && (item.kind === "image" || item.kind === "video");
   const previewUrl = useQuery(
     api.assets.signedReadUrl,
     canPreview ? { assetId: item.studioId, expiresUnix } : "skip",
   );
-  const tileClass =
-    item.kind === "image" ? "is-square" : item.kind === "video" ? "is-video" : "is-tag";
+  const Icon = item.kind === "image" ? ImageIcon : item.kind === "video" ? Video : FileText;
   return (
-    <span className={`cursor-attach-tile ${tileClass}`} data-attach-kind={item.kind ?? "file"}>
-      <span className="cursor-attach-tile-open">
-        {item.kind === "image" ? (
-          previewUrl ? (
-            <img className="cursor-attach-tile-img" src={previewUrl} alt={item.label} loading="lazy" />
-          ) : (
-            <span className="cursor-attach-tile-fallback">
-              <ImageIcon className="h-4 w-4" />
-            </span>
-          )
-        ) : item.kind === "video" ? (
-          previewUrl ? (
-            <video className="cursor-attach-tile-img" src={previewUrl} muted playsInline preload="metadata" />
-          ) : (
-            <span className="cursor-attach-tile-fallback">
-              <Video className="h-4 w-4" />
-            </span>
-          )
-        ) : (
-          <>
-            <span className="cursor-attach-tile-icon">
-              <FileText className="h-3.5 w-3.5" />
-            </span>
-            <span className="cursor-attach-tile-label">{item.label}</span>
-            <span className="cursor-attach-tile-badge">{item.studioKind ?? item.kind}</span>
-          </>
-        )}
-      </span>
+    <span className="studio-inline-tag" contentEditable={false}>
+      {previewUrl && item.kind === "image" ? (
+        <img className="studio-inline-tag-media" src={previewUrl} alt="" loading="lazy" />
+      ) : previewUrl && item.kind === "video" ? (
+        <video className="studio-inline-tag-media" src={previewUrl} muted playsInline preload="metadata" />
+      ) : (
+        <Icon className="h-3 w-3 shrink-0 text-cursor-muted" />
+      )}
+      <span className="studio-inline-tag-label">{item.label}</span>
       <button
         type="button"
-        className="cursor-attach-tile-remove"
-        aria-label="Remove"
+        className="studio-inline-tag-remove"
+        aria-label={`Remove ${item.label}`}
         onClick={() => onRemove(item)}
       >
         ×
