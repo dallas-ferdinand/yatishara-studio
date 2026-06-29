@@ -27,15 +27,34 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Yatishara Studio",
   description: "AI creative studio for image and video generation",
+  applicationName: "Yatishara Studio",
   manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Yatishara Studio",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/branding/favicon.ico", sizes: "any" },
+      { url: "/branding/yatishara-logo-light-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/branding/yatishara-logo-light-192.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: [{ url: "/branding/yatishara-logo-light-180.png", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1b1c23",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
+  colorScheme: "dark light",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: "cover",
 };
 
@@ -61,6 +80,39 @@ export default function RootLayout({
             type={asset.type}
           />
         ))}
+        <link rel="icon" href="/branding/yatishara-logo-dark-32.png" media="(prefers-color-scheme: light)" />
+        <link rel="icon" href="/branding/yatishara-logo-light-32.png" media="(prefers-color-scheme: dark)" />
+        <link rel="apple-touch-icon" href="/branding/yatishara-logo-light-180.png" />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-light-iphone-1170x2532.png"
+          media="(prefers-color-scheme: dark) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+        />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-dark-iphone-1170x2532.png"
+          media="(prefers-color-scheme: light) and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+        />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-light-iphone-1290x2796.png"
+          media="(prefers-color-scheme: dark) and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)"
+        />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-dark-iphone-1290x2796.png"
+          media="(prefers-color-scheme: light) and (device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)"
+        />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-light-ipad-2048x2732.png"
+          media="(prefers-color-scheme: dark) and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)"
+        />
+        <link
+          rel="apple-touch-startup-image"
+          href="/branding/yatishara-splash-dark-ipad-2048x2732.png"
+          media="(prefers-color-scheme: light) and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)"
+        />
         <Script id="mos-theme-boot" strategy="beforeInteractive">
           {getThemeBootInlineScript()}
         </Script>

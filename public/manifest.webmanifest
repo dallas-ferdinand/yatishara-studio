@@ -1,10 +1,54 @@
 {
-  "name": "MercuryOS Desk",
-  "short_name": "Desk",
-  "description": "Minimal MercuryOS agent desk",
+  "name": "Yatishara Studio",
+  "short_name": "Studio",
+  "description": "AI creative generation and organization workspace",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#1b1c23",
-  "theme_color": "#1b1c23",
-  "icons": []
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["productivity", "graphics", "utilities"],
+  "icons": [
+    {
+      "src": "/branding/yatishara-logo-light-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/yatishara-logo-light-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/branding/yatishara-maskable-light-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/branding/yatishara-maskable-light-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/branding/yatishara-logo-dark-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "monochrome"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/branding/yatishara-splash-light-iphone-1170x2532.png",
+      "sizes": "1170x2532",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Yatishara Studio launch screen"
+    }
+  ]
 }

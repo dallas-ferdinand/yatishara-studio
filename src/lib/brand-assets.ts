@@ -1,14 +1,14 @@
-/** MercuryOS logo paths (static export, basePath /desk). */
+/** Yatishara Studio logo paths. Export names stay stable for older Desk components. */
 
 const BASE = "/branding";
 
-export const MERCURY_LOGO_SIDEBAR = `${BASE}/mercury_logo-32.webp`;
-export const MERCURY_LOGO_BOOT = `${BASE}/mercury_logo-192.webp`;
+export const MERCURY_LOGO_SIDEBAR = `${BASE}/yatishara-logo-light-32.webp`;
+export const MERCURY_LOGO_BOOT = `${BASE}/yatishara-logo-light-192.webp`;
 
 type LogoFormat = "webp" | "png";
 
 function logoPath(px: number, format: LogoFormat) {
-  const name = px >= 512 ? "mercury_logo" : `mercury_logo-${px}`;
+  const name = `yatishara-logo-light-${px}`;
   return `${BASE}/${name}.${format}`;
 }
 

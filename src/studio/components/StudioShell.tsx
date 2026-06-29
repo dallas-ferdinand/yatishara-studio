@@ -43,6 +43,7 @@ import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
 import { getDeviceId, loadSession } from "@/lib/session";
 import * as mosApi from "@mos-app/api.js";
@@ -139,6 +140,7 @@ function studioVoiceErrorMessage(error) {
 }
 
 export function StudioShell() {
+  const { isMobile } = useMobileLayout();
   const { signOut } = useAuthActions();
   const ensureDefaults = useMutation(api.users.ensureStudioDefaults);
   const createFolder = useMutation(api.folders.create);
@@ -181,6 +183,7 @@ export function StudioShell() {
   const [flowPending, setFlowPending] = useState(false);
   const [status, setStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileSection, setMobileSection] = useState("composer");
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
@@ -219,6 +222,10 @@ export function StudioShell() {
   const activeFolder = activeFolderId
     ? (selectedFolder ?? folderByIdRef.current.get(activeFolderId) ?? topFolders?.find((folder) => folder._id === activeFolderId) ?? null)
     : (topFolders?.[0] ?? null);
+
+  useEffect(() => {
+    if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
+  }, [isMobile, mobileSection]);
   const childFolders = useQuery(
     api.folders.list,
     activeFolder ? { parentId: activeFolder._id } : "skip",
@@ -628,7 +635,24 @@ export function StudioShell() {
     if (activeTab.startsWith("settings:")) {
       setActiveTab(COMPOSER_TAB);
     }
+    if (isMobile) setMobileSection("settings");
     setSettingsOpen(true);
+  }
+
+  function openMobileSection(section) {
+    setMobileSection(section);
+    if (section === "composer") {
+      setSettingsOpen(false);
+      if (!activeTab.startsWith("composer:")) setActiveTab(COMPOSER_TAB);
+      return;
+    }
+    if (section === "files") {
+      setSettingsOpen(false);
+      return;
+    }
+    if (section === "settings") {
+      setSettingsOpen(true);
+    }
   }
 
   function closeTab(key) {
@@ -955,7 +979,7 @@ export function StudioShell() {
   return (
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish${customCursorEnabled ? " is-custom-cursor" : ""}${studioBackground.ready ? " is-studio-bg-ready" : ""}`}
+      className={`${STYLE.shell} studio-polish${isMobile ? ` is-studio-mobile is-mobile-${mobileSection}` : ""}${customCursorEnabled ? " is-custom-cursor" : ""}${studioBackground.ready ? " is-studio-bg-ready" : ""}`}
       style={studioBackground.value ? { "--studio-loaded-bg": studioBackground.value } : undefined}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
@@ -986,6 +1010,103 @@ export function StudioShell() {
           position: relative;
           overflow: hidden;
           isolation: isolate;
+        }
+        .studio-mobile-bottom-nav {
+          display: none;
+          position: absolute;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          z-index: 60;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 4px;
+          padding: 7px max(8px, env(safe-area-inset-right, 0px)) calc(7px + env(safe-area-inset-bottom, 0px))
+            max(8px, env(safe-area-inset-left, 0px));
+          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border) 74%, transparent);
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
+            color-mix(in srgb, var(--mos-bg) 82%, transparent);
+          box-shadow: 0 -18px 42px rgba(0, 0, 0, 0.34);
+          backdrop-filter: blur(22px);
+        }
+        .studio-mobile-nav-btn {
+          display: flex;
+          min-width: 0;
+          min-height: 44px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          border: 1px solid transparent;
+          border-radius: 16px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .studio-mobile-nav-btn svg {
+          width: 17px;
+          height: 17px;
+        }
+        .studio-mobile-nav-btn.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          color: var(--cursor-accent);
+          box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+        }
+        @media (max-width: 899px) {
+          .studio-polish .studio-main-panels > .cursor-resize {
+            display: none !important;
+          }
+          .studio-polish .studio-main-panels {
+            padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+          }
+          .studio-polish.is-mobile-files .studio-main-panels > [data-panel]:first-child,
+          .studio-polish:not(.is-mobile-files) .studio-main-panels > [data-panel]:last-child {
+            display: flex !important;
+          }
+          .studio-polish:not(.is-mobile-files) .studio-main-panels > [data-panel]:first-child,
+          .studio-polish.is-mobile-files .studio-main-panels > [data-panel]:last-child {
+            display: none !important;
+          }
+          .studio-polish.is-mobile-files aside {
+            border-right: 0 !important;
+          }
+          .studio-polish.is-mobile-files .studio-folder-pathbar {
+            padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish.is-mobile-files .cursor-panel-search {
+            padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish.is-mobile-files .cursor-sidebar-head,
+          .studio-polish.is-mobile-files .cursor-panel-head {
+            padding-left: max(8px, env(safe-area-inset-left, 0px));
+            padding-right: max(8px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish .studio-main-panels > [data-panel]:first-child,
+          .studio-polish .studio-main-panels > [data-panel]:last-child {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .studio-polish .cursor-workspace-head {
+            gap: 4px;
+            padding-right: max(6px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish .cursor-workspace-tools {
+            gap: 4px;
+            padding-left: 2px;
+          }
+          .studio-polish .cursor-workspace-tools .studio-credit-pill {
+            max-width: 104px;
+          }
+          .studio-polish .cursor-unified-tabs {
+            padding-left: max(8px, env(safe-area-inset-left, 0px));
+          }
+          .studio-polish .studio-mobile-bottom-nav {
+            display: grid;
+          }
         }
         [data-studio-bg-pack="space"] .studio-polish {
           --studio-active-bg: var(--studio-space-bg);
@@ -4737,7 +4858,7 @@ export function StudioShell() {
           }
         }
       `}</style>
-      <PanelGroup direction="horizontal" autoSaveId="studio-main-h" className="min-w-0 flex-1">
+      <PanelGroup direction="horizontal" autoSaveId="studio-main-h" className="studio-main-panels min-w-0 flex-1">
         <Panel defaultSize={24} minSize={16} maxSize={42}>
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
@@ -4825,6 +4946,13 @@ export function StudioShell() {
             onNewChat={openNewComposerTab}
           />
           <div className="cursor-panel-head-tools cursor-workspace-tools">
+            {isMobile ? (
+              <StudioAddMenu
+                open={addMenuOpen}
+                setOpen={setAddMenuOpen}
+                onAction={runCreateAction}
+              />
+            ) : null}
             <CreditPill entitlement={entitlement} />
             <StudioSettingsLauncher
               onOpenSettingsTab={openSettingsTab}
@@ -4904,6 +5032,38 @@ export function StudioShell() {
         </Panel>
       </PanelGroup>
 
+      {isMobile ? (
+        <nav className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
+          <button
+            type="button"
+            className={`studio-mobile-nav-btn${mobileSection === "files" ? " is-active" : ""}`}
+            aria-current={mobileSection === "files" ? "page" : undefined}
+            onClick={() => openMobileSection("files")}
+          >
+            <LayoutGrid aria-hidden="true" />
+            <span>Files</span>
+          </button>
+          <button
+            type="button"
+            className={`studio-mobile-nav-btn${mobileSection === "composer" ? " is-active" : ""}`}
+            aria-current={mobileSection === "composer" ? "page" : undefined}
+            onClick={() => openMobileSection("composer")}
+          >
+            <Sparkles aria-hidden="true" />
+            <span>Create</span>
+          </button>
+          <button
+            type="button"
+            className={`studio-mobile-nav-btn${mobileSection === "settings" ? " is-active" : ""}`}
+            aria-current={mobileSection === "settings" ? "page" : undefined}
+            onClick={() => openMobileSection("settings")}
+          >
+            <Settings aria-hidden="true" />
+            <span>Settings</span>
+          </button>
+        </nav>
+      ) : null}
+
       {settingsOpen ? (
         <SettingsFloatingPanel
           currentUser={currentUser}
@@ -4913,7 +5073,10 @@ export function StudioShell() {
           pricing={pricing}
           bankAccounts={bankAccounts}
           subscriptionPlans={subscriptionPlans}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            if (isMobile) setMobileSection("composer");
+          }}
           onSaveAccount={(values) => void updateAccountDetails(values).then(() => setStatus("Account updated."))}
           customCursorEnabled={customCursorEnabled}
           onCustomCursorChange={setCustomCursorEnabled}
