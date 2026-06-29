@@ -1110,18 +1110,46 @@ export function StudioShell() {
             min-width: 0 !important;
           }
           .studio-polish .cursor-workspace-head {
-            gap: 4px;
-            padding-right: max(6px, env(safe-area-inset-right, 0px));
+            min-height: 54px;
+            gap: 6px;
+            padding-right: max(10px, env(safe-area-inset-right, 0px));
           }
           .studio-polish .cursor-workspace-tools {
-            gap: 4px;
-            padding-left: 2px;
+            gap: 8px;
+            padding-left: 6px;
+            padding-right: max(4px, env(safe-area-inset-right, 0px));
+          }
+          .studio-polish .cursor-workspace-tools .studio-settings-pill {
+            min-width: 42px;
+            min-height: 42px;
+            border-radius: 16px;
+            padding: 0 12px;
+          }
+          .studio-polish .cursor-workspace-tools .studio-settings-pill svg {
+            width: 20px;
+            height: 20px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill {
-            max-width: 104px;
+            min-height: 42px;
+            max-width: 132px;
+            padding-inline: 12px;
+            border-radius: 16px;
+            font-size: 12px;
+          }
+          .studio-polish .cursor-workspace-tools .studio-credit-pill svg {
+            width: 18px;
+            height: 18px;
           }
           .studio-polish .cursor-unified-tabs {
             padding-left: max(8px, env(safe-area-inset-left, 0px));
+          }
+          .studio-polish .cursor-unified-tab {
+            height: 38px !important;
+          }
+          .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
+            width: 38px;
+            min-width: 38px;
+            max-width: 38px;
           }
           .studio-mobile-bottom-nav {
             display: grid !important;
