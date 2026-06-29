@@ -1123,8 +1123,8 @@ export function StudioShell() {
           .studio-polish .cursor-unified-tabs {
             padding-left: max(8px, env(safe-area-inset-left, 0px));
           }
-          .studio-polish .studio-mobile-bottom-nav {
-            display: grid;
+          .studio-mobile-bottom-nav {
+            display: grid !important;
           }
         }
         [data-studio-bg-pack="space"] .studio-polish {
@@ -5051,37 +5051,40 @@ export function StudioShell() {
         </Panel>
       </PanelGroup>
 
-      {isMobile ? (
-        <nav className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
-          <button
-            type="button"
-            className={`studio-mobile-nav-btn${mobileSection === "files" ? " is-active" : ""}`}
-            aria-current={mobileSection === "files" ? "page" : undefined}
-            onClick={() => openMobileSection("files")}
-          >
-            <LayoutGrid aria-hidden="true" />
-            <span>Files</span>
-          </button>
-          <button
-            type="button"
-            className={`studio-mobile-nav-btn${mobileSection === "composer" ? " is-active" : ""}`}
-            aria-current={mobileSection === "composer" ? "page" : undefined}
-            onClick={() => openMobileSection("composer")}
-          >
-            <Sparkles aria-hidden="true" />
-            <span>Create</span>
-          </button>
-          <button
-            type="button"
-            className={`studio-mobile-nav-btn${mobileSection === "settings" ? " is-active" : ""}`}
-            aria-current={mobileSection === "settings" ? "page" : undefined}
-            onClick={() => openMobileSection("settings")}
-          >
-            <Settings aria-hidden="true" />
-            <span>Settings</span>
-          </button>
-        </nav>
-      ) : null}
+      {isMobile && typeof document !== "undefined"
+        ? createPortal(
+            <nav className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
+              <button
+                type="button"
+                className={`studio-mobile-nav-btn${mobileSection === "files" ? " is-active" : ""}`}
+                aria-current={mobileSection === "files" ? "page" : undefined}
+                onClick={() => openMobileSection("files")}
+              >
+                <LayoutGrid aria-hidden="true" />
+                <span>Files</span>
+              </button>
+              <button
+                type="button"
+                className={`studio-mobile-nav-btn${mobileSection === "composer" ? " is-active" : ""}`}
+                aria-current={mobileSection === "composer" ? "page" : undefined}
+                onClick={() => openMobileSection("composer")}
+              >
+                <Sparkles aria-hidden="true" />
+                <span>Create</span>
+              </button>
+              <button
+                type="button"
+                className={`studio-mobile-nav-btn${mobileSection === "settings" ? " is-active" : ""}`}
+                aria-current={mobileSection === "settings" ? "page" : undefined}
+                onClick={() => openMobileSection("settings")}
+              >
+                <Settings aria-hidden="true" />
+                <span>Settings</span>
+              </button>
+            </nav>,
+            document.body,
+          )
+        : null}
 
       {settingsOpen ? (
         <SettingsFloatingPanel
