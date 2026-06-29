@@ -160,6 +160,7 @@ export function StudioShell() {
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
+  const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const runFlow = useAction(api.generationActions.runFlow);
   const generateScript = useAction(api.generationActions.generateScript);
 
@@ -940,8 +941,19 @@ export function StudioShell() {
         return;
       }
 
-      const preset = presets?.[0];
-      if (!preset) throw new Error("Style options are not ready yet. Open settings and add them first.");
+      if (presets === undefined) {
+        throw new Error("Style options are still loading. Try again in a moment.");
+      }
+      const preset = presets[0];
+      if (!preset) {
+        const canSeedPresets =
+          currentUser?.role === "admin" || currentUser?.role === "super_admin";
+        throw new Error(
+          canSeedPresets
+            ? "Style options are not ready yet. Open Settings > Team tools and seed them first."
+            : "Style options are not ready yet. Ask an admin to seed them in Settings.",
+        );
+      }
       if (entitlement && !entitlement.canGenerate) {
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
@@ -5078,6 +5090,7 @@ export function StudioShell() {
             if (isMobile) setMobileSection("composer");
           }}
           onSaveAccount={(values) => void updateAccountDetails(values).then(() => setStatus("Account updated."))}
+          onSeedStylePresets={() => seedStylePresets()}
           customCursorEnabled={customCursorEnabled}
           onCustomCursorChange={setCustomCursorEnabled}
         />
@@ -7489,6 +7502,7 @@ function SettingsFloatingPanel({
   subscriptionPlans,
   onClose,
   onSaveAccount,
+  onSeedStylePresets,
   customCursorEnabled,
   onCustomCursorChange,
 }) {
@@ -7510,6 +7524,7 @@ function SettingsFloatingPanel({
           bankAccounts={bankAccounts}
           subscriptionPlans={subscriptionPlans}
           onSaveAccount={onSaveAccount}
+          onSeedStylePresets={onSeedStylePresets}
           customCursorEnabled={customCursorEnabled}
           onCustomCursorChange={onCustomCursorChange}
         />
@@ -7528,6 +7543,7 @@ function SettingsWorkspacePane({
   bankAccounts,
   subscriptionPlans,
   onSaveAccount,
+  onSeedStylePresets,
   customCursorEnabled,
   onCustomCursorChange,
 }) {
@@ -7538,6 +7554,7 @@ function SettingsWorkspacePane({
   const [selectedSubscriptionPlanName, setSelectedSubscriptionPlanName] = useState("Studio");
   const [isPaymentStep, setIsPaymentStep] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [setupStatus, setSetupStatus] = useState("");
   const [pendingReceiptPaymentId, setPendingReceiptPaymentId] = useState(null);
   const receiptInputRef = useRef(null);
   const submitBankPayment = useMutation(api.billing.submitBankPayment);
@@ -7613,6 +7630,19 @@ function SettingsWorkspacePane({
       setPaymentStatus("Receipt uploaded. We will review and activate once payment clears.");
     } catch (error) {
       setPaymentStatus(error instanceof Error ? error.message : "Receipt upload failed.");
+    }
+  }
+  async function seedDefaultStylePresets() {
+    setSetupStatus("Seeding style presets...");
+    try {
+      const created = await onSeedStylePresets?.();
+      setSetupStatus(
+        created === 0
+          ? "Style presets already exist."
+          : `Seeded ${created} style preset${created === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      setSetupStatus(error instanceof Error ? error.message : "Style preset setup failed.");
     }
   }
   const items = [
@@ -7893,6 +7923,16 @@ function SettingsWorkspacePane({
           <section className="cursor-settings-section studio-settings-simple-card">
             <div className="studio-settings-rows">
               <div className="studio-settings-row">
+                <span>Style presets</span>
+                <button
+                  type="button"
+                  className="cursor-settings-action"
+                  onClick={() => void seedDefaultStylePresets()}
+                >
+                  Seed defaults
+                </button>
+              </div>
+              <div className="studio-settings-row">
                 <span>Role</span>
                 <strong>{currentUser?.role ?? "Admin"}</strong>
                 </div>
@@ -7905,6 +7945,7 @@ function SettingsWorkspacePane({
                 <strong>{bankAccounts?.length ?? 0}</strong>
               </div>
             </div>
+            {setupStatus ? <p className="studio-settings-payment-status">{setupStatus}</p> : null}
             </section>
           ) : null}
 

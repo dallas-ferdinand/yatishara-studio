@@ -47,7 +47,7 @@ async function createOrUpdateUser(
 
   if (args.existingUserId !== null) {
     await ctx.db.patch(args.existingUserId, {
-      ...args.profile,
+      ...profileFields(args.profile),
       email,
       updatedAt: now,
       lastSeenAt: now,
@@ -62,7 +62,7 @@ async function createOrUpdateUser(
       .unique();
     if (byEmail) {
       await ctx.db.patch(byEmail._id, {
-        ...args.profile,
+        ...profileFields(args.profile),
         email,
         updatedAt: now,
         lastSeenAt: now,
@@ -77,12 +77,29 @@ async function createOrUpdateUser(
   return await ctx.db.insert("users", {
     name: typeof args.profile.name === "string" ? args.profile.name : undefined,
     email,
+    emailVerified: typeof args.profile.emailVerified === "boolean" ? args.profile.emailVerified : undefined,
     image: typeof args.profile.image === "string" ? args.profile.image : undefined,
     role,
     createdAt: now,
     updatedAt: now,
     lastSeenAt: now,
   });
+}
+
+function profileFields(profile: {
+  name?: string;
+  image?: string;
+  emailVerified?: boolean;
+}): {
+  name?: string;
+  image?: string;
+  emailVerified?: boolean;
+} {
+  return {
+    name: typeof profile.name === "string" ? profile.name : undefined,
+    image: typeof profile.image === "string" ? profile.image : undefined,
+    emailVerified: typeof profile.emailVerified === "boolean" ? profile.emailVerified : undefined,
+  };
 }
 
 function normalizeEmail(email: unknown): string | undefined {
