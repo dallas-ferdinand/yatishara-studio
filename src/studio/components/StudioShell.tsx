@@ -1025,10 +1025,17 @@ export function StudioShell() {
         }
         .studio-mobile-bottom-nav {
           display: none;
-          position: absolute;
+          position: fixed;
+          top: auto !important;
           right: 0;
           bottom: 0;
           left: 0;
+          width: 100vw;
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: calc(70px + env(safe-area-inset-bottom, 0px));
+          flex-shrink: 0;
+          align-items: center;
           z-index: 60;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 4px;
