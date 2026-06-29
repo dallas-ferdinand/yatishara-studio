@@ -1,0 +1,52 @@
+# Architecture Notes
+
+Yatishara Studio is a browser-based creative workspace backed by Convex. The UI keeps the MercuryOS desktop feel while the backend owns identity, files, generation state, billing, and notifications.
+
+## Request Flow
+
+1. `src/app/page.tsx` renders `StudioClientPage`.
+2. `src/components/studio-client-page.tsx` dynamically loads the client app with SSR disabled.
+3. `src/components/studio-app-client.tsx` wraps Studio in `ConvexClientProvider` and `StudioAuthGate`.
+4. `src/studio/components/StudioShell.tsx` owns the main workspace UI and calls Convex functions.
+5. `src/proxy.ts` runs before app routes. Preview traffic is password-gated first, then Convex Auth middleware runs.
+
+## Frontend Areas
+
+- `src/studio/components/`: Studio-specific auth gate and main shell.
+- `src/desk/components/`: explorer, editors, tab strip, media viewer, dialogs, and mobile shell pieces reused by Studio.
+- `src/desk/lib/`: workspace state helpers, uploads, markdown handling, rich editor support, drag/drop, and file utilities.
+- `src/mos-app/`: MercuryOS runtime modules for gateway sessions, voice, settings, workspaces, device state, and rendering.
+- `src/mos-shared/`: shared markdown/chat UI model code.
+- `src/mos-css/` and `src/app/globals.css`: MercuryOS/Studio styling.
+
+## Convex Backend
+
+- `convex/schema.ts`: app data model and indexes.
+- `convex/auth.ts`, `convex/auth.config.ts`, `convex/http.ts`: Convex Auth providers and HTTP routes.
+- `convex/lib/customFunctions.ts`: `authedQuery`, `authedMutation`, `adminQuery`, and `adminMutation` wrappers.
+- `convex/users.ts`: current user, account details, and first-run Studio defaults.
+- `convex/folders.ts`, `convex/assets.ts`, `convex/documents.ts`, `convex/elements.ts`: workspace content APIs.
+- `convex/generation.ts`: generation threads, events, jobs, entitlement checks, and state transitions.
+- `convex/generationActions.ts`: Node action that calls BytePlus and stores generated outputs.
+- `convex/billing.ts`: credits, pricing, bank receipts, admin review, subscriptions, and audit events.
+- `convex/notifications.ts`, `convex/notificationsActions.ts`: in-app notifications and web push.
+- `convex/lib/bunny.ts`: Bunny Storage/CDN path, upload, and signed URL helpers.
+- `convex/lib/byteplus.ts`: BytePlus ModelArk prompt, image, and video helpers.
+
+## Data Domains
+
+- Identity: Convex Auth tables plus Studio `users`, admin invites, roles, WhatsApp auth requests.
+- Workspace: folders, assets, documents, and elements owned by each user.
+- Generation: style presets, threads, prompt/result events, jobs, inputs, and outputs.
+- Billing: accounts, transactions, plans, subscriptions, pricing, bank accounts, payments, receipts.
+- Messaging: notifications, push subscriptions, and admin audit events.
+
+## External Services
+
+- Convex: app backend, auth HTTP routes, schema, and reactive client data.
+- Bunny: storage, pull zone signed reads, and stream/media backing.
+- BytePlus ModelArk: prompt enhancement, image generation, and video generation.
+- Resend: email OTP delivery.
+- Evolution API: WhatsApp OTP delivery.
+- Web Push: browser push notification delivery.
+- Coolify/VPS: production app build, runtime, proxy, and preview hot reload service.

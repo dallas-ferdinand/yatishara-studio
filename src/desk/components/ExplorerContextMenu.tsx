@@ -10,6 +10,7 @@ function buildMenuItems(entry, {
   currentPath,
   canCreateFile,
   canCreateFolder,
+  createItems,
   onRequestRename,
   onRequestDelete,
 }) {
@@ -21,17 +22,23 @@ function buildMenuItems(entry, {
   const isFile = !isDir && !isBlank;
 
   const items = [];
+  const creationItems = createItems?.length
+    ? createItems.map((item, index) =>
+        item.sep ? { id: `sep-create-${index}`, sep: true } : { ...item, id: item.id ?? item.action },
+      )
+    : [
+        ...(canCreateFile ? [{ id: "new-file", label: "New note" }] : []),
+        ...(canCreateFolder ? [{ id: "new-folder", label: "New folder" }] : []),
+      ];
   if (isBlank) {
-    if (canCreateFile) items.push({ id: "new-file", label: "New file" });
-    if (canCreateFolder) items.push({ id: "new-folder", label: "New folder" });
-    if (canCreateFile || canCreateFolder) items.push({ id: "sep-blank", sep: true });
+    items.push(...creationItems);
+    if (creationItems.length) items.push({ id: "sep-blank", sep: true });
     items.push({ id: "refresh", label: "Refresh" });
   } else if (isParent) {
     items.push({ id: "open", label: "Go up" });
   } else if (isDir) {
-    if (canCreateFile) items.push({ id: "new-file", label: "New file" });
-    if (canCreateFolder) items.push({ id: "new-folder", label: "New folder" });
-    if (canCreateFile || canCreateFolder) items.push({ id: "sep-dir-new", sep: true });
+    items.push(...creationItems);
+    if (creationItems.length) items.push({ id: "sep-dir-new", sep: true });
     items.push({ id: "open", label: "Open folder" });
   } else {
     items.push({ id: "open", label: "Open" });
@@ -43,16 +50,16 @@ function buildMenuItems(entry, {
       if (pinnedHere) {
         items.push({ id: "unpin", label: "Unpin folder" });
       } else {
-        if (currentPath) items.push({ id: "pin-root", label: "Pin to root" });
+        if (currentPath) items.push({ id: "pin-root", label: "Pin to home" });
         items.push({ id: "pin-here", label: currentPath ? "Pin here" : "Pin folder" });
       }
     }
-    items.push({ id: "copy-path", label: "Copy path" });
-    if (isDir && !isParent) items.push({ id: "download-zip", label: "Download as ZIP" });
+    items.push({ id: "copy-path", label: "Copy item link" });
+    if (isDir && !isParent) items.push({ id: "download-zip", label: "Download folder" });
     if (isFile) items.push({ id: "download", label: "Download" });
     if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });
     items.push({ id: "sep-1", sep: true });
-    if (!isParent) items.push({ id: "attach", label: isDir ? "Add folder" : "Add here" });
+    if (!isParent) items.push({ id: "attach", label: isDir ? "Use folder" : "Use this" });
     if (!isParent && onRequestDelete) {
       items.push({ id: "sep-2", sep: true });
       items.push({ id: "delete", label: isDir ? "Delete folder" : "Delete", danger: true });
@@ -74,6 +81,7 @@ export function ExplorerContextMenu({
   currentPath = "",
   canCreateFile = false,
   canCreateFolder = false,
+  createItems,
 }) {
   const menuRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
@@ -85,6 +93,7 @@ export function ExplorerContextMenu({
         currentPath,
         canCreateFile,
         canCreateFolder,
+        createItems,
         onRequestRename,
         onRequestDelete,
       }),
@@ -94,6 +103,7 @@ export function ExplorerContextMenu({
       currentPath,
       canCreateFile,
       canCreateFolder,
+      createItems,
       onRequestRename,
       onRequestDelete,
     ],

@@ -23,11 +23,11 @@
   --mos-border: rgba(148, 163, 184, 0.13);
   --mos-border-soft: rgba(148, 163, 184, 0.08);
   --mos-border-subtle: rgba(148, 163, 184, 0.1);
-  --mos-text: #e2e8f0;
-  --mos-text-soft: #cbd5e1;
-  --mos-text-bright: #f8fafc;
-  --mos-muted: #94a3b8;
-  --mos-faint: #64748b;
+  --mos-text: #ffffff;
+  --mos-text-soft: rgba(255, 255, 255, 0.82);
+  --mos-text-bright: #ffffff;
+  --mos-muted: rgba(255, 255, 255, 0.62);
+  --mos-faint: rgba(255, 255, 255, 0.42);
   --mos-accent: #22c55e;
   --mos-accent-hover: #4ade80;
   --mos-hover: #162033;
@@ -105,7 +105,15 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--mos-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--mos-accent) 44%, var(--mos-hover));
+  color: var(--mos-text-bright);
+  text-shadow: none;
+}
+
+::-moz-selection {
+  background: color-mix(in srgb, var(--mos-accent) 44%, var(--mos-hover));
+  color: var(--mos-text-bright);
+  text-shadow: none;
 }
 
 .mos-toast {

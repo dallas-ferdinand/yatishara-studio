@@ -1,5 +1,7 @@
 # Yatishara Studio Launch Runbook
 
+For broader architecture, local setup, production deployment, and preview hot reload details, see `docs/architecture.md`, `docs/development.md`, and `docs/deployment.md`.
+
 ## Current Deployment Target
 
 - App: `https://studio.yatishara.com`
@@ -17,6 +19,7 @@
 1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
 2. In BytePlus Ark Console, activate the configured ModelArk models:
    - enhancement: `BYTEPLUS_ENHANCEMENT_MODEL_ID`
+   - text/script: `BYTEPLUS_TEXT_MODEL_ID`
    - image: `BYTEPLUS_IMAGE_LOW_MODEL_ID`, `BYTEPLUS_IMAGE_MEDIUM_MODEL_ID`, `BYTEPLUS_IMAGE_HIGH_MODEL_ID`
    - video: `BYTEPLUS_VIDEO_MODEL_ID`
 3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.
@@ -46,7 +49,19 @@ Set these on the dedicated Studio Convex deployment (`https://convex-studio-api.
 - `SITE_URL=https://studio.yatishara.com`
 - `CONVEX_SITE_URL=https://convex-studio.yatishara.com`
 - `AUTH_RESEND_KEY`
+- `AUTH_RESEND_FROM`
+- `EVOLUTION_API_URL`
 - `EVOLUTION_API_KEY`
+- `EVOLUTION_INSTANCE`
+
+## Preview Hot Reload
+
+- URL: `https://preview.studio.yatishara.com`
+- Password env var: `PREVIEW_STUDIO_PASSWORD`
+- Repo code: `src/proxy.ts`, `src/app/preview-gate/route.ts`, `src/lib/preview-gate.ts`, `next.config.ts`
+- External VPS files: `/etc/systemd/system/yatishara-studio-preview.service` and `/data/coolify/proxy/dynamic/yatishara-studio-preview.yaml`
+
+The preview gate sets a short-lived HTTP-only cookie before normal Convex Auth middleware runs. Do not document or print the actual preview password.
 
 ## Provider Smoke Status
 

@@ -90,6 +90,7 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "chat") return "message";
   if (tab.kind === "pulse") return "infinity";
   if (tab.kind === "buckets") return "bucket";
+  if (tab.kind === "settings") return "settings";
   const path = tab.path ?? tab.title ?? "";
   if (tab.ext) return fileIconName(`file${tab.ext.startsWith(".") ? tab.ext : `.${tab.ext}`}`);
   return fileIconName(path);

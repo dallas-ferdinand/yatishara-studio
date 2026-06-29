@@ -1,6 +1,11 @@
 /* Desk chat — turns, bubbles, thread column */
 
 .cursor-chat-thread.mos-chat {
+  --chat-motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --chat-motion-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --chat-motion-fast: 160ms;
+  --chat-motion-med: 240ms;
+  --chat-glow-gutter: 14px;
   --msg-max-h: none;
   --msg-max-h-stream: none;
   --font-body: var(--font-cursor);
@@ -16,7 +21,7 @@
   --accent-dim: var(--cursor-accent-dim);
   display: flex;
   flex-direction: column;
-  padding: 10px 14px 4px;
+  padding: 10px calc(14px + var(--chat-glow-gutter)) 4px;
   gap: 0;
   scroll-behavior: auto;
   background: var(--color-cursor-chat);
@@ -24,14 +29,15 @@
   font-size: var(--desk-text-base);
   line-height: var(--desk-leading);
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
 
 @media (max-width: 899px) {
   .cursor-chat-thread.mos-chat {
     width: 100%;
     max-width: 100%;
-    padding: var(--desk-mobile-inset-y) var(--desk-mobile-inset-x) 6px;
-    overflow-x: hidden;
+    padding: var(--desk-mobile-inset-y) calc(var(--desk-mobile-inset-x) + 8px) 6px;
+    overflow-x: clip;
   }
 
   .cursor-chat-thread.mos-chat .flow-text,
@@ -77,6 +83,9 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  animation: chat-turn-in var(--chat-motion-med) var(--chat-motion-ease-out) both;
+  transform-origin: 50% 0;
+  will-change: opacity, transform;
 }
 
 .cursor-chat-thread.mos-chat .cursor-chat-turn + .cursor-chat-turn {
@@ -93,6 +102,48 @@
 
 .cursor-chat-thread.mos-chat .cursor-chat-turn-active.cursor-chat-turn-streaming {
   padding-bottom: min(22vh, 180px);
+}
+
+.cursor-chat-thread.mos-chat .cursor-chat-turn-active {
+  animation-duration: 280ms;
+}
+
+@keyframes chat-turn-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes chat-surface-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.cursor-chat-thread.mos-chat .cursor-chat-turn.is-exiting,
+.cursor-chat-thread.mos-chat .cursor-chat-turn[data-state="closing"] {
+  animation: chat-turn-out var(--chat-motion-fast) var(--chat-motion-ease-in) both;
+}
+
+@keyframes chat-turn-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.996);
+  }
 }
 
 /* ── User bubbles (accent tint) ── */

@@ -48,6 +48,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${onest.variable} ${bricolage.variable} ${jetbrains.variable} h-full`}
+      suppressHydrationWarning
     >
       <head>
         <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? ""} />
@@ -64,7 +65,7 @@ export default function RootLayout({
           {getThemeBootInlineScript()}
         </Script>
       </head>
-      <body className="h-full overflow-hidden">
+      <body className="h-full overflow-hidden" suppressHydrationWarning>
         <MosTooltipLayer />
         {children}
       </body>

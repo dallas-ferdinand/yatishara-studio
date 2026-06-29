@@ -4,29 +4,132 @@ import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
 import { useAction, useMutation } from "convex/react";
 import {
   ArrowRight,
-  CheckCircle2,
   Copy,
-  Film,
   Loader2,
   Mail,
-  MessageCircle,
   Phone,
-  ShieldCheck,
-  Sparkles,
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { StudioShell } from "./StudioShell";
 
+const AUTH_BACKGROUND_IMAGES = [
+  "/studio-scene-agent-genesis-4k.webp",
+  "/studio-space-agent-genesis-4k.webp",
+  "/studio-bg-agent-genesis-4k.webp",
+  "/studio-scene-gold-archive-4k.webp",
+  "/studio-bg-gold-solstice-4k.webp",
+  "/studio-scene-ember-forge-4k.webp",
+  "/studio-bg-ember-forge-4k.webp",
+  "/studio-scene-mint-meadow-4k.webp",
+  "/studio-space-mint-meadow-4k.webp",
+  "/studio-bg-mint-eden-4k.webp",
+  "/studio-scene-violet-dusk-4k.webp",
+  "/studio-bg-violet-nebula-4k.webp",
+  "/studio-scene-rose-bloom-4k.webp",
+  "/studio-space-rose-bloom-4k.webp",
+  "/studio-scene-cobalt-skyline-4k.webp",
+  "/studio-space-cobalt-skyline-4k.webp",
+  "/studio-scene-coral-reef-4k.webp",
+  "/studio-space-coral-reef-4k.webp",
+  "/studio-scene-sage-grove-4k.webp",
+  "/studio-space-sage-grove-4k.webp",
+  "/studio-scene-cherry-pulse-4k.webp",
+  "/studio-space-cherry-pulse-4k.webp",
+  "/studio-scene-teal-lagoon-4k.webp",
+  "/studio-space-teal-lagoon-4k.webp",
+  "/studio-scene-lime-canopy-4k.webp",
+  "/studio-space-lime-canopy-4k.webp",
+  "/studio-scene-fuchsia-neon-4k.webp",
+  "/studio-space-fuchsia-neon-4k.webp",
+  "/studio-scene-copper-foundry-4k.webp",
+  "/studio-space-copper-foundry-4k.webp",
+  "/studio-scene-indigo-midnight-4k.webp",
+  "/studio-space-indigo-midnight-4k.webp",
+  "/studio-empty-space-4k.webp",
+];
+
+const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
+
+const AUTH_BACKGROUND_THEMES = [
+  { key: "gold", accent: "#c4a574" },
+  { key: "ember", accent: "#fb923c" },
+  { key: "mint", accent: "#4ade80" },
+  { key: "violet", accent: "#c084fc" },
+  { key: "rose", accent: "#fb7185" },
+  { key: "cobalt", accent: "#60a5fa" },
+  { key: "coral", accent: "#f472b6" },
+  { key: "sage", accent: "#86efac" },
+  { key: "cherry", accent: "#f87171" },
+  { key: "teal", accent: "#2dd4bf" },
+  { key: "lime", accent: "#a3e635" },
+  { key: "fuchsia", accent: "#e879f9" },
+  { key: "copper", accent: "#d97706" },
+  { key: "indigo", accent: "#818cf8" },
+  { key: "space", accent: "#38bdf8" },
+  { key: "agent", accent: "#22c55e" },
+];
+
+function hexToRgbString(hex: string) {
+  const value = hex.replace("#", "");
+  return `${parseInt(value.slice(0, 2), 16)} ${parseInt(value.slice(2, 4), 16)} ${parseInt(value.slice(4, 6), 16)}`;
+}
+
+function getAuthThemeForBackground(path: string) {
+  return (
+    AUTH_BACKGROUND_THEMES.find((theme) => path.includes(theme.key)) ??
+    AUTH_BACKGROUND_THEMES[AUTH_BACKGROUND_THEMES.length - 1]
+  );
+}
+
+type WhatsAppCodeStep = {
+  requestId: Id<"whatsappAuthRequests">;
+  phone: string;
+  code: string;
+  whatsappNumber: string;
+  whatsappUrl: string;
+  expiresAt: number;
+  clientExpiresAt?: number;
+};
+
+function withWhatsAppClientExpiry(step: WhatsAppCodeStep): WhatsAppCodeStep {
+  return {
+    ...step,
+    clientExpiresAt: Math.min(step.expiresAt, Date.now() + WHATSAPP_CODE_TTL_MS),
+  };
+}
+
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12.04 2.25a9.66 9.66 0 0 0-8.19 14.78l-1.1 4.01 4.11-1.08a9.66 9.66 0 1 0 5.18-17.71Zm0 1.78a7.88 7.88 0 1 1 0 15.76 7.8 7.8 0 0 1-4-1.1l-.29-.17-2.44.64.65-2.38-.19-.3a7.88 7.88 0 0 1 6.27-12.45Zm-3.35 3.7c-.18 0-.47.07-.71.34-.24.26-.93.91-.93 2.22 0 1.31.96 2.58 1.09 2.76.13.17 1.85 2.96 4.58 4.03 2.27.89 2.73.71 3.22.67.49-.04 1.59-.65 1.81-1.28.22-.63.22-1.17.15-1.28-.07-.11-.24-.18-.51-.31-.27-.13-1.59-.78-1.84-.87-.25-.09-.43-.13-.61.13-.18.27-.7.87-.86 1.05-.16.18-.31.2-.58.07-.27-.13-1.13-.42-2.15-1.33-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.12-.55.12-.12.27-.31.4-.47.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.47-.07-.13-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47h-.52Z" />
+    </svg>
+  );
+}
+
 export function StudioAuthGate() {
   const auth = useConvexAuth();
+  const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!auth?.isLoading) {
+      setAuthLoadTimedOut(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAuthLoadTimedOut(true), 4500);
+    return () => window.clearTimeout(timer);
+  }, [auth?.isLoading]);
+
   if (!auth) {
     return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
   }
   if (auth.isLoading) {
+    if (authLoadTimedOut) {
+      return <StudioSignIn />;
+    }
     return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
   }
   if (!auth.isAuthenticated) {
@@ -40,22 +143,65 @@ function StudioSignIn() {
   const startWhatsApp = useMutation(api.whatsappAuth.start);
   const checkLatestWhatsApp = useAction(api.whatsappAuth.checkLatest);
   const [method, setMethod] = useState<"email" | "whatsapp">("email");
-  const [emailStep, setEmailStep] = useState<"email" | { email: string }>("email");
+  const [emailStep, setEmailStep] = useState<"email" | { email: string }>(
+    "email",
+  );
   const [whatsAppStep, setWhatsAppStep] = useState<
     | "phone"
-    | {
-        requestId: Id<"whatsappAuthRequests">;
-        phone: string;
-        code: string;
-        whatsappNumber: string;
-        whatsappUrl: string;
-      }
+    | WhatsAppCodeStep
   >("phone");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const isEmailCodeStep = emailStep !== "email";
   const isWhatsAppCodeStep = whatsAppStep !== "phone";
+  const whatsAppExpiry =
+    whatsAppStep === "phone"
+      ? 0
+      : (whatsAppStep.clientExpiresAt ??
+        Math.min(whatsAppStep.expiresAt, nowMs + WHATSAPP_CODE_TTL_MS));
+  const whatsAppTimeLeftMs = Math.max(0, whatsAppExpiry - nowMs);
+  const whatsAppTimeLeftSeconds = Math.ceil(whatsAppTimeLeftMs / 1000);
+  const whatsAppExpired = isWhatsAppCodeStep && whatsAppTimeLeftSeconds <= 0;
+
+  useEffect(() => {
+    if (!isWhatsAppCodeStep) return;
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [isWhatsAppCodeStep, whatsAppExpiry]);
+
+  useEffect(() => {
+    if (whatsAppStep === "phone" || whatsAppStep.clientExpiresAt) return;
+    setWhatsAppStep(withWhatsAppClientExpiry(whatsAppStep));
+  }, [whatsAppStep]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 1800);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  const resendWhatsAppCode = () => {
+    if (whatsAppStep === "phone") return;
+    setPending(true);
+    setError("");
+    setNotice("");
+    void startWhatsApp({ phone: whatsAppStep.phone })
+      .then((request) => {
+        setWhatsAppStep(withWhatsAppClientExpiry(request));
+        setNowMs(Date.now());
+        setNotice("New code ready.");
+      })
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error ? err.message : "WhatsApp sign-in failed",
+        );
+      })
+      .finally(() => setPending(false));
+  };
 
   return (
     <AuthFrame
@@ -63,34 +209,31 @@ function StudioSignIn() {
       title={
         method === "email"
           ? isEmailCodeStep
-            ? "Check your inbox"
-            : "Create without passwords"
+            ? "Check your email"
+            : "Welcome back"
           : isWhatsAppCodeStep
-            ? "Send this code on WhatsApp"
-            : "Sign in with WhatsApp"
-      }
-      footer={
-        method === "email"
-          ? isEmailCodeStep
-            ? `We sent an 8-digit code to ${emailStep.email}.`
-            : "Choose email OTP or WhatsApp self-verification."
-          : isWhatsAppCodeStep
-            ? `Only latest message from ${whatsAppStep.phone} is checked.`
-            : "We show a code. You message it to our WhatsApp number."
+            ? "Open WhatsApp"
+            : "Welcome back"
       }
     >
-      <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1">
-        <MethodButton active={method === "email"} onClick={() => setMethod("email")}>
+      <div className="mt-6 grid grid-cols-2 gap-1.5 rounded-full border border-white/15 bg-transparent p-1.5 shadow-inner shadow-white/[0.04] backdrop-blur-xl">
+        <MethodButton
+          active={method === "email"}
+          onClick={() => setMethod("email")}
+        >
           <Mail className="h-4 w-4" aria-hidden="true" />
           Email
         </MethodButton>
-        <MethodButton active={method === "whatsapp"} onClick={() => setMethod("whatsapp")}>
-          <MessageCircle className="h-4 w-4" aria-hidden="true" />
+        <MethodButton
+          active={method === "whatsapp"}
+          onClick={() => setMethod("whatsapp")}
+        >
+          <WhatsAppIcon className="h-4 w-4" />
           WhatsApp
         </MethodButton>
       </div>
       <form
-        className="mt-4 space-y-4"
+        className="mt-6 space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
           setPending(true);
@@ -114,10 +257,14 @@ function StudioSignIn() {
           if (whatsAppStep === "phone") {
             void startWhatsApp({ phone: String(formData.get("phone") ?? "") })
               .then((request) => {
-                setWhatsAppStep(request);
+                setWhatsAppStep(withWhatsAppClientExpiry(request));
               })
               .catch((err: unknown) => {
-                setError(err instanceof Error ? err.message : "WhatsApp sign-in failed");
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "WhatsApp sign-in failed",
+                );
               })
               .finally(() => setPending(false));
             return;
@@ -142,22 +289,27 @@ function StudioSignIn() {
               }
             })
             .catch((err: unknown) => {
-              setError(err instanceof Error ? err.message : "WhatsApp check failed");
+              setError(
+                err instanceof Error ? err.message : "WhatsApp check failed",
+              );
             })
             .finally(() => setPending(false));
         }}
       >
         {method === "email" && !isEmailCodeStep ? (
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
-              Work email
+          <label className="block text-left">
+            <span className="mb-1.5 block text-xs font-medium text-white/48">
+              Email address
             </span>
-            <span className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 shadow-inner shadow-white/[0.02] transition focus-within:border-emerald-300/70 focus-within:bg-white/[0.08]">
-              <Mail className="h-4 w-4 text-emerald-200" aria-hidden="true" />
+            <span className="studio-auth-field flex items-center gap-3 rounded-2xl border border-white/15 bg-transparent px-4 py-3.5 shadow-inner shadow-white/[0.03] backdrop-blur-xl transition">
+              <Mail
+                className="studio-auth-accent-text h-5 w-5"
+                aria-hidden="true"
+              />
               <input
-                className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+                className="min-w-0 flex-1 bg-transparent text-lg text-white outline-none placeholder:text-white/35"
                 name="email"
-                placeholder="you@yatishara.com"
+                placeholder="you@example.com"
                 type="email"
                 autoComplete="email"
                 required
@@ -170,11 +322,9 @@ function StudioSignIn() {
           <>
             <input name="email" value={emailStep.email} type="hidden" />
             <label className="block">
-              <span className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
-                Verification code
-              </span>
+              <span className="sr-only">Code</span>
               <input
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 text-center text-xl font-semibold tracking-[0.45em] text-white outline-none shadow-inner shadow-white/[0.02] transition placeholder:text-white/30 focus:border-emerald-300/70 focus:bg-white/[0.08]"
+                className="studio-auth-field w-full rounded-2xl border border-white/15 bg-transparent px-5 py-4 text-center text-lg font-semibold tracking-[0.28em] text-white outline-none shadow-inner shadow-white/[0.03] backdrop-blur-xl transition placeholder:text-white/30"
                 name="code"
                 placeholder="00000000"
                 inputMode="numeric"
@@ -186,19 +336,24 @@ function StudioSignIn() {
         ) : null}
 
         {method === "whatsapp" && !isWhatsAppCodeStep ? (
-          <label className="block">
-            <span className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
+          <label className="block text-left">
+            <span className="mb-1.5 block text-xs font-medium text-white/48">
               WhatsApp number
             </span>
-            <span className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 shadow-inner shadow-white/[0.02] transition focus-within:border-emerald-300/70 focus-within:bg-white/[0.08]">
-              <Phone className="h-4 w-4 text-emerald-200" aria-hidden="true" />
+            <span className="studio-auth-field flex items-center gap-3 rounded-2xl border border-white/15 bg-transparent px-4 py-3.5 shadow-inner shadow-white/[0.03] backdrop-blur-xl transition">
+              <Phone
+                className="studio-auth-accent-text h-5 w-5"
+                aria-hidden="true"
+              />
               <input
-                className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+                className="min-w-0 flex-1 bg-transparent text-lg text-white outline-none placeholder:text-white/35"
                 name="phone"
-                placeholder="18683377338"
+                placeholder="+1 (868) 000-0000"
                 type="tel"
                 inputMode="tel"
                 autoComplete="tel"
+                value={phoneInput}
+                onChange={(event) => setPhoneInput(formatPhoneInput(event.target.value))}
                 required
               />
             </span>
@@ -206,78 +361,103 @@ function StudioSignIn() {
         ) : null}
 
         {method === "whatsapp" && isWhatsAppCodeStep ? (
-          <div className="space-y-4">
-            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-300/10 p-4 text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-100/80">
-                Message this code
+          <div className="space-y-2">
+            <div className="rounded-2xl border border-white/15 bg-transparent p-3 text-center shadow-inner shadow-white/[0.03] backdrop-blur-xl">
+              <p className="mb-1 text-[11px] leading-4 text-white/42">
+                Send code to {formatPhoneDisplay(whatsAppStep.whatsappNumber)}
               </p>
-              <p className="mt-3 text-4xl font-black tracking-[0.24em] text-white">
-                {whatsAppStep.code}
-              </p>
-              <p className="mt-3 text-xs leading-5 text-white/52">
-                Send it from {whatsAppStep.phone} to {whatsAppStep.whatsappNumber}.
+              <div className="flex items-center justify-center gap-2">
+                <p className="text-2xl font-semibold tracking-[0.16em] text-white">
+                  {formatAuthCode(whatsAppStep.code)}
+                </p>
+                <button
+                  className="inline-flex cursor-pointer items-center justify-center bg-transparent p-0 text-white/60 transition hover:text-white focus:outline-none"
+                  type="button"
+                  aria-label="Copy code"
+                  title="Copy code"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(whatsAppStep.code);
+                    setNotice("Code copied.");
+                  }}
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] leading-4 text-white/38">
+                {whatsAppExpired
+                  ? "Expired"
+                  : `Expires in ${formatCountdown(whatsAppTimeLeftSeconds)}`}
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-2">
               <a
-                className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 px-4 py-3 text-sm font-semibold text-emerald-50 transition hover:bg-emerald-300/15 focus:outline-none focus:ring-2 focus:ring-emerald-200/50"
+                className="studio-auth-primary flex cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none"
                 href={whatsAppStep.whatsappUrl}
                 target="_blank"
                 rel="noreferrer"
               >
-                <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                WhatsApp us
+                <WhatsAppIcon className="h-4 w-4" />
+                Open WhatsApp
               </a>
               <button
-                className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/75 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/25"
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard.writeText(whatsAppStep.code);
-                  setNotice("Code copied.");
-                }}
+                className="studio-auth-primary flex cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                type="submit"
+                disabled={pending || whatsAppExpired}
               >
-                <Copy className="h-4 w-4" aria-hidden="true" />
-                Copy code
+                {pending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight
+                      className="h-4 w-4 transition group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </>
+                )}
               </button>
             </div>
           </div>
         ) : null}
         {notice ? (
-          <p className="rounded-2xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-50">
+          <p className="studio-auth-notice text-xs">
             {notice}
           </p>
         ) : null}
         {error ? (
-          <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <p className="rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {error}
           </p>
         ) : null}
-        <button
-          className="group flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-300 via-teal-200 to-cyan-200 px-4 py-3.5 text-sm font-bold text-slate-950 shadow-lg shadow-emerald-500/20 transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-emerald-200/70 focus:ring-offset-2 focus:ring-offset-[#06070d] disabled:cursor-not-allowed disabled:opacity-60"
-          type="submit"
-          disabled={pending}
-        >
-          {pending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              {method === "whatsapp" && isWhatsAppCodeStep ? "Checking latest message" : "Sending secure code"}
-            </>
-          ) : (
-            <>
-              {method === "email"
-                ? isEmailCodeStep
-                  ? "Enter Studio"
-                  : "Send sign-in code"
-                : isWhatsAppCodeStep
-                  ? "I sent it"
-                  : "Show WhatsApp code"}
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true" />
-            </>
-          )}
-        </button>
+        {method === "whatsapp" && isWhatsAppCodeStep ? null : (
+          <button
+            className="studio-auth-primary group flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-base font-semibold shadow-lg shadow-black/20 transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            type="submit"
+            disabled={pending}
+          >
+            {pending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                Sending secure code
+              </>
+            ) : (
+              <>
+                {method === "email"
+                  ? isEmailCodeStep
+                    ? "Continue"
+                    : "Send code"
+                  : "Get code"}
+                <ArrowRight
+                  className="h-5 w-5 transition group-hover:translate-x-0.5"
+                  aria-hidden="true"
+                />
+              </>
+            )}
+          </button>
+        )}
         {method === "email" && isEmailCodeStep ? (
           <button
-            className="w-full cursor-pointer rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/75 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/25"
+            className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none"
             type="button"
             onClick={() => {
               setError("");
@@ -289,17 +469,30 @@ function StudioSignIn() {
           </button>
         ) : null}
         {method === "whatsapp" && isWhatsAppCodeStep ? (
-          <button
-            className="w-full cursor-pointer rounded-2xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/75 transition hover:border-white/20 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-white/25"
-            type="button"
-            onClick={() => {
-              setError("");
-              setNotice("");
-              setWhatsAppStep("phone");
-            }}
-          >
-            Request a new WhatsApp code
-          </button>
+          <div className="flex items-center justify-center gap-3 text-sm font-medium">
+            <button
+              className="cursor-pointer bg-transparent px-1 py-1 text-white/55 underline-offset-4 transition hover:text-white hover:underline focus:outline-none"
+              type="button"
+              onClick={() => {
+                setError("");
+                setNotice("");
+                setWhatsAppStep("phone");
+              }}
+            >
+              Use another number
+            </button>
+            <span className="text-white/25" aria-hidden="true">
+              /
+            </span>
+            <button
+              className="cursor-pointer bg-transparent px-1 py-1 text-white/55 underline-offset-4 transition hover:text-white hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={pending}
+              onClick={resendWhatsAppCode}
+            >
+              Resend code
+            </button>
+          </div>
         ) : null}
       </form>
     </AuthFrame>
@@ -317,10 +510,8 @@ function MethodButton({
 }) {
   return (
     <button
-      className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-emerald-200/60 ${
-        active
-          ? "bg-white text-slate-950 shadow-sm"
-          : "text-white/58 hover:bg-white/[0.06] hover:text-white"
+      className={`studio-auth-method flex cursor-pointer items-center justify-center gap-2 rounded-full px-3.5 py-2.5 text-base font-medium transition focus:outline-none ${
+        active ? "is-active shadow-sm shadow-black/20 backdrop-blur-xl" : "text-white/55"
       }`}
       type="button"
       onClick={onClick}
@@ -333,89 +524,145 @@ function MethodButton({
 function AuthFrame({
   eyebrow,
   title,
-  footer,
   children,
 }: {
   eyebrow: string;
   title: string;
-  footer?: string;
   children?: ReactNode;
 }) {
+  const [backgroundIndex, setBackgroundIndex] = useState(0);
+  const activeBackground = AUTH_BACKGROUND_IMAGES[backgroundIndex];
+  const activeTheme = getAuthThemeForBackground(activeBackground);
+  const authThemeStyle = {
+    "--studio-auth-accent": activeTheme.accent,
+    "--studio-auth-accent-rgb": hexToRgbString(activeTheme.accent),
+  } as CSSProperties;
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      setBackgroundIndex(
+        (index) => (index + 1) % AUTH_BACKGROUND_IMAGES.length,
+      );
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const next =
+      AUTH_BACKGROUND_IMAGES[
+        (backgroundIndex + 1) % AUTH_BACKGROUND_IMAGES.length
+      ];
+    const image = new Image();
+    image.decoding = "async";
+    image.src = next;
+  }, [backgroundIndex]);
+
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#05060b] px-4 py-8 text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.20),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.20),transparent_30%),linear-gradient(135deg,#06070d_0%,#0f1020_55%,#090a12_100%)]" />
-      <div className="absolute left-1/2 top-8 h-40 w-40 -translate-x-1/2 rounded-full bg-emerald-300/10 blur-3xl" />
-      <section className="relative grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.06] shadow-2xl shadow-black/50 backdrop-blur-2xl md:grid-cols-[1.05fr_0.95fr]">
-        <div className="hidden min-h-[560px] flex-col justify-between border-r border-white/10 bg-black/20 p-8 md:flex">
+    <main
+      className="studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#020617] px-5 py-10 text-white"
+      style={authThemeStyle}
+    >
+      <div
+        className="absolute inset-0 scale-[1.03] bg-cover bg-center transition-[background-image,opacity,transform] duration-1000 ease-out"
+        style={{ backgroundImage: `url("${activeBackground}")` }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.14),transparent_28%),linear-gradient(180deg,rgba(5,7,12,0.42),rgba(5,7,12,0.82))]"
+        aria-hidden="true"
+      />
+      <style jsx global>{`
+        .studio-auth-theme .studio-auth-accent-text,
+        .studio-auth-theme .studio-auth-eyebrow {
+          color: rgb(var(--studio-auth-accent-rgb) / 0.72);
+        }
+        .studio-auth-theme .studio-auth-field:focus,
+        .studio-auth-theme .studio-auth-field:focus-within {
+          border-color: rgb(var(--studio-auth-accent-rgb) / 0.44);
+          background: rgb(var(--studio-auth-accent-rgb) / 0.035);
+          box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.04),
+            0 0 0 1px rgb(var(--studio-auth-accent-rgb) / 0.16);
+        }
+        .studio-auth-theme .studio-auth-primary {
+          border: 1px solid rgb(var(--studio-auth-accent-rgb) / 0.34);
+          background: rgb(var(--studio-auth-accent-rgb) / 0.18);
+          color: #fff;
+          box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.08),
+            0 18px 44px rgb(0 0 0 / 0.24),
+            0 0 34px rgb(var(--studio-auth-accent-rgb) / 0.16);
+        }
+        .studio-auth-theme .studio-auth-primary:hover {
+          border-color: rgb(var(--studio-auth-accent-rgb) / 0.52);
+          background: rgb(var(--studio-auth-accent-rgb) / 0.24);
+        }
+        .studio-auth-theme .studio-auth-primary:focus-visible,
+        .studio-auth-theme .studio-auth-secondary:focus-visible,
+        .studio-auth-theme .studio-auth-method:focus-visible {
+          box-shadow:
+            0 0 0 2px rgb(2 6 23 / 0.9),
+            0 0 0 4px rgb(var(--studio-auth-accent-rgb) / 0.34);
+        }
+        .studio-auth-theme .studio-auth-secondary:hover,
+        .studio-auth-theme .studio-auth-method:hover {
+          border-color: rgb(var(--studio-auth-accent-rgb) / 0.34);
+          background: rgb(var(--studio-auth-accent-rgb) / 0.06);
+          color: rgb(255 255 255 / 0.88);
+        }
+        .studio-auth-theme .studio-auth-method.is-active {
+          border: 1px solid rgb(var(--studio-auth-accent-rgb) / 0.32);
+          background: rgb(var(--studio-auth-accent-rgb) / 0.12);
+          color: #fff;
+        }
+        .studio-auth-theme .studio-auth-notice {
+          color: rgb(255 255 255 / 0.58);
+          min-height: 1rem;
+        }
+      `}</style>
+      <section className="relative w-full max-w-[372px] rounded-[2rem] border border-white/15 bg-transparent p-5 text-center shadow-2xl shadow-black/35 ring-1 ring-white/[0.04] backdrop-blur-3xl sm:p-6">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <BrandMark size={64} subtle />
           <div>
-            <div className="flex items-center gap-3">
-              <BrandMark size={44} subtle />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-200">
-                  {eyebrow}
-                </p>
-                <p className="text-sm text-white/45">AI video and image workspace</p>
-              </div>
-            </div>
-            <div className="mt-14 max-w-md">
-              <p className="inline-flex rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-semibold text-emerald-100">
-                Private launch access
-              </p>
-              <h1 className="mt-5 text-5xl font-semibold leading-[0.95] tracking-tight">
-                Turn briefs into production-ready scenes.
-              </h1>
-              <p className="mt-5 text-base leading-7 text-white/58">
-                Prompt enhancement, reference assets, folders, billing, and generation history in one focused Studio.
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <FeaturePill icon={<Sparkles className="h-4 w-4" aria-hidden="true" />} label="Prompt flows" />
-            <FeaturePill icon={<Film className="h-4 w-4" aria-hidden="true" />} label="Pro video" />
-            <FeaturePill icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />} label="OTP secure" />
+            <p className="studio-auth-eyebrow text-xs font-semibold uppercase tracking-[0.24em]">
+              {eyebrow}
+            </p>
           </div>
         </div>
-        <div className="p-5 sm:p-8">
-          <div className="mx-auto flex min-h-[520px] max-w-md flex-col justify-center">
-            <div className="mb-8 flex items-center gap-3 md:hidden">
-              <BrandMark size={40} subtle />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
-                  {eyebrow}
-                </p>
-                <p className="text-sm text-white/45">AI creative studio</p>
-              </div>
-            </div>
-            <div className="rounded-[1.75rem] border border-white/10 bg-[#0c0f1a]/85 p-5 shadow-xl shadow-black/30 sm:p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200/85">
-                    Secure access
-                  </p>
-                  <h2 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h2>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-emerald-200">
-                  <CheckCircle2 className="h-5 w-5" aria-hidden="true" />
-                </div>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-white/55">
-                Create image and video generations from a Yatishara Studio workspace.
-              </p>
-              {children}
-              {footer ? <p className="mt-5 text-xs leading-5 text-white/42">{footer}</p> : null}
-            </div>
-          </div>
+        <div className="mt-4">
+          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         </div>
+        {children}
       </section>
     </main>
   );
 }
 
-function FeaturePill({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-sm text-white/70">
-      <div className="mb-2 text-emerald-200">{icon}</div>
-      <p>{label}</p>
-    </div>
-  );
+function formatCountdown(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatAuthCode(code: string) {
+  return code.replace(/^(\d{3})(\d{3})$/, "$1-$2");
+}
+
+function formatPhoneDisplay(phone: string) {
+  return phone.replace(/^1?(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3");
+}
+
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, "").replace(/^1/, "").slice(0, 10);
+  const area = digits.slice(0, 3);
+  const prefix = digits.slice(3, 6);
+  const line = digits.slice(6, 10);
+
+  if (!area) return "";
+  if (area.length < 3) return `+1 (${area}`;
+  if (!prefix) return `+1 (${area})`;
+  if (prefix.length < 3) return `+1 (${area}) ${prefix}`;
+  return `+1 (${area}) ${prefix}${line ? `-${line}` : ""}`;
 }

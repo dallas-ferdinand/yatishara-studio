@@ -1,119 +1,132 @@
 /** Appearance mode (light/dark) + accent color schemes — CSS variables on :root */
 const SCHEME_KEY = "mercuryos-theme-v1";
 const MODE_KEY = "mercuryos-appearance-v1";
+const STUDIO_BG_PACK_KEY = "mercuryos-studio-bg-pack-v1";
 
 export const SCHEMES = {
   agent: {
-    label: "Agent",
+    label: "Genesis",
     accent: "#22c55e",
     bg: "#020617",
     surface: "#0f172a",
     raised: "#1e293b",
   },
   gold: {
-    label: "Gold",
+    label: "Archive",
     accent: "#c4a574",
     bg: "#1b1c23",
     surface: "#1d1e26",
     raised: "#21222c",
   },
   ocean: {
-    label: "Ocean",
+    label: "Space",
     accent: "#38bdf8",
     bg: "#070b10",
     surface: "#0f172a",
     raised: "#172554",
   },
   ember: {
-    label: "Ember",
+    label: "Forge",
     accent: "#fb923c",
     bg: "#0a0806",
     surface: "#1a120c",
     raised: "#291911",
   },
   mint: {
-    label: "Mint",
+    label: "Meadow",
     accent: "#4ade80",
     bg: "#060a08",
     surface: "#0f1a14",
     raised: "#14261c",
   },
   violet: {
-    label: "Violet",
+    label: "Dusk",
     accent: "#c084fc",
     bg: "#09070d",
     surface: "#15101f",
     raised: "#1f1630",
   },
   rose: {
-    label: "Rose",
+    label: "Bloom",
     accent: "#fb7185",
     bg: "#0d0809",
     surface: "#1a1012",
     raised: "#261419",
   },
   cobalt: {
-    label: "Cobalt",
+    label: "Skyline",
     accent: "#60a5fa",
     bg: "#060810",
     surface: "#0c1222",
     raised: "#111a2e",
   },
   coral: {
-    label: "Coral",
+    label: "Reef",
     accent: "#f472b6",
     bg: "#0c080a",
     surface: "#1a1018",
     raised: "#261422",
   },
   sage: {
-    label: "Sage",
+    label: "Grove",
     accent: "#86efac",
     bg: "#070a08",
     surface: "#101a14",
     raised: "#16261c",
   },
   cherry: {
-    label: "Cherry",
+    label: "Pulse",
     accent: "#f87171",
     bg: "#0a0606",
     surface: "#1a0e0e",
     raised: "#281414",
   },
   teal: {
-    label: "Teal",
+    label: "Lagoon",
     accent: "#2dd4bf",
     bg: "#060a0a",
     surface: "#0c1a18",
     raised: "#102826",
   },
   lime: {
-    label: "Lime",
+    label: "Canopy",
     accent: "#a3e635",
     bg: "#080a06",
     surface: "#141a0c",
     raised: "#1e2610",
   },
   fuchsia: {
-    label: "Fuchsia",
+    label: "Neon",
     accent: "#e879f9",
     bg: "#0a060c",
     surface: "#180c1e",
     raised: "#24122c",
   },
   copper: {
-    label: "Copper",
+    label: "Foundry",
     accent: "#d97706",
     bg: "#0a0806",
     surface: "#18120c",
     raised: "#241a10",
   },
   indigo: {
-    label: "Indigo",
+    label: "Midnight",
     accent: "#818cf8",
     bg: "#07060e",
     surface: "#100e1c",
     raised: "#181428",
+  },
+};
+
+export const STUDIO_BACKGROUND_PACKS = {
+  worlds: {
+    label: "Scenes",
+  },
+  space: {
+    label: "Space",
+  },
+  clean: {
+    label: "Clean",
   },
 };
 
@@ -221,10 +234,10 @@ function buildDeskPalette(scheme, isLight) {
     borderSoft: hairlineBorder(false, 0.04),
     borderSubtle: hairlineBorder(false, 0.05),
     borderFocus: mixHex(scheme.accent, bg, 0.38),
-    text: "#e4e4e7",
-    textSoft: "#c8c9d0",
-    muted: "#858699",
-    faint: "#6b6d7b",
+    text: "#ffffff",
+    textSoft: "rgba(255,255,255,0.82)",
+    muted: "rgba(255,255,255,0.62)",
+    faint: "rgba(255,255,255,0.42)",
     hover: mixHex(panel, bg, 0.22),
     active: mixHex(panel, bg, 0.32),
     accent: scheme.accent,
@@ -350,6 +363,18 @@ export function getSchemeId() {
   return SCHEMES[id] ? id : "agent";
 }
 
+export function getStudioBackgroundPack() {
+  const id = localStorage.getItem(STUDIO_BG_PACK_KEY);
+  return STUDIO_BACKGROUND_PACKS[id] ? id : "worlds";
+}
+
+export function setStudioBackgroundPack(id) {
+  const pack = STUDIO_BACKGROUND_PACKS[id] ? id : "worlds";
+  document.documentElement.dataset.studioBgPack = pack;
+  localStorage.setItem(STUDIO_BG_PACK_KEY, pack);
+  window.dispatchEvent(new CustomEvent("mercuryos-theme-change", { detail: { bgPack: pack } }));
+}
+
 /** @deprecated use getSchemeId */
 export function getThemeId() {
   return getSchemeId();
@@ -378,6 +403,7 @@ export function applyTheme(schemeId, mode) {
   const root = document.documentElement;
   root.dataset.appearance = appearance;
   root.dataset.theme = sid;
+  root.dataset.studioBgPack = getStudioBackgroundPack();
 
   applyDeskTokens(palette, isLight);
 
@@ -450,5 +476,5 @@ export function wireAppearanceSettings() {
 /** Blocking inline script for layout — sets --mos-* before first paint (Tailwind reads these). */
 export function getThemeBootInlineScript() {
   const schemesJson = JSON.stringify(SCHEMES);
-  return `(function(){try{var SCHEMES=${schemesJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=SCHEMES[sid];var isLight=mode==="light";var LIGHT={bg:"#f4f4f5",surface:"#ffffff",raised:"#e4e4e7",text:"#18181b",textMuted:"#52525b",textFaint:"#71717a",hover:"#ececee",active:"#e4e4e7"};var palette=isLight?{bg:LIGHT.bg,sidebar:mixHex(LIGHT.bg,"#000000",0.03),panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.55),surface:mixHex(LIGHT.bg,LIGHT.raised,0.4),surfaceRaised:mixHex(LIGHT.raised,"#ffffff",0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}:{bg:scheme.bg,sidebar:darken(scheme.bg,0.04),panel:scheme.surface,composer:mixHex(scheme.bg,scheme.surface,0.28),surface:mixHex(scheme.bg,scheme.surface,0.34),surfaceRaised:mixHex(scheme.surface,scheme.bg,0.12),surfaceOverlay:mixHex(scheme.surface,scheme.bg,0.2),surfaceInput:darken(scheme.surface,0.04),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,scheme.bg,0.38),text:"#e2e8f0",textSoft:"#cbd5e1",muted:"#94a3b8",faint:"#64748b",hover:mixHex(scheme.surface,scheme.bg,0.22),active:mixHex(scheme.surface,scheme.bg,0.32),accent:scheme.accent};var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.03)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted)}catch(e){}})();`;
+  return `(function(){try{var SCHEMES=${schemesJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1",BK="mercuryos-studio-bg-pack-v1";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";var storedBgPack=localStorage.getItem(BK);var bgPack=storedBgPack==="space"||storedBgPack==="clean"?storedBgPack:"worlds";if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=SCHEMES[sid];var isLight=mode==="light";var LIGHT={bg:"#f4f4f5",surface:"#ffffff",raised:"#e4e4e7",text:"#18181b",textMuted:"#52525b",textFaint:"#71717a",hover:"#ececee",active:"#e4e4e7"};var palette=isLight?{bg:LIGHT.bg,sidebar:mixHex(LIGHT.bg,"#000000",0.03),panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.55),surface:mixHex(LIGHT.bg,LIGHT.raised,0.4),surfaceRaised:mixHex(LIGHT.raised,"#ffffff",0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}:{bg:scheme.bg,sidebar:darken(scheme.bg,0.04),panel:scheme.surface,composer:mixHex(scheme.bg,scheme.surface,0.28),surface:mixHex(scheme.bg,scheme.surface,0.34),surfaceRaised:mixHex(scheme.surface,scheme.bg,0.12),surfaceOverlay:mixHex(scheme.surface,scheme.bg,0.2),surfaceInput:darken(scheme.surface,0.04),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,scheme.bg,0.38),text:"#ffffff",textSoft:"#d4d4d8",muted:"#a1a1aa",faint:"#71717a",hover:mixHex(scheme.surface,scheme.bg,0.22),active:mixHex(scheme.surface,scheme.bg,0.32),accent:scheme.accent};var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.dataset.studioBgPack=bgPack;root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.03)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted)}catch(e){}})();`;
 }

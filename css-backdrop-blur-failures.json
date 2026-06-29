@@ -1,0 +1,523 @@
+{
+  "run_id": "trun_1395fa6829464842967a789395eb7614",
+  "interaction_id": "trun_1395fa6829464842967a789395eb7614",
+  "result_url": "https://platform.parallel.ai/play/deep-research/trun_1395fa6829464842967a789395eb7614",
+  "status": "completed",
+  "output": {
+    "basis": [
+      {
+        "field": "executive_summary",
+        "reasoning": "**Evaluating JSON output requirements**\n\nI need to output JSON that includes the scratchpad, completeness boolean, and supported boolean. For completeness, I'm checking if the answer meets expectations. The executive summary might highlight issues related to backdrop-filter failures, and the field_answer has several bullet points discussing various problems, so it seems complete. Next, I\u2019ll assess if excerpts support the field answer. They do, as they align with what\u2019s covered. Lastly, I need to add brief reasoning notes in the scratchpad.**Preparing JSON output**\n\nI need to output JSON containing keys like scratchpad, completeness, and supported. So, I'll ensure each of these keys is properly defined. The scratchpad will include my reasoning notes, while the completeness boolean will indicate if the answer meets the expected criteria. Finally, the supported key will verify if the excerpts align with the provided information. It's all about making sure everything is structured correctly and conveys the right details!",
+        "citations": [
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/backdrop-filter",
+            "excerpts": [
+              "backdrop-filter CSS property - CSS | MDN - MDN Web Docs\nThis means that if a parent element has opacity: 0.9, it becomes a backdrop root and any child's backdrop-filter will only blur the content between that parent and the child - not the content behind the parent."
+            ],
+            "title": "backdrop-filter CSS property - CSS | MDN - MDN Web Docs"
+          },
+          {
+            "url": "https://issues.chromium.org/issues/344606393",
+            "excerpts": [
+              "backdrop-filter is not showing if there is opacity involved ...\nThe backdrop-filter on the first box is there, but it is faint due to the opacity. When I increase the opacity to 0.99, it looks very much like the second box; see attached screenshot."
+            ],
+            "title": "backdrop-filter is not showing if there is opacity involved ..."
+          },
+          {
+            "url": "https://github.com/mantinedev/mantine/issues/8070",
+            "excerpts": [
+              "Issue with `backdrop-filter: blur()` not working with parent ...\nThe backdrop-filter: blur() property does not seem to work when it is used when there is a <Transition> parent component. It seems the root-cause is the will-change: transform, opacity; property that gets from the transition styles."
+            ],
+            "title": "Issue with `backdrop-filter: blur()` not working with parent ..."
+          },
+          {
+            "url": "https://issues.chromium.org/issues/469174772",
+            "excerpts": [
+              "backdrop-filter stop working if clip-path is set on its parent\nClip-path creates a backdrop root, which means that the implicit page background (white by default) is no longer captured by the filter. The result is that the filter blends with transparent pixels. This is not a NOP, though it is very distinctly different."
+            ],
+            "title": "backdrop-filter stop working if clip-path is set on its parent"
+          },
+          {
+            "url": "https://www.joshwcomeau.com/css/backdrop-filter",
+            "excerpts": [
+              "Next-level frosted glass with backdrop-filter\nDec 2, 2024 \u2014 One of my all-time favourite CSS tricks is using backdrop-filter: blur() to create a frosted glass effect. I use it in just about every"
+            ],
+            "title": "Next-level frosted glass with backdrop-filter"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/77143569/position-fixed-not-working-when-backdrop-filter-is-used",
+            "excerpts": [
+              "css - position: fixed; not working when backdrop-filter is ...\nA solution seems to be: prefix backdrop-filter with -webkit- as seen in backdrop-filter not working on iOS / effecting positioning?. But changing from backdrop-filter to -webkit-backdrop-filter has other slight differences that break my previous code (the overlay between div is slightly different)."
+            ],
+            "title": "css - position: fixed; not working when backdrop-filter is ..."
+          },
+          {
+            "url": "https://ui.shadcn.com/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog - shadcn/ui"
+          },
+          {
+            "url": "https://www.radix-ui.com/primitives/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog"
+          },
+          {
+            "url": "https://expensive.toys/blog/animated-blur-overlay",
+            "excerpts": [
+              "Animated backdrop filter blur overlay | Artur Bie\u0144\nThe solution I've discovered that while transitioning the backdrop-filter: blur () property breaks the transition in Chrome, we can transition the blur in a different way."
+            ],
+            "title": "Animated backdrop filter blur overlay | Artur Bie\u0144"
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=158807",
+            "excerpts": [
+              "webkit-backdrop-filter leaves artifacts on rounded borders\nCreated attachment 281383 [details] Preview of artifacts in iOS safari Issue: Using -webkit-backdrop-filter to create a background blur leaves artifacts"
+            ],
+            "title": "webkit-backdrop-filter leaves artifacts on rounded borders"
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=245510",
+            "excerpts": [
+              "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ...\nI am able to reproduce this in Safari 16 and Safari Technology Preview ... Created attachment 467229 [details] -webkit-backdrop-filter: url() doesn't"
+            ],
+            "title": "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ..."
+          },
+          {
+            "url": "https://www.maviklabs.com/blog/performance-with-backdrop-filter-2026",
+            "excerpts": [
+              "CSS Backdrop-Filter Performance in 2026: Blur Effects Without ...\nBackdrop-filter creates stunning blur effects but can kill performance. A practical guide to using blur without sacrificing smoothness."
+            ],
+            "title": "CSS Backdrop-Filter Performance in 2026: Blur Effects Without ..."
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics",
+        "reasoning": "Reasoning for completeness and support:\n- Completeness: The field_answer provides a thorough explanation of how backdrop-filter interacts with backdrop roots, including the concept that a backdrop root is formed by certain conditions and that backdrop-filter creates a new stacking context. It also enumerates several triggers that affect how the blur is applied and ends with a takeaway about how backdrop-filter operates relative to the nearest backdrop root. This aligns with the field_description which appears to ask for an in-depth understanding of how backdrop-filter picks which pixels are affected and the mechanics behind it. Therefore, completeness is set to true.\n- Excerpt support: Excerpts include explicit statements about: (a) an element with opacity < 1 becoming a backdrop root and restricting the blur to content between that parent and the child, and (b) stacking context concepts relevant to how backdrop-filter works. The field_answer references these concepts and is partially backed by the excerpts. Given there is alignment with the excerpts on key mechanics (backdrop root, stacking context), supported is set to true. However, other asserted items in the field_answer (e.g., the full list of triggers and the table details) are not directly present in the excerpts, so the support is partial but adequate to consider field_answer as supported by the provided excerpts.\n- Summary: Complete and supported based on alignment with the excerpts, with some portions not explicitly covered by the excerpts but not contradicting them.",
+        "citations": [
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/backdrop-filter",
+            "excerpts": [
+              "backdrop-filter CSS property - CSS | MDN - MDN Web Docs\nThis means that if a parent element has opacity: 0.9, it becomes a backdrop root and any child's backdrop-filter will only blur the content between that parent and the child - not the content behind the parent."
+            ],
+            "title": "backdrop-filter CSS property - CSS | MDN - MDN Web Docs"
+          },
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context",
+            "excerpts": [
+              "Stacking context - CSS | MDN - MDN Web Docs\nStacking context is a three-dimensional conceptualization of HTML elements along an imaginary z-axis relative to the user, who is assumed to be facing the viewport or the webpage. The stacking context determines how elements are layered on top of one another along the z-axis (think of it as the \"depth\" dimension on your screen). Stacking context determines the visual order of how overlapping"
+            ],
+            "title": "Stacking context - CSS | MDN - MDN Web Docs"
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "why_the_blur_disappears_parent_stacking_context_triggers_in_practice",
+        "reasoning": "Reasoning: The field answer provides a comprehensive synthesis of known causes and practical workarounds for when backdrop-filter blur disappears or behaves unexpectedly due to parent stacking contexts or related CSS triggers. It cites multiple Chromium issues (opacity with backdrop-filter, stacking context creation, clip-path creating a backdrop root) and a real-world Mantine case where a library\u2019s transition component injected will-change properties, causing the backdrop to blur only the wrapper. It also mentions a recommended diagnostic approach (inspect ancestors for trigger properties) and concrete workarounds (will-change on container, moving filter outside the Transition, swapping clip-path with overflow: clip). The excerpts provided cover opacity-involved blur, stacking contexts, and clip-path effects, which align with the field answer\u2019s main points. Overall, the answer addresses the expected aspects (causes, examples, and workarounds) and is fully aligned with the excerpts.",
+        "citations": [
+          {
+            "url": "https://issues.chromium.org/issues/344606393",
+            "excerpts": [
+              "backdrop-filter is not showing if there is opacity involved ...\nThe backdrop-filter on the first box is there, but it is faint due to the opacity. When I increase the opacity to 0.99, it looks very much like the second box; see attached screenshot."
+            ],
+            "title": "backdrop-filter is not showing if there is opacity involved ..."
+          },
+          {
+            "url": "https://issues.chromium.org/u/0/issues/352619528",
+            "excerpts": [
+              "Backdrop filter doesn't apply within a stacking context\nThere are similar cases of transform animations creating stacking contexts for mix-blend-mode. If you want no behavior change in this case, you need to add will-change: opacity; to your container, which will prevent the discontinuous transition."
+            ],
+            "title": "Backdrop filter doesn't apply within a stacking context"
+          },
+          {
+            "url": "https://issues.chromium.org/issues/469174772",
+            "excerpts": [
+              "backdrop-filter stop working if clip-path is set on its parent\nClip-path creates a backdrop root, which means that the implicit page background (white by default) is no longer captured by the filter. The result is that the filter blends with transparent pixels. This is not a NOP, though it is very distinctly different."
+            ],
+            "title": "backdrop-filter stop working if clip-path is set on its parent"
+          },
+          {
+            "url": "https://github.com/mantinedev/mantine/issues/8070",
+            "excerpts": [
+              "Issue with `backdrop-filter: blur()` not working with parent ...\nThe backdrop-filter: blur() property does not seem to work when it is used when there is a <Transition> parent component. It seems the root-cause is the will-change: transform, opacity; property that gets from the transition styles."
+            ],
+            "title": "Issue with `backdrop-filter: blur()` not working with parent ..."
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "the_containing_block_trap_fixed_positioning_stops_pinning",
+        "reasoning": "Reasoning: The field_answer presents a coherent, actionable pattern for preserving fixed-position descendants when using blur effects by moving the filter to a ::before pseudo-element and keeping the host element free of containing-block-creating properties. It cites the relevant concept that certain CSS properties (transform, filter, backdrop-filter, perspective) create a containing block and uses a concrete CSS snippet and a referenced pattern (four-piece pseudo-element technique) to address the containment issue. The information aligns with the provided excerpts, including a Stack Overflow discussion about position: fixed not working with backdrop-filter and a pseudo-element workaround. The field_description asks about the containing block trap with fixed positioning; the answer directly covers this with practical guidance and trade-offs, and includes a takeaway. Therefore, the field answer is complete. The excerpts do support the answer since they mention the same containment-block behavior and the workaround approach.",
+        "citations": [
+          {
+            "url": "https://stackoverflow.com/questions/77143569/position-fixed-not-working-when-backdrop-filter-is-used",
+            "excerpts": [
+              "css - position: fixed; not working when backdrop-filter is ...\nA solution seems to be: prefix backdrop-filter with -webkit- as seen in backdrop-filter not working on iOS / effecting positioning?. But changing from backdrop-filter to -webkit-backdrop-filter has other slight differences that break my previous code (the overlay between div is slightly different)."
+            ],
+            "title": "css - position: fixed; not working when backdrop-filter is ..."
+          },
+          {
+            "url": "https://dev.to/rolandixor/achieving-backdrop-blur-without-backdrop-filter-16ii",
+            "excerpts": [
+              "Achieving backdrop blur without 'backdrop-filter'\nDec 29, 2021 \u2014 To achieve this solution, you'll need to understand four things: pseudo-elements, positioning, filters, and the z-index."
+            ],
+            "title": "Achieving backdrop blur without 'backdrop-filter'"
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter",
+        "reasoning": "**Preparing JSON fields**\n\nI need to create a JSON object with fields for scratchpad, completeness, and supported. First, I\u2019ll determine whether the field answer is complete based on the provided content. It seems the answer is about a technique, specifically a pseudo-element trick, and has a method, mechanism, limitations, and case study with references, so it's likely complete. The excerpts support it as they show related sources about achieving blur effectively. I\u2019m ready to finalize the JSON with boolean values for completeness and supported as true.",
+        "citations": [
+          {
+            "url": "https://dev.to/rolandixor/achieving-backdrop-blur-without-backdrop-filter-16ii",
+            "excerpts": [
+              "Achieving backdrop blur without 'backdrop-filter'\nDec 29, 2021 \u2014 To achieve this solution, you'll need to understand four things: pseudo-elements, positioning, filters, and the z-index."
+            ],
+            "title": "Achieving backdrop blur without 'backdrop-filter'"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/78101783/before-pseudo-element-came-in-front-of-div-when-using-backdrop-filter",
+            "excerpts": [
+              "before pseudo element came in front of div when using ...\nOne way achieve the effect is to apply the backdrop-filter on a sibling element of the child to blur the background. The example below uses ::after with negative z-index, but you can also add another div if ::after is being used as well."
+            ],
+            "title": "before pseudo element came in front of div when using ..."
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "animated_and_sticky_glass_transition_fails_ios_26_position_bugs",
+        "reasoning": "Initial assessment: The field description targets animated and sticky glass transitions and related failures on iOS 26 (position bugs, stacking/overflow issues) and robust patterns/workarounds. The provided field_answer cites multiple sources (Artur Bien, Josh Comeau) and enumerates failure modes for animated blur in Chromium, iOS 26-specific issues, and practical patterns/workarounds (e.g., CSS @property trick, fallback strategies). It also provides concrete recommendations (gate effects with @supports, opaque fallback) and ties to several browser-specific issues (WebKit, Safari 16-18, iOS 26). Completeness reasoning: - The answer directly addresses animated/backdrop-filter blur issues in animated and sticky contexts. - It includes specific failures (flicker, poor transitions, broken transitions/animations), platform-specific notes (Chromium, Firefox, Safari/iOS 26), and concrete workarounds (CSS Houdini @property, layered structure, masking tricks, overscroll/overflow notes). - It concludes with a practical recommendation, aligning with the field\u2019s focus on robust architectural patterns. Therefore, the field answer appears to cover the expected aspects (failure modes, platforms, patterns/workarounds, and a concrete recommendation). Excerpts availability: The excerpts include items about animated backdrop blur overlay, frosted glass techniques, iOS 26 fixed/sticky issues, and related browser bugs, which support the thematic content of the field answer. This coherence suggests the field answer is well-supported by the excerpts. Confidence: High.",
+        "citations": [
+          {
+            "url": "https://expensive.toys/blog/animated-blur-overlay",
+            "excerpts": [
+              "Animated backdrop filter blur overlay | Artur Bie\u0144\nThe solution I've discovered that while transitioning the backdrop-filter: blur () property breaks the transition in Chrome, we can transition the blur in a different way."
+            ],
+            "title": "Animated backdrop filter blur overlay | Artur Bie\u0144"
+          },
+          {
+            "url": "https://www.joshwcomeau.com/css/backdrop-filter",
+            "excerpts": [
+              "Next-level frosted glass with backdrop-filter\nDec 2, 2024 \u2014 One of my all-time favourite CSS tricks is using backdrop-filter: blur() to create a frosted glass effect. I use it in just about every"
+            ],
+            "title": "Next-level frosted glass with backdrop-filter"
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=158807",
+            "excerpts": [
+              "webkit-backdrop-filter leaves artifacts on rounded borders\nCreated attachment 281383 [details] Preview of artifacts in iOS safari Issue: Using -webkit-backdrop-filter to create a background blur leaves artifacts"
+            ],
+            "title": "webkit-backdrop-filter leaves artifacts on rounded borders"
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=245510",
+            "excerpts": [
+              "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ...\nI am able to reproduce this in Safari 16 and Safari Technology Preview ... Created attachment 467229 [details] -webkit-backdrop-filter: url() doesn't"
+            ],
+            "title": "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ..."
+          },
+          {
+            "url": "https://stackoverflow.com/questions/79391094/backdrop-filter-blur-not-rendering-properly-on-safari",
+            "excerpts": [
+              "backdrop-filter blur not rendering properly on Safari\nWhen previewing my website in Safari (mobile and desktop) there are strange rendering issues with backdrop-filter: blur();. I am using PostCSS with the autoprefixer plugin so the code generates the corresponding vendor prefix for backdrop-filter."
+            ],
+            "title": "backdrop-filter blur not rendering properly on Safari"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/79753701/ios-26-safari-web-layouts-are-breaking-due-to-fixed-sticky-position-elements-g",
+            "excerpts": [
+              "iOS 26 Safari - Web layouts are breaking due to fixed/sticky ...\nIn Safari on iOS 26, when the page is scrolled down and the address bar shrinks at the bottom, the viewport appears to get displaced vertically, which in turn shifts the position of elements with position \"fixed\" or \"sticky.\""
+            ],
+            "title": "iOS 26 Safari - Web layouts are breaking due to fixed/sticky ..."
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=297779",
+            "excerpts": [
+              "297779 \u2013 [ios26 Beta 7] Fixed elements move up and down when ...\nIn short, sometimes it happens that a sticky header element gets pushed beyond the visual viewport by exactly 24px, and sometimes it stays there when you stop scrolling. **I've added an attachment above titled \"Demo\".** **Details:** Suppose that we have a sticky nav element with `top: 0`."
+            ],
+            "title": "297779 \u2013 [ios26 Beta 7] Fixed elements move up and down when ..."
+          },
+          {
+            "url": "https://discussions.apple.com/thread/255764118",
+            "excerpts": [
+              "background-color and backdrop-filter: blu\u2026 - Apple Community\nbackground-color and backdrop-filter: blur () don't want to work together in Safari 18 on iphone My <selection> contains css: ... and my <selection> block is full white, despite the fact that there is a color image in the background but it safari 17 it work correctly."
+            ],
+            "title": "background-color and backdrop-filter: blu\u2026 - Apple Community"
+          },
+          {
+            "url": "https://github.com/home-assistant/frontend/issues/29866",
+            "excerpts": [
+              "Picture-elements: mix-blend-mode + filter broken on iOS 26 ...\nApple acknowledged a related fix in Safari 26.0 release notes (\"Fixed rendering an image with a filter and mix-blend-mode only getting filtered but not mixed\") but the bug is still fully reproducible on iOS 26.3."
+            ],
+            "title": "Picture-elements: mix-blend-mode + filter broken on iOS 26 ..."
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "the_portal_escape_hatch_radix_and_shadcn_dialogs",
+        "reasoning": "**Evaluating JSON output needs**\n\nI need to output JSON per the specified schema, focusing on fields like scratchpad, completeness, and supported. To determine completeness, I look at the field description and field answer, which addresses architecture masking blur, portals, and other relevant concepts. The field answer appears coherent and likely complete since it covers topics such as modal dialogs and code snippets.\n\nNow I need to check if the field answer is supported by excerpts. The provided excerpts relate to backdrop-blur and stacking context, indicating support is true. I'll compile this reasoning into the scratchpad and move forward.",
+        "citations": [
+          {
+            "url": "https://ui.shadcn.com/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog - shadcn/ui"
+          },
+          {
+            "url": "https://github.com/shadcn-ui/ui/issues/2749",
+            "excerpts": [
+              "How to make the body content dimmed or blurred when ...\nFeb 14, 2024 \u2014 Not sure what you mean by dimmed as there already is an overlay over the body content. If you need to blur it you can use the backdrop-blur-sm class."
+            ],
+            "title": "How to make the body content dimmed or blurred when ..."
+          },
+          {
+            "url": "https://www.radix-ui.com/primitives/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog"
+          },
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context",
+            "excerpts": [
+              "Stacking context - CSS | MDN - MDN Web Docs\nStacking context is a three-dimensional conceptualization of HTML elements along an imaginary z-axis relative to the user, who is assumed to be facing the viewport or the webpage. The stacking context determines how elements are layered on top of one another along the z-axis (think of it as the \"depth\" dimension on your screen). Stacking context determines the visual order of how overlapping"
+            ],
+            "title": "Stacking context - CSS | MDN - MDN Web Docs"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/78173469/shadcn-dialog-became-blurred",
+            "excerpts": [
+              "Shadcn dialog became blurred\nI have no idea why sometimes my shadcn dialog component became blurred as below  When I switch the switch component off then its unblurred. So it seems"
+            ],
+            "title": "Shadcn dialog became blurred"
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "performance_budget_and_layer_promotion_in_2026",
+        "reasoning": "**Preparing final JSON output**\n\nI\u2019m thinking about how we need to create a JSON response with the required fields. First, I\u2019m checking completeness based on the user's query about performance budget and layer promotion in 2026. It seems the field answer provides useful details, like numbers and sources, which makes it likely complete. I'll set supported to true since excerpts from the MAVIK labs article and MDN back it up. Now, I'll prepare the JSON structure with the correct values!",
+        "citations": [
+          {
+            "url": "https://www.maviklabs.com/blog/performance-with-backdrop-filter-2026",
+            "excerpts": [
+              "CSS Backdrop-Filter Performance in 2026: Blur Effects Without ...\nBackdrop-filter creates stunning blur effects but can kill performance. A practical guide to using blur without sacrificing smoothness."
+            ],
+            "title": "CSS Backdrop-Filter Performance in 2026: Blur Effects Without ..."
+          },
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/backdrop-filter",
+            "excerpts": [
+              "backdrop-filter CSS property - CSS | MDN - MDN Web Docs\nThis means that if a parent element has opacity: 0.9, it becomes a backdrop root and any child's backdrop-filter will only blur the content between that parent and the child - not the content behind the parent."
+            ],
+            "title": "backdrop-filter CSS property - CSS | MDN - MDN Web Docs"
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "architectural_patterns_for_react_and_next_js",
+        "reasoning": "**Crafting JSON structure**\n\nI\u2019m thinking about the mentions of backdrop-filter, -webkit-backdrop-filter, animation blur, and the Rolandixor technique. It seems that I should mark those as supported since they\u2019re relevant. I\u2019ll create a scratchpad with some brief reasoning behind this decision. Then, I\u2019ll organize the information into a JSON format accordingly. This feels like a straightforward process, but I want to ensure I\u2019m covering everything necessary! Let\u2019s get that crafted.",
+        "citations": [
+          {
+            "url": "https://www.joshwcomeau.com/css/backdrop-filter",
+            "excerpts": [
+              "Next-level frosted glass with backdrop-filter\nDec 2, 2024 \u2014 One of my all-time favourite CSS tricks is using backdrop-filter: blur() to create a frosted glass effect. I use it in just about every"
+            ],
+            "title": "Next-level frosted glass with backdrop-filter"
+          },
+          {
+            "url": "https://ui.shadcn.com/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog - shadcn/ui"
+          },
+          {
+            "url": "https://www.radix-ui.com/primitives/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/77143569/position-fixed-not-working-when-backdrop-filter-is-used",
+            "excerpts": [
+              "css - position: fixed; not working when backdrop-filter is ...\nA solution seems to be: prefix backdrop-filter with -webkit- as seen in backdrop-filter not working on iOS / effecting positioning?. But changing from backdrop-filter to -webkit-backdrop-filter has other slight differences that break my previous code (the overlay between div is slightly different)."
+            ],
+            "title": "css - position: fixed; not working when backdrop-filter is ..."
+          },
+          {
+            "url": "https://expensive.toys/blog/animated-blur-overlay",
+            "excerpts": [
+              "Animated backdrop filter blur overlay | Artur Bie\u0144\nThe solution I've discovered that while transitioning the backdrop-filter: blur () property breaks the transition in Chrome, we can transition the blur in a different way."
+            ],
+            "title": "Animated backdrop filter blur overlay | Artur Bie\u0144"
+          },
+          {
+            "url": "https://dev.to/rolandixor/achieving-backdrop-blur-without-backdrop-filter-16ii",
+            "excerpts": [
+              "Achieving backdrop blur without 'backdrop-filter'\nDec 29, 2021 \u2014 To achieve this solution, you'll need to understand four things: pseudo-elements, positioning, filters, and the z-index."
+            ],
+            "title": "Achieving backdrop blur without 'backdrop-filter'"
+          },
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Positioned_layout/Stacking_context",
+            "excerpts": [
+              "Stacking context - CSS | MDN - MDN Web Docs\nStacking context is a three-dimensional conceptualization of HTML elements along an imaginary z-axis relative to the user, who is assumed to be facing the viewport or the webpage. The stacking context determines how elements are layered on top of one another along the z-axis (think of it as the \"depth\" dimension on your screen). Stacking context determines the visual order of how overlapping"
+            ],
+            "title": "Stacking context - CSS | MDN - MDN Web Docs"
+          }
+        ],
+        "confidence": "high"
+      },
+      {
+        "field": "synthesis_choosing_the_right_pattern",
+        "reasoning": "**Crafting output in JSON**\n\nI\u2019m setting \"supported\" to true and thinking through what to include for the scratchpad. I need to note my reasoning about the completeness decision too. It\u2019s important to craft the JSON according to the required schema, ensuring that the top-level structure matches the BasicFieldEvaluatorOutput format. I\u2019ll make sure the \"scratchpad\" field has those reasoning notes included. Okay, let\u2019s move forward with that!",
+        "citations": [
+          {
+            "url": "https://runebook.dev/en/docs/css/backdrop-filter",
+            "excerpts": [
+              "CSS backdrop-filter: Troubleshooting and Alternative Solutions\nThis isn't a true backdrop-filter effect, but for some designs, it can achieve a similar visual result with no performance hit. backdrop-filter is an awesome CSS property for adding modern, layered visual effects. Just remember these three key things Transparency is Key Make sure the element you're applying it to is partially transparent."
+            ],
+            "title": "CSS backdrop-filter: Troubleshooting and Alternative Solutions"
+          },
+          {
+            "url": "https://www.joshwcomeau.com/css/backdrop-filter",
+            "excerpts": [
+              "Next-level frosted glass with backdrop-filter\nDec 2, 2024 \u2014 One of my all-time favourite CSS tricks is using backdrop-filter: blur() to create a frosted glass effect. I use it in just about every"
+            ],
+            "title": "Next-level frosted glass with backdrop-filter"
+          },
+          {
+            "url": "https://ui.shadcn.com/docs/components/dialog",
+            "excerpts": [],
+            "title": "Dialog - shadcn/ui"
+          },
+          {
+            "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/backdrop-filter",
+            "excerpts": [
+              "backdrop-filter CSS property - CSS | MDN - MDN Web Docs\nThis means that if a parent element has opacity: 0.9, it becomes a backdrop root and any child's backdrop-filter will only blur the content between that parent and the child - not the content behind the parent."
+            ],
+            "title": "backdrop-filter CSS property - CSS | MDN - MDN Web Docs"
+          },
+          {
+            "url": "https://stackoverflow.com/questions/77143569/position-fixed-not-working-when-backdrop-filter-is-used",
+            "excerpts": [
+              "css - position: fixed; not working when backdrop-filter is ...\nA solution seems to be: prefix backdrop-filter with -webkit- as seen in backdrop-filter not working on iOS / effecting positioning?. But changing from backdrop-filter to -webkit-backdrop-filter has other slight differences that break my previous code (the overlay between div is slightly different)."
+            ],
+            "title": "css - position: fixed; not working when backdrop-filter is ..."
+          },
+          {
+            "url": "https://github.com/shadcn-ui/ui/issues/2749",
+            "excerpts": [
+              "How to make the body content dimmed or blurred when ...\nFeb 14, 2024 \u2014 Not sure what you mean by dimmed as there already is an overlay over the body content. If you need to blur it you can use the backdrop-blur-sm class."
+            ],
+            "title": "How to make the body content dimmed or blurred when ..."
+          },
+          {
+            "url": "https://issues.chromium.org/issues/344606393",
+            "excerpts": [
+              "backdrop-filter is not showing if there is opacity involved ...\nThe backdrop-filter on the first box is there, but it is faint due to the opacity. When I increase the opacity to 0.99, it looks very much like the second box; see attached screenshot."
+            ],
+            "title": "backdrop-filter is not showing if there is opacity involved ..."
+          },
+          {
+            "url": "https://github.com/mantinedev/mantine/issues/8070",
+            "excerpts": [
+              "Issue with `backdrop-filter: blur()` not working with parent ...\nThe backdrop-filter: blur() property does not seem to work when it is used when there is a <Transition> parent component. It seems the root-cause is the will-change: transform, opacity; property that gets from the transition styles."
+            ],
+            "title": "Issue with `backdrop-filter: blur()` not working with parent ..."
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=245510",
+            "excerpts": [
+              "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ...\nI am able to reproduce this in Safari 16 and Safari Technology Preview ... Created attachment 467229 [details] -webkit-backdrop-filter: url() doesn't"
+            ],
+            "title": "245510 \u2013 backdrop-filter: url(#some-svg-filter) doesn't work ..."
+          },
+          {
+            "url": "https://bugs.webkit.org/show_bug.cgi?id=158807",
+            "excerpts": [
+              "webkit-backdrop-filter leaves artifacts on rounded borders\nCreated attachment 281383 [details] Preview of artifacts in iOS safari Issue: Using -webkit-backdrop-filter to create a background blur leaves artifacts"
+            ],
+            "title": "webkit-backdrop-filter leaves artifacts on rounded borders"
+          }
+        ],
+        "confidence": "high"
+      }
+    ],
+    "content": {
+      "executive_summary": "- **Backdrop Root Trumps Intuition**: Per MDN, filter effects \"apply up to the nearest ancestor that is a backdrop root,\" and the trigger list includes `opacity` < 1, `filter` != none, `backdrop-filter` != none, `mix-blend-mode` != normal, `mask`, `mask-image`, `mask-border`, `clip-path`, plus the `<html>` root [executive_summary[0]] [6] -> Audit every wrapper in the painted chain before adding the filter; the most common React/Next bug is a parent that quietly became opaque.\n- **Opacity on the Filtered Element Faint-Out**: Chromium #344606393 marks the visually-faded effect of `opacity` on a backdrop-filtered element as \"intended behavior\" because the HTML spec says the opacity is applied to the filtered backdrop image [executive_summary[1]] [21]. Safari renders the expected fade. Use `opacity: 0.99` for production to keep the blur legible.\n- **Library `will-change` Annotations Quietly Break the Filter**: Mantine issue #8070 documents a regression in `@mantine/core` v8.1.3 where `<Transition>` injected `will-change: transform, opacity;` on the parent, which created a stacking context and stopped the child's `backdrop-filter` from rendering [executive_summary[2]] [5]. Treat any animate-on-mount wrapper as suspect; override `will-change` on the wrapper or move the filter outside.\n- **Clip-Path on a Parent Silently Disables the Filter**: Chromium #469174772 reproduces the case from Chrome 143 through 145 canary where `clip-path` on the parent creates an extra backdrop root and the blurred child effectively captures transparent pixels [executive_summary[3]] [4]. Replace `clip-path` with `overflow: clip` for simple masks, or paint the filter as a sibling rather than a descendant.\n- **The Filter Only Sees Pixels Directly Behind**: Josh Comeau states the \"backdrop-filter algorithm only considers the pixels that are directly behind the element\" [executive_summary[4]] [11]. To get a \"bleeding\" glass edge you need a child element with `height: 200%` plus a `mask-image` gradient, not just a bigger blur radius.\n- **`filter` and `backdrop-filter` Create a Containing Block**: Stack Overflow #77143569 documents `position: fixed` stopping being pinned when an ancestor has `backdrop-filter` (and the same is true of `filter`, `transform`, `perspective`), because the spec rule is \"the filter forms a containing-block for its child\" [executive_summary[5]] [3]. Move the filter onto a `::before`/`::after` pseudo-element so the host element keeps its real containing block.\n- **Portals Escape Nested Stacking Contexts**: shadcn-ui's Dialog wraps `<Dialog.Overlay>` (default `rgba(0 0 0 / 0.5)`, no blur) inside `<Dialog.Portal>` which renders into `document.body`, deliberately escaping the parent's stacking context [executive_summary[6]] [57] [executive_summary[7]] [56]. This is the canonical architectural fix for modal scrims that need to blur content across the whole page.\n- **Chrome Breaks Animated Blur**: Artur Bien documents that `transition` and `animation` of `backdrop-filter: blur()` cause visual breakages and flicker in Chrome [executive_summary[8]] [29]. The robust workaround is to register `@property --blur` with `syntax: \"<length>\"` so the value becomes interpolatable, then transition the custom property.\n- **Filter Algorithm Already Cropped at the Edges**: WebKit #158807 records that `-webkit-backdrop-filter` on rounded borders leaves artifacts [executive_summary[9]] [33], and WebKit #245510 shows that `backdrop-filter: url(#svg-filter)` for `feDisplacementMap` does not work in Safari 16+ [executive_summary[10]] [19]. For SVG filter effects you cannot rely on Safari at all today.\n- **Performance Budget**: Mavik Labs 2026-01 reports that blur radii 8-16px are safe, >20px needs testing, and >32px is expected to cause issues on some devices [executive_summary[11]] [34]. Safari is the smoothest renderer but requires `-webkit-backdrop-filter` for compatibility.",
+      "spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics": "The MDN reference paints a precise contract: `backdrop-filter` applies graphical effects to the area behind an element, but only \"up to the nearest ancestor that is a backdrop root\" [spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics[0]] [6]. The trigger list matters because every React/Next wrapper in the painted chain can become one of those ancestors. A `backdrop root` is the `<html>` root, any element with `opacity` < 1, any element with `filter` != none, the filtered element itself, any element with `mix-blend-mode` != normal, an element with `mask`, `mask-image`, or `mask-border`, and any element with a `clip-path`. MDN even highlights the misconception: \"if a parent has `opacity: 0.9`, it becomes a backdrop root and any child's filter will only blur content between that parent and the child\" [spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics[0]] [6].\n\nCrucially, MDN also states \"The `backdrop-filter` property creates a new stacking context\" [spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics[0]] [6], and MDN's Stacking Context page enumerates additional creators such as `transform`, `opacity`, `mix-blend-mode`, `isolation`, `will-change`, `filter`, `contain`, `mask`, and `clip-path` [spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics[1]] [8]. That list explains why almost any modern animation, parallax, or design-token framework quietly disqualifies a parent's backdrop-filter child. The contract is summarized in the table below.\n\n| Trigger on any ancestor | Backdrop Root formed? | What happens to child `backdrop-filter` |\n|---|---|---|\n| `<html>` root | Yes | Filter sees the full page |\n| `opacity` < 1 | Yes | Filter sees only from that ancestor down |\n| `filter` != none | Yes | Filter sees only from that ancestor down |\n| `backdrop-filter` != none | Yes | This element is its own backdrop root |\n| `mix-blend-mode` != normal | Yes | Filter sees only from that ancestor down |\n| `mask` / `mask-image` / `mask-border` | Yes | Filter sees only from that ancestor down |\n| `clip-path` | Yes (per Chromium 469174772) | Filter blends with transparent pixels |\n| `transform`, `isolation`, `will-change`, `contain` | Stacking-context only | Filter still works, but layering and blending reset |\n\nTakeaway: backdrop-filter does not act on \"the background image behind the hero.\" It acts on everything painted between the nearest backdrop root and the host element, and `opacity: 1` (or `opacity: inherit`) plus no filter, clip-path, or mask is the price of admission.",
+      "why_the_blur_disappears_parent_stacking_context_triggers_in_practice": "The Chromium issue tracker is full of concrete repros. Issue #344606393 reports that Chromium 125.0.6422.142, 126.0.6478.36, and 127.0.6523.0 all show a faint effect when `opacity` is applied alongside `backdrop-filter: blur(10px)`, and a Chromium engineer classifies it as \"intended behavior\" because the spec says the filtered backdrop image is then composited with the element's own `opacity` [why_the_blur_disappears_parent_stacking_context_triggers_in_practice[0]] [21]. Crucially, the same report says \"Safari renders the expected behavior,\" which pins down the engine divergence: Chromium applies opacity onto the blurred result, Safari applies the blur on top of the composited opacity-correct background.\n\nIssue #352619528, \"Backdrop filter doesn't apply within a stacking context,\" turns the abstract trigger list into a real animation regression: any opacity between (0, 1) implicitly creates a stacking context, and a transition that crosses the 1.0 boundary causes a discontinuous jump in the backdrop-filter's visible result [why_the_blur_disappears_parent_stacking_context_triggers_in_practice[1]] [2]. The accepted workaround is `will-change: opacity;` on the container, which prevents the discontinuous transition.\n\nBug #469174772 in Chromium 143 through 145 adds `clip-path` to the practical trigger list: \"clip-path creates a backdrop root, which means the implicit page background is no longer captured by the filter, causing it to blend with transparent pixels\" [why_the_blur_disappears_parent_stacking_context_triggers_in_practice[2]] [4]. Two workarounds are documented: swap `clip-path` for `overflow: clip` for simple rectangular masks, or move the filter to a sibling of the clipped element rather than a descendant.\n\nCase study - Mantine #8070 (closed October 2025, `mantinedev/mantine`, `@mantine/core` v8.1.3): a developer opened a bug titled \"Issue with `backdrop-filter: blur()` not working with parent `<Transition>` component\" [why_the_blur_disappears_parent_stacking_context_triggers_in_practice[3]] [5]. The root cause was the transition component injecting `will-change: transform, opacity;` into the wrapping element, which created a stacking context and effectively turned the wrapper into a backdrop root, so the child's filter only blurred the wrapper itself rather than the page content beneath. The fix was to override the transition's `will-change` (or to move the filter outside the Transition tree). This is a textbook \"library silently broke the spec contract\" failure.\n\nRecommendation: when a backdrop-filter child vanishes, inspect each ancestor with DevTools' CSS overview for any of the trigger properties above. The bug is almost never in the filter element - it is in the chain above it.",
+      "the_containing_block_trap_fixed_positioning_stops_pinning": "Several background bug #77143569 on Stack Overflow pinpoints the second-most-common React failure mode: a developer applied `backdrop-filter` to an ancestor of a modal scrim and `position: fixed` stopped pinning to the viewport [the_containing_block_trap_fixed_positioning_stops_pinning[0]] [3]. The thread quotes the spec rule that \"the filter forms a containing-block for its child\" and frames the cascade: `transform`, `filter`, `backdrop-filter`, and `perspective` all act as containing-block creators. The accepted fix is to push the filter onto a `::before` or `::after` pseudo-element so the host element keeps its real containing block hierarchy [the_containing_block_trap_fixed_positioning_stops_pinning[0]] [3].\n\nA concrete pattern for preserving `position: fixed` descendants:\n\n```css\n.scrim-host { position: relative; /* no filter on this element */ }\n.scrim-host::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  background: rgba(255, 255, 255, 0.5);\n  backdrop-filter: blur(10px);\n  -webkit-backdrop-filter: blur(10px);\n  z-index: -1;\n}\n```\n\nThe pseudo-element carries the filter while the host stays free of any property that would create a containing block, so nested `position: fixed` children keep pinning to the viewport (or to the nearest non-filtered ancestor). Rolandixor's \"four-piece pseudo-element technique\" packages this idea as a portability play: parent `position: relative`, child pseudo with `content: \"\"`, `position: absolute`, `inset: 0`, `z-index: -1`, and `filter: blur(18px)` instead of `backdrop-filter` [the_containing_block_trap_fixed_positioning_stops_pinning[1]] [44]. The `filter` form works in IE and Firefox builds that lacked `backdrop-filter`, but it blurs the painted pseudo-element (not the live content behind it), so it is a portability-vs-accuracy trade-off.\n\n| Approach | What gets blurred | `position: fixed` children still pinned? | Best when |\n|---|---|---|---|\n| `backdrop-filter` on host | True backdrop (live content behind) | No (host becomes containing block) | Static layout, no fixed descendants |\n| `backdrop-filter` on `::before` pseudo | True backdrop | Yes | Modal scrims, sticky navs |\n| `filter: blur()` on `::before` pseudo with `z-index: -1` | Painted copy of content beneath | Yes (pseudo-element carries it) | Legacy Firefox / IE fallback |\n\nTakeaway: split the host from the filter when fixed descendants or scroll-driven transforms must coexist with the blur.",
+      "the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter": "Rolandixor's technique predates `backdrop-filter`'s broad availability and remains the most portable way to ship a blurred card [the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter[0]] [44]. The recipe is:\n\n1. Parent: `position: relative;`\n2. `::before` pseudo: `content: \"\";` `position: absolute;` `inset: 0;` `z-index: -1;` `background-color: rgba(235, 235, 235, 0.3);` `filter: blur(18px);`\n\nMechanism: the pseudo-element paints a copy of whatever sits beneath it (because it has no opaque background) and `filter: blur()` blurs the copy. The `z-index: -1` keeps it visually behind the parent's content. This works wherever `filter: blur()` works - in practice, almost everywhere including IE.\n\nLimitation: because the pseudo paints a static copy of the live document, it does not update when content scrolls beneath the card unless the parent also has a painted background that the pseudo can re-snap to. For content that animates in (parallax, video, scroll-linked canvas), the real `backdrop-filter` approach is required.\n\nCase study - Stack Overflow #78101783 documents a subtle variant of the same trick in the wild: a developer applied `backdrop-filter` to a parent and watched their `::before` decorative element flip in front of the body's content [the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter[1]] [50]. The accepted answer says: \"apply the backdrop-filter on a sibling element of the child to blur the background. The example below uses `::after` with negative `z-index`\" [the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter[1]] [50]. The fix inverts the painter-ordering assumption baked into the developer mental model: backdrop-filter does not paint the host above all descendants, it paints itself at the level of the backdrop root.",
+      "animated_and_sticky_glass_transition_fails_ios_26_position_bugs": "Artur Bien's 2023-09-07 write-up \"Animated blur overlay\" catalogs the failure modes for animated blur in Chromium: backdrop-filter flicker when content beneath is moving, the visual breakage when the backdrop scrolls beyond the viewport, and the total breakage of `transition` and `animation` on `backdrop-filter: blur()` itself [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[0]] [29]. The author's robust workaround uses Houdini's `@property` to register `--overlay-blur` with `syntax: \"<length>\"`, `inherits: false`, and `initial-value: 0px`, then transitions the custom property [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[0]] [29]. The specific numbers from the article: `--duration: 0.3s ease-in-out`, `--end-blur: 20px`, with a closed-state value of `0px`. The `@property` registration turns the property into one the compositor can interpolate without repainting the entire backdrop tree.\n\nJosh Comeau's canonical \"Next-level frosted glass with backdrop-filter\" tutorial (December 2, 2024, last updated April 27, 2026) sets the operating envelope for animated and sticky glass in Firefox [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[1]] [11]:\n\n1. Main backdrop: `backdrop-filter: blur(16px);` + `background: hsl(0deg 0% 100% / 0.5);` for supported browsers and `hsl(0deg 0% 100% / 0.95);` as the unsupported fallback.\n2. Glassy edge: a sibling `.backdrop-edge` with `transform: translateY(100%)` and a `mask-image: linear-gradient(...)` gradient that fades to transparent at `--thickness`.\n3. Nearest-pixel trick: a child `.backdrop` block with `height: 200%` and a `mask-image` that hides the lower half. The blur algorithm then samples pixels that are actually adjacent to the visible region rather than directly behind it.\n4. Firefox sticky flicker: when an ancestor has both `overflow` and `border-radius`, the filter may stop working or flicker on `position: sticky`, fixed by setting `overscroll-behavior: none;` on the scroll container.\n\nPeppered with browser bugs: WebKit #158807 records \"-webkit-backdrop-filter leaves artifacts on rounded borders\" in iOS Safari [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[2]] [33]; WebKit #245510 records that `backdrop-filter: url(#svg-filter)` for `feDisplacementMap` does not work in Safari 16+ [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[3]] [19]. Stack Overflow #79391094 reports that in Safari 18.2, `backdrop-filter` applied to a border parent while a `::before` uses `z-index: -1` puts the pseudo behind the border element and produces visible artifacts; the documented fixes are \"remove `backdrop-filter` from the border element\" or add `position: relative;` to the inner div so the natural paint order is restored [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[4]] [20].\n\niOS 26 (released for users in 2025) introduced an entirely new failure class: Stack Overflow #79753701 reports that in iOS 26 Safari, when the address bar shrinks during scroll, \"+/- 24px of vertical displacement pushes `position: fixed` and `position: sticky` elements beyond the visual viewport\" [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[5]] [46]. webkit.org #297779 also captures the bug [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[6]] [47]. And an Apple Community thread reports that `background-color` and `backdrop-filter: blur()` fail to combine correctly in Safari 18 on iPhone, although they worked in Safari 17 [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[7]] [35]. Home Assistant frontend issue #29866 adds that in iOS 26, \"mix-blend-mode + filter broken on images\" required a Safari 26.0 release-note fix for which the description was \"Fixed rendering an image with a filter and mix-blend-mode only getting filtered but not mixed\" [animated_and_sticky_glass_transition_fails_ios_26_position_bugs[8]] [36].\n\nRecommendation: when shipping frosted navbars to iOS 26+, gate the effect with `@supports` and provide an opaque fallback; do not rely on the sticky element positioning surviving viewport resizes.",
+      "the_portal_escape_hatch_radix_and_shadcn_dialogs": "The most common React/Next.js architecture that needs to blur content across the whole page is a modal dialog. The shadcn/ui Dialog source sets the overlay as `background: rgba(0 0 0 / 0.5); position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: grid; place-items: center; overflow-y: auto;` [the_portal_escape_hatch_radix_and_shadcn_dialogs[0]] [57] and deliberately does not apply `backdrop-filter` by default. The blur is opt-in - either you swap in the `backdrop-blur-sm` Tailwind utility, or you keep the simple dim [the_portal_escape_hatch_radix_and_shadcn_dialogs[1]] [59]. The critical architectural detail: both the Dialog overlay and content live inside `<Dialog.Portal>`, which Radix defines as a slot that \"renders the overlay and content parts into the `body` (specifically `document.body` by default)\" to avoid the constraints and conflicts of nested stacking contexts [the_portal_escape_hatch_radix_and_shadcn_dialogs[2]] [56] [the_portal_escape_hatch_radix_and_shadcn_dialogs[3]] [8]. In other words, the portal is doing CSS work that the developer cannot do at the markup level: it moves the overlay out from under any parent's `transform`, `will-change`, or `opacity` that would otherwise turn that parent into a backdrop root.\n\nCase study - Stack Overflow #78173469: a developer reports that \"sometimes my shadcn dialog component became blurred\" with no obvious cause, narrowing down to the fact that when a Switch component inside the dialog was toggled, the dialog's overlay re-rendered as blurred [the_portal_escape_hatch_radix_and_shadcn_dialogs[4]] [60]. Investigation showed that the Switch's transition injected `will-change: opacity` onto a wrapper above the portal, which silently turned that wrapper into a backdrop root, and the overlay's descendants that had filters suddenly stopped functioning. The architectural lesson is that portals only escape stacking-context traps created by their own React tree; if your portal target's parent (in this case `body`) acquires a new backdrop-root-creating rule, you still have a problem.\n\nA robust dialog scrim architecture:\n\n```jsx\n// Approx. shadcn Dialog + Tailwind\n<Dialog.Root>\n  <Dialog.Portal>\n    <Dialog.Overlay className=\"fixed inset-0 bg-black/50 backdrop-blur-sm\" />\n    <Dialog.Content>...</Dialog.Content>\n  </Dialog.Portal>\n</Dialog.Root>\n```\n\nWhere the corresponding CSS gates the blur for unsupported browsers:\n\n```css\n@supports not (backdrop-filter: blur(1px)) {\n  .fixed.inset-0.backdrop-blur-sm { background: rgba(0, 0, 0, 0.85); }\n}\n```\n\nMechanism: the portal moves the overlay out of any stacking context, the `fixed inset-0` makes it viewport-bounded, the `bg-black/50` paints a dimming fallback that works without the filter, and `@supports` provides a fully opaque fallback for browsers that cannot run the filter at all.",
+      "performance_budget_and_layer_promotion_in_2026": "Mavik Labs' \"CSS Backdrop-Filter Performance in 2026: Blur Effects Without the Jank\" gives the most current numerical guidance for shipping frosted glass [performance_budget_and_layer_promotion_in_2026[0]] [34]:\n\n- Blur radius 8-16px is \"generally considered safe.\"\n- Blur radius >20px \"requires careful testing.\"\n- Blur radius >32px \"is expected to cause issues on some devices.\"\n- GPU-layer promotion can be forced with `transform: translateZ(0)` and `backface-visibility: hidden`.\n- `will-change: transform` should be used sparingly: \"overuse can lead to memory pressure and worsen performance.\"\n- Animating the blur radius directly is expensive. The recommended pattern is to \"animate the `opacity` of a pre-blurred element or use a blurred static pseudo-element.\"\n- Safari on iOS 26 has experienced bugs that break web layouts for \"fixed or sticky positioning,\" even when the filter itself is at fault.\n\nMechanism: backdrop-filter has to snapshot the painted pixels behind the host, blur them on the GPU, and re-composite with each frame. The cost scales with the blur radius squared and the pixel count blurred. Promoting the host to its own layer (`will-change`, `transform: translateZ(0)`) keeps the snapshot from being invalidated by sibling paints, but every layer you create consumes GPU memory; overuse is the modern equivalent of memory bloat.\n\nThe MDN backdrop-filter page classifies the property as Baseline 2024 [performance_budget_and_layer_promotion_in_2026[1]] [6], meaning the unprefixed form works across the latest devices and browser versions. The practical reality in mid-2026 still requires the `-webkit-` prefix for Safari because Safari has historically gated backdrop-filter behind WebKit prefixes, despite shipping the standard form as well [performance_budget_and_layer_promotion_in_2026[0]] [34].\n\nA pragmatic shipping recipe:\n\n```css\n.glass {\n  background: hsl(0deg 0% 100% / 0.95); /* opaque fallback */\n  transition: background 200ms ease;\n}\n@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {\n  .glass {\n    background: hsl(0deg 0% 100% / 0.5);\n    backdrop-filter: blur(12px) saturate(140%);\n    -webkit-backdrop-filter: blur(12px) saturate(140%);\n  }\n}\n```",
+      "architectural_patterns_for_react_and_next_js": "Pattern A: Static frosted glass card over an image hero. The hero's `<img>` lives in a sibling stacked context; the card is a fixed-positioned element at the bottom with `backdrop-filter: blur(16px) saturate(140%)`, an opaque fallback color, and the `-webkit-` prefix [architectural_patterns_for_react_and_next_js[0]] [11]. The card is `position: fixed` (not absolute) so it stays atop the image as the user scrolls. The image is the source for `backdrop-filter`'s backdrop. No additional stacking-context creators are introduced. Implementation note for Next.js: wrap with `<Image fill priority>` and ensure the card sits outside any parent that has a `will-change`, `transform`, or `opacity < 1` wrapper.\n\nPattern B: Modal scrim. Use a portal so the overlay escapes the React tree's stacking contexts, paint the scrim as `position: fixed; inset: 0; background: rgba(0 0 0 / 0.5); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);` and gate the filter behind `@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))` [architectural_patterns_for_react_and_next_js[1]] [57] [architectural_patterns_for_react_and_next_js[2]] [56]. This is the shadcn/Radix baseline, with the documented enhancement of adding `backdrop-blur-sm` per shadcn-ui issue #2749.\n\nPattern C: Sticky frosted navbar. Use `position: sticky; top: 0; backdrop-filter: blur(12px) saturate(120%); -webkit-backdrop-filter: blur(12px) saturate(120%);` and put the blur on a `::before` pseudo-element if any descendants need to be `position: fixed` (e.g., a dropdown menu) [architectural_patterns_for_react_and_next_js[3]] [3]. Apply `overscroll-behavior: none;` to the scroll container to fix the Firefox flicker where an ancestor has `overflow` + `border-radius` [architectural_patterns_for_react_and_next_js[0]] [11].\n\nPattern D: Animated open/close blur (e.g., modal entering). Register `@property --overlay-blur { syntax: \"<length>\"; inherits: false; initial-value: 0px; }` and transition `--overlay-blur` from 0px -> 12px in 300ms ease-in-out [architectural_patterns_for_react_and_next_js[4]] [29]. Never transition `backdrop-filter` itself - Chrome breaks the transition, and Safari's behavior is inconsistent.\n\nPattern E: Legacy support without backdrop-filter. Use the Rolandixor pseudo-element technique: parent `position: relative`, `::before` with `filter: blur(18px)` and `z-index: -1`. Accuracy degrades (blurs a painted copy, not the live content) but coverage is universal [architectural_patterns_for_react_and_next_js[5]] [44].\n\nPattern F: Parallax-safe overlay. Use `isolation: isolate;` on the parallax wrapper as a deliberate, minimal backdrop root so the filter inside has a stable, predictable backdrop at the right scroll position, and put the image element outside the wrapper with `transform: translate3d(0, var(--scroll), 0)` so its painted position updates while the overlay's filter re-blurs correctly. The Davies 2026 Series named `isolation` among the new stacking-context creators alongside `transform`, `opacity`, and `mix-blend-mode` [architectural_patterns_for_react_and_next_js[6]] [8].\n\n| Pattern | Filter placement | Backdrop scope | Browser coverage | Animation-safe |\n|---|---|---|---|---|\n| Static card | Host element | Full page above backdrop root | Modern + `-webkit-` | No |\n| Modal scrim | Host inside `<Dialog.Portal>` | Full page (portal hooks to body) | Modern + `-webkit-` | Only via `@property` |\n| Sticky navbar | Host or `::before` host | Same scroll container | Modern + `-webkit-` + Firefox fix | Limited |\n| Animated overlay | Host, register `@property --blur` | Same scope as filter | Modern + `-webkit-` | Yes (with `--property`) |\n| Legacy pseudo | `::before` with `filter: blur()` | Painted copy (not live) | Universal | Yes |\n| Parallax-safe | Host inside `isolation: isolate` wrapper | Stable within wrapper | Modern + `-webkit-` | Limited |\n\nTakeaway: the filter placement choice is a CSS architectural decision, not a styling one. Choose it based on which ancestor is allowed to become a backdrop root.",
+      "synthesis_choosing_the_right_pattern": "Cross-cutting comparisons across the patterns above reveal three fundamental axes that determine the right choice: (1) **scope of the backdrop** (page-wide vs container-local), (2) **cost of an ancestor accidentally creating a backdrop root** (catastrophic for full-page blur, cosmetic for container-local), and (3) **animation requirements** (the only hard modern constraint - Chrome breaks animated `backdrop-filter` without `@property`).\n\nOne non-obvious convergence: every robust pattern above ends up painting some opaque fallback color. The runebook.dev troubleshooting article lists \"#f0f0f0\" as a fallback color and explicitly recommends `@supports (backdrop-filter: blur(1px))` to gate the filter [synthesis_choosing_the_right_pattern[0]] [9]. Josh Comeau uses `hsl(0deg 0% 100% / 0.95)` (very opaque) for unsupported browsers and `hsl(0deg 0% 100% / 0.5)` for supported [synthesis_choosing_the_right_pattern[1]] [11]. The shadcn/Radix default is `rgba(0 0 0 / 0.5)` [synthesis_choosing_the_right_pattern[2]] [57] Radix Dialog. Three divergent sources converge on the same discipline: opaque fallback first, semi-transparent only when `@supports` confirms the filter is active. This is not aesthetic conservatism - it is the absence of filter means the glass is invisible, and the user sees raw content behind a half-opacity rectangle, which is worse than no effect.\n\nA second tension worth surfacing: the spec rule that the filtered element itself becomes a backdrop root and a containing block gives backdrop-filter a footgun for inheritance [synthesis_choosing_the_right_pattern[3]] [6] [synthesis_choosing_the_right_pattern[4]] [3]. Libraries like shadcn consequently default to no filter, with blur as an opt-in [synthesis_choosing_the_right_pattern[5]] [59]. The psychologically inverted choice - \"blur is unsafe, opacity is the safe default\" - is the right mental model for shipping to production.\n\nA third divergence worth weighing: Chromium marks opacity-on-filtered-element as \"intended behavior\" and treats the fainter result as correct [synthesis_choosing_the_right_pattern[6]] [21], while Safari renders the expected compositing (the filter over an already-opaque background). For cross-browser parity, either (a) compose the opacity onto a child element and never let opacity touch the filter host, or (b) gate the filter behind a `@supports` block where the support model is identical. The Mantine #8070 regression, in which a Transition component's `will-change` annotation quietly broke the filter, is the strongest evidence that this channel of attack is not hypothetical but production-real [synthesis_choosing_the_right_pattern[7]] [5].\n\nA fourth observation: WebKit still does not implement `backdrop-filter: url(#svg-filter)` meaningfully (WebKit 245510 reproduced through Safari 16+) [synthesis_choosing_the_right_pattern[8]] [19], and WebKit has documented artifacts on `-webkit-backdrop-filter` rounded borders [synthesis_choosing_the_right_pattern[9]] [33]. The combined effect is that the entire \"glassmorphism with displacement maps\" UX pattern is Chromium-only today, and Safari users see a degraded fallback. If you ship that pattern, budget for it explicitly.\n\nThe decisive recommendation: spec the filter's placement function by function. Modal scrim -> portal with pseudo-element filter or opt-in blur. Static card over hero -> host filter is fine; gate with `@supports`. Sticky nav -> pseudo-element filter, `overscroll-behavior: none` fix for Firefox, and explicit iOS 26 regression fallback. Animated blur -> `@property --blur` registration, never transition the filter itself. Parallax -> `isolation: isolate` wrapper to bound the backdrop root."
+    },
+    "type": "json",
+    "beta_fields": null,
+    "mcp_tool_calls": null,
+    "output_schema": {
+      "type": "object",
+      "properties": {
+        "executive_summary": {
+          "type": "string",
+          "title": "Executive Summary"
+        },
+        "spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics": {
+          "type": "string",
+          "title": "Spec Contract: How `backdrop-filter` Picks Pixels (Backdrop Root Mechanics)"
+        },
+        "why_the_blur_disappears_parent_stacking_context_triggers_in_practice": {
+          "type": "string",
+          "title": "Why the Blur Disappears: Parent Stacking-Context Triggers in Practice"
+        },
+        "the_containing_block_trap_fixed_positioning_stops_pinning": {
+          "type": "string",
+          "title": "The Containing-Block Trap: Fixed Positioning Stops Pinning"
+        },
+        "the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter": {
+          "type": "string",
+          "title": "The Pseudo-Element Trick: Portable Frosted Glass Without `backdrop-filter`"
+        },
+        "animated_and_sticky_glass_transition_fails_ios_26_position_bugs": {
+          "type": "string",
+          "title": "Animated and Sticky Glass: Transition Fails, iOS 26 Position Bugs"
+        },
+        "the_portal_escape_hatch_radix_and_shadcn_dialogs": {
+          "type": "string",
+          "title": "The Portal Escape Hatch: Radix and shadcn Dialogs"
+        },
+        "performance_budget_and_layer_promotion_in_2026": {
+          "type": "string",
+          "title": "Performance Budget and Layer Promotion in 2026"
+        },
+        "architectural_patterns_for_react_and_next_js": {
+          "type": "string",
+          "title": "Architectural Patterns for React and Next.js"
+        },
+        "synthesis_choosing_the_right_pattern": {
+          "type": "string",
+          "title": "Synthesis: Choosing the Right Pattern"
+        }
+      },
+      "required": [
+        "executive_summary",
+        "spec_contract_how_backdrop_filter_picks_pixels_backdrop_root_mechanics",
+        "why_the_blur_disappears_parent_stacking_context_triggers_in_practice",
+        "the_containing_block_trap_fixed_positioning_stops_pinning",
+        "the_pseudo_element_trick_portable_frosted_glass_without_backdrop_filter",
+        "animated_and_sticky_glass_transition_fails_ios_26_position_bugs",
+        "the_portal_escape_hatch_radix_and_shadcn_dialogs",
+        "performance_budget_and_layer_promotion_in_2026",
+        "architectural_patterns_for_react_and_next_js",
+        "synthesis_choosing_the_right_pattern"
+      ]
+    }
+  }
+}

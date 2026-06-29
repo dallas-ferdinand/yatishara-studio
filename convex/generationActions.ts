@@ -9,6 +9,7 @@ import {
   createVideoTask,
   enhancePrompt,
   generateImage,
+  generateScript as generateScriptWithBytePlus,
   type ImageTier,
 } from "./lib/byteplus";
 
@@ -25,6 +26,9 @@ const createQueuedJobRef = makeFunctionReference<
     aspectRatio?: string;
     resolution?: string;
     durationSeconds?: number;
+    hasReferenceInput?: boolean;
+    hasVideoReferenceInput?: boolean;
+    hasNonVideoReferenceInput?: boolean;
   },
   Id<"generationJobs">
 >("generation:createQueuedJob");
@@ -96,11 +100,80 @@ const failJobRef = internalMutationRef<
   null
 >("generation:failJob");
 
+const chargeTextGenerationRef = publicMutationRef<
+  {
+    folderId: Id<"folders">;
+    imageReferenceCount?: number;
+    videoReferenceCount?: number;
+    audioReferenceCount?: number;
+  },
+  Id<"creditTransactions">
+>("generation:chargeTextGeneration");
+
+const refundTextGenerationRef = publicMutationRef<
+  {
+    transactionId: Id<"creditTransactions">;
+    reason?: string;
+  },
+  null
+>("generation:refundTextGeneration");
+
+const createDocumentRef = publicMutationRef<
+  {
+    folderId: Id<"folders">;
+    title: string;
+    contentMarkdown?: string;
+  },
+  Id<"documents">
+>("documents:create");
+
 const imageTier = v.union(
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
 );
+
+export const generateScript = action({
+  args: {
+    folderId: v.id("folders"),
+    userPrompt: v.string(),
+    referenceInputs: v.optional(v.array(v.object({
+      kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
+      url: v.string(),
+    }))),
+  },
+  returns: v.object({
+    documentId: v.id("documents"),
+  }),
+  handler: async (ctx, args): Promise<{ documentId: Id<"documents"> }> => {
+    const referenceInputs = args.referenceInputs ?? [];
+    const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
+      folderId: args.folderId,
+      imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
+      videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
+      audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+    });
+    try {
+      const contentMarkdown = await generateScriptWithBytePlus({
+        userPrompt: args.userPrompt,
+        referenceInputs,
+      });
+      const documentId = await ctx.runMutation(createDocumentRef, {
+        folderId: args.folderId,
+        title: scriptTitle(args.userPrompt, contentMarkdown),
+        contentMarkdown,
+      });
+      return { documentId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Script generation failed";
+      await ctx.runMutation(refundTextGenerationRef, {
+        transactionId,
+        reason: message,
+      });
+      throw error;
+    }
+  },
+});
 
 export const runFlow = action({
   args: {
@@ -114,6 +187,10 @@ export const runFlow = action({
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
+    referenceInputs: v.optional(v.array(v.object({
+      kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
+      url: v.string(),
+    }))),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -129,6 +206,7 @@ export const runFlow = action({
     externalTaskId?: string;
   }> => {
     const resolvedModel = modelForRequest(args.mode, args.tier);
+    const referenceInputs = args.referenceInputs ?? [];
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: args.mode,
@@ -140,6 +218,9 @@ export const runFlow = action({
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
       durationSeconds: args.durationSeconds,
+      hasReferenceInput: Boolean(referenceInputs.length),
+      hasVideoReferenceInput: referenceInputs.some((input) => input.kind === "video"),
+      hasNonVideoReferenceInput: referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
     });
 
     try {
@@ -168,9 +249,15 @@ export const runFlow = action({
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
-          referenceImageUrls: [],
-          referenceVideoUrls: [],
-          referenceAudioUrls: [],
+          referenceImageUrls: referenceInputs
+            .filter((input) => input.kind === "image")
+            .map((input) => input.url),
+          referenceVideoUrls: referenceInputs
+            .filter((input) => input.kind === "video")
+            .map((input) => input.url),
+          referenceAudioUrls: referenceInputs
+            .filter((input) => input.kind === "audio")
+            .map((input) => input.url),
         });
         await ctx.runMutation(setVideoTaskRef, {
           jobId,
@@ -256,6 +343,17 @@ function internalMutationRef<Args extends Record<string, unknown>, Return>(
   >;
 }
 
+function publicMutationRef<Args extends Record<string, unknown>, Return>(
+  name: string,
+): FunctionReference<"mutation", "public", Args, Return> {
+  return makeFunctionReference<"mutation", Args, Return>(name) as unknown as FunctionReference<
+    "mutation",
+    "public",
+    Args,
+    Return
+  >;
+}
+
 function internalQueryRef<Args extends Record<string, unknown>, Return>(
   name: string,
 ): FunctionReference<"query", "internal", Args, Return> {
@@ -265,6 +363,15 @@ function internalQueryRef<Args extends Record<string, unknown>, Return>(
     Args,
     Return
   >;
+}
+
+function scriptTitle(userPrompt: string, contentMarkdown: string): string {
+  const markdownTitle = contentMarkdown
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("# "));
+  const title = markdownTitle?.replace(/^#\s+/, "").trim() || userPrompt.trim();
+  return (title || "Generated script").slice(0, 60);
 }
 
 function requiredEnv(name: string): string {

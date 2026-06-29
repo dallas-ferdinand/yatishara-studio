@@ -33,9 +33,14 @@ export function captureStripLayout(
   const newChatRect = newChatEl?.getBoundingClientRect?.();
   const anchorLeft = rects[0]?.left ?? stripRect?.left ?? 0;
   const tabWidth = rects[0]?.width > 0 ? rects[0].width : UNIFIED_TAB_WIDTH_PX;
+  const measuredStep =
+    rects.length > 1 && rects[1].left > rects[0].left
+      ? rects[1].left - rects[0].left
+      : tabWidth;
   return {
     anchorLeft,
     tabWidth,
+    tabStep: measuredStep > 0 ? measuredStep : tabWidth,
     tabCount: Math.max(tabCount ?? 0, rects.length),
     stripTop: stripRect?.top ?? rects[0]?.top ?? 0,
     /** Left edge of the + button — ghost must stay left of this. */
@@ -45,11 +50,12 @@ export function captureStripLayout(
 
 /** Target top-left for ghost when dropped at insertIndex among remaining tabs. */
 export function ghostTargetAtInsertIndex(layout, insertIndex) {
-  const { anchorLeft, tabWidth, stripTop } = layout ?? {};
+  const { anchorLeft, tabStep, tabWidth, stripTop } = layout ?? {};
   const width = tabWidth > 0 ? tabWidth : UNIFIED_TAB_WIDTH_PX;
+  const step = tabStep > 0 ? tabStep : width;
   const index = Math.max(0, insertIndex | 0);
   return {
-    x: (anchorLeft ?? 0) + index * width,
+    x: (anchorLeft ?? 0) + index * step,
     y: stripTop ?? 0,
   };
 }
@@ -59,13 +65,14 @@ export function ghostTargetAtInsertIndex(layout, insertIndex) {
  * Uses a collapsed slot grid (n-1 slots packed from strip anchor) so midpoints
  * match where remaining tabs sit after the dragged tab is removed from the row.
  */
-export function insertionIndexAmongCollapsed(dragLeadingX, anchorLeft, tabWidth, otherCount) {
+export function insertionIndexAmongCollapsed(dragLeadingX, anchorLeft, tabWidth, otherCount, tabStep = tabWidth) {
   const width = tabWidth > 0 ? tabWidth : UNIFIED_TAB_WIDTH_PX;
+  const step = tabStep > 0 ? tabStep : width;
   const count = Math.max(0, otherCount | 0);
   if (!count) return 0;
 
   for (let i = 0; i < count; i++) {
-    const mid = anchorLeft + i * width + width / 2;
+    const mid = anchorLeft + i * step + width / 2;
     if (dragLeadingX < mid) return i;
   }
   return count;
@@ -125,13 +132,14 @@ export function resolveDragOrder({
   lastStripIndex = -1,
   lastLeadingX = dragLeadingX,
 }) {
-  const { anchorLeft, tabWidth } = layout ?? {};
+  const { anchorLeft, tabWidth, tabStep } = layout ?? {};
   const otherCount = Math.max(0, order.length - 1);
   const insertIndex = insertionIndexAmongCollapsed(
     dragLeadingX,
     anchorLeft ?? 0,
     tabWidth ?? UNIFIED_TAB_WIDTH_PX,
-    otherCount
+    otherCount,
+    tabStep ?? tabWidth ?? UNIFIED_TAB_WIDTH_PX
   );
   if (!shouldAcceptStripIndex(insertIndex, lastStripIndex, dragLeadingX, lastLeadingX)) {
     return { order, stripIndex: lastStripIndex, leadingX: lastLeadingX, changed: false };

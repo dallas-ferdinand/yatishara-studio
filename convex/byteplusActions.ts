@@ -21,7 +21,6 @@ export const enhancePromptInternal = internalAction({
     return await enhancePrompt(args);
   },
 });
-
 export const generateImageInternal = internalAction({
   args: {
     prompt: v.string(),
@@ -35,7 +34,11 @@ export const generateImageInternal = internalAction({
     usageCredits: v.optional(v.number()),
   }),
   handler: async (_ctx, args) => {
-    return await generateImage(args);
+    const result = await generateImage(args);
+    return {
+      urls: result.urls,
+      usageCredits: result.usageCredits,
+    };
   },
 });
 

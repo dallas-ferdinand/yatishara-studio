@@ -18,6 +18,7 @@ const DESK_BUILD_ID = process.env.NEXT_PUBLIC_DESK_BUILD ?? deskBuildStamp();
 const nextConfig: NextConfig = {
   output: "standalone",
   trailingSlash: true,
+  allowedDevOrigins: ["preview.studio.yatishara.com"],
   async headers() {
     return [
       {

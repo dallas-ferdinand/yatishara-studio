@@ -10,7 +10,7 @@ const VIEW_OPTIONS = [
   { id: "preview", label: "Preview view", icon: "layoutPreview" },
 ];
 
-export function ExplorerViewMenu({ viewMode, onChange }) {
+export function ExplorerViewMenu({ viewMode, onChange, triggerClassName = "", showLabel = false }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const active = VIEW_OPTIONS.find((v) => v.id === viewMode) ?? VIEW_OPTIONS[0];
@@ -36,13 +36,15 @@ export function ExplorerViewMenu({ viewMode, onChange }) {
     <div className="desk-explorer-view-menu" ref={wrapRef}>
       <button
         type="button"
-        className={`cursor-icon-btn${open ? " active" : ""}`}
+        className={`${triggerClassName || "cursor-icon-btn"}${open ? " active" : ""}`}
         title={`View: ${active.label}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name={active.icon} size={15} />
+        {showLabel ? <span>{active.label.replace(" view", "")}</span> : null}
+        {showLabel ? <Icon name="chevDown" size={12} /> : null}
       </button>
       {open ? (
         <div className="desk-explorer-view-dropdown" role="menu">

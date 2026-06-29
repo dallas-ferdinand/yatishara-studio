@@ -51,23 +51,76 @@ function isPinnedEntry(entry, pinnedPaths) {
   return entry.type === "dir" && pinnedPaths?.has?.(entry.path);
 }
 
-function setCompactDragImage(dataTransfer, entry) {
+function setTransparentDragImage(dataTransfer) {
   if (!dataTransfer || typeof document === "undefined") return;
   const ghost = document.createElement("div");
-  ghost.className = "desk-file-drag-ghost";
-  ghost.textContent = entry.name ?? entry.path?.split("/").pop() ?? "Item";
+  ghost.className = "desk-file-drag-native-ghost";
   document.body.appendChild(ghost);
-  dataTransfer.setDragImage(ghost, 18, 16);
+  dataTransfer.setDragImage(ghost, 1, 1);
   window.requestAnimationFrame(() => ghost.remove());
 }
 
+function startFileDragPreview(event, entry) {
+  if (typeof document === "undefined") return;
+  const source = event.currentTarget;
+  if (!source) return;
+
+  const rect = source.getBoundingClientRect();
+  const preview = source.cloneNode(true);
+  const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
+  const targetWidth = Math.min(Math.max(label.length * 7 + 50, 96), 164);
+  const targetHeight = Math.min(rect.height, 74);
+  const offsetX = Math.min(event.clientX - rect.left, targetWidth * 0.42);
+  const offsetY = Math.min(event.clientY - rect.top, targetHeight * 0.55);
+
+  preview.classList.add("desk-file-drag-preview");
+  preview.style.width = `${rect.width}px`;
+  preview.style.height = `${rect.height}px`;
+  preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
+  preview.dataset.dragName = label;
+  document.body.appendChild(preview);
+
+  let lastX = event.clientX;
+  let lastY = event.clientY;
+  let rafId = 0;
+
+  const move = () => {
+    rafId = 0;
+    preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
+  };
+
+  const queueMove = (clientX, clientY) => {
+    if (clientX > 0 || clientY > 0) {
+      lastX = clientX;
+      lastY = clientY;
+    }
+    if (!rafId) rafId = window.requestAnimationFrame(move);
+  };
+
+  const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
+  const cleanup = () => {
+    if (rafId) window.cancelAnimationFrame(rafId);
+    preview.remove();
+    document.removeEventListener("dragover", handleMove);
+    document.removeEventListener("drag", handleMove);
+    document.removeEventListener("drop", cleanup);
+    document.removeEventListener("dragend", cleanup);
+  };
+
+  document.addEventListener("dragover", handleMove);
+  document.addEventListener("drag", handleMove);
+  document.addEventListener("drop", cleanup, { once: true });
+  document.addEventListener("dragend", cleanup, { once: true });
+
+  window.requestAnimationFrame(() => {
+    preview.style.width = `${targetWidth}px`;
+    preview.style.height = `${targetHeight}px`;
+    preview.classList.add("is-shrunk");
+    queueMove(event.clientX, event.clientY);
+  });
+}
+
 function ExplorerEmpty({ flatEntries, rootEntries }) {
-  if (!rootEntries && !flatEntries) {
-    return <FileTreeSkeleton />;
-  }
-  if (rootEntries?.loading || flatEntries?.loading) {
-    return <FileTreeSkeleton />;
-  }
   if (rootEntries?.error || flatEntries?.error) {
     return (
       <div className="cursor-tree-empty text-red-400/90">
@@ -76,26 +129,6 @@ function ExplorerEmpty({ flatEntries, rootEntries }) {
     );
   }
   return null;
-}
-
-function FileTreeSkeleton() {
-  return (
-    <div className="flex-1 overflow-hidden min-h-0 desk-file-skeleton" aria-label="Loading files">
-      <div className="desk-file-list-head" aria-hidden>
-        <span className="desk-file-list-head-name">Name</span>
-        <span className="desk-file-list-head-meta">Modified</span>
-      </div>
-      {Array.from({ length: 7 }).map((_, index) => (
-        <div key={index} className="desk-file-list-row desk-file-skeleton-row" aria-hidden>
-          <span className="desk-file-list-name">
-            <span className="desk-file-skeleton-icon" />
-            <span className="desk-file-skeleton-line" style={{ width: `${58 + (index % 3) * 11}%` }} />
-          </span>
-          <span className="desk-file-skeleton-meta" />
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function FileEntryButton({
@@ -163,6 +196,10 @@ function SearchDivider({ label }) {
   );
 }
 
+function entryRowKey(entry, index) {
+  return `${entry.type ?? "entry"}:${entry.path ?? entry.name ?? ".."}:${index}`;
+}
+
 function renderEntryRows({
   list,
   viewMode,
@@ -183,14 +220,14 @@ function renderEntryRows({
   if (viewMode === "preview") {
     return (
       <div className="desk-file-preview-grid">
-        {list.map((e) => {
+        {list.map((e, index) => {
           if (e.type === "search-divider") {
-            return <SearchDivider key={e.path} label={e.name} />;
+            return <SearchDivider key={entryRowKey(e, index)} label={e.name} />;
           }
           const label = entryLabel(e);
           return (
             <FileEntryButton
-              key={e.path ?? ".."}
+              key={entryRowKey(e, index)}
               entry={e}
               className={rowClass(e, "desk-file-preview-item")}
               label={label}
@@ -211,14 +248,34 @@ function renderEntryRows({
   if (viewMode === "grid") {
     return (
       <div className="cursor-file-grid">
-        {list.map((e) => {
+        {list.map((e, index) => {
           if (e.type === "search-divider") {
-            return <SearchDivider key={e.path} label={e.name} />;
+            return <SearchDivider key={entryRowKey(e, index)} label={e.name} />;
           }
           const label = entryLabel(e);
+          if (e.type === "parent") {
+            return (
+              <FileEntryButton
+                key={entryRowKey(e, index)}
+                entry={e}
+                className={rowClass(e, "desk-file-list-row desk-file-grid-back-row")}
+                label="Back"
+                onOpen={() => onEntry(e)}
+                enableLongPress={enableLongPress}
+                onLongPress={onEntryLongPress}
+                onContextMenu={(ev) => onEntryContextMenu(ev, e)}
+                onDragStart={(ev) => onEntryDragStart(ev, e)}
+              >
+                <span className="desk-file-list-name">
+                  <Icon name="chevL" size={16} className="text-cursor-muted shrink-0" />
+                  <span className="truncate">Back</span>
+                </span>
+              </FileEntryButton>
+            );
+          }
           return (
             <FileEntryButton
-              key={e.path ?? ".."}
+              key={entryRowKey(e, index)}
               entry={e}
               className={rowClass(e, "desk-file-grid-item")}
               label={label}
@@ -239,18 +296,18 @@ function renderEntryRows({
   return (
     <>
       <div className="desk-file-list-head" aria-hidden>
-        <span className="desk-file-list-head-name">Name</span>
-        <span className="desk-file-list-head-meta">{searchActive ? "Location" : "Modified"}</span>
+        <span className="desk-file-list-head-name">Content</span>
+        <span className="desk-file-list-head-meta">{searchActive ? "Found in" : "Updated"}</span>
       </div>
-      {list.map((e) => {
+      {list.map((e, index) => {
         if (e.type === "search-divider") {
-          return <SearchDivider key={e.path} label={e.name} />;
+          return <SearchDivider key={entryRowKey(e, index)} label={e.name} />;
         }
         const label = entryLabel(e);
         const metaDate = entryMeta(e, searchActive, searchScope);
         return (
           <FileEntryButton
-            key={e.path ?? ".."}
+            key={entryRowKey(e, index)}
             entry={e}
             className={rowClass(e, "desk-file-list-row")}
             label={label}
@@ -305,6 +362,10 @@ export function FileTree({
     ? buildSearchList(searchResults, searchScope, pinnedShortcuts)
     : buildDisplayList(flatEntries, pinnedShortcuts);
 
+  if (!list.length && (rootEntries?.loading || flatEntries?.loading)) {
+    return <div className="flex-1 overflow-y-auto min-h-0" {...treeScrollProps(onBlankContextMenu)} />;
+  }
+
   if (!list.length) {
     const q = searchQuery.trim();
     return (
@@ -330,7 +391,8 @@ export function FileTree({
   const onEntryDragStart = (e, entry) => {
     if (entry.type === "parent") return;
     writeExplorerDragData(e.dataTransfer, entry);
-    setCompactDragImage(e.dataTransfer, entry);
+    setTransparentDragImage(e.dataTransfer);
+    startFileDragPreview(e, entry);
   };
 
   const onContext = (ev, entry) => {
@@ -381,7 +443,7 @@ export function FileTree({
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0" {...treeScrollProps(onBlankContextMenu)}>
-      {viewMode === "list" ? <div className="py-0.5">{rows}</div> : rows}
+      {viewMode === "list" ? <div className="desk-file-list">{rows}</div> : rows}
       {searchActive && searchTruncated ? (
         <div className="desk-file-search-truncated" role="status">
           Showing first matches — refine your search

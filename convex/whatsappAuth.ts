@@ -6,7 +6,7 @@ import type { MutationCtx } from "./_generated/server";
 
 const DEFAULT_STUDIO_WHATSAPP_NUMBER = "18683034621";
 const DEFAULT_ADMIN_PHONE = "18683377338";
-const CODE_TTL_MS = 15 * 60 * 1000;
+const CODE_TTL_MS = 2 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 type CheckLatestReturn = {
@@ -309,8 +309,9 @@ async function getLatestInboundMessageText(phone: string): Promise<string | null
     }),
   ].filter((message): message is EvolutionMessage => message !== null);
 
+  const allowSelfMessage = phone === getStudioWhatsAppNumber();
   const inbound = candidates
-    .filter((message) => message.key.fromMe === false)
+    .filter((message) => allowSelfMessage || message.key.fromMe === false)
     .sort((a, b) => b.messageTimestamp - a.messageTimestamp)[0];
 
   return inbound ? getMessageText(inbound) : null;

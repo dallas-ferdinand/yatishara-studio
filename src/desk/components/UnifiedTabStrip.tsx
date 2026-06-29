@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import { Icon } from "./Icons";
 import {
   TAB_DRAG_LEADING_INSET_PX,
@@ -55,15 +55,60 @@ function UnifiedTabStripInner({
   const pendingRef = useRef(null);
   const dragRef = useRef(null);
   const didDragRef = useRef(false);
+  const dragFrameRef = useRef(0);
+  const dragPointRef = useRef(null);
+  const flipRectsRef = useRef(null);
   const settleTimerRef = useRef(null);
+  const enterTimerRef = useRef(null);
+  const previousOrderRef = useRef(null);
 
   const [dragUi, setDragUi] = useState(null);
+  const [enteringKey, setEnteringKey] = useState(null);
 
   useHorizontalWheelScroll(stripRef);
 
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
   const baseOrder = useMemo(() => (tabs ?? []).map((t) => t.key), [tabs]);
+
+  const captureFlipRects = useCallback(() => {
+    const rects = new Map();
+    for (const [key, el] of tabRefs.current.entries()) {
+      if (!el?.getBoundingClientRect) continue;
+      const rect = el.getBoundingClientRect();
+      rects.set(key, { left: rect.left, top: rect.top });
+    }
+    flipRectsRef.current = rects;
+  }, []);
+
+  useEffect(() => {
+    const previousOrder = previousOrderRef.current;
+    if (previousOrder && baseOrder.length > previousOrder.length) {
+      const addedKey = baseOrder.find((key) => !previousOrder.includes(key));
+      if (addedKey) {
+        if (enterTimerRef.current != null) {
+          window.clearTimeout(enterTimerRef.current);
+        }
+        setEnteringKey(addedKey);
+        enterTimerRef.current = window.setTimeout(() => {
+          setEnteringKey(null);
+          enterTimerRef.current = null;
+        }, 360);
+      }
+    }
+    previousOrderRef.current = baseOrder;
+  }, [baseOrder]);
+
+  useEffect(() => {
+    return () => {
+      if (enterTimerRef.current != null) {
+        window.clearTimeout(enterTimerRef.current);
+      }
+      if (dragFrameRef.current) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+      }
+    };
+  }, []);
 
   const commitOrder = useCallback(
     (order) => {
@@ -99,6 +144,11 @@ function UnifiedTabStripInner({
   const completeSettle = useCallback(
     (order) => {
       clearSettleTimer();
+      if (dragFrameRef.current) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = 0;
+      }
+      dragPointRef.current = null;
       if (order) commitOrder(order);
       dragRef.current = null;
       pendingRef.current = null;
@@ -161,15 +211,6 @@ function UnifiedTabStripInner({
       }, TAB_DRAG_SETTLE_MS + 80);
     },
     [clearSettleTimer, completeSettle, releasePointer, tabs]
-  );
-
-  const finishDrag = useCallback(
-    (pointerId) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      beginSettle(drag, pointerId);
-    },
-    [beginSettle]
   );
 
   const onGhostSettleEnd = useCallback(
@@ -244,6 +285,79 @@ function UnifiedTabStripInner({
     };
   }, []);
 
+  const flushDragFrame = useCallback(() => {
+    dragFrameRef.current = 0;
+    const point = dragPointRef.current;
+    const active = dragRef.current;
+    if (!point || !active) return;
+
+    const next = applyDragMove(active, point.x, point.y);
+    dragRef.current = next;
+
+    const orderChanged = !arraysEqual(next.order, active.order);
+    const insertChanged = next.insertIndex !== active.insertIndex;
+    if (orderChanged || insertChanged) {
+      captureFlipRects();
+    }
+
+    setDragUi((current) => {
+      if (
+        current &&
+        current.key === next.key &&
+        current.insertIndex === next.insertIndex &&
+        current.ghostX === next.ghostX &&
+        current.ghostY === next.ghostY &&
+        current.width === next.width &&
+        current.height === next.height &&
+        arraysEqual(current.order, next.order)
+      ) {
+        return current;
+      }
+      return {
+        key: next.key,
+        order: next.order,
+        insertIndex: next.insertIndex,
+        ghostX: next.ghostX,
+        ghostY: next.ghostY,
+        width: next.width,
+        height: next.height,
+        mode: next.mode ?? null,
+      };
+    });
+  }, [applyDragMove, captureFlipRects]);
+
+  const queueDragFrame = useCallback(
+    (clientX, clientY) => {
+      dragPointRef.current = { x: clientX, y: clientY };
+      if (dragFrameRef.current) return;
+      dragFrameRef.current = window.requestAnimationFrame(flushDragFrame);
+    },
+    [flushDragFrame]
+  );
+
+  const finishDrag = useCallback(
+    (pointerId) => {
+      let drag = dragRef.current;
+      if (!drag) return;
+      if (dragFrameRef.current) {
+        window.cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = 0;
+      }
+      const point = dragPointRef.current;
+      if (point) {
+        const next = applyDragMove(drag, point.x, point.y);
+        if (!arraysEqual(next.order, drag.order) || next.insertIndex !== drag.insertIndex) {
+          captureFlipRects();
+        }
+        dragRef.current = next;
+        drag = next;
+      }
+      dragPointRef.current = null;
+      beginSettle(drag, pointerId);
+    },
+    [applyDragMove, beginSettle, captureFlipRects]
+  );
+
   const onTabPointerDown = (tab, e) => {
     if (e.button !== 0) return;
     if (e.target.closest?.(".cursor-tab-close")) return;
@@ -313,6 +427,7 @@ function UnifiedTabStripInner({
 
       dragRef.current = initial;
       pendingRef.current = null;
+      captureFlipRects();
       setDragUi({
         key: initial.key,
         order: initial.order,
@@ -328,19 +443,7 @@ function UnifiedTabStripInner({
 
     const active = dragRef.current;
     if (!active) return;
-
-    const next = applyDragMove(active, e.clientX, e.clientY);
-    dragRef.current = next;
-    setDragUi({
-      key: next.key,
-      order: next.order,
-      insertIndex: next.insertIndex,
-      ghostX: next.ghostX,
-      ghostY: next.ghostY,
-      width: next.width,
-      height: next.height,
-      mode: next.mode ?? null,
-    });
+    queueDragFrame(e.clientX, e.clientY);
   };
 
   const onTabPointerUp = (tab, e) => {
@@ -400,7 +503,10 @@ function UnifiedTabStripInner({
 
   const dragKey = dragUi?.key ?? null;
   const displayOrder = dragUi?.order ?? baseOrder;
+  const isDragging = Boolean(dragUi && !dragUi.settling);
+  const isSettling = Boolean(dragUi?.settling);
   const placeholderAt = dragKey != null ? (dragUi?.insertIndex ?? 0) : -1;
+  const draggingFirstTab = dragKey != null && baseOrder[0] === dragKey;
 
   const stripItems = useMemo(() => {
     const items = [];
@@ -415,10 +521,49 @@ function UnifiedTabStripInner({
     return items;
   }, [displayOrder, dragKey, placeholderAt, tabs]);
 
-  const isDragging = Boolean(dragUi && !dragUi.settling);
-  const isSettling = Boolean(dragUi?.settling);
-
   const ghostTab = dragUi ? tabFromKey(tabs, dragUi.key) : null;
+
+  useLayoutEffect(() => {
+    const previousRects = flipRectsRef.current;
+    if (!previousRects?.size) return;
+    flipRectsRef.current = null;
+
+    const animated = [];
+    for (const [key, el] of tabRefs.current.entries()) {
+      const prev = previousRects.get(key);
+      if (!prev || !el?.getBoundingClientRect) continue;
+      const next = el.getBoundingClientRect();
+      const dx = prev.left - next.left;
+      const dy = prev.top - next.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+
+      el.style.transition = "none";
+      el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
+      animated.push(el);
+    }
+
+    if (!animated.length) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      for (const el of animated) {
+        el.style.transition = "transform 260ms cubic-bezier(0.2, 0.92, 0.28, 1)";
+        el.style.transform = "";
+      }
+    });
+
+    const cleanup = window.setTimeout(() => {
+      window.cancelAnimationFrame(frame);
+      for (const el of animated) {
+        el.style.transition = "";
+        el.style.transform = "";
+      }
+    }, 320);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(cleanup);
+    };
+  }, [stripItems]);
 
   return (
     <div
@@ -428,7 +573,7 @@ function UnifiedTabStripInner({
       aria-label="Workspace tabs"
       onPointerMove={onTabPointerMove}
     >
-      {stripItems.map((item) => {
+      {stripItems.map((item, itemIndex) => {
         if (item.kind === "placeholder") {
           return (
             <div
@@ -440,6 +585,9 @@ function UnifiedTabStripInner({
         }
 
         const tab = item.tab;
+        const tabVisualIndex = stripItems
+          .slice(0, itemIndex)
+          .filter((candidate) => candidate.kind === "tab").length;
         const chatTabClasses =
           tab.kind === "chat" ? tab.tabClasses ?? "" : "";
         const chatDotClass = tab.kind === "chat" ? tab.tabDotClass ?? "" : "";
@@ -463,7 +611,8 @@ function UnifiedTabStripInner({
             data-tab-key={tab.key}
             data-tab-signal={tab.kind === "chat" ? tab.tabSignal ?? "" : undefined}
             aria-selected={active}
-            className={`cursor-unified-tab${active ? " is-active" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}`}
+            className={`cursor-unified-tab${active ? " is-active" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${enteringKey === tab.key ? " is-entering" : ""}`}
+            style={{ "--tab-stack": 100 - tabVisualIndex }}
             title={
               tab.kind === "file"
                 ? tab.path
@@ -546,7 +695,7 @@ function UnifiedTabStripInner({
       ) : null}
       {dragUi && ghostTab ? (
         <div
-          className={`cursor-unified-tab-ghost${dragUi.settling ? " is-settling" : ""}`}
+          className={`cursor-unified-tab-ghost${dragUi.settling ? " is-settling" : ""}${draggingFirstTab ? " is-first-drag" : ""}`}
           style={{
             width: dragUi.width,
             height: dragUi.height,

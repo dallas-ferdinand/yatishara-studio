@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
-import { buildReceiptPath, getStorageUploadCredentials } from "./lib/bunny";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { buildReceiptPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
 import { adminMutation, adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 
 const paymentStatus = v.union(
@@ -29,7 +29,17 @@ const pricingReturn = v.object({
   imageMediumCredits: v.number(),
   imageHighCredits: v.number(),
   videoCredits: v.number(),
+  textCredits: v.number(),
 });
+
+const imageCreditCosts = {
+  low: 1,
+  medium: 2,
+  high: 4,
+} as const;
+const creditPriceCents = 50;
+const textGenerationCreditCost = 1;
+const videoBaseCreditCost = 15;
 
 const bankAccountReturn = v.object({
   _id: v.id("bankAccounts"),
@@ -45,6 +55,22 @@ const bankAccountReturn = v.object({
   updatedAt: v.number(),
 });
 
+const subscriptionPlanReturn = v.object({
+  _id: v.id("subscriptionPlans"),
+  _creationTime: v.number(),
+  name: v.string(),
+  slug: v.string(),
+  monthlyPriceCents: v.number(),
+  originalMonthlyPriceCents: v.optional(v.number()),
+  discountPercent: v.optional(v.number()),
+  includedMonthlyCredits: v.number(),
+  topUpCreditPriceCents: v.number(),
+  enabled: v.boolean(),
+  sortOrder: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
 export const getPricing = authedQuery({
   args: {},
   returns: pricingReturn,
@@ -54,11 +80,12 @@ export const getPricing = authedQuery({
       .withIndex("by_key", (q) => q.eq("key", "default"))
       .unique();
     return {
-      creditPriceCents: settings?.creditPriceCents ?? 100,
-      imageLowCredits: settings?.imageLowCredits ?? 2,
-      imageMediumCredits: settings?.imageMediumCredits ?? 5,
-      imageHighCredits: settings?.imageHighCredits ?? 9,
-      videoCredits: settings?.videoCredits ?? 35,
+      creditPriceCents: settings?.creditPriceCents ?? creditPriceCents,
+      imageLowCredits: imageCreditCosts.low,
+      imageMediumCredits: imageCreditCosts.medium,
+      imageHighCredits: imageCreditCosts.high,
+      videoCredits: videoBaseCreditCost,
+      textCredits: textGenerationCreditCost,
     };
   },
 });
@@ -128,6 +155,7 @@ export const listMyPayments = authedQuery({
       subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
       bankAccountId: v.optional(v.id("bankAccounts")),
       externalPaymentId: v.optional(v.string()),
+      receiptUrl: v.optional(v.string()),
       reference: v.optional(v.string()),
       rejectionReason: v.optional(v.string()),
       reviewedBy: v.optional(v.id("users")),
@@ -137,10 +165,11 @@ export const listMyPayments = authedQuery({
     }),
   ),
   handler: async (ctx) => {
-    return await ctx.db
+    const payments = await ctx.db
       .query("payments")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
       .collect();
+    return await withReceiptUrls(ctx, payments);
   },
 });
 
@@ -155,11 +184,23 @@ export const listBankAccounts = authedQuery({
   },
 });
 
+export const listSubscriptionPlans = authedQuery({
+  args: {},
+  returns: v.array(subscriptionPlanReturn),
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("subscriptionPlans")
+      .withIndex("by_enabled_and_sort", (q) => q.eq("enabled", true))
+      .collect();
+  },
+});
+
 export const submitBankPayment = authedMutation({
   args: {
     bankAccountId: v.id("bankAccounts"),
     amountCents: v.number(),
     creditsRequested: v.optional(v.number()),
+    subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
     reference: v.optional(v.string()),
   },
   returns: v.id("payments"),
@@ -168,13 +209,25 @@ export const submitBankPayment = authedMutation({
     if (!bankAccount || !bankAccount.enabled) {
       throw new Error("Bank account not available");
     }
+    let subscriptionPlan: Doc<"subscriptionPlans"> | null = null;
+    if (args.subscriptionPlanId !== undefined) {
+      const plan = await ctx.db.get("subscriptionPlans", args.subscriptionPlanId);
+      if (!plan || !plan.enabled) {
+        throw new Error("Subscription plan not available");
+      }
+      if (args.amountCents !== plan.monthlyPriceCents) {
+        throw new Error("Subscription payment amount does not match the selected plan");
+      }
+      subscriptionPlan = plan;
+    }
     const now = Date.now();
     return await ctx.db.insert("payments", {
       userId: ctx.user._id,
       method: "bank",
       status: "receipt_uploaded",
-      amountCents: args.amountCents,
-      creditsGranted: args.creditsRequested,
+      amountCents: subscriptionPlan ? subscriptionPlan.monthlyPriceCents : args.amountCents,
+      creditsGranted: subscriptionPlan ? undefined : args.creditsRequested,
+      subscriptionPlanId: args.subscriptionPlanId,
       bankAccountId: args.bankAccountId,
       reference: args.reference,
       createdAt: now,
@@ -257,6 +310,7 @@ export const adminListPayments = adminQuery({
       subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
       bankAccountId: v.optional(v.id("bankAccounts")),
       externalPaymentId: v.optional(v.string()),
+      receiptUrl: v.optional(v.string()),
       reference: v.optional(v.string()),
       rejectionReason: v.optional(v.string()),
       reviewedBy: v.optional(v.id("users")),
@@ -268,12 +322,13 @@ export const adminListPayments = adminQuery({
   handler: async (ctx, args) => {
     if (args.status !== undefined) {
       const status = args.status;
-      return await ctx.db
+      const payments = await ctx.db
         .query("payments")
         .withIndex("by_status", (q) => q.eq("status", status))
         .collect();
+      return await withReceiptUrls(ctx, payments);
     }
-    return await ctx.db.query("payments").collect();
+    return await withReceiptUrls(ctx, await ctx.db.query("payments").collect());
   },
 });
 
@@ -295,10 +350,10 @@ export const adminSetPricing = adminMutation({
     const data = {
       key: "default",
       creditPriceCents: args.creditPriceCents,
-      imageLowCredits: args.imageLowCredits,
-      imageMediumCredits: args.imageMediumCredits,
-      imageHighCredits: args.imageHighCredits,
-      videoCredits: args.videoCredits,
+      imageLowCredits: imageCreditCosts.low,
+      imageMediumCredits: imageCreditCosts.medium,
+      imageHighCredits: imageCreditCosts.high,
+      videoCredits: videoBaseCreditCost,
       updatedBy: ctx.user._id,
       updatedAt: now,
     };
@@ -388,11 +443,11 @@ export const adminSeedLaunchPricing = adminMutation({
       .unique();
     const data = {
       key: "default",
-      creditPriceCents: 100,
-      imageLowCredits: 2,
-      imageMediumCredits: 5,
-      imageHighCredits: 9,
-      videoCredits: 35,
+      creditPriceCents,
+      imageLowCredits: imageCreditCosts.low,
+      imageMediumCredits: imageCreditCosts.medium,
+      imageHighCredits: imageCreditCosts.high,
+      videoCredits: videoBaseCreditCost,
       updatedBy: ctx.user._id,
       updatedAt: now,
     };
@@ -403,6 +458,16 @@ export const adminSeedLaunchPricing = adminMutation({
     }
     await audit(ctx, "pricing_seeded");
     return null;
+  },
+});
+
+export const adminSeedSubscriptionPlans = adminMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const seeded = await seedSubscriptionPlans(ctx);
+    await audit(ctx, "subscription_plans_seeded");
+    return seeded;
   },
 });
 
@@ -476,13 +541,68 @@ export const adminReviewPayment = adminMutation({
       reviewedAt: now,
       updatedAt: now,
     });
-    if (args.status === "payment_completed" && payment.creditsGranted) {
-      await grantCredits(ctx, {
-        userId: payment.userId,
-        amount: payment.creditsGranted,
-        paymentId: payment._id,
-        reason: "Payment completed",
-      });
+    if (args.status === "payment_completed") {
+      if (payment.subscriptionPlanId) {
+        const plan = await ctx.db.get("subscriptionPlans", payment.subscriptionPlanId);
+        if (plan) {
+          const periodEnd = now + 30 * 24 * 60 * 60 * 1000;
+          const existingSubscription = await ctx.db
+            .query("subscriptions")
+            .withIndex("by_user_and_status", (q) => q.eq("userId", payment.userId).eq("status", "active"))
+            .first();
+          const subscriptionId =
+            existingSubscription?._id ??
+            (await ctx.db.insert("subscriptions", {
+              userId: payment.userId,
+              planId: plan._id,
+              status: "active",
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              createdAt: now,
+              updatedAt: now,
+            }));
+          if (existingSubscription) {
+            await ctx.db.patch(existingSubscription._id, {
+              planId: plan._id,
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+              updatedAt: now,
+            });
+          }
+          const account = await ctx.db
+            .query("billingAccounts")
+            .withIndex("by_user", (q) => q.eq("userId", payment.userId))
+            .unique();
+          if (account) {
+            await ctx.db.patch(account._id, {
+              activeSubscriptionId: subscriptionId,
+              updatedAt: now,
+            });
+          } else {
+            await ctx.db.insert("billingAccounts", {
+              userId: payment.userId,
+              creditBalance: 0,
+              reservedCredits: 0,
+              activeSubscriptionId: subscriptionId,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+          await grantCredits(ctx, {
+            userId: payment.userId,
+            amount: plan.includedMonthlyCredits,
+            paymentId: payment._id,
+            reason: `${plan.name} subscription activated`,
+          });
+        }
+      } else if (payment.creditsGranted) {
+        await grantCredits(ctx, {
+          userId: payment.userId,
+          amount: payment.creditsGranted,
+          paymentId: payment._id,
+          reason: "Payment completed",
+        });
+      }
     }
     const notificationId = await ctx.db.insert("notifications", {
       userId: payment.userId,
@@ -522,6 +642,102 @@ export const adminAdjustCredits = adminMutation({
     return null;
   },
 });
+
+async function withReceiptUrls<T extends Doc<"payments">>(
+  ctx: QueryCtx,
+  payments: T[],
+): Promise<Array<T & { receiptUrl?: string }>> {
+  const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60 * 12;
+  return await Promise.all(
+    payments.map(async (payment) => {
+      const receipt = await ctx.db
+        .query("paymentReceipts")
+        .withIndex("by_payment", (q) => q.eq("paymentId", payment._id))
+        .first();
+      return {
+        ...payment,
+        receiptUrl: receipt?.bunnyPath
+          ? await signBunnyCdnUrl(receipt.bunnyPath, expiresUnix)
+          : undefined,
+      };
+    }),
+  );
+}
+
+async function seedSubscriptionPlans(ctx: MutationCtx): Promise<number> {
+  const now = Date.now();
+  const pricing = await ctx.db
+    .query("pricingSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .unique();
+  const planCreditPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
+  const plans = [
+    {
+      name: "Starter",
+      slug: "starter",
+      includedMonthlyCredits: 500,
+      discountPercent: 0,
+      sortOrder: 0,
+    },
+    {
+      name: "Studio",
+      slug: "studio",
+      includedMonthlyCredits: 1000,
+      discountPercent: 0,
+      sortOrder: 1,
+    },
+    {
+      name: "Production",
+      slug: "production",
+      includedMonthlyCredits: 2000,
+      discountPercent: 3,
+      sortOrder: 2,
+    },
+    {
+      name: "Scale",
+      slug: "scale",
+      includedMonthlyCredits: 4000,
+      discountPercent: 5,
+      sortOrder: 3,
+    },
+    {
+      name: "Enterprise",
+      slug: "enterprise",
+      includedMonthlyCredits: 8000,
+      discountPercent: 8,
+      sortOrder: 4,
+    },
+  ];
+  for (const plan of plans) {
+    const existing = await ctx.db
+      .query("subscriptionPlans")
+      .withIndex("by_slug", (q) => q.eq("slug", plan.slug))
+      .unique();
+    const originalMonthlyPriceCents = Math.round(plan.includedMonthlyCredits * planCreditPriceCents);
+    const monthlyPriceCents = Math.round(originalMonthlyPriceCents * (100 - plan.discountPercent) / 100);
+    const data = {
+      name: plan.name,
+      slug: plan.slug,
+      monthlyPriceCents,
+      originalMonthlyPriceCents,
+      discountPercent: plan.discountPercent,
+      includedMonthlyCredits: plan.includedMonthlyCredits,
+      topUpCreditPriceCents: planCreditPriceCents,
+      enabled: true,
+      sortOrder: plan.sortOrder,
+      updatedAt: now,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, data);
+    } else {
+      await ctx.db.insert("subscriptionPlans", {
+        ...data,
+        createdAt: now,
+      });
+    }
+  }
+  return plans.length;
+}
 
 async function grantCredits(
   ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
