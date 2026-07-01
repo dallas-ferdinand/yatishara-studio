@@ -6,9 +6,14 @@ import { Icon } from "./Icons";
 import * as api from "@mos-app/api.js";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
 import { workspaceFileRawUrl, workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
+import { displayEntryPath } from "@/desk/lib/display-path";
 import { externalPreviewUrl } from "@mos-app/preview.js";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
+
+function isVideoFileUrl(url) {
+  return typeof url === "string" && /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
+}
 
 function entryKind(entry) {
   if (entry?.type === "dir" || entry?.type === "parent") {
@@ -106,15 +111,20 @@ export function FileEntryThumb({
     visual = (
       <img src={mediaUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
     );
-  } else if (kind === "video" && thumbUrl) {
+  } else if (kind === "video" && thumbUrl && !isVideoFileUrl(thumbUrl)) {
     visual = (
       <img src={thumbUrl} alt="" className="desk-file-thumb-video" loading="lazy" decoding="async" />
     );
-  } else if (kind === "video" && mediaUrl) {
+  } else if (kind === "video" && (mediaUrl || thumbUrl)) {
     visual = (
-      <div className="desk-file-thumb-fallback">
-        <Icon name="video" size={28} className="text-cursor-muted" />
-      </div>
+      <video
+        src={mediaUrl ?? thumbUrl}
+        poster={thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined}
+        className="desk-file-thumb-video"
+        muted
+        playsInline
+        preload="metadata"
+      />
     );
   } else if (kind === "audio" && mediaUrl) {
     visual = (
@@ -132,7 +142,7 @@ export function FileEntryThumb({
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>
       <div className="desk-file-thumb-visual">{visual}</div>
       {showLabel ? (
-        <span className="desk-file-thumb-label" title={entry?.path || label}>
+        <span className="desk-file-thumb-label" title={entry?.path ? displayEntryPath(entry) : label}>
           {label}
         </span>
       ) : null}

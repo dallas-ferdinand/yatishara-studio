@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { buildReceiptPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
 import { adminMutation, adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 
@@ -184,14 +184,14 @@ export const listBankAccounts = authedQuery({
   },
 });
 
-export const listSubscriptionPlans = authedQuery({
+export const listSubscriptionPlans = query({
   args: {},
   returns: v.array(subscriptionPlanReturn),
   handler: async (ctx) => {
     return await ctx.db
       .query("subscriptionPlans")
       .withIndex("by_enabled_and_sort", (q) => q.eq("enabled", true))
-      .collect();
+      .take(20);
   },
 });
 
@@ -315,6 +315,16 @@ export const adminListPayments = adminQuery({
       rejectionReason: v.optional(v.string()),
       reviewedBy: v.optional(v.id("users")),
       reviewedAt: v.optional(v.number()),
+      customer: v.optional(
+        v.object({
+          name: v.optional(v.string()),
+          email: v.optional(v.string()),
+          phone: v.optional(v.string()),
+          role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
+        }),
+      ),
+      subscriptionPlanName: v.optional(v.string()),
+      bankAccountLabel: v.optional(v.string()),
       createdAt: v.number(),
       updatedAt: v.number(),
     }),
@@ -326,9 +336,9 @@ export const adminListPayments = adminQuery({
         .query("payments")
         .withIndex("by_status", (q) => q.eq("status", status))
         .collect();
-      return await withReceiptUrls(ctx, payments);
+      return await withAdminPaymentDetails(ctx, payments);
     }
-    return await withReceiptUrls(ctx, await ctx.db.query("payments").collect());
+    return await withAdminPaymentDetails(ctx, await ctx.db.query("payments").collect());
   },
 });
 
@@ -659,6 +669,37 @@ async function withReceiptUrls<T extends Doc<"payments">>(
         receiptUrl: receipt?.bunnyPath
           ? await signBunnyCdnUrl(receipt.bunnyPath, expiresUnix)
           : undefined,
+      };
+    }),
+  );
+}
+
+async function withAdminPaymentDetails<T extends Doc<"payments">>(
+  ctx: QueryCtx,
+  payments: T[],
+) {
+  const withReceipts = await withReceiptUrls(ctx, payments);
+  return await Promise.all(
+    withReceipts.map(async (payment) => {
+      const user = await ctx.db.get(payment.userId);
+      const plan = payment.subscriptionPlanId
+        ? await ctx.db.get(payment.subscriptionPlanId)
+        : null;
+      const bank = payment.bankAccountId
+        ? await ctx.db.get(payment.bankAccountId)
+        : null;
+      return {
+        ...payment,
+        customer: user
+          ? {
+              name: user.name,
+              email: user.email,
+              phone: user.phone,
+              role: user.role,
+            }
+          : undefined,
+        subscriptionPlanName: plan?.name,
+        bankAccountLabel: bank?.label,
       };
     }),
   );

@@ -8,6 +8,7 @@ import {
   Clock3,
   FileText,
   Gauge,
+  History,
   Image as ImageIcon,
   CircleDot,
   LayoutGrid,
@@ -26,7 +27,6 @@ import {
   Upload,
   UserRound,
   Video,
-  Volume2,
   Zap,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -42,7 +42,8 @@ import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
-import { readExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { EXPLORER_DND_TYPE, readExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
 import { getDeviceId, loadSession } from "@/lib/session";
@@ -50,6 +51,7 @@ import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
+const STUDIO_SELECTED_THREAD_KEY = "yatishara-studio-selected-thread";
 const CREATE_MENU_ITEMS = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
@@ -75,6 +77,24 @@ function studioCursorTextUrl(accent) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 9 12, text`;
 }
 
+function studioCursorResizeXUrl(accent) {
+  const accentSoft = studioMixHex(accent, "#ffffff", 0.34);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="18" viewBox="0 0 30 18"><path d="M6 9h18M10.2 4.8 6 9l4.2 4.2M19.8 4.8 24 9l-4.2 4.2" fill="none" stroke="#0b0c10" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9h18M10.2 4.8 6 9l4.2 4.2M19.8 4.8 24 9l-4.2 4.2" fill="none" stroke="${accentSoft}" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9h18M10.2 4.8 6 9l4.2 4.2M19.8 4.8 24 9l-4.2 4.2" fill="none" stroke="${accent}" stroke-opacity=".58" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 15 9, ew-resize`;
+}
+
+function studioCursorDragUrl(accent) {
+  const accentSoft = studioMixHex(accent, "#ffffff", 0.35);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><defs><radialGradient id="ringFill" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="${accentSoft}" stop-opacity="0.95"/><stop offset="0.7" stop-color="${accent}" stop-opacity="0.55"/><stop offset="1" stop-color="${accent}" stop-opacity="0.0"/></radialGradient></defs><circle cx="10" cy="10" r="9" fill="rgba(11,12,16,0.55)"/><circle cx="10" cy="10" r="8.4" fill="none" stroke="url(#ringFill)" stroke-width="1.6"/><circle cx="10" cy="10" r="2.6" fill="${accent}"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="#0b0c10" stroke-width="0.7"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 10 10, grab`;
+}
+
+function studioCursorGrabbingUrl(accent) {
+  const accentSoft = studioMixHex(accent, "#ffffff", 0.35);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><defs><radialGradient id="grabFill" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="${accentSoft}"/><stop offset="1" stop-color="${accent}"/></radialGradient></defs><circle cx="10" cy="10" r="9.2" fill="url(#grabFill)" stroke="#0b0c10" stroke-width="1.4"/><circle cx="10" cy="10" r="9.2" fill="none" stroke="${accentSoft}" stroke-opacity="0.45" stroke-width="0.8"/><circle cx="7.5" cy="7" r="1.6" fill="#ffffff" fill-opacity="0.55"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 10 10, grabbing`;
+}
+
 function studioMixHex(hex, target, amount) {
   const clean = String(hex || "").trim();
   if (!/^#[0-9a-f]{6}$/i.test(clean)) return "#66e8ff";
@@ -87,12 +107,16 @@ function studioMixHex(hex, target, amount) {
 
 function applyStudioCursorTheme(element) {
   if (!element) return;
+  const root = document.documentElement;
   const accent =
     getComputedStyle(document.documentElement).getPropertyValue("--cursor-accent").trim() ||
     "#22c55e";
-  element.style.setProperty("--studio-cursor-default", studioCursorUrl(accent, false));
-  element.style.setProperty("--studio-cursor-active", studioCursorUrl(accent, true));
-  element.style.setProperty("--studio-cursor-text", studioCursorTextUrl(accent));
+  root.style.setProperty("--studio-cursor-default", studioCursorUrl(accent, false));
+  root.style.setProperty("--studio-cursor-active", studioCursorUrl(accent, true));
+  root.style.setProperty("--studio-cursor-text", studioCursorTextUrl(accent));
+  root.style.setProperty("--studio-cursor-resize-x", studioCursorResizeXUrl(accent));
+  root.style.setProperty("--studio-cursor-drag", studioCursorDragUrl(accent));
+  root.style.setProperty("--studio-cursor-grabbing", studioCursorGrabbingUrl(accent));
 }
 
 function cssUrlToPath(value) {
@@ -101,9 +125,9 @@ function cssUrlToPath(value) {
 }
 
 const STYLE = {
-  shell: "flex h-dvh min-h-0 bg-cursor-bg text-cursor-text",
-  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border bg-cursor-sidebar",
-  main: "flex min-w-0 flex-1 flex-col bg-cursor-bg",
+  shell: "flex h-dvh min-h-0 text-cursor-text",
+  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border",
+  main: "flex min-w-0 flex-1 flex-col",
   panelHead: "cursor-panel-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
@@ -168,6 +192,10 @@ export function StudioShell() {
   const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
   const [tabEntrySnapshots, setTabEntrySnapshots] = useState({});
   const [activeTab, setActiveTab] = useState(COMPOSER_TAB);
+  const [selectedThreadId, setSelectedThreadId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(STUDIO_SELECTED_THREAD_KEY);
+  });
   const [navTrail, setNavTrail] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
@@ -180,7 +208,7 @@ export function StudioShell() {
   const [imageResolution, setImageResolution] = useState("2K");
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
-  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const [flowPending, setFlowPending] = useState(false);
   const [status, setStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -190,6 +218,7 @@ export function StudioShell() {
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const [studioBackground, setStudioBackground] = useState({ path: "", value: "", ready: false });
@@ -207,18 +236,20 @@ export function StudioShell() {
   const studioBackgroundPathRef = useRef("");
 
   const currentUser = useQuery(api.users.current, {});
-  const billingAccount = useQuery(api.billing.currentAccount, {});
-  const pricing = useQuery(api.billing.getPricing, {});
-  const bankAccounts = useQuery(api.billing.listBankAccounts, {});
-  const subscriptionPlans = useQuery(api.billing.listSubscriptionPlans, {});
-  const payments = useQuery(api.billing.listMyPayments, {});
-  const notifications = useQuery(api.notifications.listMine, {});
+  const hasCurrentUser = currentUser !== undefined;
+  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
+  const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
+  const bankAccounts = useQuery(api.billing.listBankAccounts, hasCurrentUser ? {} : "skip");
+  const subscriptionPlans = useQuery(api.billing.listSubscriptionPlans, hasCurrentUser ? {} : "skip");
+  const payments = useQuery(api.billing.listMyPayments, hasCurrentUser ? {} : "skip");
+  const notifications = useQuery(api.notifications.listMine, hasCurrentUser ? {} : "skip");
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const adminPayments = useQuery(api.billing.adminListPayments, isAdminUser ? {} : "skip");
-  const topFolders = useQuery(api.folders.list, {});
+  const adminCustomers = useQuery(api.users.adminListCustomers, isAdminUser ? {} : "skip");
+  const topFolders = useQuery(api.folders.list, hasCurrentUser ? {} : "skip");
   const selectedFolder = useQuery(
     api.folders.get,
-    activeFolderId ? { folderId: activeFolderId } : "skip",
+    hasCurrentUser && activeFolderId ? { folderId: activeFolderId } : "skip",
   );
   const activeFolder = activeFolderId
     ? (selectedFolder ?? folderByIdRef.current.get(activeFolderId) ?? topFolders?.find((folder) => folder._id === activeFolderId) ?? null)
@@ -229,27 +260,31 @@ export function StudioShell() {
   }, [isMobile, mobileSection]);
   const childFolders = useQuery(
     api.folders.list,
-    activeFolder ? { parentId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder ? { parentId: activeFolder._id } : "skip",
   );
   const assets = useQuery(
     api.assets.listByFolder,
-    activeFolder ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder ? { folderId: activeFolder._id } : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    activeFolder ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder ? { folderId: activeFolder._id } : "skip",
   );
-  const elements = useQuery(api.elements.list, {});
-  const threads = useQuery(api.generation.listThreads, {});
-  const activeThreadId = activeTab.startsWith("thread:")
+  const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
+  const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
+  const tabThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
+  const activeThreadId = tabThreadId ?? selectedThreadId;
   const events = useQuery(
     api.generation.listEvents,
-    activeThreadId ? { threadId: activeThreadId } : "skip",
+    hasCurrentUser && activeThreadId && threads?.some((t) => t._id === activeThreadId)
+      ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix }
+      : "skip",
   );
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
+    if (!hasCurrentUser) return queries;
     for (const asset of assets ?? []) {
       if (!asset?._id || !["image", "video"].includes(asset.kind)) continue;
       queries[`asset:${asset._id}`] = {
@@ -258,10 +293,11 @@ export function StudioShell() {
       };
     }
     return queries;
-  }, [assetUrlExpiresUnix, assets]);
+  }, [assetUrlExpiresUnix, assets, hasCurrentUser]);
   const assetPreviewUrls = useQueries(assetPreviewQueries);
   const attachmentUrlQueries = useMemo(() => {
     const queries = {};
+    if (!hasCurrentUser) return queries;
     for (const attachment of attachments) {
       if (
         attachment?.studioKind !== "asset" ||
@@ -291,7 +327,7 @@ export function StudioShell() {
       }
     }
     return queries;
-  }, [assetUrlExpiresUnix, attachments]);
+  }, [assetUrlExpiresUnix, attachments, hasCurrentUser]);
   const attachmentMediaUrls = useQueries(attachmentUrlQueries);
   const assetsWithPreviewUrls = useMemo(
     () =>
@@ -305,9 +341,10 @@ export function StudioShell() {
       }),
     [assetPreviewUrls, assets],
   );
-  const presets = useQuery(api.stylePresets.listEnabled, {
-    kind: mode === "video" ? "video" : "image",
-  });
+  const presets = useQuery(
+    api.stylePresets.listEnabled,
+    hasCurrentUser ? { kind: mode === "video" ? "video" : "image" } : "skip",
+  );
   const generationReferences = useMemo(
     () => generationReferenceInputs(attachments, attachmentMediaUrls),
     [attachmentMediaUrls, attachments],
@@ -318,16 +355,22 @@ export function StudioShell() {
   );
   const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
   const hasNonVideoReferenceInput = generationReferences.some((reference) => reference.kind === "image" || reference.kind === "audio");
-  const entitlement = useQuery(api.generation.canGenerate, {
-    tier: mode === "video" ? "pro_video" : imageTier,
-    now: entitlementNow,
-    resolution: mode === "video" ? resolution : undefined,
-    durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
-    hasReferenceInput: mode === "video" ? generationReferences.length > 0 : undefined,
-    hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
-    hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
-    audioEnabled: mode === "video" ? audioEnabled : undefined,
-  });
+  const videoSupportsReferenceInput = false;
+  const entitlement = useQuery(
+    api.generation.canGenerate,
+    hasCurrentUser
+      ? {
+          tier: mode === "video" ? "pro_video" : imageTier,
+          now: entitlementNow,
+          resolution: mode === "video" ? resolution : undefined,
+          durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
+          hasReferenceInput: mode === "video" ? false : undefined,
+          hasVideoReferenceInput: mode === "video" ? false : undefined,
+          hasNonVideoReferenceInput: mode === "video" ? false : undefined,
+          audioEnabled: mode === "video" ? false : undefined,
+        }
+      : "skip",
+  );
 
   const composerContextKey = activeTab.startsWith("composer:") || activeTab.startsWith("thread:")
     ? activeTab
@@ -355,7 +398,7 @@ export function StudioShell() {
     setImageResolution(next?.imageResolution ?? "2K");
     setResolution(next?.resolution ?? "1280x720");
     setDurationSeconds(next?.durationSeconds ?? "4");
-    setAudioEnabled(next?.audioEnabled ?? true);
+    setAudioEnabled(next?.audioEnabled ?? false);
     composerKeyRef.current = composerContextKey;
   }, [composerContextKey]);
 
@@ -384,6 +427,22 @@ export function StudioShell() {
   useEffect(() => {
     window.localStorage.setItem(STUDIO_CUSTOM_CURSOR_KEY, customCursorEnabled ? "on" : "off");
   }, [customCursorEnabled]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (selectedThreadId) {
+      window.localStorage.setItem(STUDIO_SELECTED_THREAD_KEY, selectedThreadId);
+    } else {
+      window.localStorage.removeItem(STUDIO_SELECTED_THREAD_KEY);
+    }
+  }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (!threads?.length) return;
+    if (!selectedThreadId || !threads.some((thread) => thread._id === selectedThreadId)) {
+      setSelectedThreadId(threads[0]._id);
+    }
+  }, [selectedThreadId, threads]);
 
   useEffect(() => {
     const updateCursor = () => applyStudioCursorTheme(shellRef.current);
@@ -539,6 +598,7 @@ export function StudioShell() {
   );
   const folderPrefetchQueries = useMemo(() => {
     const queries = {};
+    if (!hasCurrentUser) return queries;
     for (const folderId of visibleFolderIds) {
       queries[`folders:${folderId}`] = {
         query: api.folders.list,
@@ -554,7 +614,7 @@ export function StudioShell() {
       };
     }
     return queries;
-  }, [visibleFolderIds]);
+  }, [hasCurrentUser, visibleFolderIds]);
   useQueries(folderPrefetchQueries);
 
   const tabs = useMemo(() => {
@@ -638,6 +698,13 @@ export function StudioShell() {
     }
     if (isMobile) setMobileSection("settings");
     setSettingsOpen(true);
+  }
+
+  function openAdminTab(tab) {
+    if (!isAdminUser) return;
+    setSettingsOpen(false);
+    if (isMobile) setMobileSection("composer");
+    openTab(`admin:${tab}`);
   }
 
   function openMobileSection(section) {
@@ -820,6 +887,53 @@ export function StudioShell() {
     closeTab(`${entry.studioKind}:${entry.studioId}`);
   }
 
+  function handleEntryDrop(event, targetEntry) {
+    if (!targetEntry?.studioId) return;
+    const raw = event.dataTransfer?.getData(EXPLORER_DND_TYPE);
+    if (!raw) return;
+    let source;
+    try { source = JSON.parse(raw); } catch { return; }
+    if (!source?.studioKind || !source?.studioId) return;
+    if (source.studioId === targetEntry.studioId) return;
+    if (targetEntry.type === "dir" || targetEntry.studioKind === "folder") {
+      void moveEntryToFolder(source, targetEntry.studioId);
+    }
+  }
+
+  function handleBreadcrumbDrop(event, crumbPath, crumbIndex) {
+    const raw = event.dataTransfer?.getData(EXPLORER_DND_TYPE);
+    if (!raw) return;
+    let source;
+    try { source = JSON.parse(raw); } catch { return; }
+    if (!source?.studioKind || !source?.studioId) return;
+    let targetId;
+    if (crumbIndex === 0) {
+      targetId = navTrail[0]?.id;
+    } else {
+      const target = navTrail[crumbIndex];
+      if (!target) return;
+      targetId = target.id;
+    }
+    if (!targetId || source.studioId === targetId) return;
+    void moveEntryToFolder(source, targetId);
+  }
+
+  async function moveEntryToFolder(source, targetFolderId) {
+    try {
+      if (source.studioKind === "folder") {
+        await updateFolder({ folderId: source.studioId, parentId: targetFolderId });
+      } else if (source.studioKind === "asset") {
+        await updateAsset({ assetId: source.studioId, folderId: targetFolderId });
+      } else if (source.studioKind === "document") {
+        await updateDocument({ documentId: source.studioId, folderId: targetFolderId });
+      } else if (source.studioKind === "element") {
+        await updateElement({ elementId: source.studioId, folderId: targetFolderId });
+      }
+    } catch (err) {
+      console.error("Failed to move entry:", err);
+    }
+  }
+
   async function uploadFiles(files) {
     if (!activeFolder) return;
     for (const file of Array.from(files ?? [])) {
@@ -950,8 +1064,8 @@ export function StudioShell() {
           currentUser?.role === "admin" || currentUser?.role === "super_admin";
         throw new Error(
           canSeedPresets
-            ? "Style options are not ready yet. Open Settings > Team tools and seed them first."
-            : "Style options are not ready yet. Ask an admin to seed them in Settings.",
+            ? "Style options are not ready yet. Open Admin > Setup and seed them first."
+            : "Style options are not ready yet. Ask an admin to seed them in Admin Setup.",
         );
       }
       if (entitlement && !entitlement.canGenerate) {
@@ -961,14 +1075,15 @@ export function StudioShell() {
         folderId: activeFolder._id,
         title: draft.trim().slice(0, 64),
       });
-      openTab(`thread:${threadId}`);
+      setSelectedThreadId(threadId);
+      setActiveTab(COMPOSER_TAB);
       await runFlow({
         threadId,
         mode,
         tier: mode === "video" ? "pro_video" : imageTier,
         stylePresetId: preset._id,
         userPrompt: buildPromptWithAttachments(draft, attachments),
-        audioEnabled: mode === "video" ? audioEnabled : undefined,
+        audioEnabled: mode === "video" ? false : undefined,
         aspectRatio,
         resolution: mode === "image" ? normalizeImageResolution(imageTier, imageResolution) : resolution,
         durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
@@ -1000,6 +1115,7 @@ export function StudioShell() {
         }
       }}
     >
+      <div className="studio-backdrop" aria-hidden="true" />
       <style jsx global>{`
         .studio-polish {
           --studio-scene-bg: url("/studio-empty-space-4k.webp");
@@ -1020,8 +1136,25 @@ export function StudioShell() {
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           position: relative;
+          background: var(--mos-bg) !important;
           overflow: hidden;
-          isolation: isolate;
+        }
+        .studio-backdrop {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          background: var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
+          transition: opacity 180ms ease;
+        }
+        .studio-backdrop {
+          opacity: 0.74;
+        }
+        .studio-polish.is-studio-bg-ready .studio-backdrop {
+          opacity: 1;
+        }
+        .studio-polish > :not(style, .studio-backdrop) {
+          position: relative;
         }
         .studio-mobile-bottom-nav {
           display: none;
@@ -1141,15 +1274,23 @@ export function StudioShell() {
             height: 18px;
           }
           .studio-polish .cursor-unified-tabs {
-            padding-left: max(8px, env(safe-area-inset-left, 0px));
+            padding-left: 0;
           }
           .studio-polish .cursor-unified-tab {
             height: 38px !important;
+            width: min(124px, var(--cursor-unified-tab-width, 138px)) !important;
+            min-width: min(124px, var(--cursor-unified-tab-width, 138px)) !important;
+            max-width: min(124px, var(--cursor-unified-tab-width, 138px)) !important;
+            padding-left: 8px !important;
+          }
+          .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
+            padding-left: 16px !important;
           }
           .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
             width: 38px;
             min-width: 38px;
             max-width: 38px;
+            padding-left: 0 !important;
           }
           .studio-mobile-bottom-nav {
             display: grid !important;
@@ -1246,6 +1387,9 @@ export function StudioShell() {
           cursor: var(--studio-cursor-text, text) !important;
           caret-color: var(--cursor-accent);
         }
+        .studio-polish.is-custom-cursor :where(.cursor-resize, [data-panel-resize-handle-id], [role="separator"]) {
+          cursor: var(--studio-cursor-resize-x, ew-resize) !important;
+        }
         .studio-polish.is-custom-cursor :where(button, a, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .cursor-unified-tab, .studio-inline-tag, .cursor-tab-close):is(:hover, :active) {
           cursor: var(--studio-cursor-active), pointer !important;
         }
@@ -1271,6 +1415,26 @@ export function StudioShell() {
           --studio-cursor-default: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5.35%203.9%2018.25%2013.15c.58.42.34%201.33-.37%201.43l-4.7.64-2.18%204.54c-.34.7-1.39.54-1.5-.23L5.35%203.9Z%22%20fill%3D%22%2311131a%22%20stroke%3D%22%23d97706%22%20stroke-width%3D%221.9%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M7.1%206.8%2015.55%2012.82l-3.72.5-1.72%203.56L7.1%206.8Z%22%20fill%3D%22none%22%20stroke%3D%22%23f8fafc%22%20stroke-opacity%3D%22.42%22%20stroke-width%3D%22.85%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E") 4 3;
           --studio-cursor-active: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5.35%203.9%2018.25%2013.15c.58.42.34%201.33-.37%201.43l-4.7.64-2.18%204.54c-.34.7-1.39.54-1.5-.23L5.35%203.9Z%22%20fill%3D%22%23d97706%22%20stroke%3D%22%230b0c10%22%20stroke-width%3D%221.9%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M7.1%206.8%2015.55%2012.82l-3.72.5-1.72%203.56L7.1%206.8Z%22%20fill%3D%22none%22%20stroke%3D%22%23fff8ea%22%20stroke-opacity%3D%22.58%22%20stroke-width%3D%22.85%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E") 4 3;
         }
+        body.is-drag-cursor,
+        .studio-polish.is-custom-cursor [draggable="true"]:active {
+          cursor: var(--studio-cursor-drag), grab !important;
+        }
+        body.is-grabbing-cursor {
+          cursor: var(--studio-cursor-grabbing), grabbing !important;
+        }
+        .desk-file-list-row.is-drag-over,
+        .desk-file-grid-item.is-drag-over,
+        .desk-file-preview-item.is-drag-over {
+          outline: 2px solid var(--cursor-accent);
+          outline-offset: -2px;
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent) !important;
+          border-radius: 6px;
+        }
+        .desk-file-breadcrumbs-chip.is-drag-over {
+          outline: 2px solid var(--cursor-accent);
+          outline-offset: -1px;
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent) !important;
+        }
         .studio-polish::before,
         .studio-polish::after {
           content: "";
@@ -1291,9 +1455,8 @@ export function StudioShell() {
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style) {
+        .studio-polish > :not(style, .studio-backdrop) {
           position: relative;
-          z-index: 1;
         }
         .studio-polish ::selection {
           background: color-mix(in srgb, var(--cursor-accent) 46%, var(--color-cursor-hover));
@@ -1376,20 +1539,30 @@ export function StudioShell() {
         }
         .studio-polish .cursor-panel-head {
           border-bottom: 0 !important;
-          backdrop-filter: none;
-          background: color-mix(in srgb, var(--mos-surface) 78%, var(--mos-bg) 22%) !important;
-          box-shadow: none !important;
+          background: rgb(255 255 255 / 0.001) !important;
+          box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.04),
+            0 12px 34px rgb(0 0 0 / 0.14) !important;
+          backdrop-filter: blur(28px) saturate(1.2);
+          -webkit-backdrop-filter: blur(28px) saturate(1.2);
+        }
+        .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body, .cursor-workspace-head) {
+          background: transparent !important;
+        }
+        .studio-polish :where(.cursor-panel-head, .cursor-explorer-panel, .desk-file-grid-item, .desk-file-preview-item, .desk-file-list-row, .cursor-tree-row, .studio-credit-pill, .cursor-icon-btn, .studio-pill-btn) {
+          backdrop-filter: blur(22px) saturate(1.16);
+          -webkit-backdrop-filter: blur(22px) saturate(1.16);
         }
         .studio-polish .cursor-sidebar-brand-logo-img {
           filter: drop-shadow(0 0 8px var(--studio-glow-soft));
         }
         .studio-polish .cursor-sidebar-brand-logo {
-          width: 24px;
-          height: 24px;
+          width: 20px;
+          height: 20px;
         }
         .studio-polish .cursor-sidebar-brand-logo-img {
-          width: 24px;
-          height: 24px;
+          width: 18px;
+          height: 18px;
         }
         .studio-user-menu-wrap {
           position: relative;
@@ -1451,11 +1624,10 @@ export function StudioShell() {
         }
         .studio-polish main {
           position: relative;
-          overflow: hidden;
-          background: var(--mos-bg) !important;
+          background: transparent !important;
         }
         .studio-polish main.studio-composer-bg {
-          background: var(--mos-bg) !important;
+          background: transparent !important;
         }
         .studio-polish main::before {
           content: "";
@@ -1465,8 +1637,22 @@ export function StudioShell() {
           pointer-events: none;
           opacity: 0;
           background:
-            radial-gradient(ellipse at center, transparent 28%, color-mix(in srgb, #000 22%, transparent) 68%, color-mix(in srgb, #000 48%, transparent) 100%),
-            var(--studio-loaded-bg) center / cover no-repeat;
+            radial-gradient(ellipse at center,
+              transparent 0%,
+              color-mix(in srgb, #000 2%, transparent) 28%,
+              color-mix(in srgb, #000 10%, transparent) 48%,
+              color-mix(in srgb, #000 22%, transparent) 66%,
+              color-mix(in srgb, #000 38%, transparent) 82%,
+              color-mix(in srgb, #000 56%, transparent) 100%
+            ),
+            radial-gradient(ellipse at 50% -4%,
+              color-mix(in srgb, var(--cursor-accent) 6%, transparent) 0%,
+              transparent 50%
+            ),
+            radial-gradient(ellipse at 82% 94%,
+              color-mix(in srgb, var(--cursor-accent-hover) 3%, transparent) 0%,
+              transparent 40%
+            );
           transition: opacity 180ms ease;
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
@@ -1484,14 +1670,16 @@ export function StudioShell() {
           background: linear-gradient(
             180deg,
             transparent 0%,
-            color-mix(in srgb, var(--mos-bg) 34%, transparent) 28%,
-            color-mix(in srgb, var(--mos-bg) 82%, transparent) 66%,
-            var(--mos-bg) 100%
+            color-mix(in srgb, var(--mos-bg) 8%, transparent) 14%,
+            color-mix(in srgb, var(--mos-bg) 24%, transparent) 28%,
+            color-mix(in srgb, var(--mos-bg) 48%, transparent) 44%,
+            color-mix(in srgb, var(--mos-bg) 70%, transparent) 60%,
+            color-mix(in srgb, var(--mos-bg) 88%, transparent) 78%,
+            color-mix(in srgb, var(--mos-bg) 98%, transparent) 100%
           );
         }
         .studio-polish main > :not(style) {
           position: relative;
-          z-index: 1;
         }
         .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item) {
           position: relative;
@@ -1548,6 +1736,7 @@ export function StudioShell() {
           padding: 0 !important;
           gap: 0;
           align-items: center;
+          background: var(--color-cursor-sidebar) !important;
         }
         .studio-polish .cursor-workspace-head::after {
           content: none !important;
@@ -1555,13 +1744,13 @@ export function StudioShell() {
         .studio-polish .cursor-unified-tabs {
           align-items: center;
           gap: 4px;
-          padding: 0 0 0 12px;
+          padding: 0;
         }
         .studio-polish .cursor-unified-tab {
           height: 30px !important;
-          width: min(152px, var(--cursor-unified-tab-width, 168px));
-          min-width: min(152px, var(--cursor-unified-tab-width, 168px));
-          max-width: min(152px, var(--cursor-unified-tab-width, 168px));
+          width: min(140px, var(--cursor-unified-tab-width, 154px));
+          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
           border: 1px solid color-mix(in srgb, var(--mos-text-bright) 4%, transparent) !important;
           border-left-width: 0 !important;
           border-radius: 0 11px 11px 0 !important;
@@ -1571,7 +1760,7 @@ export function StudioShell() {
               color-mix(in srgb, var(--mos-surface) 68%, var(--mos-bg)),
               color-mix(in srgb, var(--mos-surface) 42%, var(--mos-bg))
             ) !important;
-          padding: 0 2px !important;
+          padding: 0 2px 0 8px !important;
           box-shadow:
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent),
             0 1px 0 color-mix(in srgb, #000 12%, transparent) !important;
@@ -1610,10 +1799,13 @@ export function StudioShell() {
         .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new) {
           margin: 0 0 0 -12px;
         }
+        .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
+          padding-left: 18px !important;
+        }
         .studio-polish .cursor-unified-tab-placeholder {
-          width: min(152px, var(--cursor-unified-tab-width, 168px));
-          min-width: min(152px, var(--cursor-unified-tab-width, 168px));
-          max-width: min(152px, var(--cursor-unified-tab-width, 168px));
+          width: min(140px, var(--cursor-unified-tab-width, 154px));
+          min-width: min(140px, var(--cursor-unified-tab-width, 154px));
+          max-width: min(140px, var(--cursor-unified-tab-width, 154px));
           margin: 0 0 0 -18px;
           border-left-width: 1px;
           border-radius: 11px;
@@ -1709,9 +1901,11 @@ export function StudioShell() {
           max-width: 30px;
           height: 30px;
           border-radius: 999px !important;
+          border-width: 1px !important;
+          border-left-width: 1px !important;
           justify-content: center;
           margin-left: 4px;
-          padding: 0;
+          padding: 0 !important;
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border)) !important;
           background:
             linear-gradient(
@@ -2518,6 +2712,27 @@ export function StudioShell() {
             grid-template-columns: 1fr;
             width: 100%;
           }
+          .studio-admin-payment-layout {
+            grid-template-columns: 1fr;
+          }
+          .studio-admin-hero-card,
+          .studio-admin-table-head,
+          .studio-admin-hero-actions {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          .studio-admin-quick-links {
+            max-width: 42vw;
+            overflow-x: auto;
+            scrollbar-width: none;
+          }
+          .studio-admin-quick-link {
+            min-width: 72px;
+            flex: 0 0 auto;
+          }
+          .studio-admin-filter-tabs {
+            justify-content: flex-start;
+          }
         }
         .studio-polish .cursor-settings-action:hover,
         .studio-polish .theme-chip:hover {
@@ -2566,11 +2781,19 @@ export function StudioShell() {
             0 0 16px color-mix(in srgb, var(--cursor-accent) 22%, transparent);
         }
         .studio-polish .cursor-resize {
-          transition: background var(--studio-motion-fast) var(--studio-motion-ease), box-shadow var(--studio-motion-med) var(--studio-motion-ease);
+          position: relative;
+          z-index: 20;
+          width: 12px !important;
+          margin-inline: -6px;
+          flex: 0 0 12px;
+          background: transparent !important;
+          box-shadow: none !important;
+          transition: none;
         }
-        .studio-polish .cursor-resize:hover {
-          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          box-shadow: 0 0 18px var(--studio-glow-soft);
+        .studio-polish .cursor-resize:hover,
+        .studio-polish .cursor-resize[data-resize-handle-active] {
+          background: transparent !important;
+          box-shadow: none !important;
         }
         .studio-polish .desk-file-list-head {
           display: none;
@@ -2593,6 +2816,16 @@ export function StudioShell() {
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 14%, transparent), transparent);
           box-shadow: none;
+        }
+        .studio-polish .desk-file-list-name {
+          min-width: 0;
+          font-size: 11px;
+          font-weight: 500;
+          line-height: 1.15;
+        }
+        .studio-polish .desk-file-list-name .truncate {
+          min-width: 0;
+          font-weight: 500;
         }
         .studio-polish .desk-file-list-row:hover {
           border-color: transparent !important;
@@ -2652,25 +2885,32 @@ export function StudioShell() {
           flex: 0 0 auto;
           aspect-ratio: 1 / 1;
           height: auto;
-          width: calc(100% - 10px);
-          margin: 5px auto 0;
-          border-radius: 10px;
+          width: 100%;
+          margin: 0;
+          border-radius: 0;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item .desk-file-thumb-label {
-          display: flex;
+          display: -webkit-box;
           align-items: center;
           justify-content: center;
-          min-height: 24px;
-          max-height: 24px;
-          padding: 3px 7px;
+          min-height: 30px;
+          max-height: 30px;
+          padding: 3px 6px;
           border-top: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
           border-bottom: 1px solid color-mix(in srgb, #000 22%, transparent);
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--mos-panel) 86%, var(--mos-bg)), color-mix(in srgb, var(--mos-bg) 82%, #000 18%));
           color: var(--color-cursor-text-bright);
-          font-weight: 650;
-          line-height: 1.15;
+          overflow: hidden;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          font-size: 10.5px;
+          font-weight: 500;
+          line-height: 1.08;
+          overflow-wrap: anywhere;
+          text-align: center;
+          text-overflow: ellipsis;
           text-shadow: 0 1px 0 color-mix(in srgb, #000 36%, transparent);
         }
         .studio-polish .desk-file-grid-item:hover,
@@ -2768,6 +3008,7 @@ export function StudioShell() {
           width: 100%;
           max-width: min(700px, calc(100% - 24px));
           margin: 0 auto;
+          transform: translateX(-5px);
           padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
           background: transparent !important;
         }
@@ -2781,7 +3022,6 @@ export function StudioShell() {
           min-width: 0;
         }
         .studio-composer .cursor-composer-box {
-          /* Backdrop blur needs the image on main behind this overlay; avoid opacity/transform/will-change wrappers here. */
           position: relative;
           overflow: hidden;
           display: flex;
@@ -2792,19 +3032,11 @@ export function StudioShell() {
           min-width: 0;
           border: 1px solid rgba(255, 255, 255, 0.15) !important;
           background: transparent !important;
-          backdrop-filter: blur(48px) saturate(1.28) brightness(1.1);
-          -webkit-backdrop-filter: blur(48px) saturate(1.28) brightness(1.1);
           box-shadow:
-            0 24px 68px color-mix(in srgb, #000 38%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
-            inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+            inset 0 0 16px -6px rgba(255, 255, 255, 0.24);
           transition:
-            background-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            background 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             border-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            -webkit-backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1);
+            box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1);
           padding: 0 !important;
         }
         .studio-composer .cursor-composer-box::before {
@@ -2813,33 +3045,34 @@ export function StudioShell() {
           top: 0;
           left: 0;
           z-index: 3;
-          width: 124px;
-          height: 70px;
-          border-radius: 17px 0 0 0;
-          border-top: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
-          border-left: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
+          width: 320px;
+          height: 170px;
+          border-radius: 14px 0 0 0;
+          border-top: 2px solid color-mix(in srgb, var(--cursor-accent) 96%, transparent);
+          border-left: 2px solid color-mix(in srgb, var(--cursor-accent) 96%, transparent);
           background: transparent;
-          mask-image: radial-gradient(ellipse at 0 0, #000 0 10%, rgba(0, 0, 0, 0.58) 22%, rgba(0, 0, 0, 0.12) 34%, transparent 48%);
-          -webkit-mask-image: radial-gradient(ellipse at 0 0, #000 0 10%, rgba(0, 0, 0, 0.58) 22%, rgba(0, 0, 0, 0.12) 34%, transparent 48%);
+          mask-image: radial-gradient(ellipse at 0 0, #000 0%, rgba(0, 0, 0, 0.45) 10%, rgba(0, 0, 0, 0.12) 18%, transparent 26%);
+          -webkit-mask-image: radial-gradient(ellipse at 0 0, #000 0%, rgba(0, 0, 0, 0.45) 10%, rgba(0, 0, 0, 0.12) 18%, transparent 26%);
           opacity: 0.78;
           transition:
-            width 1000ms var(--studio-composer-focus-line-ease),
-            height 1000ms var(--studio-composer-focus-line-ease),
-            border-color 1000ms var(--studio-composer-focus-line-ease),
-            opacity 1000ms var(--studio-composer-focus-line-ease);
+            width 2500ms var(--studio-composer-focus-line-ease),
+            height 2500ms var(--studio-composer-focus-line-ease),
+            border-color 2500ms var(--studio-composer-focus-line-ease),
+            opacity 2500ms var(--studio-composer-focus-line-ease);
           pointer-events: none;
         }
-        .studio-composer .cursor-composer-box:focus-within::before {
-          width: 330px;
-          height: 150px;
+        .studio-composer .cursor-composer-box:focus-within::before,
+        .studio-composer .cursor-composer-box:hover::before {
+          width: 800px;
+          height: 400px;
           border-top-color: var(--cursor-accent);
           border-left-color: var(--cursor-accent);
           opacity: 1;
           transition:
-            width 1000ms var(--studio-composer-focus-line-ease),
-            height 1000ms var(--studio-composer-focus-line-ease),
-            border-color 1000ms var(--studio-composer-focus-line-ease),
-            opacity 1000ms var(--studio-composer-focus-line-ease);
+            width 2500ms var(--studio-composer-focus-line-ease),
+            height 2500ms var(--studio-composer-focus-line-ease),
+            border-color 2500ms var(--studio-composer-focus-line-ease),
+            opacity 2500ms var(--studio-composer-focus-line-ease);
         }
         .studio-composer .cursor-composer-box::after {
           content: "";
@@ -2847,33 +3080,34 @@ export function StudioShell() {
           right: 0;
           bottom: 0;
           z-index: 3;
-          width: 124px;
-          height: 70px;
-          border-radius: 0 0 17px 0;
+          width: 290px;
+          height: 150px;
+          border-radius: 0 0 14px 0;
           border-right: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
           border-bottom: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
           background: transparent;
-          mask-image: radial-gradient(ellipse at 100% 100%, #000 0 10%, rgba(0, 0, 0, 0.58) 22%, rgba(0, 0, 0, 0.12) 34%, transparent 48%);
-          -webkit-mask-image: radial-gradient(ellipse at 100% 100%, #000 0 10%, rgba(0, 0, 0, 0.58) 22%, rgba(0, 0, 0, 0.12) 34%, transparent 48%);
+          mask-image: radial-gradient(ellipse at 100% 100%, #000 0%, rgba(0, 0, 0, 0.45) 10%, rgba(0, 0, 0, 0.12) 18%, transparent 26%);
+          -webkit-mask-image: radial-gradient(ellipse at 100% 100%, #000 0%, rgba(0, 0, 0, 0.45) 10%, rgba(0, 0, 0, 0.12) 18%, transparent 26%);
           opacity: 0.78;
           transition:
-            width 1000ms var(--studio-composer-focus-line-ease),
-            height 1000ms var(--studio-composer-focus-line-ease),
-            border-color 1000ms var(--studio-composer-focus-line-ease),
-            opacity 1000ms var(--studio-composer-focus-line-ease);
+            width 2500ms var(--studio-composer-focus-line-ease),
+            height 2500ms var(--studio-composer-focus-line-ease),
+            border-color 2500ms var(--studio-composer-focus-line-ease),
+            opacity 2500ms var(--studio-composer-focus-line-ease);
           pointer-events: none;
         }
-        .studio-composer .cursor-composer-box:focus-within::after {
-          width: 310px;
-          height: 140px;
+        .studio-composer .cursor-composer-box:focus-within::after,
+        .studio-composer .cursor-composer-box:hover::after {
+          width: 760px;
+          height: 380px;
           border-right-color: var(--cursor-accent);
           border-bottom-color: var(--cursor-accent);
           opacity: 1;
           transition:
-            width 1000ms var(--studio-composer-focus-line-ease),
-            height 1000ms var(--studio-composer-focus-line-ease),
-            border-color 1000ms var(--studio-composer-focus-line-ease),
-            opacity 1000ms var(--studio-composer-focus-line-ease);
+            width 2500ms var(--studio-composer-focus-line-ease),
+            height 2500ms var(--studio-composer-focus-line-ease),
+            border-color 2500ms var(--studio-composer-focus-line-ease),
+            opacity 2500ms var(--studio-composer-focus-line-ease);
         }
         .studio-composer .cursor-composer-box > * {
           position: relative;
@@ -2885,9 +3119,9 @@ export function StudioShell() {
           display: grid;
           grid-template-rows: repeat(3, minmax(32px, 1fr));
           gap: 4px;
-          flex: 0 0 116px;
-          width: 116px;
-          min-height: 96px;
+          flex: 0 0 118px;
+          width: 118px;
+          min-height: 118px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border-soft));
           border-radius: 16px;
           background:
@@ -3186,7 +3420,8 @@ export function StudioShell() {
           overflow: hidden;
           background: color-mix(in srgb, var(--cursor-accent) 8%, var(--color-cursor-hover));
         }
-        .studio-chip-preview-media img {
+        .studio-chip-preview-media img,
+        .studio-chip-preview-media video {
           display: block;
           width: 100%;
           height: 100%;
@@ -4181,8 +4416,21 @@ export function StudioShell() {
         .studio-admin-workspace {
           display: grid;
           gap: 14px;
-          max-width: 1040px;
+          max-width: 1180px;
           margin: 0 auto;
+        }
+        .studio-admin-quick-links {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .studio-admin-quick-link {
+          width: auto;
+          min-width: 78px;
+          padding: 0 10px;
+          color: var(--color-cursor-text-bright);
+          font-size: 11px;
+          font-weight: 720;
         }
         .studio-asset-preview {
           position: relative;
@@ -4322,6 +4570,12 @@ export function StudioShell() {
           padding: 20px;
           box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), 0 0 30px var(--studio-glow-soft);
         }
+        .studio-admin-hero-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+        }
         .studio-admin-hero-card h2,
         .studio-admin-card h3 {
           color: var(--color-cursor-text-bright);
@@ -4351,6 +4605,192 @@ export function StudioShell() {
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-spring);
+        }
+        .studio-admin-table-card,
+        .studio-admin-table-card:hover {
+          transform: none;
+        }
+        .studio-admin-tabbar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          padding: 8px;
+        }
+        .studio-admin-tabbar button,
+        .studio-admin-filter-tabs button {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          color: var(--color-cursor-muted);
+          padding: 7px 12px;
+          font-size: 12px;
+          font-weight: 720;
+          cursor: pointer;
+        }
+        .studio-admin-tabbar button.is-active,
+        .studio-admin-filter-tabs button.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 54%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent-dim) 62%, var(--color-cursor-hover));
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-admin-table-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+        .studio-admin-filter-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+        .studio-admin-payment-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+          gap: 14px;
+          align-items: start;
+        }
+        .studio-admin-table-wrap {
+          overflow: auto;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+        }
+        .studio-admin-table {
+          width: 100%;
+          border-collapse: collapse;
+          min-width: 760px;
+          color: var(--color-cursor-text);
+          font-size: 12px;
+        }
+        .studio-admin-table th,
+        .studio-admin-table td {
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 54%, transparent);
+          padding: 11px 12px;
+          text-align: left;
+          vertical-align: middle;
+        }
+        .studio-admin-table th {
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+        .studio-admin-table tbody tr {
+          cursor: pointer;
+        }
+        .studio-admin-table tbody tr:hover,
+        .studio-admin-table tbody tr.is-selected {
+          background: color-mix(in srgb, var(--cursor-accent-dim) 36%, transparent);
+        }
+        .studio-admin-table td strong,
+        .studio-admin-detail-panel h3,
+        .studio-admin-setup-card h4 {
+          display: block;
+          color: var(--color-cursor-text-bright);
+          font-weight: 760;
+        }
+        .studio-admin-table td span {
+          display: block;
+          margin-top: 2px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-admin-table a {
+          color: var(--cursor-accent);
+          font-weight: 720;
+          text-decoration: none;
+        }
+        .studio-payment-status-pill {
+          display: inline-flex;
+          width: fit-content;
+          align-items: center;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 20%, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent-dim) 34%, transparent);
+          color: var(--color-cursor-text-bright);
+          padding: 5px 8px;
+          font-size: 11px;
+          font-weight: 760;
+        }
+        .studio-payment-status-pill.is-payment_completed {
+          border-color: color-mix(in srgb, #22c55e 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, #22c55e 14%, transparent);
+        }
+        .studio-payment-status-pill.is-rejected {
+          border-color: color-mix(in srgb, #ef4444 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, #ef4444 14%, transparent);
+        }
+        .studio-admin-detail-panel {
+          display: grid;
+          gap: 12px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border-radius: 18px;
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 40%),
+            color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          padding: 16px;
+        }
+        .studio-admin-detail-list {
+          display: grid;
+          gap: 8px;
+        }
+        .studio-admin-detail-actions,
+        .studio-admin-setup-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+        .studio-admin-detail-actions a,
+        .studio-admin-detail-actions button,
+        .studio-admin-detail-actions span,
+        .studio-admin-muted-action {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          color: var(--color-cursor-text-bright);
+          padding: 7px 10px;
+          font-size: 12px;
+          font-weight: 720;
+          text-decoration: none;
+          cursor: pointer;
+        }
+        .studio-admin-detail-actions span,
+        .studio-admin-muted-action {
+          color: var(--color-cursor-muted);
+          cursor: default;
+        }
+        .studio-admin-rejection-note {
+          border: 1px solid color-mix(in srgb, #ef4444 34%, var(--color-cursor-border-soft));
+          border-radius: 12px;
+          background: color-mix(in srgb, #ef4444 12%, transparent);
+          color: var(--color-cursor-text-bright);
+          padding: 10px;
+          font-size: 12px;
+        }
+        .studio-admin-setup-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 12px;
+        }
+        .studio-admin-setup-card {
+          align-items: flex-start;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          padding: 14px;
+        }
+        .studio-admin-setup-card p {
+          margin-top: 4px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
         }
         .studio-price-card:hover,
         .studio-bank-card:hover,
@@ -4505,8 +4945,8 @@ export function StudioShell() {
           position: relative;
           display: grid;
           place-items: center;
-          width: 176px;
-          height: 176px;
+          width: 132px;
+          height: 132px;
           margin: 0 auto;
         }
         .studio-empty-logo::before {
@@ -4533,8 +4973,8 @@ export function StudioShell() {
         .studio-empty-logo img {
           position: relative;
           z-index: 1;
-          width: 148px;
-          height: 148px;
+          width: 104px;
+          height: 104px;
           object-fit: contain;
           filter:
             drop-shadow(0 20px 34px color-mix(in srgb, #000 58%, transparent))
@@ -4799,6 +5239,285 @@ export function StudioShell() {
           font-size: 11px;
           font-weight: 700;
         }
+        .studio-chat-render-area {
+          display: flex;
+          height: 100%;
+          min-height: 0;
+          flex-direction: column;
+        }
+        .studio-history-floating-panel {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          width: min(340px, 100vw);
+          height: 100vh;
+          align-self: stretch;
+          flex-direction: column;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border));
+          border-width: 0 0 0 1px;
+          border-radius: 0;
+          background: color-mix(in srgb, var(--mos-panel) 94%, var(--mos-bg));
+          box-shadow: 0 24px 70px color-mix(in srgb, #000 46%, transparent), 0 0 34px var(--studio-glow-soft);
+        }
+        .studio-history-floating-head {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          padding: 0 6px 0 0;
+          border-bottom: 1px solid var(--color-cursor-border);
+        }
+        .studio-history-floating-head .studio-history-search {
+          flex: 1;
+          margin: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          padding: 0 12px;
+          min-height: 34px;
+        }
+        .studio-history-search {
+          margin: 10px 12px;
+          padding: 8px 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
+          color: var(--color-cursor-text);
+          font-size: 12px;
+          outline: none;
+        }
+        .studio-history-search::placeholder {
+          color: var(--color-cursor-muted);
+        }
+        .studio-history-search:focus {
+          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+        }
+        .studio-history-list {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          padding: 0 8px 8px;
+        }
+        .studio-history-item {
+          display: flex;
+          width: 100%;
+          flex-direction: column;
+          gap: 2px;
+          padding: 10px 12px;
+          border: 1px solid transparent;
+          border-radius: 10px;
+          background: transparent;
+          color: inherit;
+          font-family: inherit;
+          font-size: inherit;
+          text-align: left;
+          cursor: pointer;
+          transition: background 120ms ease, border-color 120ms ease;
+        }
+        .studio-history-item:hover {
+          background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
+          border-color: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-history-item.is-active {
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          border-color: color-mix(in srgb, var(--cursor-accent) 30%, transparent);
+        }
+        .studio-history-item-title {
+          color: var(--color-cursor-text-bright);
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1.3;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .studio-history-item-date {
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+        }
+        .studio-history-empty {
+          padding: 24px 12px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          text-align: center;
+        }
+        .studio-chat-stream {
+          min-height: 0;
+          flex: 1;
+          overflow-y: auto;
+          scrollbar-gutter: stable;
+          padding: 18px 18px calc(180px + env(safe-area-inset-bottom, 0px));
+          scroll-padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+        }
+        .studio-chat-stream-inner {
+          display: flex;
+          max-width: min(640px, calc(100% - 24px));
+          min-height: 100%;
+          margin: 0 auto;
+          flex-direction: column;
+          justify-content: flex-end;
+          gap: 12px;
+        }
+        .studio-chat-empty-state {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+        .studio-chat-empty-state .studio-empty-logo {
+          margin: 0 auto 12px;
+        }
+        .studio-chat-empty-state h3 {
+          color: var(--color-cursor-text-bright);
+          font-size: 15px;
+          font-weight: 760;
+        }
+        .studio-chat-empty-state p {
+          max-width: 360px;
+          margin-top: 6px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
+        .studio-chat-bubble {
+          position: relative;
+          max-width: 100%;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 18px;
+          background: transparent;
+          overflow: hidden;
+          padding: 12px 14px;
+          box-shadow:
+            inset 0 0 16px -6px rgb(255 255 255 / 0.24),
+            0 18px 44px rgb(0 0 0 / 0.32);
+        }
+        .studio-chat-bubble.is-user {
+          border-color: rgb(255 255 255 / 0.15);
+          background: transparent;
+          box-shadow:
+            inset 0 0 16px -6px rgb(255 255 255 / 0.28),
+            0 18px 44px rgb(0 0 0 / 0.32);
+        }
+        .studio-chat-bubble.is-result {
+          box-shadow:
+            inset 0 0 24px -2px rgb(255 255 255 / 0.42),
+            0 28px 64px rgb(0 0 0 / 0.65);
+        }
+        .studio-chat-bubble.is-system {
+          box-shadow:
+            inset 0 0 20px -4px rgb(255 255 255 / 0.35),
+            0 28px 64px rgb(0 0 0 / 0.55);
+        }
+
+        .studio-chat-kicker {
+          margin-bottom: 6px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+        }
+        .studio-chat-text {
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          line-height: 1.5;
+          white-space: pre-wrap;
+        }
+        .studio-video-progress-card {
+          margin: -12px -14px;
+          overflow: hidden;
+          border-radius: 18px;
+          border: 0;
+          background: transparent;
+          box-shadow:
+            0 28px 64px rgb(0 0 0 / 0.65);
+        }
+        .studio-video-progress-frame {
+          position: relative;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          background: rgba(0,0,0,0.9);
+        }
+        .studio-video-progress-frame::before {
+          content: "";
+          position: absolute;
+          inset: -80%;
+          background:
+            radial-gradient(circle at 30% 50%, color-mix(in srgb, var(--cursor-accent) 30%, transparent) 0%, transparent 40%),
+            radial-gradient(circle at 70% 50%, color-mix(in srgb, var(--cursor-accent-hover) 24%, transparent) 0%, transparent 40%);
+          animation: studio-aura-drift 5000ms ease-in-out infinite alternate;
+        }
+        @keyframes studio-aura-drift {
+          0% { transform: translate(-10%, -5%) scale(1); }
+          50% { transform: translate(5%, 5%) scale(1.1); }
+          100% { transform: translate(10%, -5%) scale(1); }
+        }
+        .studio-video-progress-frame::after {
+          content: "";
+          position: absolute;
+          inset: -100%;
+          background:
+            radial-gradient(circle at 50% 50%, transparent 20%, color-mix(in srgb, var(--mos-text-bright) 20%, transparent) 40%, transparent 55%),
+            radial-gradient(circle at 50% 50%, transparent 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent) 25%, transparent 45%);
+          animation: studio-ripple-pulse 3000ms cubic-bezier(0.25, 0, 0.2, 1) infinite;
+        }
+        @keyframes studio-ripple-pulse {
+          0% { transform: scale(0.5); opacity: 0; }
+          15% { opacity: 0.7; }
+          100% { transform: scale(1.8); opacity: 0; }
+        }
+        .studio-video-progress-content {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          color: var(--color-cursor-text-bright);
+          text-align: center;
+        }
+        @keyframes studio-spin {
+          to { transform: rotate(360deg); }
+        }
+        .studio-chat-result-grid {
+          display: grid;
+          gap: 10px;
+          margin: -12px -14px;
+        }
+        .studio-chat-result-card {
+          overflow: hidden;
+          border-radius: 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+          background: rgba(0,0,0,0.9);
+          box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
+            0 28px 64px rgb(0 0 0 / 0.65);
+        }
+        .studio-chat-result-card img,
+        .studio-chat-result-card video {
+          display: block;
+          width: 100%;
+          object-fit: contain;
+          background: rgba(0,0,0,0.9);
+        }
+        .studio-chat-result-actions {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 9px 10px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        @media (max-width: 899px) {
+          .studio-video-progress-card {
+            max-width: none;
+            width: 100%;
+          }
+          .studio-chat-stream {
+            padding: 12px 12px calc(154px + env(safe-area-inset-bottom, 0px));
+            scroll-padding-bottom: calc(154px + env(safe-area-inset-bottom, 0px));
+          }
+        }
         @keyframes studio-logo-breathe {
           0%, 100% { opacity: 0.34; transform: scale(0.96); }
           50% { opacity: 0.62; transform: scale(1.04); }
@@ -4939,7 +5658,7 @@ export function StudioShell() {
         </div>
         <PanelSearchBar value={search} onChange={setSearch} placeholder="Search your content" aria-label="Search your content" />
         <div className="studio-folder-pathbar">
-          <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} />
+          <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} onDropEntry={handleBreadcrumbDrop} />
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
           <FileTree
@@ -4975,6 +5694,7 @@ export function StudioShell() {
             searchTruncated={searchState.truncated}
             onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
             onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
+            onEntryDrop={handleEntryDrop}
           />
         </div>
       </aside>
@@ -5001,17 +5721,31 @@ export function StudioShell() {
               />
             ) : null}
             <CreditPill entitlement={entitlement} />
+            {isAdminUser ? (
+              <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+            ) : null}
+            <button
+              className="studio-settings-pill studio-settings-trigger"
+              onClick={() => setHistoryOpen(v => !v)}
+              aria-label="Chat history"
+              title="Chat history"
+            >
+              <History className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
             <StudioSettingsLauncher
               onOpenSettingsTab={openSettingsTab}
             />
           </div>
         </header>
-        <section className="min-h-0 flex-1 overflow-hidden">
+        <section className="min-h-0 flex-1">
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
             assets={assetsWithPreviewUrls ?? []}
             events={events}
+            threads={threads ?? []}
+            selectedThreadId={activeThreadId}
+            onSelectThread={setSelectedThreadId}
             onAttach={attachEntry}
             onDuplicate={duplicateEntry}
             onRename={renameEntry}
@@ -5031,9 +5765,11 @@ export function StudioShell() {
             pricing={pricing}
             bankAccounts={bankAccounts}
             adminPayments={adminPayments}
+            adminCustomers={adminCustomers}
             payments={payments}
-            notifications={notifications}
             onOpenSettings={() => openSettingsTab("general")}
+            onOpenAdminTab={openAdminTab}
+            onSeedStylePresets={() => seedStylePresets()}
             onCreateItem={(values) => createStudioItem(values)}
             onUploadElementFiles={(files) => uploadElementFiles(files)}
             onCloseTab={closeTab}
@@ -5058,11 +5794,10 @@ export function StudioShell() {
             setResolution={setResolution}
             durationSeconds={durationSeconds}
             setDurationSeconds={setDurationSeconds}
-            audioEnabled={audioEnabled}
-            setAudioEnabled={setAudioEnabled}
-            hasReferenceInput={mode === "video" && generationReferences.length > 0}
-            hasVideoReferenceInput={mode === "video" && hasVideoReferenceInput}
-            hasNonVideoReferenceInput={mode === "video" && hasNonVideoReferenceInput}
+            audioEnabled={mode === "video" ? false : audioEnabled}
+            hasReferenceInput={mode === "video" && videoSupportsReferenceInput && generationReferences.length > 0}
+            hasVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasVideoReferenceInput}
+            hasNonVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasNonVideoReferenceInput}
             generationReferences={generationReferences}
             pricing={pricing}
             disabled={flowPending}
@@ -5114,6 +5849,43 @@ export function StudioShell() {
           )
         : null}
 
+      {historyOpen ? (
+        <div className="studio-settings-floating-overlay" role="dialog" aria-label="Chat history">
+          <button type="button" className="studio-settings-floating-backdrop" onClick={() => setHistoryOpen(false)} aria-label="Close history" />
+          <aside className="studio-history-floating-panel">
+            <header className="studio-history-floating-head">
+              <input
+                className="studio-history-search"
+                type="search"
+                placeholder="Search threads..."
+                aria-label="Search chat history"
+              />
+              <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={() => setHistoryOpen(false)} aria-label="Close">&times;</button>
+            </header>
+            <div className="studio-history-list">
+              {threads?.length ? (
+                threads.map((thread) => (
+                  <button
+                    key={thread._id}
+                    className={`studio-history-item${thread._id === activeThreadId ? " is-active" : ""}`}
+                    onClick={() => {
+                      setSelectedThreadId(thread._id);
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <span className="studio-history-item-title">{thread.title || "Untitled generation"}</span>
+                    <span className="studio-history-item-date">
+                      {new Date(thread._creationTime).toLocaleDateString()}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="studio-history-empty">No threads yet</p>
+              )}
+            </div>
+          </aside>
+        </div>
+      ) : null}
       {settingsOpen ? (
         <SettingsFloatingPanel
           currentUser={currentUser}
@@ -5128,7 +5900,6 @@ export function StudioShell() {
             if (isMobile) setMobileSection("composer");
           }}
           onSaveAccount={(values) => void updateAccountDetails(values).then(() => setStatus("Account updated."))}
-          onSeedStylePresets={() => seedStylePresets()}
           customCursorEnabled={customCursorEnabled}
           onCustomCursorChange={setCustomCursorEnabled}
         />
@@ -5155,7 +5926,7 @@ export function StudioShell() {
             if (action === "open") handleEntryOpen(entry);
             if (action === "attach") attachEntry(entry);
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
-            if (action === "copy-path") void navigator.clipboard?.writeText(entry.path ?? "");
+            if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
             if (action === "download") handleEntryOpen(entry);
           }}
         />
@@ -5183,7 +5954,6 @@ function StudioComposer({
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
-  setAudioEnabled,
   hasReferenceInput,
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
@@ -5486,8 +6256,6 @@ function StudioComposer({
                 setResolution={setResolution}
                 durationSeconds={durationSeconds}
                 setDurationSeconds={setDurationSeconds}
-                audioEnabled={audioEnabled}
-                setAudioEnabled={setAudioEnabled}
               />
             ) : null}
           </div>
@@ -5545,10 +6313,15 @@ function StudioComposerChipPreview({ preview }) {
   const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
   const top = rect.top > height + 18 ? rect.top - height - 10 : rect.bottom + 10;
   const label = attachment.label ?? attachment.filename ?? "Preview";
+  const mediaUrl = attachment.mediaUrl ?? attachment.thumbnailUrl;
   return (
     <div className="studio-chip-preview-card" style={{ left, top, width }} role="tooltip">
       <div className="studio-chip-preview-media">
-        <img src={attachment.thumbnailUrl} alt="" loading="lazy" />
+        {attachment.kind === "video" ? (
+          <video src={mediaUrl} muted playsInline preload="metadata" aria-label="" />
+        ) : (
+          <img src={attachment.thumbnailUrl} alt="" loading="lazy" />
+        )}
         {attachment.kind === "video" ? (
           <span className="studio-chip-preview-play" aria-hidden="true">
             <Video className="h-4 w-4" />
@@ -5565,6 +6338,7 @@ function StudioComposerPreviewDock({ attachment, onClose }) {
   const src = attachment.mediaUrl ?? attachment.thumbnailUrl;
   const isImage = attachment.kind === "image";
   const isVideo = attachment.kind === "video";
+  const posterUrl = isVideoFileUrl(attachment.thumbnailUrl) ? undefined : attachment.thumbnailUrl;
   return (
     <div className="studio-composer-preview-dock">
       <div className="studio-composer-preview-head">
@@ -5577,7 +6351,7 @@ function StudioComposerPreviewDock({ attachment, onClose }) {
         {isImage && src ? (
           <img className="studio-composer-preview-image" src={src} alt="" loading="lazy" />
         ) : isVideo && src ? (
-          <video className="studio-composer-preview-video" src={src} poster={attachment.thumbnailUrl} controls playsInline />
+          <video className="studio-composer-preview-video" src={src} poster={posterUrl} controls playsInline preload="metadata" />
         ) : (
           <div className="studio-composer-preview-fallback">
             {createPreviewKindLabel(attachment)}
@@ -5592,7 +6366,7 @@ function createPreviewKindLabel(attachment) {
   if (attachment.studioKind === "folder") return "Folder reference";
   if (attachment.studioKind === "document") return "Script reference";
   if (attachment.studioKind === "element") return "Brand item reference";
-  return attachment.filename ?? attachment.path ?? "Reference";
+  return attachment.filename ?? (attachment.path ? displayWorkspacePath(attachment.path) : "Reference");
 }
 
 function StudioModeSwitcher({ mode, setMode }) {
@@ -5852,13 +6626,16 @@ function StudioComposerInlineSettings({
   setResolution,
   durationSeconds,
   setDurationSeconds,
-  audioEnabled,
-  setAudioEnabled,
 }) {
+  const maxVideoDuration = 12;
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
-    setLocalDurationSeconds(String(durationSeconds));
-  }, [durationSeconds]);
+    const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
+    setLocalDurationSeconds(next);
+    if (mode === "video" && String(durationSeconds) !== next) {
+      setDurationSeconds(next);
+    }
+  }, [durationSeconds, mode, setDurationSeconds]);
   const aspectItems = [
     { value: "16:9", label: "16:9", meta: "YouTube / TV" },
     { value: "9:16", label: "9:16", meta: "TikTok / Shorts" },
@@ -5893,9 +6670,9 @@ function StudioComposerInlineSettings({
     { value: "1280x720", label: "720p" },
     { value: "1920x1080", label: "1080p" },
   ];
-  const durationProgress = `${((Number(localDurationSeconds) - 4) / 11) * 100}%`;
+  const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
-    const next = String(Math.max(4, Math.min(15, Number(seconds) || 4)));
+    const next = String(Math.max(4, Math.min(maxVideoDuration, Number(seconds) || 4)));
     setLocalDurationSeconds(next);
     setDurationSeconds(next);
   };
@@ -5967,13 +6744,13 @@ function StudioComposerInlineSettings({
           <div className="studio-inline-settings-range-panel">
             <div className="studio-duration-readout">
               <strong>{localDurationSeconds}s</strong>
-              <span>4-15s</span>
+              <span>4-12s</span>
             </div>
             <input
               className="studio-settings-range"
               type="range"
               min="4"
-              max="15"
+              max={maxVideoDuration}
               step="1"
               value={localDurationSeconds}
               onChange={(event) => setLocalDurationSeconds(event.currentTarget.value)}
@@ -5985,11 +6762,11 @@ function StudioComposerInlineSettings({
             />
             <div className="studio-duration-ticks" aria-hidden="true">
               <span>4s</span>
-              <span>10s</span>
-              <span>15s</span>
+              <span>8s</span>
+              <span>12s</span>
             </div>
             <div className="studio-settings-chip-grid studio-duration-presets" role="group" aria-label="Video duration presets">
-              {["4", "10", "15"].map((seconds) => (
+              {["4", "8", "12"].map((seconds) => (
                 <button
                   key={seconds}
                   type="button"
@@ -6003,20 +6780,6 @@ function StudioComposerInlineSettings({
             </div>
           </div>
         </StudioInlineSettingPopover>
-      ) : null}
-      {mode === "video" ? (
-        <StudioInlineSettingSelect
-          icon={Volume2}
-          label="Audio"
-          value={audioEnabled ? "on" : "off"}
-          items={[
-            { value: "on", label: "On" },
-            { value: "off", label: "Off" },
-          ]}
-          onChange={(value) => setAudioEnabled(value === "on")}
-          hideLabel
-          hideChevron
-        />
       ) : null}
     </div>
   );
@@ -6142,6 +6905,20 @@ function StudioSettingsLauncher({ onOpenSettingsTab }) {
     >
       <Settings className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
+  );
+}
+
+function AdminQuickLinks({ onOpenAdminTab }) {
+  return (
+    <button
+      type="button"
+      className="studio-settings-pill studio-settings-trigger"
+      aria-label="Admin workspace"
+      title="Admin workspace"
+      onClick={() => onOpenAdminTab("payments")}
+    >
+      <Gauge className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
   );
 }
 
@@ -6517,11 +7294,17 @@ function createComposerAttachmentToken(attachment) {
   const isPreviewAsset = attachment.thumbnailUrl && (attachment.kind === "image" || attachment.kind === "video");
   if (isPreviewAsset) {
     token.classList.add("studio-inline-tag--preview");
-    const img = document.createElement("img");
-    img.className = "studio-inline-tag-media";
-    img.src = attachment.thumbnailUrl;
-    img.alt = "";
-    kind.appendChild(img);
+    const media = attachment.kind === "video" ? document.createElement("video") : document.createElement("img");
+    media.className = "studio-inline-tag-media";
+    media.src = attachment.kind === "video" ? (attachment.mediaUrl ?? attachment.thumbnailUrl) : attachment.thumbnailUrl;
+    if (attachment.kind === "video") {
+      media.muted = true;
+      media.playsInline = true;
+      media.preload = "metadata";
+    } else {
+      media.alt = "";
+    }
+    kind.appendChild(media);
     if (attachment.kind === "video") {
       kind.classList.add("studio-inline-tag-kind--video");
       kind.appendChild(createComposerTokenIcon("video-play"));
@@ -6954,11 +7737,151 @@ function playStudioTapFeedback() {
   }
 }
 
+function StudioThreadChat({
+  threads = [],
+  selectedThreadId,
+  events,
+  assets = [],
+  onSelectThread,
+  onSwitchThreadFolder,
+}) {
+  const selectedThread = threads.find((thread) => thread._id === selectedThreadId);
+  const safeEvents = events ?? [];
+  const hasEvents = safeEvents.length > 0;
+  const completedJobIds = new Set(
+    safeEvents
+      .filter((event) => event.kind === "result" && event.generationJobId)
+      .map((event) => event.generationJobId),
+  );
+  const displayEvents = safeEvents.filter(
+    (event) => !(event.kind === "stage" && event.generationJobId && completedJobIds.has(event.generationJobId)),
+  );
+  return (
+    <div className="studio-chat-render-area">
+      <div className="studio-chat-stream">
+        <div className="studio-chat-stream-inner">
+          {!hasEvents ? (
+            <div className="studio-chat-empty-state">
+              <div>
+                <div className="studio-empty-logo" aria-hidden="true">
+                  <img
+                    src={MERCURY_EMPTY_LOGO.src}
+                    srcSet={MERCURY_EMPTY_LOGO.srcSet}
+                    sizes={MERCURY_EMPTY_LOGO.sizes}
+                    alt=""
+                    width={72}
+                    height={72}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            displayEvents.map((event) => (
+              <StudioThreadEvent
+                key={event._id}
+                event={event}
+                assets={assets}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StudioThreadEvent({ event, assets }) {
+  if (event.kind === "prompt") {
+    return (
+      <article className="studio-chat-bubble is-user">
+        <p className="studio-chat-text">{event.prompt}</p>
+      </article>
+    );
+  }
+  if (event.kind === "stage") {
+    return (
+      <article className="studio-chat-bubble is-system">
+        {event.stage === "queued" || event.stage === "generating" || event.stage === "saving" ? (
+          <StudioProgressCard stage={event.stage} />
+        ) : (
+          <p className="studio-thread-stage">{event.stage}</p>
+        )}
+      </article>
+    );
+  }
+  if (event.kind === "result") {
+    const eventAssets = event.resultAssets?.length
+      ? event.resultAssets
+      : (event.assetIds ?? []).map((assetId) => assets.find((asset) => asset._id === assetId || asset.studioId === assetId));
+    const resultAssets = eventAssets
+      .filter(Boolean)
+      .map(assetToEntry);
+    return (
+      <article className="studio-chat-bubble is-result">
+        {resultAssets.length ? (
+          <div className="studio-chat-result-grid">
+            {resultAssets.map((entry) => (
+              <StudioChatResultCard key={entry.studioId ?? entry.path} entry={entry} />
+            ))}
+          </div>
+        ) : (
+          <p className="studio-chat-text">{event.assetIds?.length ?? 0} result(s) ready. Open the linked folder to view them.</p>
+        )}
+      </article>
+    );
+  }
+  return (
+    <article className="studio-chat-bubble is-system">
+      <p className="studio-chat-kicker">Studio</p>
+      <p className="studio-chat-text">Folder changed for this chat.</p>
+    </article>
+  );
+}
+
+function StudioProgressCard({ stage }) {
+  const copy =
+    stage === "saving"
+      ? "Saving your render into Studio..."
+      : stage === "queued"
+        ? "Queued for render..."
+        : "Rendering...";
+  return (
+    <div className="studio-video-progress-card">
+      <div className="studio-video-progress-frame" aria-live="polite">
+        <div className="studio-video-progress-content">
+          <strong>{copy}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StudioChatResultCard({ entry }) {
+  const isVideo = entry.kind === "video";
+  const isImage = entry.kind === "image";
+  const src = entry.mediaUrl ?? entry.thumbnailUrl;
+  const poster = isVideoFileUrl(entry.thumbnailUrl) ? undefined : entry.thumbnailUrl;
+  return (
+    <div className="studio-chat-result-card">
+      {isVideo && src ? (
+        <video src={src} poster={poster} controls playsInline preload="metadata" />
+      ) : isImage && src ? (
+        <img src={src} alt="" loading="lazy" />
+      ) : (
+        <div className="studio-composer-preview-fallback">{entry.kindLabel ?? "Result"}</div>
+      )}
+    </div>
+  );
+}
+
 function ActivePane({
   activeTab,
   activeEntry,
   assets,
   events,
+  threads,
+  selectedThreadId,
+  onSelectThread,
   onAttach,
   onDuplicate,
   onRename,
@@ -6973,9 +7896,11 @@ function ActivePane({
   pricing,
   bankAccounts,
   adminPayments,
+  adminCustomers,
   payments,
-  notifications,
   onOpenSettings,
+  onOpenAdminTab,
+  onSeedStylePresets,
   onCreateItem,
   onUploadElementFiles,
   onCloseTab,
@@ -6995,20 +7920,13 @@ function ActivePane({
   }
   if (activeTab.startsWith("composer:")) {
     return (
-      <div className="cursor-chat-empty thread-empty cursor-chat-empty-logo-only">
-        <div className="studio-empty-hero">
-          <div className="studio-empty-logo" aria-hidden="true">
-            <img
-              src={MERCURY_EMPTY_LOGO.src}
-              srcSet={MERCURY_EMPTY_LOGO.srcSet}
-              sizes={MERCURY_EMPTY_LOGO.sizes}
-              alt=""
-              width={72}
-              height={72}
-            />
-          </div>
-        </div>
-      </div>
+      <StudioThreadChat
+        threads={threads}
+        selectedThreadId={selectedThreadId}
+        events={events}
+        assets={assets}
+        onSelectThread={onSelectThread}
+      />
     );
   }
   if (activeEntry?.studioKind === "document") {
@@ -7024,27 +7942,14 @@ function ActivePane({
   }
   if (activeTab.startsWith("thread:")) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="studio-thread-head flex items-center justify-between gap-3 border-b px-4 py-3">
-          <div>
-            <p className="text-sm font-semibold text-cursor-text-bright">Generation updates</p>
-            <p className="text-xs text-cursor-muted">Your results stay with this project.</p>
-          </div>
-          <button className={STYLE.iconButton} onClick={() => onSwitchThreadFolder(activeTab.slice("thread:".length))}>
-            Save in current folder
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-          {(events ?? []).map((event) => (
-            <article key={event._id} className="studio-thread-card">
-              <p className="studio-thread-kind">{event.kind}</p>
-              {event.prompt ? <p className="mt-2 whitespace-pre-wrap text-sm text-cursor-text">{event.prompt}</p> : null}
-              {event.stage ? <p className="studio-thread-stage mt-3">{event.stage}</p> : null}
-              {event.assetIds?.length ? <p className="mt-2 text-xs text-cursor-muted">{event.assetIds.length} result(s) ready</p> : null}
-            </article>
-          ))}
-        </div>
-      </div>
+      <StudioThreadChat
+        threads={threads}
+        selectedThreadId={activeTab.slice("thread:".length)}
+        events={events}
+        assets={assets}
+        onSelectThread={onSelectThread}
+        onSwitchThreadFolder={onSwitchThreadFolder}
+      />
     );
   }
   if (adminTab) {
@@ -7052,12 +7957,13 @@ function ActivePane({
       <AdminWorkspacePane
         tab={adminTab}
         currentUser={currentUser}
-        billingAccount={billingAccount}
         pricing={pricing}
         bankAccounts={bankAccounts}
         payments={adminPayments ?? payments}
-        notifications={notifications}
+        customers={adminCustomers}
         onOpenSettings={onOpenSettings}
+        onOpenAdminTab={onOpenAdminTab}
+        onSeedStylePresets={onSeedStylePresets}
       />
     );
   }
@@ -7298,6 +8204,7 @@ function StudioAssetPreview({ entry, onAttach, onRename, onDuplicate, onTrash })
   );
   const mediaUrl = entry.mediaUrl ?? signedMediaUrl;
   const thumbUrl = entry.thumbnailUrl ?? mediaUrl;
+  const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
   return (
     <div className="studio-asset-preview">
       <header className="studio-asset-preview-head">
@@ -7321,7 +8228,7 @@ function StudioAssetPreview({ entry, onAttach, onRename, onDuplicate, onTrash })
           <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} />
         ) : kind === "video" && mediaUrl ? (
           <div className="desk-media-player-embed studio-asset-player">
-            <DeskMediaPlayer kind="video" src={mediaUrl} name={entry.name} poster={thumbUrl} fileSize={entry.byteSize ?? null} />
+            <DeskMediaPlayer kind="video" src={mediaUrl} name={entry.name} poster={videoPosterUrl} fileSize={entry.byteSize ?? null} />
           </div>
         ) : kind === "audio" && mediaUrl ? (
           <div className="desk-media-player-embed studio-asset-player">
@@ -7404,40 +8311,287 @@ function BillingWorkspacePane({ tab, billingAccount, pricing, bankAccounts, paym
   );
 }
 
-function AdminWorkspacePane({ tab, currentUser, billingAccount, pricing, bankAccounts, payments, notifications, onOpenSettings }) {
+function AdminWorkspacePane({
+  tab,
+  currentUser,
+  pricing,
+  bankAccounts,
+  payments,
+  customers,
+  onOpenSettings,
+  onOpenAdminTab,
+  onSeedStylePresets,
+}) {
   const plans = pricingPlans(pricing);
-  const pendingPayments = (payments ?? []).filter((payment) => payment.status !== "payment_completed");
+  const safePayments = payments ?? [];
+  const pendingPayments = safePayments.filter((payment) => payment.status !== "payment_completed" && payment.status !== "rejected");
+  const completedPayments = safePayments.filter((payment) => payment.status === "payment_completed");
+  const rejectedPayments = safePayments.filter((payment) => payment.status === "rejected");
+  const [paymentFilter, setPaymentFilter] = useState("pending");
+  const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
+  const seedLaunchPricing = useMutation(api.billing.adminSeedLaunchPricing);
+  const seedBankAccount = useMutation(api.billing.adminSeedBankAccountFromEnv);
+  const seedSubscriptionPlans = useMutation(api.billing.adminSeedSubscriptionPlans);
   const [reviewStatus, setReviewStatus] = useState("");
-  async function reviewPayment(paymentId, status) {
+  const visiblePayments = safePayments
+    .filter((payment) => {
+      if (paymentFilter === "all") return true;
+      if (paymentFilter === "pending") return payment.status !== "payment_completed" && payment.status !== "rejected";
+      return payment.status === paymentFilter;
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const selectedPayment =
+    safePayments.find((payment) => payment._id === selectedPaymentId) ??
+    visiblePayments[0] ??
+    null;
+
+  async function reviewPayment(paymentId, status, rejectionReason) {
     setReviewStatus("Updating payment...");
     try {
       await adminReviewPayment({
         paymentId,
         status,
-        rejectionReason: status === "rejected" ? "Rejected by admin." : undefined,
+        rejectionReason: status === "rejected" ? (rejectionReason || "Rejected by admin.") : undefined,
       });
       setReviewStatus("Payment updated.");
     } catch (error) {
       setReviewStatus(error instanceof Error ? error.message : "Payment update failed.");
     }
   }
+
+  async function rejectPayment(paymentId) {
+    const reason = window.prompt("Why reject this payment?", "Receipt could not be verified.");
+    if (reason === null) return;
+    await reviewPayment(paymentId, "rejected", reason);
+  }
+
+  async function runSetup(label, action) {
+    setReviewStatus(`${label}...`);
+    try {
+      const result = await action();
+      setReviewStatus(result === null || result === undefined ? `${label} complete.` : `${label} complete: ${result}`);
+    } catch (error) {
+      setReviewStatus(error instanceof Error ? error.message : `${label} failed.`);
+    }
+  }
+
+  const adminTabs = [
+    { id: "payments", label: "Payments" },
+    { id: "customers", label: "Customers" },
+    { id: "setup", label: "Setup" },
+    { id: "pricing", label: "Pricing" },
+  ];
+  const customerRows = customers ?? [];
+
   return (
     <div className="h-full overflow-auto p-6">
       <div className="studio-admin-workspace">
         <section className="studio-admin-hero-card">
           <div>
-            <p className="studio-section-kicker">Team tools</p>
-            <h2>{tab === "payments" ? "Payments and receipts" : "Pricing setup"}</h2>
-            <p>Logged in as {currentUser?.email ?? currentUser?.phone ?? currentUser?.name ?? "admin"}.</p>
+            <p className="studio-section-kicker">Admin workspace</p>
+            <h2>{adminTitle(tab)}</h2>
+            <p>Manage payments, customers, pricing, and launch setup outside Settings.</p>
           </div>
-          <button type="button" className="cursor-settings-action" onClick={onOpenSettings}>
-            <Settings className="h-3.5 w-3.5" />
-            Settings
-          </button>
+          <div className="studio-admin-hero-actions">
+            <span className="studio-admin-chip">{currentUser?.email ?? currentUser?.phone ?? currentUser?.name ?? "admin"}</span>
+            <button type="button" className="cursor-settings-action" onClick={onOpenSettings}>
+              <Settings className="h-3.5 w-3.5" />
+              Settings
+            </button>
+          </div>
         </section>
 
-        {tab === "pricing" ? (
+        <nav className="studio-admin-tabbar" aria-label="Admin sections">
+          {adminTabs.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={tab === item.id ? "is-active" : ""}
+              onClick={() => onOpenAdminTab(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        {tab === "payments" ? (
+          <>
+            <section className="studio-admin-grid-large">
+              <AdminMetricCard label="Pending payments" value={pendingPayments.length} body="Receipts waiting for review." />
+              <AdminMetricCard label="Approved payments" value={completedPayments.length} body="Completed payments and credit grants." />
+              <AdminMetricCard label="Rejected payments" value={rejectedPayments.length} body="Rejected or unverifiable receipts." />
+            </section>
+            <section className="studio-admin-card studio-admin-table-card">
+              <div className="studio-admin-table-head">
+                <div>
+                  <p className="studio-admin-card-kicker">Payment queue</p>
+                  <h3>Review receipts</h3>
+                </div>
+                <div className="studio-admin-filter-tabs" role="group" aria-label="Payment filters">
+                  {[
+                    ["pending", "Pending"],
+                    ["receipt_uploaded", "Uploaded"],
+                    ["receipt_received", "Received"],
+                    ["payment_completed", "Approved"],
+                    ["rejected", "Rejected"],
+                    ["all", "All"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={paymentFilter === value ? "is-active" : ""}
+                      onClick={() => setPaymentFilter(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="studio-admin-payment-layout">
+                <div className="studio-admin-table-wrap">
+                  <table className="studio-admin-table">
+                    <thead>
+                      <tr>
+                        <th>Customer</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Receipt</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visiblePayments.map((payment) => (
+                        <tr
+                          key={payment._id}
+                          className={selectedPayment?._id === payment._id ? "is-selected" : ""}
+                          onClick={() => setSelectedPaymentId(payment._id)}
+                        >
+                          <td>
+                            <strong>{paymentCustomerName(payment)}</strong>
+                            <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
+                          </td>
+                          <td>{payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")}</td>
+                          <td>{formatMoney(payment.amountCents)}</td>
+                          <td><PaymentStatusPill status={payment.status} /></td>
+                          <td>{formatDate(payment.createdAt)}</td>
+                          <td>
+                            {payment.receiptUrl ? (
+                              <a href={payment.receiptUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
+                                Open
+                              </a>
+                            ) : (
+                              <span>No receipt</span>
+                            )}
+                          </td>
+                          <td>
+                            <PaymentActions
+                              payment={payment}
+                              onReceived={() => void reviewPayment(payment._id, "receipt_received")}
+                              onApprove={() => void reviewPayment(payment._id, "payment_completed")}
+                              onReject={() => void rejectPayment(payment._id)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!visiblePayments.length ? <p className="studio-settings-empty">No payments match this filter.</p> : null}
+                </div>
+                <PaymentDetailPanel
+                  payment={selectedPayment}
+                  onReceived={() => selectedPayment ? void reviewPayment(selectedPayment._id, "receipt_received") : undefined}
+                  onApprove={() => selectedPayment ? void reviewPayment(selectedPayment._id, "payment_completed") : undefined}
+                  onReject={() => selectedPayment ? void rejectPayment(selectedPayment._id) : undefined}
+                />
+              </div>
+              {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
+            </section>
+          </>
+        ) : tab === "customers" ? (
+          <section className="studio-admin-card studio-admin-table-card">
+            <div className="studio-admin-table-head">
+              <div>
+                <p className="studio-admin-card-kicker">Customers</p>
+                <h3>{customerRows.length} accounts</h3>
+              </div>
+            </div>
+            <div className="studio-admin-table-wrap">
+              <table className="studio-admin-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Role</th>
+                    <th>Credits</th>
+                    <th>Subscription</th>
+                    <th>Payments</th>
+                    <th>Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customerRows.map((customer) => (
+                    <tr key={customer._id}>
+                      <td>
+                        <strong>{customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer"}</strong>
+                        <span>{customer.email ?? customer.phone ?? customer._id}</span>
+                      </td>
+                      <td>{customer.role}</td>
+                      <td>{customer.creditBalance} <span>{customer.reservedCredits} reserved</span></td>
+                      <td>
+                        <strong>{customer.activeSubscription?.planName ?? "None"}</strong>
+                        <span>{customer.activeSubscription ? `${customer.activeSubscription.status} until ${formatDate(customer.activeSubscription.currentPeriodEnd)}` : "No active subscription"}</span>
+                      </td>
+                      <td>
+                        <strong>{customer.paymentCount}</strong>
+                        <span>{customer.latestPaymentStatus ? humanizePaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
+                      </td>
+                      <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!customerRows.length ? <p className="studio-settings-empty">No customers yet.</p> : null}
+            </div>
+          </section>
+        ) : tab === "setup" ? (
+          <section className="studio-admin-card studio-admin-table-card">
+            <div className="studio-admin-table-head">
+              <div>
+                <p className="studio-admin-card-kicker">Launch setup</p>
+                <h3>Admin seeds and defaults</h3>
+              </div>
+            </div>
+            <div className="studio-admin-setup-grid">
+              <AdminSetupAction
+                title="Style presets"
+                body="Creates the default creative style options used by generation."
+                actionLabel="Seed style presets"
+                onRun={() => runSetup("Seeding style presets", onSeedStylePresets)}
+              />
+              <AdminSetupAction
+                title="Launch pricing"
+                body="Creates or refreshes default content credit costs."
+                actionLabel="Seed pricing"
+                onRun={() => runSetup("Seeding pricing", seedLaunchPricing)}
+              />
+              <AdminSetupAction
+                title="Bank account"
+                body="Creates or refreshes the configured bank-transfer receiving account."
+                actionLabel="Seed bank account"
+                onRun={() => runSetup("Seeding bank account", seedBankAccount)}
+              />
+              <AdminSetupAction
+                title="Subscriptions"
+                body="Creates or refreshes monthly subscription plans."
+                actionLabel="Seed plans"
+                onRun={() => runSetup("Seeding subscription plans", seedSubscriptionPlans)}
+              />
+            </div>
+            {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
+          </section>
+        ) : (
           <>
             <section className="studio-admin-grid-large">
               {plans.map((plan) => (
@@ -7461,54 +8615,6 @@ function AdminWorkspacePane({ tab, currentUser, billingAccount, pricing, bankAcc
                 <div className="studio-credit-cost"><span>Video</span><strong>from {pricing?.videoCredits ?? 15} credits</strong></div>
               </div>
             </section>
-          </>
-        ) : (
-          <>
-            <section className="studio-admin-grid-large">
-              <article className="studio-admin-card">
-                <p className="studio-admin-card-kicker">Credits</p>
-                <h3>{billingAccount?.creditBalance ?? 0}</h3>
-                <p>{billingAccount?.reservedCredits ?? 0} set aside for content in progress.</p>
-              </article>
-              <article className="studio-admin-card">
-                <p className="studio-admin-card-kicker">Pending payments</p>
-                <h3>{pendingPayments.length}</h3>
-                <p>Bank transfer receipts waiting for review.</p>
-              </article>
-              <article className="studio-admin-card">
-                <p className="studio-admin-card-kicker">Notifications</p>
-                <h3>{notifications?.length ?? 0}</h3>
-                <p>Recent account and content updates.</p>
-              </article>
-            </section>
-            <section className="studio-admin-card">
-              <p className="studio-admin-card-kicker">Payment review</p>
-              <div className="studio-settings-invoice-list">
-                {(payments ?? []).slice(0, 12).map((payment) => {
-                  const isSubscription = Boolean(payment.subscriptionPlanId);
-                  return (
-                    <div key={payment._id} className="studio-settings-invoice-row">
-                      <div>
-                        <strong>{isSubscription ? "Subscription" : "Top up"} · ${(payment.amountCents / 100).toFixed(2)}</strong>
-                        <span>{humanizePaymentStatus(payment.status)} · {formatDate(payment.createdAt)}</span>
-                      </div>
-                      <div className="studio-payment-review-actions">
-                        {payment.receiptUrl ? <a href={payment.receiptUrl} target="_blank" rel="noreferrer">Receipt</a> : <span>No receipt</span>}
-                        {payment.status !== "payment_completed" && payment.status !== "rejected" ? (
-                          <>
-                            <button type="button" onClick={() => void reviewPayment(payment._id, "receipt_received")}>Received</button>
-                            <button type="button" onClick={() => void reviewPayment(payment._id, "payment_completed")}>Approve</button>
-                            <button type="button" onClick={() => void reviewPayment(payment._id, "rejected")}>Reject</button>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-                {!payments?.length ? <p className="studio-settings-empty">No payments yet.</p> : null}
-                {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
-              </div>
-            </section>
             <section className="studio-admin-card">
               <p className="studio-admin-card-kicker">Payment accounts</p>
               <div className="space-y-2">
@@ -7530,6 +8636,99 @@ function AdminWorkspacePane({ tab, currentUser, billingAccount, pricing, bankAcc
   );
 }
 
+function AdminMetricCard({ label, value, body }) {
+  return (
+    <article className="studio-admin-card">
+      <p className="studio-admin-card-kicker">{label}</p>
+      <h3>{value}</h3>
+      <p>{body}</p>
+    </article>
+  );
+}
+
+function PaymentActions({ payment, onReceived, onApprove, onReject }) {
+  if (payment.status === "payment_completed" || payment.status === "rejected") {
+    return <span className="studio-admin-muted-action">Closed</span>;
+  }
+  return (
+    <div className="studio-payment-review-actions" onClick={(event) => event.stopPropagation()}>
+      {payment.status === "receipt_uploaded" ? <button type="button" onClick={onReceived}>Received</button> : null}
+      <button type="button" onClick={onApprove}>Approve</button>
+      <button type="button" onClick={onReject}>Reject</button>
+    </div>
+  );
+}
+
+function PaymentDetailPanel({ payment, onReceived, onApprove, onReject }) {
+  if (!payment) {
+    return (
+      <aside className="studio-admin-detail-panel">
+        <p className="studio-admin-card-kicker">Payment detail</p>
+        <h3>No payment selected</h3>
+        <p>Select a payment to review the receipt and account details.</p>
+      </aside>
+    );
+  }
+  const canReview = payment.status !== "payment_completed" && payment.status !== "rejected";
+  return (
+    <aside className="studio-admin-detail-panel">
+      <p className="studio-admin-card-kicker">Payment detail</p>
+      <h3>{formatMoney(payment.amountCents)}</h3>
+      <div className="studio-admin-detail-list">
+        <BankLine label="Customer" value={paymentCustomerName(payment)} />
+        <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
+        <BankLine label="Type" value={payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")} />
+        <BankLine label="Credits" value={payment.creditsGranted ?? "Subscription grant"} />
+        <BankLine label="Bank" value={payment.bankAccountLabel ?? "Unassigned"} />
+        <BankLine label="Created" value={formatDate(payment.createdAt)} />
+        <BankLine label="Reviewed" value={payment.reviewedAt ? formatDate(payment.reviewedAt) : "Not reviewed"} />
+      </div>
+      <PaymentStatusPill status={payment.status} />
+      {payment.rejectionReason ? <p className="studio-admin-rejection-note">{payment.rejectionReason}</p> : null}
+      <div className="studio-admin-detail-actions">
+        {payment.receiptUrl ? <a href={payment.receiptUrl} target="_blank" rel="noreferrer">Open receipt</a> : <span>No receipt uploaded</span>}
+        {canReview ? (
+          <>
+            {payment.status === "receipt_uploaded" ? <button type="button" onClick={onReceived}>Mark received</button> : null}
+            <button type="button" onClick={onApprove}>Approve payment</button>
+            <button type="button" onClick={onReject}>Reject</button>
+          </>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
+function AdminSetupAction({ title, body, actionLabel, onRun }) {
+  return (
+    <article className="studio-admin-setup-card">
+      <div>
+        <h4>{title}</h4>
+        <p>{body}</p>
+      </div>
+      <button type="button" className="cursor-settings-action" onClick={() => void onRun()}>
+        {actionLabel}
+      </button>
+    </article>
+  );
+}
+
+function PaymentStatusPill({ status }) {
+  return <span className={`studio-payment-status-pill is-${status}`}>{humanizePaymentStatus(status)}</span>;
+}
+
+function adminTitle(tab) {
+  if (tab === "payments") return "Payments and receipts";
+  if (tab === "customers") return "Customers";
+  if (tab === "setup") return "Admin setup";
+  if (tab === "pricing") return "Pricing setup";
+  return "Admin";
+}
+
+function paymentCustomerName(payment) {
+  return payment.customer?.name ?? payment.customer?.email ?? payment.customer?.phone ?? "Unknown customer";
+}
+
 function SettingsFloatingPanel({
   currentUser,
   payments,
@@ -7540,7 +8739,6 @@ function SettingsFloatingPanel({
   subscriptionPlans,
   onClose,
   onSaveAccount,
-  onSeedStylePresets,
   customCursorEnabled,
   onCustomCursorChange,
 }) {
@@ -7562,7 +8760,6 @@ function SettingsFloatingPanel({
           bankAccounts={bankAccounts}
           subscriptionPlans={subscriptionPlans}
           onSaveAccount={onSaveAccount}
-          onSeedStylePresets={onSeedStylePresets}
           customCursorEnabled={customCursorEnabled}
           onCustomCursorChange={onCustomCursorChange}
         />
@@ -7581,18 +8778,15 @@ function SettingsWorkspacePane({
   bankAccounts,
   subscriptionPlans,
   onSaveAccount,
-  onSeedStylePresets,
   customCursorEnabled,
   onCustomCursorChange,
 }) {
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const [section, setSection] = useState(tab || "general");
   const [creditMode, setCreditMode] = useState("top-up");
   const [selectedPlanName, setSelectedPlanName] = useState("Studio");
   const [selectedSubscriptionPlanName, setSelectedSubscriptionPlanName] = useState("Studio");
   const [isPaymentStep, setIsPaymentStep] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState("");
-  const [setupStatus, setSetupStatus] = useState("");
   const [pendingReceiptPaymentId, setPendingReceiptPaymentId] = useState(null);
   const receiptInputRef = useRef(null);
   const submitBankPayment = useMutation(api.billing.submitBankPayment);
@@ -7670,26 +8864,12 @@ function SettingsWorkspacePane({
       setPaymentStatus(error instanceof Error ? error.message : "Receipt upload failed.");
     }
   }
-  async function seedDefaultStylePresets() {
-    setSetupStatus("Seeding style presets...");
-    try {
-      const created = await onSeedStylePresets?.();
-      setSetupStatus(
-        created === 0
-          ? "Style presets already exist."
-          : `Seeded ${created} style preset${created === 1 ? "" : "s"}.`,
-      );
-    } catch (error) {
-      setSetupStatus(error instanceof Error ? error.message : "Style preset setup failed.");
-    }
-  }
   const items = [
     { id: "general", label: "Appearance" },
     { id: "account", label: "Account details" },
     { id: "billing", label: "Billing" },
     { id: "top-up", label: "Add credits" },
     { id: "activity", label: "Activity" },
-    ...(isAdmin ? [{ id: "team", label: "Team tools" }] : []),
   ];
   return (
     <div className="studio-settings-workspace">
@@ -7954,36 +9134,6 @@ function SettingsWorkspacePane({
                 ))}
                 {!notifications?.length && !payments?.length ? <p>No recent billing or notification activity.</p> : null}
               </div>
-            </section>
-          ) : null}
-
-        {section === "team" && isAdmin ? (
-          <section className="cursor-settings-section studio-settings-simple-card">
-            <div className="studio-settings-rows">
-              <div className="studio-settings-row">
-                <span>Style presets</span>
-                <button
-                  type="button"
-                  className="cursor-settings-action"
-                  onClick={() => void seedDefaultStylePresets()}
-                >
-                  Seed defaults
-                </button>
-              </div>
-              <div className="studio-settings-row">
-                <span>Role</span>
-                <strong>{currentUser?.role ?? "Admin"}</strong>
-                </div>
-              <div className="studio-settings-row">
-                <span>Pending payments</span>
-                <strong>{(payments ?? []).filter((payment) => payment.status !== "payment_completed").length}</strong>
-              </div>
-              <div className="studio-settings-row">
-                <span>Payment accounts</span>
-                <strong>{bankAccounts?.length ?? 0}</strong>
-              </div>
-            </div>
-            {setupStatus ? <p className="studio-settings-payment-status">{setupStatus}</p> : null}
             </section>
           ) : null}
 
@@ -8289,6 +9439,7 @@ function folderToEntry(folder) {
     type: "dir",
     name: folder.name,
     path: studioPathForFolder(folder),
+    displayPath: displayWorkspacePath(studioPathForFolder(folder)),
     modified: folder.updatedAt,
     mtimeMs: folder.updatedAt,
     studioKind: "folder",
@@ -8301,6 +9452,7 @@ function documentToEntry(doc) {
     type: "file",
     name: `${doc.title}.md`,
     path: `/Studio/scripts/${doc._id}.md`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(doc.title, ".md")}`),
     modified: doc.updatedAt,
     mtimeMs: doc.updatedAt,
     ext: ".md",
@@ -8317,6 +9469,7 @@ function assetToEntry(asset) {
     type: "file",
     name: asset.name,
     path: `/Studio/assets/${asset._id}${ext}`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(asset.name, ext)}`),
     modified: asset.updatedAt,
     mtimeMs: asset.updatedAt,
     ext,
@@ -8332,6 +9485,10 @@ function assetToEntry(asset) {
   };
 }
 
+function isVideoFileUrl(url) {
+  return typeof url === "string" && /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
+}
+
 function elementToEntry(element, assets = []) {
   const sourceAssets = (element.sourceAssetIds ?? [])
     .map((assetId) => {
@@ -8343,6 +9500,7 @@ function elementToEntry(element, assets = []) {
     type: "file",
     name: `@${element.name}`,
     path: `/Studio/elements/${element._id}.element`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(`@${element.name}`, ".element")}`),
     modified: element.updatedAt,
     mtimeMs: element.updatedAt,
     ext: ".element",
@@ -8368,13 +9526,27 @@ function studioPathForFolder(folder) {
   return `/Studio/${folder.name}`;
 }
 
+function virtualFileName(name, ext) {
+  const cleanName = String(name ?? "item").replace(/[\\/]/g, "-").trim() || "item";
+  return cleanName.toLowerCase().endsWith(ext.toLowerCase()) ? cleanName : `${cleanName}${ext}`;
+}
+
 function tabDescriptor({ key, threads, assets, documents, elements, snapshots }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
   }
   if (key.startsWith("admin:")) {
     const kind = key.slice("admin:".length);
-    const title = kind === "payments" ? "Payments" : kind === "pricing" ? "Pricing" : "Team tools";
+    const title =
+      kind === "payments"
+        ? "Payments"
+        : kind === "customers"
+          ? "Customers"
+          : kind === "setup"
+            ? "Admin setup"
+            : kind === "pricing"
+              ? "Pricing"
+              : "Admin";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("billing:")) {
@@ -8397,6 +9569,7 @@ function tabDescriptor({ key, threads, assets, documents, elements, snapshots })
       kind: "file",
       title: entry.name,
       path: entry.path,
+      displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
       ext: entry.ext,
       status: "ready",
     };
@@ -8446,6 +9619,7 @@ function entryToAttachment(entry) {
     kind,
     label: entry.name.replace(/^@/, ""),
     path: entry.path,
+    displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
     filename: entry.name,
     studioKind,
     studioId: entry.studioId,
@@ -8477,7 +9651,7 @@ function buildPromptWithAttachments(prompt, attachments) {
         item.elementType ? `element: ${elementTypeLabel(item.elementType)}` : "",
         item.description ? `notes: ${item.description}` : "",
         item.sourceAssets?.length ? `media: ${item.sourceAssets.map((asset) => asset.name).join(", ")}` : "",
-        item.path ? `path: ${item.path}` : "",
+        item.displayPath ? `path: ${item.displayPath}` : item.path ? `path: ${displayWorkspacePath(item.path)}` : "",
         item.filename ? `file: ${item.filename}` : "",
       ]
         .filter(Boolean)

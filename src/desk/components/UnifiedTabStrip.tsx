@@ -15,6 +15,7 @@ import {
 } from "@/desk/lib/chrome-tab-drag";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { workspaceTabIcon } from "@/desk/lib/file-kind";
+import { displayEntryPath } from "@/desk/lib/display-path";
 
 function tabFromKey(tabs, key) {
   return (tabs ?? []).find((t) => t.key === key) ?? null;
@@ -615,7 +616,7 @@ function UnifiedTabStripInner({
             style={{ "--tab-stack": 100 - tabVisualIndex }}
             title={
               tab.kind === "file"
-                ? tab.path
+                ? displayEntryPath(tab)
                 : chatTabTitle
                   ? `${tab.title} — ${chatTabTitle}`
                   : tab.title

@@ -19,7 +19,7 @@ export function writeExplorerDragData(dataTransfer, entry) {
     mimeType: entry.mimeType,
     byteSize: entry.byteSize,
   }));
-  dataTransfer.effectAllowed = "copy";
+  dataTransfer.effectAllowed = "all";
 }
 
 export function readExplorerDragData(dataTransfer) {

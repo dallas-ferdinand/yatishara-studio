@@ -9,6 +9,7 @@ import { MarkdownDocEditor } from "./MarkdownDocEditor";
 import { MediaFileViewer } from "./MediaFileViewer";
 import { fileViewerKind, isEditableInTab, isHtmlExt, fileIconName } from "@/desk/lib/file-kind";
 import { tabsForWorkspace } from "@/desk/lib/editor-tabs";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { HtmlDocEditor } from "./HtmlDocEditor";
 
 const MARKDOWN_RICH_PREVIEW_MAX_CHARS = 120_000;
@@ -178,7 +179,7 @@ export function EditorPanel({
                   onCloseTab(tab.id);
                 }
               }}
-              title={tab.path}
+              title={displayWorkspacePath(tab.path)}
             >
               <Icon name={fileIconName(tab.path ?? tab.name ?? "", { isDir: false })} size={14} className="text-cursor-muted shrink-0" />
               <span className="truncate">

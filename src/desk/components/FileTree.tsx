@@ -8,6 +8,8 @@ import { formatFileDate } from "@/desk/lib/explorer-file-actions";
 import { writeExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
+import { displayEntryPath } from "@/desk/lib/display-path";
+import { useState } from "react";
 
 function parentEntry(parent) {
   if (!parent) return null;
@@ -66,58 +68,144 @@ function startFileDragPreview(event, entry) {
   if (!source) return;
 
   const rect = source.getBoundingClientRect();
-  const preview = source.cloneNode(true);
   const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
-  const targetWidth = Math.min(Math.max(label.length * 7 + 50, 96), 164);
-  const targetHeight = Math.min(rect.height, 74);
-  const offsetX = Math.min(event.clientX - rect.left, targetWidth * 0.42);
-  const offsetY = Math.min(event.clientY - rect.top, targetHeight * 0.55);
+  const isMedia = entry.kindLabel === "image" || entry.kindLabel === "video" || entry.mimeType?.startsWith("image/") || entry.mimeType?.startsWith("video/");
 
-  preview.classList.add("desk-file-drag-preview");
-  preview.style.width = `${rect.width}px`;
-  preview.style.height = `${rect.height}px`;
-  preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
-  preview.dataset.dragName = label;
-  document.body.appendChild(preview);
+  let preview;
+  if (isMedia) {
+    const srcUrl = entry.thumbnailUrl || entry.mediaUrl;
+    const isVideo = entry.kindLabel === "video" || entry.mimeType?.startsWith("video/");
+    const baseSize = Math.min(Math.max(80, Math.min(rect.width, rect.height) * 0.48), 100);
+    const chipWidth = baseSize;
+    const chipHeight = isVideo ? Math.round(baseSize * 0.5625) : baseSize;
+    const br = isVideo ? Math.round(chipHeight * 0.22) : Math.round(baseSize * 0.18);
 
-  let lastX = event.clientX;
-  let lastY = event.clientY;
-  let rafId = 0;
+    preview = document.createElement("div");
+    preview.style.position = "fixed";
+    preview.style.left = "0";
+    preview.style.top = "0";
+    preview.style.width = `${chipWidth}px`;
+    preview.style.height = `${chipHeight}px`;
+    preview.style.zIndex = "99999";
+    preview.style.pointerEvents = "none";
+    preview.style.borderRadius = `${br}px`;
+    preview.style.overflow = "hidden";
+    preview.style.boxShadow = "0 8px 24px rgb(0 0 0 / 0.45)";
+    preview.style.transformOrigin = "top left";
+    preview.style.willChange = "transform";
+    preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
 
-  const move = () => {
-    rafId = 0;
-    preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
-  };
+    const img = document.createElement("img");
+    img.src = srcUrl || "";
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "cover";
+    img.style.display = "block";
+    img.draggable = false;
+    preview.appendChild(img);
 
-  const queueMove = (clientX, clientY) => {
-    if (clientX > 0 || clientY > 0) {
-      lastX = clientX;
-      lastY = clientY;
-    }
-    if (!rafId) rafId = window.requestAnimationFrame(move);
-  };
+    const gradient = document.createElement("div");
+    gradient.style.position = "absolute";
+    gradient.style.inset = "0";
+    gradient.style.background = "linear-gradient(135deg, rgba(0,0,0,0.35) 0%, transparent 50%)";
+    gradient.style.pointerEvents = "none";
+    preview.appendChild(gradient);
 
-  const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
-  const cleanup = () => {
-    if (rafId) window.cancelAnimationFrame(rafId);
-    preview.remove();
-    document.removeEventListener("dragover", handleMove);
-    document.removeEventListener("drag", handleMove);
-    document.removeEventListener("drop", cleanup);
-    document.removeEventListener("dragend", cleanup);
-  };
+    document.body.appendChild(preview);
 
-  document.addEventListener("dragover", handleMove);
-  document.addEventListener("drag", handleMove);
-  document.addEventListener("drop", cleanup, { once: true });
-  document.addEventListener("dragend", cleanup, { once: true });
+    const offsetX = chipWidth * 0.5;
+    const offsetY = chipHeight * 0.5;
 
-  window.requestAnimationFrame(() => {
-    preview.style.width = `${targetWidth}px`;
-    preview.style.height = `${targetHeight}px`;
-    preview.classList.add("is-shrunk");
-    queueMove(event.clientX, event.clientY);
-  });
+    let lastX = event.clientX;
+    let lastY = event.clientY;
+    let rafId = 0;
+
+    const move = () => {
+      rafId = 0;
+      preview.style.transition = "none";
+      preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
+    };
+
+    const queueMove = (clientX, clientY) => {
+      if (clientX > 0 || clientY > 0) {
+        lastX = clientX;
+        lastY = clientY;
+      }
+      if (!rafId) rafId = window.requestAnimationFrame(move);
+    };
+
+    const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
+    const cleanup = () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      preview.remove();
+      document.removeEventListener("dragover", handleMove);
+      document.removeEventListener("drag", handleMove);
+      document.removeEventListener("drop", cleanup);
+      document.removeEventListener("dragend", cleanup);
+    };
+
+    document.addEventListener("dragover", handleMove);
+    document.addEventListener("drag", handleMove);
+    document.addEventListener("drop", cleanup, { once: true });
+    document.addEventListener("dragend", cleanup, { once: true });
+
+    window.requestAnimationFrame(() => {
+      preview.style.transition = "transform 440ms cubic-bezier(0.18, 1.32, 0.32, 1)";
+      preview.style.transform = `translate3d(${event.clientX - offsetX}px, ${event.clientY - offsetY}px, 0) scale(1)`;
+    });
+  } else {
+    preview = source.cloneNode(true);
+    const targetWidth = Math.min(Math.max(label.length * 7 + 50, 96), 164);
+    const targetHeight = Math.min(rect.height, 74);
+    const offsetX = Math.min(event.clientX - rect.left, targetWidth * 0.42);
+    const offsetY = Math.min(event.clientY - rect.top, targetHeight * 0.55);
+
+    preview.classList.add("desk-file-drag-preview");
+    preview.style.width = `${rect.width}px`;
+    preview.style.height = `${rect.height}px`;
+    preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
+    preview.dataset.dragName = label;
+    document.body.appendChild(preview);
+
+    let lastX = event.clientX;
+    let lastY = event.clientY;
+    let rafId = 0;
+
+    const move = () => {
+      rafId = 0;
+      preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
+    };
+
+    const queueMove = (clientX, clientY) => {
+      if (clientX > 0 || clientY > 0) {
+        lastX = clientX;
+        lastY = clientY;
+      }
+      if (!rafId) rafId = window.requestAnimationFrame(move);
+    };
+
+    const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
+    const cleanup = () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      preview.remove();
+      document.removeEventListener("dragover", handleMove);
+      document.removeEventListener("drag", handleMove);
+      document.removeEventListener("drop", cleanup);
+      document.removeEventListener("dragend", cleanup);
+    };
+
+    document.addEventListener("dragover", handleMove);
+    document.addEventListener("drag", handleMove);
+    document.addEventListener("drop", cleanup, { once: true });
+    document.addEventListener("dragend", cleanup, { once: true });
+
+    window.requestAnimationFrame(() => {
+      preview.style.width = `${targetWidth}px`;
+      preview.style.height = `${targetHeight}px`;
+      preview.classList.add("is-shrunk");
+      queueMove(event.clientX, event.clientY);
+    });
+  }
 }
 
 function ExplorerEmpty({ flatEntries, rootEntries }) {
@@ -141,16 +229,20 @@ function FileEntryButton({
   onLongPress,
   onContextMenu,
   onDragStart,
+  onDropEntry,
 }) {
   const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
     enableLongPress && onLongPress ? () => onLongPress(entry) : undefined,
   );
 
+  const isDir = entry.type === "dir";
+  const [dragOver, setDragOver] = useState(false);
+
   return (
     <button
       type="button"
-      className={className}
-      title={entry.path || label}
+      className={`${className}${dragOver ? " is-drag-over" : ""}`}
+      title={entry.path ? displayEntryPath(entry) : label}
       onClick={() => {
         if (longPressFired()) {
           clearLongPressFired();
@@ -161,6 +253,17 @@ function FileEntryButton({
       onContextMenu={onContextMenu}
       draggable={entry.type !== "parent"}
       onDragStart={onDragStart}
+      onDragOver={isDir && onDropEntry ? (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setDragOver(true);
+      } : undefined}
+      onDragLeave={isDir && onDropEntry ? () => setDragOver(false) : undefined}
+      onDrop={isDir && onDropEntry ? (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        onDropEntry(e, entry);
+      } : undefined}
       {...longPressHandlers}
     >
       {children ?? (
@@ -211,6 +314,7 @@ function renderEntryRows({
   onEntryLongPress,
   onEntryContextMenu,
   onEntryDragStart,
+  onEntryDrop,
   enableLongPress,
   rowClass,
   pinnedFolderIconClass,
@@ -236,6 +340,7 @@ function renderEntryRows({
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
+              onDropEntry={onEntryDrop}
             >
               <FileEntryThumb entry={e} workspaceId={workspaceId} size="preview" pinned={isPinnedEntry(e, pinnedPaths)} />
             </FileEntryButton>
@@ -284,6 +389,7 @@ function renderEntryRows({
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
+              onDropEntry={onEntryDrop}
             >
               <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" pinned={isPinnedEntry(e, pinnedPaths)} />
             </FileEntryButton>
@@ -352,6 +458,7 @@ export function FileTree({
   onEntryLongPress,
   onEntryContextMenu,
   onBlankContextMenu,
+  onEntryDrop,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -390,9 +497,17 @@ export function FileTree({
 
   const onEntryDragStart = (e, entry) => {
     if (entry.type === "parent") return;
+    document.body.classList.add("is-drag-cursor");
     writeExplorerDragData(e.dataTransfer, entry);
     setTransparentDragImage(e.dataTransfer);
     startFileDragPreview(e, entry);
+    const cleanupDragCursor = () => {
+      document.body.classList.remove("is-drag-cursor");
+      document.removeEventListener("drop", cleanupDragCursor);
+      document.removeEventListener("dragend", cleanupDragCursor);
+    };
+    document.addEventListener("drop", cleanupDragCursor, { once: true });
+    document.addEventListener("dragend", cleanupDragCursor, { once: true });
   };
 
   const onContext = (ev, entry) => {
@@ -434,6 +549,7 @@ export function FileTree({
     onEntryLongPress,
     onEntryContextMenu: onContext,
     onEntryDragStart,
+    onEntryDrop,
     enableLongPress,
     rowClass,
     pinnedFolderIconClass,

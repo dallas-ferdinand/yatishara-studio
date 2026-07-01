@@ -2,9 +2,10 @@
 import * as api from "@mos-app/api.js";
 import { workspaceDownloadUrl, streamWorkspaceFolderZip } from "@/desk/lib/mos-download.js";
 import { joinExplorerPath } from "@/desk/lib/explorer-create.js";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 export async function copyWorkspacePath(path) {
-  const text = String(path ?? "").trim();
+  const text = displayWorkspacePath(path).trim();
   if (!text) return false;
   try {
     await navigator.clipboard.writeText(text);

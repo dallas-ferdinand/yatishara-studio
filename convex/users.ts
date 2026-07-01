@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 
 export const current = authedQuery({
   args: {},
@@ -124,6 +124,89 @@ export const ensureStudioDefaults = authedMutation({
       }));
 
     return { rootFolderId, billingAccountId };
+  },
+});
+
+export const adminListCustomers = adminQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("users"),
+      _creationTime: v.number(),
+      name: v.optional(v.string()),
+      email: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      lastSeenAt: v.optional(v.number()),
+      creditBalance: v.number(),
+      reservedCredits: v.number(),
+      activeSubscription: v.optional(
+        v.object({
+          status: v.union(
+            v.literal("active"),
+            v.literal("past_due"),
+            v.literal("cancelled"),
+            v.literal("expired"),
+          ),
+          planName: v.optional(v.string()),
+          currentPeriodEnd: v.number(),
+        }),
+      ),
+      paymentCount: v.number(),
+      latestPaymentStatus: v.optional(
+        v.union(
+          v.literal("receipt_uploaded"),
+          v.literal("receipt_received"),
+          v.literal("payment_completed"),
+          v.literal("rejected"),
+        ),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    const rows = await Promise.all(
+      users.map(async (user) => {
+        const account = await ctx.db
+          .query("billingAccounts")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .unique();
+        const subscription = account?.activeSubscriptionId
+          ? await ctx.db.get(account.activeSubscriptionId)
+          : null;
+        const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+        const payments = await ctx.db
+          .query("payments")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect();
+        const latestPayment = payments.sort((a, b) => b.createdAt - a.createdAt)[0];
+        return {
+          _id: user._id,
+          _creationTime: user._creationTime,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          lastSeenAt: user.lastSeenAt,
+          creditBalance: account?.creditBalance ?? 0,
+          reservedCredits: account?.reservedCredits ?? 0,
+          activeSubscription: subscription
+            ? {
+                status: subscription.status,
+                planName: plan?.name,
+                currentPeriodEnd: subscription.currentPeriodEnd,
+              }
+            : undefined,
+          paymentCount: payments.length,
+          latestPaymentStatus: latestPayment?.status,
+        };
+      }),
+    );
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 

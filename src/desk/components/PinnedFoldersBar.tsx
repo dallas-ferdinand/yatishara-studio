@@ -2,6 +2,7 @@
 "use client";
 
 import { Icon } from "./Icons";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 export function PinnedFoldersBar({ pins, onNavigate, onUnpin }) {
   if (!pins?.length) return null;
@@ -18,7 +19,7 @@ export function PinnedFoldersBar({ pins, onNavigate, onUnpin }) {
             <button
               type="button"
               className="desk-explorer-pin-btn"
-              title={pin.path}
+              title={displayWorkspacePath(pin.path)}
               onClick={() => onNavigate(pin.path)}
             >
               <Icon name="folder" size={14} className="shrink-0 text-cursor-muted" />

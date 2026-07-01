@@ -119,23 +119,51 @@ export function StudioAuthGate() {
       setAuthLoadTimedOut(false);
       return;
     }
-    const timer = window.setTimeout(() => setAuthLoadTimedOut(true), 4500);
+    const timer = window.setTimeout(() => setAuthLoadTimedOut(true), 3000);
     return () => window.clearTimeout(timer);
   }, [auth?.isLoading]);
 
   if (!auth) {
-    return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
+    return <StudioPageLoader />;
   }
   if (auth.isLoading) {
     if (authLoadTimedOut) {
       return <StudioSignIn />;
     }
-    return <AuthFrame eyebrow="Starting" title="Loading Studio..." />;
+    return <StudioPageLoader />;
   }
   if (!auth.isAuthenticated) {
     return <StudioSignIn />;
   }
   return <StudioShell />;
+}
+
+function StudioPageLoader() {
+  return (
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#020617] text-white">
+      <style jsx global>{`
+        @keyframes studio-loader-pulse {
+          0% { transform: scale(0.5); opacity: 0; }
+          15% { opacity: 0.5; }
+          100% { transform: scale(2); opacity: 0; }
+        }
+        .studio-page-loader-pulse {
+          position: absolute;
+          inset: -100%;
+          background:
+            radial-gradient(circle at 50% 50%, transparent 20%, color-mix(in srgb, #fff 16%, transparent) 40%, transparent 55%),
+            radial-gradient(circle at 50% 50%, transparent 0%, color-mix(in srgb, var(--cursor-accent, #66e8ff) 10%, transparent) 25%, transparent 45%);
+          animation: studio-loader-pulse 3000ms cubic-bezier(0.25, 0, 0.2, 1) 1 forwards;
+        }
+      `}</style>
+      <div className="relative flex h-48 w-48 items-center justify-center">
+        <div className="studio-page-loader-pulse" />
+        <div className="relative z-10">
+          <BrandMark size={36} subtle />
+        </div>
+      </div>
+    </main>
+  );
 }
 
 function StudioSignIn() {

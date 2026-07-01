@@ -3,7 +3,7 @@ import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath } from "./lib/bunny";
+import { buildAssetPath, signBunnyCdnUrl } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 
 const generationMode = v.union(v.literal("image"), v.literal("video"));
@@ -63,6 +63,15 @@ const eventReturn = v.object({
   fromFolderId: v.optional(v.id("folders")),
   toFolderId: v.optional(v.id("folders")),
   createdAt: v.number(),
+  resultAssets: v.optional(v.array(v.object({
+    _id: v.id("assets"),
+    name: v.string(),
+    kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio"), v.literal("document")),
+    mimeType: v.string(),
+    byteSize: v.optional(v.number()),
+    signedReadUrl: v.optional(v.string()),
+    signedThumbnailUrl: v.optional(v.string()),
+  }))),
 });
 
 export const listThreads = authedQuery({
@@ -79,14 +88,46 @@ export const listThreads = authedQuery({
 });
 
 export const listEvents = authedQuery({
-  args: { threadId: v.id("generationThreads") },
+  args: {
+    threadId: v.id("generationThreads"),
+    expiresUnix: v.optional(v.number()),
+  },
   returns: v.array(eventReturn),
   handler: async (ctx, args) => {
     await requireThreadOwner(ctx, args.threadId);
-    return await ctx.db
+    const events = await ctx.db
       .query("generationEvents")
       .withIndex("by_thread_and_order", (q) => q.eq("threadId", args.threadId))
       .collect();
+    const resultAssetIds = Array.from(new Set(events.flatMap((event) => event.assetIds ?? [])));
+    const assets = (await Promise.all(resultAssetIds.map((assetId) => ctx.db.get("assets", assetId))))
+      .filter((asset): asset is Doc<"assets"> => asset !== null);
+    const assetsById = new Map(assets.map((asset) => [asset._id, asset]));
+    return await Promise.all(events.map(async (event) => ({
+      ...event,
+      resultAssets: event.assetIds?.length
+        ? await Promise.all(
+            event.assetIds
+              .map((assetId) => assetsById.get(assetId))
+              .filter((asset): asset is Doc<"assets"> => asset !== undefined)
+              .map(async (asset) => ({
+                _id: asset._id,
+                name: asset.name,
+                kind: asset.kind,
+                mimeType: asset.mimeType,
+                byteSize: asset.byteSize,
+                signedReadUrl: asset.bunnyPath && args.expiresUnix
+                  ? await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix)
+                  : undefined,
+                signedThumbnailUrl: asset.thumbnailPath && args.expiresUnix
+                  ? await signBunnyCdnUrl(asset.thumbnailPath, args.expiresUnix)
+                  : asset.bunnyPath && asset.kind === "image" && args.expiresUnix
+                    ? await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix)
+                    : undefined,
+              })),
+          )
+        : undefined,
+    })));
   },
 });
 
@@ -175,7 +216,7 @@ export const canGenerate = authedQuery({
         creditBalance: account?.creditBalance ?? 0,
         cost: 0,
         hasActiveSubscription: false,
-        reason: "Video duration must be between 4 and 15 seconds.",
+        reason: "Video duration must be between 4 and 12 seconds.",
       };
     }
     const cost = creditCostForGeneration({
@@ -230,7 +271,7 @@ export const createQueuedJob = authedMutation({
       throw new Error("4K video is disabled until ModelArk API support is confirmed");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      throw new Error("Video duration must be between 4 and 15 seconds");
+      throw new Error("Video duration must be between 4 and 12 seconds");
     }
     const preset = await ctx.db.get("stylePresets", args.stylePresetId);
     if (!preset || !preset.enabled) {
@@ -831,7 +872,7 @@ function videoCreditCost(args: {
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
 }): number {
-  const duration = Math.max(4, Math.min(15, Math.ceil(args.durationSeconds ?? 4)));
+  const duration = Math.max(4, Math.min(12, Math.ceil(args.durationSeconds ?? 4)));
   const multiplier = Math.ceil(duration / 5);
   const base =
     args.resolution === "854x480"
@@ -853,7 +894,7 @@ function videoCreditCost(args: {
 
 function isSupportedVideoDuration(durationSeconds?: number): boolean {
   const duration = Number(durationSeconds ?? 4);
-  return Number.isFinite(duration) && duration >= 4 && duration <= 15;
+  return Number.isFinite(duration) && duration >= 4 && duration <= 12;
 }
 
 function creditCostForGeneration(

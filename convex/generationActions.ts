@@ -3,15 +3,21 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { putObject } from "./lib/bunny";
 import {
   createVideoTask,
   enhancePrompt,
   generateImage,
   generateScript as generateScriptWithBytePlus,
+  retrieveVideoTask,
   type ImageTier,
 } from "./lib/byteplus";
+
+const VIDEO_POLL_INITIAL_DELAY_MS = 12_000;
+const VIDEO_POLL_LATER_DELAY_MS = 30_000;
+const VIDEO_POLL_FAST_ATTEMPTS = 10;
+const VIDEO_POLL_MAX_ATTEMPTS = 40;
 
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
@@ -99,6 +105,15 @@ const failJobRef = internalMutationRef<
   },
   null
 >("generation:failJob");
+
+const pollVideoTaskRef = internalActionRef<
+  {
+    jobId: Id<"generationJobs">;
+    taskId: string;
+    attempt: number;
+  },
+  null
+>("generationActions:pollVideoTask");
 
 const chargeTextGenerationRef = publicMutationRef<
   {
@@ -207,6 +222,10 @@ export const runFlow = action({
   }> => {
     const resolvedModel = modelForRequest(args.mode, args.tier);
     const referenceInputs = args.referenceInputs ?? [];
+    const effectiveReferenceInputs =
+      args.mode === "video" && isSeedance1Model(resolvedModel) ? [] : referenceInputs;
+    const effectiveAudioEnabled =
+      args.mode === "video" && isSeedance1Model(resolvedModel) ? false : args.audioEnabled;
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: args.mode,
@@ -214,13 +233,13 @@ export const runFlow = action({
       resolvedModel,
       stylePresetId: args.stylePresetId,
       userPrompt: args.userPrompt,
-      audioEnabled: args.audioEnabled,
+      audioEnabled: effectiveAudioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
       durationSeconds: args.durationSeconds,
-      hasReferenceInput: Boolean(referenceInputs.length),
-      hasVideoReferenceInput: referenceInputs.some((input) => input.kind === "video"),
-      hasNonVideoReferenceInput: referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      hasReferenceInput: Boolean(effectiveReferenceInputs.length),
+      hasVideoReferenceInput: effectiveReferenceInputs.some((input) => input.kind === "video"),
+      hasNonVideoReferenceInput: effectiveReferenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
     });
 
     try {
@@ -248,20 +267,25 @@ export const runFlow = action({
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
-          generateAudio: args.audioEnabled ?? false,
-          referenceImageUrls: referenceInputs
+          generateAudio: effectiveAudioEnabled ?? false,
+          referenceImageUrls: effectiveReferenceInputs
             .filter((input) => input.kind === "image")
             .map((input) => input.url),
-          referenceVideoUrls: referenceInputs
+          referenceVideoUrls: effectiveReferenceInputs
             .filter((input) => input.kind === "video")
             .map((input) => input.url),
-          referenceAudioUrls: referenceInputs
+          referenceAudioUrls: effectiveReferenceInputs
             .filter((input) => input.kind === "audio")
             .map((input) => input.url),
         });
         await ctx.runMutation(setVideoTaskRef, {
           jobId,
           externalTaskId: task.taskId,
+        });
+        await ctx.scheduler.runAfter(VIDEO_POLL_INITIAL_DELAY_MS, pollVideoTaskRef, {
+          jobId,
+          taskId: task.taskId,
+          attempt: 1,
         });
         return { jobId, externalTaskId: task.taskId };
       }
@@ -316,11 +340,100 @@ export const runFlow = action({
   },
 });
 
+export const pollVideoTask = internalAction({
+  args: {
+    jobId: v.id("generationJobs"),
+    taskId: v.string(),
+    attempt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    try {
+      const task = await retrieveVideoTask(args.taskId);
+      const status = task.status.toLowerCase();
+      if (status === "succeeded" || status === "success" || status === "completed") {
+        if (!task.videoUrl) {
+          await ctx.runMutation(failJobRef, {
+            jobId: args.jobId,
+            error: "BytePlus video task completed but no video URL was returned.",
+          });
+          return null;
+        }
+        const response = await fetch(task.videoUrl);
+        if (!response.ok) {
+          const text = await response.text().catch(() => "");
+          throw new Error(`Video download failed (${response.status}): ${text.slice(0, 300)}`);
+        }
+        const contentType = response.headers.get("content-type") ?? "video/mp4";
+        const asset = await ctx.runMutation(createGeneratedAssetRef, {
+          jobId: args.jobId,
+          name: `generated-video-${args.jobId.slice(-6)}.mp4`,
+          kind: "video",
+          mimeType: contentType,
+        });
+        await putObject({
+          path: asset.bunnyPath,
+          body: await response.arrayBuffer(),
+          contentType,
+        });
+        await ctx.runMutation(completeWithOutputsRef, {
+          jobId: args.jobId,
+          assetIds: [asset.assetId],
+        });
+        return null;
+      }
+      if (status === "failed" || status === "cancelled" || status === "canceled") {
+        await ctx.runMutation(failJobRef, {
+          jobId: args.jobId,
+          error: task.error ?? `BytePlus video task ${status}.`,
+        });
+        return null;
+      }
+      if (args.attempt >= VIDEO_POLL_MAX_ATTEMPTS) {
+        await ctx.runMutation(failJobRef, {
+          jobId: args.jobId,
+          error: "BytePlus video task timed out before Studio received a completed MP4.",
+        });
+        return null;
+      }
+      await ctx.scheduler.runAfter(
+        args.attempt < VIDEO_POLL_FAST_ATTEMPTS
+          ? VIDEO_POLL_INITIAL_DELAY_MS
+          : VIDEO_POLL_LATER_DELAY_MS,
+        pollVideoTaskRef,
+        {
+          jobId: args.jobId,
+          taskId: args.taskId,
+          attempt: args.attempt + 1,
+        },
+      );
+      return null;
+    } catch (error) {
+      if (args.attempt >= VIDEO_POLL_MAX_ATTEMPTS) {
+        await ctx.runMutation(failJobRef, {
+          jobId: args.jobId,
+          error: error instanceof Error ? error.message : "BytePlus video polling failed.",
+        });
+        return null;
+      }
+      await ctx.scheduler.runAfter(VIDEO_POLL_LATER_DELAY_MS, pollVideoTaskRef, {
+        jobId: args.jobId,
+        taskId: args.taskId,
+        attempt: args.attempt + 1,
+      });
+      return null;
+    }
+  },
+});
+
 function modelForRequest(
   mode: "image" | "video",
   tier: "low" | "medium" | "high" | "pro_video",
 ): string {
   if (mode === "video") {
+    if (process.env.BYTEPLUS_DEV_MODE === "true") {
+      return process.env.BYTEPLUS_VIDEO_DEV_MODEL_ID ?? requiredEnv("BYTEPLUS_VIDEO_MODEL_ID");
+    }
     return requiredEnv("BYTEPLUS_VIDEO_MODEL_ID");
   }
   if (tier === "low") {
@@ -332,11 +445,26 @@ function modelForRequest(
   return requiredEnv("BYTEPLUS_IMAGE_HIGH_MODEL_ID");
 }
 
+function isSeedance1Model(model: string): boolean {
+  return model.includes("seedance-1-");
+}
+
 function internalMutationRef<Args extends Record<string, unknown>, Return>(
   name: string,
 ): FunctionReference<"mutation", "internal", Args, Return> {
   return makeFunctionReference<"mutation", Args, Return>(name) as unknown as FunctionReference<
     "mutation",
+    "internal",
+    Args,
+    Return
+  >;
+}
+
+function internalActionRef<Args extends Record<string, unknown>, Return>(
+  name: string,
+): FunctionReference<"action", "internal", Args, Return> {
+  return makeFunctionReference<"action", Args, Return>(name) as unknown as FunctionReference<
+    "action",
     "internal",
     Args,
     Return

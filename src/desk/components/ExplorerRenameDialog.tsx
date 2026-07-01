@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icons";
 import { sanitizeEntryName, uniqueName, entryNamesSet } from "@/desk/lib/explorer-create";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 export function ExplorerRenameDialog({
   open,
@@ -61,7 +62,7 @@ export function ExplorerRenameDialog({
       >
         <header className="desk-explorer-dialog-head">
           <h2>Rename {isDir ? "folder" : "file"}</h2>
-          <p className="desk-explorer-dialog-sub">{entry.path}</p>
+          <p className="desk-explorer-dialog-sub">{displayWorkspacePath(entry.path)}</p>
           <button type="button" className="desk-explorer-dialog-close" aria-label="Close" onClick={onClose} disabled={busy}>
             <Icon name="x" size={14} />
           </button>

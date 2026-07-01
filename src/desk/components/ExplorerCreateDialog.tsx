@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./Icons";
 import { NEW_FILE_TYPES, sanitizeEntryName, uniqueName, entryNamesSet } from "@/desk/lib/explorer-create";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 export function ExplorerCreateDialog({
   open,
@@ -64,7 +65,7 @@ export function ExplorerCreateDialog({
   };
 
   const title = mode === "folder" ? "New folder" : "New file";
-  const dest = destDir ? destDir : "Files";
+  const dest = displayWorkspacePath(destDir);
 
   return createPortal(
     <div className="desk-explorer-dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>

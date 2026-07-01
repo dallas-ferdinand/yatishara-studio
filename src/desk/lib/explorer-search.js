@@ -1,3 +1,5 @@
+import { displayWorkspacePath } from "@/desk/lib/display-path";
+
 export function withSearchSections(results = [], scope = "") {
   const rows = [];
   let lastSection = null;
@@ -15,6 +17,8 @@ export function withSearchSections(results = [], scope = "") {
 export function searchResultMeta(entry, scope = "") {
   if (!entry || entry.type === "search-divider") return "";
   const path = entry.path ?? "";
-  if (!path) return scope || "";
-  return scope ? `${scope} · ${path}` : path;
+  const visibleScope = scope ? displayWorkspacePath(scope) : "";
+  if (!path) return visibleScope;
+  const visiblePath = displayWorkspacePath(path);
+  return visibleScope ? `${visibleScope} · ${visiblePath}` : visiblePath;
 }

@@ -32,6 +32,7 @@ import {
 } from "@/desk/lib/explorer-file-actions";
 import { destLabel } from "@/desk/lib/explorer-upload-queue";
 import { uploadByteProgressLabel, formatUploadBytes } from "@/desk/lib/upload-progress-format";
+import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 const VIEW_KEY = "desk-explorer-view";
 const VIEW_MODES = ["list", "grid", "preview"];
@@ -853,7 +854,7 @@ export function ExplorerPanel({
       <MobileActionSheet
         open={Boolean(sheetEntry)}
         title={sheetEntry?.name ?? sheetEntry?.path?.split("/").pop()}
-        subtitle={sheetEntry?.path}
+        subtitle={sheetEntry?.path ? displayWorkspacePath(sheetEntry.path) : ""}
         actions={sheetActions}
         onClose={() => setSheetEntry(null)}
       />
