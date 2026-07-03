@@ -181,6 +181,11 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
     <div className="desk-image-viewer">
       <div className="desk-image-viewer-toolbar">
         <div className="desk-image-viewer-toolbar-left">
+          {name ? (
+            <span className="desk-image-viewer-name truncate" title={name}>
+              {name}
+            </span>
+          ) : null}
           {statusLabel ? <span className="desk-image-viewer-status">{statusLabel}</span> : null}
         </div>
         <div className="desk-image-viewer-toolbar-center">

@@ -126,7 +126,7 @@ function StudioPageLoader() {
       <div className="relative flex h-48 w-48 items-center justify-center">
         <div className="studio-page-loader-pulse" />
         <div className="relative z-10">
-          <BrandMark size={36} subtle />
+          <BrandMark size={36} subtle appearance="dark" />
         </div>
       </div>
     </main>

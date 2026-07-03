@@ -14,6 +14,7 @@ import {
   imageModelForRequest,
   videoModelForRequest,
 } from "./lib/aiGateway";
+import { referenceInputValidator } from "./lib/referenceInput";
 
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
@@ -127,6 +128,88 @@ const createDocumentRef = publicMutationRef<
   Id<"documents">
 >("documents:create");
 
+const chargeTextForApiRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    folderId: Id<"folders">;
+    imageReferenceCount?: number;
+    videoReferenceCount?: number;
+    audioReferenceCount?: number;
+  },
+  { transactionId: Id<"creditTransactions">; cost: number }
+>("studioApiInternal:chargeTextGenerationForApi");
+
+const createDocumentForApiRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    folderId: Id<"folders">;
+    title: string;
+    contentMarkdown?: string;
+  },
+  Id<"documents">
+>("studioApiInternal:createDocumentForApi");
+
+const refundTextForApiRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    transactionId: Id<"creditTransactions">;
+    reason?: string;
+  },
+  null
+>("studioApiInternal:refundTextGenerationForApi");
+
+const internalCreateThreadRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    folderId: Id<"folders">;
+    title?: string;
+  },
+  Id<"generationThreads">
+>("generation:internalCreateThread");
+
+const internalCreateQueuedJobRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    threadId: Id<"generationThreads">;
+    mode: "image" | "video";
+    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    resolvedModel: string;
+    stylePresetId: Id<"stylePresets">;
+    userPrompt: string;
+    audioEnabled?: boolean;
+    aspectRatio?: string;
+    resolution?: string;
+    durationSeconds?: number;
+    hasReferenceInput?: boolean;
+    hasVideoReferenceInput?: boolean;
+    hasNonVideoReferenceInput?: boolean;
+    apiKeyId?: Id<"apiKeys">;
+  },
+  Id<"generationJobs">
+>("generation:internalCreateQueuedJob");
+
+const prepareApiGenerationRef = internalMutationRef<
+  {
+    userId: Id<"users">;
+    folderId: Id<"folders">;
+    apiKeyId?: Id<"apiKeys">;
+    mode: "image" | "video";
+    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    resolvedModel: string;
+    stylePresetId: Id<"stylePresets">;
+    userPrompt: string;
+    title?: string;
+    audioEnabled?: boolean;
+    aspectRatio?: string;
+    resolution?: string;
+    durationSeconds?: number;
+    hasReferenceInput?: boolean;
+    hasVideoReferenceInput?: boolean;
+    hasNonVideoReferenceInput?: boolean;
+  },
+  { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> }
+>("generation:prepareApiGeneration");
+
 const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
@@ -141,10 +224,7 @@ export const generateScript = action({
     stylePresetId: v.id("stylePresets"),
     userPrompt: v.string(),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
-    referenceInputs: v.optional(v.array(v.object({
-      kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
-      url: v.string(),
-    }))),
+    referenceInputs: v.optional(v.array(referenceInputValidator)),
   },
   returns: v.object({
     documentId: v.id("documents"),
@@ -203,10 +283,7 @@ export const runFlow = action({
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
-    referenceInputs: v.optional(v.array(v.object({
-      kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
-      url: v.string(),
-    }))),
+    referenceInputs: v.optional(v.array(referenceInputValidator)),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceSummaries: v.optional(v.array(v.string())),
   },
@@ -345,6 +422,248 @@ export const runFlow = action({
       await ctx.runMutation(failJobRef, {
         jobId,
         error: message,
+      });
+      throw error;
+    }
+  },
+});
+
+export const executeApiJob = action({
+  args: {
+    jobId: v.id("generationJobs"),
+    mode: v.union(v.literal("image"), v.literal("video")),
+    aspectRatio: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    audioEnabled: v.optional(v.boolean()),
+    referenceUrls: v.optional(v.array(v.string())),
+    referenceInputs: v.optional(v.array(referenceInputValidator)),
+  },
+  returns: v.object({
+    jobId: v.id("generationJobs"),
+    assetIds: v.optional(v.array(v.id("assets"))),
+  }),
+  handler: async (ctx, args) => executeQueuedApiJob(ctx, args),
+});
+
+async function executeQueuedApiJob(
+  ctx: ActionCtx,
+  args: {
+    jobId: Id<"generationJobs">;
+    mode: "image" | "video";
+    aspectRatio?: string;
+    resolution?: string;
+    durationSeconds?: number;
+    audioEnabled?: boolean;
+    referenceUrls?: string[];
+    referenceInputs?: Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>;
+  },
+): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
+  const referenceInputs = args.referenceInputs ?? [];
+  try {
+    await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
+    const { job, preset } = await ctx.runQuery(getJobRunContextRef, { jobId: args.jobId });
+    const enhancedPrompt = await enhancePromptWithFallback({
+      userPrompt: job.userPrompt,
+      presetName: preset.name,
+      presetInstructions: preset.systemInstructions,
+      scriptInstructions: preset.scriptInstructions,
+      negativePrompt: preset.negativePrompt,
+      outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
+      storytellingEnabled: preset.storytelling,
+      durationSeconds: job.durationSeconds ?? args.durationSeconds,
+      resolution: job.resolution ?? args.resolution,
+      aspectRatio: job.aspectRatio ?? args.aspectRatio,
+      hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
+      hasImageReference:
+        referenceInputs.some((input) => input.kind === "image") ||
+        Boolean(args.referenceUrls?.length),
+    });
+    await ctx.runMutation(setEnhancedPromptRef, {
+      jobId: args.jobId,
+      enhancedPrompt,
+      negativePrompt: preset.negativePrompt,
+    });
+
+    if (args.mode === "video") {
+      const video = await generateVideo({
+        prompt: enhancedPrompt,
+        aspectRatio: args.aspectRatio,
+        resolution: args.resolution,
+        durationSeconds: args.durationSeconds,
+        generateAudio: args.audioEnabled ?? false,
+        referenceImageUrls: referenceInputs
+          .filter((input) => input.kind === "image")
+          .map((input) => input.url),
+        referenceVideoUrls: referenceInputs
+          .filter((input) => input.kind === "video")
+          .map((input) => input.url),
+        referenceAudioUrls: referenceInputs
+          .filter((input) => input.kind === "audio")
+          .map((input) => input.url),
+      });
+      await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "saving" });
+      const assetId = await saveGeneratedMedia(ctx, {
+        jobId: args.jobId,
+        kind: "video",
+        name: `generated-video-${args.jobId.slice(-6)}.${extensionForContentType(video.mediaType)}`,
+        mediaType: video.mediaType,
+        body: video.data,
+      });
+      await ctx.runMutation(completeWithOutputsRef, { jobId: args.jobId, assetIds: [assetId] });
+      return { jobId: args.jobId, assetIds: [assetId] };
+    }
+
+    const imageResult = await generateImage({
+      prompt: enhancedPrompt,
+      aspectRatio: args.aspectRatio,
+      resolution: args.resolution,
+      referenceUrls: args.referenceUrls ?? [],
+    });
+    await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "saving" });
+    const assetIds: Id<"assets">[] = [];
+    for (const [index, image] of imageResult.images.entries()) {
+      const assetId = await saveGeneratedMedia(ctx, {
+        jobId: args.jobId,
+        kind: "image",
+        name: `generated-image-${index + 1}.${extensionForContentType(image.mediaType)}`,
+        mediaType: image.mediaType,
+        body: image.data,
+      });
+      assetIds.push(assetId);
+    }
+    await ctx.runMutation(completeWithOutputsRef, { jobId: args.jobId, assetIds });
+    return { jobId: args.jobId, assetIds };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Generation failed";
+    await ctx.runMutation(failJobRef, { jobId: args.jobId, error: message });
+    throw error;
+  }
+}
+
+export const runGenerationForApi = action({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    mode: v.union(v.literal("image"), v.literal("video")),
+    tier: generationTier,
+    stylePresetId: v.id("stylePresets"),
+    userPrompt: v.string(),
+    audioEnabled: v.optional(v.boolean()),
+    aspectRatio: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    referenceUrls: v.optional(v.array(v.string())),
+    referenceInputs: v.optional(v.array(referenceInputValidator)),
+  },
+  returns: v.object({
+    jobId: v.id("generationJobs"),
+    threadId: v.id("generationThreads"),
+    assetIds: v.optional(v.array(v.id("assets"))),
+  }),
+  handler: async (ctx, args) => {
+    const referenceInputs = args.referenceInputs ?? [];
+    const resolvedModel = modelForRequest(args.mode);
+    const prepared = await ctx.runMutation(prepareApiGenerationRef, {
+      userId: args.userId,
+      folderId: args.folderId,
+      apiKeyId: args.apiKeyId,
+      mode: args.mode,
+      tier: args.tier,
+      resolvedModel,
+      stylePresetId: args.stylePresetId,
+      userPrompt: args.userPrompt,
+      title: args.userPrompt.trim().slice(0, 64) || "API generation",
+      audioEnabled: args.audioEnabled,
+      aspectRatio: args.aspectRatio,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      hasReferenceInput:
+        args.mode === "video"
+          ? Boolean(referenceInputs.length)
+          : Boolean(args.referenceUrls?.length),
+      hasVideoReferenceInput:
+        args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
+      hasNonVideoReferenceInput:
+        args.mode === "video" &&
+        referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+    });
+    const executed = await executeQueuedApiJob(ctx, {
+      jobId: prepared.jobId,
+      mode: args.mode,
+      aspectRatio: args.aspectRatio,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      audioEnabled: args.audioEnabled,
+      referenceUrls: args.referenceUrls,
+      referenceInputs,
+    });
+    return {
+      jobId: prepared.jobId,
+      threadId: prepared.threadId,
+      assetIds: executed.assetIds,
+    };
+  },
+});
+
+export const runScriptForApi = action({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    stylePresetId: v.id("stylePresets"),
+    userPrompt: v.string(),
+    referenceInputs: v.optional(v.array(referenceInputValidator)),
+  },
+  returns: v.object({
+    documentId: v.id("documents"),
+    title: v.string(),
+    creditsSpent: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const referenceInputs = args.referenceInputs ?? [];
+    const preset = await ctx.runQuery(api.stylePresets.get, {
+      presetId: args.stylePresetId,
+    });
+    if (!preset) {
+      throw new Error("Selected creative preset is not available.");
+    }
+    const charged = await ctx.runMutation(chargeTextForApiRef, {
+      userId: args.userId,
+      folderId: args.folderId,
+      imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
+      videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
+      audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+    });
+    try {
+      const contentMarkdown = await generateScriptWithGateway({
+        userPrompt: args.userPrompt,
+        presetName: preset.name,
+        presetInstructions: preset.systemInstructions,
+        scriptInstructions: preset.scriptInstructions,
+        storytellingEnabled: preset.storytelling,
+        negativePrompt: preset.negativePrompt,
+        referenceInputs,
+      });
+      const title = scriptTitle(args.userPrompt, contentMarkdown);
+      const documentId = await ctx.runMutation(createDocumentForApiRef, {
+        userId: args.userId,
+        folderId: args.folderId,
+        title,
+        contentMarkdown,
+      });
+      return {
+        documentId,
+        title,
+        creditsSpent: charged.cost,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Script generation failed";
+      await ctx.runMutation(refundTextForApiRef, {
+        userId: args.userId,
+        transactionId: charged.transactionId,
+        reason: message,
       });
       throw error;
     }

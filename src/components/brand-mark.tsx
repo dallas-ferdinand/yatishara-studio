@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import type { AppearanceMode } from "@/lib/brand-assets";
+import { mercuryLogoAssets } from "@/lib/brand-assets";
 import { useMercuryLogoAssets } from "@/lib/use-appearance-mode";
 
 type Props = {
   size?: number;
   subtle?: boolean;
+  /** Lock logo ink to a canvas appearance (avoids theme-driven swaps on fixed backgrounds). */
+  appearance?: AppearanceMode;
 };
 
 /** Studio logo — WebP @ correct DPR, soft ambient breathe. */
-export function BrandMark({ size = 48, subtle = false }: Props) {
+export function BrandMark({ size = 48, subtle = false, appearance }: Props) {
   const [loaded, setLoaded] = useState(false);
-  const assets = useMercuryLogoAssets(size);
+  const themedAssets = useMercuryLogoAssets(size);
+  const assets = appearance ? mercuryLogoAssets(size, appearance) : themedAssets;
   const ambient = !subtle;
 
   return (

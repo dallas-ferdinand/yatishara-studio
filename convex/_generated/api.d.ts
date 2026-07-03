@@ -10,6 +10,7 @@
 
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as aiGatewayActions from "../aiGatewayActions.js";
+import type * as apiKeys from "../apiKeys.js";
 import type * as assets from "../assets.js";
 import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
@@ -28,9 +29,19 @@ import type * as lib_customFunctions from "../lib/customFunctions.js";
 import type * as lib_elementSheets from "../lib/elementSheets.js";
 import type * as lib_generationPricing from "../lib/generationPricing.js";
 import type * as lib_presetThumbnails from "../lib/presetThumbnails.js";
+import type * as lib_referenceInput from "../lib/referenceInput.js";
 import type * as lib_storytellingFoundation from "../lib/storytellingFoundation.js";
+import type * as lib_studioApi_auth from "../lib/studioApi/auth.js";
+import type * as lib_studioApi_crypto from "../lib/studioApi/crypto.js";
+import type * as lib_studioApi_folderScope from "../lib/studioApi/folderScope.js";
+import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js";
+import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
+import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
 import type * as notifications from "../notifications.js";
 import type * as notificationsActions from "../notificationsActions.js";
+import type * as studioApiActions from "../studioApiActions.js";
+import type * as studioApiHttp from "../studioApiHttp.js";
+import type * as studioApiInternal from "../studioApiInternal.js";
 import type * as stylePresetActions from "../stylePresetActions.js";
 import type * as stylePresets from "../stylePresets.js";
 import type * as users from "../users.js";
@@ -45,6 +56,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   aiGatewayActions: typeof aiGatewayActions;
+  apiKeys: typeof apiKeys;
   assets: typeof assets;
   auth: typeof auth;
   billing: typeof billing;
@@ -63,9 +75,19 @@ declare const fullApi: ApiFromModules<{
   "lib/elementSheets": typeof lib_elementSheets;
   "lib/generationPricing": typeof lib_generationPricing;
   "lib/presetThumbnails": typeof lib_presetThumbnails;
+  "lib/referenceInput": typeof lib_referenceInput;
   "lib/storytellingFoundation": typeof lib_storytellingFoundation;
+  "lib/studioApi/auth": typeof lib_studioApi_auth;
+  "lib/studioApi/crypto": typeof lib_studioApi_crypto;
+  "lib/studioApi/folderScope": typeof lib_studioApi_folderScope;
+  "lib/studioApi/httpHelpers": typeof lib_studioApi_httpHelpers;
+  "lib/studioApi/openapi": typeof lib_studioApi_openapi;
+  "lib/studioApi/scopes": typeof lib_studioApi_scopes;
   notifications: typeof notifications;
   notificationsActions: typeof notificationsActions;
+  studioApiActions: typeof studioApiActions;
+  studioApiHttp: typeof studioApiHttp;
+  studioApiInternal: typeof studioApiInternal;
   stylePresetActions: typeof stylePresetActions;
   stylePresets: typeof stylePresets;
   users: typeof users;

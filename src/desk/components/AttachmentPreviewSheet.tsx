@@ -9,6 +9,7 @@ import {
   attachmentMediaUrl,
   attachmentPreviewKind,
   attachmentIsVideo,
+  attachmentVideoPosterUrl,
   loadAttachmentTextContent,
   loadAttachmentFolderListing,
 } from "@/desk/lib/attachment-model.js";
@@ -60,10 +61,7 @@ export function AttachmentPreviewSheet({
   const mediaUrl = attachment ? attachmentMediaUrl(attachment, workspaceId) : null;
   const externalUrl = attachment ? attachmentExternalUrl(attachment, workspaceId) : null;
   const ext = fileExt(attachment?.filename ?? attachment?.path ?? "");
-  const videoPoster =
-    attachment && attachmentIsVideo(attachment)
-      ? workspaceFileThumbUrl(attachment.workspacePath ?? attachment.path ?? "", workspaceId, 720)
-      : null;
+  const videoPoster = attachment ? attachmentVideoPosterUrl(attachment, workspaceId) : null;
 
   useEffect(() => {
     if (!open || !attachment) {

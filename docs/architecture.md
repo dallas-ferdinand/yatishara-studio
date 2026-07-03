@@ -32,6 +32,8 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 - `convex/notifications.ts`, `convex/notificationsActions.ts`: in-app notifications and web push.
 - `convex/lib/bunny.ts`: Bunny Storage/CDN path, upload, and signed URL helpers.
 - `convex/lib/aiGateway.ts`: Vercel AI Gateway prompt, image, and video helpers.
+- `convex/apiKeys.ts`, `convex/studioApiInternal.ts`, `convex/studioApiHttp.ts`, `convex/studioApiActions.ts`: REST API v1 (`/api/v1/*`) with Bearer API keys, rate limits, and audit logging. See [docs/api.md](./api.md).
+- `packages/studio-mcp`: stdio MCP server exposing Studio tools for Cursor and other agents.
 
 ## Data Domains
 

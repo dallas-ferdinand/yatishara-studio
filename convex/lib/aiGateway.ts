@@ -14,6 +14,7 @@ import {
   buildElementSheetUserPrompt,
   type ElementSheetType,
 } from "./elementSheets";
+import { normalizeAudioMimeType, type ReferenceInput } from "./referenceInput";
 
 export type GenerationMode = "image" | "video";
 
@@ -47,10 +48,7 @@ export type ScriptGenerationInput = {
   storytellingEnabled?: boolean;
   negativePrompt?: string;
   attachedScriptMarkdown?: string[];
-  referenceInputs: Array<{
-    kind: "image" | "video" | "audio";
-    url: string;
-  }>;
+  referenceInputs: ReferenceInput[];
 };
 
 export type GeneratedMedia = {
@@ -100,10 +98,7 @@ export type ElementSheetInput = {
   elementType: ElementSheetType;
   name: string;
   existingNotes?: string;
-  referenceInputs: Array<{
-    kind: "image" | "video" | "audio";
-    url: string;
-  }>;
+  referenceInputs: ReferenceInput[];
 };
 
 export async function generateElementSheet(input: ElementSheetInput): Promise<string> {
@@ -134,6 +129,7 @@ export async function generateElementSheet(input: ElementSheetInput): Promise<st
 }
 
 export async function generateScript(input: ScriptGenerationInput): Promise<string> {
+  const hasAudioReference = input.referenceInputs.some((reference) => reference.kind === "audio");
   const context: CreativeDirectionContext = {
     userPrompt: input.userPrompt,
     presetName: input.presetName,
@@ -143,6 +139,7 @@ export async function generateScript(input: ScriptGenerationInput): Promise<stri
     negativePrompt: input.negativePrompt,
     outputKind: "script",
     attachedScriptMarkdown: input.attachedScriptMarkdown,
+    hasAudioReference,
   };
   const result = await generateText({
     model: gateway.languageModel(textModelId()),
@@ -263,10 +260,7 @@ function normalizeSize(
   return map[resolution.toLowerCase()] ?? map[resolution];
 }
 
-function contentPartForReference(reference: {
-  kind: "image" | "video" | "audio";
-  url: string;
-}): Array<
+function contentPartForReference(reference: ReferenceInput): Array<
   | { type: "text"; text: string }
   | { type: "image"; image: URL }
   | { type: "file"; data: URL; mediaType: string }
@@ -275,9 +269,21 @@ function contentPartForReference(reference: {
     return [{ type: "image", image: new URL(reference.url) }];
   }
   if (reference.kind === "video") {
-    return [{ type: "file", data: new URL(reference.url), mediaType: "video/mp4" }];
+    return [
+      {
+        type: "file",
+        data: new URL(reference.url),
+        mediaType: reference.mimeType?.split(";")[0]?.trim() || "video/mp4",
+      },
+    ];
   }
-  return [{ type: "text", text: `Audio reference URL: ${reference.url}` }];
+  return [
+    {
+      type: "file",
+      data: new URL(reference.url),
+      mediaType: normalizeAudioMimeType(reference.mimeType),
+    },
+  ];
 }
 
 function formatGatewayError(error: unknown): string {

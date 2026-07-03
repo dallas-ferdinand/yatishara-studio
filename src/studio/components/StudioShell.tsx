@@ -38,17 +38,21 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
+import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
+import { Icon } from "@/desk/components/Icons";
 import { ImageZoomViewer } from "@/desk/components/ImageZoomViewer";
 import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
+import { StudioApiKeysSettings } from "@/studio/components/StudioApiKeysSettings";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { EXPLORER_DND_TYPE, readExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { getDeviceId, loadSession } from "@/lib/session";
@@ -885,7 +889,7 @@ export function StudioShell() {
         assetId: asset.assetId,
         expiresUnix,
       });
-      if (url) inputs.push({ kind: asset.kind, url });
+      if (url) inputs.push({ kind: asset.kind, url, mimeType: asset.mimeType });
     }
     return inputs;
   }
@@ -1341,14 +1345,15 @@ export function StudioShell() {
           --studio-glow-mid: color-mix(in srgb, var(--cursor-accent) 24%, transparent);
           --studio-surface-hover: color-mix(in srgb, var(--cursor-accent) 5%, var(--color-cursor-hover));
           --studio-card-bg: color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          --studio-shell-border: color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent);
+          --studio-shell-border: var(--color-cursor-border-soft);
+          --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-card-border: color-mix(in srgb, var(--cursor-accent) 8%, var(--studio-shell-border));
           --studio-motion-fast: 220ms;
           --studio-motion-med: 360ms;
           --studio-motion-ease: cubic-bezier(0.34, 1.38, 0.64, 1);
           --studio-motion-spring: cubic-bezier(0.18, 1.42, 0.32, 1);
           --studio-composer-focus-line-ease: cubic-bezier(0.16, 1, 0.3, 1);
-          --studio-hover-scale: 1.018;
+          --studio-hover-scale: 1.012;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 58%, transparent);
@@ -1522,9 +1527,11 @@ export function StudioShell() {
             padding-left: 16px !important;
           }
           .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
-            width: 38px;
-            min-width: 38px;
-            max-width: 38px;
+            width: 38px !important;
+            min-width: 38px !important;
+            max-width: 38px !important;
+            height: 38px !important;
+            min-height: 38px !important;
             padding-left: 0 !important;
           }
           .studio-mobile-bottom-nav {
@@ -1792,7 +1799,7 @@ export function StudioShell() {
           background: var(--mos-sidebar) !important;
         }
         .studio-polish :where(.border-cursor-border-soft) {
-          border-color: color-mix(in srgb, var(--color-cursor-border-soft) 34%, transparent) !important;
+          border-color: var(--color-cursor-border-soft) !important;
         }
         @keyframes studio-ambient-drift {
           from { transform: translate3d(0, 0, 0) scale(0.96); }
@@ -1806,26 +1813,42 @@ export function StudioShell() {
             color var(--studio-motion-fast) var(--studio-motion-ease),
             filter var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring),
+            transform var(--studio-motion-fast) var(--studio-motion-ease),
             opacity var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip) {
           -webkit-tap-highlight-color: transparent;
         }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn) {
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) {
           position: relative;
+          transform-origin: center center;
+          transform: scale(1);
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) :where(svg, .icon-inline) {
+          transform: scale(1);
+          transition:
+            transform var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) {
+          transform: scale(var(--studio-hover-scale));
+          box-shadow:
+            0 2px 8px color-mix(in srgb, #000 14%, transparent),
+            0 0 14px var(--studio-glow-soft);
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) :where(svg, .icon-inline) {
+          transform: scale(calc(1 / var(--studio-hover-scale)));
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) {
+          transform: scale(var(--studio-press-scale));
+        }
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) :where(svg, .icon-inline) {
+          transform: scale(calc(1 / var(--studio-press-scale)));
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip):focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
           outline-offset: 2px;
           box-shadow: var(--studio-focus-ring);
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):hover:not(:disabled) {
-          box-shadow: 0 0 18px var(--studio-glow-soft);
-          transform: scale(var(--studio-hover-scale));
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active:not(:disabled) {
-          transform: scale(var(--studio-press-scale));
         }
         .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-breadcrumbs-chip):active {
           transform: scale(var(--studio-press-scale));
@@ -1852,6 +1875,12 @@ export function StudioShell() {
           box-shadow:
             inset 0 1px 0 rgb(255 255 255 / 0.04),
             0 12px 34px rgb(0 0 0 / 0.14) !important;
+        }
+        .studio-polish aside .cursor-panel-head,
+        .studio-polish aside .cursor-sidebar-head {
+          background: var(--color-cursor-bg) !important;
+          border-bottom: 1px solid var(--studio-chrome-divider) !important;
+          box-shadow: none !important;
         }
         .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body, .cursor-workspace-head) {
           background: transparent !important;
@@ -2023,7 +2052,9 @@ export function StudioShell() {
           padding: 0 !important;
           gap: 0;
           align-items: center;
-          background: var(--color-cursor-sidebar) !important;
+          background: var(--color-cursor-bg) !important;
+          border-bottom: 1px solid var(--studio-chrome-divider) !important;
+          box-shadow: none !important;
         }
         .studio-polish .cursor-workspace-head::after {
           content: none !important;
@@ -2183,16 +2214,21 @@ export function StudioShell() {
           z-index: var(--tab-stack, 1) !important;
         }
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
-          width: 24px;
-          min-width: 24px;
-          max-width: 24px;
-          height: 24px;
+          width: 30px !important;
+          min-width: 30px !important;
+          max-width: 30px !important;
+          height: 30px !important;
+          min-height: 30px !important;
+          aspect-ratio: 1;
           border-radius: 999px !important;
           border-width: 1px !important;
           border-left-width: 1px !important;
           justify-content: center;
+          align-items: center;
           margin-left: 4px;
           padding: 0 !important;
+          overflow: visible;
+          flex-shrink: 0;
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border)) !important;
           background:
             linear-gradient(
@@ -2281,6 +2317,7 @@ export function StudioShell() {
             inset 0 1px 0 rgba(255, 255, 255, 0.48);
           --studio-card-bg: var(--mos-panel);
           --studio-shell-border: var(--color-cursor-border-soft);
+          --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-surface-hover: var(--color-cursor-hover);
           --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text) 2%, var(--mos-bg));
           --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 4.5%, var(--mos-bg));
@@ -2292,12 +2329,11 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish :where(
           .studio-composer .cursor-composer-box,
           .studio-chat-bubble,
-          .studio-mode-switcher,
-          .studio-mode-row,
+          .studio-mode-row::before,
           .studio-preset-grid-panel,
           .studio-preset-trigger,
           .studio-preset-grid-card,
-          .studio-composer-preview-dock,
+          .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock,
           .studio-composer .studio-pill-btn,
           .studio-composer .cursor-attach-tile-open,
           .studio-chat-chip,
@@ -2310,13 +2346,17 @@ export function StudioShell() {
         }
         [data-appearance="light"] .studio-polish aside {
           background: var(--mos-sidebar) !important;
-          border-right-color: color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent) !important;
+          border-right-color: var(--color-cursor-border-soft) !important;
         }
-        [data-appearance="light"] .studio-polish .cursor-panel-head,
-        [data-appearance="light"] .studio-polish .cursor-sidebar-head,
-        [data-appearance="light"] .studio-polish .cursor-workspace-head {
+        [data-appearance="light"] .studio-polish .studio-folder-pathbar,
+        [data-appearance="light"] .studio-polish .cursor-panel-search {
           background: var(--color-cursor-sidebar) !important;
-          border-bottom: 1px solid var(--color-cursor-border-soft) !important;
+        }
+        [data-appearance="light"] .studio-polish aside .cursor-panel-head,
+        [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
+        [data-appearance="light"] .studio-polish main .cursor-workspace-head {
+          background: #fff !important;
+          border-bottom: 1px solid var(--studio-chrome-divider) !important;
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-sidebar-brand-logo-img {
@@ -2498,26 +2538,42 @@ export function StudioShell() {
           flex-direction: column;
         }
         .studio-settings-workspace-head {
-          border-bottom: 1px solid var(--color-cursor-border);
-          padding: 6px 8px;
-        }
-        .studio-settings-workspace-head h2 {
-          margin: 0;
-          color: var(--color-cursor-text-bright);
-          font-size: 24px;
-          font-weight: 720;
+          display: flex;
+          flex-shrink: 0;
+          min-height: var(--cursor-head-h);
+          height: var(--cursor-head-h);
+          align-items: stretch;
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar);
+          padding: 0;
         }
         .studio-settings-horizontal-menu {
           display: flex;
+          flex: 1;
+          min-width: 0;
+          width: 100%;
+          align-items: center;
           gap: 4px;
           overflow-x: auto;
+          overflow-y: hidden;
+          padding: 4px 8px;
+          scroll-behavior: smooth;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .studio-settings-horizontal-menu::-webkit-scrollbar {
+          display: none;
         }
         .studio-settings-horizontal-menu button {
+          display: inline-flex;
           flex: 0 0 auto;
+          min-height: 24px;
+          height: 24px;
+          align-items: center;
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: var(--cursor-radius-sm);
           background: color-mix(in srgb, var(--mos-surface) 64%, transparent);
-          padding: 5px 8px;
+          padding: 0 10px;
           color: var(--color-cursor-muted);
           font-size: 11px;
           font-weight: 650;
@@ -3027,6 +3083,114 @@ export function StudioShell() {
           font-size: 12px;
           font-weight: 700;
         }
+        .studio-api-keys-panel {
+          width: 100%;
+        }
+        .studio-api-keys-lead {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .studio-api-keys-card {
+          display: grid;
+          gap: 10px;
+          padding: 10px;
+          border-radius: 10px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          background:
+            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 42%),
+            color-mix(in srgb, var(--mos-bg) 42%, transparent);
+        }
+        .studio-api-keys-form {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-api-keys-scope-row {
+          display: grid;
+          gap: 6px;
+        }
+        .studio-api-keys-scope-label {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-api-keys-secret {
+          display: block;
+          padding: 10px 12px;
+          border-radius: 9px;
+          border: 1px solid var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-bg) 56%, transparent);
+          color: var(--color-cursor-text-bright);
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 11px;
+          line-height: 1.45;
+          word-break: break-all;
+        }
+        .studio-api-keys-rows {
+          display: grid;
+          gap: 2px;
+        }
+        .studio-api-keys-item {
+          display: flex;
+          min-height: 42px;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
+          padding: 6px 0;
+        }
+        .studio-api-keys-item:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+        .studio-api-keys-item-copy {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .studio-api-keys-item-copy strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 12px;
+          font-weight: 750;
+        }
+        .studio-api-keys-item-copy span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-api-keys-item-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          gap: 6px;
+        }
+        .studio-api-keys-item-actions .cursor-settings-action,
+        .studio-api-keys-card .studio-account-actions .cursor-settings-action {
+          width: auto;
+          min-width: 0;
+          min-height: 28px;
+          padding: 0 10px;
+          font-size: 11px;
+        }
+        .studio-api-keys-edit {
+          display: grid;
+          gap: 8px;
+          width: 100%;
+        }
+        .studio-api-keys-status {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-api-keys-secret-card {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 48%),
+            color-mix(in srgb, var(--mos-bg) 42%, transparent);
+        }
         .studio-section-head,
         .studio-billing-hero {
           display: flex;
@@ -3467,8 +3631,8 @@ export function StudioShell() {
           display: flex;
           align-items: center;
           gap: 4px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 28%, transparent);
-          background: transparent;
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar);
         }
         .studio-polish .cursor-explorer-body {
           background: var(--mos-sidebar);
@@ -3476,8 +3640,8 @@ export function StudioShell() {
         .studio-polish .cursor-panel-search {
           min-height: 32px;
           height: 32px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 28%, transparent);
-          background: transparent;
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar);
         }
         .studio-polish .cursor-panel-search-input {
           font-size: 11.5px;
@@ -3685,18 +3849,8 @@ export function StudioShell() {
           align-self: stretch;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 14px;
-          background: var(--studio-composer-glass);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
-          box-shadow:
-            0 4px 14px color-mix(in srgb, #000 16%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          background: transparent;
           padding: 5px;
-        }
-        [data-appearance="light"] .studio-polish .studio-mode-switcher {
-          box-shadow:
-            0 2px 8px color-mix(in srgb, #000 3%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.42);
         }
         .studio-mode-row {
           display: flex;
@@ -3709,9 +3863,7 @@ export function StudioShell() {
           min-height: 0;
           border: 1px solid rgba(255, 255, 255, 0.05);
           border-radius: 9px;
-          background: var(--studio-composer-glass-muted);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          background: transparent;
           padding: 5px 4px;
           color: var(--color-cursor-muted);
           font-size: 11px;
@@ -3719,33 +3871,40 @@ export function StudioShell() {
           line-height: 1.1;
           text-align: center;
           cursor: pointer;
+          transform-origin: center center;
+          transform: scale(1);
           transition:
             background var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
             color var(--studio-motion-fast) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring);
-        }
-        .studio-mode-row:hover {
-          background: color-mix(in srgb, var(--studio-composer-glass-muted) 70%, var(--color-cursor-hover) 30%);
-          color: var(--color-cursor-text);
-          transform: scale(var(--studio-hover-scale));
-        }
-        .studio-mode-row.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
-          background:
-            radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--cursor-accent) 22%, transparent), transparent 48%),
-            color-mix(in srgb, var(--cursor-accent-dim) 38%, var(--studio-composer-glass-strong) 62%);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          color: var(--color-cursor-text-bright);
-          transform: scale(1.008);
+            transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-mode-row svg {
           width: 15px;
           height: 15px;
           flex: 0 0 auto;
           stroke-width: 2.15;
+          transform: scale(1);
+          transition: transform var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-mode-row:hover {
+          color: var(--color-cursor-text);
+          transform: scale(var(--studio-hover-scale));
+          box-shadow:
+            0 2px 8px color-mix(in srgb, #000 14%, transparent),
+            0 0 14px var(--studio-glow-soft);
+        }
+        .studio-mode-row:hover svg {
+          transform: scale(calc(1 / var(--studio-hover-scale)));
+        }
+        .studio-mode-row.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+          color: var(--color-cursor-text-bright);
+          transform: scale(1.008);
+        }
+        .studio-mode-row.is-active svg {
+          transform: scale(calc(1 / 1.008));
         }
         .studio-mode-row span {
           display: block;
@@ -3784,22 +3943,11 @@ export function StudioShell() {
           overflow: hidden;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
-          background: var(--studio-composer-glass-strong);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          background: transparent;
           box-shadow: var(--studio-composer-glass-shadow);
           padding: 10px;
           isolation: isolate;
           animation: studio-preset-grid-in 180ms var(--studio-motion-ease);
-        }
-        .studio-preset-grid-panel::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          z-index: -1;
-          border-radius: inherit;
-          background: color-mix(in srgb, var(--color-mos-composer, #07111f) 62%, transparent);
-          pointer-events: none;
         }
         @keyframes studio-preset-grid-in {
           from {
@@ -3867,13 +4015,13 @@ export function StudioShell() {
           min-width: 0;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 12px;
-          background: var(--studio-composer-glass-muted);
+          background: transparent;
           padding: 6px;
           text-align: left;
           cursor: pointer;
           transition:
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring),
+            transform var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease);
         }
         .studio-preset-grid-card:hover {
@@ -4314,128 +4462,14 @@ export function StudioShell() {
           stroke-width: 2.35;
           filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.42));
         }
-        .studio-chip-preview-card {
-          position: fixed;
-          z-index: 80;
-          overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border-soft));
-          border-radius: 18px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 56%),
-            color-mix(in srgb, var(--color-cursor-bg) 72%, #020617);
-          box-shadow:
-            0 18px 50px color-mix(in srgb, #000 48%, transparent),
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 8%, transparent),
-            0 0 26px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
-          pointer-events: none;
-          transform-origin: bottom center;
-          animation: studio-chip-preview-in 120ms ease-out;
+        .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock {
+          width: min(var(--studio-composer-shell-max), calc(100% - 24px));
+          margin-left: auto;
+          margin-right: auto;
         }
-        .studio-chip-preview-media {
-          position: relative;
-          height: 104px;
-          overflow: hidden;
-          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--color-cursor-hover));
-        }
-        .studio-chip-preview-media img,
-        .studio-chip-preview-media video {
-          display: block;
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .studio-chip-preview-kind {
-          position: absolute;
-          inset: 0;
-          display: grid;
-          place-items: center;
-          color: rgba(255, 255, 255, 0.78);
-          pointer-events: none;
-          background: transparent;
-        }
-        .studio-chip-preview-kind svg {
-          width: 22px;
-          height: 22px;
-          opacity: 0.82;
-          stroke-width: 2.1;
-          filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.42));
-        }
-        .studio-chip-preview-label {
-          overflow: hidden;
-          padding: 7px 9px 8px;
-          color: var(--color-cursor-text-bright);
-          font-size: 11px;
-          font-weight: 650;
-          line-height: 1.15;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        @keyframes studio-chip-preview-in {
-          from { opacity: 0; transform: translateY(4px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .studio-composer-preview-dock {
-          width: min(520px, max(220px, calc(100% - 292px)));
-          max-height: min(34vh, 260px);
-          display: flex;
-          flex-direction: column;
-          margin: 0 auto 8px;
-          overflow: hidden;
-          border: 1px solid var(--studio-composer-glass-border);
-          border-radius: var(--cursor-composer-radius);
-          background: var(--studio-composer-glass-strong);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
-          box-shadow: var(--studio-composer-glass-shadow);
-          pointer-events: auto;
-        }
-        .studio-composer-preview-head {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          min-height: 28px;
-          padding: 0 8px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
-        }
-        .studio-composer-preview-title {
-          min-width: 0;
-          flex: 1;
-          overflow: hidden;
-          color: var(--color-cursor-text-bright);
-          font-size: 11px;
-          font-weight: 650;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .studio-composer-preview-close {
-          display: inline-grid;
-          width: 20px;
-          height: 20px;
-          place-items: center;
-          border: 0;
-          border-radius: 999px;
-          background: transparent;
-          color: var(--color-cursor-muted);
-          font-size: 17px;
-          line-height: 1;
-        }
-        .studio-composer-preview-close:hover {
-          background: var(--cursor-overlay-hover);
-          color: var(--color-cursor-text-bright);
-        }
-        .studio-composer-preview-body {
-          min-height: 0;
-          overflow: hidden;
-          display: grid;
-          place-items: center;
-          background: color-mix(in srgb, var(--color-cursor-bg) 82%, transparent);
-        }
-        .studio-composer-preview-image,
-        .studio-composer-preview-video {
-          display: block;
-          width: 100%;
-          max-height: min(29vh, 226px);
-          object-fit: contain;
+        [data-appearance="light"] .studio-polish .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
         .studio-composer-preview-fallback {
           padding: 20px;
@@ -4563,7 +4597,6 @@ export function StudioShell() {
         .studio-composer .studio-pill-btn[aria-expanded="true"] {
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          box-shadow: 0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-pill-btn {
           position: relative;
@@ -4590,7 +4623,6 @@ export function StudioShell() {
         .studio-pill-btn[aria-expanded="true"] {
           background: var(--color-cursor-hover);
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          box-shadow: 0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-dropdown-menu {
           min-width: max-content;
@@ -5324,7 +5356,7 @@ export function StudioShell() {
           overflow: hidden;
           transition:
             filter var(--studio-motion-fast) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring),
+            transform var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease);
         }
         [data-appearance="light"] .studio-polish .studio-generate-btn:not(:disabled) {
@@ -5495,110 +5527,149 @@ export function StudioShell() {
         }
         .studio-asset-preview {
           position: relative;
-          display: block;
+          display: flex;
+          flex-direction: column;
           height: 100%;
-          padding: 10px;
+          min-height: 0;
+          padding: 0;
         }
-        .studio-asset-preview-head {
-          position: absolute;
-          top: 18px;
-          right: 18px;
-          z-index: 5;
+        .studio-asset-media-bar {
           display: flex;
           align-items: center;
-          justify-content: flex-end;
-          gap: 10px;
-          max-width: min(640px, calc(100% - 36px));
-          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
-          border-radius: 16px;
-          background:
-            radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 42%),
-            color-mix(in srgb, var(--mos-bg) 62%, transparent);
-          padding: 8px;
-          box-shadow:
-            0 16px 38px color-mix(in srgb, #000 28%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
-          opacity: 0.9;
-          transition: opacity var(--studio-motion-fast) var(--studio-motion-ease), transform var(--studio-motion-fast) var(--studio-motion-spring);
+          gap: 12px;
+          min-height: var(--cursor-head-h);
+          height: var(--cursor-head-h);
+          padding: 0 12px;
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar) !important;
+          flex-shrink: 0;
         }
-        .studio-asset-preview-head:hover {
-          opacity: 1;
-          transform: translateY(-1px);
-        }
-        .studio-asset-preview-title {
+        .studio-asset-media-bar-name {
           min-width: 0;
-          max-width: min(280px, 34vw);
-          padding: 0 4px 0 8px;
-        }
-        .studio-asset-preview-head h2 {
-          color: var(--color-cursor-text-bright);
+          flex: 1;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-          font-size: 12px;
-          font-weight: 700;
-        }
-        .studio-asset-preview-head p:not(.studio-section-kicker) {
-          display: none;
-        }
-        .studio-asset-preview-head .studio-section-kicker {
-          margin: 0 0 2px;
-          color: var(--color-cursor-muted);
-          font-size: 9px;
-          letter-spacing: 0.16em;
-        }
-        .studio-asset-actions {
-          display: flex;
-          flex-wrap: nowrap;
-          justify-content: flex-end;
-          gap: 5px;
-        }
-        .studio-asset-actions .cursor-icon-btn,
-        .studio-asset-actions .inline-flex {
-          height: 28px;
-          min-height: 28px;
-          padding: 0 8px;
-          border-radius: 10px;
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          font-weight: 500;
         }
         .studio-asset-lightbox {
-          height: 100%;
+          flex: 1;
           min-height: 0;
           overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
-          border-radius: 20px;
-          background:
-            radial-gradient(circle at 50% 12%, color-mix(in srgb, var(--cursor-accent) 9%, transparent), transparent 42%),
-            color-mix(in srgb, var(--mos-bg) 96%, #03040a);
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 4%, transparent);
+          border: none;
+          border-radius: 0;
+          background: var(--color-cursor-bg);
+          box-shadow: none;
+          display: flex;
+          flex-direction: column;
         }
-        .studio-asset-preview .desk-image-viewer {
+        [data-appearance="light"] .studio-asset-lightbox {
+          background: #fff;
+        }
+        .studio-asset-preview .desk-image-viewer,
+        .studio-asset-preview .desk-media-player--studio-preview {
+          background: var(--color-cursor-bg);
+          flex: 1;
+          min-height: 0;
+        }
+        [data-appearance="light"] .studio-asset-preview .desk-image-viewer,
+        [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview {
+          background: #fff;
+        }
+        .studio-asset-preview .desk-image-viewer-toolbar,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
+          position: static;
+          left: auto;
+          bottom: auto;
+          z-index: 1;
+          width: 100%;
+          min-width: 0;
+          min-height: var(--cursor-head-h);
+          height: var(--cursor-head-h);
+          transform: none;
+          border: none;
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          border-radius: 0;
+          background: var(--color-cursor-sidebar) !important;
+          box-shadow: none;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+        .studio-asset-preview .desk-image-viewer-name,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-name {
+          color: var(--color-cursor-text);
+        }
+        .studio-asset-preview .desk-image-viewer-status {
+          color: var(--color-cursor-muted);
+        }
+        .studio-asset-preview .desk-image-viewer-scale-btn,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-time {
+          color: var(--color-cursor-muted);
+        }
+        .studio-asset-preview .desk-image-viewer-scale-btn:hover {
+          background: var(--color-cursor-hover);
+          color: var(--color-cursor-text);
+        }
+        .studio-asset-preview .desk-image-viewer-scale-input {
+          background: var(--color-cursor-bg);
+          border: 1px solid var(--studio-chrome-divider);
+          color: var(--color-cursor-text);
+        }
+        .studio-asset-preview .desk-image-viewer-toolbar .cursor-icon-btn,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar .cursor-icon-btn {
+          color: var(--color-cursor-muted);
+        }
+        .studio-asset-preview .desk-image-viewer-toolbar .cursor-icon-btn:hover,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar .cursor-icon-btn:hover {
+          background: var(--color-cursor-hover);
+          color: var(--color-cursor-text);
+        }
+        .studio-asset-preview .desk-image-viewer-stage,
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-stage {
+          flex: 1;
+          min-height: 0;
+          padding: 0;
+          background: var(--color-cursor-bg);
+        }
+        [data-appearance="light"] .studio-asset-preview .desk-image-viewer-stage,
+        [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-stage,
+        [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-stage {
+          background: #fff;
+        }
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-volume {
+          width: 56px;
+        }
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-controls {
+          flex-shrink: 0;
+          border-top: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar);
+        }
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-scrub {
+          padding: 8px 12px 4px;
           background: transparent;
         }
-        .studio-asset-preview .desk-image-viewer-toolbar {
-          position: absolute;
-          left: 50%;
-          bottom: 18px;
-          z-index: 4;
-          min-height: 34px;
-          height: 34px;
-          width: auto;
-          min-width: 224px;
-          transform: translateX(-50%);
-          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-bg) 60%, transparent);
-          box-shadow: 0 14px 34px color-mix(in srgb, #000 26%, transparent);
+        .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-toolbar {
+          background: transparent;
+          border-top: none;
         }
-        .studio-asset-preview .desk-image-viewer-stage {
-          padding: 28px;
+        .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-stage {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--color-cursor-bg);
+        }
+        [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-stage {
+          background: #fff;
         }
         .studio-asset-preview .desk-image-viewer-img {
-          border-radius: 12px;
+          border-radius: 0;
           box-shadow: 0 18px 55px color-mix(in srgb, #000 28%, transparent);
         }
         .studio-asset-player {
-          height: 100%;
+          flex: 1;
+          min-height: 0;
           align-items: center;
         }
         .studio-asset-empty {
@@ -5957,9 +6028,6 @@ export function StudioShell() {
           font-weight: 520;
           text-align: right;
         }
-        .studio-upload-popover {
-          min-width: 190px;
-        }
         .studio-element-picker {
           min-width: 268px;
           max-width: 300px;
@@ -6078,12 +6146,6 @@ export function StudioShell() {
           margin-top: 6px;
           padding-top: 6px;
           border-top: 1px solid var(--color-cursor-border-soft);
-        }
-        .studio-upload-hint {
-          padding: 6px 8px 4px;
-          color: var(--color-cursor-muted);
-          font-size: 10px;
-          line-height: 1.25;
         }
         @keyframes studio-menu-pop {
           from { opacity: 0; transform: translateY(4px) scale(0.98); }
@@ -7315,11 +7377,9 @@ function StudioComposer({
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
-  const [chipPreview, setChipPreview] = useState(null);
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const inputLineRef = useRef(null);
@@ -7403,42 +7463,10 @@ function StudioComposer({
   }, [editorRef]);
 
   useEffect(() => {
-    let previewTimer = null;
-    const showPreview = (event) => {
-      const attachment = event.detail?.attachment;
-      const rect = event.detail?.rect;
-      if (!attachment?.thumbnailUrl || !rect) return;
-      if (previewTimer) window.clearTimeout(previewTimer);
-      previewTimer = window.setTimeout(() => {
-        setChipPreview({ attachment, rect });
-      }, 420);
-    };
-    const hidePreview = () => {
-      if (previewTimer) {
-        window.clearTimeout(previewTimer);
-        previewTimer = null;
-      }
-      setChipPreview(null);
-    };
-    window.addEventListener("studio-composer-token-preview", showPreview);
-    window.addEventListener("studio-composer-token-preview-hide", hidePreview);
-    window.addEventListener("scroll", hidePreview, true);
-    window.addEventListener("resize", hidePreview);
-    return () => {
-      window.removeEventListener("studio-composer-token-preview", showPreview);
-      window.removeEventListener("studio-composer-token-preview-hide", hidePreview);
-      window.removeEventListener("scroll", hidePreview, true);
-      window.removeEventListener("resize", hidePreview);
-      if (previewTimer) window.clearTimeout(previewTimer);
-    };
-  }, []);
-
-  useEffect(() => {
     const openPreview = (event) => {
       const attachment = event.detail?.attachment;
       if (!attachment) return;
       setPreviewAttachment(attachment);
-      setChipPreview(null);
     };
     window.addEventListener("studio-composer-token-open", openPreview);
     return () => window.removeEventListener("studio-composer-token-open", openPreview);
@@ -7532,10 +7560,12 @@ function StudioComposer({
         }
       }}
     >
-      {chipPreview ? <StudioComposerChipPreview preview={chipPreview} /> : null}
       {previewAttachment ? (
-        <StudioComposerPreviewDock
-          attachment={previewAttachment}
+        <AttachmentPreviewSheet
+          open
+          layout="dock"
+          attachment={studioComposerPreviewAttachment(previewAttachment)}
+          workspaceId={WORKSPACE_ID}
           onClose={() => setPreviewAttachment(null)}
         />
       ) : null}
@@ -7620,11 +7650,7 @@ function StudioComposer({
           {isElementMode ? (
             <>
               <StudioElementTypePicker elementType={elementType} setElementType={setElementType} />
-              <StudioUploadMenu
-                open={uploadMenuOpen}
-                setOpen={setUploadMenuOpen}
-                inputRef={uploadInputRef}
-              />
+              <StudioUploadButton inputRef={uploadInputRef} />
             </>
           ) : (
             <>
@@ -7633,11 +7659,7 @@ function StudioComposer({
                 open={presetGridOpen}
                 onClick={() => setPresetGridOpen((open) => !open)}
               />
-              <StudioUploadMenu
-                open={uploadMenuOpen}
-                setOpen={setUploadMenuOpen}
-                inputRef={uploadInputRef}
-              />
+              <StudioUploadButton inputRef={uploadInputRef} />
               {mode !== "script" ? (
                 <StudioComposerInlineSettings
                   mode={mode}
@@ -7659,7 +7681,7 @@ function StudioComposer({
         <div className="studio-composer-actions">
           <button
             type="button"
-            className={`studio-pill-btn studio-settings-trigger cursor-composer-mic${recording ? " is-recording" : ""}`}
+            className={`studio-pill-btn studio-upload-trigger cursor-composer-mic${recording ? " is-recording" : ""}`}
             title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
             onClick={() => void toggleVoice()}
             disabled={transcribing}
@@ -7720,58 +7742,15 @@ function StudioElementTypePicker({ elementType, setElementType }) {
   );
 }
 
-function StudioComposerChipPreview({ preview }) {
-  const { attachment, rect } = preview;
-  const width = 188;
-  const height = 132;
-  const left = Math.min(Math.max(12, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 12);
-  const top = rect.top > height + 18 ? rect.top - height - 10 : rect.bottom + 10;
-  const label = attachment.label ?? attachment.filename ?? "Preview";
-  const mediaUrl = attachment.mediaUrl ?? attachment.thumbnailUrl;
-  return (
-    <div className="studio-chip-preview-card" style={{ left, top, width }} role="tooltip">
-      <div className="studio-chip-preview-media">
-        {attachment.kind === "video" ? (
-          <video src={mediaUrl} muted playsInline preload="metadata" aria-label="" />
-        ) : (
-          <img src={attachment.thumbnailUrl} alt="" loading="lazy" />
-        )}
-        <span className="studio-chip-preview-kind" aria-hidden="true">
-          {attachment.kind === "video" ? <Video /> : <ImageIcon />}
-        </span>
-      </div>
-      <div className="studio-chip-preview-label">{label}</div>
-    </div>
-  );
-}
-
-function StudioComposerPreviewDock({ attachment, onClose }) {
-  const label = attachment.label ?? attachment.filename ?? "Preview";
-  const src = attachment.mediaUrl ?? attachment.thumbnailUrl;
-  const isImage = attachment.kind === "image";
-  const isVideo = attachment.kind === "video";
-  const posterUrl = isVideoFileUrl(attachment.thumbnailUrl) ? undefined : attachment.thumbnailUrl;
-  return (
-    <div className="studio-composer-preview-dock">
-      <div className="studio-composer-preview-head">
-        <span className="studio-composer-preview-title">{label}</span>
-        <button type="button" className="studio-composer-preview-close" onClick={onClose} aria-label="Close preview">
-          ×
-        </button>
-      </div>
-      <div className="studio-composer-preview-body">
-        {isImage && src ? (
-          <img className="studio-composer-preview-image" src={src} alt="" loading="lazy" />
-        ) : isVideo && src ? (
-          <video className="studio-composer-preview-video" src={src} poster={posterUrl} controls playsInline preload="metadata" />
-        ) : (
-          <div className="studio-composer-preview-fallback">
-            {createPreviewKindLabel(attachment)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function studioComposerPreviewAttachment(attachment) {
+  if (!attachment) return null;
+  const next = {
+    ...attachment,
+    workspacePath: attachment.path ?? attachment.workspacePath,
+    previewUrl: attachment.thumbnailUrl ?? attachment.previewUrl,
+  };
+  if (attachment.studioKind === "folder") next.kind = "folder";
+  return next;
 }
 
 function createPreviewKindLabel(attachment) {
@@ -7958,63 +7937,17 @@ function StudioAddMenu({ open, setOpen, onAction }) {
   );
 }
 
-function StudioUploadMenu({ open, setOpen, inputRef }) {
-  const wrapRef = useRef(null);
-  const menuRef = useRef(null);
-  const menuStyle = useFixedMenuPosition(open, wrapRef, 190);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event) => {
-      if (wrapRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    const onKey = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, setOpen]);
-
+function StudioUploadButton({ inputRef }) {
   return (
-    <div className="relative" ref={wrapRef}>
-      <button
-        type="button"
-        className="studio-pill-btn studio-upload-trigger"
-        title="Add photos, videos, or notes"
-        aria-expanded={open}
-        onClick={() => setOpen((state) => !state)}
-      >
-        <Plus className="h-4 w-4" />
-      </button>
-      {open && menuStyle
-        ? createPortal(
-            <div
-              ref={menuRef}
-              className="cursor-tab-context-menu studio-dropdown-menu studio-upload-popover is-fixed"
-              style={menuStyle}
-            >
-              <button
-                type="button"
-                className="cursor-tab-context-item"
-                onClick={() => {
-                  inputRef.current?.click();
-                  setOpen(false);
-                }}
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Add photos, videos, or notes
-              </button>
-              <p className="studio-upload-hint">Use uploads as inspiration for your next request.</p>
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
+    <button
+      type="button"
+      className="studio-pill-btn studio-upload-trigger"
+      title="Add photos, videos, or notes"
+      aria-label="Add photos, videos, or notes"
+      onClick={() => inputRef.current?.click()}
+    >
+      <Upload className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -8419,7 +8352,7 @@ function elementSheetReferenceInputs(sourceAssets = []) {
         ? asset.kind
         : null;
       const url = asset.mediaUrl ?? asset.thumbnailUrl;
-      return kind && /^https?:\/\//i.test(url ?? "") ? [{ kind, url }] : [];
+      return kind && /^https?:\/\//i.test(url ?? "") ? [{ kind, url, mimeType: asset.mimeType }] : [];
     });
 }
 
@@ -8552,19 +8485,6 @@ function createComposerAttachmentToken(attachment) {
   });
   token.addEventListener("dragend", () => {
     token.classList.remove("is-dragging");
-  });
-  token.addEventListener("mouseenter", () => {
-    const attachmentData = JSON.parse(token.dataset.attachment ?? "{}");
-    if (!attachmentData.thumbnailUrl) return;
-    window.dispatchEvent(new CustomEvent("studio-composer-token-preview", {
-      detail: {
-        attachment: attachmentData,
-        rect: token.getBoundingClientRect(),
-      },
-    }));
-  });
-  token.addEventListener("mouseleave", () => {
-    window.dispatchEvent(new CustomEvent("studio-composer-token-preview-hide"));
   });
   token.addEventListener("click", (event) => {
     event.preventDefault();
@@ -9326,13 +9246,7 @@ function ActivePane({
   }
   if (activeEntry.studioKind === "asset") {
     return (
-      <StudioAssetPreview
-        entry={activeEntry}
-        onAttach={onAttach}
-        onRename={onRename}
-        onDuplicate={onDuplicate}
-        onTrash={onTrash}
-      />
+      <StudioAssetPreview entry={activeEntry} />
     );
   }
   if (activeEntry.studioKind === "element") {
@@ -9568,7 +9482,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   );
 }
 
-function StudioAssetPreview({ entry, onAttach, onRename, onDuplicate, onTrash }) {
+function StudioAssetPreview({ entry }) {
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const signedMediaUrl = useQuery(
@@ -9578,35 +9492,41 @@ function StudioAssetPreview({ entry, onAttach, onRename, onDuplicate, onTrash })
   const mediaUrl = entry.mediaUrl ?? signedMediaUrl;
   const thumbUrl = entry.thumbnailUrl ?? mediaUrl;
   const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
+  const downloadAsset = () => {
+    if (!mediaUrl) return;
+    const anchor = document.createElement("a");
+    anchor.href = mediaUrl;
+    anchor.download = entry.name ?? "download";
+    anchor.rel = "noopener noreferrer";
+    anchor.target = "_blank";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  };
   return (
     <div className="studio-asset-preview">
-      <header className="studio-asset-preview-head">
-        <div className="studio-asset-preview-title">
-          <p className="studio-section-kicker">{entry.kindLabel}</p>
-          <h2>{entry.name}</h2>
-          <p>{entry.mimeType ?? entry.description}</p>
-        </div>
-        <div className="studio-asset-actions">
-          <button className={STYLE.iconButton} onClick={() => onAttach(entry)}>
-            <Plus className="h-4 w-4" />
-            Use in request
-          </button>
-          <button className={STYLE.iconButton} onClick={() => onRename(entry)}>Rename</button>
-          <button className={STYLE.iconButton} onClick={() => onDuplicate(entry)}>Duplicate</button>
-          <button className={STYLE.iconButton} onClick={() => onTrash(entry)}>Remove</button>
-        </div>
-      </header>
       <div className="studio-asset-lightbox">
         {kind === "image" && mediaUrl ? (
-          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} />
+          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} />
         ) : kind === "video" && mediaUrl ? (
-          <div className="desk-media-player-embed studio-asset-player">
-            <DeskMediaPlayer kind="video" src={mediaUrl} name={entry.name} poster={videoPosterUrl} fileSize={entry.byteSize ?? null} />
-          </div>
+          <DeskMediaPlayer
+            kind="video"
+            layout="studio-preview"
+            src={mediaUrl}
+            name={entry.name}
+            poster={videoPosterUrl}
+            fileSize={entry.byteSize ?? null}
+            onDownload={downloadAsset}
+          />
         ) : kind === "audio" && mediaUrl ? (
-          <div className="desk-media-player-embed studio-asset-player">
-            <DeskMediaPlayer kind="audio" src={mediaUrl} name={entry.name} fileSize={entry.byteSize ?? null} />
-          </div>
+          <DeskMediaPlayer
+            kind="audio"
+            layout="studio-preview"
+            src={mediaUrl}
+            name={entry.name}
+            fileSize={entry.byteSize ?? null}
+            onDownload={downloadAsset}
+          />
         ) : (
           <div className="studio-asset-empty">
             <FileText className="h-10 w-10" />
@@ -10180,6 +10100,8 @@ function SettingsWorkspacePane({
   const [paymentStatus, setPaymentStatus] = useState("");
   const [pendingReceiptPaymentId, setPendingReceiptPaymentId] = useState(null);
   const receiptInputRef = useRef(null);
+  const settingsMenuScrollRef = useRef(null);
+  useHorizontalWheelScroll(settingsMenuScrollRef);
   const submitBankPayment = useMutation(api.billing.submitBankPayment);
   const reserveReceiptUpload = useMutation(api.billing.reserveReceiptUpload);
   const completeReceiptUpload = useMutation(api.billing.completeReceiptUpload);
@@ -10258,6 +10180,7 @@ function SettingsWorkspacePane({
   const items = [
     { id: "general", label: "Appearance" },
     { id: "account", label: "Account details" },
+    { id: "api-keys", label: "API keys" },
     { id: "billing", label: "Billing" },
     { id: "top-up", label: "Add credits" },
     { id: "activity", label: "Activity" },
@@ -10265,7 +10188,7 @@ function SettingsWorkspacePane({
   return (
     <div className="studio-settings-workspace">
       <header className="studio-settings-workspace-head">
-        <nav className="studio-settings-horizontal-menu" aria-label="Settings sections">
+        <nav ref={settingsMenuScrollRef} className="studio-settings-horizontal-menu" aria-label="Settings sections">
           {items.map((item) => (
             <button
               key={item.id}
@@ -10282,6 +10205,8 @@ function SettingsWorkspacePane({
         {section === "account" ? (
           <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} />
           ) : null}
+
+        {section === "api-keys" ? <StudioApiKeysSettings /> : null}
 
         {section === "billing" ? (
           <div className="studio-settings-stack">
@@ -11043,10 +10968,12 @@ function generationReferenceInputs(attachments, signedUrls = {}) {
       const direct = {
         kind: attachment.kind,
         url: attachment.mediaUrl ?? signedUrls[`attachment:${attachment.id}`] ?? attachment.thumbnailUrl,
+        mimeType: attachment.mimeType,
       };
       const sourceRefs = (attachment.sourceAssets ?? []).map((asset) => ({
         kind: asset.kind,
         url: asset.mediaUrl ?? signedUrls[`element-source:${attachment.id}:${asset.studioId}`] ?? asset.thumbnailUrl,
+        mimeType: asset.mimeType,
       }));
       return [direct, ...sourceRefs];
     })

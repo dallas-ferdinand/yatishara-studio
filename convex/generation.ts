@@ -309,6 +309,7 @@ export const createQueuedJob = authedMutation({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       reservedCreditTransactionId,
+      source: "ui",
       createdAt: now,
       updatedAt: now,
     });
@@ -331,6 +332,213 @@ export const createQueuedJob = authedMutation({
       createdAt: now,
     });
     return jobId;
+  },
+});
+
+export const internalCreateThread = internalMutation({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    title: v.optional(v.string()),
+  },
+  returns: v.id("generationThreads"),
+  handler: async (ctx, args) => {
+    await requireFolderForUser(ctx, args.userId, args.folderId);
+    const now = Date.now();
+    return await ctx.db.insert("generationThreads", {
+      ownerId: args.userId,
+      linkedFolderId: args.folderId,
+      title: args.title ?? "API generation",
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const internalCreateQueuedJob = internalMutation({
+  args: {
+    userId: v.id("users"),
+    threadId: v.id("generationThreads"),
+    mode: generationMode,
+    tier: generationTier,
+    resolvedModel: v.string(),
+    stylePresetId: v.id("stylePresets"),
+    userPrompt: v.string(),
+    audioEnabled: v.optional(v.boolean()),
+    aspectRatio: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    hasReferenceInput: v.optional(v.boolean()),
+    hasVideoReferenceInput: v.optional(v.boolean()),
+    hasNonVideoReferenceInput: v.optional(v.boolean()),
+    apiKeyId: v.optional(v.id("apiKeys")),
+  },
+  returns: v.id("generationJobs"),
+  handler: async (ctx, args) => {
+    const thread = await requireThreadForUser(ctx, args.userId, args.threadId);
+    await requireFolderForUser(ctx, args.userId, thread.linkedFolderId);
+    if (args.mode === "video" && args.resolution === "3840x2160") {
+      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
+    }
+    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
+      throw new Error("Video duration must be between 4 and 15 seconds");
+    }
+    const preset = await ctx.db.get("stylePresets", args.stylePresetId);
+    if (!preset || !preset.enabled) {
+      throw new Error("Style preset not available");
+    }
+    const now = Date.now();
+    const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
+      tier: args.tier,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      hasReferenceInput: args.hasReferenceInput,
+      hasVideoReferenceInput: args.hasVideoReferenceInput,
+      hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+      audioEnabled: args.audioEnabled,
+    });
+    const jobId = await ctx.db.insert("generationJobs", {
+      ownerId: args.userId,
+      threadId: args.threadId,
+      saveFolderId: thread.linkedFolderId,
+      mode: args.mode,
+      tier: args.tier,
+      resolvedModel: args.resolvedModel,
+      stylePresetId: args.stylePresetId,
+      userPrompt: args.userPrompt,
+      stage: "queued",
+      audioEnabled: args.audioEnabled,
+      aspectRatio: args.aspectRatio,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      hasReferenceInput: args.hasReferenceInput,
+      hasVideoReferenceInput: args.hasVideoReferenceInput,
+      hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+      reservedCreditTransactionId,
+      source: "api",
+      apiKeyId: args.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: args.threadId,
+      kind: "prompt",
+      order: now,
+      prompt: args.userPrompt,
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: args.threadId,
+      kind: "stage",
+      order: now + 1,
+      stage: "queued",
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    return jobId;
+  },
+});
+
+export const prepareApiGeneration = internalMutation({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    mode: generationMode,
+    tier: generationTier,
+    resolvedModel: v.string(),
+    stylePresetId: v.id("stylePresets"),
+    userPrompt: v.string(),
+    title: v.optional(v.string()),
+    audioEnabled: v.optional(v.boolean()),
+    aspectRatio: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    hasReferenceInput: v.optional(v.boolean()),
+    hasVideoReferenceInput: v.optional(v.boolean()),
+    hasNonVideoReferenceInput: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    threadId: v.id("generationThreads"),
+    jobId: v.id("generationJobs"),
+  }),
+  handler: async (ctx, args) => {
+    await requireFolderForUser(ctx, args.userId, args.folderId);
+    const now = Date.now();
+    const threadId = await ctx.db.insert("generationThreads", {
+      ownerId: args.userId,
+      linkedFolderId: args.folderId,
+      title: args.title ?? "API generation",
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const thread = await requireThreadForUser(ctx, args.userId, threadId);
+    if (args.mode === "video" && args.resolution === "3840x2160") {
+      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
+    }
+    if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
+      throw new Error("Video duration must be between 4 and 15 seconds");
+    }
+    const preset = await ctx.db.get("stylePresets", args.stylePresetId);
+    if (!preset || !preset.enabled) {
+      throw new Error("Style preset not available");
+    }
+    const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
+      tier: args.tier,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      hasReferenceInput: args.hasReferenceInput,
+      hasVideoReferenceInput: args.hasVideoReferenceInput,
+      hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+      audioEnabled: args.audioEnabled,
+    });
+    const jobId = await ctx.db.insert("generationJobs", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      saveFolderId: thread.linkedFolderId,
+      mode: args.mode,
+      tier: args.tier,
+      resolvedModel: args.resolvedModel,
+      stylePresetId: args.stylePresetId,
+      userPrompt: args.userPrompt,
+      stage: "queued",
+      audioEnabled: args.audioEnabled,
+      aspectRatio: args.aspectRatio,
+      resolution: args.resolution,
+      durationSeconds: args.durationSeconds,
+      hasReferenceInput: args.hasReferenceInput,
+      hasVideoReferenceInput: args.hasVideoReferenceInput,
+      hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+      reservedCreditTransactionId,
+      source: "api",
+      apiKeyId: args.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      kind: "prompt",
+      order: now,
+      prompt: args.userPrompt,
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      kind: "stage",
+      order: now + 1,
+      stage: "queued",
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    return { threadId, jobId };
   },
 });
 
@@ -693,9 +901,25 @@ async function reserveCreditsForJob(
     audioEnabled?: boolean;
   },
 ): Promise<Id<"creditTransactions">> {
+  return await reserveCreditsForUser(ctx, ctx.user._id, args);
+}
+
+async function reserveCreditsForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    resolution?: string;
+    durationSeconds?: number;
+    hasReferenceInput?: boolean;
+    hasVideoReferenceInput?: boolean;
+    hasNonVideoReferenceInput?: boolean;
+    audioEnabled?: boolean;
+  },
+): Promise<Id<"creditTransactions">> {
   const account = await ctx.db
     .query("billingAccounts")
-    .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+    .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
   const cost = creditCostForGeneration(args);
   const now = Date.now();
@@ -709,7 +933,7 @@ async function reserveCreditsForJob(
     updatedAt: now,
   });
   return await ctx.db.insert("creditTransactions", {
-    userId: ctx.user._id,
+    userId,
     billingAccountId: account._id,
     kind: "reserved",
     amount: -cost,
@@ -717,6 +941,30 @@ async function reserveCreditsForJob(
     reason: `Reserved for ${args.tier} generation`,
     createdAt: now,
   });
+}
+
+async function requireFolderForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  folderId: Id<"folders">,
+) {
+  const folder = await ctx.db.get("folders", folderId);
+  if (!folder || folder.ownerId !== userId || folder.deletedAt) {
+    throw new Error("Folder not found");
+  }
+  return folder;
+}
+
+async function requireThreadForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  threadId: Id<"generationThreads">,
+) {
+  const thread = await ctx.db.get("generationThreads", threadId);
+  if (!thread || thread.ownerId !== userId) {
+    throw new Error("Unauthorized");
+  }
+  return thread;
 }
 
 export const chargeTextGeneration = authedMutation({

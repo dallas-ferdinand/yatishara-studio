@@ -39,10 +39,7 @@ const refundTextGenerationRef = makeFunctionReference<
   null
 >("generation:refundTextGeneration");
 
-const referenceInput = v.object({
-  kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
-  url: v.string(),
-});
+import { referenceInputValidator } from "./lib/referenceInput";
 
 const SHEET_IMAGE_RESOLUTION = "2K";
 const SHEET_IMAGE_ASPECT_RATIO = "16:9";
@@ -50,7 +47,7 @@ const SHEET_IMAGE_ASPECT_RATIO = "16:9";
 export const generateSheet = action({
   args: {
     elementId: v.id("elements"),
-    referenceInputs: v.array(referenceInput),
+    referenceInputs: v.array(referenceInputValidator),
     existingNotes: v.optional(v.string()),
   },
   returns: v.object({

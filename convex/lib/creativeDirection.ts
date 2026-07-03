@@ -22,6 +22,7 @@ export type CreativeDirectionContext = {
   aspectRatio?: string;
   hasVideoReference?: boolean;
   hasImageReference?: boolean;
+  hasAudioReference?: boolean;
   attachedScriptMarkdown?: string[];
   referenceSummaries?: string[];
 };
@@ -167,6 +168,11 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
 
   if (context.outputKind === "script") {
     sections.push(`Brief:\n${context.userPrompt.trim()}`);
+    if (context.hasAudioReference) {
+      sections.push(
+        "Voice brief: one or more audio attachments follow this text. Listen to them as the creator's spoken direction — honor their intent, tone, product details, and any specific lines they mention.",
+      );
+    }
     sections.push(
       [
         "Return Markdown only.",

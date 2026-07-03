@@ -44,6 +44,8 @@ export function attachmentPreviewKind(a, workspaceId = "mercuryos") {
   if (attachmentIsDirectory(a)) return "folder";
   if (a.kind === "context") return "text";
   if (a.kind === "image") return "image";
+  if (a.kind === "video") return "video";
+  if (a.kind === "audio") return "audio";
   const path = a.workspacePath ?? a.path ?? a.filename ?? "";
   const ext = fileExt(path);
   if (a.previewUrl || (a.stored && a.kind === "image")) return "image";
@@ -53,8 +55,18 @@ export function attachmentPreviewKind(a, workspaceId = "mercuryos") {
 
 export function attachmentIsVideo(a) {
   if (!a || attachmentIsDirectory(a)) return false;
+  if (a.kind === "video") return true;
   const path = a.workspacePath ?? a.path ?? a.filename ?? "";
   return fileViewerKind(fileExt(path)) === "video";
+}
+
+export function attachmentVideoPosterUrl(a, workspaceId = "mercuryos") {
+  if (!attachmentIsVideo(a)) return null;
+  const thumb = a.thumbnailUrl ?? a.previewUrl;
+  if (thumb && !/\.(mp4|webm|mov|m4v)(\?|$)/i.test(String(thumb))) return thumb;
+  const path = a.workspacePath ?? a.path;
+  if (path) return workspaceFileThumbUrl(path, workspaceId, 720);
+  return null;
 }
 
 export function attachmentThumbUrl(a, workspaceId = "mercuryos") {
@@ -74,6 +86,7 @@ export function attachmentThumbUrl(a, workspaceId = "mercuryos") {
 
 export function attachmentMediaUrl(a, workspaceId = "mercuryos") {
   if (!a || attachmentIsDirectory(a)) return null;
+  if (a.mediaUrl) return a.mediaUrl;
   if (a.previewUrl) return a.previewUrl;
   if (a.stored) return api.uploadRawUrl(a.stored);
   const path = a.workspacePath ?? a.path;

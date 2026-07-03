@@ -40,6 +40,7 @@ export function DeskMediaPlayer({
   poster,
   fileSize = null,
   prefetch = true,
+  layout = "default",
 }) {
   const mediaRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -185,69 +186,86 @@ export function DeskMediaPlayer({
         ? " desk-media-player--landscape"
         : "";
   const playerStyle = aspect ? { "--desk-media-aspect": String(aspect) } : undefined;
+  const isStudioPreview = layout === "studio-preview";
+
+  const transportControls = (
+    <>
+      <button type="button" className="cursor-icon-btn" title="Back 10s" onClick={() => skip(-10)}>
+        <Rewind {...mediaIcon(14)} />
+      </button>
+      <button
+        type="button"
+        className="cursor-icon-btn desk-media-player-play"
+        title={playing ? "Pause" : "Play"}
+        onClick={togglePlay}
+      >
+        {playing ? <Pause {...mediaIcon(16)} /> : <Play {...mediaIcon(16)} />}
+      </button>
+      <button type="button" className="cursor-icon-btn" title="Forward 10s" onClick={() => skip(10)}>
+        <FastForward {...mediaIcon(14)} />
+      </button>
+      <span className="desk-media-player-time">
+        {formatTime(current)}
+        <span className="desk-media-player-time-sep">/</span>
+        {ready ? formatTime(duration) : "—"}
+      </span>
+    </>
+  );
+
+  const volumeControls = (
+    <>
+      <button type="button" className="cursor-icon-btn" title={muted ? "Unmute" : "Mute"} onClick={toggleMute}>
+        <VolumeIcon {...mediaIcon(14)} />
+      </button>
+      <input
+        type="range"
+        className="desk-media-player-volume"
+        min={0}
+        max={1}
+        step={0.02}
+        value={muted ? 0 : volume}
+        onChange={onVolume}
+        aria-label="Volume"
+      />
+    </>
+  );
+
+  const scrubBar = (
+    <div className="desk-media-player-scrub">
+      <div
+        className="desk-media-player-scrub-track"
+        style={{ "--desk-media-progress": `${progressPct}%` }}
+      >
+        <input
+          type="range"
+          className="desk-media-player-scrub-input"
+          min={0}
+          max={duration || 0}
+          step={0.05}
+          value={seekValue}
+          disabled={!duration}
+          onPointerDown={onSeekStart}
+          onChange={onSeek}
+          onPointerUp={onSeekEnd}
+          onBlur={onSeekEnd}
+          aria-label="Seek"
+        />
+      </div>
+    </div>
+  );
 
   const controls = (
     <div className="desk-media-player-controls">
-      <div className="desk-media-player-scrub">
-        <div
-          className="desk-media-player-scrub-track"
-          style={{ "--desk-media-progress": `${progressPct}%` }}
-        >
-          <input
-            type="range"
-            className="desk-media-player-scrub-input"
-            min={0}
-            max={duration || 0}
-            step={0.05}
-            value={seekValue}
-            disabled={!duration}
-            onPointerDown={onSeekStart}
-            onChange={onSeek}
-            onPointerUp={onSeekEnd}
-            onBlur={onSeekEnd}
-            aria-label="Seek"
-          />
-        </div>
-      </div>
+      {scrubBar}
       <div className="desk-media-player-toolbar">
         <div className="desk-media-player-toolbar-left">
-          <button type="button" className="cursor-icon-btn" title="Back 10s" onClick={() => skip(-10)}>
-            <Rewind {...mediaIcon(14)} />
-          </button>
-          <button
-            type="button"
-            className="cursor-icon-btn desk-media-player-play"
-            title={playing ? "Pause" : "Play"}
-            onClick={togglePlay}
-          >
-            {playing ? <Pause {...mediaIcon(16)} /> : <Play {...mediaIcon(16)} />}
-          </button>
-          <button type="button" className="cursor-icon-btn" title="Forward 10s" onClick={() => skip(10)}>
-            <FastForward {...mediaIcon(14)} />
-          </button>
-          <span className="desk-media-player-time">
-            {formatTime(current)}
-            <span className="desk-media-player-time-sep">/</span>
-            {ready ? formatTime(duration) : "—"}
-          </span>
+          {transportControls}
         </div>
         <div className="desk-media-player-toolbar-right">
           <span className="desk-media-player-name truncate" title={name}>
             {name}
           </span>
-          <button type="button" className="cursor-icon-btn" title={muted ? "Unmute" : "Mute"} onClick={toggleMute}>
-            <VolumeIcon {...mediaIcon(14)} />
-          </button>
-          <input
-            type="range"
-            className="desk-media-player-volume"
-            min={0}
-            max={1}
-            step={0.02}
-            value={muted ? 0 : volume}
-            onChange={onVolume}
-            aria-label="Volume"
-          />
+          {volumeControls}
           {onDownload ? (
             <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
               <Download {...mediaIcon(14)} />
@@ -258,53 +276,98 @@ export function DeskMediaPlayer({
     </div>
   );
 
+  const studioPreviewControls = (
+    <div className="desk-media-player-controls desk-media-player-controls--studio-preview">
+      {scrubBar}
+      <div className="desk-media-player-toolbar">
+        <div className="desk-media-player-toolbar-left">{transportControls}</div>
+        <div className="desk-media-player-toolbar-right">
+          {volumeControls}
+        </div>
+      </div>
+    </div>
+  );
+
+  const videoStage = (
+    <div className="desk-media-player-stage" onClick={togglePlay}>
+      <Tag
+        ref={mediaRef}
+        src={src}
+        poster={poster}
+        playsInline
+        preload={shouldPrefetch ? "auto" : "metadata"}
+        className="desk-media-player-video"
+      />
+      {buffering && playing ? (
+        <div className="desk-media-player-buffering" aria-hidden>
+          <span className="desk-media-player-buffering-spin" />
+        </div>
+      ) : null}
+      {!playing ? (
+        <button
+          type="button"
+          className="desk-media-player-overlay-play"
+          title="Play"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePlay();
+          }}
+        >
+          <Play size={28} strokeWidth={2} aria-hidden />
+        </button>
+      ) : null}
+    </div>
+  );
+
+  const audioBody = (
+    <div className="desk-media-player-audio-body">
+      <div className="desk-media-player-audio-art" aria-hidden>
+        <Music size={32} strokeWidth={1.75} />
+      </div>
+      <Tag
+        ref={mediaRef}
+        src={src}
+        preload={shouldPrefetch ? "auto" : "metadata"}
+        className="desk-media-player-audio-el"
+      />
+    </div>
+  );
+
+  if (isStudioPreview) {
+    return (
+      <div
+        className={`desk-image-viewer desk-media-player desk-media-player--${kind} desk-media-player--studio-preview${aspectClass}`}
+        style={playerStyle}
+      >
+        <div className="desk-image-viewer-toolbar">
+          <div className="desk-image-viewer-toolbar-left">
+            {name ? (
+              <span className="desk-image-viewer-name truncate" title={name}>
+                {name}
+              </span>
+            ) : null}
+          </div>
+          <div className="desk-image-viewer-toolbar-center" />
+          <div className="desk-image-viewer-toolbar-right">
+            {onDownload ? (
+              <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
+                <Download {...mediaIcon(14)} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+        {isVideo ? videoStage : <div className="desk-image-viewer-stage">{audioBody}</div>}
+        {studioPreviewControls}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`desk-media-player desk-media-player--${kind}${aspectClass}`}
       style={playerStyle}
     >
-      {isVideo ? (
-        <div className="desk-media-player-stage" onClick={togglePlay}>
-          <Tag
-            ref={mediaRef}
-            src={src}
-            poster={poster}
-            playsInline
-            preload={shouldPrefetch ? "auto" : "metadata"}
-            className="desk-media-player-video"
-          />
-          {buffering && playing ? (
-            <div className="desk-media-player-buffering" aria-hidden>
-              <span className="desk-media-player-buffering-spin" />
-            </div>
-          ) : null}
-          {!playing ? (
-            <button
-              type="button"
-              className="desk-media-player-overlay-play"
-              title="Play"
-              onClick={(e) => {
-                e.stopPropagation();
-                togglePlay();
-              }}
-            >
-              <Play size={28} strokeWidth={2} aria-hidden />
-            </button>
-          ) : null}
-        </div>
-      ) : (
-        <div className="desk-media-player-audio-body">
-          <div className="desk-media-player-audio-art" aria-hidden>
-            <Music size={32} strokeWidth={1.75} />
-          </div>
-          <Tag
-            ref={mediaRef}
-            src={src}
-            preload={shouldPrefetch ? "auto" : "metadata"}
-            className="desk-media-player-audio-el"
-          />
-        </div>
-      )}
+      {isVideo ? videoStage : audioBody}
       {controls}
     </div>
   );

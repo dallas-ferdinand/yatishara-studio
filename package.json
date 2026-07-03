@@ -2,6 +2,9 @@
   "name": "yatishara-studio",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/studio-mcp"
+  ],
   "scripts": {
     "dev": "concurrently -n convex,next -c blue,green \"npm run dev:convex\" \"npm run dev:next\"",
     "dev:next": "next dev",

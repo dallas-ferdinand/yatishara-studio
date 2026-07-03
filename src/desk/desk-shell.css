@@ -6,7 +6,7 @@
 
 .cursor-resize {
   width: 1px;
-  background: var(--color-cursor-border);
+  background: var(--color-cursor-border-soft);
   transition: background 0.12s;
 }
 .cursor-resize:hover,
@@ -3266,7 +3266,7 @@
   display: flex;
   flex-direction: column;
   margin-bottom: 8px;
-  border: 1px solid var(--cursor-border-subtle);
+  border: 1px solid var(--color-cursor-border-soft);
   border-radius: var(--cursor-composer-radius);
   background: color-mix(in srgb, var(--mos-surface) 88%, var(--mos-bg));
   overflow: hidden;
@@ -3355,6 +3355,42 @@
   max-height: min(70vh, 720px);
   object-fit: contain;
   border-radius: 8px;
+}
+
+/* Image dock preview — theme canvas, sidebar-style top bar */
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
+  background: var(--color-cursor-bg);
+  border: 1px solid var(--color-cursor-border-soft);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-appearance="light"] .cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
+  background: #fff;
+}
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-head {
+  background: var(--color-cursor-sidebar) !important;
+  border-bottom: 1px solid var(--color-cursor-border-soft);
+}
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-title {
+  color: var(--color-cursor-text);
+}
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-body {
+  background: var(--color-cursor-bg);
+}
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-media {
+  padding: 0;
+  background: var(--color-cursor-bg);
+}
+[data-appearance="light"] .cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-body,
+[data-appearance="light"] .cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-media {
+  background: #fff;
+}
+.cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.22);
 }
 .cursor-attach-preview-iframe {
   width: 100%;
@@ -6699,14 +6735,20 @@
   width: var(--cursor-head-h);
   min-width: var(--cursor-head-h);
   max-width: var(--cursor-head-h);
+  height: var(--cursor-head-h);
+  min-height: var(--cursor-head-h);
+  aspect-ratio: 1;
+  border-radius: 999px;
   padding: 0;
   justify-content: center;
+  align-items: center;
   color: var(--color-cursor-muted);
   cursor: pointer;
   touch-action: manipulation;
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+  overflow: visible;
 }
 .cursor-unified-tab-new.is-strip-new-during-drag {
   transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
@@ -6942,7 +6984,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #0d0e12;
+  background: var(--color-cursor-bg);
   min-height: 0;
 }
 .desk-image-viewer-toolbar {
@@ -6953,13 +6995,22 @@
   padding: 0 8px;
   min-height: var(--cursor-head-h);
   height: var(--cursor-head-h);
-  border-bottom: 1px solid var(--color-cursor-border);
+  border-bottom: 1px solid var(--color-cursor-border-soft);
   flex-shrink: 0;
   background: var(--color-cursor-sidebar);
 }
 .desk-image-viewer-toolbar-left {
   justify-self: start;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.desk-image-viewer-name {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-cursor-text);
 }
 .desk-image-viewer-toolbar-center {
   display: flex;
@@ -7341,6 +7392,32 @@
 .desk-media-player--audio .desk-media-player-audio-body {
   position: relative;
 }
+.desk-media-player--studio-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-cursor-bg);
+}
+.desk-media-player--studio-preview .desk-media-player-stage {
+  flex: 1;
+  min-height: 0;
+}
+.desk-media-player--studio-preview .desk-image-viewer-toolbar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.desk-media-player--studio-preview .desk-image-viewer-toolbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.desk-media-player--studio-preview .desk-media-player-controls {
+  flex-shrink: 0;
+}
 .desk-media-player-embed {
   width: 100%;
   padding: 12px 16px 16px;
@@ -7716,13 +7793,35 @@
 
 /* --- composer focus: keep default glass bg; accent ring via border/shadow only --- */
 
-/* --- mode switcher (dark translucent glass) --- */
+/* --- mode switcher (type tiles: blur on ::before, not nested on host) --- */
 .studio-polish .studio-mode-switcher {
-  background: var(
-    --studio-composer-glass,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 58%, transparent)
-  ) !important;
+  background: transparent !important;
   border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11));
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none;
+}
+
+.studio-polish .studio-mode-row {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.studio-polish .studio-mode-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)
+  );
   -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   box-shadow: var(
@@ -7730,13 +7829,43 @@
     0 20px 48px rgba(0, 0, 0, 0.38),
     inset 0 1px 0 rgba(255, 255, 255, 0.08)
   );
+  transition:
+    background 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.studio-polish .studio-mode-row {
-  background: var(
-    --studio-composer-glass-muted,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)
+.studio-polish .studio-mode-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.studio-polish .studio-mode-row:hover::before {
+  background: color-mix(
+    in srgb,
+    var(--studio-composer-glass-muted, color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)) 70%,
+    var(--color-cursor-hover, #1e293b) 30%
   );
+}
+
+.studio-polish .studio-mode-row.is-active::before {
+  background:
+    radial-gradient(
+      circle at 16% 0%,
+      color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+      transparent 48%
+    ),
+    color-mix(
+      in srgb,
+      var(--cursor-accent-dim, var(--cursor-accent)) 38%,
+      var(--studio-composer-glass-strong, color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent)) 62%
+    );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+[data-appearance="light"] .studio-polish .studio-mode-row::before {
+  box-shadow:
+    0 2px 8px color-mix(in srgb, #000 3%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 /* --- generate button (translucent accent glass) --- */
@@ -7746,12 +7875,6 @@
     color-mix(in srgb, var(--cursor-accent) 62%, transparent) !important;
   -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-}
-
-/* --- chip preview card (drag preview) --- */
-.studio-chip-preview-card {
-  -webkit-backdrop-filter: blur(18px) saturate(1.14);
-  backdrop-filter: blur(18px) saturate(1.14);
 }
 
 /* --- dropdown menus --- */
@@ -7772,17 +7895,12 @@
   backdrop-filter: blur(18px);
 }
 
-/* --- asset preview head --- */
-.studio-asset-preview-head {
-  -webkit-backdrop-filter: blur(20px) saturate(1.28);
-  backdrop-filter: blur(20px) saturate(1.28);
-}
-
 /* --- asset preview image viewer toolbar --- */
-.studio-asset-preview .desk-image-viewer-toolbar {
-  background: transparent !important;
-  -webkit-backdrop-filter: blur(18px) saturate(1.22);
-  backdrop-filter: blur(18px) saturate(1.22);
+.studio-asset-preview .desk-image-viewer-toolbar,
+.studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
+  background: var(--color-cursor-sidebar) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 /* --- empty copy / placeholder --- */
@@ -7821,6 +7939,57 @@
   ) !important;
 }
 
+/* --- style preset picker (frosted glass) --- */
+.studio-polish .studio-preset-grid-panel {
+  background: var(
+    --studio-composer-glass-strong,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 48%, transparent)
+  ) !important;
+  border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11)) !important;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(14px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(14px));
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  ) !important;
+}
+
+.studio-polish .studio-preset-grid-card {
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 34%, transparent)
+  ) !important;
+  border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11)) !important;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(140%) blur(10px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(140%) blur(10px));
+}
+
+.studio-polish .studio-preset-grid-card:hover,
+.studio-polish .studio-preset-grid-card.is-active {
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+}
+
+.studio-polish .studio-preset-trigger {
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 40%, transparent)
+  ) !important;
+  border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11)) !important;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(10px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(10px));
+}
+
+.studio-polish .studio-preset-grid-close {
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 36%, transparent)
+  ) !important;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(140%) blur(8px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(140%) blur(8px));
+}
+
 /* --- empty chat logo (same glass stack as composer/bubbles) --- */
 .studio-polish .studio-empty-logo-blur {
   position: absolute;
@@ -7843,5 +8012,10 @@
   box-shadow:
     0 6px 16px color-mix(in srgb, #000 8%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+
+.studio-settings-status {
+  color: var(--cursor-accent);
 }
 

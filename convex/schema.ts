@@ -24,6 +24,14 @@ export const elementType = v.union(
 
 export const generationMode = v.union(v.literal("image"), v.literal("video"));
 
+export const generationSource = v.union(v.literal("ui"), v.literal("api"));
+
+export const apiKeyScope = v.union(
+  v.literal("read"),
+  v.literal("write"),
+  v.literal("generate"),
+);
+
 export const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
@@ -246,13 +254,16 @@ export default defineSchema({
     error: v.optional(v.string()),
     reservedCreditTransactionId: v.optional(v.id("creditTransactions")),
     spentCreditTransactionId: v.optional(v.id("creditTransactions")),
+    source: v.optional(generationSource),
+    apiKeyId: v.optional(v.id("apiKeys")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_thread", ["threadId"])
     .index("by_stage", ["stage"])
-    .index("by_external_task", ["externalTaskId"]),
+    .index("by_external_task", ["externalTaskId"])
+    .index("by_owner_and_created", ["ownerId", "createdAt"]),
 
   generationInputs: defineTable({
     jobId: v.id("generationJobs"),
@@ -433,6 +444,32 @@ export default defineSchema({
   })
     .index("by_phone_and_created", ["phone", "createdAt"])
     .index("by_status_and_expires", ["status", "expiresAt"]),
+
+  apiKeys: defineTable({
+    ownerId: v.id("users"),
+    name: v.string(),
+    keyPrefix: v.string(),
+    keyHash: v.string(),
+    scopes: v.array(v.string()),
+    sandboxFolderId: v.optional(v.id("folders")),
+    defaultFolderId: v.optional(v.id("folders")),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_hash", ["keyHash"]),
+
+  apiRequestLog: defineTable({
+    apiKeyId: v.id("apiKeys"),
+    userId: v.id("users"),
+    method: v.string(),
+    route: v.string(),
+    status: v.number(),
+    latencyMs: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_key_and_created", ["apiKeyId", "createdAt"]),
 
   adminAuditEvents: defineTable({
     adminId: v.id("users"),
