@@ -2569,9 +2569,11 @@
 }
 
 .desk-file-thumb-visual {
-  background:
-    radial-gradient(circle at 50% 24%, color-mix(in srgb, var(--mos-accent) 10%, transparent), transparent 52%),
-    color-mix(in srgb, var(--mos-bg) 38%, transparent);
+  background: color-mix(in srgb, var(--mos-text-bright) 3.5%, var(--mos-bg));
+}
+
+[data-appearance="light"] .desk-file-thumb-visual {
+  background: color-mix(in srgb, var(--mos-text) 2.5%, var(--mos-bg));
 }
 
 .desk-file-thumb-label {

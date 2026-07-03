@@ -53,6 +53,7 @@ function FileEditor({ file, workspaceId, onContentChange, onSave, onToggleViewMo
             <CodeEditor
               value={content}
               path={file.path}
+              surface="sidebar"
               onChange={(v) => onContentChange?.(file.id, v)}
               onSave={onSave}
             />
@@ -91,6 +92,7 @@ function FileEditor({ file, workspaceId, onContentChange, onSave, onToggleViewMo
     <CodeEditor
       value={file.content ?? ""}
       path={file.path}
+      surface={ext === ".md" ? "sidebar" : "editor"}
       onChange={(v) => onContentChange?.(file.id, v)}
       onSave={onSave}
     />

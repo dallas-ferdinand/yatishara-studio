@@ -175,7 +175,11 @@ function startFileDragPreview(event, entry, workspaceId) {
   source.dataset.dragToken = dragToken;
 
   const sourceRadius = readComputedNumberPx(source, "borderTopLeftRadius");
-  const visualEl = isMedia ? source.querySelector(".desk-file-thumb-visual") : null;
+  const isGridLike =
+    source.classList.contains("desk-file-grid-item") ||
+    source.classList.contains("desk-file-preview-item");
+  const thumbVisualEl = source.querySelector(".desk-file-thumb-visual");
+  const visualEl = isMedia || isGridLike ? thumbVisualEl : null;
   const visualRect = visualEl ? visualEl.getBoundingClientRect() : null;
   const visualRadius = visualEl ? readComputedNumberPx(visualEl, "borderTopLeftRadius") : 0;
 
@@ -289,7 +293,7 @@ function startFileDragPreview(event, entry, workspaceId) {
     inner.style.gap = "4px";
     inner.style.width = "100%";
     inner.style.height = "100%";
-    inner.style.background = "var(--color-cursor-sidebar)";
+    inner.style.background = "color-mix(in srgb, var(--mos-text-bright, #fff) 3.5%, var(--mos-bg, var(--color-cursor-sidebar)))";
     inner.style.color = "var(--color-cursor-text)";
     inner.style.pointerEvents = "none";
     if (iconHtml) {
@@ -447,8 +451,16 @@ function startFileDragPreview(event, entry, workspaceId) {
           chip.style.transition = "none";
           chip.style.width = `${visualRect.width}px`;
           chip.style.height = `${visualRect.height}px`;
-          chip.style.borderRadius = `${sourceRadius}px`;
+          chip.style.borderRadius = `${visualRadius || sourceRadius}px`;
           chip.style.transform = `translate3d(${visualRect.left}px, ${visualRect.top}px, 0)`;
+        } else if (isGridLike && visualRect) {
+          chip.style.transition = "none";
+          chip.style.opacity = "0";
+          chip.style.transform = `translate3d(${
+            visualRect.left + (visualRect.width - targetWidth) / 2
+          }px, ${
+            visualRect.top + (visualRect.height - targetHeight) / 2
+          }px, 0)`;
         } else {
           chip.style.transition = "none";
           chip.style.width = `${rect.width}px`;
@@ -460,7 +472,9 @@ function startFileDragPreview(event, entry, workspaceId) {
       } else if (isMedia && visualRect) {
         const currentVisualEl = visualEl && visualEl.isConnected ? visualEl : null;
         const currentVisualRect = currentVisualEl ? currentVisualEl.getBoundingClientRect() : visualRect;
-        const currentSnapRadius = source.isConnected ? readComputedNumberPx(source, "borderTopLeftRadius") : sourceRadius;
+        const currentSnapRadius = currentVisualEl
+          ? readComputedNumberPx(currentVisualEl, "borderTopLeftRadius")
+          : visualRadius || sourceRadius;
         chip.style.transition = `width ${RETURN_MORPH_MS}ms ${MORPH_EASING}, height ${RETURN_MORPH_MS}ms ${MORPH_EASING}, border-radius ${RETURN_MORPH_MS}ms ${MORPH_EASING}`;
         chip.style.width = `${currentVisualRect.width}px`;
         chip.style.height = `${currentVisualRect.height}px`;
@@ -473,6 +487,23 @@ function startFileDragPreview(event, entry, workspaceId) {
           },
           RETURN_SPRING,
         ).finished;
+      } else if (isGridLike && visualRect) {
+        const currentVisualEl = visualEl && visualEl.isConnected ? visualEl : null;
+        const currentVisualRect = currentVisualEl ? currentVisualEl.getBoundingClientRect() : visualRect;
+        const endX = currentVisualRect.left + (currentVisualRect.width - targetWidth) / 2;
+        const endY = currentVisualRect.top + (currentVisualRect.height - targetHeight) / 2;
+        chip.style.transition = "opacity 180ms ease";
+        await Promise.all([
+          animate(
+            chip,
+            {
+              x: [lastX - followOffsetX, endX],
+              y: [lastY - followOffsetY, endY],
+            },
+            RETURN_SPRING,
+          ).finished,
+          animate(chip, { opacity: [0.96, 0] }, { delay: 0.08, duration: 0.22, easing: "ease-out" }).finished,
+        ]);
       } else {
         const currentRect = source.isConnected ? source.getBoundingClientRect() : rect;
         const currentSourceRadius = source.isConnected ? readComputedNumberPx(source, "borderTopLeftRadius") : sourceRadius;
@@ -662,18 +693,15 @@ function renderEntryRows({
               <FileEntryButton
                 key={entryRowKey(e, index)}
                 entry={e}
-                className={rowClass(e, "desk-file-list-row desk-file-grid-back-row")}
-                label="Back"
+                className={rowClass(e, "desk-file-grid-item")}
+                label=".."
                 onOpen={() => onEntry(e)}
                 enableLongPress={enableLongPress}
                 onLongPress={onEntryLongPress}
                 onContextMenu={(ev) => onEntryContextMenu(ev, e)}
                 onDragStart={(ev) => onEntryDragStart(ev, e)}
               >
-                <span className="desk-file-list-name">
-                  <Icon name="chevL" size={16} className="text-cursor-muted shrink-0" />
-                  <span className="truncate">Back</span>
-                </span>
+                <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" />
               </FileEntryButton>
             );
           }

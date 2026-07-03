@@ -15,42 +15,9 @@ import { BrandMark } from "@/components/brand-mark";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { StudioShell } from "./StudioShell";
+import { STUDIO_SCENE_ALL_PATHS } from "@/studio/lib/studio-scene-backgrounds";
 
-const AUTH_BACKGROUND_IMAGES = [
-  "/studio-scene-agent-genesis-4k.webp",
-  "/studio-space-agent-genesis-4k.webp",
-  "/studio-bg-agent-genesis-4k.webp",
-  "/studio-scene-gold-archive-4k.webp",
-  "/studio-bg-gold-solstice-4k.webp",
-  "/studio-scene-ember-forge-4k.webp",
-  "/studio-bg-ember-forge-4k.webp",
-  "/studio-scene-mint-meadow-4k.webp",
-  "/studio-space-mint-meadow-4k.webp",
-  "/studio-bg-mint-eden-4k.webp",
-  "/studio-scene-violet-dusk-4k.webp",
-  "/studio-bg-violet-nebula-4k.webp",
-  "/studio-scene-rose-bloom-4k.webp",
-  "/studio-space-rose-bloom-4k.webp",
-  "/studio-scene-cobalt-skyline-4k.webp",
-  "/studio-space-cobalt-skyline-4k.webp",
-  "/studio-scene-coral-reef-4k.webp",
-  "/studio-space-coral-reef-4k.webp",
-  "/studio-scene-sage-grove-4k.webp",
-  "/studio-space-sage-grove-4k.webp",
-  "/studio-scene-cherry-pulse-4k.webp",
-  "/studio-space-cherry-pulse-4k.webp",
-  "/studio-scene-teal-lagoon-4k.webp",
-  "/studio-space-teal-lagoon-4k.webp",
-  "/studio-scene-lime-canopy-4k.webp",
-  "/studio-space-lime-canopy-4k.webp",
-  "/studio-scene-fuchsia-neon-4k.webp",
-  "/studio-space-fuchsia-neon-4k.webp",
-  "/studio-scene-copper-foundry-4k.webp",
-  "/studio-space-copper-foundry-4k.webp",
-  "/studio-scene-indigo-midnight-4k.webp",
-  "/studio-space-indigo-midnight-4k.webp",
-  "/studio-empty-space-4k.webp",
-];
+const AUTH_BACKGROUND_IMAGES = [...STUDIO_SCENE_ALL_PATHS];
 
 const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
 

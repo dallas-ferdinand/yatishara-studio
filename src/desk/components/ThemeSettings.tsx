@@ -51,7 +51,7 @@ export function ThemeSettings() {
     <section className="cursor-settings-section">
       <h3>Appearance</h3>
       <p className="text-xs text-cursor-muted mb-3 leading-relaxed">
-        Theme changes the app tone and the Studio background. Use Scenes, Space, or Clean for theme colors without image backgrounds.
+        Theme changes the app tone and the Studio background. Scenes shows a cinematic photoreal wallpaper; Clean uses theme colors only.
       </p>
 
       <p className="text-xs text-cursor-muted mb-2">Mode</p>

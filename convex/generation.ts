@@ -7,6 +7,7 @@ import { buildAssetPath, signBunnyCdnUrl } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
   creditCostForGeneration,
+  imageCreditCost,
   textCreditCost,
 } from "./lib/generationPricing";
 
@@ -749,6 +750,44 @@ export const chargeTextGeneration = authedMutation({
       amount: -cost,
       balanceAfter,
       reason: "Text generation",
+      createdAt: now,
+    });
+  },
+});
+
+export const chargeImageGeneration = authedMutation({
+  args: {
+    folderId: v.id("folders"),
+    resolution: v.optional(v.string()),
+    hasReferenceInput: v.optional(v.boolean()),
+  },
+  returns: v.id("creditTransactions"),
+  handler: async (ctx, args) => {
+    await requireFolderOwner(ctx, args.folderId);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .unique();
+    const cost = imageCreditCost({
+      resolution: args.resolution,
+      hasReferenceInput: args.hasReferenceInput,
+    });
+    const now = Date.now();
+    if (!account || account.creditBalance < cost) {
+      throw new Error(insufficientCreditsMessage(cost));
+    }
+    const balanceAfter = account.creditBalance - cost;
+    await ctx.db.patch(account._id, {
+      creditBalance: balanceAfter,
+      updatedAt: now,
+    });
+    return await ctx.db.insert("creditTransactions", {
+      userId: ctx.user._id,
+      billingAccountId: account._id,
+      kind: "spent",
+      amount: -cost,
+      balanceAfter,
+      reason: "Image generation",
       createdAt: now,
     });
   },

@@ -208,6 +208,7 @@ export const runFlow = action({
       url: v.string(),
     }))),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
+    referenceSummaries: v.optional(v.array(v.string())),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -270,7 +271,7 @@ export const runFlow = action({
           referenceInputs.some((input) => input.kind === "image") ||
           Boolean(args.referenceUrls?.length),
         attachedScriptMarkdown: args.attachedScriptMarkdown,
-        referenceSummaries: [],
+        referenceSummaries: args.referenceSummaries,
       });
       await ctx.runMutation(setEnhancedPromptRef, {
         jobId,

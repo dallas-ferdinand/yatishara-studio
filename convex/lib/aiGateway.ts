@@ -9,6 +9,11 @@ import {
   buildCreativeUserPrompt,
   type CreativeDirectionContext,
 } from "./creativeDirection";
+import {
+  buildElementSheetSystemPrompt,
+  buildElementSheetUserPrompt,
+  type ElementSheetType,
+} from "./elementSheets";
 
 export type GenerationMode = "image" | "video";
 
@@ -89,6 +94,43 @@ export async function enhancePrompt(input: EnhancementInput): Promise<string> {
   });
   const enhanced = result.text.trim();
   return enhanced || context.userPrompt;
+}
+
+export type ElementSheetInput = {
+  elementType: ElementSheetType;
+  name: string;
+  existingNotes?: string;
+  referenceInputs: Array<{
+    kind: "image" | "video" | "audio";
+    url: string;
+  }>;
+};
+
+export async function generateElementSheet(input: ElementSheetInput): Promise<string> {
+  const result = await generateText({
+    model: gateway.languageModel(textModelId()),
+    system: buildElementSheetSystemPrompt(input.elementType),
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: buildElementSheetUserPrompt({
+              type: input.elementType,
+              name: input.name,
+              existingNotes: input.existingNotes,
+            }),
+          },
+          ...input.referenceInputs.flatMap((reference) => contentPartForReference(reference)),
+        ],
+      },
+    ],
+  });
+  const sheet = result.text.trim();
+  if (sheet) return sheet;
+  const fallbackTitle = input.name.trim() || "Element";
+  return `# ${fallbackTitle}\n\n${input.existingNotes?.trim() ?? "No sheet generated."}`;
 }
 
 export async function generateScript(input: ScriptGenerationInput): Promise<string> {

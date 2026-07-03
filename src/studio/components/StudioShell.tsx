@@ -5,7 +5,7 @@ import { StudioHistoryPanel } from "./StudioHistoryPanel";
 import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useAction, useMutation, useQueries, useQuery } from "convex/react";
+import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
 import {
   ChevronDown,
   Clock3,
@@ -50,10 +50,11 @@ import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { EXPLORER_DND_TYPE, readExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
-import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
+import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { getDeviceId, loadSession } from "@/lib/session";
 import {
   creditCostForGeneration,
+  imageCreditCost,
   normalizeImageResolutionLabel as normalizeImageResolution,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
@@ -61,7 +62,6 @@ import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
-const STUDIO_SELECTED_THREAD_KEY = "yatishara-studio-selected-thread";
 const CREATE_MENU_ITEMS = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
@@ -72,8 +72,6 @@ const CREATE_MENU_ITEMS = [
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
 const STUDIO_VOICE_NOT_CONNECTED =
   "Voice is not connected yet. Please try typing your request, or connect voice and try again.";
-const MERCURY_EMPTY_LOGO = mercuryLogoAssets(96);
-
 function studioCursorUrl(accent, active = false) {
   const path = "M4 6.3 L4 19.9 Q4 21.9 5.258 20.346 L7.4 17.7 C8.4 16.4 9.9 15.7 11.5 15.7 L14.902 15.826 Q16.9 15.9 15.414 14.562 L5.486 5.638 Q4 4.3 4 6.3 Z";
   const glow = `<path d='${path}' fill='none' stroke='${accent}' stroke-width='5' stroke-opacity='.22' stroke-linejoin='round' stroke-linecap='round' filter='blur(2.5px)'/>`;
@@ -126,9 +124,9 @@ function cssUrlToPath(value) {
 
 const STYLE = {
   shell: "flex h-dvh min-h-0 text-cursor-text",
-  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border",
+  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border-soft",
   main: "flex min-w-0 flex-1 flex-col",
-  panelHead: "cursor-panel-head justify-between",
+  panelHead: "cursor-panel-head cursor-sidebar-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
 };
@@ -188,15 +186,15 @@ export function StudioShell() {
   const generatePresetThumbnails = useAction(api.stylePresetActions.adminGenerateThumbnails);
   const runFlow = useAction(api.generationActions.runFlow);
   const generateScript = useAction(api.generationActions.generateScript);
+  const generateElementSheet = useAction(api.elementActions.generateSheet);
+  const convex = useConvex();
+
+  const lastGenerationModeRef = useRef("image");
 
   const [activeFolderId, setActiveFolderId] = useState(null);
   const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
   const [tabEntrySnapshots, setTabEntrySnapshots] = useState({});
   const [activeTab, setActiveTab] = useState(COMPOSER_TAB);
-  const [selectedThreadId, setSelectedThreadId] = useState(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(STUDIO_SELECTED_THREAD_KEY);
-  });
   const [navTrail, setNavTrail] = useState([]);
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
@@ -204,11 +202,19 @@ export function StudioShell() {
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [mode, setMode] = useState("image");
+
+  useEffect(() => {
+    if (mode === "image" || mode === "video" || mode === "script") {
+      lastGenerationModeRef.current = mode;
+    }
+  }, [mode]);
+
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [imageResolution, setImageResolution] = useState("2K");
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [elementType, setElementType] = useState("character");
   const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
   const [flowPending, setFlowPending] = useState(false);
   const [status, setStatus] = useState("");
@@ -229,6 +235,7 @@ export function StudioShell() {
   const shellRef = useRef(null);
   const editorRef = useRef(null);
   const composerKeyRef = useRef(COMPOSER_TAB);
+  const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
   const composerContextsRef = useRef({});
   const folderByIdRef = useRef(new Map());
@@ -273,10 +280,9 @@ export function StudioShell() {
   );
   const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
   const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
-  const tabThreadId = activeTab.startsWith("thread:")
+  const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
-  const activeThreadId = tabThreadId ?? selectedThreadId;
   const events = useQuery(
     api.generation.listEvents,
     hasCurrentUser && activeThreadId && threads?.some((t) => t._id === activeThreadId)
@@ -358,6 +364,27 @@ export function StudioShell() {
         .map((attachment) => attachment.description.trim()),
     [attachments],
   );
+  const attachedElementSheets = useMemo(
+    () =>
+      attachments
+        .filter((attachment) => attachment.studioKind === "element" && attachment.description?.trim())
+        .map((attachment) => attachment.description.trim()),
+    [attachments],
+  );
+  const attachedCreativeMarkdown = useMemo(
+    () => [...attachedScriptMarkdown, ...attachedElementSheets],
+    [attachedElementSheets, attachedScriptMarkdown],
+  );
+  const elementReferenceSummaries = useMemo(
+    () =>
+      attachments
+        .filter((attachment) => attachment.studioKind === "element" && attachment.description?.trim())
+        .map(
+          (attachment) =>
+            `${elementTypeLabel(attachment.elementType)} @${attachment.label}:\n${attachment.description.trim()}`,
+        ),
+    [attachments],
+  );
   const generationReferences = useMemo(
     () => generationReferenceInputs(attachments, attachmentMediaUrls),
     [attachmentMediaUrls, attachments],
@@ -381,10 +408,6 @@ export function StudioShell() {
     }
     return presets.find((preset) => preset.slug === "product-studio") ?? presets[0];
   }, [hasVideoReferenceInput, mode, presets, selectedStylePresetId]);
-  const composerElementEntries = useMemo(
-    () => (elements ?? []).filter((element) => !element.deletedAt).map((element) => elementToEntry(element, assetsWithPreviewUrls)),
-    [assetsWithPreviewUrls, elements],
-  );
   const hasNonVideoReferenceInput = generationReferences.some((reference) => reference.kind === "image" || reference.kind === "audio");
   const videoSupportsReferenceInput = mode === "video";
   const entitlement = useQuery(
@@ -464,22 +487,6 @@ export function StudioShell() {
   useEffect(() => {
     window.localStorage.setItem(STUDIO_CUSTOM_CURSOR_KEY, customCursorEnabled ? "on" : "off");
   }, [customCursorEnabled]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (selectedThreadId) {
-      window.localStorage.setItem(STUDIO_SELECTED_THREAD_KEY, selectedThreadId);
-    } else {
-      window.localStorage.removeItem(STUDIO_SELECTED_THREAD_KEY);
-    }
-  }, [selectedThreadId]);
-
-  useEffect(() => {
-    if (!threads?.length) return;
-    if (!selectedThreadId || !threads.some((thread) => thread._id === selectedThreadId)) {
-      setSelectedThreadId(threads[0]._id);
-    }
-  }, [selectedThreadId, threads]);
 
   useEffect(() => {
     const updateCursor = () => applyStudioCursorTheme(shellRef.current);
@@ -569,7 +576,11 @@ export function StudioShell() {
     };
 
     const observer = new MutationObserver((mutations) => {
-      if (mutations.some((mutation) => mutation.attributeName === "data-theme" || mutation.attributeName === "data-studio-bg-pack")) {
+      if (mutations.some((mutation) =>
+        mutation.attributeName === "data-theme"
+        || mutation.attributeName === "data-studio-bg-pack"
+        || mutation.attributeName === "data-appearance",
+      )) {
         loadBackground();
       }
     });
@@ -577,7 +588,7 @@ export function StudioShell() {
     loadBackground();
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["data-theme", "data-studio-bg-pack"],
+      attributeFilter: ["data-theme", "data-studio-bg-pack", "data-appearance"],
     });
     window.addEventListener("mercuryos-theme-change", loadBackground);
 
@@ -731,12 +742,12 @@ export function StudioShell() {
   }
 
   function openNewComposerTab() {
-    openTab(`composer:${Date.now()}`);
+    composerTabIndexRef.current += 1;
+    openTab(`composer:${composerTabIndexRef.current}`);
   }
 
   function openHistoryThread(threadId) {
-    setSelectedThreadId(threadId);
-    setActiveTab(COMPOSER_TAB);
+    openTab(`thread:${threadId}`);
     setHistoryOpen(false);
     if (isMobile) setMobileSection("composer");
   }
@@ -753,7 +764,13 @@ export function StudioShell() {
     }
     if (action === "new-folder") openCreateTab("folder");
     if (action === "new-file") openCreateTab("script");
-    if (action === "new-element") openCreateTab("element");
+    if (action === "new-element") openElementCreateInComposer();
+  }
+
+  function openElementCreateInComposer() {
+    if (isMobile) setMobileSection("composer");
+    setActiveTab(COMPOSER_TAB);
+    setMode("element");
   }
 
   function openSettingsTab() {
@@ -789,6 +806,9 @@ export function StudioShell() {
   }
 
   function closeTab(key) {
+    if (key.startsWith("composer:")) {
+      delete composerContextsRef.current[key];
+    }
     setOpenTabs((tabs) => {
       const remaining = tabs.filter((tab) => tab !== key);
       const next = remaining.length ? remaining : [COMPOSER_TAB];
@@ -856,6 +876,73 @@ export function StudioShell() {
     });
   }
 
+  async function referenceInputsForAssetIds(assetMetas = []) {
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60 * 12;
+    const inputs = [];
+    for (const asset of assetMetas) {
+      if (!asset?.assetId || !["image", "video", "audio"].includes(asset.kind)) continue;
+      const url = await convex.query(api.assets.signedReadUrl, {
+        assetId: asset.assetId,
+        expiresUnix,
+      });
+      if (url) inputs.push({ kind: asset.kind, url });
+    }
+    return inputs;
+  }
+
+  async function createAndAttachElement(values) {
+    if (!activeFolder || !values?.name?.trim()) {
+      throw new Error("Pick a folder and name your element first.");
+    }
+    const uploadedAssets = values.uploadedAssets ?? [];
+    const sourceAssetIds = values.sourceAssetIds?.length
+      ? values.sourceAssetIds
+      : uploadedAssets.map((asset) => asset.assetId).filter(Boolean);
+    const id = await createElement({
+      folderId: activeFolder._id,
+      type: values.elementType,
+      name: values.name.trim(),
+      sourceAssetIds,
+    });
+    const referenceInputs =
+      values.referenceInputs?.length
+        ? values.referenceInputs
+        : await referenceInputsForAssetIds(uploadedAssets);
+    let description;
+    let sheetAssetId;
+    if (values.generateSheet) {
+      const result = await generateElementSheet({
+        elementId: id,
+        referenceInputs,
+        existingNotes: referenceInputs.length ? undefined : values.name.trim(),
+      });
+      description = result.description;
+      sheetAssetId = result.sheetAssetId;
+    }
+    const allSourceAssetIds = sheetAssetId ? [sheetAssetId, ...sourceAssetIds] : sourceAssetIds;
+    const elementRecord = {
+      _id: id,
+      name: values.name.trim(),
+      type: values.elementType,
+      description,
+      sourceAssetIds: allSourceAssetIds,
+      updatedAt: Date.now(),
+    };
+    const sourceAssetEntries = allSourceAssetIds
+      .map((assetId) => {
+        const uploaded = uploadedAssets.find((asset) => asset.assetId === assetId);
+        if (uploaded) return uploadedElementAssetToEntry(uploaded);
+        const asset = assetsWithPreviewUrls?.find((item) => item._id === assetId);
+        return asset ? assetToEntry(asset) : null;
+      })
+      .filter(Boolean);
+    const entry = elementToEntry(elementRecord, assetsWithPreviewUrls ?? []);
+    entry.sourceAssets = sourceAssetEntries;
+    attachEntry(entry);
+    setStatus(`@${values.name.trim()} attached to your request.`);
+    return id;
+  }
+
   async function createStudioItem(values) {
     if (!activeFolder || !values?.name?.trim()) return;
     if (values.kind === "folder") {
@@ -878,13 +965,24 @@ export function StudioShell() {
       openTab(`document:${id}`);
       return;
     }
-    const id = await createElement({
-      folderId: activeFolder._id,
-      type: values.elementType,
-      name: values.name.trim(),
-      sourceAssetIds: values.sourceAssetIds ?? [],
+  }
+
+  async function buildElementSheet(entry, sourceAssets, existingNotes) {
+    if (!entry?.studioId) return;
+    const referenceInputs = elementSheetReferenceInputs(sourceAssets);
+    const result = await generateElementSheet({
+      elementId: entry.studioId,
+      referenceInputs,
+      existingNotes,
     });
-    openTab(`element:${id}`);
+    setTabEntrySnapshots((snapshots) => ({
+      ...snapshots,
+      [`element:${entry.studioId}`]: {
+        ...entry,
+        description: result.description,
+      },
+    }));
+    return result.description;
   }
 
   async function renameEntry(entry) {
@@ -1047,7 +1145,10 @@ export function StudioShell() {
         assetId: reserved.assetId,
         name: file.name,
         kind,
-        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+        previewUrl:
+          file.type.startsWith("image/") || file.type.startsWith("video/")
+            ? URL.createObjectURL(file)
+            : "",
       });
     }
     return uploaded;
@@ -1108,6 +1209,44 @@ export function StudioShell() {
     setStatus("");
     setFlowPending(true);
     try {
+      if (mode === "element") {
+        const mediaAttachments = attachments.filter(
+          (attachment) =>
+            attachment.studioKind === "asset" &&
+            (attachment.kind === "image" ||
+              attachment.kind === "video" ||
+              attachment.kind === "audio") &&
+            Boolean(attachment.studioId),
+        );
+        const uploadedAssets = mediaAttachments.map((attachment) => ({
+          assetId: attachment.studioId,
+          name: attachment.label ?? attachment.filename ?? "reference",
+          kind: attachment.kind,
+          previewUrl: attachment.mediaUrl ?? attachment.thumbnailUrl,
+        }));
+        const sheetCost = elementSheetCreditCost({
+          elementType,
+          imageReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "image").length,
+          videoReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "video").length,
+          audioReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "audio").length,
+        });
+        if (entitlement && entitlement.creditBalance < sheetCost) {
+          throw new Error(
+            entitlement.reason ?? `You need ${sheetCost} credits to build this ${elementSheetLabel(elementType)}.`,
+          );
+        }
+        await createAndAttachElement({
+          elementType,
+          name: draft.trim(),
+          sourceAssetIds: uploadedAssets.map((asset) => asset.assetId),
+          uploadedAssets,
+          generateSheet: true,
+        });
+        setDraft("");
+        setAttachments([]);
+        setMode(lastGenerationModeRef.current ?? "image");
+        return;
+      }
       if (mode === "script") {
         if (!selectedStylePreset) {
           throw new Error("Creative presets are still loading. Try again in a moment.");
@@ -1145,15 +1284,22 @@ export function StudioShell() {
         folderId: activeFolder._id,
         title: draft.trim().slice(0, 64),
       });
-      setSelectedThreadId(threadId);
-      setActiveTab(COMPOSER_TAB);
+      const composerTab = activeTab;
+      if (composerTab.startsWith("composer:")) {
+        delete composerContextsRef.current[composerTab];
+        setOpenTabs((tabs) => tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)));
+        setActiveTab(`thread:${threadId}`);
+      } else {
+        openTab(`thread:${threadId}`);
+      }
       await runFlow({
         threadId,
         mode,
         tier: mode === "video" ? "pro_video" : "image",
         stylePresetId: preset._id,
         userPrompt: buildPromptWithAttachments(draft, attachments),
-        attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
+        attachedScriptMarkdown: attachedCreativeMarkdown.length ? attachedCreativeMarkdown : undefined,
+        referenceSummaries: elementReferenceSummaries.length ? elementReferenceSummaries : undefined,
         audioEnabled: mode === "video" ? audioEnabled : undefined,
         aspectRatio,
         resolution: mode === "image" ? normalizeImageResolution(imageResolution) : resolution,
@@ -1189,8 +1335,7 @@ export function StudioShell() {
       <div className="studio-backdrop" aria-hidden="true" />
       <style jsx global>{`
         .studio-polish {
-          --studio-scene-bg: url("/studio-empty-space-4k.webp");
-          --studio-space-bg: url("/studio-empty-space-4k.webp");
+          --studio-scene-bg: url("/studio-scene-agent-genesis-4k.webp");
           --studio-active-bg: var(--studio-scene-bg);
           --studio-glow-soft: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           --studio-glow-mid: color-mix(in srgb, var(--cursor-accent) 24%, transparent);
@@ -1206,6 +1351,25 @@ export function StudioShell() {
           --studio-hover-scale: 1.018;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 58%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent);
+          --studio-composer-glass-border: rgba(255, 255, 255, 0.11);
+          --studio-composer-glass-blur: saturate(150%) blur(5px);
+          --studio-composer-glass-shadow:
+            0 20px 48px rgba(0, 0, 0, 0.38),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          --studio-composer-shell-max: 860px;
+          --studio-composer-min-height: 96px;
+          --studio-mode-switcher-width: 120px;
+          --studio-generate-column-width: var(--studio-composer-min-height);
+          --studio-composer-row-gap: 8px;
+          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text-bright) 2.8%, var(--mos-bg));
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text-bright) 5.5%, var(--mos-bg));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text-bright) 4.2%, var(--mos-bg));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
+          --studio-grid-tile-glow: 0 0 16px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
           position: relative;
           background: var(--mos-bg) !important;
           overflow: hidden;
@@ -1323,25 +1487,26 @@ export function StudioShell() {
             padding-right: max(4px, env(safe-area-inset-right, 0px));
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill {
-            min-width: 42px;
-            min-height: 42px;
-            border-radius: 16px;
-            padding: 0 12px;
+            min-width: 28px;
+            min-height: 28px;
+            border-radius: 999px;
+            padding: 0;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill svg {
-            width: 20px;
-            height: 20px;
+            width: 12px;
+            height: 12px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill {
-            min-height: 42px;
+            min-height: 28px;
+            height: 28px;
             max-width: 132px;
-            padding-inline: 12px;
-            border-radius: 16px;
-            font-size: 12px;
+            padding-inline: 10px;
+            border-radius: 999px;
+            font-size: 11px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill svg {
-            width: 18px;
-            height: 18px;
+            width: 12px;
+            height: 12px;
           }
           .studio-polish .cursor-unified-tabs {
             padding-left: 0;
@@ -1366,14 +1531,10 @@ export function StudioShell() {
             display: grid !important;
           }
         }
-        [data-studio-bg-pack="space"] .studio-polish {
-          --studio-active-bg: var(--studio-space-bg);
-        }
         [data-studio-bg-pack="clean"] .studio-polish {
           --studio-active-bg: none;
         }
-        [data-studio-bg-pack="worlds"] .studio-polish,
-        [data-studio-bg-pack="space"] .studio-polish {
+        [data-studio-bg-pack="worlds"] .studio-polish {
           --studio-glow-soft: transparent;
           --studio-glow-mid: transparent;
           --studio-surface-hover: color-mix(in srgb, var(--mos-text-bright) 4%, var(--color-cursor-hover));
@@ -1382,67 +1543,99 @@ export function StudioShell() {
         }
         [data-theme="agent"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-agent-genesis-4k.webp");
-          --studio-space-bg: url("/studio-space-agent-genesis-4k.webp");
         }
         [data-theme="gold"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-gold-archive-4k.webp");
-          --studio-space-bg: url("/studio-bg-gold-solstice-4k.webp");
         }
         [data-theme="ocean"] .studio-polish {
-          --studio-scene-bg: url("/studio-empty-space-4k.webp");
-          --studio-space-bg: url("/studio-empty-space-4k.webp");
+          --studio-scene-bg: url("/studio-scene-ocean-depth-4k.webp");
         }
         [data-theme="ember"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-ember-forge-4k.webp");
-          --studio-space-bg: url("/studio-bg-ember-forge-4k.webp");
         }
         [data-theme="mint"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-mint-meadow-4k.webp");
-          --studio-space-bg: url("/studio-space-mint-meadow-4k.webp");
         }
         [data-theme="violet"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-violet-dusk-4k.webp");
-          --studio-space-bg: url("/studio-bg-violet-nebula-4k.webp");
         }
         [data-theme="rose"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-rose-bloom-4k.webp");
-          --studio-space-bg: url("/studio-space-rose-bloom-4k.webp");
         }
         [data-theme="cobalt"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-cobalt-skyline-4k.webp");
-          --studio-space-bg: url("/studio-space-cobalt-skyline-4k.webp");
         }
         [data-theme="coral"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-coral-reef-4k.webp");
-          --studio-space-bg: url("/studio-space-coral-reef-4k.webp");
         }
         [data-theme="sage"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-sage-grove-4k.webp");
-          --studio-space-bg: url("/studio-space-sage-grove-4k.webp");
         }
         [data-theme="cherry"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-cherry-pulse-4k.webp");
-          --studio-space-bg: url("/studio-space-cherry-pulse-4k.webp");
         }
         [data-theme="teal"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-teal-lagoon-4k.webp");
-          --studio-space-bg: url("/studio-space-teal-lagoon-4k.webp");
         }
         [data-theme="lime"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-lime-canopy-4k.webp");
-          --studio-space-bg: url("/studio-space-lime-canopy-4k.webp");
         }
         [data-theme="fuchsia"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-fuchsia-neon-4k.webp");
-          --studio-space-bg: url("/studio-space-fuchsia-neon-4k.webp");
         }
         [data-theme="copper"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-copper-foundry-4k.webp");
-          --studio-space-bg: url("/studio-space-copper-foundry-4k.webp");
         }
         [data-theme="indigo"] .studio-polish {
           --studio-scene-bg: url("/studio-scene-indigo-midnight-4k.webp");
-          --studio-space-bg: url("/studio-space-indigo-midnight-4k.webp");
+        }
+        [data-appearance="light"][data-theme="agent"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-agent-genesis-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="gold"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-gold-archive-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="ocean"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-ocean-depth-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="ember"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-ember-forge-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="mint"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-mint-meadow-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="violet"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-violet-dusk-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="rose"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-rose-bloom-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="cobalt"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-cobalt-skyline-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="coral"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-coral-reef-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="sage"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-sage-grove-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="cherry"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-cherry-pulse-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="teal"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-teal-lagoon-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="lime"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-lime-canopy-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="fuchsia"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-fuchsia-neon-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="copper"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-copper-foundry-light-4k.webp");
+        }
+        [data-appearance="light"][data-theme="indigo"] .studio-polish {
+          --studio-scene-bg: url("/studio-scene-indigo-midnight-light-4k.webp");
         }
         :root {
           --studio-cursor-transition: opacity 0.2s ease;
@@ -1484,15 +1677,71 @@ export function StudioShell() {
         .desk-file-list-row.is-drag-over,
         .desk-file-grid-item.is-drag-over,
         .desk-file-preview-item.is-drag-over {
-          outline: 2px solid var(--cursor-accent);
-          outline-offset: -2px;
-          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent) !important;
-          border-radius: 6px;
+          outline: none !important;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 90%, var(--cursor-accent) 10%) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          box-shadow:
+            0 12px 32px color-mix(in srgb, #000 30%, transparent),
+            0 4px 12px color-mix(in srgb, #000 18%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+          border-radius: 10px;
         }
         .desk-file-breadcrumbs-chip.is-drag-over {
-          outline: 2px solid var(--cursor-accent);
-          outline-offset: -1px;
-          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent) !important;
+          outline: none !important;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 88%, var(--cursor-accent) 12%) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          box-shadow:
+            0 10px 24px color-mix(in srgb, #000 28%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        }
+        .desk-file-drag-preview {
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.52)) 78%, transparent) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
+          box-shadow:
+            0 18px 44px color-mix(in srgb, #000 36%, transparent),
+            0 6px 16px color-mix(in srgb, #000 22%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+        }
+        .cursor-composer-box.is-drop-target {
+          border-style: solid !important;
+          border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
+          background: var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          box-shadow:
+            0 16px 40px color-mix(in srgb, #000 32%, transparent),
+            0 6px 16px color-mix(in srgb, #000 20%, transparent),
+            var(--studio-composer-glass-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.08)) !important;
+        }
+        .cursor-composer-shell.is-drop-target-hit .cursor-composer-box,
+        .cursor-composer-box.is-drop-target-hit {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
+          box-shadow:
+            0 20px 48px color-mix(in srgb, #000 34%, transparent),
+            0 8px 20px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+        }
+        .cursor-explorer-panel.is-drop-target {
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 92%, var(--cursor-accent) 8%);
+          box-shadow: inset 0 0 0 1px var(--studio-composer-glass-border, rgba(255, 255, 255, 0.1));
+        }
+        .studio-inline-tag.is-drag-image {
+          opacity: 0.96;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.52)) 82%, transparent);
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
+          box-shadow:
+            0 14px 36px color-mix(in srgb, #000 34%, transparent),
+            0 4px 12px color-mix(in srgb, #000 20%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          border-radius: 999px;
         }
         .studio-polish::before,
         .studio-polish::after {
@@ -1540,8 +1789,7 @@ export function StudioShell() {
           border-color: var(--studio-shell-border) !important;
         }
         .studio-polish aside {
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-sidebar) 98%, var(--mos-bg) 2%), var(--mos-sidebar)) !important;
+          background: var(--mos-sidebar) !important;
         }
         .studio-polish :where(.border-cursor-border-soft) {
           border-color: color-mix(in srgb, var(--color-cursor-border-soft) 34%, transparent) !important;
@@ -1576,8 +1824,10 @@ export function StudioShell() {
           box-shadow: 0 0 18px var(--studio-glow-soft);
           transform: scale(var(--studio-hover-scale));
         }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active:not(:disabled),
-        .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip):active {
+        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active:not(:disabled) {
+          transform: scale(var(--studio-press-scale));
+        }
+        .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-breadcrumbs-chip):active {
           transform: scale(var(--studio-press-scale));
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn)::after {
@@ -1713,14 +1963,25 @@ export function StudioShell() {
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
           opacity: 1;
         }
+        [data-appearance="light"] .studio-polish main.studio-composer-bg::before {
+          opacity: 0;
+        }
         .studio-polish main > :not(style) {
           position: relative;
         }
-        .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item) {
+        .studio-polish :where(.cursor-tree-row) {
           position: relative;
           overflow: hidden;
         }
-        .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item)::after {
+        .studio-polish :where(.desk-file-list-row) {
+          position: relative;
+          overflow: hidden;
+        }
+        .studio-polish :where(.desk-file-grid-item, .desk-file-preview-item) {
+          position: relative;
+          overflow: visible;
+        }
+        .studio-polish :where(.cursor-tree-row)::after {
           content: "";
           position: absolute;
           inset: 0;
@@ -1736,10 +1997,7 @@ export function StudioShell() {
             linear-gradient(90deg, color-mix(in srgb, var(--mos-text-bright) 4%, transparent), transparent 58%);
           transition: opacity var(--studio-motion-fast) var(--studio-motion-ease);
         }
-        .studio-polish .cursor-tree-row:hover,
-        .studio-polish .desk-file-list-row:hover,
-        .studio-polish .desk-file-grid-item:hover,
-        .studio-polish .desk-file-preview-item:hover {
+        .studio-polish .cursor-tree-row:hover {
           background: var(--studio-surface-hover);
           border-color: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-shell-border));
           box-shadow:
@@ -1747,25 +2005,19 @@ export function StudioShell() {
             0 10px 28px color-mix(in srgb, var(--cursor-accent) 10%, rgba(2, 6, 23, 0.24));
           transform: scale(var(--studio-hover-scale));
         }
-        .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item):hover::after {
+        .studio-polish :where(.cursor-tree-row):hover::after {
           opacity: 1;
         }
         .studio-polish .cursor-tree-row[aria-selected="true"],
-        .studio-polish .desk-file-list-row[aria-selected="true"],
-        .studio-polish .desk-file-grid-item[aria-selected="true"],
-        .studio-polish .desk-file-preview-item[aria-selected="true"],
-        .studio-polish .cursor-tree-row.is-selected,
-        .studio-polish .desk-file-list-row.is-selected,
-        .studio-polish .desk-file-grid-item.is-selected,
-        .studio-polish .desk-file-preview-item.is-selected {
+        .studio-polish .cursor-tree-row.is-selected {
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-hover));
           box-shadow:
             inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
             0 0 16px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-polish .desk-file-breadcrumbs-chip:hover {
-          background: var(--cursor-overlay-subtle);
-          box-shadow: 0 0 12px var(--studio-glow-soft);
+          background: var(--studio-grid-tile-hover);
+          box-shadow: none;
         }
         .studio-polish .cursor-workspace-head {
           padding: 0 !important;
@@ -1931,10 +2183,10 @@ export function StudioShell() {
           z-index: var(--tab-stack, 1) !important;
         }
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
-          width: 30px;
-          min-width: 30px;
-          max-width: 30px;
-          height: 30px;
+          width: 24px;
+          min-width: 24px;
+          max-width: 24px;
+          height: 24px;
           border-radius: 999px !important;
           border-width: 1px !important;
           border-left-width: 1px !important;
@@ -1963,6 +2215,10 @@ export function StudioShell() {
             0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent) inset,
             0 10px 22px color-mix(in srgb, #000 28%, transparent),
             0 0 20px color-mix(in srgb, var(--cursor-accent) 20%, transparent);
+        }
+        .studio-polish .cursor-unified-tab.cursor-unified-tab-new svg {
+          width: 12px;
+          height: 12px;
         }
         .studio-polish .cursor-unified-tab.is-drag-source,
         .studio-polish .cursor-unified-tabs.is-dragging-strip .cursor-unified-tab:not(.cursor-unified-tab-new) {
@@ -2014,6 +2270,147 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish .cursor-settings-panel {
           box-shadow: -10px 0 24px color-mix(in srgb, #000 10%, transparent) !important;
         }
+        [data-appearance="light"] .studio-polish {
+          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #ffffff) 58%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #ffffff) 74%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #ffffff) 44%, transparent);
+          --studio-composer-glass-border: rgba(15, 23, 42, 0.10);
+          --studio-composer-glass-blur: saturate(180%) blur(10px);
+          --studio-composer-glass-shadow:
+            0 2px 10px color-mix(in srgb, #000 3.5%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.48);
+          --studio-card-bg: var(--mos-panel);
+          --studio-shell-border: var(--color-cursor-border-soft);
+          --studio-surface-hover: var(--color-cursor-hover);
+          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text) 2%, var(--mos-bg));
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 4.5%, var(--mos-bg));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 3.4%, var(--mos-bg));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 5.5%, var(--mos-bg));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 6%, var(--mos-bg));
+          --studio-grid-tile-glow: 0 0 12px color-mix(in srgb, var(--cursor-accent) 9%, transparent);
+        }
+        [data-appearance="light"] .studio-polish :where(
+          .studio-composer .cursor-composer-box,
+          .studio-chat-bubble,
+          .studio-mode-switcher,
+          .studio-mode-row,
+          .studio-preset-grid-panel,
+          .studio-preset-trigger,
+          .studio-preset-grid-card,
+          .studio-composer-preview-dock,
+          .studio-composer .studio-pill-btn,
+          .studio-composer .cursor-attach-tile-open,
+          .studio-chat-chip,
+          .studio-settings-menu.is-fixed,
+          .studio-add-menu.is-fixed,
+          .studio-dropdown-menu.is-fixed
+        ) {
+          backdrop-filter: var(--studio-composer-glass-blur) !important;
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+        }
+        [data-appearance="light"] .studio-polish aside {
+          background: var(--mos-sidebar) !important;
+          border-right-color: color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent) !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-panel-head,
+        [data-appearance="light"] .studio-polish .cursor-sidebar-head,
+        [data-appearance="light"] .studio-polish .cursor-workspace-head {
+          background: var(--color-cursor-sidebar) !important;
+          border-bottom: 1px solid var(--color-cursor-border-soft) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-sidebar-brand-logo-img {
+          filter: none;
+        }
+        [data-appearance="light"] .studio-polish .cursor-sidebar-brand-user,
+        [data-appearance="light"] .studio-polish .studio-user-menu-trigger:hover .cursor-sidebar-brand-user {
+          border-color: var(--color-cursor-border-soft) !important;
+          background: var(--color-cursor-panel) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
+          .studio-settings-pill,
+          .studio-credit-pill,
+          .cursor-icon-btn,
+          .studio-pill-btn
+        ) {
+          border-color: var(--color-cursor-border-soft) !important;
+          background: var(--color-cursor-panel) !important;
+          color: var(--color-cursor-muted) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) .studio-settings-pill.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft)) !important;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-panel)) !important;
+          color: var(--color-cursor-text) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .studio-credit-pill {
+          background: var(--color-cursor-panel) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .studio-credit-pill svg {
+          filter: none;
+        }
+        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
+          .studio-settings-pill,
+          .studio-credit-pill,
+          .cursor-icon-btn,
+          .studio-pill-btn
+        ):hover:not(:disabled) {
+          background: var(--color-cursor-hover) !important;
+          color: var(--color-cursor-text) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab {
+          border-color: var(--color-cursor-border-soft) !important;
+          background: color-mix(in srgb, var(--mos-bg) 72%, var(--color-cursor-panel)) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish :where(
+          .cursor-tab,
+          .cursor-agent-chat-tab,
+          .cursor-unified-tab
+        ):hover {
+          background: var(--color-cursor-hover) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish :where(
+          .cursor-tab.active,
+          .cursor-agent-chat-tab.active,
+          .cursor-tab.is-active,
+          .cursor-agent-chat-tab.is-active,
+          .cursor-unified-tab.is-active
+        ) {
+          border-color: var(--color-cursor-border-soft) !important;
+          background: var(--color-cursor-panel) !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-streaming.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-question.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-input.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-plan.is-active,
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-error.is-active {
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab::before {
+          display: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-settings-pill.is-active {
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(.cursor-icon-btn, .studio-pill-btn):hover:not(:disabled) {
+          box-shadow: none !important;
+          transform: none;
+        }
+        [data-appearance="light"] .studio-backdrop {
+          opacity: 0.52;
+        }
+        [data-appearance="light"] .studio-polish.is-studio-bg-ready .studio-backdrop {
+          opacity: 0.64;
+        }
         .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item):hover {
           background: var(--studio-surface-hover);
         }
@@ -2029,13 +2426,13 @@ export function StudioShell() {
         }
         .studio-settings-pill {
           display: inline-flex;
-          min-height: 28px;
+          min-height: 24px;
           align-items: center;
           gap: 6px;
           border-radius: var(--cursor-radius-pill);
           border: 1px solid var(--color-cursor-border);
           background: var(--color-cursor-panel);
-          padding: 4px 9px;
+          padding: 0 8px;
           color: var(--color-cursor-muted);
           font-size: 11px;
           font-weight: 650;
@@ -2775,19 +3172,16 @@ export function StudioShell() {
           box-shadow: 0 0 18px var(--studio-glow-soft);
         }
         .studio-polish .cursor-composer-box:focus-within {
-          border-color: color-mix(in srgb, var(--cursor-accent) 34%, rgba(255, 255, 255, 0.15));
-          background: transparent !important;
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, rgba(255, 255, 255, 0.12));
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           box-shadow:
-            0 24px 64px color-mix(in srgb, #000 42%, transparent),
-            0 0 36px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
-            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+            var(--studio-composer-glass-shadow),
+            0 0 28px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           transition:
-            background-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            background 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             border-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1),
+            backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1);
         }
         .studio-polish .cursor-composer-box:focus-within::before {
           opacity: 1;
@@ -2805,13 +3199,13 @@ export function StudioShell() {
           pointer-events: auto;
         }
         .studio-polish .studio-inline-tag:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 62%, var(--color-cursor-border-soft));
+          border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--color-cursor-border-soft));
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 28%, transparent), transparent 70%),
             color-mix(in srgb, var(--cursor-accent) 20%, var(--color-cursor-hover));
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text-bright) 14%, transparent),
-            0 0 16px color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 18%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text-bright) 14%, transparent);
         }
         .studio-polish .cursor-resize {
           position: relative;
@@ -2832,29 +3226,34 @@ export function StudioShell() {
           display: none;
         }
         .studio-polish .desk-file-list {
-          padding: 4px 4px 8px;
+          padding: 4px 6px 8px;
+          gap: 1px;
         }
         .studio-polish .cursor-file-grid {
-          padding: 6px 6px 10px;
-          grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+          padding: 8px 8px 12px;
+          grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
           grid-auto-rows: auto;
         }
         .studio-polish .desk-file-preview-grid {
-          padding: 6px 6px 12px;
+          padding: 8px 8px 12px;
         }
         .studio-polish .desk-file-list-row {
-          min-height: 30px;
+          min-height: 28px;
           border-color: transparent !important;
           border-radius: 8px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 14%, transparent), transparent);
+          background: transparent !important;
           box-shadow: none;
+        }
+        .studio-polish .desk-file-list-meta {
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          opacity: 0.72;
         }
         .studio-polish .desk-file-list-name {
           min-width: 0;
           font-size: 11px;
           font-weight: 500;
-          line-height: 1.15;
+          line-height: 1.2;
         }
         .studio-polish .desk-file-list-name .truncate {
           min-width: 0;
@@ -2862,38 +3261,22 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-list-row:hover {
           border-color: transparent !important;
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--mos-text-bright) 4%, transparent), transparent 46%),
-            color-mix(in srgb, var(--mos-text-bright) 3%, var(--color-cursor-hover));
-          box-shadow: 0 4px 10px color-mix(in srgb, #000 10%, transparent);
+          background: var(--studio-grid-tile-hover) !important;
+          box-shadow: var(--studio-grid-tile-glow);
+          transform: none;
         }
-        .studio-polish .desk-file-list-row.is-parent-row,
-        .studio-polish .cursor-file-grid .desk-file-grid-back-row {
-          min-height: 30px;
+        .studio-polish .desk-file-list-row.is-parent-row {
+          min-height: 28px;
           justify-content: flex-start;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-border-soft)) !important;
-          border-radius: 10px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-surface)), color-mix(in srgb, var(--mos-surface) 38%, transparent));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
-            0 4px 12px color-mix(in srgb, #000 12%, transparent);
+          border: none !important;
+          border-radius: 8px;
+          background: var(--studio-grid-tile-bg) !important;
+          box-shadow: none;
         }
-        .studio-polish .cursor-file-grid .desk-file-grid-back-row {
-          grid-column: 1 / -1;
-          width: 100%;
-          justify-self: stretch;
-        }
-        .studio-polish .desk-file-list-row.is-parent-row:hover,
-        .studio-polish .cursor-file-grid .desk-file-grid-back-row:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border)) !important;
-          background:
-            radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 42%),
-            color-mix(in srgb, var(--cursor-accent) 8%, var(--color-cursor-hover));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 10%, transparent),
-            0 8px 18px color-mix(in srgb, #000 18%, transparent),
-            0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        .studio-polish .desk-file-list-row.is-parent-row:hover {
+          background: var(--studio-grid-tile-hover) !important;
+          box-shadow: var(--studio-grid-tile-glow);
+          transform: none;
         }
         .studio-polish .cursor-file-grid,
         .studio-polish .desk-file-preview-grid {
@@ -2902,17 +3285,25 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-grid-item,
         .studio-polish .desk-file-preview-item {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 6px;
           min-height: 0;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft)) !important;
-          border-radius: 14px;
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 9%, transparent), transparent 45%),
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 54%, var(--mos-bg)), color-mix(in srgb, var(--mos-surface) 34%, var(--mos-bg)));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent),
-            0 8px 22px color-mix(in srgb, #000 18%, transparent),
-            0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 3%, transparent);
-          overflow: hidden;
+          padding: 0;
+          border: none !important;
+          border-radius: 0;
+          background: transparent !important;
+          box-shadow: none !important;
+          overflow: visible;
+          transform: none;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb,
+        .studio-polish .desk-file-preview-item .desk-file-thumb {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+          width: 100%;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item .desk-file-thumb-visual {
@@ -2921,84 +3312,219 @@ export function StudioShell() {
           height: auto;
           width: 100%;
           margin: 0;
-          border-radius: 0;
+          border: none;
+          border-radius: 10px;
+          background: var(--studio-grid-tile-bg) !important;
+          box-shadow: none;
+          overflow: hidden;
+          transition:
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            box-shadow var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
+          background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-badge,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-badge {
+          display: none;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-folder svg,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-folder svg {
+          opacity: 1;
+          color: var(--color-cursor-text) !important;
+          transition: opacity var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-fallback svg,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-fallback svg {
+          opacity: 0.54;
+          transition: opacity var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
+        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
+          opacity: 1;
+        }
+        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
+        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
+          opacity: 0.82;
+        }
+        [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-folder svg,
+        [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-folder svg {
+          opacity: 1;
+          color: var(--color-cursor-text) !important;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-folder .desk-file-entry-icon--pinned,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-folder .desk-file-entry-icon--pinned {
+          color: var(--cursor-accent) !important;
+        }
+        [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-fallback svg,
+        [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-fallback svg {
+          opacity: 0.46;
+        }
+        [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
+        [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
+          opacity: 1;
+        }
+        [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
+        [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
+          opacity: 0.78;
+        }
+        [data-appearance="light"] .studio-polish .desk-file-breadcrumbs-chip {
+          opacity: 0.82;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item .desk-file-thumb-label {
           display: block;
           min-height: 0;
           max-height: none;
-          padding: 6px 8px;
-          border-top: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
-          border-bottom: 1px solid color-mix(in srgb, #000 22%, transparent);
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-panel) 86%, var(--mos-bg)), color-mix(in srgb, var(--mos-bg) 82%, #000 18%));
-          color: var(--color-cursor-text-bright);
+          padding: 0 1px;
+          border: none !important;
+          background: transparent !important;
+          color: var(--color-cursor-text);
+          opacity: 1;
           overflow: hidden;
           white-space: nowrap;
           font-size: 10.5px;
           font-weight: 500;
-          line-height: 1.25;
+          line-height: 1.2;
           text-align: center;
           text-overflow: ellipsis;
-          text-shadow: 0 1px 0 color-mix(in srgb, #000 36%, transparent);
+          text-shadow: none;
+          transition: color var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish .desk-file-grid-item:hover,
         .studio-polish .desk-file-preview-item:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border)) !important;
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 16%, transparent), transparent 46%),
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 66%, var(--cursor-accent) 8%), color-mix(in srgb, var(--mos-surface) 42%, var(--mos-bg)));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 10%, transparent),
-            0 12px 26px color-mix(in srgb, #000 24%, transparent),
-            0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          transform: none;
+        }
+        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual {
+          background: var(--studio-grid-tile-hover) !important;
+          box-shadow: var(--studio-grid-tile-glow) !important;
+        }
+        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
+          background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
         }
         .studio-polish .desk-file-grid-item:hover .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item:hover .desk-file-thumb-label {
-          border-top-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border));
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel)), color-mix(in srgb, var(--mos-bg) 78%, #000 22%));
+          color: var(--color-cursor-text);
+          opacity: 1;
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"],
         .studio-polish .desk-file-preview-item[aria-selected="true"],
-        .studio-polish .desk-file-list-row[aria-selected="true"],
         .studio-polish .desk-file-grid-item.is-selected,
-        .studio-polish .desk-file-preview-item.is-selected,
+        .studio-polish .desk-file-preview-item.is-selected {
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual,
+        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual {
+          background: var(--studio-grid-tile-selected) !important;
+          box-shadow: none;
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-label,
+        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-label,
+        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-label,
+        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-label {
+          color: var(--color-cursor-text);
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual,
+        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual {
+          box-shadow: var(--studio-grid-tile-glow) !important;
+        }
+        .studio-polish .desk-file-list-row[aria-selected="true"],
         .studio-polish .desk-file-list-row.is-selected {
-          border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--color-cursor-border)) !important;
-          background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 20%, transparent), transparent 48%),
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 15%, var(--mos-surface)), color-mix(in srgb, var(--mos-surface) 42%, var(--mos-bg)));
-          box-shadow:
-            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 36%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 10%, transparent),
-            0 0 22px color-mix(in srgb, var(--cursor-accent) 20%, transparent);
+          border-color: transparent !important;
+          background: var(--studio-grid-tile-selected) !important;
+          box-shadow: none;
         }
-        .studio-polish .desk-file-search-divider {
-          display: flex;
-          align-items: center;
-          min-height: 26px;
-          padding-top: 6px;
-          padding-bottom: 4px;
+        .studio-polish .desk-file-list-row[aria-selected="true"]:hover,
+        .studio-polish .desk-file-list-row.is-selected:hover {
+          box-shadow: var(--studio-grid-tile-glow);
         }
-        .studio-polish .cursor-file-grid .desk-file-search-divider,
-        .studio-polish .desk-file-preview-grid .desk-file-search-divider {
-          grid-column: 1 / -1;
-          height: auto;
-          min-height: 28px;
+        .studio-polish .desk-file-grid-item.is-drag-over,
+        .studio-polish .desk-file-preview-item.is-drag-over {
+          border: none !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          box-shadow: none !important;
         }
-        .studio-polish .cursor-chat-empty.thread-empty.cursor-chat-empty-logo-only {
-          min-height: 100%;
-          height: 100%;
-          justify-content: center;
-          padding-bottom: 116px;
+        .studio-polish .desk-file-grid-item.is-drag-over .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item.is-drag-over .desk-file-thumb-visual {
+          background: var(--studio-grid-tile-hover) !important;
+          box-shadow: var(--studio-grid-tile-glow) !important;
         }
         .studio-folder-pathbar {
           display: flex;
           align-items: center;
           gap: 4px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 38%, transparent);
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 28%, transparent);
+          background: transparent;
+        }
+        .studio-polish .cursor-explorer-body {
+          background: var(--mos-sidebar);
+        }
+        .studio-polish .cursor-panel-search {
+          min-height: 32px;
+          height: 32px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 28%, transparent);
+          background: transparent;
+        }
+        .studio-polish .cursor-panel-search-input {
+          font-size: 11.5px;
+        }
+        .studio-polish .cursor-panel-search-input::placeholder {
+          opacity: 0.68;
+        }
+        .studio-polish .cursor-panel-search-input:focus,
+        .studio-polish .cursor-panel-search-input:focus-visible {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .studio-polish .desk-file-breadcrumbs {
+          min-height: 26px;
+          border-bottom: none;
+          background: transparent;
+        }
+        .studio-polish .desk-file-breadcrumbs-track {
+          padding: 1px 8px 3px;
+        }
+        .studio-polish .desk-file-breadcrumbs-chip {
+          border-radius: 6px;
+          padding: 2px 6px;
+          font-size: 10.5px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-polish .desk-file-breadcrumbs-chip.is-current {
+          background: var(--studio-grid-tile-bg);
+          color: var(--color-cursor-text);
+        }
+        .studio-polish .desk-file-search-divider {
+          display: flex;
+          align-items: center;
+          min-height: 22px;
+          padding: 8px 8px 2px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          opacity: 0.62;
+        }
+        .studio-polish .cursor-file-grid .desk-file-search-divider,
+        .studio-polish .desk-file-preview-grid .desk-file-search-divider {
+          grid-column: 1 / -1;
+          height: auto;
+          min-height: 22px;
         }
         @media (prefers-reduced-motion: reduce) {
           .studio-polish *,
@@ -3015,19 +3541,18 @@ export function StudioShell() {
           box-shadow: none !important;
           border-color: transparent !important;
         }
-        .cursor-composer-box.is-drop-target {
-          border-style: dashed !important;
-          border-color: color-mix(in srgb, var(--cursor-accent) 72%, var(--cursor-border-subtle)) !important;
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 42%, transparent) inset,
-            0 0 24px color-mix(in srgb, var(--cursor-accent) 24%, transparent) !important;
-        }
         .cursor-attach-tile-open {
           transition:
             background var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-spring) !important;
+        }
+        .studio-composer .cursor-attach-tile-open {
+          border-color: var(--studio-composer-glass-border) !important;
+          background: var(--studio-composer-glass-muted) !important;
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
         }
         .cursor-attach-tile-open:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border)) !important;
@@ -3036,7 +3561,7 @@ export function StudioShell() {
         .studio-composer .cursor-composer {
           display: flex;
           width: 100%;
-          max-width: min(700px, calc(100% - 24px));
+          max-width: min(var(--studio-composer-shell-max), calc(100% - 24px));
           margin: 0 auto;
           position: relative;
           left: -5px;
@@ -3047,8 +3572,8 @@ export function StudioShell() {
           position: relative;
           isolation: auto;
           display: flex;
-          align-items: flex-end;
-          gap: 8px;
+          align-items: stretch;
+          gap: var(--studio-composer-row-gap);
           width: 100%;
           min-width: 0;
         }
@@ -3057,17 +3582,20 @@ export function StudioShell() {
           overflow: hidden;
           display: flex;
           align-self: stretch;
-          min-height: 96px;
+          min-height: var(--studio-composer-min-height);
           flex: 1 1 auto;
           flex-direction: column;
           min-width: 0;
-          border: 1px solid rgba(255, 255, 255, 0.15) !important;
-          background: transparent !important;
-          box-shadow:
-            inset 0 0 16px -6px rgba(255, 255, 255, 0.24);
+          border: 1px solid var(--studio-composer-glass-border) !important;
+          border-radius: 16px;
+          background: var(--studio-composer-glass) !important;
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          box-shadow: var(--studio-composer-glass-shadow);
           transition:
             border-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1);
+            box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
+            background 1000ms cubic-bezier(0.45, 0, 0.2, 1);
           padding: 0 !important;
         }
         .studio-composer .cursor-composer-box::before {
@@ -3148,40 +3676,48 @@ export function StudioShell() {
           position: relative;
           z-index: 1;
           display: grid;
-          grid-template-rows: repeat(3, minmax(32px, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: repeat(2, minmax(0, 1fr));
           gap: 4px;
-          flex: 0 0 118px;
-          width: 118px;
-          min-height: 118px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border-soft));
-          border-radius: 16px;
-          background:
-            radial-gradient(circle at 22% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 38%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--mos-surface) 94%, var(--mos-bg) 6%),
-              color-mix(in srgb, var(--mos-panel) 88%, var(--mos-bg) 12%)
-            );
+          flex: 0 0 var(--studio-mode-switcher-width);
+          width: var(--studio-mode-switcher-width);
+          min-height: 88px;
+          align-self: stretch;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: 14px;
+          background: var(--studio-composer-glass);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           box-shadow:
-            0 16px 38px color-mix(in srgb, var(--mos-bg) 32%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
+            0 4px 14px color-mix(in srgb, #000 16%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
           padding: 5px;
+        }
+        [data-appearance="light"] .studio-polish .studio-mode-switcher {
+          box-shadow:
+            0 2px 8px color-mix(in srgb, #000 3%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.42);
         }
         .studio-mode-row {
           display: flex;
+          flex-direction: column;
           align-items: center;
-          gap: 7px;
+          justify-content: center;
+          gap: 4px;
           width: 100%;
           min-width: 0;
-          border: 1px solid transparent;
-          border-radius: 11px;
-          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          padding: 0 9px;
+          min-height: 0;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 9px;
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          padding: 5px 4px;
           color: var(--color-cursor-muted);
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 650;
-          line-height: 1;
-          text-align: left;
+          line-height: 1.1;
+          text-align: center;
           cursor: pointer;
           transition:
             background var(--studio-motion-fast) var(--studio-motion-ease),
@@ -3191,18 +3727,17 @@ export function StudioShell() {
             transform var(--studio-motion-fast) var(--studio-motion-spring);
         }
         .studio-mode-row:hover {
-          background: var(--color-cursor-hover);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 70%, var(--color-cursor-hover) 30%);
           color: var(--color-cursor-text);
           transform: scale(var(--studio-hover-scale));
         }
         .studio-mode-row.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
           background:
-            radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 48%),
-            color-mix(in srgb, var(--cursor-accent-dim) 48%, var(--color-cursor-hover));
+            radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--cursor-accent) 22%, transparent), transparent 48%),
+            color-mix(in srgb, var(--cursor-accent-dim) 38%, var(--studio-composer-glass-strong) 62%);
           box-shadow:
-            0 7px 18px color-mix(in srgb, var(--mos-bg) 28%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
           color: var(--color-cursor-text-bright);
           transform: scale(1.008);
         }
@@ -3210,13 +3745,30 @@ export function StudioShell() {
           width: 15px;
           height: 15px;
           flex: 0 0 auto;
-          stroke-width: 2.25;
+          stroke-width: 2.15;
         }
         .studio-mode-row span {
+          display: block;
+          width: 100%;
           min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          overflow: visible;
           white-space: nowrap;
+        }
+        .studio-composer .cursor-composer-box.is-preset-open {
+          overflow: visible;
+        }
+        .studio-composer .cursor-composer-box.is-preset-open > *:not(.studio-preset-grid-panel) {
+          position: relative;
+          z-index: 1;
+        }
+        .studio-composer .cursor-composer-box .studio-preset-grid-panel {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: calc(100% + 10px);
+          z-index: 40;
+          width: 100%;
+          max-width: 100%;
         }
         .studio-preset-grid-panel {
           position: absolute;
@@ -3226,22 +3778,28 @@ export function StudioShell() {
           z-index: 40;
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          max-height: min(52vh, 420px);
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          gap: 8px;
+          min-height: 0;
+          max-height: min(72vh, 520px);
+          overflow: hidden;
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
-          background:
-            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 42%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--mos-panel) 96%, var(--mos-bg) 4%),
-              color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg) 8%)
-            );
-          box-shadow:
-            0 24px 64px color-mix(in srgb, var(--mos-bg) 45%, transparent),
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
-          padding: 12px;
+          background: var(--studio-composer-glass-strong);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          box-shadow: var(--studio-composer-glass-shadow);
+          padding: 10px;
+          isolation: isolate;
           animation: studio-preset-grid-in 180ms var(--studio-motion-ease);
+        }
+        .studio-preset-grid-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: -1;
+          border-radius: inherit;
+          background: color-mix(in srgb, var(--color-mos-composer, #07111f) 62%, transparent);
+          pointer-events: none;
         }
         @keyframes studio-preset-grid-in {
           from {
@@ -3257,17 +3815,15 @@ export function StudioShell() {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
+          gap: 8px;
+          flex: 0 0 auto;
+          min-height: 28px;
           padding: 0 2px;
         }
         .studio-preset-grid-head strong {
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           color: var(--color-cursor-text-bright);
-        }
-        .studio-preset-grid-head span {
-          font-size: 11px;
-          color: var(--color-cursor-muted);
         }
         .studio-preset-grid-close {
           display: inline-flex;
@@ -3275,32 +3831,44 @@ export function StudioShell() {
           justify-content: center;
           width: 28px;
           height: 28px;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-surface) 80%, transparent);
+          background: var(--studio-composer-glass-muted);
           color: var(--color-cursor-muted);
           cursor: pointer;
         }
         .studio-preset-grid-close:hover {
           color: var(--color-cursor-text);
-          background: var(--color-cursor-hover);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 72%, var(--color-cursor-hover) 28%);
         }
         .studio-preset-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-          gap: 10px;
-          overflow: auto;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
           padding: 2px;
+          scrollbar-width: thin;
+        }
+        .studio-preset-grid::-webkit-scrollbar {
+          width: 6px;
+        }
+        .studio-preset-grid::-webkit-scrollbar-thumb {
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-muted) 42%, transparent);
         }
         .studio-preset-grid-card {
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 6px;
           min-width: 0;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--mos-surface) 78%, transparent);
-          padding: 8px;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: 12px;
+          background: var(--studio-composer-glass-muted);
+          padding: 6px;
           text-align: left;
           cursor: pointer;
           transition:
@@ -3311,21 +3879,22 @@ export function StudioShell() {
         .studio-preset-grid-card:hover {
           transform: translateY(-1px);
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          box-shadow: 0 10px 24px color-mix(in srgb, var(--mos-bg) 24%, transparent);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 76%, var(--cursor-accent-dim) 24%);
+          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
         }
         .studio-preset-grid-card.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
           box-shadow:
             0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
-            0 12px 28px color-mix(in srgb, var(--mos-bg) 28%, transparent);
+            0 12px 28px rgba(0, 0, 0, 0.34);
         }
         .studio-preset-grid-thumb {
           position: relative;
-          aspect-ratio: 16 / 10;
+          aspect-ratio: 1 / 1;
           overflow: hidden;
           border-radius: 10px;
-          background:
-            linear-gradient(135deg, color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-panel)), var(--mos-surface));
+          background: color-mix(in srgb, #000 42%, var(--studio-composer-glass-strong) 58%);
         }
         .studio-preset-grid-thumb img {
           width: 100%;
@@ -3343,46 +3912,53 @@ export function StudioShell() {
         }
         .studio-preset-grid-copy strong {
           display: block;
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 700;
           color: var(--color-cursor-text-bright);
           line-height: 1.2;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
-        .studio-preset-grid-copy span {
-          display: block;
-          margin-top: 3px;
-          font-size: 10px;
-          line-height: 1.35;
-          color: var(--color-cursor-muted);
+        .studio-composer .studio-pill-btn.studio-preset-trigger {
+          height: 30px;
+          min-height: 30px;
+          max-width: min(148px, 34vw);
+          padding: 0 8px 0 4px;
+          gap: 5px;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
         }
         .studio-preset-trigger {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
           min-width: 0;
-          max-width: 220px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-border-soft));
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-surface) 84%, transparent);
-          padding: 4px 10px 4px 4px;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: var(--cursor-radius-pill);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           color: var(--color-cursor-text);
           cursor: pointer;
           transition:
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            background var(--studio-motion-fast) var(--studio-motion-ease);
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
+            transform var(--studio-motion-fast) var(--studio-motion-spring);
         }
         .studio-preset-trigger:hover,
         .studio-preset-trigger.is-open {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent-dim) 22%, var(--mos-surface));
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 64%, var(--cursor-accent-dim) 36%);
         }
         .studio-preset-trigger-thumb {
           flex: 0 0 auto;
-          width: 28px;
-          height: 28px;
+          width: 22px;
+          height: 22px;
           overflow: hidden;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-panel));
+          background: color-mix(in srgb, #000 36%, var(--studio-composer-glass-strong) 64%);
         }
         .studio-preset-trigger-thumb img {
           width: 100%;
@@ -3391,39 +3967,42 @@ export function StudioShell() {
         }
         .studio-preset-trigger-copy {
           min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
           text-align: left;
-        }
-        .studio-preset-trigger-copy strong {
-          display: block;
           font-size: 11px;
-          font-weight: 700;
-          line-height: 1.1;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          font-weight: 650;
+          line-height: 1;
+          color: var(--color-cursor-text-bright);
         }
-        .studio-preset-trigger-copy span {
-          display: block;
-          font-size: 10px;
-          color: var(--color-cursor-muted);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
+        .studio-preset-trigger svg {
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
+          opacity: 0.72;
         }
-        .studio-composer .cursor-composer-textarea {
-          --studio-composer-line-size: 24px;
-          --studio-composer-text-size: 14px;
-          --studio-composer-chip-size: 20px;
+        .studio-composer .cursor-composer-textarea,
+        .studio-composer .cursor-composer-textarea.cursor-composer-mention-editor {
+          --studio-composer-line-size: 28px;
+          --studio-composer-text-size: 16px;
+          --studio-composer-chip-size: 22px;
           --studio-composer-chip-font-size: 11px;
-          flex: 1 1 auto;
-          align-self: center;
+          --studio-composer-chip-media-size: 16px;
+          --studio-composer-chip-icon-size: 8px;
+          --studio-composer-chip-lift: 0px;
+          flex: 0 1 auto;
+          align-self: auto;
+          width: 100%;
           height: auto;
           min-height: var(--studio-composer-line-size) !important;
           max-height: 100%;
           overflow-y: auto;
           padding: 0 !important;
+          margin: 0;
+          border: 0;
           font-size: var(--studio-composer-text-size);
-          line-height: var(--studio-composer-line-size);
+          line-height: var(--studio-composer-line-size) !important;
           white-space: pre-wrap;
           overflow-wrap: anywhere;
           word-break: break-word;
@@ -3431,6 +4010,7 @@ export function StudioShell() {
         .studio-composer .cursor-composer-mention-editor:empty::before {
           color: color-mix(in srgb, var(--color-cursor-text) 58%, transparent) !important;
           opacity: 0.58;
+          font-size: var(--studio-composer-text-size);
           line-height: var(--studio-composer-line-size);
         }
         .studio-composer .cursor-composer-box:focus-within .cursor-composer-mention-editor:empty::before {
@@ -3440,14 +4020,13 @@ export function StudioShell() {
         .studio-composer-inputline {
           position: relative;
           display: flex;
-          flex: 1 1 0;
+          flex: 1 1 auto;
+          flex-direction: column;
+          justify-content: flex-start;
           min-height: 0;
-          align-items: center;
-          align-content: flex-start;
-          gap: 6px;
-          flex-wrap: wrap;
+          align-items: stretch;
+          padding: 6px 10px 4px;
           overflow: hidden;
-          padding: 10px;
         }
         .studio-composer-selection-layer {
           position: absolute;
@@ -3458,17 +4037,88 @@ export function StudioShell() {
         }
         .studio-composer-selection-pill {
           position: absolute;
-          border-radius: 7px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 54%, transparent), color-mix(in srgb, var(--cursor-accent) 34%, transparent)),
-            color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-hover));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text-bright) 12%, transparent),
-            0 0 10px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          border-radius: 4px;
+          background: color-mix(in srgb, var(--cursor-accent) 46%, var(--color-cursor-hover));
         }
         .studio-composer .cursor-composer-mention-editor {
           position: relative;
           z-index: 2;
+        }
+        .studio-composer .studio-inline-tag {
+          display: inline-flex;
+          height: var(--studio-composer-chip-size, 28px);
+          max-width: min(220px, 48vw);
+          align-items: center;
+          justify-content: center;
+          gap: 2px;
+          margin: 0;
+          margin-top: calc(
+            (var(--studio-composer-line-size) - var(--studio-composer-chip-size)) / 2 -
+            var(--studio-composer-chip-lift, 2px)
+          );
+          vertical-align: top;
+          box-sizing: border-box;
+          border-radius: var(--cursor-radius-pill);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 22%, transparent), transparent 72%),
+            color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-hover));
+          padding: 0 4px;
+          color: var(--color-cursor-text-bright);
+          font-family: inherit;
+          font-size: var(--studio-composer-chip-font-size, 13px);
+          font-weight: inherit;
+          line-height: 1;
+          white-space: nowrap;
+          cursor: grab;
+          user-select: none;
+          -webkit-user-select: none;
+          overflow: hidden;
+          isolation: isolate;
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
+        }
+        .studio-composer .composer-inline-mention {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: var(--studio-composer-chip-size, 28px);
+          height: var(--studio-composer-chip-size, 28px);
+          margin: 0;
+          margin-top: calc(
+            (var(--studio-composer-line-size) - var(--studio-composer-chip-size)) / 2 -
+            var(--studio-composer-chip-lift, 2px)
+          );
+          padding: 0 4px;
+          vertical-align: top;
+          font-family: inherit;
+          font-size: var(--studio-composer-chip-font-size, 13px);
+          font-weight: inherit;
+          line-height: 1;
+          overflow: hidden;
+          isolation: isolate;
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
+        }
+        .studio-composer .composer-inline-mention--with-icon {
+          height: var(--studio-composer-chip-size, 28px);
+          line-height: 1;
+        }
+        .studio-composer .composer-inline-mention--image {
+          width: var(--studio-composer-chip-size, 28px);
+          height: var(--studio-composer-chip-size, 28px);
+          margin: 0;
+          margin-top: calc(
+            (var(--studio-composer-line-size) - var(--studio-composer-chip-size)) / 2 -
+            var(--studio-composer-chip-lift, 2px)
+          );
+          vertical-align: top;
+        }
+        .studio-composer .composer-inline-mention--with-icon .composer-inline-mention-icon {
+          width: var(--studio-composer-chip-icon-size, 9px);
+          height: var(--studio-composer-chip-icon-size, 9px);
+        }
+        .studio-composer .composer-inline-mention--with-icon .composer-inline-mention-icon svg {
+          width: var(--studio-composer-chip-icon-size, 9px);
+          height: var(--studio-composer-chip-icon-size, 9px);
         }
         .studio-composer .cursor-composer-mention-editor::selection,
         .studio-composer .cursor-composer-mention-editor *::selection {
@@ -3486,7 +4136,7 @@ export function StudioShell() {
           position: absolute;
           z-index: 4;
           width: 2px;
-          min-height: 20px;
+          min-height: var(--studio-composer-line-size, 28px);
           border-radius: 999px;
           background: var(--cursor-accent);
           box-shadow:
@@ -3501,12 +4151,12 @@ export function StudioShell() {
         }
         .studio-inline-tag {
           display: inline-flex;
-          height: var(--studio-composer-chip-size, 20px);
+          height: var(--studio-composer-chip-size, 28px);
           max-width: min(220px, 48vw);
           align-items: center;
-          align-self: center;
+          align-self: auto;
           gap: 3px;
-          margin: 1px 4px 1px 0;
+          margin: 0 4px 0 0;
           vertical-align: middle;
           border-radius: var(--cursor-radius-pill);
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
@@ -3515,32 +4165,41 @@ export function StudioShell() {
             color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-hover));
           padding: 0 6px;
           color: var(--color-cursor-text-bright);
-          font-size: var(--studio-composer-chip-font-size, 11px);
-          line-height: var(--studio-composer-chip-size, 20px);
+          font-size: var(--studio-composer-chip-font-size, 13px);
+          line-height: 1;
           white-space: nowrap;
           cursor: grab;
           user-select: none;
           -webkit-user-select: none;
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 14%, transparent),
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 7%, transparent);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
         }
         .studio-inline-tag.is-dragging {
-          opacity: 0.45;
+          opacity: 0.55;
           cursor: grabbing;
-          border-color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-border-soft));
+          border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 14%, transparent),
-            0 0 18px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+            0 12px 28px color-mix(in srgb, #000 28%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        }
+        .studio-composer .studio-inline-tag.is-selection-highlighted {
+          border-color: transparent !important;
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        .studio-composer .studio-inline-tag.is-selection-highlighted::selection,
+        .studio-composer .studio-inline-tag.is-selection-highlighted *::selection {
+          background: transparent;
+          color: inherit;
+          text-shadow: none;
         }
         .studio-inline-tag.is-selection-highlighted {
-          border-color: color-mix(in srgb, var(--cursor-accent) 78%, var(--color-cursor-border-soft));
+          border-color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-border-soft));
           background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 48%, transparent), transparent 74%),
-            color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-hover));
+            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 44%, transparent), transparent 74%),
+            color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-hover));
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text-bright) 18%, transparent),
-            0 0 12px color-mix(in srgb, var(--cursor-accent) 24%, transparent);
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 36%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text-bright) 14%, transparent);
         }
         .studio-inline-tag::selection,
         .studio-inline-tag *::selection {
@@ -3548,14 +4207,29 @@ export function StudioShell() {
           color: var(--color-cursor-text-bright);
           text-shadow: none;
         }
+        .studio-composer .studio-inline-tag-label,
+        .studio-composer .composer-inline-mention-label {
+          display: inline-flex;
+          align-items: center;
+          height: 100%;
+          line-height: 1;
+        }
+        .studio-composer .studio-inline-tag-kind {
+          height: var(--studio-composer-chip-media-size, 18px);
+          line-height: 0;
+        }
         .studio-inline-tag-label {
           display: inline-flex;
           align-items: center;
           min-width: 0;
-          height: auto;
+          height: 100%;
           overflow: hidden;
           text-overflow: ellipsis;
-          line-height: inherit;
+          line-height: 1;
+        }
+        .studio-composer .studio-inline-tag--preview {
+          padding-left: 0;
+          gap: 2px;
         }
         .studio-inline-tag--preview {
           height: var(--studio-composer-chip-size, 20px);
@@ -3563,68 +4237,82 @@ export function StudioShell() {
         }
         .studio-inline-tag--image-only {
           position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
           width: var(--studio-composer-chip-size, 20px);
           min-width: var(--studio-composer-chip-size, 20px);
           max-width: var(--studio-composer-chip-size, 20px);
+          height: var(--studio-composer-chip-size, 20px);
           padding: 0;
           border-radius: 999px;
           gap: 0;
         }
+        .studio-inline-tag--image-only.studio-inline-tag--preview {
+          padding: 0;
+        }
         .studio-inline-tag-media {
-          width: 18px;
-          height: 18px;
+          width: var(--studio-composer-chip-media-size, 18px);
+          height: var(--studio-composer-chip-media-size, 18px);
           border-radius: 999px;
           object-fit: cover;
           flex-shrink: 0;
           background: var(--cursor-overlay-subtle);
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 32%, transparent),
-            0 1px 3px color-mix(in srgb, #000 38%, transparent);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
         }
         .studio-inline-tag-kind {
           position: relative;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 11px;
-          height: 100%;
-          color: color-mix(in srgb, var(--cursor-accent) 74%, var(--color-cursor-text-bright));
+          width: var(--studio-composer-chip-icon-size, 9px);
+          height: var(--studio-composer-chip-media-size, 18px);
           flex-shrink: 0;
-          line-height: 1;
+          color: color-mix(in srgb, var(--cursor-accent) 74%, var(--color-cursor-text-bright));
+          line-height: 0;
         }
         .studio-inline-tag--image-only .studio-inline-tag-kind {
-          width: 100%;
-          height: 100%;
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: auto;
+          height: auto;
         }
         .studio-inline-tag--image-only .studio-inline-tag-media {
           width: 100%;
           height: 100%;
+          border-radius: 999px;
           box-shadow: none;
         }
         .studio-inline-tag-kind svg {
           display: block;
-          width: 11px;
-          height: 11px;
+          width: var(--studio-composer-chip-icon-size, 9px);
+          height: var(--studio-composer-chip-icon-size, 9px);
           stroke-width: 2.25;
         }
-        .studio-inline-tag-overlay {
+        .studio-inline-tag--image-only .studio-inline-tag-overlay {
           position: absolute;
-          right: -2px;
-          bottom: -2px;
-          display: inline-flex;
+          inset: 0;
+          z-index: 1;
+          display: flex;
           align-items: center;
           justify-content: center;
-          width: 11px;
-          height: 11px;
-          color: #fff;
+          color: rgba(255, 255, 255, 0.78);
           pointer-events: none;
-          filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+          background: transparent;
+          border-radius: 999px;
         }
         .studio-inline-tag-overlay svg {
           display: block;
-          width: 10px;
-          height: 10px;
-          stroke-width: 2.5;
+          flex: 0 0 auto;
+          width: 11px;
+          height: 11px;
+          opacity: 0.82;
+          stroke-width: 2.35;
+          filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.42));
         }
         .studio-chip-preview-card {
           position: fixed;
@@ -3656,18 +4344,21 @@ export function StudioShell() {
           height: 100%;
           object-fit: cover;
         }
-        .studio-chip-preview-play {
+        .studio-chip-preview-kind {
           position: absolute;
-          inset: 50% auto auto 50%;
-          display: inline-grid;
-          width: 34px;
-          height: 34px;
+          inset: 0;
+          display: grid;
           place-items: center;
-          border-radius: 999px;
-          color: white;
-          background: color-mix(in srgb, #000 46%, transparent);
-          transform: translate(-50%, -50%);
-          box-shadow: 0 8px 24px color-mix(in srgb, #000 44%, transparent);
+          color: rgba(255, 255, 255, 0.78);
+          pointer-events: none;
+          background: transparent;
+        }
+        .studio-chip-preview-kind svg {
+          width: 22px;
+          height: 22px;
+          opacity: 0.82;
+          stroke-width: 2.1;
+          filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.42));
         }
         .studio-chip-preview-label {
           overflow: hidden;
@@ -3684,20 +4375,18 @@ export function StudioShell() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .studio-composer-preview-dock {
-          width: min(420px, max(220px, calc(100% - 292px)));
+          width: min(520px, max(220px, calc(100% - 292px)));
           max-height: min(34vh, 260px);
           display: flex;
           flex-direction: column;
           margin: 0 auto 8px;
           overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, var(--color-cursor-border-soft));
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: var(--cursor-composer-radius);
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 6%, transparent), transparent 62%),
-            color-mix(in srgb, var(--mos-surface) 88%, var(--mos-bg));
-          box-shadow:
-            0 10px 34px color-mix(in srgb, #000 28%, transparent),
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 6%, transparent);
+          background: var(--studio-composer-glass-strong);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          box-shadow: var(--studio-composer-glass-shadow);
           pointer-events: auto;
         }
         .studio-composer-preview-head {
@@ -3758,7 +4447,7 @@ export function StudioShell() {
           align-items: center;
           justify-content: space-between;
           flex-wrap: nowrap;
-          gap: 8px;
+          gap: 6px;
           margin-top: auto;
           padding: 3px 8px 7px;
           min-width: 0;
@@ -3766,8 +4455,9 @@ export function StudioShell() {
         .studio-composer-controls {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
           min-width: 0;
+          flex: 1 1 auto;
           overflow: visible;
           scrollbar-width: none;
         }
@@ -3790,11 +4480,14 @@ export function StudioShell() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          height: 30px;
           min-height: 30px;
           padding: 0 8px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 84%, transparent);
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: var(--cursor-radius-pill);
-          background: color-mix(in srgb, var(--mos-surface) 56%, transparent);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           flex: 0 0 auto;
         }
         .studio-inline-audio-label {
@@ -3808,13 +4501,16 @@ export function StudioShell() {
         }
         .studio-inline-setting-trigger {
           display: inline-flex;
+          height: 30px;
           min-height: 30px;
-          max-width: 156px;
+          max-width: 148px;
           align-items: center;
           gap: 5px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 84%, transparent);
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: var(--cursor-radius-pill);
-          background: color-mix(in srgb, var(--mos-surface) 56%, transparent);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           padding: 0 8px;
           color: var(--color-cursor-text);
           font-size: 11px;
@@ -3830,8 +4526,8 @@ export function StudioShell() {
         .studio-inline-setting-trigger:hover,
         .studio-inline-setting-trigger[aria-expanded="true"] {
           border-color: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent-dim) 32%, var(--color-cursor-hover));
-          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent-dim) 28%, var(--studio-composer-glass) 72%);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
         }
         .studio-inline-setting-trigger svg {
           flex: 0 0 auto;
@@ -3854,6 +4550,20 @@ export function StudioShell() {
           gap: 6px;
           flex-shrink: 0;
           margin-left: auto;
+        }
+        .studio-composer .studio-pill-btn {
+          height: 30px;
+          min-height: 30px;
+          border: 1px solid var(--studio-composer-glass-border);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+        }
+        .studio-composer .studio-pill-btn:hover,
+        .studio-composer .studio-pill-btn[aria-expanded="true"] {
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-pill-btn {
           position: relative;
@@ -3932,10 +4642,10 @@ export function StudioShell() {
           flex: 0 0 auto;
         }
         .studio-settings-trigger {
-          width: 30px;
-          min-width: 30px;
-          height: 30px;
-          min-height: 30px;
+          width: 24px;
+          min-width: 24px;
+          height: 24px;
+          min-height: 24px;
           justify-content: center;
           border-radius: 9999px;
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border));
@@ -3947,6 +4657,21 @@ export function StudioShell() {
             0 8px 20px color-mix(in srgb, #000 24%, transparent),
             0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
           padding: 0;
+        }
+        .studio-settings-trigger svg {
+          width: 12px;
+          height: 12px;
+        }
+        .studio-polish :where(.cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) .studio-credit-pill {
+          min-height: 24px;
+          height: 24px;
+          padding: 0 8px;
+          font-size: 11px;
+          line-height: 1;
+        }
+        .studio-polish :where(.cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) .studio-credit-pill svg {
+          width: 12px;
+          height: 12px;
         }
         .studio-settings-trigger:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--color-cursor-border));
@@ -3974,6 +4699,23 @@ export function StudioShell() {
           width: 30px;
           min-width: 30px;
           border-radius: var(--cursor-radius-pill);
+        }
+        .studio-composer .studio-settings-menu,
+        .studio-inline-settings-menu.is-fixed,
+        .studio-add-menu.is-fixed,
+        .studio-dropdown-menu.is-fixed {
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11)) !important;
+          background: var(
+            --studio-composer-glass-strong,
+            color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent)
+          ) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          box-shadow: var(
+            --studio-composer-glass-shadow,
+            0 20px 48px rgba(0, 0, 0, 0.38),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08)
+          ) !important;
         }
         .studio-settings-menu {
           width: 336px;
@@ -4090,8 +4832,8 @@ export function StudioShell() {
           height: 10px;
         }
         .studio-composer-settings-dock {
-          width: min(420px, max(220px, calc(100% - 292px))) !important;
-          max-width: min(420px, calc(100vw - 24px)) !important;
+          width: min(520px, max(220px, calc(100% - 292px))) !important;
+          max-width: min(520px, calc(100vw - 24px)) !important;
           margin: 0 auto 8px;
           pointer-events: auto;
           overflow: visible;
@@ -4546,81 +5288,147 @@ export function StudioShell() {
           isolation: auto;
           display: flex;
           align-self: stretch;
-          align-items: flex-end;
-          flex: 0 0 118px;
-          min-height: 96px;
+          align-items: stretch;
+          flex: 0 0 auto;
+          width: auto;
+          min-height: 0;
         }
         .studio-generate-btn {
           display: inline-flex;
-          width: 100%;
-          min-width: 0;
-          min-height: 100%;
+          height: 100%;
+          width: auto;
+          min-height: 0;
+          max-height: 100%;
+          aspect-ratio: 1 / 1;
+          flex: 0 0 auto;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 3px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
-          border-radius: 16px;
+          padding: 6px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 48%, #000 8%);
+          border-radius: 14px;
           background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--mos-text-bright) 22%, transparent), transparent 42%),
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 24%, transparent), transparent 44%),
             linear-gradient(
               180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 86%, var(--mos-text-bright) 14%),
-              var(--cursor-accent)
+              color-mix(in srgb, var(--cursor-accent-hover) 82%, #fff 10%),
+              color-mix(in srgb, var(--cursor-accent) 78%, #000 18%)
             );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 28%, transparent),
-            inset 0 -12px 20px color-mix(in srgb, var(--mos-bg) 12%, transparent),
-            0 16px 36px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-            0 0 22px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
-          color: var(--mos-bg);
+            inset 0 1px 0 color-mix(in srgb, #fff 36%, transparent),
+            0 6px 16px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+          color: #ffffff;
           cursor: pointer;
           text-align: center;
+          overflow: hidden;
           transition:
             filter var(--studio-motion-fast) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-spring),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease);
         }
+        [data-appearance="light"] .studio-polish .studio-generate-btn:not(:disabled) {
+          border-color: color-mix(in srgb, var(--cursor-accent) 62%, #000 10%);
+          background:
+            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.38), transparent 44%),
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--cursor-accent-hover) 88%, #ffffff 6%),
+              color-mix(in srgb, var(--cursor-accent) 82%, #000 22%)
+            );
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.48),
+            0 8px 20px color-mix(in srgb, var(--cursor-accent) 40%, transparent);
+          color: #ffffff;
+        }
         .studio-generate-btn:hover:not(:disabled) {
           transform: scale(var(--studio-hover-scale));
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 34%, transparent),
-            inset 0 -12px 20px color-mix(in srgb, var(--mos-bg) 14%, transparent),
-            0 0 28px color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+            inset 0 1px 0 color-mix(in srgb, #fff 44%, transparent),
+            0 8px 20px color-mix(in srgb, var(--cursor-accent) 34%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-generate-btn:hover:not(:disabled) {
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.56),
+            0 10px 24px color-mix(in srgb, var(--cursor-accent) 46%, transparent);
         }
         .studio-generate-btn:active:not(:disabled) {
           transform: scale(var(--studio-press-scale));
         }
         .studio-generate-btn:disabled {
           cursor: not-allowed;
+          border-color: var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-text) 5%, var(--studio-composer-glass-muted));
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+          color: var(--color-cursor-muted);
+        }
+        [data-appearance="light"] .studio-polish .studio-generate-btn:disabled {
+          border-color: var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-text) 7%, var(--mos-panel));
+          color: color-mix(in srgb, var(--mos-text) 46%, var(--mos-muted));
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
         }
         .studio-generate-btn:disabled .studio-generate-label,
         .studio-generate-btn:disabled .studio-generate-cost {
-          opacity: 0.5;
+          opacity: 1;
+          color: inherit;
+          text-shadow: none;
         }
         .studio-generate-label {
           font-size: 12px;
-          font-weight: 650;
-          line-height: 1;
+          font-weight: 700;
+          line-height: 1.1;
           letter-spacing: -0.01em;
+          max-width: 100%;
+          text-wrap: balance;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+          hyphens: auto;
+          color: inherit;
+          text-shadow: 0 1px 2px color-mix(in srgb, #000 42%, transparent);
+        }
+        .studio-generate-btn.is-element-mode .studio-generate-label {
+          font-size: 10px;
+          line-height: 1.08;
+          letter-spacing: 0;
+          text-wrap: pretty;
         }
         .studio-generate-cost {
           display: inline-flex;
           align-items: center;
-          gap: 4px;
-          font-size: 10px;
+          gap: 3px;
+          font-size: 9px;
           font-weight: 650;
           line-height: 1;
+          color: color-mix(in srgb, #ffffff 94%, transparent);
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 32%, transparent);
         }
         .studio-generate-mark {
           width: 11px;
           height: 11px;
           object-fit: contain;
-          filter: drop-shadow(0 0 5px color-mix(in srgb, var(--mos-bg) 24%, transparent));
+          color: inherit;
+          opacity: 0.95;
+          filter: none;
         }
         @media (max-width: 640px) {
           .studio-composer .cursor-composer {
             max-width: 100%;
+            padding-inline: 8px;
+            left: 0;
+          }
+          .studio-chat-composer-align {
+            grid-template-columns: minmax(0, 1fr);
+            max-width: 100%;
+            left: 0;
+            padding-inline: 0;
+          }
+          .studio-chat-composer-gutter {
+            display: none;
+          }
+          .studio-chat-stream {
             padding-inline: 8px;
           }
           .studio-composer-row {
@@ -4628,16 +5436,24 @@ export function StudioShell() {
             gap: 6px;
           }
           .studio-mode-switcher {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             grid-template-rows: none;
             width: 100%;
-            min-height: 44px;
+            min-height: 40px;
             flex: 0 0 auto;
           }
           .studio-generate-column {
             flex: 0 0 auto;
-            min-height: 52px;
+            min-height: 0;
+            width: auto;
+          }
+          .studio-generate-btn {
             width: 100%;
+            height: auto;
+            min-height: 52px;
+            aspect-ratio: 1 / 1;
+            max-width: 52px;
+            margin-left: auto;
           }
           .studio-composer .cursor-composer-box {
             align-self: auto;
@@ -4645,9 +5461,11 @@ export function StudioShell() {
             min-height: 112px;
           }
           .studio-mode-row {
-            min-height: 34px;
+            flex-direction: row;
+            min-height: 32px;
             justify-content: center;
-            padding: 0 7px;
+            padding: 0 6px;
+            font-size: 10px;
           }
         }
         .studio-pricing-grid,
@@ -5142,6 +5960,125 @@ export function StudioShell() {
         .studio-upload-popover {
           min-width: 190px;
         }
+        .studio-element-picker {
+          min-width: 268px;
+          max-width: 300px;
+        }
+        .studio-element-picker-list {
+          max-height: 220px;
+          overflow: auto;
+        }
+        .studio-element-create-types {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 6px;
+        }
+        .studio-element-create-type-btn {
+          display: grid;
+          place-items: center;
+          gap: 4px;
+          min-height: 52px;
+          border-radius: 12px;
+          border: 1px solid var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 600;
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-element-create-type-btn.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-element-create-name {
+          margin-top: 10px;
+          width: 100%;
+          height: 34px;
+          border-radius: 10px;
+          border: 1px solid var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          padding: 0 10px;
+          color: var(--color-cursor-text);
+          font-size: 12px;
+          outline: none;
+        }
+        .studio-element-create-name:focus {
+          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--color-cursor-border-soft));
+        }
+        .studio-element-create-media {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 10px;
+          min-height: 40px;
+          align-items: center;
+        }
+        .studio-element-create-thumb {
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--mos-bg) 50%, transparent) center/cover no-repeat;
+          border: 1px solid var(--color-cursor-border-soft);
+        }
+        .studio-element-create-upload {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 40px;
+          height: 40px;
+          border-radius: 10px;
+          border: 1px dashed var(--color-cursor-border-soft);
+          color: var(--color-cursor-muted);
+          background: transparent;
+        }
+        .studio-element-create-upload:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 44%, var(--color-cursor-border-soft));
+          color: var(--color-cursor-text);
+        }
+        .studio-element-create-sheet {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin-top: 10px;
+          font-size: 11px;
+          line-height: 1.35;
+          color: var(--color-cursor-muted);
+        }
+        .studio-element-create-sheet input {
+          margin-top: 2px;
+          accent-color: var(--cursor-accent);
+        }
+        .studio-element-create-actions {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        .studio-element-create-submit {
+          flex: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          min-height: 34px;
+          border-radius: 10px;
+          border: none;
+          background: var(--cursor-accent);
+          color: #000;
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-element-create-submit:disabled {
+          opacity: 0.45;
+        }
+        .studio-element-picker-footer {
+          margin-top: 6px;
+          padding-top: 6px;
+          border-top: 1px solid var(--color-cursor-border-soft);
+        }
         .studio-upload-hint {
           padding: 6px 8px 4px;
           color: var(--color-cursor-muted);
@@ -5184,30 +6121,42 @@ export function StudioShell() {
           position: relative;
           display: grid;
           place-items: center;
-          width: 132px;
-          height: 132px;
+          width: 148px;
+          height: 148px;
           margin: 0 auto;
         }
         .studio-empty-logo::before {
           content: "";
           position: absolute;
-          inset: -8px;
-          z-index: 0;
+          top: 72%;
+          left: 50%;
+          z-index: -1;
+          width: 78%;
+          height: 28%;
           border-radius: 999px;
-          background:
-            radial-gradient(circle, color-mix(in srgb, #000 88%, transparent) 0 34%, transparent 74%),
-            radial-gradient(circle, color-mix(in srgb, #000 54%, transparent) 0 48%, transparent 82%);
-          box-shadow:
-            0 34px 86px color-mix(in srgb, #000 72%, transparent),
-            0 10px 46px color-mix(in srgb, #000 52%, transparent);
+          pointer-events: none;
+          transform: translateX(-50%);
+          background: radial-gradient(
+            ellipse at 50% 50%,
+            color-mix(in srgb, #000 58%, transparent) 0%,
+            color-mix(in srgb, #000 28%, transparent) 42%,
+            transparent 72%
+          );
           filter: blur(18px);
-          animation: studio-logo-breathe 3.8s ease-in-out infinite;
+          opacity: 0.88;
         }
         [data-appearance="light"] .studio-empty-logo::before {
-          background:
-            radial-gradient(circle, color-mix(in srgb, #000 18%, transparent) 0 34%, transparent 70%),
-            radial-gradient(circle, color-mix(in srgb, var(--cursor-accent) 16%, transparent), transparent 72%);
-          box-shadow: 0 18px 42px color-mix(in srgb, #000 16%, transparent);
+          background: radial-gradient(
+            ellipse at 50% 50%,
+            color-mix(in srgb, #000 24%, transparent) 0%,
+            color-mix(in srgb, #000 10%, transparent) 44%,
+            transparent 72%
+          );
+          opacity: 0.72;
+        }
+        [data-appearance="light"] .studio-empty-logo img {
+          filter: none;
+          opacity: 0.68;
         }
         .studio-empty-logo img {
           position: relative;
@@ -5215,9 +6164,9 @@ export function StudioShell() {
           width: 104px;
           height: 104px;
           object-fit: contain;
-          filter:
-            drop-shadow(0 20px 34px color-mix(in srgb, #000 58%, transparent))
-            drop-shadow(0 6px 16px color-mix(in srgb, #000 42%, transparent));
+          transform: translate(-2px, 5px);
+          opacity: 0.76;
+          filter: drop-shadow(0 10px 20px color-mix(in srgb, #000 18%, transparent));
         }
         .studio-polish .cursor-chat-empty.thread-empty.cursor-chat-empty-logo-only {
           position: relative;
@@ -5370,19 +6319,15 @@ export function StudioShell() {
           line-height: 1.5;
         }
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::before,
-        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::after,
-        [data-studio-bg-pack="space"] .studio-polish .studio-empty-hero::before,
-        [data-studio-bg-pack="space"] .studio-polish .studio-empty-hero::after {
+        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::after {
           display: none;
         }
-        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-copy,
-        [data-studio-bg-pack="space"] .studio-polish .studio-empty-copy {
+        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-copy {
           border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           background: color-mix(in srgb, #000 16%, transparent);
           box-shadow: none;
         }
-        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-chips span,
-        [data-studio-bg-pack="space"] .studio-polish .studio-empty-chips span {
+        [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-chips span {
           border-color: color-mix(in srgb, var(--mos-text-bright) 10%, transparent);
           background: color-mix(in srgb, #000 10%, transparent);
         }
@@ -5477,6 +6422,7 @@ export function StudioShell() {
           font-weight: 700;
         }
         .studio-chat-render-area {
+          position: relative;
           display: flex;
           height: 100%;
           min-height: 0;
@@ -5685,14 +6631,31 @@ export function StudioShell() {
           flex: 1;
           overflow-y: auto;
           scrollbar-gutter: stable;
-          padding: 18px 18px calc(180px + env(safe-area-inset-bottom, 0px));
+          padding: 18px 10px calc(180px + env(safe-area-inset-bottom, 0px));
           scroll-padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+        }
+        .studio-chat-composer-align {
+          display: grid;
+          grid-template-columns:
+            var(--studio-mode-switcher-width)
+            minmax(0, 1fr)
+            var(--studio-generate-column-width);
+          gap: var(--studio-composer-row-gap);
+          width: 100%;
+          max-width: min(var(--studio-composer-shell-max), calc(100% - 24px));
+          min-height: 100%;
+          margin: 0 auto;
+          position: relative;
+          left: -5px;
+          box-sizing: border-box;
+        }
+        .studio-chat-composer-gutter {
+          pointer-events: none;
         }
         .studio-chat-stream-inner {
           display: flex;
-          max-width: min(640px, calc(100% - 24px));
+          min-width: 0;
           min-height: 100%;
-          margin: 0 auto;
           flex-direction: column;
           justify-content: flex-end;
           gap: 12px;
@@ -5701,55 +6664,41 @@ export function StudioShell() {
           justify-content: center;
         }
         .studio-chat-empty-state {
-          flex: 1;
+          position: absolute;
+          inset: 0;
+          z-index: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 100%;
-          min-height: min(68vh, 640px);
-          padding: 24px 16px 32px;
-          text-align: center;
-        }
-        .studio-chat-empty-state .studio-empty-hero {
-          gap: 18px;
+          padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+          pointer-events: none;
         }
         .studio-chat-empty-state .studio-empty-logo {
-          margin: 0 auto;
-        }
-        .studio-chat-empty-state .studio-empty-copy {
-          margin-top: 0;
-        }
-        .studio-chat-empty-state .studio-empty-copy h1 {
-          font-size: clamp(20px, 3.4vw, 28px);
+          transform: translateY(16px);
         }
         .studio-chat-bubble {
           position: relative;
           max-width: 100%;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
-          background: transparent;
+          background: var(--studio-composer-glass);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           overflow: hidden;
           padding: 12px 14px;
-          box-shadow:
-            inset 0 0 16px -6px rgb(255 255 255 / 0.24),
-            0 18px 44px rgb(0 0 0 / 0.32);
+          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-bubble.is-user {
-          border-color: rgb(255 255 255 / 0.15);
-          background: transparent;
-          box-shadow:
-            inset 0 0 16px -6px rgb(255 255 255 / 0.28),
-            0 18px 44px rgb(0 0 0 / 0.32);
+          background: var(--studio-composer-glass-strong);
         }
         .studio-chat-bubble.is-result {
+          background: var(--studio-composer-glass-strong);
           box-shadow:
-            inset 0 0 24px -2px rgb(255 255 255 / 0.42),
-            0 28px 64px rgb(0 0 0 / 0.65);
+            var(--studio-composer-glass-shadow),
+            0 0 24px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-chat-bubble.is-system {
-          box-shadow:
-            inset 0 0 20px -4px rgb(255 255 255 / 0.35),
-            0 28px 64px rgb(0 0 0 / 0.55);
+          background: var(--studio-composer-glass-muted);
         }
 
         .studio-chat-kicker {
@@ -5798,10 +6747,12 @@ export function StudioShell() {
           align-items: center;
           gap: 5px;
           padding: 4px 8px 4px 6px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-border-soft));
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-composer-glass-border));
           border-radius: 999px;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
-          color: var(--color-cursor-text-bright);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          color: var(--color-cursor-text);
           font-size: 11px;
           font-weight: 650;
           line-height: 1.2;
@@ -6117,7 +7068,7 @@ export function StudioShell() {
         <PanelResizeHandle className="cursor-resize" />
         <Panel defaultSize={76} minSize={42}>
 
-      <main className={`${STYLE.main}${activeTab.startsWith("composer:") ? " studio-composer-bg" : ""}`}>
+      <main className={`${STYLE.main}${activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? " studio-composer-bg" : ""}`}>
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
           <UnifiedTabStrip
             tabs={tabs}
@@ -6160,13 +7111,13 @@ export function StudioShell() {
             assets={assetsWithPreviewUrls ?? []}
             events={events}
             threads={threads ?? []}
-            selectedThreadId={activeThreadId}
-            onSelectThread={setSelectedThreadId}
+            activeThreadId={activeThreadId}
             onAttach={attachEntry}
             onDuplicate={duplicateEntry}
             onRename={renameEntry}
             onTrash={trashEntry}
             onElementUpdate={updateElementDetails}
+            onBuildElementSheet={buildElementSheet}
             onDocumentChange={(entry, contentMarkdown) => {
               void updateDocument({ documentId: entry.studioId, contentMarkdown });
             }}
@@ -6189,6 +7140,7 @@ export function StudioShell() {
             onGeneratePresetThumbnails={() => generatePresetThumbnails({ force: true })}
             onCreateItem={(values) => createStudioItem(values)}
             onUploadElementFiles={(files) => uploadElementFiles(files)}
+            onOpenElementCreate={openElementCreateInComposer}
             onCloseTab={closeTab}
           />
         </section>
@@ -6211,6 +7163,8 @@ export function StudioShell() {
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
+            elementType={elementType}
+            setElementType={setElementType}
             presets={presets}
             selectedStylePreset={selectedStylePreset}
             onSelectStylePreset={setSelectedStylePresetId}
@@ -6221,10 +7175,8 @@ export function StudioShell() {
             pricing={pricing}
             disabled={flowPending}
             status={status}
-            elements={composerElementEntries}
             onSubmit={handleSubmit}
             onDropEntry={(entry, range) => attachEntry(entry, range)}
-            onAttachElement={(entry) => attachEntry(entry)}
             onUploadFiles={(files) => uploadComposerFiles(files)}
             uploadInputRef={composerUploadInputRef}
           />
@@ -6343,6 +7295,8 @@ function StudioComposer({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  elementType,
+  setElementType,
   presets,
   selectedStylePreset,
   onSelectStylePreset,
@@ -6353,10 +7307,8 @@ function StudioComposer({
   pricing,
   disabled,
   status,
-  elements,
   onSubmit,
   onDropEntry,
-  onAttachElement,
   onUploadFiles,
   uploadInputRef,
 }) {
@@ -6364,7 +7316,6 @@ function StudioComposer({
   const [transcribing, setTranscribing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
-  const [elementMenuOpen, setElementMenuOpen] = useState(false);
   const [voiceError, setVoiceError] = useState("");
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
@@ -6372,6 +7323,28 @@ function StudioComposer({
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const inputLineRef = useRef(null);
+  const isElementMode = mode === "element";
+  const elementReferenceCounts = useMemo(() => {
+    const media = attachments.filter(
+      (attachment) =>
+        attachment.studioKind === "asset" &&
+        (attachment.kind === "image" ||
+          attachment.kind === "video" ||
+          attachment.kind === "audio"),
+    );
+    return {
+      image: media.filter((attachment) => attachment.kind === "image").length,
+      video: media.filter((attachment) => attachment.kind === "video").length,
+      audio: media.filter((attachment) => attachment.kind === "audio").length,
+    };
+  }, [attachments]);
+
+  useEffect(() => {
+    if (mode !== "element") {
+      setPresetGridOpen(false);
+    }
+  }, [mode]);
+
   const cost = composerCreditCost({
     mode,
     resolution,
@@ -6382,6 +7355,8 @@ function StudioComposer({
     hasNonVideoReferenceInput,
     audioEnabled,
     referenceInputs: generationReferences,
+    elementType,
+    elementReferenceCounts,
   });
 
   useEffect(() => {
@@ -6552,6 +7527,8 @@ function StudioComposer({
           const range = rangeFromPointInEditor(editorRef.current, event.clientX, event.clientY);
           if (range) setSelectionToRange(range);
           onDropEntry(entry, range);
+        } else if (event.dataTransfer?.files?.length) {
+          void onUploadFiles(event.dataTransfer.files);
         }
       }}
     >
@@ -6562,7 +7539,11 @@ function StudioComposer({
           onClose={() => setPreviewAttachment(null)}
         />
       ) : null}
-      {presetGridOpen ? (
+      <div className="cursor-composer">
+        <div className="studio-composer-row">
+          <StudioModeSwitcher mode={mode} setMode={setMode} />
+          <div className={`cursor-composer-box${presetGridOpen && !isElementMode ? " is-preset-open" : ""} ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
+      {presetGridOpen && !isElementMode ? (
         <StudioPresetGridPanel
           presets={presets}
           selectedPresetId={selectedStylePreset?._id}
@@ -6573,125 +7554,134 @@ function StudioComposer({
           onClose={() => setPresetGridOpen(false)}
         />
       ) : null}
-      <div className="cursor-composer">
-        <div className="studio-composer-row">
-          <StudioModeSwitcher mode={mode} setMode={setMode} />
-          <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
-        <div
-          className="studio-composer-inputline"
-          ref={inputLineRef}
-          onMouseDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            event.preventDefault();
-            focusComposerEditorEnd(editorRef.current);
-          }}
-        >
-          {dropMarker ? (
-            <span className="studio-composer-drop-caret" style={{ left: dropMarker.left, top: dropMarker.top, height: dropMarker.height }} />
-          ) : null}
-          {selectionHighlights.length ? (
-            <div className="studio-composer-selection-layer" aria-hidden="true">
-              {selectionHighlights.map((rect, index) => (
-                <span
-                  key={`${index}-${rect.left}-${rect.top}-${rect.width}-${rect.height}`}
-                  className="studio-composer-selection-pill"
-                  style={{
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                  }}
-                />
-              ))}
-            </div>
-          ) : null}
-          <div
-            ref={editorRef}
-            role="textbox"
-            aria-multiline="true"
-            contentEditable
-            suppressContentEditableWarning
-            data-placeholder="Describe the video, ad, or post you want"
-            className="cursor-composer-textarea cursor-composer-mention-editor"
-            onInput={(event) => setDraft(readComposerEditorText(event.currentTarget))}
-            onKeyDown={(event) => {
-              if (
-                (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
-                moveCaretAcrossComposerToken(editorRef.current, event.key === "ArrowLeft" ? "left" : "right")
-              ) {
-                event.preventDefault();
-                return;
-              }
-              if (event.key === "Backspace" && removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
-                event.preventDefault();
-                setDraft(readComposerEditorText(editorRef.current));
-                return;
-              }
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void onSubmit();
-              }
-            }}
-          />
-        </div>
-        <div className="studio-composer-toolbar">
-          <div className="studio-composer-controls">
-            <StudioPresetTriggerButton
-              preset={selectedStylePreset}
-              open={presetGridOpen}
-              onClick={() => setPresetGridOpen((open) => !open)}
-            />
-            <StudioUploadMenu
-              open={uploadMenuOpen}
-              setOpen={setUploadMenuOpen}
-              inputRef={uploadInputRef}
-            />
-            <StudioElementPicker
-              open={elementMenuOpen}
-              setOpen={setElementMenuOpen}
-              elements={elements}
-              onPick={onAttachElement}
-            />
-            {mode !== "script" ? (
-              <StudioComposerInlineSettings
-                mode={mode}
-                aspectRatio={aspectRatio}
-                setAspectRatio={setAspectRatio}
-                imageResolution={imageResolution}
-                setImageResolution={setImageResolution}
-                resolution={resolution}
-                setResolution={setResolution}
-                durationSeconds={durationSeconds}
-                setDurationSeconds={setDurationSeconds}
-                audioEnabled={audioEnabled}
-                setAudioEnabled={setAudioEnabled}
+      <div
+        className="studio-composer-inputline"
+        ref={inputLineRef}
+        onMouseDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          event.preventDefault();
+          focusComposerEditorEnd(editorRef.current);
+        }}
+      >
+        {dropMarker ? (
+          <span className="studio-composer-drop-caret" style={{ left: dropMarker.left, top: dropMarker.top, height: dropMarker.height }} />
+        ) : null}
+        {selectionHighlights.length ? (
+          <div className="studio-composer-selection-layer" aria-hidden="true">
+            {selectionHighlights.map((rect, index) => (
+              <span
+                key={`${index}-${rect.left}-${rect.top}-${rect.width}-${rect.height}`}
+                className="studio-composer-selection-pill"
+                style={{
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  height: rect.height,
+                }}
               />
-            ) : null}
+            ))}
           </div>
-          <div className="studio-composer-actions">
-            <button
-              type="button"
-              className={`studio-pill-btn studio-settings-trigger cursor-composer-mic${recording ? " is-recording" : ""}`}
-              title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
-              onClick={() => void toggleVoice()}
-              disabled={transcribing}
-            >
-              {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
-            </button>
-          </div>
+        ) : null}
+        <div
+          ref={editorRef}
+          role="textbox"
+          aria-multiline="true"
+          contentEditable
+          suppressContentEditableWarning
+          data-placeholder={
+            isElementMode
+              ? `Name your ${elementTypeLabel(elementType).toLowerCase()} and drop reference media`
+              : "Describe the video, ad, or post you want"
+          }
+          className="cursor-composer-textarea cursor-composer-mention-editor"
+          onInput={(event) => setDraft(readComposerEditorText(event.currentTarget))}
+          onKeyDown={(event) => {
+            if (
+              (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+              moveCaretAcrossComposerToken(editorRef.current, event.key === "ArrowLeft" ? "left" : "right")
+            ) {
+              event.preventDefault();
+              return;
+            }
+            if (event.key === "Backspace" && removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
+              event.preventDefault();
+              setDraft(readComposerEditorText(editorRef.current));
+              return;
+            }
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void onSubmit();
+            }
+          }}
+        />
+      </div>
+      <div className="studio-composer-toolbar">
+        <div className="studio-composer-controls">
+          {isElementMode ? (
+            <>
+              <StudioElementTypePicker elementType={elementType} setElementType={setElementType} />
+              <StudioUploadMenu
+                open={uploadMenuOpen}
+                setOpen={setUploadMenuOpen}
+                inputRef={uploadInputRef}
+              />
+            </>
+          ) : (
+            <>
+              <StudioPresetTriggerButton
+                preset={selectedStylePreset}
+                open={presetGridOpen}
+                onClick={() => setPresetGridOpen((open) => !open)}
+              />
+              <StudioUploadMenu
+                open={uploadMenuOpen}
+                setOpen={setUploadMenuOpen}
+                inputRef={uploadInputRef}
+              />
+              {mode !== "script" ? (
+                <StudioComposerInlineSettings
+                  mode={mode}
+                  aspectRatio={aspectRatio}
+                  setAspectRatio={setAspectRatio}
+                  imageResolution={imageResolution}
+                  setImageResolution={setImageResolution}
+                  resolution={resolution}
+                  setResolution={setResolution}
+                  durationSeconds={durationSeconds}
+                  setDurationSeconds={setDurationSeconds}
+                  audioEnabled={audioEnabled}
+                  setAudioEnabled={setAudioEnabled}
+                />
+              ) : null}
+            </>
+          )}
         </div>
-        {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
-        {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
+        <div className="studio-composer-actions">
+          <button
+            type="button"
+            className={`studio-pill-btn studio-settings-trigger cursor-composer-mic${recording ? " is-recording" : ""}`}
+            title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
+            onClick={() => void toggleVoice()}
+            disabled={transcribing}
+          >
+            {transcribing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+      {status ? <p className="px-3 pb-2 text-xs text-red-300">{status}</p> : null}
+      {voiceError ? <p className="px-3 pb-2 text-xs text-red-300">{voiceError}</p> : null}
           </div>
           <div className="studio-generate-column">
             <button
               type="button"
               disabled={disabled || !draft.trim()}
               onClick={() => void onSubmit()}
-              className="studio-generate-btn"
-              title="Generate content"
+              className={`studio-generate-btn${isElementMode ? " is-element-mode" : ""}`}
+              title={isElementMode ? `Build ${elementSheetLabel(elementType)}` : "Generate content"}
             >
-              <span className="studio-generate-label">Generate</span>
+              <span className="studio-generate-label">
+                {isElementMode ? `Build ${elementSheetLabel(elementType)}` : "Generate"}
+              </span>
               <span className="studio-generate-cost">
                 <Coins className="studio-generate-mark" aria-hidden="true" />
                 {`${cost} Credits`}
@@ -6704,7 +7694,7 @@ function StudioComposer({
         className="sr-only"
         type="file"
         multiple
-        accept="image/*,video/*,.md,text/markdown"
+        accept="image/*,video/*,audio/*,.md,text/markdown"
         onChange={(event) => {
           void onUploadFiles(event.currentTarget.files);
           event.currentTarget.value = "";
@@ -6712,6 +7702,21 @@ function StudioComposer({
       />
       </div>
     </div>
+  );
+}
+
+function StudioElementTypePicker({ elementType, setElementType }) {
+  const active = ELEMENT_TYPE_OPTIONS.find((item) => item.value === elementType) ?? ELEMENT_TYPE_OPTIONS[0];
+  const ActiveIcon = active.icon;
+  return (
+    <StudioInlineSettingSelect
+      icon={ActiveIcon}
+      label="Element type"
+      value={elementType}
+      items={ELEMENT_TYPE_OPTIONS}
+      onChange={setElementType}
+      hideLabel
+    />
   );
 }
 
@@ -6731,11 +7736,9 @@ function StudioComposerChipPreview({ preview }) {
         ) : (
           <img src={attachment.thumbnailUrl} alt="" loading="lazy" />
         )}
-        {attachment.kind === "video" ? (
-          <span className="studio-chip-preview-play" aria-hidden="true">
-            <Video className="h-4 w-4" />
-          </span>
-        ) : null}
+        <span className="studio-chip-preview-kind" aria-hidden="true">
+          {attachment.kind === "video" ? <Video /> : <ImageIcon />}
+        </span>
       </div>
       <div className="studio-chip-preview-label">{label}</div>
     </div>
@@ -6783,6 +7786,7 @@ function StudioModeSwitcher({ mode, setMode }) {
     { value: "image", label: "Image", icon: ImageIcon },
     { value: "video", label: "Video", icon: Video },
     { value: "script", label: "Script", icon: FileText },
+    { value: "element", label: "Element", icon: Sparkles },
   ];
 
   return (
@@ -6812,10 +7816,11 @@ function StudioPresetTriggerButton({ preset, open, onClick }) {
   return (
     <button
       type="button"
-      className={`studio-preset-trigger${open ? " is-open" : ""}`}
+      className={`studio-pill-btn studio-preset-trigger${open ? " is-open" : ""}`}
       aria-expanded={open}
       aria-haspopup="listbox"
-      title="Choose a style preset"
+      aria-label={preset?.name ? `Style: ${preset.name}` : "Choose style"}
+      title={preset?.name ?? "Choose style"}
       onClick={onClick}
     >
       <span className="studio-preset-trigger-thumb">
@@ -6823,15 +7828,12 @@ function StudioPresetTriggerButton({ preset, open, onClick }) {
           <img src={preset.previewImageUrl} alt="" loading="lazy" />
         ) : (
           <span className="studio-preset-grid-thumb-fallback">
-            <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+            <Wand2 className="h-3 w-3" aria-hidden="true" />
           </span>
         )}
       </span>
-      <span className="studio-preset-trigger-copy">
-        <strong>{preset?.name ?? "Style"}</strong>
-        <span>{preset?.tagline ?? "Pick a look"}</span>
-      </span>
-      <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
+      <span className="studio-preset-trigger-copy">{preset?.name ?? "Style"}</span>
+      <ChevronDown aria-hidden="true" />
     </button>
   );
 }
@@ -6846,20 +7848,17 @@ function StudioPresetGridPanel({ presets, selectedPresetId, onSelect, onClose })
   }, [onClose]);
 
   return (
-    <div className="studio-preset-grid-panel" role="dialog" aria-label="Choose a style preset">
+    <div className="studio-preset-grid-panel" role="dialog" aria-label="Choose style">
       <div className="studio-preset-grid-head">
-        <div>
-          <strong>Style presets</strong>
-          <span> Pick a look — we handle the rest </span>
-        </div>
-        <button type="button" className="studio-preset-grid-close" onClick={onClose} aria-label="Close presets">
+        <strong>Style</strong>
+        <button type="button" className="studio-preset-grid-close" onClick={onClose} aria-label="Close">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
       {presets === undefined ? (
-        <p className="px-2 text-xs text-cursor-muted">Loading presets…</p>
+        <p className="px-2 text-xs text-cursor-muted">Loading…</p>
       ) : (
-        <div className="studio-preset-grid" role="listbox">
+        <div className="studio-preset-grid" role="listbox" aria-label="Style presets">
           {presets.map((preset) => {
             const active = preset._id === selectedPresetId;
             return (
@@ -6882,7 +7881,6 @@ function StudioPresetGridPanel({ presets, selectedPresetId, onSelect, onClose })
                 </div>
                 <div className="studio-preset-grid-copy">
                   <strong>{preset.name}</strong>
-                  <span>{preset.tagline ?? "Custom style"}</span>
                 </div>
               </button>
             );
@@ -7020,93 +8018,6 @@ function StudioUploadMenu({ open, setOpen, inputRef }) {
   );
 }
 
-function StudioElementPicker({ open, setOpen, elements, onPick }) {
-  const [query, setQuery] = useState("");
-  const wrapRef = useRef(null);
-  const menuRef = useRef(null);
-  const menuStyle = useFixedMenuPosition(open, wrapRef, 280);
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const items = elements ?? [];
-    if (!q) return items.slice(0, 12);
-    return items
-      .filter((entry) =>
-        `${entry.name} ${entry.kindLabel} ${entry.description ?? ""}`.toLowerCase().includes(q),
-      )
-      .slice(0, 12);
-  }, [elements, query]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event) => {
-      if (wrapRef.current?.contains(event.target) || menuRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    const onKey = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, setOpen]);
-
-  return (
-    <div className="relative" ref={wrapRef}>
-      <button
-        type="button"
-        className="studio-pill-btn studio-upload-trigger"
-        title="Use saved element"
-        aria-expanded={open}
-        onClick={() => setOpen((state) => !state)}
-      >
-        <Sparkles className="h-4 w-4" />
-      </button>
-      {open && menuStyle
-        ? createPortal(
-            <div
-              ref={menuRef}
-              className="cursor-tab-context-menu studio-dropdown-menu studio-element-picker is-fixed"
-              style={menuStyle}
-            >
-              <input
-                className="mb-2 h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-xs text-cursor-text outline-none placeholder:text-cursor-muted focus:border-cursor-accent"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search elements"
-                autoFocus
-              />
-              {filtered.length ? (
-                filtered.map((entry) => (
-                  <button
-                    key={entry.studioId}
-                    type="button"
-                    className="cursor-tab-context-item studio-element-picker-item"
-                    onClick={() => {
-                      onPick(entry);
-                      setOpen(false);
-                      setQuery("");
-                    }}
-                  >
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="min-w-0">
-                      <span className="block truncate">{entry.name}</span>
-                      <span className="block truncate text-[11px] text-cursor-muted">{entry.kindLabel}</span>
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="px-2 py-3 text-xs text-cursor-muted">No elements yet. Use Add then Add element.</p>
-              )}
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
-  );
-}
 
 function StudioComposerInlineSettings({
   mode,
@@ -7399,6 +8310,7 @@ function WhatsAppIcon({ className }) {
 
 function StudioUserMenu({ currentUser, onSignOut }) {
   const [open, setOpen] = useState(false);
+  const sidebarLogo = useMercurySidebarLogo();
   const label = currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator";
   const contactType = currentUser?.phone ? "whatsapp" : currentUser?.email ? "email" : "creator";
   return (
@@ -7411,7 +8323,7 @@ function StudioUserMenu({ currentUser, onSignOut }) {
       >
         <span className="cursor-sidebar-brand-logo" aria-hidden="true">
           <img
-            src={MERCURY_LOGO_SIDEBAR}
+            src={sidebarLogo}
             alt=""
             width={16}
             height={16}
@@ -7492,6 +8404,25 @@ function elementTypeLabel(type) {
   return "Element";
 }
 
+function elementSheetLabel(type) {
+  if (type === "character") return "character sheet";
+  if (type === "prop") return "prop sheet";
+  if (type === "location") return "location sheet";
+  if (type === "doc") return "style sheet";
+  return "element sheet";
+}
+
+function elementSheetReferenceInputs(sourceAssets = []) {
+  return sourceAssets
+    .flatMap((asset) => {
+      const kind = asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"
+        ? asset.kind
+        : null;
+      const url = asset.mediaUrl ?? asset.thumbnailUrl;
+      return kind && /^https?:\/\//i.test(url ?? "") ? [{ kind, url }] : [];
+    });
+}
+
 function resolveElementSourceAssets(entry, assets) {
   const ids = entry.sourceAssetIds ?? [];
   return ids
@@ -7525,34 +8456,14 @@ const ELEMENT_TYPE_OPTIONS = [
   { value: "doc", label: "Notes", meta: "Rules, style notes, references", icon: FileText },
 ];
 
-function CreateStudioTab({ target, onCancel, onCreate, onUploadElementFiles }) {
-  const kind = target.kind ?? "folder";
+function CreateStudioTab({ target, onCancel, onCreate }) {
+  const kind = target.kind === "script" ? "script" : "folder";
   const [name, setName] = useState("");
-  const [elementType, setElementType] = useState(target.elementType ?? "character");
-  const [elementAssets, setElementAssets] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
-  const elementUploadInputRef = useRef(null);
-  const title = kind === "folder" ? "New folder" : kind === "script" ? "New ad copy" : `New ${elementTypeLabel(elementType).toLowerCase()}`;
+  const title = kind === "folder" ? "New folder" : "New ad copy";
   const helper =
     kind === "folder"
       ? "Create a folder in the current workspace folder."
-      : kind === "script"
-        ? "Start a note or ad copy draft in a new editable tab."
-        : "Save a reusable element for characters, props, places, or notes.";
-  async function handleElementUpload(files) {
-    if (!files?.length) return;
-    setUploadError("");
-    setUploading(true);
-    try {
-      const uploaded = await onUploadElementFiles(files, entry.folderId);
-      setElementAssets((items) => [...items, ...(uploaded ?? [])]);
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Upload failed.");
-    } finally {
-      setUploading(false);
-    }
-  }
+      : "Start a note or ad copy draft in a new editable tab.";
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -7560,12 +8471,7 @@ function CreateStudioTab({ target, onCancel, onCreate, onUploadElementFiles }) {
         className="mx-auto mt-10 w-full max-w-2xl rounded-3xl border border-white/15 bg-transparent p-6 shadow-[0_24px_80px_rgba(0,0,0,0.34)] backdrop-blur-2xl"
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate({
-            kind,
-            name,
-            elementType,
-            sourceAssetIds: elementAssets.map((asset) => asset.assetId),
-          });
+          onCreate({ kind, name });
         }}
       >
         <p className="studio-section-kicker">Create</p>
@@ -7573,42 +8479,9 @@ function CreateStudioTab({ target, onCancel, onCreate, onUploadElementFiles }) {
         <p className="mt-2 text-sm text-cursor-muted">{helper}</p>
         <div className="mt-6 flex flex-wrap gap-2">
           <span className="inline-flex h-8 items-center rounded-lg border border-white/15 bg-white/[0.03] px-3 text-xs font-semibold text-cursor-text">
-            {kind === "folder" ? "Folder" : kind === "element" ? "Element" : "Ad copy"}
+            {kind === "folder" ? "Folder" : "Ad copy"}
           </span>
         </div>
-        {kind === "element" ? (
-          <div className="mt-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cursor-muted">Element type</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {ELEMENT_TYPE_OPTIONS.map((item) => {
-                const Icon = item.icon;
-                const active = elementType === item.value;
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      active
-                        ? "border-cursor-accent bg-cursor-accent/10 text-cursor-text-bright"
-                        : "border-white/15 bg-white/[0.03] text-cursor-text hover:border-white/25 hover:bg-white/[0.06]"
-                    }`}
-                    onClick={() => setElementType(item.value)}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 place-items-center rounded-xl border border-white/15 bg-black/20">
-                        <Icon className="h-4 w-4" aria-hidden="true" />
-                      </span>
-                      <span>
-                        <span className="block text-sm font-semibold">{item.label}</span>
-                        <span className="mt-0.5 block text-xs text-cursor-muted">{item.meta}</span>
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
         <label className="mt-6 block text-xs font-medium text-cursor-muted">
           Name it
           <input
@@ -7616,62 +8489,9 @@ function CreateStudioTab({ target, onCancel, onCreate, onUploadElementFiles }) {
             className="mt-2 h-12 w-full rounded-2xl border border-white/15 bg-white/[0.03] px-4 text-lg font-medium text-cursor-text outline-none transition focus:border-cursor-accent"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder={kind === "folder" ? "Folder name" : kind === "script" ? "Campaign idea" : `${elementTypeLabel(elementType)} name`}
+            placeholder={kind === "folder" ? "Folder name" : "Campaign idea"}
           />
         </label>
-        {kind === "element" ? (
-          <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.03] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-cursor-text-bright">Media for this element</p>
-                <p className="mt-1 text-xs text-cursor-muted">Upload reference photos, clips, or audio that define it.</p>
-              </div>
-              <button
-                type="button"
-                className={STYLE.iconButton}
-                disabled={uploading}
-                onClick={() => elementUploadInputRef.current?.click()}
-              >
-                <Upload className="h-3.5 w-3.5" />
-                {uploading ? "Uploading..." : "Upload media"}
-              </button>
-              <input
-                ref={elementUploadInputRef}
-                className="hidden"
-                type="file"
-                multiple
-                onChange={(event) => {
-                  void handleElementUpload(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </div>
-            {uploadError ? <p className="mt-3 text-xs text-red-300">{uploadError}</p> : null}
-            {elementAssets.length ? (
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {elementAssets.map((asset) => (
-                  <div key={asset.assetId} className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2">
-                    {asset.previewUrl ? (
-                      <span
-                        className="h-10 w-10 rounded-lg bg-cover bg-center"
-                        style={{ backgroundImage: `url(${asset.previewUrl})` }}
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <span className="grid h-10 w-10 place-items-center rounded-lg bg-white/[0.06]">
-                        <Upload className="h-4 w-4 text-cursor-muted" aria-hidden="true" />
-                      </span>
-                    )}
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-semibold text-cursor-text">{asset.name}</span>
-                      <span className="text-[11px] uppercase tracking-wide text-cursor-muted">{asset.kind}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" className={STYLE.iconButton} onClick={onCancel}>Cancel</button>
           <button
@@ -7809,6 +8629,8 @@ function createComposerTokenIcon(kind) {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("width", "11");
+  svg.setAttribute("height", "11");
   const lucidePaths = {
     image: [
       "M15 8h.01",
@@ -7867,6 +8689,42 @@ function clearStudioComposerSelectedTags(editor) {
   });
 }
 
+function mergeComposerSelectionRects(rects) {
+  if (!rects.length) return [];
+  const sorted = [...rects].sort((a, b) => a.top - b.top || a.left - b.left);
+  const merged = [];
+
+  for (const rect of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ ...rect });
+      continue;
+    }
+
+    const topDelta = Math.abs(last.top - rect.top);
+    const heightDelta = Math.abs(last.height - rect.height);
+    const sameLine = topDelta <= 4 && heightDelta <= 6;
+    const gap = rect.left - (last.left + last.width);
+    const touches = gap <= 4;
+
+    if (sameLine && touches) {
+      const nextLeft = Math.min(last.left, rect.left);
+      const nextRight = Math.max(last.left + last.width, rect.left + rect.width);
+      const nextTop = Math.min(last.top, rect.top);
+      const nextBottom = Math.max(last.top + last.height, rect.top + rect.height);
+      last.left = nextLeft;
+      last.width = nextRight - nextLeft;
+      last.top = nextTop;
+      last.height = nextBottom - nextTop;
+      continue;
+    }
+
+    merged.push({ ...rect });
+  }
+
+  return merged;
+}
+
 function getStudioComposerSelectionHighlights(editor, inputLine) {
   const selection = window.getSelection();
   clearStudioComposerSelectedTags(editor);
@@ -7876,30 +8734,44 @@ function getStudioComposerSelectionHighlights(editor, inputLine) {
 
   const inputRect = inputLine.getBoundingClientRect();
   const editorRect = editor.getBoundingClientRect();
-  const rects = [...range.getClientRects()]
-    .map((rect) => ({
-      left: Math.max(rect.left, editorRect.left) - inputRect.left,
-      top: rect.top - inputRect.top,
-      width: Math.min(rect.right, editorRect.right) - Math.max(rect.left, editorRect.left),
-      height: rect.height,
-    }))
-    .filter((rect) => rect.width > 1 && rect.height > 1)
-    .map((rect) => ({
-      left: Math.round(rect.left - 2),
-      top: Math.round(rect.top - 1),
-      width: Math.round(rect.width + 4),
-      height: Math.round(rect.height + 2),
-    }));
+  const pills = [];
 
   editor.querySelectorAll(".studio-inline-tag").forEach((token) => {
     try {
-      if (range.intersectsNode(token)) token.classList.add("is-selection-highlighted");
+      if (range.intersectsNode(token)) {
+        token.classList.add("is-selection-highlighted");
+        const tokenRect = token.getBoundingClientRect();
+        pills.push({
+          left: tokenRect.left - inputRect.left,
+          top: tokenRect.top - inputRect.top,
+          width: tokenRect.width,
+          height: tokenRect.height,
+        });
+      }
     } catch {
       // Detached nodes can throw while the browser is mutating selection.
     }
   });
 
-  return rects;
+  for (const rect of range.getClientRects()) {
+    pills.push({
+      left: Math.max(rect.left, editorRect.left) - inputRect.left,
+      top: rect.top - inputRect.top,
+      width: Math.min(rect.right, editorRect.right) - Math.max(rect.left, editorRect.left),
+      height: rect.height,
+    });
+  }
+
+  return mergeComposerSelectionRects(
+    pills
+      .filter((rect) => rect.width > 1 && rect.height > 1)
+      .map((rect) => ({
+        left: Math.round(rect.left - 1),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width + 2),
+        height: Math.round(rect.height),
+      })),
+  );
 }
 
 function ensureSelectionInEditor(editor) {
@@ -8204,14 +9076,10 @@ function playStudioTapFeedback() {
 }
 
 function StudioThreadChat({
-  threads = [],
-  selectedThreadId,
   events,
   assets = [],
-  onSelectThread,
-  onSwitchThreadFolder,
 }) {
-  const selectedThread = threads.find((thread) => thread._id === selectedThreadId);
+  const emptyLogo = useMercuryLogoAssets(96);
   const safeEvents = events ?? [];
   const hasEvents = safeEvents.length > 0;
   const completedJobIds = new Set(
@@ -8224,43 +9092,38 @@ function StudioThreadChat({
   );
   return (
     <div className="studio-chat-render-area">
-      <div className="studio-chat-stream">
-        <div className={`studio-chat-stream-inner${!hasEvents ? " is-empty" : ""}`}>
-          {!hasEvents ? (
-            <div className="studio-chat-empty-state">
-              <div className="studio-empty-hero">
-                <div className="studio-empty-logo" aria-hidden="true">
-                  <img
-                    src={MERCURY_EMPTY_LOGO.src}
-                    srcSet={MERCURY_EMPTY_LOGO.srcSet}
-                    sizes={MERCURY_EMPTY_LOGO.sizes}
-                    alt=""
-                    width={104}
-                    height={104}
-                  />
-                </div>
-                <div className="studio-empty-copy">
-                  <h1>What will you create?</h1>
-                  <p>Describe an image or video below. Your prompts and results will show up here.</p>
-                </div>
-                <div className="studio-empty-chips" aria-hidden="true">
-                  <span>Product shot</span>
-                  <span>Cinematic b-roll</span>
-                  <span>Portrait</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            displayEvents.map((event) => (
-              <StudioThreadEvent
-                key={event._id}
-                event={event}
-                assets={assets}
-              />
-            ))
-          )}
+      {!hasEvents ? (
+        <div className="studio-chat-empty-state">
+          <div className="studio-empty-logo" aria-hidden="true">
+            <span className="studio-empty-logo-blur" aria-hidden="true" />
+            <img
+              src={emptyLogo.src}
+              srcSet={emptyLogo.srcSet}
+              sizes={emptyLogo.sizes}
+              alt=""
+              width={104}
+              height={104}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
+      {hasEvents ? (
+        <div className="studio-chat-stream">
+          <div className="studio-chat-composer-align">
+            <div className="studio-chat-composer-gutter" aria-hidden="true" />
+            <div className="studio-chat-stream-inner">
+              {displayEvents.map((event) => (
+                <StudioThreadEvent
+                  key={event._id}
+                  event={event}
+                  assets={assets}
+                />
+              ))}
+            </div>
+            <div className="studio-chat-composer-gutter" aria-hidden="true" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -8355,13 +9218,13 @@ function ActivePane({
   assets,
   events,
   threads,
-  selectedThreadId,
-  onSelectThread,
+  activeThreadId,
   onAttach,
   onDuplicate,
   onRename,
   onTrash,
   onElementUpdate,
+  onBuildElementSheet,
   onDocumentChange,
   onSwitchThreadFolder,
   adminTab,
@@ -8379,15 +9242,25 @@ function ActivePane({
   onGeneratePresetThumbnails,
   onCreateItem,
   onUploadElementFiles,
+  onOpenElementCreate,
   onCloseTab,
 }) {
+  useEffect(() => {
+    if (!activeTab.startsWith("create:")) return;
+    const createTarget = parseCreateTab(activeTab);
+    if (createTarget.kind === "element") {
+      onCloseTab(activeTab);
+      onOpenElementCreate();
+    }
+  }, [activeTab, onCloseTab, onOpenElementCreate]);
+
   if (activeTab.startsWith("create:")) {
     const createTarget = parseCreateTab(activeTab);
+    if (createTarget.kind === "element") return null;
     return (
       <CreateStudioTab
         target={createTarget}
         onCancel={() => onCloseTab(activeTab)}
-        onUploadElementFiles={onUploadElementFiles}
         onCreate={(values) => {
           void onCreateItem(values).then(() => onCloseTab(activeTab));
         }}
@@ -8397,11 +9270,8 @@ function ActivePane({
   if (activeTab.startsWith("composer:")) {
     return (
       <StudioThreadChat
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        events={events}
+        events={[]}
         assets={assets}
-        onSelectThread={onSelectThread}
       />
     );
   }
@@ -8419,12 +9289,8 @@ function ActivePane({
   if (activeTab.startsWith("thread:")) {
     return (
       <StudioThreadChat
-        threads={threads}
-        selectedThreadId={activeTab.slice("thread:".length)}
         events={events}
         assets={assets}
-        onSelectThread={onSelectThread}
-        onSwitchThreadFolder={onSwitchThreadFolder}
       />
     );
   }
@@ -8477,6 +9343,7 @@ function ActivePane({
         onAttach={onAttach}
         onRename={onRename}
         onUpdate={onElementUpdate}
+        onBuildSheet={onBuildElementSheet}
         onUploadElementFiles={onUploadElementFiles}
         onTrash={onTrash}
       />
@@ -8504,14 +9371,16 @@ function ActivePane({
   );
 }
 
-function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onUploadElementFiles, onTrash }) {
+function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onBuildSheet, onUploadElementFiles, onTrash }) {
   const [name, setName] = useState(entry.name.replace(/^@/, ""));
   const [description, setDescription] = useState(entry.description ?? "");
   const [sourceAssets, setSourceAssets] = useState(entry.sourceAssets ?? []);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [buildingSheet, setBuildingSheet] = useState(false);
   const [message, setMessage] = useState("");
   const inputRef = useRef(null);
+  const sheetLabel = elementSheetLabel(entry.elementType);
 
   useEffect(() => {
     setName(entry.name.replace(/^@/, ""));
@@ -8555,6 +9424,22 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     }
   }
 
+  async function buildSheet() {
+    setBuildingSheet(true);
+    setMessage("");
+    try {
+      const nextDescription = await onBuildSheet(draftEntry, sourceAssets, description);
+      if (nextDescription) {
+        setDescription(nextDescription);
+      }
+      setMessage(`${sheetLabel.charAt(0).toUpperCase()}${sheetLabel.slice(1)} ready.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not build sheet.");
+    } finally {
+      setBuildingSheet(false);
+    }
+  }
+
   const draftEntry = {
     ...entry,
     name: `@${name.trim() || entry.name.replace(/^@/, "")}`,
@@ -8570,9 +9455,20 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
           <div>
             <p className="studio-section-kicker">{entry.kindLabel}</p>
             <h2 className="mt-2 text-2xl font-semibold text-cursor-text-bright">{entry.name}</h2>
-            <p className="mt-2 text-sm text-cursor-muted">Reusable creative ingredient for generation prompts.</p>
+            <p className="mt-2 text-sm text-cursor-muted">
+              Build a {sheetLabel} from reference media — used when you attach this element to generation.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={STYLE.iconButton}
+              disabled={buildingSheet || (!sourceAssets.length && !description.trim())}
+              onClick={() => void buildSheet()}
+            >
+              {buildingSheet ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {buildingSheet ? "Building..." : `Build ${sheetLabel}`}
+            </button>
             <button className={STYLE.iconButton} onClick={() => onAttach(draftEntry)}>
               <Plus className="h-3.5 w-3.5" />
               Use in request
@@ -8593,12 +9489,12 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             />
           </label>
           <label className="block text-xs font-medium text-cursor-muted">
-            Notes for generation
+            {sheetLabel.charAt(0).toUpperCase() + sheetLabel.slice(1)}
             <textarea
-              className="mt-2 min-h-32 w-full resize-y rounded-2xl border border-white/15 bg-white/[0.03] px-4 py-3 text-sm text-cursor-text outline-none transition placeholder:text-cursor-muted focus:border-cursor-accent"
+              className="mt-2 min-h-48 w-full resize-y rounded-2xl border border-white/15 bg-white/[0.03] px-4 py-3 font-mono text-[13px] leading-relaxed text-cursor-text outline-none transition placeholder:text-cursor-muted focus:border-cursor-accent"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Describe the look, behavior, constraints, or what the model should preserve."
+              placeholder={`Build a ${sheetLabel} from media, or write notes manually. Includes a ## Generation prompt section when auto-built.`}
             />
           </label>
         </div>
@@ -9819,6 +10715,28 @@ function formatMoney(amountCents) {
   })}`;
 }
 
+function elementSheetCreditCost({
+  elementType,
+  imageReferenceCount = 0,
+  videoReferenceCount = 0,
+  audioReferenceCount = 0,
+}) {
+  const textCost = textCreditCost({
+    imageReferenceCount,
+    videoReferenceCount,
+    audioReferenceCount,
+  });
+  // Notes elements are text-only; the others also generate a reference sheet image.
+  const imageSheetCost =
+    elementType === "doc"
+      ? 0
+      : imageCreditCost({
+          resolution: "2K",
+          hasReferenceInput: imageReferenceCount > 0,
+        });
+  return textCost + imageSheetCost;
+}
+
 function composerCreditCost({
   mode,
   resolution,
@@ -9829,7 +10747,17 @@ function composerCreditCost({
   hasNonVideoReferenceInput,
   audioEnabled,
   referenceInputs,
+  elementType,
+  elementReferenceCounts,
 }) {
+  if (mode === "element") {
+    return elementSheetCreditCost({
+      elementType,
+      imageReferenceCount: elementReferenceCounts?.image ?? 0,
+      videoReferenceCount: elementReferenceCounts?.video ?? 0,
+      audioReferenceCount: elementReferenceCounts?.audio ?? 0,
+    });
+  }
   if (mode === "script") {
     return textCreditCost({
       imageReferenceCount: referenceInputs?.filter((reference) => reference.kind === "image").length ?? 0,
@@ -9862,8 +10790,8 @@ function humanizePaymentStatus(status) {
 
 function CreditPill({ entitlement }) {
   return (
-    <span className="studio-credit-pill inline-flex items-center gap-1 rounded-full border border-cursor-border bg-cursor-panel px-2 py-1 text-[11px] font-semibold text-cursor-muted">
-      <Coins className="h-3 w-3" aria-hidden="true" />
+    <span className="studio-credit-pill inline-flex h-6 items-center gap-1 rounded-full border border-cursor-border bg-cursor-panel px-2 text-[11px] font-semibold leading-none text-cursor-muted">
+      <Coins className="h-3 w-3 shrink-0" aria-hidden="true" />
       {entitlement ? `${entitlement.creditBalance} Credits` : "Credits"}
     </span>
   );

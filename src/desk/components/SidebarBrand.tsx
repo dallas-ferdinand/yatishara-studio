@@ -2,11 +2,12 @@
 
 import { loadSession } from "@/lib/session";
 import { MERCURYOS_LABEL } from "@/desk/lib/workspace";
-import { MERCURY_LOGO_SIDEBAR } from "@/lib/brand-assets";
+import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { Icon } from "./Icons";
 
 export function SidebarBrand() {
   const session = loadSession();
+  const sidebarLogo = useMercurySidebarLogo();
   const userName = session?.displayName?.trim() || session?.userId?.trim() || "";
   const vaultLabel = userName ? `${userName} chats` : "This device (PIN)";
 
@@ -18,7 +19,7 @@ export function SidebarBrand() {
       <span className="cursor-sidebar-brand-logo" aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={MERCURY_LOGO_SIDEBAR}
+          src={sidebarLogo}
           alt=""
           width={16}
           height={16}

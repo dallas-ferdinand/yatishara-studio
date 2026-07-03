@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { highlightCodeHtml } from "@/desk/lib/code-highlight";
 
-export function CodeEditor({ value, path, onChange, onSave }) {
+export function CodeEditor({ value, path, onChange, onSave, surface = "editor" }) {
   const taRef = useRef(null);
   const highlightRef = useRef(null);
 
@@ -25,7 +25,7 @@ export function CodeEditor({ value, path, onChange, onSave }) {
   }, [syncScroll]);
 
   return (
-    <div className="cursor-code-editor">
+    <div className={`cursor-code-editor${surface === "sidebar" ? " cursor-code-editor--sidebar-surface" : ""}`}>
       <div className="cursor-code-stack">
         <pre ref={highlightRef} className="cursor-code-highlight" aria-hidden>
           <code dangerouslySetInnerHTML={{ __html: `${highlighted}\n` }} />

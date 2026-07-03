@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { mercuryLogoAssets } from "@/lib/brand-assets";
+import { useMercuryLogoAssets } from "@/lib/use-appearance-mode";
 
 type Props = {
   size?: number;
@@ -11,7 +11,7 @@ type Props = {
 /** Studio logo — WebP @ correct DPR, soft ambient breathe. */
 export function BrandMark({ size = 48, subtle = false }: Props) {
   const [loaded, setLoaded] = useState(false);
-  const assets = mercuryLogoAssets(size);
+  const assets = useMercuryLogoAssets(size);
   const ambient = !subtle;
 
   return (

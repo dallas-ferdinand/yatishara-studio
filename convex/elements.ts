@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { buildAssetPath } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const elementType = v.union(
@@ -53,6 +54,18 @@ async function listByType(
     )
     .collect();
 }
+
+export const get = authedQuery({
+  args: { elementId: v.id("elements") },
+  returns: v.union(v.null(), elementReturn),
+  handler: async (ctx, args) => {
+    const element = await ctx.db.get("elements", args.elementId);
+    if (!element || element.ownerId !== ctx.user._id || element.deletedAt) {
+      return null;
+    }
+    return element;
+  },
+});
 
 export const create = authedMutation({
   args: {
@@ -123,6 +136,42 @@ export const update = authedMutation({
       updatedAt: Date.now(),
     });
     return null;
+  },
+});
+
+export const createSheetAsset = authedMutation({
+  args: {
+    elementId: v.id("elements"),
+    name: v.string(),
+    mimeType: v.string(),
+  },
+  returns: v.object({
+    assetId: v.id("assets"),
+    bunnyPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const element = await requireElementOwner(ctx, args.elementId);
+    if (!element.folderId) {
+      throw new Error("Element must live in a folder before generating a sheet.");
+    }
+    const now = Date.now();
+    const assetId = await ctx.db.insert("assets", {
+      ownerId: ctx.user._id,
+      folderId: element.folderId,
+      name: args.name,
+      kind: "image",
+      mimeType: args.mimeType,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const bunnyPath = buildAssetPath({
+      userId: ctx.user._id,
+      folderId: element.folderId,
+      assetId,
+      filename: args.name,
+    });
+    await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+    return { assetId, bunnyPath };
   },
 });
 
