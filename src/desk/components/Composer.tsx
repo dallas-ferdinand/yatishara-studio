@@ -1021,6 +1021,7 @@ export function Composer({
   return (
     <Wrapper
       className={composerClass}
+      data-drop-target="composer"
       onDragOver={onComposerDragOver}
       onDragLeave={onComposerDragLeave}
       onDrop={onComposerDrop}

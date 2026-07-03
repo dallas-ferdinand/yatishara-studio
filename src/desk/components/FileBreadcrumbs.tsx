@@ -52,6 +52,7 @@ export function FileBreadcrumbs({
             <button
               type="button"
               className={`desk-file-breadcrumbs-chip${i === crumbs.length - 1 ? " is-current" : ""}${dragOverIndex === i ? " is-drag-over" : ""}`}
+              data-drop-target="breadcrumb"
               onClick={() => onNavigate(crumb.path)}
               title={displayWorkspacePath(crumb.path)}
               onDragOver={onDropEntry ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDragOverIndex(i); } : undefined}

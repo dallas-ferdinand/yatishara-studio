@@ -5,13 +5,18 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { buildAssetPath, signBunnyCdnUrl } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
+import {
+  creditCostForGeneration,
+  textCreditCost,
+} from "./lib/generationPricing";
 
 const generationMode = v.union(v.literal("image"), v.literal("video"));
 const generationTier = v.union(
+  v.literal("image"),
+  v.literal("pro_video"),
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
-  v.literal("pro_video"),
 );
 const generationStage = v.union(
   v.literal("queued"),
@@ -207,7 +212,7 @@ export const canGenerate = authedQuery({
         creditBalance: account?.creditBalance ?? 0,
         cost: 0,
         hasActiveSubscription: false,
-        reason: "4K video is disabled until ModelArk API support is confirmed.",
+        reason: "4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.",
       };
     }
     if (args.tier === "pro_video" && !isSupportedVideoDuration(args.durationSeconds)) {
@@ -216,7 +221,7 @@ export const canGenerate = authedQuery({
         creditBalance: account?.creditBalance ?? 0,
         cost: 0,
         hasActiveSubscription: false,
-        reason: "Video duration must be between 4 and 12 seconds.",
+        reason: "Video duration must be between 4 and 15 seconds.",
       };
     }
     const cost = creditCostForGeneration({
@@ -234,15 +239,13 @@ export const canGenerate = authedQuery({
       ctx.user._id,
       args.now,
     );
-    const canGenerate = creditBalance >= cost || hasActiveSubscription;
+    const canGenerate = creditBalance >= cost;
     return {
       canGenerate,
       creditBalance,
       cost,
       hasActiveSubscription,
-      reason: canGenerate
-        ? undefined
-        : `Generation needs ${cost} credits. Top up or activate a subscription.`,
+      reason: canGenerate ? undefined : insufficientCreditsMessage(cost),
     };
   },
 });
@@ -268,10 +271,10 @@ export const createQueuedJob = authedMutation({
     const thread = await requireThreadOwner(ctx, args.threadId);
     await requireFolderOwner(ctx, thread.linkedFolderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is disabled until ModelArk API support is confirmed");
+      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
-      throw new Error("Video duration must be between 4 and 12 seconds");
+      throw new Error("Video duration must be between 4 and 15 seconds");
     }
     const preset = await ctx.db.get("stylePresets", args.stylePresetId);
     if (!preset || !preset.enabled) {
@@ -361,6 +364,8 @@ export const getJobRunContext = internalQuery({
       _id: v.id("stylePresets"),
       name: v.string(),
       systemInstructions: v.string(),
+      scriptInstructions: v.optional(v.string()),
+      storytelling: v.optional(v.boolean()),
       negativePrompt: v.optional(v.string()),
     }),
   }),
@@ -402,6 +407,8 @@ export const getJobRunContext = internalQuery({
         _id: preset._id,
         name: preset.name,
         systemInstructions: preset.systemInstructions,
+        scriptInstructions: preset.scriptInstructions,
+        storytelling: preset.storytelling,
         negativePrompt: preset.negativePrompt,
       },
     };
@@ -669,10 +676,14 @@ async function requireJob(ctx: QueryCtx | MutationCtx, jobId: Id<"generationJobs
   return job;
 }
 
+function insufficientCreditsMessage(cost: number): string {
+  return `Generation needs ${cost} credits. Top up to continue.`;
+}
+
 async function reserveCreditsForJob(
   ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
   args: {
-    tier: "low" | "medium" | "high" | "pro_video";
+    tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolution?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
@@ -687,41 +698,8 @@ async function reserveCreditsForJob(
     .unique();
   const cost = creditCostForGeneration(args);
   const now = Date.now();
-  const hasSubscription = await hasActiveSubscriptionForUser(ctx, ctx.user._id, now);
-  if (!account) {
-    if (!hasSubscription) {
-      throw new Error(`Generation needs ${cost} credits. Top up or activate a subscription.`);
-    }
-    const billingAccountId = await ctx.db.insert("billingAccounts", {
-      userId: ctx.user._id,
-      creditBalance: 0,
-      reservedCredits: 0,
-      createdAt: now,
-      updatedAt: now,
-    });
-    return await ctx.db.insert("creditTransactions", {
-      userId: ctx.user._id,
-      billingAccountId,
-      kind: "reserved",
-      amount: 0,
-      balanceAfter: 0,
-      reason: `Reserved via subscription entitlement for ${args.tier} generation`,
-      createdAt: now,
-    });
-  }
-  if (account.creditBalance < cost) {
-    if (hasSubscription) {
-      return await ctx.db.insert("creditTransactions", {
-        userId: ctx.user._id,
-        billingAccountId: account._id,
-        kind: "reserved",
-        amount: 0,
-        balanceAfter: account.creditBalance,
-        reason: `Reserved via subscription entitlement for ${args.tier} generation`,
-        createdAt: now,
-      });
-    }
-    throw new Error(`Generation needs ${cost} credits. Top up or activate a subscription.`);
+  if (!account || account.creditBalance < cost) {
+    throw new Error(insufficientCreditsMessage(cost));
   }
   const balanceAfter = account.creditBalance - cost;
   await ctx.db.patch(account._id, {
@@ -740,13 +718,6 @@ async function reserveCreditsForJob(
   });
 }
 
-const imageCreditCosts = {
-  low: 1,
-  medium: 2,
-  high: 4,
-} as const;
-const textGenerationCreditCost = 1;
-
 export const chargeTextGeneration = authedMutation({
   args: {
     folderId: v.id("folders"),
@@ -763,41 +734,8 @@ export const chargeTextGeneration = authedMutation({
       .unique();
     const cost = textCreditCost(args);
     const now = Date.now();
-    const hasSubscription = await hasActiveSubscriptionForUser(ctx, ctx.user._id, now);
-    if (!account) {
-      if (!hasSubscription) {
-        throw new Error(`Text generation needs ${cost} credits. Top up or activate a subscription.`);
-      }
-      const billingAccountId = await ctx.db.insert("billingAccounts", {
-        userId: ctx.user._id,
-        creditBalance: 0,
-        reservedCredits: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return await ctx.db.insert("creditTransactions", {
-        userId: ctx.user._id,
-        billingAccountId,
-        kind: "spent",
-        amount: 0,
-        balanceAfter: 0,
-        reason: "Text generation via subscription entitlement",
-        createdAt: now,
-      });
-    }
-    if (account.creditBalance < cost) {
-      if (hasSubscription) {
-        return await ctx.db.insert("creditTransactions", {
-          userId: ctx.user._id,
-          billingAccountId: account._id,
-          kind: "spent",
-          amount: 0,
-          balanceAfter: account.creditBalance,
-          reason: "Text generation via subscription entitlement",
-          createdAt: now,
-        });
-      }
-      throw new Error(`Text generation needs ${cost} credits. Top up or activate a subscription.`);
+    if (!account || account.creditBalance < cost) {
+      throw new Error(insufficientCreditsMessage(cost));
     }
     const balanceAfter = account.creditBalance - cost;
     await ctx.db.patch(account._id, {
@@ -851,67 +789,9 @@ export const refundTextGeneration = authedMutation({
   },
 });
 
-function textCreditCost(args: {
-  imageReferenceCount?: number;
-  videoReferenceCount?: number;
-  audioReferenceCount?: number;
-}): number {
-  return (
-    textGenerationCreditCost +
-    Math.max(0, Math.ceil(args.imageReferenceCount ?? 0)) * 1 +
-    Math.max(0, Math.ceil(args.audioReferenceCount ?? 0)) * 2 +
-    Math.max(0, Math.ceil(args.videoReferenceCount ?? 0)) * 5
-  );
-}
-
-function videoCreditCost(args: {
-  resolution?: string;
-  durationSeconds?: number;
-  hasReferenceInput?: boolean;
-  hasVideoReferenceInput?: boolean;
-  hasNonVideoReferenceInput?: boolean;
-  audioEnabled?: boolean;
-}): number {
-  const duration = Math.max(4, Math.min(12, Math.ceil(args.durationSeconds ?? 4)));
-  const multiplier = Math.ceil(duration / 5);
-  const base =
-    args.resolution === "854x480"
-      ? 15
-      : args.resolution === "1920x1080"
-        ? 45
-        : 25;
-  const videoReferenceSurcharge = args.hasVideoReferenceInput ? 5 : 0;
-  const nonVideoReferenceSurcharge = args.hasNonVideoReferenceInput
-    ? args.resolution === "1920x1080"
-      ? 10
-      : 5
-    : args.hasReferenceInput
-      ? 5
-      : 0;
-  const audioSurcharge = args.audioEnabled ? 5 : 0;
-  return (base + videoReferenceSurcharge + nonVideoReferenceSurcharge + audioSurcharge) * multiplier;
-}
-
 function isSupportedVideoDuration(durationSeconds?: number): boolean {
   const duration = Number(durationSeconds ?? 4);
-  return Number.isFinite(duration) && duration >= 4 && duration <= 12;
-}
-
-function creditCostForGeneration(
-  args: {
-    tier: "low" | "medium" | "high" | "pro_video";
-    resolution?: string;
-    durationSeconds?: number;
-    hasReferenceInput?: boolean;
-    hasVideoReferenceInput?: boolean;
-    hasNonVideoReferenceInput?: boolean;
-    audioEnabled?: boolean;
-  },
-): number {
-  if (args.tier === "low") return imageCreditCosts.low;
-  if (args.tier === "medium") return imageCreditCosts.medium;
-  if (args.tier === "high") return imageCreditCosts.high;
-  return videoCreditCost(args);
+  return Number.isFinite(duration) && duration >= 4 && duration <= 15;
 }
 
 async function hasActiveSubscriptionForUser(

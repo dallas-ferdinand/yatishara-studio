@@ -3,28 +3,24 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { action, internalAction } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
+import { api } from "./_generated/api";
 import { putObject } from "./lib/bunny";
 import {
-  createVideoTask,
   enhancePrompt,
   generateImage,
-  generateScript as generateScriptWithBytePlus,
-  retrieveVideoTask,
-  type ImageTier,
-} from "./lib/byteplus";
-
-const VIDEO_POLL_INITIAL_DELAY_MS = 12_000;
-const VIDEO_POLL_LATER_DELAY_MS = 30_000;
-const VIDEO_POLL_FAST_ATTEMPTS = 10;
-const VIDEO_POLL_MAX_ATTEMPTS = 40;
+  generateScript as generateScriptWithGateway,
+  generateVideo,
+  imageModelForRequest,
+  videoModelForRequest,
+} from "./lib/aiGateway";
 
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
   {
     threadId: Id<"generationThreads">;
     mode: "image" | "video";
-    tier: "low" | "medium" | "high" | "pro_video";
+    tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolvedModel: string;
     stylePresetId: Id<"stylePresets">;
     userPrompt: string;
@@ -54,10 +50,16 @@ const getJobRunContextRef = internalQueryRef<
     job: {
       _id: Id<"generationJobs">;
       userPrompt: string;
-      tier: "low" | "medium" | "high" | "pro_video";
+      mode: "image" | "video";
+      durationSeconds?: number;
+      resolution?: string;
+      aspectRatio?: string;
     };
     preset: {
+      name: string;
       systemInstructions: string;
+      scriptInstructions?: string;
+      storytelling?: boolean;
       negativePrompt?: string;
     };
   }
@@ -71,14 +73,6 @@ const setEnhancedPromptRef = internalMutationRef<
   },
   null
 >("generation:setEnhancedPrompt");
-
-const setVideoTaskRef = internalMutationRef<
-  {
-    jobId: Id<"generationJobs">;
-    externalTaskId: string;
-  },
-  null
->("generation:setVideoTask");
 
 const createGeneratedAssetRef = internalMutationRef<
   {
@@ -105,15 +99,6 @@ const failJobRef = internalMutationRef<
   },
   null
 >("generation:failJob");
-
-const pollVideoTaskRef = internalActionRef<
-  {
-    jobId: Id<"generationJobs">;
-    taskId: string;
-    attempt: number;
-  },
-  null
->("generationActions:pollVideoTask");
 
 const chargeTextGenerationRef = publicMutationRef<
   {
@@ -142,7 +127,9 @@ const createDocumentRef = publicMutationRef<
   Id<"documents">
 >("documents:create");
 
-const imageTier = v.union(
+const generationTier = v.union(
+  v.literal("image"),
+  v.literal("pro_video"),
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
@@ -151,7 +138,9 @@ const imageTier = v.union(
 export const generateScript = action({
   args: {
     folderId: v.id("folders"),
+    stylePresetId: v.id("stylePresets"),
     userPrompt: v.string(),
+    attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(v.object({
       kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
       url: v.string(),
@@ -162,6 +151,12 @@ export const generateScript = action({
   }),
   handler: async (ctx, args): Promise<{ documentId: Id<"documents"> }> => {
     const referenceInputs = args.referenceInputs ?? [];
+    const preset = await ctx.runQuery(api.stylePresets.get, {
+      presetId: args.stylePresetId,
+    });
+    if (!preset) {
+      throw new Error("Selected creative preset is not available.");
+    }
     const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
       folderId: args.folderId,
       imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
@@ -169,8 +164,14 @@ export const generateScript = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const contentMarkdown = await generateScriptWithBytePlus({
+      const contentMarkdown = await generateScriptWithGateway({
         userPrompt: args.userPrompt,
+        presetName: preset.name,
+        presetInstructions: preset.systemInstructions,
+        scriptInstructions: preset.scriptInstructions,
+        storytellingEnabled: preset.storytelling,
+        negativePrompt: preset.negativePrompt,
+        attachedScriptMarkdown: args.attachedScriptMarkdown,
         referenceInputs,
       });
       const documentId = await ctx.runMutation(createDocumentRef, {
@@ -194,7 +195,7 @@ export const runFlow = action({
   args: {
     threadId: v.id("generationThreads"),
     mode: v.union(v.literal("image"), v.literal("video")),
-    tier: v.union(imageTier, v.literal("pro_video")),
+    tier: generationTier,
     stylePresetId: v.id("stylePresets"),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
@@ -206,6 +207,7 @@ export const runFlow = action({
       kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
       url: v.string(),
     }))),
+    attachedScriptMarkdown: v.optional(v.array(v.string())),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -220,12 +222,8 @@ export const runFlow = action({
     assetIds?: Id<"assets">[];
     externalTaskId?: string;
   }> => {
-    const resolvedModel = modelForRequest(args.mode, args.tier);
+    const resolvedModel = modelForRequest(args.mode);
     const referenceInputs = args.referenceInputs ?? [];
-    const effectiveReferenceInputs =
-      args.mode === "video" && isSeedance1Model(resolvedModel) ? [] : referenceInputs;
-    const effectiveAudioEnabled =
-      args.mode === "video" && isSeedance1Model(resolvedModel) ? false : args.audioEnabled;
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: args.mode,
@@ -233,13 +231,19 @@ export const runFlow = action({
       resolvedModel,
       stylePresetId: args.stylePresetId,
       userPrompt: args.userPrompt,
-      audioEnabled: effectiveAudioEnabled,
+      audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
       durationSeconds: args.durationSeconds,
-      hasReferenceInput: Boolean(effectiveReferenceInputs.length),
-      hasVideoReferenceInput: effectiveReferenceInputs.some((input) => input.kind === "video"),
-      hasNonVideoReferenceInput: effectiveReferenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      hasReferenceInput:
+        args.mode === "video"
+          ? Boolean(referenceInputs.length)
+          : Boolean(args.referenceUrls?.length),
+      hasVideoReferenceInput:
+        args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
+      hasNonVideoReferenceInput:
+        args.mode === "video" &&
+        referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
     });
 
     try {
@@ -252,8 +256,21 @@ export const runFlow = action({
       });
       const enhancedPrompt = await enhancePromptWithFallback({
         userPrompt: job.userPrompt,
+        presetName: preset.name,
         presetInstructions: preset.systemInstructions,
+        scriptInstructions: preset.scriptInstructions,
         negativePrompt: preset.negativePrompt,
+        outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
+        storytellingEnabled: preset.storytelling,
+        durationSeconds: job.durationSeconds ?? args.durationSeconds,
+        resolution: job.resolution ?? args.resolution,
+        aspectRatio: job.aspectRatio ?? args.aspectRatio,
+        hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
+        hasImageReference:
+          referenceInputs.some((input) => input.kind === "image") ||
+          Boolean(args.referenceUrls?.length),
+        attachedScriptMarkdown: args.attachedScriptMarkdown,
+        referenceSummaries: [],
       });
       await ctx.runMutation(setEnhancedPromptRef, {
         jobId,
@@ -262,37 +279,42 @@ export const runFlow = action({
       });
 
       if (args.mode === "video") {
-        const task = await createVideoTask({
+        const video = await generateVideo({
           prompt: enhancedPrompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
-          generateAudio: effectiveAudioEnabled ?? false,
-          referenceImageUrls: effectiveReferenceInputs
+          generateAudio: args.audioEnabled ?? false,
+          referenceImageUrls: referenceInputs
             .filter((input) => input.kind === "image")
             .map((input) => input.url),
-          referenceVideoUrls: effectiveReferenceInputs
+          referenceVideoUrls: referenceInputs
             .filter((input) => input.kind === "video")
             .map((input) => input.url),
-          referenceAudioUrls: effectiveReferenceInputs
+          referenceAudioUrls: referenceInputs
             .filter((input) => input.kind === "audio")
             .map((input) => input.url),
         });
-        await ctx.runMutation(setVideoTaskRef, {
+        await ctx.runMutation(markStageRef, {
           jobId,
-          externalTaskId: task.taskId,
+          stage: "saving",
         });
-        await ctx.scheduler.runAfter(VIDEO_POLL_INITIAL_DELAY_MS, pollVideoTaskRef, {
+        const assetId = await saveGeneratedMedia(ctx, {
           jobId,
-          taskId: task.taskId,
-          attempt: 1,
+          kind: "video",
+          name: `generated-video-${jobId.slice(-6)}.${extensionForContentType(video.mediaType)}`,
+          mediaType: video.mediaType,
+          body: video.data,
         });
-        return { jobId, externalTaskId: task.taskId };
+        await ctx.runMutation(completeWithOutputsRef, {
+          jobId,
+          assetIds: [assetId],
+        });
+        return { jobId, assetIds: [assetId] };
       }
 
       const imageResult = await generateImage({
         prompt: enhancedPrompt,
-        tier: args.tier as ImageTier,
         aspectRatio: args.aspectRatio,
         resolution: args.resolution,
         referenceUrls: args.referenceUrls ?? [],
@@ -302,27 +324,15 @@ export const runFlow = action({
         stage: "saving",
       });
       const assetIds: Id<"assets">[] = [];
-      for (const [index, url] of imageResult.urls.entries()) {
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Generated image fetch failed (${response.status})`);
-        }
-        const contentType = response.headers.get("content-type") ?? "image/png";
-        const body = await response.arrayBuffer();
-        const name = `generated-image-${index + 1}.${extensionForContentType(contentType)}`;
-        const asset: { assetId: Id<"assets">; bunnyPath: string } =
-          await ctx.runMutation(createGeneratedAssetRef, {
+      for (const [index, image] of imageResult.images.entries()) {
+        const assetId = await saveGeneratedMedia(ctx, {
           jobId,
-          name,
           kind: "image",
-          mimeType: contentType,
+          name: `generated-image-${index + 1}.${extensionForContentType(image.mediaType)}`,
+          mediaType: image.mediaType,
+          body: image.data,
         });
-        await putObject({
-          path: asset.bunnyPath,
-          body,
-          contentType,
-        });
-        assetIds.push(asset.assetId);
+        assetIds.push(assetId);
       }
       await ctx.runMutation(completeWithOutputsRef, {
         jobId,
@@ -340,113 +350,35 @@ export const runFlow = action({
   },
 });
 
-export const pollVideoTask = internalAction({
-  args: {
-    jobId: v.id("generationJobs"),
-    taskId: v.string(),
-    attempt: v.number(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    try {
-      const task = await retrieveVideoTask(args.taskId);
-      const status = task.status.toLowerCase();
-      if (status === "succeeded" || status === "success" || status === "completed") {
-        if (!task.videoUrl) {
-          await ctx.runMutation(failJobRef, {
-            jobId: args.jobId,
-            error: "BytePlus video task completed but no video URL was returned.",
-          });
-          return null;
-        }
-        const response = await fetch(task.videoUrl);
-        if (!response.ok) {
-          const text = await response.text().catch(() => "");
-          throw new Error(`Video download failed (${response.status}): ${text.slice(0, 300)}`);
-        }
-        const contentType = response.headers.get("content-type") ?? "video/mp4";
-        const asset = await ctx.runMutation(createGeneratedAssetRef, {
-          jobId: args.jobId,
-          name: `generated-video-${args.jobId.slice(-6)}.mp4`,
-          kind: "video",
-          mimeType: contentType,
-        });
-        await putObject({
-          path: asset.bunnyPath,
-          body: await response.arrayBuffer(),
-          contentType,
-        });
-        await ctx.runMutation(completeWithOutputsRef, {
-          jobId: args.jobId,
-          assetIds: [asset.assetId],
-        });
-        return null;
-      }
-      if (status === "failed" || status === "cancelled" || status === "canceled") {
-        await ctx.runMutation(failJobRef, {
-          jobId: args.jobId,
-          error: task.error ?? `BytePlus video task ${status}.`,
-        });
-        return null;
-      }
-      if (args.attempt >= VIDEO_POLL_MAX_ATTEMPTS) {
-        await ctx.runMutation(failJobRef, {
-          jobId: args.jobId,
-          error: "BytePlus video task timed out before Studio received a completed MP4.",
-        });
-        return null;
-      }
-      await ctx.scheduler.runAfter(
-        args.attempt < VIDEO_POLL_FAST_ATTEMPTS
-          ? VIDEO_POLL_INITIAL_DELAY_MS
-          : VIDEO_POLL_LATER_DELAY_MS,
-        pollVideoTaskRef,
-        {
-          jobId: args.jobId,
-          taskId: args.taskId,
-          attempt: args.attempt + 1,
-        },
-      );
-      return null;
-    } catch (error) {
-      if (args.attempt >= VIDEO_POLL_MAX_ATTEMPTS) {
-        await ctx.runMutation(failJobRef, {
-          jobId: args.jobId,
-          error: error instanceof Error ? error.message : "BytePlus video polling failed.",
-        });
-        return null;
-      }
-      await ctx.scheduler.runAfter(VIDEO_POLL_LATER_DELAY_MS, pollVideoTaskRef, {
-        jobId: args.jobId,
-        taskId: args.taskId,
-        attempt: args.attempt + 1,
-      });
-      return null;
-    }
-  },
-});
-
-function modelForRequest(
-  mode: "image" | "video",
-  tier: "low" | "medium" | "high" | "pro_video",
-): string {
-  if (mode === "video") {
-    if (process.env.BYTEPLUS_DEV_MODE === "true") {
-      return process.env.BYTEPLUS_VIDEO_DEV_MODEL_ID ?? requiredEnv("BYTEPLUS_VIDEO_MODEL_ID");
-    }
-    return requiredEnv("BYTEPLUS_VIDEO_MODEL_ID");
-  }
-  if (tier === "low") {
-    return requiredEnv("BYTEPLUS_IMAGE_LOW_MODEL_ID");
-  }
-  if (tier === "medium") {
-    return requiredEnv("BYTEPLUS_IMAGE_MEDIUM_MODEL_ID");
-  }
-  return requiredEnv("BYTEPLUS_IMAGE_HIGH_MODEL_ID");
+function modelForRequest(mode: "image" | "video"): string {
+  return mode === "video" ? videoModelForRequest() : imageModelForRequest();
 }
 
-function isSeedance1Model(model: string): boolean {
-  return model.includes("seedance-1-");
+async function saveGeneratedMedia(
+  ctx: ActionCtx,
+  args: {
+    jobId: Id<"generationJobs">;
+    kind: "image" | "video";
+    name: string;
+    mediaType: string;
+    body: Uint8Array;
+  },
+): Promise<Id<"assets">> {
+  const asset: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
+    createGeneratedAssetRef,
+    {
+      jobId: args.jobId,
+      name: args.name,
+      kind: args.kind,
+      mimeType: args.mediaType,
+    },
+  );
+  await putObject({
+    path: asset.bunnyPath,
+    body: args.body,
+    contentType: args.mediaType,
+  });
+  return asset.assetId;
 }
 
 function internalMutationRef<Args extends Record<string, unknown>, Return>(
@@ -454,17 +386,6 @@ function internalMutationRef<Args extends Record<string, unknown>, Return>(
 ): FunctionReference<"mutation", "internal", Args, Return> {
   return makeFunctionReference<"mutation", Args, Return>(name) as unknown as FunctionReference<
     "mutation",
-    "internal",
-    Args,
-    Return
-  >;
-}
-
-function internalActionRef<Args extends Record<string, unknown>, Return>(
-  name: string,
-): FunctionReference<"action", "internal", Args, Return> {
-  return makeFunctionReference<"action", Args, Return>(name) as unknown as FunctionReference<
-    "action",
     "internal",
     Args,
     Return
@@ -514,20 +435,42 @@ function extensionForContentType(contentType: string): string {
   if (contentType.includes("jpeg")) return "jpg";
   if (contentType.includes("webp")) return "webp";
   if (contentType.includes("gif")) return "gif";
+  if (contentType.includes("mp4")) return "mp4";
   return "png";
 }
 
 async function enhancePromptWithFallback(args: {
   userPrompt: string;
+  presetName: string;
   presetInstructions: string;
+  scriptInstructions?: string;
   negativePrompt?: string;
+  outputKind: "image_prompt" | "video_prompt";
+  storytellingEnabled?: boolean;
+  durationSeconds?: number;
+  resolution?: string;
+  aspectRatio?: string;
+  hasVideoReference?: boolean;
+  hasImageReference?: boolean;
+  attachedScriptMarkdown?: string[];
+  referenceSummaries?: string[];
 }): Promise<string> {
   try {
     return await enhancePrompt({
       userPrompt: args.userPrompt,
+      presetName: args.presetName,
       presetInstructions: args.presetInstructions,
+      scriptInstructions: args.scriptInstructions,
       negativePrompt: args.negativePrompt,
-      referenceSummaries: [],
+      outputKind: args.outputKind,
+      storytellingEnabled: args.storytellingEnabled,
+      durationSeconds: args.durationSeconds,
+      resolution: args.resolution,
+      aspectRatio: args.aspectRatio,
+      hasVideoReference: args.hasVideoReference,
+      hasImageReference: args.hasImageReference,
+      attachedScriptMarkdown: args.attachedScriptMarkdown,
+      referenceSummaries: args.referenceSummaries ?? [],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown enhancement error";

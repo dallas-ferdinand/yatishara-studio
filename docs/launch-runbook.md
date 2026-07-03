@@ -17,11 +17,10 @@ For broader architecture, local setup, production deployment, and preview hot re
 ## Required Human Gates
 
 1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
-2. In BytePlus Ark Console, activate the configured ModelArk models:
-   - enhancement: `BYTEPLUS_ENHANCEMENT_MODEL_ID`
-   - text/script: `BYTEPLUS_TEXT_MODEL_ID`
-   - image: `BYTEPLUS_IMAGE_LOW_MODEL_ID`, `BYTEPLUS_IMAGE_MEDIUM_MODEL_ID`, `BYTEPLUS_IMAGE_HIGH_MODEL_ID`
-   - video: `BYTEPLUS_VIDEO_MODEL_ID`
+2. Confirm AI Gateway model IDs on Convex:
+   - text: `GATEWAY_TEXT_MODEL_ID` (`google/gemini-2.5-flash-lite`)
+   - image: `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`)
+   - video: `GATEWAY_VIDEO_MODEL_ID` (`bytedance/seedance-2.0`)
 3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.
 4. Complete first OTP login with `STUDIO_SUPER_ADMIN_EMAIL`, then use Settings to:
    - seed style presets,
@@ -67,7 +66,7 @@ The preview gate sets a short-lived HTTP-only cookie before normal Convex Auth m
 
 - Bunny Storage: live tiny upload returned `201`.
 - Bunny signed CDN read: live signed GET returned `200`.
-- BytePlus ModelArk: API key and `/api/v3/models` work, but generation/text calls return `ModelNotOpen` until models are activated in Ark Console.
+- Vercel AI Gateway: `AI_GATEWAY_API_KEY` and `GATEWAY_*` model IDs configured on Convex; text smoke returns successfully.
 - Web push: VAPID keys are generated and configured; browser permission/subscription must be tested on the live HTTPS domain.
 - Resend: API key/env are configured; DNS verification may still depend on provider propagation.
 
@@ -82,6 +81,6 @@ The preview gate sets a short-lived HTTP-only cookie before normal Convex Auth m
 - Submit a bank top-up receipt and approve it from admin payment review.
 - Confirm credits increase after approval.
 - Enable browser push notifications.
-- Run one image generation after BytePlus models are active.
-- Run one video generation after BytePlus video model is active.
+- Run one image generation through AI Gateway.
+- Run one video generation through AI Gateway.
 - Confirm completion notification and generated asset saved to the linked folder.

@@ -54,14 +54,10 @@ Auth and messaging:
 
 Generation:
 
-- `BYTEPLUS_ARK_API_KEY`
-- `BYTEPLUS_ARK_BASE_URL`
-- `BYTEPLUS_ENHANCEMENT_MODEL_ID`
-- `BYTEPLUS_TEXT_MODEL_ID`
-- `BYTEPLUS_IMAGE_LOW_MODEL_ID`
-- `BYTEPLUS_IMAGE_MEDIUM_MODEL_ID`
-- `BYTEPLUS_IMAGE_HIGH_MODEL_ID`
-- `BYTEPLUS_VIDEO_MODEL_ID`
+- `AI_GATEWAY_API_KEY`
+- `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `google/gemini-2.5-flash-lite`)
+- `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `openai/gpt-image-2`)
+- `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `bytedance/seedance-2.0`)
 
 Storage, video, and push:
 
@@ -90,6 +86,8 @@ Preview only:
 
 ## Convex Notes
 
+- Generation runs in Convex actions. Set `AI_GATEWAY_API_KEY` and all `GATEWAY_*` model IDs on the Convex deployment with `npx convex env set`, not only in `.env.local`.
+- For the self-hosted Convex instance (`CONVEX_SELF_HOSTED_URL`), `npx convex dev` and `npx convex env` target that deployment when `.env.local` points at it.
 - Public Convex functions should define `args` and `returns` validators.
 - User data should go through `authedQuery`/`authedMutation`; admin-only flows should use `adminQuery`/`adminMutation`.
 - Prefer indexed queries from `convex/schema.ts` over `.filter()` scans.

@@ -24,13 +24,14 @@ export const elementType = v.union(
 
 export const generationMode = v.union(v.literal("image"), v.literal("video"));
 
-export const imageTier = v.union(
+export const generationTier = v.union(
+  v.literal("image"),
+  v.literal("pro_video"),
+  // Legacy image tiers on older jobs
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
 );
-
-export const generationTier = v.union(imageTier, v.literal("pro_video"));
 
 export const generationStage = v.union(
   v.literal("queued"),
@@ -178,6 +179,9 @@ export default defineSchema({
     slug: v.string(),
     kind: v.union(v.literal("image"), v.literal("video"), v.literal("any")),
     systemInstructions: v.string(),
+    scriptInstructions: v.optional(v.string()),
+    storytelling: v.optional(v.boolean()),
+    tagline: v.optional(v.string()),
     negativePrompt: v.optional(v.string()),
     modelHints: v.optional(modelHints),
     thumbnailAssetId: v.optional(v.id("assets")),
@@ -333,10 +337,11 @@ export default defineSchema({
   pricingSettings: defineTable({
     key: v.string(),
     creditPriceCents: v.number(),
-    imageLowCredits: v.number(),
-    imageMediumCredits: v.number(),
-    imageHighCredits: v.number(),
-    videoCredits: v.number(),
+    imageCredits: v.optional(v.number()),
+    videoCredits: v.optional(v.number()),
+    imageLowCredits: v.optional(v.number()),
+    imageMediumCredits: v.optional(v.number()),
+    imageHighCredits: v.optional(v.number()),
     updatedBy: v.optional(v.id("users")),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),

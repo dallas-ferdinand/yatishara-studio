@@ -755,130 +755,6 @@ export function ExplorerPanel({
 
   const viewToggle = <ExplorerViewMenu viewMode={viewMode} onChange={setView} />;
 
-  const panelBody = (
-    <>
-      <PanelSearchBar
-        value={search}
-        onChange={setSearch}
-        placeholder="Search files…"
-        aria-label="Search files"
-      />
-
-      <FileBreadcrumbs path={filesPath} onNavigate={onNavigate} />
-
-      {uploadQueue.length || downloads.length ? (
-        <div className="cursor-explorer-uploads shrink-0" aria-live="polite">
-          {uploadQueue.map((u) => {
-            const dest = destLabel(u.destDir);
-            return (
-              <div
-                key={u.id}
-                className={`cursor-explorer-upload-row${u.status === "error" ? " is-error" : ""}${u.status === "done" ? " is-done" : ""}`}
-              >
-                <UploadProgressPill
-                  upload={u}
-                  destLabelText={dest}
-                  onRetry={onRetryUpload ? () => onRetryUpload(u.id) : undefined}
-                  onDismiss={onDismissUpload ? () => onDismissUpload(u.id, u.status) : undefined}
-                />
-              </div>
-            );
-          })}
-          {downloads.map((dl) => (
-            <div
-              key={dl.id}
-              className={`cursor-explorer-upload-row${dl.status === "error" ? " is-error" : ""}${dl.status === "done" ? " is-done" : ""}`}
-            >
-              <DownloadProgressPill
-                download={dl}
-                onCancel={dl.status === "downloading" ? () => cancelDownload(dl.id) : undefined}
-                onDismiss={dl.status !== "downloading" ? () => dismissDownload(dl.id) : undefined}
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <FileTree
-        viewMode={viewMode}
-        rootEntries={rootEntries}
-        flatEntries={fileEntries}
-        listDir={listDir}
-        onNavigate={onNavigate}
-        onOpenFile={onOpenFile}
-        searchQuery={search}
-        searchScope={currentDir}
-        searchResults={searchResults}
-        searchBusy={searchBusy}
-        searchTruncated={searchTruncated}
-        workspaceId={workspaceId}
-        pinnedPaths={pinnedSet}
-        pinnedShortcuts={pinnedShortcuts}
-        enableLongPress={hidePanelHead && Boolean(onAttachEntry || onOpenFile)}
-        onEntryLongPress={setSheetEntry}
-        onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
-        onBlankContextMenu={openBlankContextMenu}
-      />
-
-      {toast ? (
-        <div className="desk-explorer-toast" role="status">
-          {toast}
-        </div>
-      ) : null}
-
-      <ExplorerContextMenu
-        entry={contextMenu?.entry}
-        x={contextMenu?.x ?? 0}
-        y={contextMenu?.y ?? 0}
-        onClose={() => {
-          if (deleteBusy) return;
-          setContextMenu(null);
-        }}
-        onAction={handleContextAction}
-        onRequestDelete={onDeleteFile ? requestDelete : undefined}
-        onRequestRename={onRenameFile ? requestRename : undefined}
-        pinnedPaths={pinnedSet}
-        currentPath={currentDir}
-        canCreateFile={Boolean(onCreateFile)}
-        canCreateFolder={Boolean(onCreateFolder)}
-      />
-
-      <ExplorerDeleteConfirm
-        target={deleteConfirm}
-        busy={deleteBusy}
-        error={deleteError}
-        onClose={closeDeleteConfirm}
-        onConfirm={() => deleteConfirm?.entry && void confirmDeleteEntry(deleteConfirm.entry)}
-      />
-
-      <MobileActionSheet
-        open={Boolean(sheetEntry)}
-        title={sheetEntry?.name ?? sheetEntry?.path?.split("/").pop()}
-        subtitle={sheetEntry?.path ? displayWorkspacePath(sheetEntry.path) : ""}
-        actions={sheetActions}
-        onClose={() => setSheetEntry(null)}
-      />
-
-      <ExplorerCreateDialog
-        open={Boolean(createMode)}
-        mode={createMode ?? "file"}
-        destDir={createDestDir || filesPath}
-        entries={createEntries}
-        onClose={() => setCreateMode(null)}
-        onCreateFile={onCreateFile ? wrappedCreateFile : undefined}
-        onCreateFolder={onCreateFolder ? wrappedCreateFolder : undefined}
-      />
-
-      <ExplorerRenameDialog
-        open={Boolean(renameTarget)}
-        entry={renameTarget}
-        entries={renameEntries}
-        onClose={() => setRenameTarget(null)}
-        onRename={onRenameFile ? confirmRenameEntry : undefined}
-      />
-    </>
-  );
-
   return (
     <aside
       className={`cursor-explorer-panel h-full flex flex-col min-w-0${dropOver ? " is-drop-target" : ""}${fullscreen ? " desk-explorer-panel--fullscreen" : ""}`}
@@ -941,7 +817,127 @@ export function ExplorerPanel({
         </div>
       )}
 
-      {panelBody}
+      <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
+        <PanelSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search files…"
+          aria-label="Search files"
+        />
+
+        <FileBreadcrumbs path={filesPath} onNavigate={onNavigate} />
+
+        {uploadQueue.length || downloads.length ? (
+          <div className="cursor-explorer-uploads shrink-0" aria-live="polite">
+            {uploadQueue.map((u) => {
+              const dest = destLabel(u.destDir);
+              return (
+                <div
+                  key={u.id}
+                  className={`cursor-explorer-upload-row${u.status === "error" ? " is-error" : ""}${u.status === "done" ? " is-done" : ""}`}
+                >
+                  <UploadProgressPill
+                    upload={u}
+                    destLabelText={dest}
+                    onRetry={onRetryUpload ? () => onRetryUpload(u.id) : undefined}
+                    onDismiss={onDismissUpload ? () => onDismissUpload(u.id, u.status) : undefined}
+                  />
+                </div>
+              );
+            })}
+            {downloads.map((dl) => (
+              <div
+                key={dl.id}
+                className={`cursor-explorer-upload-row${dl.status === "error" ? " is-error" : ""}${dl.status === "done" ? " is-done" : ""}`}
+              >
+                <DownloadProgressPill
+                  download={dl}
+                  onCancel={dl.status === "downloading" ? () => cancelDownload(dl.id) : undefined}
+                  onDismiss={dl.status !== "downloading" ? () => dismissDownload(dl.id) : undefined}
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <FileTree
+          viewMode={viewMode}
+          rootEntries={rootEntries}
+          flatEntries={fileEntries}
+          listDir={listDir}
+          onNavigate={onNavigate}
+          onOpenFile={onOpenFile}
+          searchQuery={search}
+          searchScope={currentDir}
+          searchResults={searchResults}
+          searchBusy={searchBusy}
+          searchTruncated={searchTruncated}
+          workspaceId={workspaceId}
+          pinnedPaths={pinnedSet}
+          pinnedShortcuts={pinnedShortcuts}
+          enableLongPress={hidePanelHead && Boolean(onAttachEntry || onOpenFile)}
+          onEntryLongPress={setSheetEntry}
+          onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
+          onBlankContextMenu={openBlankContextMenu}
+        />
+      </div>
+
+      {toast ? (
+        <div className="desk-explorer-toast" role="status">
+          {toast}
+        </div>
+      ) : null}
+
+      <ExplorerContextMenu
+        entry={contextMenu?.entry}
+        x={contextMenu?.x ?? 0}
+        y={contextMenu?.y ?? 0}
+        onClose={() => {
+          if (deleteBusy) return;
+          setContextMenu(null);
+        }}
+        onAction={handleContextAction}
+        onRequestDelete={onDeleteFile ? requestDelete : undefined}
+        onRequestRename={onRenameFile ? requestRename : undefined}
+        pinnedPaths={pinnedSet}
+        currentPath={currentDir}
+        canCreateFile={Boolean(onCreateFile)}
+        canCreateFolder={Boolean(onCreateFolder)}
+      />
+
+      <ExplorerDeleteConfirm
+        target={deleteConfirm}
+        busy={deleteBusy}
+        error={deleteError}
+        onClose={closeDeleteConfirm}
+        onConfirm={() => deleteConfirm?.entry && void confirmDeleteEntry(deleteConfirm.entry)}
+      />
+
+      <MobileActionSheet
+        open={Boolean(sheetEntry)}
+        title={sheetEntry?.name ?? sheetEntry?.path?.split("/").pop()}
+        subtitle={sheetEntry?.path ? displayWorkspacePath(sheetEntry.path) : ""}
+        actions={sheetActions}
+        onClose={() => setSheetEntry(null)}
+      />
+
+      <ExplorerCreateDialog
+        open={Boolean(createMode)}
+        mode={createMode ?? "file"}
+        destDir={createDestDir || filesPath}
+        entries={createEntries}
+        onClose={() => setCreateMode(null)}
+        onCreateFile={onCreateFile ? wrappedCreateFile : undefined}
+        onCreateFolder={onCreateFolder ? wrappedCreateFolder : undefined}
+      />
+
+      <ExplorerRenameDialog
+        open={Boolean(renameTarget)}
+        entry={renameTarget}
+        entries={renameEntries}
+        onClose={() => setRenameTarget(null)}
+        onRename={onRenameFile ? confirmRenameEntry : undefined}
+      />
     </aside>
   );
 }

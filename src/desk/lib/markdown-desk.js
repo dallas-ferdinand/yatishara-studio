@@ -1,6 +1,7 @@
 /** Desk markdown — same MercuryOS renderer as phone (no marked). */
 export {
   renderMarkdown,
+  renderMarkdownFragment,
   renderMercuryMarkdown,
   previewText,
   enhanceMarkdown,

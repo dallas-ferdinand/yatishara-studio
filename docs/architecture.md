@@ -27,11 +27,11 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 - `convex/users.ts`: current user, account details, and first-run Studio defaults.
 - `convex/folders.ts`, `convex/assets.ts`, `convex/documents.ts`, `convex/elements.ts`: workspace content APIs.
 - `convex/generation.ts`: generation threads, events, jobs, entitlement checks, and state transitions.
-- `convex/generationActions.ts`: Node action that calls BytePlus and stores generated outputs.
+- `convex/generationActions.ts`: Node action that calls Vercel AI Gateway and stores generated outputs.
 - `convex/billing.ts`: credits, pricing, bank receipts, admin review, subscriptions, and audit events.
 - `convex/notifications.ts`, `convex/notificationsActions.ts`: in-app notifications and web push.
 - `convex/lib/bunny.ts`: Bunny Storage/CDN path, upload, and signed URL helpers.
-- `convex/lib/byteplus.ts`: BytePlus ModelArk prompt, image, and video helpers.
+- `convex/lib/aiGateway.ts`: Vercel AI Gateway prompt, image, and video helpers.
 
 ## Data Domains
 
@@ -45,7 +45,7 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 
 - Convex: app backend, auth HTTP routes, schema, and reactive client data.
 - Bunny: storage, pull zone signed reads, and stream/media backing.
-- BytePlus ModelArk: prompt enhancement, image generation, and video generation.
+- Vercel AI Gateway: prompt enhancement, image generation, and video generation (Seedream / Seedance via ByteDance).
 - Resend: email OTP delivery.
 - Evolution API: WhatsApp OTP delivery.
 - Web Push: browser push notification delivery.

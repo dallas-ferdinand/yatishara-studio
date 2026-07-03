@@ -4,6 +4,14 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { buildReceiptPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
 import { adminMutation, adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
+import {
+  IMAGE_CREDITS_BY_RESOLUTION,
+  IMAGE_REFERENCE_SURCHARGE,
+  PLATFORM_OVERHEAD_CREDITS_MEDIA,
+  PLATFORM_OVERHEAD_CREDITS_TEXT,
+  TEXT_GENERATION_BASE_CREDITS,
+  VIDEO_BASE_CREDITS_PER_BLOCK,
+} from "./lib/generationPricing";
 
 const paymentStatus = v.union(
   v.literal("receipt_uploaded"),
@@ -25,21 +33,19 @@ const sendPushForNotificationRef = makeFunctionReference<
 
 const pricingReturn = v.object({
   creditPriceCents: v.number(),
-  imageLowCredits: v.number(),
-  imageMediumCredits: v.number(),
-  imageHighCredits: v.number(),
-  videoCredits: v.number(),
+  imageCredits1K: v.number(),
+  imageCredits2K: v.number(),
+  imageCredits4K: v.number(),
+  imageReferenceSurcharge: v.number(),
+  videoCredits480p: v.number(),
+  videoCredits720p: v.number(),
+  videoCredits1080p: v.number(),
+  platformOverheadCreditsMedia: v.number(),
+  platformOverheadCreditsText: v.number(),
   textCredits: v.number(),
 });
 
-const imageCreditCosts = {
-  low: 1,
-  medium: 2,
-  high: 4,
-} as const;
 const creditPriceCents = 50;
-const textGenerationCreditCost = 1;
-const videoBaseCreditCost = 15;
 
 const bankAccountReturn = v.object({
   _id: v.id("bankAccounts"),
@@ -81,11 +87,16 @@ export const getPricing = authedQuery({
       .unique();
     return {
       creditPriceCents: settings?.creditPriceCents ?? creditPriceCents,
-      imageLowCredits: imageCreditCosts.low,
-      imageMediumCredits: imageCreditCosts.medium,
-      imageHighCredits: imageCreditCosts.high,
-      videoCredits: videoBaseCreditCost,
-      textCredits: textGenerationCreditCost,
+      imageCredits1K: IMAGE_CREDITS_BY_RESOLUTION["1K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      imageCredits2K: IMAGE_CREDITS_BY_RESOLUTION["2K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      imageCredits4K: IMAGE_CREDITS_BY_RESOLUTION["4K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      imageReferenceSurcharge: IMAGE_REFERENCE_SURCHARGE,
+      videoCredits480p: VIDEO_BASE_CREDITS_PER_BLOCK["854x480"],
+      videoCredits720p: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
+      videoCredits1080p: VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
+      platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      platformOverheadCreditsText: PLATFORM_OVERHEAD_CREDITS_TEXT,
+      textCredits: TEXT_GENERATION_BASE_CREDITS + PLATFORM_OVERHEAD_CREDITS_TEXT,
     };
   },
 });
@@ -345,9 +356,7 @@ export const adminListPayments = adminQuery({
 export const adminSetPricing = adminMutation({
   args: {
     creditPriceCents: v.number(),
-    imageLowCredits: v.number(),
-    imageMediumCredits: v.number(),
-    imageHighCredits: v.number(),
+    imageCredits: v.number(),
     videoCredits: v.number(),
   },
   returns: v.null(),
@@ -360,10 +369,8 @@ export const adminSetPricing = adminMutation({
     const data = {
       key: "default",
       creditPriceCents: args.creditPriceCents,
-      imageLowCredits: imageCreditCosts.low,
-      imageMediumCredits: imageCreditCosts.medium,
-      imageHighCredits: imageCreditCosts.high,
-      videoCredits: videoBaseCreditCost,
+      imageCredits: IMAGE_CREDITS_BY_RESOLUTION["2K"],
+      videoCredits: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
       updatedBy: ctx.user._id,
       updatedAt: now,
     };
@@ -454,10 +461,8 @@ export const adminSeedLaunchPricing = adminMutation({
     const data = {
       key: "default",
       creditPriceCents,
-      imageLowCredits: imageCreditCosts.low,
-      imageMediumCredits: imageCreditCosts.medium,
-      imageHighCredits: imageCreditCosts.high,
-      videoCredits: videoBaseCreditCost,
+      imageCredits: IMAGE_CREDITS_BY_RESOLUTION["2K"],
+      videoCredits: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
       updatedBy: ctx.user._id,
       updatedAt: now,
     };

@@ -9,7 +9,7 @@ Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `h
 - Studio workspace: folder tree, tabs, editors, media preview, uploads, prompt composer, and settings.
 - Auth and users: Convex Auth with email OTP and WhatsApp OTP, plus admin/super-admin roles.
 - Assets and documents: Bunny-backed uploads, signed reads, documents, character/prop/location/doc elements.
-- Generation: prompt enhancement plus BytePlus image/video generation, saved outputs, generation threads, events, and notifications.
+- Generation: prompt enhancement plus Vercel AI Gateway image/video generation (Seedream / Seedance), saved outputs, generation threads, events, and notifications.
 - Billing: credit accounts, pricing, bank transfer receipts, admin review, subscriptions, and audit events.
 - Notifications: in-app notifications and web push subscriptions.
 
@@ -20,7 +20,7 @@ Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `h
 - `src/studio/components/StudioShell.tsx`: main Studio application shell.
 - `src/desk/`, `src/mos-app/`, `src/mos-shared/`, `src/mos-css/`: MercuryOS UI/runtime pieces reused by Studio.
 - `convex/`: Convex schema, auth, public functions, internal functions, actions, and provider integrations.
-- `convex/lib/`: shared Convex helpers for auth wrappers, Bunny storage, and BytePlus calls.
+- `convex/lib/`: shared Convex helpers for auth wrappers, Bunny storage, and AI Gateway calls.
 - `docs/`: operational docs and launch/deployment notes.
 - `Dockerfile`: Coolify production image using Next.js standalone output.
 - `scripts/check-launch-env.mjs`: local launch env completeness check.

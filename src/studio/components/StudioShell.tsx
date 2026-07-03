@@ -1,6 +1,9 @@
 // @ts-nocheck
 "use client";
 
+import { StudioHistoryPanel } from "./StudioHistoryPanel";
+import { StudioPromptMessage } from "./StudioPromptMessage";
+import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQueries, useQuery } from "convex/react";
 import {
@@ -25,6 +28,8 @@ import {
   Settings,
   Sparkles,
   Upload,
+  Wand2,
+  X,
   UserRound,
   Video,
   Zap,
@@ -47,6 +52,11 @@ import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { MERCURY_LOGO_SIDEBAR, mercuryLogoAssets } from "@/lib/brand-assets";
 import { getDeviceId, loadSession } from "@/lib/session";
+import {
+  creditCostForGeneration,
+  normalizeImageResolutionLabel as normalizeImageResolution,
+  textCreditCost,
+} from "../../../convex/lib/generationPricing";
 import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
@@ -175,6 +185,7 @@ export function StudioShell() {
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
   const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
+  const generatePresetThumbnails = useAction(api.stylePresetActions.adminGenerateThumbnails);
   const runFlow = useAction(api.generationActions.runFlow);
   const generateScript = useAction(api.generationActions.generateScript);
 
@@ -193,12 +204,12 @@ export function StudioShell() {
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [mode, setMode] = useState("image");
-  const [imageTier, setImageTier] = useState("medium");
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [imageResolution, setImageResolution] = useState("2K");
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
   const [flowPending, setFlowPending] = useState(false);
   const [status, setStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -333,31 +344,67 @@ export function StudioShell() {
   );
   const presets = useQuery(
     api.stylePresets.listEnabled,
-    hasCurrentUser ? { kind: mode === "video" ? "video" : "image" } : "skip",
+    hasCurrentUser
+      ? {
+          kind: mode === "image" ? "image" : "video",
+          expiresUnix: assetUrlExpiresUnix,
+        }
+      : "skip",
+  );
+  const attachedScriptMarkdown = useMemo(
+    () =>
+      attachments
+        .filter((attachment) => attachment.studioKind === "document" && attachment.description?.trim())
+        .map((attachment) => attachment.description.trim()),
+    [attachments],
   );
   const generationReferences = useMemo(
     () => generationReferenceInputs(attachments, attachmentMediaUrls),
     [attachmentMediaUrls, attachments],
   );
+  const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
+  const selectedStylePreset = useMemo(() => {
+    if (!presets?.length) return null;
+    if (selectedStylePresetId) {
+      const selected = presets.find((preset) => preset._id === selectedStylePresetId);
+      if (selected) return selected;
+    }
+    if (mode !== "image" && hasVideoReferenceInput) {
+      return presets.find((preset) => preset.slug === "footage-vfx") ?? presets[0];
+    }
+    if (mode === "script" || mode === "video") {
+      return (
+        presets.find((preset) => preset.slug === "story-ad") ??
+        presets.find((preset) => preset.slug === "cinematic") ??
+        presets[0]
+      );
+    }
+    return presets.find((preset) => preset.slug === "product-studio") ?? presets[0];
+  }, [hasVideoReferenceInput, mode, presets, selectedStylePresetId]);
   const composerElementEntries = useMemo(
     () => (elements ?? []).filter((element) => !element.deletedAt).map((element) => elementToEntry(element, assetsWithPreviewUrls)),
     [assetsWithPreviewUrls, elements],
   );
-  const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
   const hasNonVideoReferenceInput = generationReferences.some((reference) => reference.kind === "image" || reference.kind === "audio");
-  const videoSupportsReferenceInput = false;
+  const videoSupportsReferenceInput = mode === "video";
   const entitlement = useQuery(
     api.generation.canGenerate,
     hasCurrentUser
       ? {
-          tier: mode === "video" ? "pro_video" : imageTier,
+          tier: mode === "video" ? "pro_video" : "image",
           now: entitlementNow,
-          resolution: mode === "video" ? resolution : undefined,
+          resolution:
+            mode === "video"
+              ? resolution
+              : normalizeImageResolution(imageResolution),
           durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
-          hasReferenceInput: mode === "video" ? false : undefined,
-          hasVideoReferenceInput: mode === "video" ? false : undefined,
-          hasNonVideoReferenceInput: mode === "video" ? false : undefined,
-          audioEnabled: mode === "video" ? false : undefined,
+          hasReferenceInput:
+            mode === "video"
+              ? generationReferences.length > 0
+              : generationReferences.length > 0,
+          hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
+          hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
+          audioEnabled: mode === "video" ? audioEnabled : undefined,
         }
       : "skip",
   );
@@ -372,23 +419,23 @@ export function StudioShell() {
       draft,
       attachments,
       mode,
-      imageTier,
       aspectRatio,
       imageResolution,
       resolution,
       durationSeconds,
       audioEnabled,
+      selectedStylePresetId,
     };
     const next = composerContextsRef.current[composerContextKey];
     setDraft(next?.draft ?? "");
     setAttachments(next?.attachments ?? []);
     setMode(next?.mode ?? "image");
-    setImageTier(next?.imageTier ?? "medium");
     setAspectRatio(next?.aspectRatio ?? "16:9");
     setImageResolution(next?.imageResolution ?? "2K");
     setResolution(next?.resolution ?? "1280x720");
     setDurationSeconds(next?.durationSeconds ?? "4");
     setAudioEnabled(next?.audioEnabled ?? false);
+    setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
     composerKeyRef.current = composerContextKey;
   }, [composerContextKey]);
 
@@ -685,6 +732,13 @@ export function StudioShell() {
 
   function openNewComposerTab() {
     openTab(`composer:${Date.now()}`);
+  }
+
+  function openHistoryThread(threadId) {
+    setSelectedThreadId(threadId);
+    setActiveTab(COMPOSER_TAB);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
   }
 
   function openCreateTab(kind, elementType = "") {
@@ -1055,9 +1109,14 @@ export function StudioShell() {
     setFlowPending(true);
     try {
       if (mode === "script") {
+        if (!selectedStylePreset) {
+          throw new Error("Creative presets are still loading. Try again in a moment.");
+        }
         const result = await generateScript({
           folderId: activeFolder._id,
+          stylePresetId: selectedStylePreset._id,
           userPrompt: buildPromptWithAttachments(draft, attachments),
+          attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
           referenceInputs: generationReferences,
         });
         openTab(`document:${result.documentId}`);
@@ -1069,7 +1128,7 @@ export function StudioShell() {
       if (presets === undefined) {
         throw new Error("Style options are still loading. Try again in a moment.");
       }
-      const preset = presets[0];
+      const preset = selectedStylePreset;
       if (!preset) {
         const canSeedPresets =
           currentUser?.role === "admin" || currentUser?.role === "super_admin";
@@ -1091,12 +1150,13 @@ export function StudioShell() {
       await runFlow({
         threadId,
         mode,
-        tier: mode === "video" ? "pro_video" : imageTier,
+        tier: mode === "video" ? "pro_video" : "image",
         stylePresetId: preset._id,
         userPrompt: buildPromptWithAttachments(draft, attachments),
-        audioEnabled: mode === "video" ? false : undefined,
+        attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
+        audioEnabled: mode === "video" ? audioEnabled : undefined,
         aspectRatio,
-        resolution: mode === "image" ? normalizeImageResolution(imageTier, imageResolution) : resolution,
+        resolution: mode === "image" ? normalizeImageResolution(imageResolution) : resolution,
         durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
         referenceUrls: mode === "image"
           ? generationReferences
@@ -1190,7 +1250,6 @@ export function StudioShell() {
             radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
             color-mix(in srgb, var(--mos-bg) 82%, transparent);
           box-shadow: 0 -18px 42px rgba(0, 0, 0, 0.34);
-          backdrop-filter: blur(22px);
         }
         .studio-mobile-nav-btn {
           display: flex;
@@ -1543,15 +1602,11 @@ export function StudioShell() {
           box-shadow:
             inset 0 1px 0 rgb(255 255 255 / 0.04),
             0 12px 34px rgb(0 0 0 / 0.14) !important;
-          backdrop-filter: blur(28px) saturate(1.2);
-          -webkit-backdrop-filter: blur(28px) saturate(1.2);
         }
         .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body, .cursor-workspace-head) {
           background: transparent !important;
         }
         .studio-polish :where(.cursor-panel-head, .cursor-explorer-panel, .cursor-tree-row, .studio-credit-pill, .cursor-icon-btn, .studio-pill-btn) {
-          backdrop-filter: blur(22px) saturate(1.16);
-          -webkit-backdrop-filter: blur(22px) saturate(1.16);
         }
         .studio-polish .cursor-sidebar-brand-logo-img {
           filter: drop-shadow(0 0 8px var(--studio-glow-soft));
@@ -1657,26 +1712,6 @@ export function StudioShell() {
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
           opacity: 1;
-        }
-        .studio-polish main.studio-composer-bg::after {
-          content: "";
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          z-index: 0;
-          height: min(58vh, 460px);
-          pointer-events: none;
-          background: linear-gradient(
-            180deg,
-            transparent 0%,
-            color-mix(in srgb, var(--mos-bg) 8%, transparent) 14%,
-            color-mix(in srgb, var(--mos-bg) 24%, transparent) 28%,
-            color-mix(in srgb, var(--mos-bg) 48%, transparent) 44%,
-            color-mix(in srgb, var(--mos-bg) 70%, transparent) 60%,
-            color-mix(in srgb, var(--mos-bg) 88%, transparent) 78%,
-            color-mix(in srgb, var(--mos-bg) 98%, transparent) 100%
-          );
         }
         .studio-polish main > :not(style) {
           position: relative;
@@ -2007,10 +2042,11 @@ export function StudioShell() {
           font-family: inherit;
           cursor: pointer;
         }
-        .studio-settings-pill:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border));
-          color: var(--color-cursor-text);
-          box-shadow: 0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+        .studio-settings-pill.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border));
+          color: var(--color-cursor-text-bright);
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
         .studio-settings-floating-overlay {
           position: fixed;
@@ -2741,8 +2777,6 @@ export function StudioShell() {
         .studio-polish .cursor-composer-box:focus-within {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, rgba(255, 255, 255, 0.15));
           background: transparent !important;
-          backdrop-filter: blur(58px) saturate(1.35) brightness(1.12);
-          -webkit-backdrop-filter: blur(58px) saturate(1.35) brightness(1.12);
           box-shadow:
             0 24px 64px color-mix(in srgb, #000 42%, transparent),
             0 0 36px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
@@ -2754,7 +2788,6 @@ export function StudioShell() {
             border-color 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
             backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            -webkit-backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1);
         }
         .studio-polish .cursor-composer-box:focus-within::before {
           opacity: 1;
@@ -2881,7 +2914,8 @@ export function StudioShell() {
             0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 3%, transparent);
           overflow: hidden;
         }
-        .studio-polish .desk-file-grid-item .desk-file-thumb-visual {
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual {
           flex: 0 0 auto;
           aspect-ratio: 1 / 1;
           height: auto;
@@ -2891,24 +2925,20 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item .desk-file-thumb-label {
-          display: -webkit-box;
-          align-items: center;
-          justify-content: center;
-          min-height: 30px;
-          max-height: 30px;
-          padding: 3px 6px;
+          display: block;
+          min-height: 0;
+          max-height: none;
+          padding: 6px 8px;
           border-top: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
           border-bottom: 1px solid color-mix(in srgb, #000 22%, transparent);
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--mos-panel) 86%, var(--mos-bg)), color-mix(in srgb, var(--mos-bg) 82%, #000 18%));
           color: var(--color-cursor-text-bright);
           overflow: hidden;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
+          white-space: nowrap;
           font-size: 10.5px;
           font-weight: 500;
-          line-height: 1.08;
-          overflow-wrap: anywhere;
+          line-height: 1.25;
           text-align: center;
           text-overflow: ellipsis;
           text-shadow: 0 1px 0 color-mix(in srgb, #000 36%, transparent);
@@ -3008,7 +3038,8 @@ export function StudioShell() {
           width: 100%;
           max-width: min(700px, calc(100% - 24px));
           margin: 0 auto;
-          transform: translateX(-5px);
+          position: relative;
+          left: -5px;
           padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
           background: transparent !important;
         }
@@ -3047,7 +3078,7 @@ export function StudioShell() {
           z-index: 3;
           width: 320px;
           height: 170px;
-          border-radius: 14px 0 0 0;
+          border-radius: 16px 0 0 0;
           border-top: 2px solid color-mix(in srgb, var(--cursor-accent) 96%, transparent);
           border-left: 2px solid color-mix(in srgb, var(--cursor-accent) 96%, transparent);
           background: transparent;
@@ -3082,7 +3113,7 @@ export function StudioShell() {
           z-index: 3;
           width: 290px;
           height: 150px;
-          border-radius: 0 0 14px 0;
+          border-radius: 0 0 16px 0;
           border-right: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
           border-bottom: 2px solid color-mix(in srgb, var(--cursor-accent) 86%, transparent);
           background: transparent;
@@ -3135,7 +3166,6 @@ export function StudioShell() {
             0 16px 38px color-mix(in srgb, var(--mos-bg) 32%, transparent),
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
           padding: 5px;
-          backdrop-filter: blur(18px);
         }
         .studio-mode-row {
           display: flex;
@@ -3187,6 +3217,198 @@ export function StudioShell() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-preset-grid-panel {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: calc(100% + 10px);
+          z-index: 40;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          max-height: min(52vh, 420px);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border-radius: 18px;
+          background:
+            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 42%),
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--mos-panel) 96%, var(--mos-bg) 4%),
+              color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg) 8%)
+            );
+          box-shadow:
+            0 24px 64px color-mix(in srgb, var(--mos-bg) 45%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          padding: 12px;
+          animation: studio-preset-grid-in 180ms var(--studio-motion-ease);
+        }
+        @keyframes studio-preset-grid-in {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .studio-preset-grid-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 0 2px;
+        }
+        .studio-preset-grid-head strong {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-preset-grid-head span {
+          font-size: 11px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-preset-grid-close {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-surface) 80%, transparent);
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+        }
+        .studio-preset-grid-close:hover {
+          color: var(--color-cursor-text);
+          background: var(--color-cursor-hover);
+        }
+        .studio-preset-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+          gap: 10px;
+          overflow: auto;
+          padding: 2px;
+        }
+        .studio-preset-grid-card {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-surface) 78%, transparent);
+          padding: 8px;
+          text-align: left;
+          cursor: pointer;
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            transform var(--studio-motion-fast) var(--studio-motion-spring),
+            box-shadow var(--studio-motion-med) var(--studio-motion-ease);
+        }
+        .studio-preset-grid-card:hover {
+          transform: translateY(-1px);
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          box-shadow: 0 10px 24px color-mix(in srgb, var(--mos-bg) 24%, transparent);
+        }
+        .studio-preset-grid-card.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
+            0 12px 28px color-mix(in srgb, var(--mos-bg) 28%, transparent);
+        }
+        .studio-preset-grid-thumb {
+          position: relative;
+          aspect-ratio: 16 / 10;
+          overflow: hidden;
+          border-radius: 10px;
+          background:
+            linear-gradient(135deg, color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-panel)), var(--mos-surface));
+        }
+        .studio-preset-grid-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .studio-preset-grid-thumb-fallback {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 100%;
+          color: color-mix(in srgb, var(--cursor-accent) 70%, white);
+        }
+        .studio-preset-grid-copy strong {
+          display: block;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--color-cursor-text-bright);
+          line-height: 1.2;
+        }
+        .studio-preset-grid-copy span {
+          display: block;
+          margin-top: 3px;
+          font-size: 10px;
+          line-height: 1.35;
+          color: var(--color-cursor-muted);
+        }
+        .studio-preset-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          max-width: 220px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-surface) 84%, transparent);
+          padding: 4px 10px 4px 4px;
+          color: var(--color-cursor-text);
+          cursor: pointer;
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-preset-trigger:hover,
+        .studio-preset-trigger.is-open {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent-dim) 22%, var(--mos-surface));
+        }
+        .studio-preset-trigger-thumb {
+          flex: 0 0 auto;
+          width: 28px;
+          height: 28px;
+          overflow: hidden;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-panel));
+        }
+        .studio-preset-trigger-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .studio-preset-trigger-copy {
+          min-width: 0;
+          text-align: left;
+        }
+        .studio-preset-trigger-copy strong {
+          display: block;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1.1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .studio-preset-trigger-copy span {
+          display: block;
+          font-size: 10px;
+          color: var(--color-cursor-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .studio-composer .cursor-composer-textarea {
           --studio-composer-line-size: 24px;
@@ -3340,12 +3562,12 @@ export function StudioShell() {
           padding-left: 2px;
         }
         .studio-inline-tag--image-only {
+          position: relative;
           width: var(--studio-composer-chip-size, 20px);
           min-width: var(--studio-composer-chip-size, 20px);
           max-width: var(--studio-composer-chip-size, 20px);
           padding: 0;
           border-radius: 999px;
-          overflow: hidden;
           gap: 0;
         }
         .studio-inline-tag-media {
@@ -3385,15 +3607,24 @@ export function StudioShell() {
           height: 11px;
           stroke-width: 2.25;
         }
-        .studio-inline-tag-kind--video > svg {
+        .studio-inline-tag-overlay {
           position: absolute;
-          inset: 50% auto auto 50%;
-          width: 8px;
-          height: 8px;
-          transform: translate(-43%, -50%);
-          color: white;
-          fill: color-mix(in srgb, #000 36%, transparent);
-          filter: drop-shadow(0 1px 2px color-mix(in srgb, #000 72%, transparent));
+          right: -2px;
+          bottom: -2px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 11px;
+          height: 11px;
+          color: #fff;
+          pointer-events: none;
+          filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
+        }
+        .studio-inline-tag-overlay svg {
+          display: block;
+          width: 10px;
+          height: 10px;
+          stroke-width: 2.5;
         }
         .studio-chip-preview-card {
           position: fixed;
@@ -3411,8 +3642,6 @@ export function StudioShell() {
           pointer-events: none;
           transform-origin: bottom center;
           animation: studio-chip-preview-in 120ms ease-out;
-          backdrop-filter: blur(18px) saturate(1.14);
-          -webkit-backdrop-filter: blur(18px) saturate(1.14);
         }
         .studio-chip-preview-media {
           position: relative;
@@ -3557,6 +3786,22 @@ export function StudioShell() {
         .studio-composer-inline-settings::-webkit-scrollbar {
           display: none;
         }
+        .studio-inline-audio-setting {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 30px;
+          padding: 0 8px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 84%, transparent);
+          border-radius: var(--cursor-radius-pill);
+          background: color-mix(in srgb, var(--mos-surface) 56%, transparent);
+          flex: 0 0 auto;
+        }
+        .studio-inline-audio-label {
+          font-size: 11px;
+          color: var(--color-cursor-muted);
+          white-space: nowrap;
+        }
         .studio-inline-setting {
           position: relative;
           flex: 0 0 auto;
@@ -3653,7 +3898,6 @@ export function StudioShell() {
           top: auto;
           left: auto;
           z-index: 10000 !important;
-          backdrop-filter: blur(18px);
           animation: studio-menu-pop 130ms ease-out;
           overflow: auto;
           pointer-events: auto;
@@ -3670,7 +3914,6 @@ export function StudioShell() {
           min-width: 220px !important;
           max-width: calc(100vw - 24px);
           padding: 6px !important;
-          backdrop-filter: blur(18px);
           animation: studio-menu-pop 130ms ease-out;
           overflow: auto;
           pointer-events: auto;
@@ -3757,7 +4000,6 @@ export function StudioShell() {
           z-index: 10000 !important;
           overflow: auto;
           pointer-events: auto;
-          backdrop-filter: blur(18px);
           animation: studio-menu-pop 130ms ease-out;
         }
         .studio-inline-settings-menu {
@@ -4301,7 +4543,7 @@ export function StudioShell() {
         }
         .studio-generate-column {
           position: relative;
-          z-index: 1;
+          isolation: auto;
           display: flex;
           align-self: stretch;
           align-items: flex-end;
@@ -4340,7 +4582,6 @@ export function StudioShell() {
             box-shadow var(--studio-motion-med) var(--studio-motion-ease);
         }
         .studio-generate-btn:hover:not(:disabled) {
-          filter: brightness(1.04) saturate(1.05);
           transform: scale(var(--studio-hover-scale));
           box-shadow:
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 34%, transparent),
@@ -4352,8 +4593,10 @@ export function StudioShell() {
         }
         .studio-generate-btn:disabled {
           cursor: not-allowed;
-          filter: grayscale(0.35) brightness(0.82);
-          opacity: 0.62;
+        }
+        .studio-generate-btn:disabled .studio-generate-label,
+        .studio-generate-btn:disabled .studio-generate-cost {
+          opacity: 0.5;
         }
         .studio-generate-label {
           font-size: 12px;
@@ -4457,8 +4700,6 @@ export function StudioShell() {
           box-shadow:
             0 16px 38px color-mix(in srgb, #000 28%, transparent),
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
-          backdrop-filter: blur(20px) saturate(1.28);
-          -webkit-backdrop-filter: blur(20px) saturate(1.28);
           opacity: 0.9;
           transition: opacity var(--studio-motion-fast) var(--studio-motion-ease), transform var(--studio-motion-fast) var(--studio-motion-spring);
         }
@@ -4530,8 +4771,6 @@ export function StudioShell() {
           border-radius: 999px;
           background: color-mix(in srgb, var(--mos-bg) 60%, transparent);
           box-shadow: 0 14px 34px color-mix(in srgb, #000 26%, transparent);
-          backdrop-filter: blur(18px) saturate(1.22);
-          -webkit-backdrop-filter: blur(18px) saturate(1.22);
         }
         .studio-asset-preview .desk-image-viewer-stage {
           padding: 28px;
@@ -5115,7 +5354,6 @@ export function StudioShell() {
           box-shadow:
             0 20px 50px color-mix(in srgb, var(--mos-bg) 28%, transparent),
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
-          backdrop-filter: blur(18px) saturate(1.08);
         }
         .studio-empty-copy h1 {
           margin: 0;
@@ -5142,7 +5380,6 @@ export function StudioShell() {
           border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           background: color-mix(in srgb, #000 16%, transparent);
           box-shadow: none;
-          backdrop-filter: none;
         }
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-chips span,
         [data-studio-bg-pack="space"] .studio-polish .studio-empty-chips span {
@@ -5246,42 +5483,62 @@ export function StudioShell() {
           flex-direction: column;
         }
         .studio-history-floating-panel {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          width: min(340px, 100vw);
-          height: 100vh;
-          align-self: stretch;
-          flex-direction: column;
-          overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border));
-          border-width: 0 0 0 1px;
-          border-radius: 0;
-          background: color-mix(in srgb, var(--mos-panel) 94%, var(--mos-bg));
-          box-shadow: 0 24px 70px color-mix(in srgb, #000 46%, transparent), 0 0 34px var(--studio-glow-soft);
+          width: min(360px, 100vw);
         }
         .studio-history-floating-head {
           display: flex;
           align-items: center;
-          gap: 4px;
-          padding: 0 6px 0 0;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 14px 10px 12px 14px;
           border-bottom: 1px solid var(--color-cursor-border);
         }
-        .studio-history-floating-head .studio-history-search {
-          flex: 1;
+        .studio-history-head-copy {
+          min-width: 0;
+        }
+        .studio-history-head-title {
           margin: 0;
-          border: 0;
-          border-radius: 0;
-          background: transparent;
-          padding: 0 12px;
-          min-height: 34px;
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 700;
+          line-height: 1.2;
+        }
+        .studio-history-head-meta {
+          margin: 3px 0 0;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.2;
+        }
+        .studio-history-search-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          margin: 10px 12px 8px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
+          transition: border-color 120ms ease, box-shadow 120ms ease;
+        }
+        .studio-history-search-wrap:focus-within {
+          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-history-search-icon {
+          margin-left: 11px;
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+          color: var(--color-cursor-muted);
+          pointer-events: none;
         }
         .studio-history-search {
-          margin: 10px 12px;
-          padding: 8px 12px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
-          border-radius: 10px;
-          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
+          flex: 1;
+          min-width: 0;
+          margin: 0;
+          padding: 9px 10px;
+          border: 0;
+          border-radius: 12px;
+          background: transparent;
           color: var(--color-cursor-text);
           font-size: 12px;
           outline: none;
@@ -5289,30 +5546,61 @@ export function StudioShell() {
         .studio-history-search::placeholder {
           color: var(--color-cursor-muted);
         }
-        .studio-history-search:focus {
-          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+        .studio-history-search-clear {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 6px;
+          padding: 4px;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+        }
+        .studio-history-search-clear:hover {
+          color: var(--color-cursor-text);
+          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-history-list {
           flex: 1;
           min-height: 0;
           overflow-y: auto;
-          padding: 0 8px 8px;
+          overscroll-behavior: contain;
+          scrollbar-gutter: stable;
+          padding: 4px 10px 16px;
+        }
+        .studio-history-group + .studio-history-group {
+          margin-top: 12px;
+        }
+        .studio-history-group-label {
+          margin: 0 0 6px;
+          padding: 0 4px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-history-group-items {
+          display: grid;
+          gap: 4px;
         }
         .studio-history-item {
           display: flex;
           width: 100%;
-          flex-direction: column;
-          gap: 2px;
-          padding: 10px 12px;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 10px;
           border: 1px solid transparent;
-          border-radius: 10px;
+          border-radius: 12px;
           background: transparent;
           color: inherit;
           font-family: inherit;
           font-size: inherit;
           text-align: left;
           cursor: pointer;
-          transition: background 120ms ease, border-color 120ms ease;
+          transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
         }
         .studio-history-item:hover {
           background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
@@ -5321,26 +5609,76 @@ export function StudioShell() {
         .studio-history-item.is-active {
           background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           border-color: color-mix(in srgb, var(--cursor-accent) 30%, transparent);
+          box-shadow: inset 2px 0 0 var(--cursor-accent);
+        }
+        .studio-history-item-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          flex-shrink: 0;
+          border-radius: 8px;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          color: var(--cursor-accent);
+        }
+        .studio-history-item-body {
+          display: flex;
+          min-width: 0;
+          flex: 1;
+          flex-direction: column;
+          gap: 3px;
         }
         .studio-history-item-title {
           color: var(--color-cursor-text-bright);
           font-size: 12px;
           font-weight: 650;
           line-height: 1.3;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
           overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .studio-history-item-date {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
           color: var(--color-cursor-muted);
           font-size: 10px;
+          line-height: 1.2;
+        }
+        .studio-history-item-date-icon {
+          width: 11px;
+          height: 11px;
+          flex-shrink: 0;
+          opacity: 0.8;
         }
         .studio-history-empty {
-          padding: 24px 12px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 40px 18px;
+          text-align: center;
+        }
+        .studio-history-empty-icon {
+          width: 28px;
+          height: 28px;
+          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-muted));
+          opacity: 0.9;
+        }
+        .studio-history-empty-title {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-history-empty-copy {
+          margin: 0;
+          max-width: 22ch;
           color: var(--color-cursor-muted);
           font-size: 12px;
-          text-align: center;
+          line-height: 1.45;
         }
         .studio-chat-stream {
           min-height: 0;
@@ -5359,26 +5697,30 @@ export function StudioShell() {
           justify-content: flex-end;
           gap: 12px;
         }
+        .studio-chat-stream-inner.is-empty {
+          justify-content: center;
+        }
         .studio-chat-empty-state {
           flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
+          width: 100%;
+          min-height: min(68vh, 640px);
+          padding: 24px 16px 32px;
           text-align: center;
         }
+        .studio-chat-empty-state .studio-empty-hero {
+          gap: 18px;
+        }
         .studio-chat-empty-state .studio-empty-logo {
-          margin: 0 auto 12px;
+          margin: 0 auto;
         }
-        .studio-chat-empty-state h3 {
-          color: var(--color-cursor-text-bright);
-          font-size: 15px;
-          font-weight: 760;
+        .studio-chat-empty-state .studio-empty-copy {
+          margin-top: 0;
         }
-        .studio-chat-empty-state p {
-          max-width: 360px;
-          margin-top: 6px;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
+        .studio-chat-empty-state .studio-empty-copy h1 {
+          font-size: clamp(20px, 3.4vw, 28px);
         }
         .studio-chat-bubble {
           position: relative;
@@ -5423,6 +5765,79 @@ export function StudioShell() {
           font-size: 13px;
           line-height: 1.5;
           white-space: pre-wrap;
+        }
+        .studio-chat-markdown {
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          line-height: 1.55;
+          white-space: normal;
+        }
+        .studio-chat-markdown :where(p, ul, ol, pre, blockquote) {
+          margin: 0 0 0.65em;
+        }
+        .studio-chat-markdown :where(p:last-child, ul:last-child, ol:last-child, pre:last-child, blockquote:last-child) {
+          margin-bottom: 0;
+        }
+        .studio-chat-markdown :where(code) {
+          font-size: 0.92em;
+        }
+        .studio-chat-prompt {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-chat-prompt-chips,
+        .studio-chat-prompt-body {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+        }
+        .studio-chat-chip {
+          display: inline-flex;
+          max-width: 100%;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 8px 4px 6px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          color: var(--color-cursor-text-bright);
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1.2;
+          vertical-align: middle;
+        }
+        .studio-chat-chip-icon {
+          width: 12px;
+          height: 12px;
+          flex-shrink: 0;
+          opacity: 0.9;
+        }
+        .studio-chat-chip-label {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-chat-markdown-bit {
+          display: inline;
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          line-height: 1.5;
+        }
+        .studio-chat-markdown-bit :where(p) {
+          display: inline;
+          margin: 0;
+        }
+        .msg-user-markdown-bit {
+          display: inline;
+          color: inherit;
+          font-size: inherit;
+          line-height: inherit;
+        }
+        .msg-user-markdown-bit :where(p) {
+          display: inline;
+          margin: 0;
         }
         .studio-video-progress-card {
           margin: -12px -14px;
@@ -5656,48 +6071,48 @@ export function StudioShell() {
             }}
           />
         </div>
+        <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
         <PanelSearchBar value={search} onChange={setSearch} placeholder="Search your content" aria-label="Search your content" />
-        <div className="studio-folder-pathbar">
+        <div className="studio-folder-pathbar shrink-0">
           <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} onDropEntry={handleBreadcrumbDrop} />
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-          <FileTree
-            viewMode={viewMode}
-            workspaceId={WORKSPACE_ID}
-            rootEntries={displayRootEntries}
-            flatEntries={displayCurrentEntries}
-            listDir={() => {}}
-            onNavigate={(path, navEntry) => {
-              if (navEntry?.type === "parent" && navEntry.studioId) {
-                setActiveFolderId(navEntry.studioId);
-                setNavTrail((trail) => trail.slice(0, -1));
-                return;
-              }
-              const entry = pathToEntry.get(path);
-              if (entry) {
-                handleEntryOpen(entry);
-                return;
-              }
-              const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
-                (item) => studioPathForFolder(item) === path,
-              );
-              if (folder) {
-                setActiveFolderId(folder._id);
-                setNavTrail((trail) => [...trail, { id: folder._id, name: folder.name }]);
-              }
-            }}
-            onOpenFile={handleOpenPath}
-            searchQuery={search}
-            searchScope={breadcrumbPath}
-            searchResults={searchState.entries}
-            searchBusy={search !== deferredSearch}
-            searchTruncated={searchState.truncated}
-            onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
-            onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
-            onEntryDrop={handleEntryDrop}
-          />
-        </div>
-      </aside>
+        <FileTree
+          viewMode={viewMode}
+          workspaceId={WORKSPACE_ID}
+          rootEntries={displayRootEntries}
+          flatEntries={displayCurrentEntries}
+          listDir={() => {}}
+          onNavigate={(path, navEntry) => {
+            if (navEntry?.type === "parent" && navEntry.studioId) {
+              setActiveFolderId(navEntry.studioId);
+              setNavTrail((trail) => trail.slice(0, -1));
+              return;
+            }
+            const entry = pathToEntry.get(path);
+            if (entry) {
+              handleEntryOpen(entry);
+              return;
+            }
+            const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
+              (item) => studioPathForFolder(item) === path,
+            );
+            if (folder) {
+              setActiveFolderId(folder._id);
+              setNavTrail((trail) => [...trail, { id: folder._id, name: folder.name }]);
+            }
+          }}
+          onOpenFile={handleOpenPath}
+          searchQuery={search}
+          searchScope={breadcrumbPath}
+          searchResults={searchState.entries}
+          searchBusy={search !== deferredSearch}
+          searchTruncated={searchState.truncated}
+          onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
+          onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
+          onEntryDrop={handleEntryDrop}
+        />
+      </div>
+    </aside>
         </Panel>
         <PanelResizeHandle className="cursor-resize" />
         <Panel defaultSize={76} minSize={42}>
@@ -5725,10 +6140,11 @@ export function StudioShell() {
               <AdminQuickLinks onOpenAdminTab={openAdminTab} />
             ) : null}
             <button
-              className="studio-settings-pill studio-settings-trigger"
-              onClick={() => setHistoryOpen(v => !v)}
-              aria-label="Chat history"
-              title="Chat history"
+              className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-label="Generation history"
+              title="Generation history"
+              aria-pressed={historyOpen}
             >
               <History className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -5770,6 +6186,7 @@ export function StudioShell() {
             onOpenSettings={() => openSettingsTab("general")}
             onOpenAdminTab={openAdminTab}
             onSeedStylePresets={() => seedStylePresets()}
+            onGeneratePresetThumbnails={() => generatePresetThumbnails({ force: true })}
             onCreateItem={(values) => createStudioItem(values)}
             onUploadElementFiles={(files) => uploadElementFiles(files)}
             onCloseTab={closeTab}
@@ -5784,8 +6201,6 @@ export function StudioShell() {
             setAttachments={setAttachments}
             mode={mode}
             setMode={setMode}
-            imageTier={imageTier}
-            setImageTier={setImageTier}
             aspectRatio={aspectRatio}
             setAspectRatio={setAspectRatio}
             imageResolution={imageResolution}
@@ -5794,8 +6209,12 @@ export function StudioShell() {
             setResolution={setResolution}
             durationSeconds={durationSeconds}
             setDurationSeconds={setDurationSeconds}
-            audioEnabled={mode === "video" ? false : audioEnabled}
-            hasReferenceInput={mode === "video" && videoSupportsReferenceInput && generationReferences.length > 0}
+            audioEnabled={audioEnabled}
+            setAudioEnabled={setAudioEnabled}
+            presets={presets}
+            selectedStylePreset={selectedStylePreset}
+            onSelectStylePreset={setSelectedStylePresetId}
+            hasReferenceInput={generationReferences.length > 0}
             hasVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasVideoReferenceInput}
             hasNonVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasNonVideoReferenceInput}
             generationReferences={generationReferences}
@@ -5850,41 +6269,12 @@ export function StudioShell() {
         : null}
 
       {historyOpen ? (
-        <div className="studio-settings-floating-overlay" role="dialog" aria-label="Chat history">
-          <button type="button" className="studio-settings-floating-backdrop" onClick={() => setHistoryOpen(false)} aria-label="Close history" />
-          <aside className="studio-history-floating-panel">
-            <header className="studio-history-floating-head">
-              <input
-                className="studio-history-search"
-                type="search"
-                placeholder="Search threads..."
-                aria-label="Search chat history"
-              />
-              <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={() => setHistoryOpen(false)} aria-label="Close">&times;</button>
-            </header>
-            <div className="studio-history-list">
-              {threads?.length ? (
-                threads.map((thread) => (
-                  <button
-                    key={thread._id}
-                    className={`studio-history-item${thread._id === activeThreadId ? " is-active" : ""}`}
-                    onClick={() => {
-                      setSelectedThreadId(thread._id);
-                      setHistoryOpen(false);
-                    }}
-                  >
-                    <span className="studio-history-item-title">{thread.title || "Untitled generation"}</span>
-                    <span className="studio-history-item-date">
-                      {new Date(thread._creationTime).toLocaleDateString()}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="studio-history-empty">No threads yet</p>
-              )}
-            </div>
-          </aside>
-        </div>
+        <StudioHistoryPanel
+          threads={threads ?? []}
+          activeThreadId={activeThreadId}
+          onSelectThread={openHistoryThread}
+          onClose={() => setHistoryOpen(false)}
+        />
       ) : null}
       {settingsOpen ? (
         <SettingsFloatingPanel
@@ -5943,8 +6333,6 @@ function StudioComposer({
   setAttachments,
   mode,
   setMode,
-  imageTier,
-  setImageTier,
   aspectRatio,
   setAspectRatio,
   imageResolution,
@@ -5954,6 +6342,10 @@ function StudioComposer({
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
+  setAudioEnabled,
+  presets,
+  selectedStylePreset,
+  onSelectStylePreset,
   hasReferenceInput,
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
@@ -5978,18 +6370,18 @@ function StudioComposer({
   const [selectionHighlights, setSelectionHighlights] = useState([]);
   const [chipPreview, setChipPreview] = useState(null);
   const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [presetGridOpen, setPresetGridOpen] = useState(false);
   const inputLineRef = useRef(null);
   const cost = composerCreditCost({
     mode,
-    imageTier,
     resolution,
+    imageResolution,
     durationSeconds,
     hasReferenceInput,
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
     referenceInputs: generationReferences,
-    pricing,
   });
 
   useEffect(() => {
@@ -6132,6 +6524,7 @@ function StudioComposer({
   return (
     <div
       className="cursor-composer-shell studio-composer"
+      data-drop-target="composer"
       onDragEnter={() => setDragOver(true)}
       onDragOver={(event) => {
         event.preventDefault();
@@ -6167,6 +6560,17 @@ function StudioComposer({
         <StudioComposerPreviewDock
           attachment={previewAttachment}
           onClose={() => setPreviewAttachment(null)}
+        />
+      ) : null}
+      {presetGridOpen ? (
+        <StudioPresetGridPanel
+          presets={presets}
+          selectedPresetId={selectedStylePreset?._id}
+          onSelect={(presetId) => {
+            onSelectStylePreset(presetId);
+            setPresetGridOpen(false);
+          }}
+          onClose={() => setPresetGridOpen(false)}
         />
       ) : null}
       <div className="cursor-composer">
@@ -6232,6 +6636,11 @@ function StudioComposer({
         </div>
         <div className="studio-composer-toolbar">
           <div className="studio-composer-controls">
+            <StudioPresetTriggerButton
+              preset={selectedStylePreset}
+              open={presetGridOpen}
+              onClick={() => setPresetGridOpen((open) => !open)}
+            />
             <StudioUploadMenu
               open={uploadMenuOpen}
               setOpen={setUploadMenuOpen}
@@ -6246,8 +6655,6 @@ function StudioComposer({
             {mode !== "script" ? (
               <StudioComposerInlineSettings
                 mode={mode}
-                imageTier={imageTier}
-                setImageTier={setImageTier}
                 aspectRatio={aspectRatio}
                 setAspectRatio={setAspectRatio}
                 imageResolution={imageResolution}
@@ -6256,6 +6663,8 @@ function StudioComposer({
                 setResolution={setResolution}
                 durationSeconds={durationSeconds}
                 setDurationSeconds={setDurationSeconds}
+                audioEnabled={audioEnabled}
+                setAudioEnabled={setAudioEnabled}
               />
             ) : null}
           </div>
@@ -6395,6 +6804,91 @@ function StudioModeSwitcher({ mode, setMode }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function StudioPresetTriggerButton({ preset, open, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`studio-preset-trigger${open ? " is-open" : ""}`}
+      aria-expanded={open}
+      aria-haspopup="listbox"
+      title="Choose a style preset"
+      onClick={onClick}
+    >
+      <span className="studio-preset-trigger-thumb">
+        {preset?.previewImageUrl ? (
+          <img src={preset.previewImageUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="studio-preset-grid-thumb-fallback">
+            <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        )}
+      </span>
+      <span className="studio-preset-trigger-copy">
+        <strong>{preset?.name ?? "Style"}</strong>
+        <span>{preset?.tagline ?? "Pick a look"}</span>
+      </span>
+      <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
+    </button>
+  );
+}
+
+function StudioPresetGridPanel({ presets, selectedPresetId, onSelect, onClose }) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div className="studio-preset-grid-panel" role="dialog" aria-label="Choose a style preset">
+      <div className="studio-preset-grid-head">
+        <div>
+          <strong>Style presets</strong>
+          <span> Pick a look — we handle the rest </span>
+        </div>
+        <button type="button" className="studio-preset-grid-close" onClick={onClose} aria-label="Close presets">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {presets === undefined ? (
+        <p className="px-2 text-xs text-cursor-muted">Loading presets…</p>
+      ) : (
+        <div className="studio-preset-grid" role="listbox">
+          {presets.map((preset) => {
+            const active = preset._id === selectedPresetId;
+            return (
+              <button
+                key={preset._id}
+                type="button"
+                role="option"
+                aria-selected={active}
+                className={`studio-preset-grid-card${active ? " is-active" : ""}`}
+                onClick={() => onSelect(preset._id)}
+              >
+                <div className="studio-preset-grid-thumb">
+                  {preset.previewImageUrl ? (
+                    <img src={preset.previewImageUrl} alt="" loading="lazy" />
+                  ) : (
+                    <span className="studio-preset-grid-thumb-fallback">
+                      <Sparkles className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                  )}
+                </div>
+                <div className="studio-preset-grid-copy">
+                  <strong>{preset.name}</strong>
+                  <span>{preset.tagline ?? "Custom style"}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -6616,8 +7110,6 @@ function StudioElementPicker({ open, setOpen, elements, onPick }) {
 
 function StudioComposerInlineSettings({
   mode,
-  imageTier,
-  setImageTier,
   aspectRatio,
   setAspectRatio,
   imageResolution,
@@ -6626,8 +7118,10 @@ function StudioComposerInlineSettings({
   setResolution,
   durationSeconds,
   setDurationSeconds,
+  audioEnabled,
+  setAudioEnabled,
 }) {
-  const maxVideoDuration = 12;
+  const maxVideoDuration = 15;
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
@@ -6644,31 +7138,15 @@ function StudioComposerInlineSettings({
     { value: "3:4", label: "3:4", meta: "Portrait frame" },
     { value: "21:9", label: "21:9", meta: "Cinematic wide" },
   ];
-  const imageQualityItems = [
-    { value: "low", label: "Quick", meta: "Seedream 4.0 - simple drafts", icon: Zap },
-    { value: "medium", label: "Standard", meta: "Seedream 5.0 - PNG + multi-image", icon: CircleDot },
-    { value: "high", label: "Ultra", meta: "Seedream 4.5 - best final/4K", icon: Sparkles },
+  const imageResolutionItems = [
+    { value: "1K", label: "1K", meta: "GPT Image 2 draft" },
+    { value: "2K", label: "2K", meta: "GPT Image 2 default" },
+    { value: "4K", label: "4K", meta: "GPT Image 2 max" },
   ];
-  const imageResolutionItems =
-    imageTier === "low"
-      ? [
-          { value: "1K", label: "1K", meta: "Fast draft" },
-          { value: "2K", label: "2K", meta: "Default image size" },
-          { value: "4K", label: "4K", meta: "Large final" },
-        ]
-      : imageTier === "medium"
-        ? [
-            { value: "2K", label: "2K", meta: "Default image size" },
-            { value: "3K", label: "3K", meta: "Seedream 5 max" },
-          ]
-        : [
-            { value: "2K", label: "2K", meta: "Default image size" },
-            { value: "4K", label: "4K", meta: "Ultra final" },
-          ];
   const resolutionItems = [
-    { value: "854x480", label: "480p" },
-    { value: "1280x720", label: "720p" },
-    { value: "1920x1080", label: "1080p" },
+    { value: "854x480", label: "480p", meta: "Seedance 2.0 draft" },
+    { value: "1280x720", label: "720p", meta: "Seedance 2.0 standard" },
+    { value: "1920x1080", label: "1080p", meta: "Seedance 2.0 max" },
   ];
   const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
@@ -6690,39 +7168,6 @@ function StudioComposerInlineSettings({
         onChange={setAspectRatio}
         hideLabel
       />
-      <StudioInlineSettingSelect
-        icon={Gauge}
-        label={mode === "image" ? "Finish" : "Quality"}
-        value={mode === "image" ? imageTier : resolution}
-        items={mode === "image" ? imageQualityItems : resolutionItems}
-        onChange={
-          mode === "image"
-            ? (value) => {
-                setImageTier(value);
-                const nextResolutionItems =
-                  value === "low"
-                    ? [
-                        { value: "1K" },
-                        { value: "2K" },
-                        { value: "4K" },
-                      ]
-                    : value === "medium"
-                      ? [
-                          { value: "2K" },
-                          { value: "3K" },
-                        ]
-                      : [
-                          { value: "2K" },
-                          { value: "4K" },
-                        ];
-                if (!nextResolutionItems.some((item) => item.value === imageResolution)) {
-                  setImageResolution(nextResolutionItems[0].value);
-                }
-              }
-            : setResolution
-        }
-        hideLabel
-      />
       {mode === "image" ? (
         <StudioInlineSettingSelect
           icon={Maximize2}
@@ -6732,7 +7177,16 @@ function StudioComposerInlineSettings({
           onChange={setImageResolution}
           hideLabel
         />
-      ) : null}
+      ) : (
+        <StudioInlineSettingSelect
+          icon={Gauge}
+          label="Quality"
+          value={resolution}
+          items={resolutionItems}
+          onChange={setResolution}
+          hideLabel
+        />
+      )}
       {mode === "video" ? (
         <StudioInlineSettingPopover
           icon={Clock3}
@@ -6744,7 +7198,7 @@ function StudioComposerInlineSettings({
           <div className="studio-inline-settings-range-panel">
             <div className="studio-duration-readout">
               <strong>{localDurationSeconds}s</strong>
-              <span>4-12s</span>
+              <span>4-15s</span>
             </div>
             <input
               className="studio-settings-range"
@@ -6763,10 +7217,10 @@ function StudioComposerInlineSettings({
             <div className="studio-duration-ticks" aria-hidden="true">
               <span>4s</span>
               <span>8s</span>
-              <span>12s</span>
+              <span>15s</span>
             </div>
             <div className="studio-settings-chip-grid studio-duration-presets" role="group" aria-label="Video duration presets">
-              {["4", "8", "12"].map((seconds) => (
+              {["4", "8", "12", "15"].map((seconds) => (
                 <button
                   key={seconds}
                   type="button"
@@ -6780,6 +7234,19 @@ function StudioComposerInlineSettings({
             </div>
           </div>
         </StudioInlineSettingPopover>
+      ) : null}
+      {mode === "video" ? (
+        <div className="studio-inline-audio-setting">
+          <span className="studio-inline-audio-label">Audio</span>
+          <button
+            type="button"
+            className={`studio-audio-switch${audioEnabled ? " is-on" : ""}`}
+            role="switch"
+            aria-checked={audioEnabled}
+            aria-label="Generate synchronized audio with video"
+            onClick={() => setAudioEnabled(!audioEnabled)}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -7305,10 +7772,6 @@ function createComposerAttachmentToken(attachment) {
       media.alt = "";
     }
     kind.appendChild(media);
-    if (attachment.kind === "video") {
-      kind.classList.add("studio-inline-tag-kind--video");
-      kind.appendChild(createComposerTokenIcon("video-play"));
-    }
   } else {
     kind.appendChild(createComposerTokenIcon(composerTokenIconKind(attachment)));
   }
@@ -7317,10 +7780,13 @@ function createComposerAttachmentToken(attachment) {
   label.className = "studio-inline-tag-label";
   label.textContent = attachment.label;
 
-  if (attachment.kind === "image" && attachment.thumbnailUrl) {
+  if ((attachment.kind === "image" || attachment.kind === "video") && attachment.thumbnailUrl) {
     token.classList.add("studio-inline-tag--image-only");
-    token.title = attachment.label ?? attachment.filename ?? "Image";
-    token.append(kind);
+    token.title = attachment.label ?? attachment.filename ?? (attachment.kind === "video" ? "Video" : "Image");
+    const overlay = document.createElement("span");
+    overlay.className = "studio-inline-tag-overlay";
+    overlay.appendChild(createComposerTokenIcon(attachment.kind === "video" ? "video" : "image"));
+    token.append(kind, overlay);
   } else {
     token.append(kind, label);
   }
@@ -7695,7 +8161,7 @@ function readComposerEditorText(editor) {
       return;
     }
     if (isComposerAttachmentToken(node)) {
-      parts.push(`@${node.dataset.label ?? node.textContent ?? ""} `);
+      parts.push("\uFFFC");
       return;
     }
     node.childNodes?.forEach(walk);
@@ -7759,19 +8225,28 @@ function StudioThreadChat({
   return (
     <div className="studio-chat-render-area">
       <div className="studio-chat-stream">
-        <div className="studio-chat-stream-inner">
+        <div className={`studio-chat-stream-inner${!hasEvents ? " is-empty" : ""}`}>
           {!hasEvents ? (
             <div className="studio-chat-empty-state">
-              <div>
+              <div className="studio-empty-hero">
                 <div className="studio-empty-logo" aria-hidden="true">
                   <img
                     src={MERCURY_EMPTY_LOGO.src}
                     srcSet={MERCURY_EMPTY_LOGO.srcSet}
                     sizes={MERCURY_EMPTY_LOGO.sizes}
                     alt=""
-                    width={72}
-                    height={72}
+                    width={104}
+                    height={104}
                   />
+                </div>
+                <div className="studio-empty-copy">
+                  <h1>What will you create?</h1>
+                  <p>Describe an image or video below. Your prompts and results will show up here.</p>
+                </div>
+                <div className="studio-empty-chips" aria-hidden="true">
+                  <span>Product shot</span>
+                  <span>Cinematic b-roll</span>
+                  <span>Portrait</span>
                 </div>
               </div>
             </div>
@@ -7794,7 +8269,7 @@ function StudioThreadEvent({ event, assets }) {
   if (event.kind === "prompt") {
     return (
       <article className="studio-chat-bubble is-user">
-        <p className="studio-chat-text">{event.prompt}</p>
+        <StudioPromptMessage prompt={event.prompt} />
       </article>
     );
   }
@@ -7825,7 +8300,7 @@ function StudioThreadEvent({ event, assets }) {
             ))}
           </div>
         ) : (
-          <p className="studio-chat-text">{event.assetIds?.length ?? 0} result(s) ready. Open the linked folder to view them.</p>
+          <StudioChatMarkdown text={`${event.assetIds?.length ?? 0} result(s) ready. Open the linked folder to view them.`} />
         )}
       </article>
     );
@@ -7901,6 +8376,7 @@ function ActivePane({
   onOpenSettings,
   onOpenAdminTab,
   onSeedStylePresets,
+  onGeneratePresetThumbnails,
   onCreateItem,
   onUploadElementFiles,
   onCloseTab,
@@ -7964,6 +8440,7 @@ function ActivePane({
         onOpenSettings={onOpenSettings}
         onOpenAdminTab={onOpenAdminTab}
         onSeedStylePresets={onSeedStylePresets}
+        onGeneratePresetThumbnails={onGeneratePresetThumbnails}
       />
     );
   }
@@ -8321,6 +8798,7 @@ function AdminWorkspacePane({
   onOpenSettings,
   onOpenAdminTab,
   onSeedStylePresets,
+  onGeneratePresetThumbnails,
 }) {
   const plans = pricingPlans(pricing);
   const safePayments = payments ?? [];
@@ -8566,9 +9044,23 @@ function AdminWorkspacePane({
             <div className="studio-admin-setup-grid">
               <AdminSetupAction
                 title="Style presets"
-                body="Creates the default creative style options used by generation."
+                body="Creates or refreshes the default creative style options used by generation."
                 actionLabel="Seed style presets"
                 onRun={() => runSetup("Seeding style presets", onSeedStylePresets)}
+              />
+              <AdminSetupAction
+                title="Preset preview images"
+                body="Generates preview cards for the style picker using GPT Image 2 and saves them to storage."
+                actionLabel="Generate preset previews"
+                onRun={() =>
+                  runSetup("Generating preset preview images", async () => {
+                    const result = await onGeneratePresetThumbnails();
+                    if (result?.errors?.length) {
+                      throw new Error(result.errors.slice(0, 3).join(" · "));
+                    }
+                    return result;
+                  })
+                }
               />
               <AdminSetupAction
                 title="Launch pricing"
@@ -8609,10 +9101,13 @@ function AdminWorkspacePane({
             <section className="studio-admin-card">
                 <p className="studio-admin-card-kicker">Content costs</p>
               <div className="studio-credit-costs">
-                <div className="studio-credit-cost"><span>Quick image</span><strong>{pricing?.imageLowCredits ?? 1} credit</strong><em>Seedream 4.0 - simple drafts</em></div>
-                <div className="studio-credit-cost"><span>Standard image</span><strong>{pricing?.imageMediumCredits ?? 2} credits</strong><em>Seedream 5.0 - PNG + multi-image</em></div>
-                <div className="studio-credit-cost"><span>Ultra image</span><strong>{pricing?.imageHighCredits ?? 4} credits</strong><em>Seedream 4.5 - best final/4K</em></div>
-                <div className="studio-credit-cost"><span>Video</span><strong>from {pricing?.videoCredits ?? 15} credits</strong></div>
+                <div className="studio-credit-cost"><span>Image 1K</span><strong>{pricing?.imageCredits1K ?? 5} credits</strong><em>incl. platform</em></div>
+                <div className="studio-credit-cost"><span>Image 2K</span><strong>{pricing?.imageCredits2K ?? 19} credits</strong><em>GPT Image 2 default</em></div>
+                <div className="studio-credit-cost"><span>Image 4K</span><strong>{pricing?.imageCredits4K ?? 36} credits</strong><em>GPT Image 2 max</em></div>
+                <div className="studio-credit-cost"><span>Video 480p</span><strong>from {pricing?.videoCredits480p ?? 36} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
+                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {pricing?.videoCredits720p ?? 61} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
+                <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {pricing?.videoCredits1080p ?? 133} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
+                <div className="studio-credit-cost"><span>Script</span><strong>from {pricing?.textCredits ?? 3} credits</strong><em>incl. platform</em></div>
               </div>
             </section>
             <section className="studio-admin-card">
@@ -9324,80 +9819,33 @@ function formatMoney(amountCents) {
   })}`;
 }
 
-function videoCreditCost({
-  resolution,
-  durationSeconds,
-  hasReferenceInput,
-  hasVideoReferenceInput,
-  hasNonVideoReferenceInput,
-  audioEnabled,
-}) {
-  const duration = Math.max(4, Math.min(15, Math.ceil(Number(durationSeconds) || 4)));
-  const multiplier = Math.ceil(duration / 5);
-  const base =
-    resolution === "854x480"
-      ? 15
-      : resolution === "1920x1080"
-        ? 45
-        : 25;
-  const videoReferenceSurcharge = hasVideoReferenceInput ? 5 : 0;
-  const nonVideoReferenceSurcharge = hasNonVideoReferenceInput
-    ? resolution === "1920x1080"
-      ? 10
-      : 5
-    : hasReferenceInput
-      ? 5
-      : 0;
-  const audioSurcharge = audioEnabled ? 5 : 0;
-  return (base + videoReferenceSurcharge + nonVideoReferenceSurcharge + audioSurcharge) * multiplier;
-}
-
-function normalizeImageResolution(imageTier, imageResolution) {
-  const allowed =
-    imageTier === "low"
-      ? ["1K", "2K", "4K"]
-      : imageTier === "medium"
-        ? ["2K", "3K"]
-        : ["2K", "4K"];
-  return allowed.includes(imageResolution) ? imageResolution : allowed[0];
-}
-
 function composerCreditCost({
   mode,
-  imageTier,
   resolution,
+  imageResolution,
   durationSeconds,
   hasReferenceInput,
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
   audioEnabled,
   referenceInputs,
-  pricing,
 }) {
-  if (mode === "script") return scriptCreditCost(referenceInputs ?? [], pricing);
-  if (mode === "video") {
-    return videoCreditCost({
-      resolution,
-      durationSeconds,
-      hasReferenceInput,
-      hasVideoReferenceInput,
-      hasNonVideoReferenceInput,
-      audioEnabled,
+  if (mode === "script") {
+    return textCreditCost({
+      imageReferenceCount: referenceInputs?.filter((reference) => reference.kind === "image").length ?? 0,
+      audioReferenceCount: referenceInputs?.filter((reference) => reference.kind === "audio").length ?? 0,
+      videoReferenceCount: referenceInputs?.filter((reference) => reference.kind === "video").length ?? 0,
     });
   }
-  if (imageTier === "low") return pricing?.imageLowCredits ?? 1;
-  if (imageTier === "high") return pricing?.imageHighCredits ?? 4;
-  return pricing?.imageMediumCredits ?? 2;
-}
-
-function scriptCreditCost(referenceInputs, pricing) {
-  const base = pricing?.textCredits ?? 1;
-  return referenceInputs.reduce((total, reference) => {
-    if (reference.kind === "video") return total + 5;
-    if (reference.kind === "audio") return total + 2;
-    if (reference.kind === "image") return total + 1;
-    return total;
-  }, base);
+  return creditCostForGeneration({
+    tier: mode === "video" ? "pro_video" : "image",
+    resolution: mode === "video" ? resolution : normalizeImageResolution(imageResolution),
+    durationSeconds,
+    hasReferenceInput,
+    hasVideoReferenceInput,
+    hasNonVideoReferenceInput,
+    audioEnabled,
+  });
 }
 
 function formatDate(value) {

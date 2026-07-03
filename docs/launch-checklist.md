@@ -3,7 +3,7 @@
 ## Human Inputs Needed
 
 - Keep dedicated GitHub repo `dallas-ferdinand/yatishara-studio` pushed before Coolify deploys.
-- Activate the configured BytePlus ModelArk models in Ark Console; the API key works, but calls return `ModelNotOpen`.
+- Confirm `AI_GATEWAY_API_KEY` and `GATEWAY_*` model IDs are set on the Convex deployment.
 - Resend DNS verification complete for `yatishara.com`.
 - Add/confirm Studio bank account details from the super-admin Settings panel after first login.
 
@@ -29,7 +29,7 @@
 - Preview gate unlocks with `PREVIEW_STUDIO_PASSWORD` and HMR works on `preview.studio.yatishara.com`.
 - OTP sign-in works on `studio.yatishara.com`.
 - Bunny upload and signed read work. Completed locally against live Bunny API.
-- BytePlus image generation works after Ark model activation.
-- Seedance v2 task creation/poll/import works after Ark model activation.
+- AI Gateway image generation works with `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`).
+- Seedance 2.0 video generation works with `GATEWAY_VIDEO_MODEL_ID`.
 - Bank payment approval grants credits and sends notifications.
 - Web push subscription and delivery work.

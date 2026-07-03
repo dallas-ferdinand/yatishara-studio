@@ -103,39 +103,65 @@ export function FileEntryThumb({
         <Icon name={icon} size={size === "preview" ? 40 : 30} className={folderIconClass} />
       </div>
     );
-  } else if (kind === "image" && thumbUrl) {
-    visual = (
-      <img src={thumbUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
-    );
-  } else if (kind === "image" && mediaUrl) {
-    visual = (
-      <img src={mediaUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
-    );
-  } else if (kind === "video" && thumbUrl && !isVideoFileUrl(thumbUrl)) {
-    visual = (
-      <img src={thumbUrl} alt="" className="desk-file-thumb-video" loading="lazy" decoding="async" />
-    );
-  } else if (kind === "video" && (mediaUrl || thumbUrl)) {
-    visual = (
-      <video
-        src={mediaUrl ?? thumbUrl}
-        poster={thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined}
-        className="desk-file-thumb-video"
-        muted
-        playsInline
-        preload="metadata"
-      />
-    );
-  } else if (kind === "audio" && mediaUrl) {
-    visual = (
-      <div className="desk-file-thumb-audio">
-        <Icon name="music" size={32} className="text-cursor-muted" />
-      </div>
-    );
-  } else if (kind === "pdf" && previewUrl) {
-    visual = <iframe title={label} src={previewUrl} className="desk-file-thumb-iframe" />;
-  } else if (TEXT_KINDS.has(kind) && entry?.path && size === "preview") {
-    visual = <TextSnippet path={entry.path} workspaceId={workspaceId} className="desk-file-thumb-text-wrap" />;
+  } else {
+    const isImage = kind === "image";
+    const isVideo = kind === "video";
+
+    if (isImage && thumbUrl) {
+      visual = (
+        <>
+          <img src={thumbUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
+          <span className="desk-file-thumb-badge" aria-hidden>
+            <Icon name="image" size={14} />
+          </span>
+        </>
+      );
+    } else if (isImage && mediaUrl) {
+      visual = (
+        <>
+          <img src={mediaUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
+          <span className="desk-file-thumb-badge" aria-hidden>
+            <Icon name="image" size={14} />
+          </span>
+        </>
+      );
+    } else if (isVideo && thumbUrl && !isVideoFileUrl(thumbUrl)) {
+      visual = (
+        <>
+          <img src={thumbUrl} alt="" className="desk-file-thumb-video" loading="lazy" decoding="async" />
+          <span className="desk-file-thumb-badge" aria-hidden>
+            <Icon name="film" size={14} />
+          </span>
+        </>
+      );
+    } else if (isVideo && (mediaUrl || thumbUrl)) {
+      visual = (
+        <>
+          <video
+            src={mediaUrl ?? thumbUrl}
+            poster={thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined}
+            className="desk-file-thumb-video"
+            crossOrigin="anonymous"
+            muted
+            playsInline
+            preload="metadata"
+          />
+          <span className="desk-file-thumb-badge" aria-hidden>
+            <Icon name="film" size={14} />
+          </span>
+        </>
+      );
+    } else if (kind === "audio" && mediaUrl) {
+      visual = (
+        <div className="desk-file-thumb-audio">
+          <Icon name="music" size={32} className="text-cursor-muted" />
+        </div>
+      );
+    } else if (kind === "pdf" && previewUrl) {
+      visual = <iframe title={label} src={previewUrl} className="desk-file-thumb-iframe" />;
+    } else if (TEXT_KINDS.has(kind) && entry?.path && size === "preview") {
+      visual = <TextSnippet path={entry.path} workspaceId={workspaceId} className="desk-file-thumb-text-wrap" />;
+    }
   }
 
   return (

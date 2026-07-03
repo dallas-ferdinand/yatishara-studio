@@ -2,14 +2,17 @@
 "use client";
 
 import { Icon } from "./Icons";
+import { icon as svgIcon } from "@mos-app/icons.js";
 import { FileEntryThumb } from "./FileEntryThumb";
-import { explorerEntryIcon } from "@/desk/lib/file-kind";
+import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
 import { formatFileDate } from "@/desk/lib/explorer-file-actions";
 import { writeExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
 import { displayEntryPath } from "@/desk/lib/display-path";
 import { useState } from "react";
+import { animate } from "@motionone/dom";
 
 function parentEntry(parent) {
   if (!parent) return null;
@@ -53,6 +56,10 @@ function isPinnedEntry(entry, pinnedPaths) {
   return entry.type === "dir" && pinnedPaths?.has?.(entry.path);
 }
 
+function isVideoFileUrl(url) {
+  return typeof url === "string" && /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
+}
+
 function setTransparentDragImage(dataTransfer) {
   if (!dataTransfer || typeof document === "undefined") return;
   const ghost = document.createElement("div");
@@ -62,150 +69,440 @@ function setTransparentDragImage(dataTransfer) {
   window.requestAnimationFrame(() => ghost.remove());
 }
 
-function startFileDragPreview(event, entry) {
+function readComputedNumberPx(el, prop) {
+  if (!el || typeof window === "undefined") return 0;
+  const v = window.getComputedStyle(el)[prop];
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function cleanupDragPreviews() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll(".desk-file-drag-preview").forEach((el) => el.remove());
+  document.querySelectorAll("[data-drag-source]").forEach((el) => {
+    el.removeAttribute("data-drag-source");
+    delete el.dataset.dragToken;
+  });
+}
+
+let dragSequence = 0;
+
+if (typeof document !== "undefined" && !document.body.dataset.dragPreviewSafetyNet) {
+  document.body.dataset.dragPreviewSafetyNet = "1";
+  let cleanupTimer = null;
+  const scheduleCleanup = () => {
+    if (cleanupTimer !== null) clearTimeout(cleanupTimer);
+    cleanupTimer = window.setTimeout(() => {
+      cleanupTimer = null;
+      cleanupDragPreviews();
+    }, 800);
+  };
+  document.addEventListener("dragend", scheduleCleanup, true);
+  document.addEventListener("drop", scheduleCleanup, true);
+  document.addEventListener("dragstart", () => {
+    // A new drag started before the previous drag's safety-net timer fired.
+    // Without cancelling here, the orphan timer would nuke the new drag's
+    // data-drag-source/data-drag-token roughly half a second in, making the
+    // item look like it dropped out of the drag mid-flight.
+    if (cleanupTimer !== null) {
+      clearTimeout(cleanupTimer);
+      cleanupTimer = null;
+    }
+    cleanupDragPreviews();
+  }, true);
+}
+
+const PICKUP_SPRING = { type: "spring", stiffness: 200, damping: 19, mass: 1 };
+const RETURN_SPRING = { type: "spring", stiffness: 300, damping: 24, mass: 1 };
+const PICKUP_MORPH_MS = 520;
+const RETURN_MORPH_MS = 360;
+const MORPH_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+const DROP_EASING = [0.4, 0, 0.2, 1];
+const DROP_DURATION = 0.36;
+
+function getCaretPixelInEditor(editorEl, x, y) {
+  if (!editorEl || typeof document === "undefined") return null;
+  try {
+    const range = document.caretRangeFromPoint(x, y);
+    if (!range) return null;
+    // Check if the caret is inside the editor
+    if (!editorEl.contains(range.startContainer)) return null;
+    const rects = range.getClientRects();
+    if (rects.length > 0) {
+      return { x: rects[0].left, y: rects[0].top, height: rects[0].height };
+    }
+    // Fallback: insert a zero-width space to get a rect
+    const marker = document.createTextNode("\u200B");
+    range.insertNode(marker);
+    const markerRect = marker.getBoundingClientRect();
+    const result = { x: markerRect.left, y: markerRect.top, height: markerRect.height };
+    marker.remove();
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+function findDropTargetUnder(x, y, excludeEl) {
+  if (typeof document === "undefined") return null;
+  if (excludeEl) excludeEl.style.display = "none";
+  const el = document.elementFromPoint(x, y);
+  if (excludeEl) excludeEl.style.display = "";
+  console.log("[findDropTarget]", { x, y, el: el?.tagName, elClass: el?.className?.slice?.(0, 60), closest: el?.closest?.("[data-drop-target]")?.tagName, closestDT: el?.closest?.("[data-drop-target]")?.dataset?.dropTarget });
+  if (!el) return null;
+  return el.closest('[data-drop-target]');
+}
+
+function startFileDragPreview(event, entry, workspaceId) {
   if (typeof document === "undefined") return;
   const source = event.currentTarget;
   if (!source) return;
 
   const rect = source.getBoundingClientRect();
   const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
-  const isMedia = entry.kindLabel === "image" || entry.kindLabel === "video" || entry.mimeType?.startsWith("image/") || entry.mimeType?.startsWith("video/");
+  const mediaKind = entry.type === "dir" || entry.type === "parent"
+    ? null
+    : fileViewerKind(entry?.ext ?? fileExt(entry?.path ?? entry?.name ?? ""));
+  const isMedia = mediaKind === "image" || mediaKind === "video";
+  const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-  let preview;
+  source.setAttribute("data-drag-source", "");
+  // Stamp this drag with a unique token. The async finish() can race with a
+  // new drag that starts on the same button while our drop/return animation
+  // is still running; the token lets the late-arriving cleanup know whether
+  // the attribute it's about to strip still belongs to *this* drag.
+  const dragToken = String(++dragSequence);
+  source.dataset.dragToken = dragToken;
+
+  const sourceRadius = readComputedNumberPx(source, "borderTopLeftRadius");
+  const visualEl = isMedia ? source.querySelector(".desk-file-thumb-visual") : null;
+  const visualRect = visualEl ? visualEl.getBoundingClientRect() : null;
+  const visualRadius = visualEl ? readComputedNumberPx(visualEl, "borderTopLeftRadius") : 0;
+
+  let chip;
+  let targetWidth;
+  let targetHeight;
+  let targetRadius;
+  let followOffsetX;
+  let followOffsetY;
+
   if (isMedia) {
-    const srcUrl = entry.thumbnailUrl || entry.mediaUrl;
-    const isVideo = entry.kindLabel === "video" || entry.mimeType?.startsWith("video/");
-    const baseSize = Math.min(Math.max(80, Math.min(rect.width, rect.height) * 0.48), 100);
-    const chipWidth = baseSize;
-    const chipHeight = isVideo ? Math.round(baseSize * 0.5625) : baseSize;
-    const br = isVideo ? Math.round(chipHeight * 0.22) : Math.round(baseSize * 0.18);
+    const isVideo = mediaKind === "video";
+    const startRect = visualRect ?? rect;
+    const baseSize = Math.min(Math.max(64, Math.min(startRect.width, startRect.height) * 0.72), 80);
+    targetWidth = baseSize;
+    targetHeight = baseSize;
+    targetRadius = Math.round(baseSize * 0.22);
+    followOffsetX = targetWidth * 0.5;
+    followOffsetY = targetHeight * 0.5;
 
-    preview = document.createElement("div");
-    preview.style.position = "fixed";
-    preview.style.left = "0";
-    preview.style.top = "0";
-    preview.style.width = `${chipWidth}px`;
-    preview.style.height = `${chipHeight}px`;
-    preview.style.zIndex = "99999";
-    preview.style.pointerEvents = "none";
-    preview.style.borderRadius = `${br}px`;
-    preview.style.overflow = "hidden";
-    preview.style.boxShadow = "0 8px 24px rgb(0 0 0 / 0.45)";
-    preview.style.transformOrigin = "top left";
-    preview.style.willChange = "transform";
-    preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
+    chip = document.createElement("div");
+    chip.className = "desk-file-drag-preview desk-file-drag-preview--media";
+    chip.dataset.dragName = label;
+    chip.style.position = "fixed";
+    chip.style.left = "0";
+    chip.style.top = "0";
+    chip.style.width = `${startRect.width}px`;
+    chip.style.height = `${startRect.height}px`;
+    chip.style.borderRadius = `${visualRadius || sourceRadius}px`;
+    chip.style.overflow = "hidden";
+    chip.style.transformOrigin = "center center";
+    chip.style.boxShadow = "0 10px 28px rgba(0, 0, 0, 0.42)";
+    chip.style.transform = `translate3d(${startRect.left}px, ${startRect.top}px, 0)`;
 
+    const existingThumb = source.querySelector(".desk-file-thumb-image, .desk-file-thumb-video, video");
     const img = document.createElement("img");
-    img.src = srcUrl || "";
+    let imgSrc = "";
+    // For <img> elements, use src directly if it's not a video file URL
+    if (existingThumb?.tagName === "IMG" && existingThumb.src && !isVideoFileUrl(existingThumb.src)) {
+      imgSrc = existingThumb.src;
+    }
+    // For <video> elements, try poster first, then capture a frame via canvas
+    if (!imgSrc && existingThumb?.tagName === "VIDEO") {
+      if (existingThumb.poster && !isVideoFileUrl(existingThumb.poster)) {
+        imgSrc = existingThumb.poster;
+      } else if (existingThumb.readyState >= 2 && existingThumb.videoWidth > 0) {
+        // Video has loaded enough data to capture a frame
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = existingThumb.videoWidth;
+          canvas.height = existingThumb.videoHeight;
+          canvas.getContext("2d").drawImage(existingThumb, 0, 0);
+          imgSrc = canvas.toDataURL("image/jpeg", 0.8);
+        } catch {
+          // Canvas capture may fail due to CORS
+        }
+      }
+    }
+    // Fallback chain: skip video file URLs (they can't be displayed in <img>)
+    if (!imgSrc && entry.thumbnailUrl && !isVideoFileUrl(entry.thumbnailUrl)) imgSrc = entry.thumbnailUrl;
+    if (!imgSrc) imgSrc = workspaceFileThumbUrl(entry.path, workspaceId, 420) || "";
+    if (!imgSrc && entry.mediaUrl && !isVideoFileUrl(entry.mediaUrl)) imgSrc = entry.mediaUrl;
+    img.src = imgSrc;
+    img.alt = "";
+    img.draggable = false;
     img.style.width = "100%";
     img.style.height = "100%";
     img.style.objectFit = "cover";
     img.style.display = "block";
-    img.draggable = false;
-    preview.appendChild(img);
+    chip.appendChild(img);
 
-    const gradient = document.createElement("div");
-    gradient.style.position = "absolute";
-    gradient.style.inset = "0";
-    gradient.style.background = "linear-gradient(135deg, rgba(0,0,0,0.35) 0%, transparent 50%)";
-    gradient.style.pointerEvents = "none";
-    preview.appendChild(gradient);
-
-    document.body.appendChild(preview);
-
-    const offsetX = chipWidth * 0.5;
-    const offsetY = chipHeight * 0.5;
-
-    let lastX = event.clientX;
-    let lastY = event.clientY;
-    let rafId = 0;
-
-    const move = () => {
-      rafId = 0;
-      preview.style.transition = "none";
-      preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
-    };
-
-    const queueMove = (clientX, clientY) => {
-      if (clientX > 0 || clientY > 0) {
-        lastX = clientX;
-        lastY = clientY;
-      }
-      if (!rafId) rafId = window.requestAnimationFrame(move);
-    };
-
-    const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
-    const cleanup = () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      preview.remove();
-      document.removeEventListener("dragover", handleMove);
-      document.removeEventListener("drag", handleMove);
-      document.removeEventListener("drop", cleanup);
-      document.removeEventListener("dragend", cleanup);
-    };
-
-    document.addEventListener("dragover", handleMove);
-    document.addEventListener("drag", handleMove);
-    document.addEventListener("drop", cleanup, { once: true });
-    document.addEventListener("dragend", cleanup, { once: true });
-
-    window.requestAnimationFrame(() => {
-      preview.style.transition = "transform 440ms cubic-bezier(0.18, 1.32, 0.32, 1)";
-      preview.style.transform = `translate3d(${event.clientX - offsetX}px, ${event.clientY - offsetY}px, 0) scale(1)`;
-    });
+    const badgeIcon = isVideo ? "film" : "image";
+    const iconHtml = svgIcon(badgeIcon, 14);
+    if (iconHtml) {
+      const badge = document.createElement("span");
+      badge.className = "desk-file-thumb-badge";
+      badge.style.pointerEvents = "none";
+      badge.innerHTML = iconHtml;
+      chip.appendChild(badge);
+    }
   } else {
-    preview = source.cloneNode(true);
-    const targetWidth = Math.min(Math.max(label.length * 7 + 50, 96), 164);
-    const targetHeight = Math.min(rect.height, 74);
-    const offsetX = Math.min(event.clientX - rect.left, targetWidth * 0.42);
-    const offsetY = Math.min(event.clientY - rect.top, targetHeight * 0.55);
+    const isDir = entry.type === "dir";
+    const baseSize = Math.min(Math.max(64, Math.min(rect.width, rect.height) * 0.34), 80);
+    targetWidth = baseSize;
+    targetHeight = baseSize;
+    targetRadius = Math.round(baseSize * 0.22);
+    followOffsetX = targetWidth * 0.5;
+    followOffsetY = targetHeight * 0.5;
 
-    preview.classList.add("desk-file-drag-preview");
-    preview.style.width = `${rect.width}px`;
-    preview.style.height = `${rect.height}px`;
-    preview.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0) scale(1)`;
-    preview.dataset.dragName = label;
-    document.body.appendChild(preview);
+    chip = document.createElement("div");
+    chip.className = "desk-file-drag-preview desk-file-drag-preview--file";
+    chip.dataset.dragName = label;
+    chip.style.position = "fixed";
+    chip.style.left = "0";
+    chip.style.top = "0";
+    chip.style.width = `${rect.width}px`;
+    chip.style.height = `${rect.height}px`;
+    chip.style.borderRadius = `${sourceRadius}px`;
+    chip.style.overflow = "hidden";
+    chip.style.transformOrigin = "center center";
+    chip.style.boxShadow = "0 10px 28px rgba(0, 0, 0, 0.42)";
+    chip.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
 
-    let lastX = event.clientX;
-    let lastY = event.clientY;
-    let rafId = 0;
-
-    const move = () => {
-      rafId = 0;
-      preview.style.transform = `translate3d(${lastX - offsetX}px, ${lastY - offsetY}px, 0) scale(1)`;
-    };
-
-    const queueMove = (clientX, clientY) => {
-      if (clientX > 0 || clientY > 0) {
-        lastX = clientX;
-        lastY = clientY;
-      }
-      if (!rafId) rafId = window.requestAnimationFrame(move);
-    };
-
-    const handleMove = (moveEvent) => queueMove(moveEvent.clientX, moveEvent.clientY);
-    const cleanup = () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-      preview.remove();
-      document.removeEventListener("dragover", handleMove);
-      document.removeEventListener("drag", handleMove);
-      document.removeEventListener("drop", cleanup);
-      document.removeEventListener("dragend", cleanup);
-    };
-
-    document.addEventListener("dragover", handleMove);
-    document.addEventListener("drag", handleMove);
-    document.addEventListener("drop", cleanup, { once: true });
-    document.addEventListener("dragend", cleanup, { once: true });
-
-    window.requestAnimationFrame(() => {
-      preview.style.width = `${targetWidth}px`;
-      preview.style.height = `${targetHeight}px`;
-      preview.classList.add("is-shrunk");
-      queueMove(event.clientX, event.clientY);
-    });
+    const iconName = explorerEntryIcon(entry);
+    const iconHtml = svgIcon(iconName, 28);
+    const inner = document.createElement("div");
+    inner.style.display = "flex";
+    inner.style.flexDirection = "column";
+    inner.style.alignItems = "center";
+    inner.style.justifyContent = "center";
+    inner.style.gap = "4px";
+    inner.style.width = "100%";
+    inner.style.height = "100%";
+    inner.style.background = "var(--color-cursor-sidebar)";
+    inner.style.color = "var(--color-cursor-text)";
+    inner.style.pointerEvents = "none";
+    if (iconHtml) {
+      const iconEl = document.createElement("span");
+      iconEl.innerHTML = iconHtml;
+      iconEl.style.lineHeight = "0";
+      iconEl.style.opacity = isDir ? "1" : "0.85";
+      inner.appendChild(iconEl);
+    }
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+    labelEl.style.fontSize = "10px";
+    labelEl.style.lineHeight = "1.2";
+    labelEl.style.maxWidth = "90%";
+    labelEl.style.overflow = "hidden";
+    labelEl.style.textOverflow = "ellipsis";
+    labelEl.style.whiteSpace = "nowrap";
+    labelEl.style.textAlign = "center";
+    labelEl.style.opacity = "0.75";
+    inner.appendChild(labelEl);
+    chip.appendChild(inner);
   }
+
+  document.body.appendChild(chip);
+
+  const pickupStartRect = isMedia && visualRect ? visualRect : rect;
+  const pickupEndX = event.clientX - followOffsetX;
+  const pickupEndY = event.clientY - followOffsetY;
+
+  let pickupControls = null;
+  if (reduceMotion) {
+    chip.style.transition = "none";
+    chip.style.width = `${targetWidth}px`;
+    chip.style.height = `${targetHeight}px`;
+    chip.style.borderRadius = `${targetRadius}px`;
+    chip.style.transform = `translate3d(${pickupEndX}px, ${pickupEndY}px, 0)`;
+    if (!isMedia) chip.classList.add("is-shrunk");
+  } else {
+    chip.style.transition = `width ${PICKUP_MORPH_MS}ms ${MORPH_EASING}, height ${PICKUP_MORPH_MS}ms ${MORPH_EASING}, border-radius ${PICKUP_MORPH_MS}ms ${MORPH_EASING}`;
+    chip.style.width = `${targetWidth}px`;
+    chip.style.height = `${targetHeight}px`;
+    chip.style.borderRadius = `${targetRadius}px`;
+    if (!isMedia) chip.classList.add("is-shrunk");
+    pickupControls = animate(
+      chip,
+      {
+        x: [pickupStartRect.left, pickupEndX],
+        y: [pickupStartRect.top, pickupEndY],
+      },
+      PICKUP_SPRING,
+    );
+  }
+
+  let lastX = event.clientX;
+  let lastY = event.clientY;
+  let rafId = 0;
+  let pickupSettled = reduceMotion;
+
+  const applyFollow = () => {
+    rafId = 0;
+    chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
+  };
+
+  const queueFollow = (clientX, clientY) => {
+    if (clientX > 0 || clientY > 0) {
+      lastX = clientX;
+      lastY = clientY;
+    }
+    if (!rafId) rafId = window.requestAnimationFrame(applyFollow);
+  };
+
+  const handleMove = (moveEvent) => {
+    if (!pickupSettled) {
+      pickupSettled = true;
+      if (pickupControls) pickupControls.stop();
+      chip.style.transition = "none";
+      queueFollow(moveEvent.clientX, moveEvent.clientY);
+      return;
+    }
+    queueFollow(moveEvent.clientX, moveEvent.clientY);
+  };
+
+  let didDrop = false;
+  const handleDropCapture = () => {
+    didDrop = true;
+  };
+
+  let finished = false;
+  const finish = async () => {
+    if (finished) return;
+    finished = true;
+    if (rafId) window.cancelAnimationFrame(rafId);
+    if (pickupControls) pickupControls.stop();
+    document.removeEventListener("dragover", handleMove);
+    document.removeEventListener("drag", handleMove);
+    document.removeEventListener("drop", handleDropCapture, true);
+    document.removeEventListener("dragend", finish);
+
+    try {
+      const targetEl = didDrop ? findDropTargetUnder(lastX, lastY, chip) : null;
+      const isValidDrop = didDrop && targetEl && targetEl !== source && !source.contains(targetEl);
+
+      console.log("[drag-finish]", { didDrop, lastX, lastY, targetEl: targetEl?.tagName, targetDT: targetEl?.dataset?.dropTarget, isValidDrop, sourceTag: source.tagName });
+
+      if (isValidDrop) {
+        // For composer targets, animate to the text caret position instead of mouse position
+        let dropEndX = lastX;
+        let dropEndY = lastY;
+        if (targetEl.dataset.dropTarget === "composer") {
+          const editorEl = targetEl.querySelector("[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor");
+          const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
+          if (caretPos) {
+            dropEndX = caretPos.x;
+            dropEndY = caretPos.y + caretPos.height / 2;
+          }
+        }
+        if (reduceMotion) {
+          chip.style.transition = "none";
+          chip.style.width = `${targetWidth}px`;
+          chip.style.height = `${targetHeight}px`;
+          chip.style.borderRadius = `${targetRadius}px`;
+          chip.style.transform = `translate3d(${dropEndX - followOffsetX}px, ${dropEndY - followOffsetY}px, 0) scale(0.2)`;
+          chip.style.opacity = "0";
+        } else {
+          const startX = lastX - followOffsetX;
+          const startY = lastY - followOffsetY;
+          const endX = dropEndX - followOffsetX;
+          const endY = dropEndY - followOffsetY;
+          const distance = Math.hypot(endX - startX, endY - startY);
+          const arcHeight = Math.min(56, distance * 0.18);
+          const midX = (startX + endX) / 2;
+          const midY = Math.min(startY, endY) - arcHeight;
+          const reactionTimer = setTimeout(() => {
+            if (targetEl.isConnected) {
+              targetEl.classList.add("is-drop-target-hit");
+              setTimeout(() => {
+                if (targetEl.isConnected) targetEl.classList.remove("is-drop-target-hit");
+              }, 600);
+            }
+          }, DROP_DURATION * 1000 * 0.68);
+          await animate(
+            chip,
+            {
+              x: [startX, midX, endX],
+              y: [startY, midY, endY],
+              scale: [1, 0.55, 0.12],
+              opacity: [1, 1, 0],
+            },
+            { duration: DROP_DURATION, easing: DROP_EASING },
+          ).finished;
+          clearTimeout(reactionTimer);
+        }
+      } else if (reduceMotion) {
+        if (isMedia && visualRect) {
+          chip.style.transition = "none";
+          chip.style.width = `${visualRect.width}px`;
+          chip.style.height = `${visualRect.height}px`;
+          chip.style.borderRadius = `${sourceRadius}px`;
+          chip.style.transform = `translate3d(${visualRect.left}px, ${visualRect.top}px, 0)`;
+        } else {
+          chip.style.transition = "none";
+          chip.style.width = `${rect.width}px`;
+          chip.style.height = `${rect.height}px`;
+          chip.style.borderRadius = `${sourceRadius}px`;
+          chip.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
+          if (!isMedia) chip.classList.remove("is-shrunk");
+        }
+      } else if (isMedia && visualRect) {
+        const currentVisualEl = visualEl && visualEl.isConnected ? visualEl : null;
+        const currentVisualRect = currentVisualEl ? currentVisualEl.getBoundingClientRect() : visualRect;
+        const currentSnapRadius = source.isConnected ? readComputedNumberPx(source, "borderTopLeftRadius") : sourceRadius;
+        chip.style.transition = `width ${RETURN_MORPH_MS}ms ${MORPH_EASING}, height ${RETURN_MORPH_MS}ms ${MORPH_EASING}, border-radius ${RETURN_MORPH_MS}ms ${MORPH_EASING}`;
+        chip.style.width = `${currentVisualRect.width}px`;
+        chip.style.height = `${currentVisualRect.height}px`;
+        chip.style.borderRadius = `${currentSnapRadius}px`;
+        await animate(
+          chip,
+          {
+            x: [lastX - followOffsetX, currentVisualRect.left],
+            y: [lastY - followOffsetY, currentVisualRect.top],
+          },
+          RETURN_SPRING,
+        ).finished;
+      } else {
+        const currentRect = source.isConnected ? source.getBoundingClientRect() : rect;
+        const currentSourceRadius = source.isConnected ? readComputedNumberPx(source, "borderTopLeftRadius") : sourceRadius;
+        chip.style.transition = `width ${RETURN_MORPH_MS}ms ${MORPH_EASING}, height ${RETURN_MORPH_MS}ms ${MORPH_EASING}, border-radius ${RETURN_MORPH_MS}ms ${MORPH_EASING}`;
+        chip.style.width = `${currentRect.width}px`;
+        chip.style.height = `${currentRect.height}px`;
+        chip.style.borderRadius = `${currentSourceRadius}px`;
+        if (!isMedia) chip.classList.remove("is-shrunk");
+        await animate(
+          chip,
+          {
+            x: [lastX - followOffsetX, currentRect.left],
+            y: [lastY - followOffsetY, currentRect.top],
+          },
+          RETURN_SPRING,
+        ).finished;
+      }
+    } finally {
+      chip.remove();
+      if (source.isConnected && source.dataset.dragToken === dragToken) {
+        source.removeAttribute("data-drag-source");
+        delete source.dataset.dragToken;
+      }
+    }
+  };
+
+  document.addEventListener("dragover", handleMove);
+  document.addEventListener("drag", handleMove);
+  document.addEventListener("drop", handleDropCapture, true);
+  document.addEventListener("dragend", finish, { once: true });
 }
 
 function ExplorerEmpty({ flatEntries, rootEntries }) {
@@ -242,6 +539,8 @@ function FileEntryButton({
     <button
       type="button"
       className={`${className}${dragOver ? " is-drag-over" : ""}`}
+      data-entry-path={entry.path}
+      data-drop-target={isDir && onDropEntry ? "folder" : undefined}
       title={entry.path ? displayEntryPath(entry) : label}
       onClick={() => {
         if (longPressFired()) {
@@ -470,14 +769,14 @@ export function FileTree({
     : buildDisplayList(flatEntries, pinnedShortcuts);
 
   if (!list.length && (rootEntries?.loading || flatEntries?.loading)) {
-    return <div className="flex-1 overflow-y-auto min-h-0" {...treeScrollProps(onBlankContextMenu)} />;
+    return <div className="desk-file-tree-scroll" {...treeScrollProps(onBlankContextMenu)} />;
   }
 
   if (!list.length) {
     const q = searchQuery.trim();
     return (
       <div
-        className="flex-1 overflow-y-auto min-h-0 cursor-tree-empty-area"
+        className="desk-file-tree-scroll cursor-tree-empty-area"
         {...treeScrollProps(onBlankContextMenu)}
       >
         <div className="cursor-tree-empty">
@@ -500,7 +799,7 @@ export function FileTree({
     document.body.classList.add("is-drag-cursor");
     writeExplorerDragData(e.dataTransfer, entry);
     setTransparentDragImage(e.dataTransfer);
-    startFileDragPreview(e, entry);
+    startFileDragPreview(e, entry, workspaceId);
     const cleanupDragCursor = () => {
       document.body.classList.remove("is-drag-cursor");
       document.removeEventListener("drop", cleanupDragCursor);
@@ -558,7 +857,7 @@ export function FileTree({
   });
 
   return (
-    <div className="flex-1 overflow-y-auto min-h-0" {...treeScrollProps(onBlankContextMenu)}>
+    <div className="desk-file-tree-scroll" {...treeScrollProps(onBlankContextMenu)}>
       {viewMode === "list" ? <div className="desk-file-list">{rows}</div> : rows}
       {searchActive && searchTruncated ? (
         <div className="desk-file-search-truncated" role="status">
