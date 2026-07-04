@@ -8,6 +8,7 @@ import {
   sheetReferencePolicy,
 } from "./lib/elementSheetGuides";
 import { MAX_GENERATION_REFERENCE_ASSETS } from "./lib/elementAssetModel";
+import { appendVideoReferenceTags, startFramePromptPrefix } from "./lib/videoGeneration";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
   errorResponse,
@@ -594,7 +595,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           guide,
           all: ELEMENT_SHEET_REFERENCE_POLICY,
           note:
-            "studio_create_element only registers the element. studio_generate_element_sheet builds the sheet image. Upload refs first; do not restyle subjects.",
+            "photographic = real subject + upload refs. designed = fictional asset + description only — one generate_element_sheet call, no throwaway plates.",
         }),
       );
     }
@@ -631,6 +632,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceAssetIds?: Id<"assets">[];
         sourceAssetIds?: Id<"assets">[];
         sourceDocumentId?: Id<"documents">;
+        sourceMode?: "photographic" | "designed";
       }>(request);
       if (!body.type || !body.name?.trim()) {
         return finish(errorResponse("type and name are required"));
@@ -645,6 +647,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceAssetIds: body.referenceAssetIds ?? body.sourceAssetIds,
         sourceAssetIds: body.sourceAssetIds,
         sourceDocumentId: body.sourceDocumentId,
+        sourceMode: body.sourceMode,
       });
       const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
         userId: auth.userId,
@@ -693,6 +696,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const elementId = elementSheetMatch[1] as Id<"elements">;
       const body = await readJsonBody<{
         referenceAssetIds?: Id<"assets">[];
+        referenceElementIds?: Id<"elements">[];
+        sourceMode?: "photographic" | "designed";
         resolution?: "1K" | "2K";
       }>(request);
       try {
@@ -701,6 +706,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           sandboxFolderId: auth.sandboxFolderId,
           elementId,
           referenceAssetIds: body.referenceAssetIds,
+          referenceElementIds: body.referenceElementIds,
+          sourceMode: body.sourceMode,
           resolution: body.resolution,
           expiresUnix,
         });
@@ -872,6 +879,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         audioEnabled?: boolean;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
+        startFrameAssetId?: Id<"assets">;
       }>(request);
 
       const mode = body.mode ?? "image";
@@ -886,6 +894,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             userId: auth.userId,
             sandboxFolderId: auth.sandboxFolderId,
             elementIds: body.referenceElementIds,
+            generationMode: mode === "video" ? "video" : mode === "image" ? "image" : undefined,
           });
           estimateAssetIds = [...new Set([...estimateAssetIds, ...resolved.referenceAssetIds])];
         } catch (error) {
@@ -921,6 +930,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         audioEnabled?: boolean;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
+        /** Storyboard / opening still for video — Seedance first_frame. Characters live here, not in face-sheet refs. */
+        startFrameAssetId?: Id<"assets">;
         wait?: boolean;
         skipPromptEnhancement?: boolean;
       }>(request);
@@ -944,6 +955,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
 
       let userPrompt = body.prompt.trim();
       let mergedReferenceAssetIds = [...(body.referenceAssetIds ?? [])];
+      let referenceImageLabels: Array<{ tag: string; label: string }> = [];
 
       if (body.referenceElementIds?.length) {
         try {
@@ -951,10 +963,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             userId: auth.userId,
             sandboxFolderId: auth.sandboxFolderId,
             elementIds: body.referenceElementIds,
+            generationMode: mode === "video" ? "video" : mode === "image" ? "image" : undefined,
           });
           mergedReferenceAssetIds = [
             ...new Set([...mergedReferenceAssetIds, ...resolved.referenceAssetIds]),
           ];
+          referenceImageLabels = resolved.referenceImageLabels;
           if (resolved.promptLines.length) {
             userPrompt = `${userPrompt}\n\nElement references:\n${resolved.promptLines.join("\n\n")}`;
           }
@@ -962,6 +976,27 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           const message = error instanceof Error ? error.message : "Element resolution failed";
           return finish(errorResponse(message, message.includes("not found") ? 404 : 400));
         }
+      }
+
+      let startFrameUrl: string | undefined;
+      if (body.startFrameAssetId) {
+        if (mode !== "video") {
+          return finish(errorResponse("startFrameAssetId is only valid for video mode"));
+        }
+        const startRefs = await ctx.runQuery(internal.studioApiInternal.getAssetReferenceUrls, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          assetIds: [body.startFrameAssetId],
+          expiresUnix,
+        });
+        const startRef = startRefs[0];
+        if (!startRef || startRef.kind !== "image") {
+          return finish(errorResponse("startFrameAssetId must be an image asset"));
+        }
+        startFrameUrl = startRef.url;
+        userPrompt = `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
+      } else if (mode === "video" && referenceImageLabels.length) {
+        userPrompt = appendVideoReferenceTags(userPrompt, referenceImageLabels);
       }
 
       if (mergedReferenceAssetIds.length > MAX_GENERATION_REFERENCE_ASSETS) {
@@ -1076,7 +1111,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds: body.durationSeconds,
         hasReferenceInput:
           mode === "video"
-            ? Boolean(referenceInputsList.length)
+            ? Boolean(referenceInputsList.length || startFrameUrl)
             : Boolean(referenceUrls?.length),
         hasVideoReferenceInput:
           mode === "video" && referenceInputsList.some((input) => input.kind === "video"),
@@ -1097,6 +1132,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           audioEnabled: body.audioEnabled,
           referenceUrls,
           referenceInputs,
+          startFrameUrl,
         });
         return finish(
           jsonResponse(
@@ -1119,13 +1155,14 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         mode,
         tier,
         stylePresetId: preset.id,
-        userPrompt: body.prompt.trim(),
+        userPrompt,
         audioEnabled: body.audioEnabled,
         aspectRatio,
         resolution,
         durationSeconds: body.durationSeconds,
         referenceUrls,
         referenceInputs,
+        startFrameUrl,
         skipPromptEnhancement: body.skipPromptEnhancement,
       });
 

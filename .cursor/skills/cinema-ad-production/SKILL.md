@@ -25,21 +25,38 @@ Stage director for the **creative department**. You run phases, iterations, pack
 
 ## Golden rules
 
-1. **Never skip iteration rounds** unless Dallas explicitly says fast-path (log deviation).
+1. **Never skip iteration rounds** unless Dallas/Shara explicitly says `fast-path` in the same thread after budget approval — see [references/phase-gates.md](references/phase-gates.md). **Orchestrator-drafted packets without specialist passes are forbidden.**
 2. **Director merges; specialists build and scrutinize** — see [references/iteration-protocol.md](references/iteration-protocol.md).
 3. **Rounds 2–3 rebuild only items with `blocking` conflicts** from prior round.
 4. **Auto-advance after bible** — Phase E runs automatically; no mid-pipeline human gates ([references/auto-approval.md](references/auto-approval.md)).
 5. **Load specialist SKILL.md** from `specialists/` when executing that role's builder or scrutiny pass.
 6. **Visual scrutiny requires viewing** — never approve props or clips from prompt text alone ([references/visual-asset-pipeline.md](references/visual-asset-pipeline.md)).
-7. **All Studio generation uses raw preset** — `{ stylePreset: "raw", skipPromptEnhancement: true }`.
-8. **Cost ledger** — enforce approved cap before each generate ([references/cost-ledger.md](references/cost-ledger.md)).
+7. **Reference allocation is mandatory** — orchestrator computes `referenceElementIds[]` per shot from `approved_asset_registry` before director merge; intercut shots include all locations. Phase E uses `referenceElementIds` only — never raw upload refs. **People on camera:** storyboard still → `startFrameAssetId` before video ([references/start-frame-workflow.md](references/start-frame-workflow.md), [references/shot-reference-allocation.md](references/shot-reference-allocation.md)). **No `scene` element type.**
+8. **All Studio generation uses direct prompts** — `{ skipPromptEnhancement: true }` plus optional `stylePreset: "story-ad"` or `"realism"`. Do **not** use slug `raw` unless `studio_list_presets` confirms it exists.
+9. **Cost ledger** — enforce approved cap before each generate ([references/cost-ledger.md](references/cost-ledger.md)).
 
 ## First action
 
 1. Read [references/pipeline.md](references/pipeline.md)
 2. Determine mode: `plan` vs `run` (see table above)
 3. **Plan:** [references/planning-intake.md](references/planning-intake.md) → [references/budget-proposal.md](references/budget-proposal.md)
-4. **Run:** verify `approved_budget_credits` in thread; load planning-intake from Studio folder
+4. **Run:** verify `approved_budget_credits` in thread; load planning-intake from Studio folder; **run [references/phase-gates.md](references/phase-gates.md) checklist before any `studio_generate_*`**
+
+### Run mode — mandatory order (no exceptions)
+
+```
+budget approved → Phase A (≤3 rounds, Task subagents + director merge) → sign off
+               → Phase B (≤3 rounds, 3 parallel builds + scrutiny subagents) → sign off
+               → Phase D (style bible w/ seedance look + visual scrutiny) → sign off
+               → Phase C (editor first, parallel specialist builds, seedance prompt prefix) → sign off
+               → Production Bible → Phase E (ONLY after all gates; film-grain scrutiny per clip)
+```
+
+**Orchestrator must launch `Task` subagents** — see [references/phase-gates.md](references/phase-gates.md) and [references/parallel-agents.md](references/parallel-agents.md). Writing packets yourself is forbidden.
+
+**Visual look:** Every shot prompt must follow [references/seedance-cinematic-look.md](references/seedance-cinematic-look.md). No `studio_generate_video` until `style_bible.seedance_cinematic` is set and prompts include the mandatory film-grain prefix.
+
+**If prior run skipped specialists or generated early:** reset `phase_signoffs.A/B/C` to `pending`, clear `approved_clips`, do **not** regenerate until full iteration completes.
 
 ## Specialist index
 
@@ -131,29 +148,27 @@ Launch parallel subagents per [references/parallel-agents.md](references/paralle
 
 ---
 
-## Phase D — Visual assets (max 3 rounds per prop)
+## Phase D — Visual assets (max 3 rounds per asset)
 
-**After Phase B, before Phase C.**
+**After Phase B, before Phase C.** See [references/asset-manifest.md](references/asset-manifest.md) and [references/element-source-modes.md](references/element-source-modes.md).
 
-1. **STYLE BIBLE** — style-supervisor
-2. **SPEC BUILD** — prop-master → `prop_packet[]`
-3. **EXECUTE** — `studio_create_element` + `studio_generate_element_sheet` (or raw `studio_generate_image` for 3×3 grids)
-4. **VISUAL SCRUTINY** — prop-master **must Read** each sheet image
-5. **STYLE PASS** — style-supervisor
-6. **REVISE** — max 3 rounds per prop
-7. **REGISTRY** — `approved_asset_registry[]`
-
-Character sheets: same flow with `type: "character"`.
+1. **MANIFEST** — all characters, locations, props with `sourceMode` per row
+2. **STYLE BIBLE** — style-supervisor (seedance cinematic look)
+3. **SPEC BUILD** — prop-master per manifest row
+4. **EXECUTE** — props first (designed, one sheet each) → characters (designed) → locations (with `referenceElementIds` for props). Tricia = photographic reuse only.
+5. **VISUAL SCRUTINY** — Read every sheet; film grain + anti-gloss checks
+6. **REGISTRY** — full manifest coverage before Phase C
 
 ---
 
 ## Phase C — Shotcraft (max 3 rounds)
 
 1. **EDITOR shot list first**
-2. **BUILD** (parallel) — dp, gaffer, sound, composer, editor, motion-designer, colorist
-3. **MERGE** — director fuses shots + `generation_prompt` + `reference_assets[]` + `emotional_temperature`
-4. **SCRUTINIZE** — all Phase C roles on merged shots
-5. Auto-advance
+2. **REFERENCE ALLOCATE** — compute `generation/shot-reference-allocation.json` from registry + world_packet ([references/shot-reference-allocation.md](references/shot-reference-allocation.md)) — **before** director merge
+3. **BUILD** (parallel Task subagents) — dp, gaffer, sound, composer, editor, motion-designer, colorist
+4. **MERGE** — director fuses specialist builds + `generation_prompt` + allocated `referenceElementIds[]` + `reference_assets[]` + `reference_element_map` + `emotional_temperature`
+5. **SCRUTINIZE** — all Phase C roles on merged shots (dp, gaffer, sound, composer, editor, motion-designer, colorist)
+6. Auto-advance
 
 **Output:** `shot_packets[]`
 
@@ -230,6 +245,9 @@ Final message: summary + folder ID + total credits spent + compromises log.
 - [references/studio-handoff.md](references/studio-handoff.md)
 - [references/visual-asset-pipeline.md](references/visual-asset-pipeline.md)
 - [references/e2e-auto-run.md](references/e2e-auto-run.md)
+- [references/phase-gates.md](references/phase-gates.md) — **mandatory before any generation**
+- [references/element-source-modes.md](references/element-source-modes.md) — **photographic vs designed — no throwaway plates**
+- [references/shot-reference-allocation.md](references/shot-reference-allocation.md) — **mandatory per-shot referenceElementIds before merge**
 
 ## Downstream
 

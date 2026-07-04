@@ -221,6 +221,7 @@ export function StudioShell() {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
+  const [startFrameAttachmentId, setStartFrameAttachmentId] = useState("");
   const [mode, setMode] = useState("image");
 
   useEffect(() => {
@@ -430,10 +431,18 @@ export function StudioShell() {
         ),
     [attachments],
   );
-  const generationReferences = useMemo(
-    () => generationReferenceInputs(attachments, attachmentMediaUrls),
-    [attachmentMediaUrls, attachments],
+  const videoGenerationInputs = useMemo(
+    () =>
+      splitVideoGenerationInputs(attachments, attachmentMediaUrls, startFrameAttachmentId),
+    [attachmentMediaUrls, attachments, startFrameAttachmentId],
   );
+  const generationReferences = useMemo(() => {
+    if (mode === "video") {
+      return videoGenerationInputs.referenceInputs;
+    }
+    return generationReferenceInputs(attachments, attachmentMediaUrls);
+  }, [attachmentMediaUrls, attachments, mode, videoGenerationInputs.referenceInputs]);
+  const videoStartFrameUrl = mode === "video" ? videoGenerationInputs.startFrameUrl : undefined;
   const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
   const selectedStylePreset = useMemo(() => {
     if (!presets?.length) return null;
@@ -468,7 +477,7 @@ export function StudioShell() {
           durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
           hasReferenceInput:
             mode === "video"
-              ? generationReferences.length > 0
+              ? generationReferences.length > 0 || Boolean(videoStartFrameUrl)
               : generationReferences.length > 0,
           hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
           hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
@@ -486,6 +495,7 @@ export function StudioShell() {
     composerContextsRef.current[prevKey] = {
       draft,
       attachments,
+      startFrameAttachmentId,
       mode,
       aspectRatio,
       imageResolution,
@@ -497,6 +507,7 @@ export function StudioShell() {
     const next = composerContextsRef.current[composerContextKey];
     setDraft(next?.draft ?? "");
     setAttachments(next?.attachments ?? []);
+    setStartFrameAttachmentId(next?.startFrameAttachmentId ?? "");
     setMode(next?.mode ?? "image");
     setAspectRatio(next?.aspectRatio ?? "16:9");
     setImageResolution(next?.imageResolution ?? "2K");
@@ -1329,6 +1340,14 @@ export function StudioShell() {
     setAttachments((items) =>
       items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
     );
+    if (
+      mode === "video" &&
+      attachment.kind === "image" &&
+      attachment.studioKind === "asset" &&
+      !startFrameAttachmentId
+    ) {
+      setStartFrameAttachmentId(attachment.id);
+    }
     window.requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -1446,9 +1465,11 @@ export function StudioShell() {
             .map((reference) => reference.url)
           : undefined,
         referenceInputs: mode === "video" ? generationReferences : undefined,
+        startFrameUrl: mode === "video" ? videoStartFrameUrl : undefined,
       });
       setDraft("");
       setAttachments([]);
+      setStartFrameAttachmentId("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Studio action failed.");
     } finally {
@@ -1507,6 +1528,14 @@ export function StudioShell() {
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
           --studio-grid-tile-glow: 0 0 16px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          --studio-gen-frame-bg: rgba(0, 0, 0, 0.9);
+          --studio-gen-frame-text: var(--color-cursor-text-bright);
+          --studio-gen-card-shadow: 0 28px 64px rgb(0 0 0 / 0.65);
+          --studio-gen-media-bg: rgba(0, 0, 0, 0.9);
+          --studio-gen-glass-fill: color-mix(in srgb, #ffffff 32%, transparent);
+          --studio-gen-glass-blur: saturate(190%) blur(20px);
+          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 30%, transparent);
+          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 24%, transparent);
           position: relative;
           background: var(--mos-bg) !important;
           overflow: hidden;
@@ -2426,6 +2455,14 @@ export function StudioShell() {
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 5.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 6%, var(--mos-bg));
           --studio-grid-tile-glow: 0 0 12px color-mix(in srgb, var(--cursor-accent) 9%, transparent);
+          --studio-gen-frame-bg: transparent;
+          --studio-gen-frame-text: var(--color-cursor-text);
+          --studio-gen-card-shadow: var(--studio-composer-glass-shadow);
+          --studio-gen-media-bg: transparent;
+          --studio-gen-glass-fill: color-mix(in srgb, #ffffff 32%, transparent);
+          --studio-gen-glass-blur: saturate(190%) blur(20px);
+          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 8%, transparent);
         }
         [data-appearance="light"] .studio-polish :where(
           .studio-composer .cursor-composer-box,
@@ -5245,6 +5282,12 @@ export function StudioShell() {
           gap: 9px;
           min-width: 188px;
         }
+        .studio-video-start-frame-copy {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.45;
+        }
         .studio-duration-readout {
           display: flex;
           align-items: baseline;
@@ -7119,27 +7162,34 @@ export function StudioShell() {
           margin: 0;
         }
         .studio-video-progress-card {
-          margin: -12px -14px;
           overflow: hidden;
           border-radius: 18px;
-          border: 0;
+          border: 1px solid var(--studio-composer-glass-border);
+          background: var(--studio-gen-frame-bg);
+          box-shadow: var(--studio-gen-card-shadow);
+        }
+        [data-appearance="light"] .studio-polish .studio-video-progress-card {
           background: transparent;
-          box-shadow:
-            0 28px 64px rgb(0 0 0 / 0.65);
+          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-video-progress-frame {
           position: relative;
           aspect-ratio: 16 / 9;
           overflow: hidden;
-          background: rgba(0,0,0,0.9);
+          background: var(--studio-gen-frame-bg);
+        }
+        [data-appearance="light"] .studio-polish .studio-video-progress-frame {
+          background: var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
         }
         .studio-video-progress-frame::before {
           content: "";
           position: absolute;
           inset: -80%;
           background:
-            radial-gradient(circle at 30% 50%, color-mix(in srgb, var(--cursor-accent) 30%, transparent) 0%, transparent 40%),
-            radial-gradient(circle at 70% 50%, color-mix(in srgb, var(--cursor-accent-hover) 24%, transparent) 0%, transparent 40%);
+            radial-gradient(circle at 30% 50%, var(--studio-gen-aura-a) 0%, transparent 40%),
+            radial-gradient(circle at 70% 50%, var(--studio-gen-aura-b) 0%, transparent 40%);
           animation: studio-aura-drift 5000ms ease-in-out infinite alternate;
         }
         @keyframes studio-aura-drift {
@@ -7161,13 +7211,86 @@ export function StudioShell() {
           15% { opacity: 0.7; }
           100% { transform: scale(1.8); opacity: 0; }
         }
-        .studio-video-progress-content {
+        .studio-video-progress-content,
+        .studio-gen-status-content {
           position: absolute;
           inset: 0;
-          display: grid;
-          place-items: center;
-          color: var(--color-cursor-text-bright);
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 18px 20px;
+          color: var(--studio-gen-frame-text);
           text-align: center;
+        }
+        .studio-gen-status-content strong {
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.35;
+        }
+        .studio-gen-status-detail {
+          margin: 0;
+          max-width: 36ch;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 450;
+          line-height: 1.45;
+        }
+        .studio-gen-status-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border-radius: 999px;
+          background: color-mix(in srgb, currentColor 10%, transparent);
+        }
+        .studio-gen-status-icon svg {
+          width: 18px;
+          height: 18px;
+        }
+        .studio-gen-status-card.is-failed .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, #ef4444 10%, transparent), transparent 58%),
+            var(--studio-gen-frame-bg);
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-failed .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, #ef4444 14%, transparent), transparent 62%),
+            var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+        }
+        .studio-gen-status-card.is-failed .studio-gen-status-content {
+          color: color-mix(in srgb, #ef4444 72%, var(--studio-gen-frame-text));
+        }
+        .studio-gen-status-card.is-failed .studio-gen-status-detail {
+          color: color-mix(in srgb, #ef4444 42%, var(--color-cursor-muted));
+        }
+        .studio-gen-status-card.is-cancelled .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 12%, transparent), transparent 58%),
+            var(--studio-gen-frame-bg);
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-cancelled .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 10%, transparent), transparent 62%),
+            var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+        }
+        .studio-gen-status-card.is-cancelled .studio-gen-status-content {
+          color: var(--color-cursor-text);
+        }
+        .studio-gen-status-card.is-progress .studio-gen-status-frame::before,
+        .studio-gen-status-card.is-progress .studio-gen-status-frame::after {
+          display: block;
+        }
+        .studio-gen-status-card:not(.is-progress) .studio-gen-status-frame::before,
+        .studio-gen-status-card:not(.is-progress) .studio-gen-status-frame::after {
+          display: none;
         }
         @keyframes studio-spin {
           to { transform: rotate(360deg); }
@@ -7181,17 +7304,24 @@ export function StudioShell() {
           overflow: hidden;
           border-radius: 14px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
-          background: rgba(0,0,0,0.9);
+          background: var(--studio-gen-frame-bg);
           box-shadow:
             inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
-            0 28px 64px rgb(0 0 0 / 0.65);
+            var(--studio-gen-card-shadow);
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-card {
+          background: var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+          border-color: var(--studio-composer-glass-border);
+          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-result-card img,
         .studio-chat-result-card video {
           display: block;
           width: 100%;
           object-fit: contain;
-          background: rgba(0,0,0,0.9);
+          background: var(--studio-gen-media-bg);
         }
         .studio-chat-result-actions {
           display: flex;
@@ -7497,7 +7627,9 @@ export function StudioShell() {
             presets={presets}
             selectedStylePreset={selectedStylePreset}
             onSelectStylePreset={setSelectedStylePresetId}
-            hasReferenceInput={generationReferences.length > 0}
+            hasReferenceInput={
+            generationReferences.length > 0 || Boolean(videoStartFrameUrl)
+          }
             hasVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasVideoReferenceInput}
             hasNonVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasNonVideoReferenceInput}
             generationReferences={generationReferences}
@@ -7506,6 +7638,9 @@ export function StudioShell() {
             status={status}
             entitlement={entitlement}
             onOpenCredits={openCreditsPane}
+            attachments={attachments}
+            startFrameAttachmentId={startFrameAttachmentId}
+            setStartFrameAttachmentId={setStartFrameAttachmentId}
             onSubmit={handleSubmit}
             onDropEntry={(entry, range) => attachEntry(entry, range)}
             onUploadFiles={(files) => uploadComposerFiles(files)}
@@ -7618,6 +7753,8 @@ function StudioComposer({
   editorRef,
   attachments,
   setAttachments,
+  startFrameAttachmentId,
+  setStartFrameAttachmentId,
   mode,
   setMode,
   aspectRatio,
@@ -7948,6 +8085,9 @@ function StudioComposer({
                   setDurationSeconds={setDurationSeconds}
                   audioEnabled={audioEnabled}
                   setAudioEnabled={setAudioEnabled}
+                  attachments={attachments}
+                  startFrameAttachmentId={startFrameAttachmentId}
+                  setStartFrameAttachmentId={setStartFrameAttachmentId}
                 />
               ) : null}
             </>
@@ -8250,8 +8390,17 @@ function StudioComposerInlineSettings({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  attachments = [],
+  startFrameAttachmentId = "",
+  setStartFrameAttachmentId,
 }) {
   const maxVideoDuration = 15;
+  const startFrameCandidates = attachments.filter(
+    (attachment) =>
+      attachment.studioKind === "asset" &&
+      attachment.kind === "image" &&
+      (attachment.mediaUrl || attachment.thumbnailUrl),
+  );
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
@@ -8359,6 +8508,40 @@ function StudioComposerInlineSettings({
                   onClick={() => commitDuration(seconds)}
                 >
                   <span>{seconds}s</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </StudioInlineSettingPopover>
+      ) : null}
+      {mode === "video" ? (
+        <StudioInlineSettingPopover
+          icon={ImageIcon}
+          label="Start frame"
+          valueLabel={startFrameAttachmentId ? "Set" : "None"}
+          menuLabel="Opening shot (required for people)"
+          hideLabel
+        >
+          <div className="studio-inline-settings-range-panel">
+            <p className="studio-video-start-frame-copy">
+              Pick the still that opens the clip. Characters belong in this frame — not as face-sheet refs.
+            </p>
+            <div className="studio-settings-chip-grid" role="group" aria-label="Start frame image">
+              <button
+                type="button"
+                className={`studio-settings-chip${!startFrameAttachmentId ? " is-active" : ""}`}
+                onClick={() => setStartFrameAttachmentId?.("")}
+              >
+                <span>None</span>
+              </button>
+              {startFrameCandidates.map((attachment) => (
+                <button
+                  key={attachment.id}
+                  type="button"
+                  className={`studio-settings-chip${startFrameAttachmentId === attachment.id ? " is-active" : ""}`}
+                  onClick={() => setStartFrameAttachmentId?.(attachment.id)}
+                >
+                  <span>{attachment.label ?? attachment.filename ?? "Image"}</span>
                 </button>
               ))}
             </div>
@@ -9334,6 +9517,87 @@ function playStudioTapFeedback() {
   }
 }
 
+const GENERATION_PROGRESS_STAGES = new Set(["queued", "generating", "saving"]);
+const GENERATION_TERMINAL_STAGES = new Set(["failed", "cancelled"]);
+const GENERATION_STATUS_STAGES = new Set([
+  ...GENERATION_PROGRESS_STAGES,
+  ...GENERATION_TERMINAL_STAGES,
+]);
+const GENERATION_STAGE_RANK = {
+  queued: 1,
+  generating: 2,
+  saving: 3,
+  failed: 10,
+  cancelled: 10,
+};
+
+function compressThreadDisplayEvents(events = []) {
+  const completedJobIds = new Set(
+    events
+      .filter((event) => event.kind === "result" && event.generationJobId)
+      .map((event) => event.generationJobId),
+  );
+  const terminalJobIds = new Set(completedJobIds);
+  const latestTerminalByJob = new Map();
+  for (const event of events) {
+    if (
+      event.kind !== "stage" ||
+      !event.generationJobId ||
+      !GENERATION_TERMINAL_STAGES.has(event.stage)
+    ) {
+      continue;
+    }
+    terminalJobIds.add(event.generationJobId);
+    const prev = latestTerminalByJob.get(event.generationJobId);
+    const prevOrder = prev?.order ?? prev?.createdAt ?? 0;
+    const nextOrder = event.order ?? event.createdAt ?? 0;
+    if (!prev || nextOrder >= prevOrder) {
+      latestTerminalByJob.set(event.generationJobId, event);
+    }
+  }
+
+  const latestProgressByJob = new Map();
+  for (const event of events) {
+    if (
+      event.kind !== "stage" ||
+      !event.generationJobId ||
+      !GENERATION_PROGRESS_STAGES.has(event.stage) ||
+      terminalJobIds.has(event.generationJobId)
+    ) {
+      continue;
+    }
+    const prev = latestProgressByJob.get(event.generationJobId);
+    const prevRank = prev ? (GENERATION_STAGE_RANK[prev.stage] ?? 0) : 0;
+    const nextRank = GENERATION_STAGE_RANK[event.stage] ?? 0;
+    const prevOrder = prev?.order ?? prev?.createdAt ?? 0;
+    const nextOrder = event.order ?? event.createdAt ?? 0;
+    if (!prev || nextRank > prevRank || (nextRank === prevRank && nextOrder >= prevOrder)) {
+      latestProgressByJob.set(event.generationJobId, event);
+    }
+  }
+
+  return events.filter((event) => {
+    if (event.kind === "stage" && event.generationJobId && completedJobIds.has(event.generationJobId)) {
+      return false;
+    }
+    if (
+      event.kind === "stage" &&
+      event.generationJobId &&
+      GENERATION_TERMINAL_STAGES.has(event.stage)
+    ) {
+      return latestTerminalByJob.get(event.generationJobId)?._id === event._id;
+    }
+    if (
+      event.kind === "stage" &&
+      event.generationJobId &&
+      GENERATION_PROGRESS_STAGES.has(event.stage)
+    ) {
+      return latestProgressByJob.get(event.generationJobId)?._id === event._id;
+    }
+    return true;
+  });
+}
+
 function StudioThreadChat({
   events,
   assets = [],
@@ -9341,14 +9605,7 @@ function StudioThreadChat({
   const emptyLogo = useMercuryLogoAssets(96);
   const safeEvents = events ?? [];
   const hasEvents = safeEvents.length > 0;
-  const completedJobIds = new Set(
-    safeEvents
-      .filter((event) => event.kind === "result" && event.generationJobId)
-      .map((event) => event.generationJobId),
-  );
-  const displayEvents = safeEvents.filter(
-    (event) => !(event.kind === "stage" && event.generationJobId && completedJobIds.has(event.generationJobId)),
-  );
+  const displayEvents = compressThreadDisplayEvents(safeEvents);
   return (
     <div className="studio-chat-render-area">
       {!hasEvents ? (
@@ -9396,13 +9653,12 @@ function StudioThreadEvent({ event, assets }) {
     );
   }
   if (event.kind === "stage") {
+    if (GENERATION_STATUS_STAGES.has(event.stage)) {
+      return <StudioGenerationStatusCard stage={event.stage} error={event.error} />;
+    }
     return (
       <article className="studio-chat-bubble is-system">
-        {event.stage === "queued" || event.stage === "generating" || event.stage === "saving" ? (
-          <StudioProgressCard stage={event.stage} />
-        ) : (
-          <p className="studio-thread-stage">{event.stage}</p>
-        )}
+        <p className="studio-thread-stage">{event.stage}</p>
       </article>
     );
   }
@@ -9435,18 +9691,49 @@ function StudioThreadEvent({ event, assets }) {
   );
 }
 
-function StudioProgressCard({ stage }) {
-  const copy =
-    stage === "saving"
-      ? "Saving your render into Studio..."
-      : stage === "queued"
-        ? "Queued for render..."
-        : "Rendering...";
+function StudioGenerationStatusCard({ stage, error }) {
+  const isFailed = stage === "failed";
+  const isCancelled = stage === "cancelled";
+  const isProgress = GENERATION_PROGRESS_STAGES.has(stage);
+  const title = isCancelled
+    ? "Generation cancelled"
+    : isFailed
+      ? "Generation failed"
+      : stage === "saving"
+        ? "Saving your render into Studio..."
+        : stage === "queued"
+          ? "Queued for render..."
+          : "Rendering...";
+  const detail = isFailed
+    ? (error?.trim() || "Credits were refunded automatically.")
+    : isCancelled
+      ? "This render was stopped before it finished."
+      : null;
+
   return (
-    <div className="studio-video-progress-card">
-      <div className="studio-video-progress-frame" aria-live="polite">
-        <div className="studio-video-progress-content">
-          <strong>{copy}</strong>
+    <div
+      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}`}
+    >
+      <div className="studio-video-progress-frame studio-gen-status-frame" aria-live="polite">
+        <div className="studio-video-progress-content studio-gen-status-content">
+          {!isProgress ? (
+            <span className="studio-gen-status-icon" aria-hidden="true">
+              {isCancelled ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 12h8" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v5" />
+                  <path d="M12 16h.01" />
+                </svg>
+              )}
+            </span>
+          ) : null}
+          <strong>{title}</strong>
+          {detail ? <p className="studio-gen-status-detail">{detail}</p> : null}
         </div>
       </div>
     </div>
@@ -11436,6 +11723,52 @@ function buildPromptWithAttachments(prompt, attachments) {
     )
     .join("\n");
   return `${prompt.trim()}\n\nReferences:\n${refs}`;
+}
+
+function splitVideoGenerationInputs(attachments, signedUrls = {}, startFrameAttachmentId = "") {
+  let startFrameUrl;
+  const referenceInputs = [];
+  for (const attachment of attachments) {
+    if (attachment.id === startFrameAttachmentId) {
+      const url =
+        attachment.mediaUrl ??
+        signedUrls[`attachment:${attachment.id}`] ??
+        attachment.thumbnailUrl;
+      if (url && /^https?:\/\//i.test(url)) {
+        startFrameUrl = url;
+      }
+      continue;
+    }
+    if (attachment.studioKind === "element") {
+      if (attachment.elementType === "character") {
+        continue;
+      }
+      const sheet = attachment.sheetAsset;
+      if (!sheet) continue;
+      const url =
+        sheet.mediaUrl ??
+        signedUrls[`element-sheet:${attachment.id}`] ??
+        sheet.thumbnailUrl;
+      if (!url || !/^https?:\/\//i.test(url)) continue;
+      referenceInputs.push({ kind: "image", url, mimeType: sheet.mimeType });
+      continue;
+    }
+    const direct = {
+      kind: attachment.kind,
+      url:
+        attachment.mediaUrl ??
+        signedUrls[`attachment:${attachment.id}`] ??
+        attachment.thumbnailUrl,
+      mimeType: attachment.mimeType,
+    };
+    if (
+      ["image", "video", "audio"].includes(direct.kind) &&
+      /^https?:\/\//i.test(direct.url ?? "")
+    ) {
+      referenceInputs.push(direct);
+    }
+  }
+  return { startFrameUrl, referenceInputs };
 }
 
 function generationReferenceInputs(attachments, signedUrls = {}) {

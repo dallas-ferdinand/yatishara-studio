@@ -16,6 +16,28 @@ import {
 } from "./lib/aiGateway";
 import { referenceInputValidator } from "./lib/referenceInput";
 import { shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
+import {
+  appendVideoReferenceTags,
+  startFramePromptPrefix,
+  videoReferenceTag,
+} from "./lib/videoGeneration";
+
+function finalizeVideoPrompt(
+  prompt: string,
+  args: { startFrameUrl?: string; referenceImageCount: number },
+): string {
+  const labels = Array.from({ length: args.referenceImageCount }, (_, index) => ({
+    tag: videoReferenceTag(index + 1),
+    label: `reference image ${index + 1}`,
+  }));
+  if (args.startFrameUrl) {
+    return `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(prompt, labels)}`;
+  }
+  if (labels.length) {
+    return appendVideoReferenceTags(prompt, labels);
+  }
+  return prompt;
+}
 
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
@@ -290,6 +312,7 @@ export const runFlow = action({
     referenceInputs: v.optional(v.array(referenceInputValidator)),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceSummaries: v.optional(v.array(v.string())),
+    startFrameUrl: v.optional(v.string()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -319,7 +342,7 @@ export const runFlow = action({
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
-          ? Boolean(referenceInputs.length)
+          ? Boolean(referenceInputs.length || args.startFrameUrl)
           : Boolean(args.referenceUrls?.length),
       hasVideoReferenceInput:
         args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
@@ -361,15 +384,21 @@ export const runFlow = action({
       });
 
       if (args.mode === "video") {
+        const referenceImageUrls = referenceInputs
+          .filter((input) => input.kind === "image")
+          .map((input) => input.url);
+        const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
+          startFrameUrl: args.startFrameUrl,
+          referenceImageCount: referenceImageUrls.length,
+        });
         const video = await generateVideo({
-          prompt: enhancedPrompt,
+          prompt: videoPrompt,
           aspectRatio: args.aspectRatio,
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
-          referenceImageUrls: referenceInputs
-            .filter((input) => input.kind === "image")
-            .map((input) => input.url),
+          startFrameUrl: args.startFrameUrl,
+          referenceImageUrls,
           referenceVideoUrls: referenceInputs
             .filter((input) => input.kind === "video")
             .map((input) => input.url),
@@ -442,6 +471,7 @@ export const executeApiJob = action({
     audioEnabled: v.optional(v.boolean()),
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
+    startFrameUrl: v.optional(v.string()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -461,6 +491,7 @@ async function executeQueuedApiJob(
     audioEnabled?: boolean;
     referenceUrls?: string[];
     referenceInputs?: Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>;
+    startFrameUrl?: string;
   },
 ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
   const referenceInputs = args.referenceInputs ?? [];
@@ -496,15 +527,21 @@ async function executeQueuedApiJob(
     });
 
     if (args.mode === "video") {
+      const referenceImageUrls = referenceInputs
+        .filter((input) => input.kind === "image")
+        .map((input) => input.url);
+      const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
+        startFrameUrl: args.startFrameUrl,
+        referenceImageCount: referenceImageUrls.length,
+      });
       const video = await generateVideo({
-        prompt: enhancedPrompt,
+        prompt: videoPrompt,
         aspectRatio: args.aspectRatio,
         resolution: args.resolution,
         durationSeconds: args.durationSeconds,
         generateAudio: args.audioEnabled ?? false,
-        referenceImageUrls: referenceInputs
-          .filter((input) => input.kind === "image")
-          .map((input) => input.url),
+        startFrameUrl: args.startFrameUrl,
+        referenceImageUrls,
         referenceVideoUrls: referenceInputs
           .filter((input) => input.kind === "video")
           .map((input) => input.url),
@@ -566,6 +603,7 @@ export const runGenerationForApi = action({
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
+    startFrameUrl: v.optional(v.string()),
     skipPromptEnhancement: v.optional(v.boolean()),
   },
   returns: v.object({
@@ -592,7 +630,7 @@ export const runGenerationForApi = action({
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
-          ? Boolean(referenceInputs.length)
+          ? Boolean(referenceInputs.length || args.startFrameUrl)
           : Boolean(args.referenceUrls?.length),
       hasVideoReferenceInput:
         args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
@@ -610,6 +648,7 @@ export const runGenerationForApi = action({
       audioEnabled: args.audioEnabled,
       referenceUrls: args.referenceUrls,
       referenceInputs,
+      startFrameUrl: args.startFrameUrl,
     });
     return {
       jobId: prepared.jobId,

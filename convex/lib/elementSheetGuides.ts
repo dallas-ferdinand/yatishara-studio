@@ -1,12 +1,16 @@
 import type { ElementSheetType } from "./elementSheets";
 
+export type ElementSourceMode = "photographic" | "designed";
+
 export type SheetReferencePolicy = {
   minImageRefs: number;
+  minImageRefsDesigned: number;
   recommendedMin: number;
   recommendedMax: number;
   outputDescription: string;
   uploadChecklist: string[];
   fidelityLocks: string[];
+  designedWorkflow: string[];
   workflow: string[];
 };
 
@@ -16,8 +20,9 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
 > = {
   character: {
     minImageRefs: 3,
-    recommendedMin: 4,
-    recommendedMax: 8,
+    minImageRefsDesigned: 0,
+    recommendedMin: 20,
+    recommendedMax: 30,
     outputDescription:
       "One 16:9 image with three panels: full-body front, full-body back, head closeup (single visible face).",
     uploadChecklist: [
@@ -33,16 +38,22 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
       "Do NOT add or remove wardrobe, jewelry, tattoos, scars, or accessories",
       "Capture exactly what the reference photos show — documentary fidelity only",
     ],
+    designedWorkflow: [
+      "studio_create_element { type: character, sourceMode: designed, description: full visual spec }",
+      "studio_generate_element_sheet — ONE call builds sheet from description (no photo refs, no throwaway plates)",
+      "Visually inspect sheetUrl; use referenceElementIds in video gen",
+    ],
     workflow: [
-      "Upload 3–8 strong reference photos (not one selfie)",
-      "studio_create_element with referenceAssetIds (unbuilt state)",
+      "Upload 3–8 strong reference photos of a REAL person (not one selfie)",
+      "studio_create_element { sourceMode: photographic, referenceAssetIds }",
       "studio_generate_element_text_sheet — optional markdown production bible",
-      "studio_generate_element_sheet — builds sheet image (built state: sheetAssetId set)",
+      "studio_generate_element_sheet — builds sheet matching photos (built state)",
       "Visually inspect sheetUrl; use referenceElementIds or sheetAssetId in video/image gen — never raw upload refs",
     ],
   },
   prop: {
     minImageRefs: 2,
+    minImageRefsDesigned: 0,
     recommendedMin: 3,
     recommendedMax: 6,
     outputDescription:
@@ -58,15 +69,20 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
       "Do NOT add hands, people, or scene context",
       "Match scratches, dents, labels, and patina exactly as photographed",
     ],
+    designedWorkflow: [
+      "studio_create_element { type: prop, sourceMode: designed, description: materials/scale/wear }",
+      "studio_generate_element_sheet — direct sheet, one generation credit",
+    ],
     workflow: [
-      "Upload 2–6 reference photos of the same object",
-      "studio_create_element type=prop with referenceAssetIds",
+      "Upload 2–6 reference photos of a REAL physical object",
+      "studio_create_element type=prop with referenceAssetIds, sourceMode: photographic",
       "studio_generate_element_sheet resolution=2K → buildStatus=built",
       "Use sheetAssetId or referenceElementIds in generation — not upload refs",
     ],
   },
   location: {
     minImageRefs: 2,
+    minImageRefsDesigned: 0,
     recommendedMin: 3,
     recommendedMax: 6,
     outputDescription:
@@ -81,9 +97,15 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
       "Do NOT add or remove furniture, signage, or landmarks not in refs",
       "Preserve layout, palette, lighting direction, and material finishes",
     ],
+    designedWorkflow: [
+      "Build prop sheets FIRST if set dressing must match (chair, table props, etc.)",
+      "studio_create_element { type: location, sourceMode: designed, description: architecture/lighting }",
+      "studio_generate_element_sheet { referenceElementIds: [built prop element ids] } — composes location with prop sheets attached",
+      "Do NOT generate throwaway location plates before the sheet call",
+    ],
     workflow: [
-      "Upload 2–6 reference photos of the same space",
-      "studio_create_element type=location with referenceAssetIds",
+      "Upload 2–6 reference photos of a REAL space",
+      "studio_create_element type=location with referenceAssetIds, sourceMode: photographic",
       "studio_generate_element_sheet resolution=2K → buildStatus=built",
       "Use sheetAssetId or referenceElementIds in generation — not upload refs",
     ],
@@ -99,52 +121,124 @@ export function sheetReferencePolicy(
   return ELEMENT_SHEET_REFERENCE_POLICY[type];
 }
 
-export function assertEnoughSheetImageReferences(args: {
+/** Infer mode when caller omits sourceMode on create. */
+export function inferElementSourceMode(args: {
+  explicit?: ElementSourceMode;
+  imageRefCount: number;
+  type: ElementSheetType;
+}): ElementSourceMode {
+  if (args.explicit) {
+    return args.explicit;
+  }
+  const policy = sheetReferencePolicy(args.type);
+  const minPhoto = policy?.minImageRefs ?? 1;
+  return args.imageRefCount >= minPhoto ? "photographic" : "designed";
+}
+
+export function assertSheetGenerationReady(args: {
   type: ElementSheetType;
   imageRefCount: number;
+  sourceMode: ElementSourceMode;
+  description?: string;
 }): void {
   const policy = sheetReferencePolicy(args.type);
   if (!policy) {
     return;
   }
+
+  if (args.sourceMode === "designed") {
+    const spec = args.description?.trim() ?? "";
+    if (spec.length < 40) {
+      throw new Error(
+        [
+          `${args.type} designed sheet requires a detailed description (40+ chars) on the element.`,
+          `Use studio_create_element with sourceMode: "designed" and a full visual spec — do NOT generate throwaway reference plates first.`,
+          `Real-person characters (e.g. client headshots) use sourceMode: "photographic" with uploaded referenceAssetIds instead.`,
+        ].join(" "),
+      );
+    }
+    return;
+  }
+
   if (args.imageRefCount >= policy.minImageRefs) {
     return;
   }
   throw new Error(
     [
-      `${args.type} sheet generation needs at least ${policy.minImageRefs} reference image(s); got ${args.imageRefCount}.`,
-      `Recommended: ${policy.recommendedMin}–${policy.recommendedMax} clear photos before calling generate-sheet.`,
-      `Upload with studio_upload_asset, attach via referenceAssetIds on create/update, then studio_generate_element_sheet.`,
-      `Fidelity rule: capture features exactly as photographed — do not restyle or change identity.`,
+      `${args.type} photographic sheet needs at least ${policy.minImageRefs} reference image(s); got ${args.imageRefCount}.`,
+      `For fictional characters/props/locations, use sourceMode: "designed" on create_element and a rich description — then one studio_generate_element_sheet call (no photo refs).`,
+      `Recommended photographic: ${policy.recommendedMin}–${policy.recommendedMax} clear photos before generate-sheet.`,
     ].join(" "),
   );
 }
 
+/** @deprecated Use assertSheetGenerationReady */
+export function assertEnoughSheetImageReferences(args: {
+  type: ElementSheetType;
+  imageRefCount: number;
+}): void {
+  assertSheetGenerationReady({
+    type: args.type,
+    imageRefCount: args.imageRefCount,
+    sourceMode: "photographic",
+  });
+}
+
 export const ELEMENT_PRODUCTION_GUIDE = {
+  sourceModes: {
+    photographic:
+      "Real person, physical prop, or real location. Upload reference photos. Sheet must match photos exactly. Use for Tricia (real nurse), client-provided product photos, etc.",
+    designed:
+      "Fictional / designed asset (elderly mother character, witness chair, kitchen set). NO throwaway reference image generations. Create element with description → one generate_element_sheet call.",
+  },
   buildStates: {
     unbuilt:
-      "Element has referenceAssetIds (upload photos) only. buildStatus=unbuilt. Cannot attach to generation yet.",
+      "Element registered. photographic: has referenceAssetIds. designed: has description only. buildStatus=unbuilt until sheet built.",
     built:
-      "Element has sheetAssetId (generated sheet image) + referenceAssetIds. buildStatus=built. Ready for generation.",
+      "Element has sheetAssetId. buildStatus=built. Ready for referenceElementIds in video/image gen.",
   },
   generationRules: [
-    "Upload refs → create element (unbuilt) → generate text sheet (optional) → generate sheet image (built)",
+    "Choose sourceMode at create: photographic (real + photos) or designed (fictional + description)",
+    "Designed: NEVER studio_generate_image plates before generate_element_sheet — wastes credits",
+    "Location designed: build prop sheets first, then generate_element_sheet with referenceElementIds for props in the set",
     "When generating image/video: use referenceElementIds OR sheetAssetId — NEVER raw referenceAssetIds",
-    "Element description (markdown bible) is appended to the prompt automatically when using referenceElementIds",
-    "Cinema defaults: stylePreset raw, skipPromptEnhancement true",
+    "Element description is appended to prompts when using referenceElementIds",
+    "IMAGE: all built element sheets attach as refs (characters included)",
+    "VIDEO storyboard (studio_generate_image): all referenceElementIds — compose cast + props + locations into one still",
+    "VIDEO clip (studio_generate_video): startFrameAssetId required when people on camera; prop/location sheets as [Image N] refs only; character sheets NOT attached — identity lives in start frame + prompt",
+    "No scene element type — start frame is a per-shot asset, not a registry element",
+    "Cinema defaults: skipPromptEnhancement true, stylePreset realism or story-ad for video",
     "Visually inspect sheetUrl after build before production video",
   ],
-  mcpWorkflow: [
+  mcpWorkflowDesigned: [
+    "studio_element_sheet_guide",
+    "studio_create_element { sourceMode: designed, description: full visual spec }",
+    "studio_generate_element_sheet → sheetAssetId, buildStatus=built",
+    "studio_generate_image { referenceElementIds } → storyboard still → startFrameAssetId",
+    "studio_generate_video { startFrameAssetId, referenceElementIds }",
+  ],
+  mcpWorkflowPhotographic: [
     "studio_element_sheet_guide",
     "studio_upload_asset × N",
-    "studio_create_element { referenceAssetIds }",
+    "studio_create_element { sourceMode: photographic, referenceAssetIds }",
     "studio_generate_element_text_sheet (optional)",
-    "studio_generate_element_sheet → returns element with sheetAssetId, buildStatus=built",
-    "studio_generate_video { referenceElementIds: [elementId], stylePreset: raw, skipPromptEnhancement: true }",
+    "studio_generate_element_sheet → sheetAssetId, buildStatus=built",
+    "studio_generate_image { referenceElementIds } → storyboard still → startFrameAssetId",
+    "studio_generate_video { startFrameAssetId, referenceElementIds }",
   ],
 };
 
-export function sheetFidelityPromptSuffix(type: ElementSheetType): string {
+export function sheetFidelityPromptSuffix(
+  type: ElementSheetType,
+  sourceMode: ElementSourceMode = "photographic",
+): string {
+  if (sourceMode === "designed") {
+    return [
+      "DESIGNED ASSET: Invent from the written specification below — this is not a photo-match task.",
+      "Maintain documentary photorealism, natural skin texture, subtle film grain, no catalog gloss.",
+      "Do not add text, logos, or watermarks.",
+    ].join(" ");
+  }
   const policy = sheetReferencePolicy(type);
   if (!policy) {
     return "";

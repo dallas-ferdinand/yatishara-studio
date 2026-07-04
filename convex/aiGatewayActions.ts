@@ -71,6 +71,7 @@ export const generateVideoInternal = internalAction({
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     generateAudio: v.boolean(),
+    startFrameUrl: v.optional(v.string()),
     referenceImageUrls: v.array(v.string()),
     referenceVideoUrls: v.array(v.string()),
     referenceAudioUrls: v.array(v.string()),

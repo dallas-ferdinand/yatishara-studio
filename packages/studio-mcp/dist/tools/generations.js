@@ -9,7 +9,11 @@ const estimateSchema = {
     referenceElementIds: z
         .array(z.string())
         .optional()
-        .describe("Built elements — resolves to sheetAssetId + appends description to prompt"),
+        .describe("Built elements — video: prop/location sheets as [Image N] refs; characters prompt-only"),
+    startFrameAssetId: z
+        .string()
+        .optional()
+        .describe("Storyboard / opening still for video (Seedance first_frame). Required when people are on camera. Generate via studio_generate_image first."),
 };
 const rawPresetHint = 'Default stylePreset to "raw" with skipPromptEnhancement: true for cinema — passes prompt directly without preset rewrite.';
 export function registerGenerationTools(server) {
@@ -21,6 +25,7 @@ export function registerGenerationTools(server) {
             audioEnabled: args.audioEnabled,
             referenceAssetIds: args.referenceAssetIds,
             referenceElementIds: args.referenceElementIds,
+            startFrameAssetId: args.startFrameAssetId,
             mode: args.mode ?? "image",
         }),
     })));
@@ -71,7 +76,13 @@ export function registerGenerationTools(server) {
             skipPromptEnhancement: args.skipPromptEnhancement ?? true,
         }),
     })));
-    server.tool("studio_generate_video", `Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Starts async and polls until done (up to 5 min). Use referenceElementIds for built character/prop sheets. ${rawPresetHint}`, {
+    server.tool("studio_generate_video", `Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Async + poll (up to 5 min).
+
+VIDEO WITH PEOPLE (required workflow):
+1. studio_generate_image — storyboard still with referenceElementIds (characters + props + locations compose the opening shot)
+2. studio_generate_video — pass startFrameAssetId from step 1 + referenceElementIds for prop/location lock. Characters are IN the start frame, not face-sheet refs.
+
+Wait ≥65s between video calls (1 req/min gateway quota). ${rawPresetHint}`, {
         prompt: z.string(),
         folderId: z.string().optional(),
         stylePreset: z.string().optional(),
@@ -83,7 +94,11 @@ export function registerGenerationTools(server) {
         referenceElementIds: z
             .array(z.string())
             .optional()
-            .describe("Built element IDs — uses sheetAssetId, not upload refs"),
+            .describe("Prop + location element IDs for [Image N] refs; character descriptions append to prompt only"),
+        startFrameAssetId: z
+            .string()
+            .optional()
+            .describe("Storyboard asset ID — Seedance first_frame. Required when people appear on camera."),
         skipPromptEnhancement: z.boolean().optional(),
     }, async (args) => {
         const queued = await studioFetch("/generations", {

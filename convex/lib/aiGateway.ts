@@ -35,6 +35,8 @@ export type VideoGenerationInput = {
   resolution?: string;
   durationSeconds?: number;
   generateAudio: boolean;
+  /** Storyboard / opening shot — Seedance first_frame (I2V). Required for on-camera characters. */
+  startFrameUrl?: string;
   referenceImageUrls: string[];
   referenceVideoUrls: string[];
   referenceAudioUrls: string[];
@@ -187,11 +189,26 @@ export async function generateVideo(
   input: VideoGenerationInput,
 ): Promise<GeneratedMedia> {
   const model = requiredEnv("GATEWAY_VIDEO_MODEL_ID");
-  const referenceUrls = [
-    ...input.referenceImageUrls,
-    ...input.referenceVideoUrls,
-    ...input.referenceAudioUrls,
-  ];
+  const startFrameUrl = input.startFrameUrl?.trim();
+  const referenceImageUrls = input.referenceImageUrls;
+  const referenceVideoUrls = input.referenceVideoUrls;
+  const referenceAudioUrls = input.referenceAudioUrls;
+  const hasStartFrame = Boolean(startFrameUrl);
+  const hasReferenceImages = referenceImageUrls.length > 0;
+  const hasReferenceVideos = referenceVideoUrls.length > 0;
+  const hasReferenceAudio = referenceAudioUrls.length > 0;
+  const useProviderReferenceImages = hasStartFrame && hasReferenceImages;
+
+  // frameImages and inputReferences cannot be combined (AI SDK). With a start frame,
+  // prop/location refs go through providerOptions.bytedance.referenceImages.
+  const legacyInputReferences =
+    !hasStartFrame &&
+    (hasReferenceImages || hasReferenceVideos || hasReferenceAudio)
+      ? [...referenceImageUrls, ...referenceVideoUrls, ...referenceAudioUrls]
+      : undefined;
+  const multimodalProviderRefs =
+    hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
+
   const result = await experimental_generateVideo({
     model: gateway.videoModel(model),
     prompt: input.prompt,
@@ -199,10 +216,24 @@ export async function generateVideo(
     resolution: normalizeSize(input.resolution),
     duration: input.durationSeconds,
     generateAudio: input.generateAudio,
-    inputReferences: referenceUrls.length ? referenceUrls : undefined,
+    frameImages: hasStartFrame
+      ? [{ image: startFrameUrl!, frameType: "first_frame" as const }]
+      : undefined,
+    inputReferences: legacyInputReferences,
     providerOptions: {
       bytedance: {
         pollTimeoutMs: VIDEO_POLL_TIMEOUT_MS,
+        ...(useProviderReferenceImages
+          ? { referenceImages: referenceImageUrls }
+          : !hasStartFrame && hasReferenceImages
+            ? { referenceImages: referenceImageUrls }
+            : {}),
+        ...(multimodalProviderRefs && hasReferenceVideos
+          ? { referenceVideos: referenceVideoUrls }
+          : {}),
+        ...(multimodalProviderRefs && hasReferenceAudio
+          ? { referenceAudio: referenceAudioUrls }
+          : {}),
       },
     },
   });

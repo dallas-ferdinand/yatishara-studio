@@ -2,18 +2,24 @@
 
 Orchestrator calls Studio MCP directly (not a separate skill).
 
+**Start frames:** [start-frame-workflow.md](start-frame-workflow.md) — no `scene` element type.
+
 ## Pipeline order (automated run)
 
 1. **Phase D** — `studio_generate_element_sheet` or raw `studio_generate_image` for custom grids
-2. **Phase C** — shot_packets reference approved assets
+2. **Phase C** — shot_packets reference approved assets + `storyboard_prompt` per shot with cast
 3. **Bible** — `studio_create_document` → `production-bible.md` (internal artifact, not a gate)
-4. **Phase E** — `studio_generate_video` per shot (automatic, no human stop)
+4. **Phase E.5** — `studio_generate_image` per shot → `startFrameAssetId` (when people on camera)
+5. **Phase E** — `studio_generate_video` per shot with `startFrameAssetId`
 
 ## Prerequisites
 
 - Approved budget in thread (`approved_budget_credits`)
-- Studio MCP configured per [docs/studio-mcp.md](../../../../docs/studio-mcp.md)
-- `STUDIO_API_KEY` in `_system/env/studio-mcp.env`
+- **From MercuryOS or Studio workspace:** MCP server `yatishara-studio` enabled (`~/.cursor/mcp.json`)
+- Launcher: `/opt/yatishara-studio/_system/mcp/run-studio-mcp.sh`
+- Docs: `/opt/yatishara-studio/docs/studio-mcp.md`, `/opt/yatishara-studio/docs/api.md`
+- API key: `/opt/yatishara-studio/_system/env/studio-mcp.env` (`STUDIO_API_KEY`)
+- Generated assets land in **Yatishara Studio** folders (`{slug}-cinema-ad/`); copy to MercuryOS client tree via `yatishara-ad-production` if needed
 
 ## MCP defaults (cinema)
 
@@ -21,8 +27,8 @@ All image and video generation:
 
 ```json
 {
-  "stylePreset": "raw",
-  "skipPromptEnhancement": true
+  "skipPromptEnhancement": true,
+  "stylePreset": "story-ad"
 }
 ```
 
@@ -33,51 +39,63 @@ Models (via API env): GPT Image 2 (images), Seedance 2.0 (video).
 ### Preferred: element sheet API
 
 ```
-studio_create_element({ type: "prop", name, folderId, referenceAssetIds })   // unbuilt
-studio_generate_element_text_sheet({ elementId })                            // optional bible
-studio_generate_element_sheet({ elementId, resolution: "2K" })               // built
+studio_create_element({ type: "prop", name, folderId, sourceAssetIds })
+studio_generate_element_sheet({ elementId, resolution: "2K" })
 ```
 
-Returns `sheetUrl` + full element (`buildStatus: "built"`, `sheetAssetId`) — orchestrator **Read**s image for visual scrutiny.
+Returns `sheetUrl` — orchestrator **Read**s image for visual scrutiny.
 
-### Fallback: 3×3 cinema grid
+Character sheets are for **storyboard** composition and prompt text — **not** video face refs.
 
-When standard 2-panel sheet is insufficient:
+## Phase E.5 — Storyboard (start frame)
+
+When any character is on camera in the shot:
 
 ```
 studio_generate_image({
-  prompt: prop_sheet_prompt,  // from prop-master 3×3 spec
-  stylePreset: "raw",
+  prompt: shot_packet.storyboard_prompt,
+  referenceElementIds: shot_packet.referenceElementIds,
+  stylePreset: "story-ad",
   skipPromptEnhancement: true,
+  aspectRatio: brief aspect ratio,
   resolution: "2K",
-  referenceAssetIds: [...]
+  folderId: "..."
 })
 ```
 
-Record `studio_asset_id` in `approved_asset_registry`.
+Record `assets[0].id` as `shot_packet.startFrameAssetId`.
 
 ## Phase E — Video gen
 
 ### Per shot
 
 ```
-studio_estimate_generation({ mode: "video", resolution: "1280x720", durationSeconds, referenceElementIds })
+studio_estimate_generation({ mode: "video", resolution: "1280x720", durationSeconds: shot_packet.generation_duration_sec, referenceElementIds, startFrameAssetId })
 studio_generate_video({
   prompt: shot_packet.generation_prompt,
-  stylePreset: "raw",
+  startFrameAssetId: shot_packet.startFrameAssetId,
+  stylePreset: "story-ad",
   skipPromptEnhancement: true,
-  referenceElementIds: [built element ids],   // resolves to sheet + appends bible to prompt
-  durationSeconds: shot_packet.duration_sec,
-  aspectRatio: brief aspect ratio
+  referenceElementIds: shot_packet.referenceElementIds,
+  durationSeconds: shot_packet.generation_duration_sec,
+  aspectRatio: brief aspect ratio,
+  folderId: "..."
 })
 ```
 
-### Reference rules
+`generation_duration_sec` — Studio min **4**. When editorial `duration_sec` < 4, generate at 4 and set `editorial_trim_sec` on shot_packet.
 
-- Prefer `referenceElementIds` for elements built via `studio_generate_element_sheet` — the API attaches the sheet and rejects unbuilt elements
-- Custom 3×3 grid assets (no element) → `referenceAssetIds` with the registry `studio_asset_id`
-- Never attach raw upload photos of a built element — only the sheet
-- Never attach unapproved Phase D assets
+### referenceElementIds rules (mandatory)
+
+- Pass **full** `referenceElementIds` per shot (characters + props + locations) for audit and prompt append
+- **Storyboard (image):** all built sheets attach as refs
+- **Video mode (Studio automatic):**
+  - `startFrameAssetId` → opening frame (people baked in)
+  - attaches **prop + location** sheets as `[Image N]` refs only
+  - **character** sheets **not** sent as video images — identity via start frame + prompt
+- Cross-check `generation/shot-reference-allocation.json` before every generate call
+- **Never** raw upload `referenceAssetIds` for cast/locations/props in Phase E
+- **Wait ≥65s** between `studio_generate_video` calls (1 req/min gateway quota)
 
 ## Visual scrutiny (Phase E)
 
@@ -93,16 +111,11 @@ After each clip:
 - Single call: `studio_estimate_generation`
 - Production budget: `studio_estimate_production` (batch + contingency + TT$)
 
-## Cost ledger
-
-Before each generate: check cap per [cost-ledger.md](cost-ledger.md).
-
-Persist `cost-ledger.json` in project folder.
-
 ## Failure handling
 
 | Failure | Action |
 |---------|--------|
+| Real person filter | Missing start frame — run E.5 storyboard; do not attach character sheets to video |
 | Prop drift in clip | Re-attach prop sheet; tighten prompt; regen |
 | Wrong material | Return to Phase D prop revision |
 | Style mismatch | style-supervisor revises bible line; regen |

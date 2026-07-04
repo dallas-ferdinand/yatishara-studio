@@ -124,7 +124,11 @@ Uses GPT Image 2 directly (no preset prompt enhancement).
 
 ### Using elements in generation
 
-Pass `referenceElementIds` to `POST /generations` (and `/generations/estimate`). Each element must be **built**; the API attaches its sheet image as a reference and appends its description to the prompt. Unbuilt elements return `400`. Max 10 total reference assets per generation; image mode requires at least one image ref if any refs are passed.
+Pass `referenceElementIds` to `POST /generations` (and `/generations/estimate`). Each element must be **built**. The API appends each element's description to the prompt. Unbuilt elements return `400`. Max 10 total reference assets per generation.
+
+**Video mode:** pass **`startFrameAssetId`** when people are on camera (storyboard still → Seedance `first_frame`). Only **prop** and **location** element sheets attach as `[Image N]` video refs. **Character** elements: description in prompt + identity in start frame — never attach character sheets to video (Seedance real-person filter). **Image mode:** all built element sheets attach as references.
+
+See `GET /elements/production-guide` and [start-frame-workflow.md](../.cursor/skills/cinema-ad-production/references/start-frame-workflow.md).
 
 ## Trash
 

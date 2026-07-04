@@ -9,6 +9,10 @@ import {
   resolveElementAssets,
 } from "./lib/elementAssetModel";
 import { isFolderDescendantOf, isFolderInSandbox } from "./lib/studioApi/folderScope";
+import {
+  inferElementSourceMode,
+  type ElementSourceMode,
+} from "./lib/elementSheetGuides";
 import { creditCostForGeneration, CREDIT_PRICE_TTD, textCreditCost } from "./lib/generationPricing";
 
 const folderShape = v.object({
@@ -802,12 +806,15 @@ export const getGenerationJob = internalQuery({
   returns: v.union(
     v.object({
       id: v.id("generationJobs"),
+      threadId: v.optional(v.string()),
       status: v.string(),
       mode: v.union(v.literal("image"), v.literal("video")),
       folderId: v.id("folders"),
       prompt: v.string(),
       error: v.optional(v.string()),
       source: v.optional(v.string()),
+      stylePresetSlug: v.optional(v.string()),
+      creditsSpent: v.optional(v.number()),
       assets: v.array(assetShape),
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -836,12 +843,15 @@ export const listGenerationJobs = internalQuery({
   returns: v.array(
     v.object({
       id: v.id("generationJobs"),
+      threadId: v.optional(v.string()),
       status: v.string(),
       mode: v.union(v.literal("image"), v.literal("video")),
       folderId: v.id("folders"),
       prompt: v.string(),
       error: v.optional(v.string()),
       source: v.optional(v.string()),
+      stylePresetSlug: v.optional(v.string()),
+      creditsSpent: v.optional(v.number()),
       assets: v.array(assetShape),
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -1068,15 +1078,28 @@ export const resolveReferenceElementIds = internalQuery({
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
     elementIds: v.array(v.id("elements")),
+    /** video: attach prop/location sheets only (Seedance real-person filter). image: attach all sheets. */
+    generationMode: v.optional(v.union(v.literal("image"), v.literal("video"))),
   },
   returns: v.object({
     referenceAssetIds: v.array(v.id("assets")),
     promptLines: v.array(v.string()),
+    skippedCharacterSheetIds: v.array(v.id("elements")),
+    referenceImageLabels: v.array(
+      v.object({
+        tag: v.string(),
+        label: v.string(),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     const referenceAssetIds: Id<"assets">[] = [];
     const promptLines: string[] = [];
+    const skippedCharacterSheetIds: Id<"elements">[] = [];
+    const referenceImageLabels: Array<{ tag: string; label: string }> = [];
     const unbuiltElementNames: string[] = [];
+    const videoMode = args.generationMode === "video";
+    let referenceImageIndex = 0;
 
     for (const elementId of args.elementIds) {
       const element = await ctx.db.get("elements", elementId);
@@ -1094,13 +1117,28 @@ export const resolveReferenceElementIds = internalQuery({
         unbuiltElementNames.push(element.name);
         continue;
       }
-      referenceAssetIds.push(resolved.sheetAssetId);
+      const attachSheet =
+        !videoMode || element.type === "prop" || element.type === "location";
+      if (attachSheet) {
+        referenceAssetIds.push(resolved.sheetAssetId);
+        referenceImageIndex += 1;
+        referenceImageLabels.push({
+          tag: `[Image ${referenceImageIndex}]`,
+          label: `${element.type} @${element.name}`,
+        });
+      } else {
+        skippedCharacterSheetIds.push(elementId);
+      }
       if (element.description?.trim()) {
         promptLines.push(
           `${element.type} @${element.name}:\n${element.description.trim()}`,
         );
-      } else {
+      } else if (attachSheet) {
         promptLines.push(`${element.type} @${element.name} (built sheet attached)`);
+      } else {
+        promptLines.push(
+          `${element.type} @${element.name} (identity via prompt — sheet not attached for video; Seedance real-person filter)`,
+        );
       }
     }
 
@@ -1110,7 +1148,7 @@ export const resolveReferenceElementIds = internalQuery({
       );
     }
 
-    return { referenceAssetIds, promptLines };
+    return { referenceAssetIds, promptLines, skippedCharacterSheetIds, referenceImageLabels };
   },
 });
 
@@ -1150,6 +1188,7 @@ export const createElementForApi = internalMutation({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
+    sourceMode: v.optional(v.union(v.literal("photographic"), v.literal("designed"))),
   },
   returns: v.id("elements"),
   handler: async (ctx, args) => {
@@ -1177,12 +1216,19 @@ export const createElementForApi = internalMutation({
       }
     }
     const now = Date.now();
+    const sourceMode: ElementSourceMode =
+      args.sourceMode ??
+      inferElementSourceMode({
+        type: args.type,
+        imageRefCount: referenceAssetIds.length,
+      });
     return await ctx.db.insert("elements", {
       ownerId: args.userId,
       folderId: args.folderId,
       type: args.type,
       name: args.name.trim(),
       description: args.description?.trim(),
+      sourceMode,
       sourceAssetIds: referenceAssetIds,
       referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
@@ -1923,6 +1969,7 @@ async function formatElement(
     type: element.type,
     name: element.name,
     description: element.description,
+    sourceMode: element.sourceMode,
     folderId: element.folderId,
     buildStatus: resolved.buildStatus,
     builtAt: resolved.builtAt,

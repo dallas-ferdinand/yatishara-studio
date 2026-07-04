@@ -39,5 +39,8 @@
   "dialogue": null,
   "narrator": null,
   "continuity_locks": [],
+  "storyboard_prompt": "",
+  "startFrameAssetId": null,
+  "referenceElementIds": [],
   "generation_prompt": ""
 }

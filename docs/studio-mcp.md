@@ -80,8 +80,8 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_estimate_production` | Batch budget with credits + TT$ |
 | `studio_list_generations` | Recent jobs |
 | `studio_get_generation` | Poll job status |
-| `studio_generate_image` | Sync image gen (defaults `raw` + `skipPromptEnhancement`) |
-| `studio_generate_video` | Async video + poll (use `referenceElementIds` for built elements) |
+| `studio_generate_image` | Sync image gen — **storyboard stills** with full `referenceElementIds` (characters included) |
+| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs |
 | `studio_generate_script` | Script → document |
 
 ## Cinema ad production defaults
@@ -93,6 +93,8 @@ For `@cinema-ad-production` automated runs, always pass:
 ```
 
 Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
+
+**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cinema-ad-production/references/start-frame-workflow.md`.
 
 Budget: `studio_estimate_production` before `plan` mode budget approval.
 
