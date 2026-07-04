@@ -235,6 +235,7 @@ export function StudioShell() {
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [videoModelSlug, setVideoModelSlug] = useState("seedance-2.0");
   const [elementType, setElementType] = useState("character");
   const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
   const [flowPending, setFlowPending] = useState(false);
@@ -541,6 +542,7 @@ export function StudioShell() {
       resolution,
       durationSeconds,
       audioEnabled,
+      videoModelSlug,
       selectedStylePresetId,
     };
     const next = composerContextsRef.current[composerContextKey];
@@ -553,6 +555,7 @@ export function StudioShell() {
     setResolution(next?.resolution ?? "1280x720");
     setDurationSeconds(next?.durationSeconds ?? "4");
     setAudioEnabled(next?.audioEnabled ?? false);
+    setVideoModelSlug(next?.videoModelSlug ?? "seedance-2.0");
     setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
     composerKeyRef.current = composerContextKey;
   }, [composerContextKey]);
@@ -926,6 +929,10 @@ export function StudioShell() {
   }
 
   function openSettingsTab(section = "general") {
+    if (settingsOpen && settingsSection === section && !isMobile) {
+      setSettingsOpen(false);
+      return;
+    }
     setSettingsSection(section);
     setOpenTabs((tabs) => tabs.filter((tab) => !tab.startsWith("settings:")));
     if (activeTab.startsWith("settings:")) {
@@ -934,6 +941,24 @@ export function StudioShell() {
     if (isMobile) setMobileSection("settings");
     setSettingsOpen(true);
   }
+
+  const settingsPanelProps = {
+    settingsSection,
+    currentUser,
+    payments,
+    notifications,
+    billingAccount,
+    pricing,
+    bankAccounts,
+    subscriptionPlans,
+    onClose: () => {
+      setSettingsOpen(false);
+      if (isMobile) setMobileSection("composer");
+    },
+    onSaveAccount: (values) => void updateAccountDetails(values).then(() => setStatus("Account updated.")),
+    customCursorEnabled,
+    onCustomCursorChange: setCustomCursorEnabled,
+  };
 
   function openCreditsPane() {
     const balance = billingAccount?.creditBalance ?? entitlement?.creditBalance ?? 0;
@@ -1514,6 +1539,7 @@ export function StudioShell() {
           : undefined,
         referenceInputs: mode === "video" ? generationReferences : undefined,
         startFrameUrl: mode === "video" ? videoStartFrameUrl : undefined,
+        videoModel: mode === "video" ? videoModelSlug : undefined,
       });
       setDraft("");
       setAttachments([]);
@@ -1557,9 +1583,9 @@ export function StudioShell() {
           --studio-hover-scale: 1.012;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 58%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent);
+          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 34%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 48%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 26%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.11);
           --studio-composer-glass-blur: saturate(150%) blur(5px);
           --studio-composer-glass-shadow:
@@ -2004,7 +2030,8 @@ export function StudioShell() {
         .studio-polish :where(aside, .cursor-panel-head, .cursor-workspace-head, .cursor-settings-panel, .border-cursor-border) {
           border-color: var(--studio-shell-border) !important;
         }
-        .studio-polish aside {
+        .studio-polish aside,
+        .studio-polish .studio-settings-sidebar {
           background: var(--mos-sidebar) !important;
         }
         .studio-polish :where(.border-cursor-border-soft) {
@@ -2055,10 +2082,25 @@ export function StudioShell() {
             0 12px 34px rgb(0 0 0 / 0.14) !important;
         }
         .studio-polish aside .cursor-panel-head,
-        .studio-polish aside .cursor-sidebar-head {
+        .studio-polish aside .cursor-sidebar-head,
+        .studio-polish .studio-settings-sidebar .cursor-panel-head {
           background: var(--color-cursor-bg) !important;
           border-bottom: 1px solid var(--studio-chrome-divider) !important;
           box-shadow: none !important;
+        }
+        .studio-workspace-panels {
+          height: 100%;
+          min-height: 0;
+        }
+        .studio-settings-sidebar {
+          min-width: 0;
+          background: var(--mos-sidebar);
+        }
+        .studio-settings-sidebar .studio-settings-workspace {
+          display: flex;
+          min-height: 0;
+          flex: 1 1 auto;
+          flex-direction: column;
         }
         .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body, .cursor-workspace-head) {
           background: transparent !important;
@@ -2476,18 +2518,18 @@ export function StudioShell() {
           background: color-mix(in srgb, #000 28%, transparent) !important;
         }
         .studio-polish .cursor-settings-panel {
-          box-shadow: -12px 0 30px color-mix(in srgb, #000 18%, transparent) !important;
+          box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-settings-backdrop {
           background: color-mix(in srgb, #000 12%, transparent) !important;
         }
         [data-appearance="light"] .studio-polish .cursor-settings-panel {
-          box-shadow: -10px 0 24px color-mix(in srgb, #000 10%, transparent) !important;
+          box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish {
-          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #ffffff) 58%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #ffffff) 74%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #ffffff) 44%, transparent);
+          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #ffffff) 34%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #ffffff) 48%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #ffffff) 26%, transparent);
           --studio-composer-glass-border: rgba(15, 23, 42, 0.10);
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
@@ -2540,6 +2582,7 @@ export function StudioShell() {
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
         [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
+        [data-appearance="light"] .studio-polish .studio-settings-sidebar .cursor-panel-head,
         [data-appearance="light"] .studio-polish main .cursor-workspace-head {
           background: #fff !important;
           border-bottom: 1px solid var(--studio-chrome-divider) !important;
@@ -2676,36 +2719,84 @@ export function StudioShell() {
           position: fixed;
           inset: 0;
           z-index: 360;
-          display: flex;
-          justify-content: flex-end;
           padding: 0;
           pointer-events: auto;
         }
-        .studio-settings-floating-backdrop {
+        .studio-side-sheet-overlay {
+          display: block;
+        }
+        .studio-side-sheet-shell {
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+          display: flex;
+          min-width: 0;
+          max-width: 100vw;
+        }
+        .studio-side-sheet-overlay .studio-settings-floating-backdrop {
           position: absolute;
           inset: 0;
+          z-index: 0;
+        }
+        .studio-settings-floating-backdrop {
+          display: block;
+          width: 100%;
+          height: 100%;
           border: 0;
           background: color-mix(in srgb, #000 34%, transparent);
           cursor: pointer;
+        }
+        .studio-side-sheet-resize {
+          position: relative;
+          z-index: 2;
+          flex: 0 0 10px;
+          width: 10px;
+          align-self: stretch;
+          margin-right: -5px;
+          touch-action: none;
+          cursor: ew-resize;
+          background: var(--color-cursor-border-soft);
+          transition: background 120ms ease, width 120ms ease;
+        }
+        .studio-polish.is-custom-cursor .studio-side-sheet-resize {
+          cursor: var(--studio-cursor-resize-x, ew-resize) !important;
+        }
+        .studio-side-sheet-resize:hover,
+        .studio-side-sheet-resize[data-resize-handle-active] {
+          width: 12px;
+          flex-basis: 12px;
+          background: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+        }
+        .studio-side-sheet-shell .studio-settings-floating-panel {
+          flex: 1 1 auto;
+          min-width: 0;
+          width: auto;
+          height: 100%;
+          overflow: hidden;
         }
         .studio-settings-floating-panel {
           position: relative;
           z-index: 1;
           display: flex;
-          width: min(380px, 100vw);
-          height: 100vh;
-          align-self: stretch;
+          min-height: 0;
           flex-direction: column;
-          overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border));
           border-width: 0 0 0 1px;
           border-radius: 0;
           background:
             radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 42%),
             color-mix(in srgb, var(--mos-panel) 94%, var(--mos-bg));
-          box-shadow:
-            0 24px 70px color-mix(in srgb, #000 46%, transparent),
-            0 0 34px var(--studio-glow-soft);
+          box-shadow: none;
+        }
+        @media (max-width: 899px) {
+          .studio-side-sheet-shell {
+            width: min(100vw, 420px) !important;
+          }
+          .studio-side-sheet-resize {
+            display: none;
+          }
         }
         .studio-settings-floating-head {
           display: flex;
@@ -2777,7 +2868,7 @@ export function StudioShell() {
           min-height: 0;
           flex: 1;
           overflow: auto;
-          padding: 8px 10px;
+          padding: 12px 14px 16px;
           display: grid;
           gap: 10px;
           align-content: start;
@@ -2785,10 +2876,10 @@ export function StudioShell() {
         }
         .studio-settings-stack {
           display: grid;
-          gap: 10px;
+          gap: 14px;
         }
         .studio-settings-simple-card {
-          padding: 10px !important;
+          padding: 0 !important;
         }
         .studio-settings-workspace .cursor-settings-section {
           border: 0;
@@ -2796,80 +2887,151 @@ export function StudioShell() {
           background: transparent;
           padding: 0 !important;
         }
-        .studio-settings-billing-panel {
+        .studio-settings-billing-summary,
+        .studio-settings-invoices-card {
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
+        }
+        .studio-settings-billing-summary {
           display: grid;
-          grid-template-columns: 1fr;
-          gap: 10px;
-          padding: 0 !important;
+          gap: 0;
         }
         .studio-settings-balance-block {
           display: grid;
           align-content: center;
-          gap: 5px;
-          min-height: 88px;
-          border-radius: 10px;
+          gap: 4px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
           background:
-            radial-gradient(circle at 24% 12%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 48%),
-            color-mix(in srgb, var(--mos-bg) 42%, transparent);
-          padding: 12px;
+            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 52%),
+            color-mix(in srgb, var(--mos-bg) 24%, transparent);
+          padding: 16px 16px 14px;
         }
         .studio-settings-balance-block span,
         .studio-settings-balance-block small {
           color: var(--color-cursor-muted);
-          font-size: 12px;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
         }
         .studio-settings-balance-block strong {
           color: var(--color-cursor-text-bright);
-          font-size: 28px;
-          line-height: 1;
+          font-size: 32px;
+          font-weight: 750;
+          line-height: 1.05;
+          font-variant-numeric: tabular-nums;
         }
-        .studio-settings-rows {
+        .studio-settings-balance-block small {
+          text-transform: none;
+          letter-spacing: 0;
+          font-weight: 500;
+        }
+        .studio-settings-stat-list {
           display: grid;
+          margin: 0;
+          padding: 4px 0;
         }
-        .studio-settings-row {
-          display: flex;
-          min-height: 36px;
+        .studio-settings-stat-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          justify-content: space-between;
-          gap: 18px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          gap: 12px;
+          min-height: 44px;
+          padding: 0 16px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
+        }
+        .studio-settings-stat-row:last-child {
+          border-bottom: 0;
+        }
+        .studio-settings-stat-row dt,
+        .studio-settings-stat-row span:first-child {
+          margin: 0;
           color: var(--color-cursor-muted);
           font-size: 12px;
+          font-weight: 500;
+        }
+        .studio-settings-stat-row dd,
+        .studio-settings-stat-row strong {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+        }
+        .studio-settings-invoices-card {
+          padding: 14px 16px 8px;
         }
         .studio-settings-card-title {
-          margin: 0 0 8px;
+          margin: 0 0 10px;
           color: var(--color-cursor-text-bright);
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 750;
         }
         .studio-settings-invoice-list {
           display: grid;
-          gap: 2px;
+          gap: 0;
         }
         .studio-settings-invoice-row {
-          display: flex;
-          min-height: 42px;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          justify-content: space-between;
           gap: 12px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
+          min-height: 52px;
+          padding: 10px 0;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
         .studio-settings-invoice-row:last-child {
           border-bottom: 0;
+          padding-bottom: 4px;
         }
         .studio-settings-invoice-row div {
           display: grid;
-          gap: 2px;
+          gap: 3px;
           min-width: 0;
         }
-        .studio-settings-invoice-row strong,
-        .studio-settings-invoice-row a,
-        .studio-settings-invoice-row > span {
+        .studio-settings-invoice-row strong {
+          overflow: hidden;
           color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.2;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-settings-invoice-row span {
+          overflow: hidden;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.25;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-settings-invoice-row a,
+        .studio-settings-invoice-row > span:last-child {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
           font-weight: 700;
+          font-variant-numeric: tabular-nums;
           text-decoration: none;
+          white-space: nowrap;
+        }
+        .studio-settings-invoice-row a {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          padding: 5px 10px;
+          font-size: 11px;
+          font-weight: 650;
+        }
+        .studio-settings-invoice-row a:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent-dim) 34%, var(--color-cursor-hover));
         }
         .studio-settings-invoice-row a[aria-disabled="true"] {
           pointer-events: none;
@@ -2903,6 +3065,7 @@ export function StudioShell() {
         }
         .studio-settings-empty {
           margin: 0;
+          padding: 8px 0 4px;
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
@@ -2926,15 +3089,6 @@ export function StudioShell() {
           border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 11%, var(--mos-surface));
           color: var(--color-cursor-text-bright);
-        }
-        .studio-settings-row:last-child {
-          border-bottom: 0;
-        }
-        .studio-settings-row strong {
-          color: var(--color-cursor-text-bright);
-          font-size: 13px;
-          font-weight: 650;
-          text-align: right;
         }
         .studio-settings-rate-strip {
           display: grid;
@@ -3194,13 +3348,15 @@ export function StudioShell() {
           line-height: 1.45;
         }
         .studio-settings-thankyou-summary {
-          display: grid;
-          gap: 8px;
+          overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
           border-radius: 14px;
           background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
-          padding: 12px;
+          padding: 4px 0;
           text-align: left;
+        }
+        .studio-settings-thankyou-summary .studio-settings-stat-row {
+          padding-inline: 14px;
         }
         .studio-polish .studio-credit-pill {
           cursor: pointer;
@@ -3559,7 +3715,8 @@ export function StudioShell() {
             color-mix(in srgb, var(--mos-surface) 38%, transparent) !important;
         }
         @media (max-width: 760px) {
-          .studio-settings-billing-panel,
+          .studio-settings-billing-summary,
+          .studio-settings-invoices-card,
           .studio-settings-rate-strip {
             grid-template-columns: 1fr;
           }
@@ -4144,7 +4301,10 @@ export function StudioShell() {
           align-self: stretch;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 14px;
-          background: transparent;
+          background: var(--studio-composer-glass);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          box-shadow: var(--studio-composer-glass-shadow);
           padding: 5px;
         }
         .studio-mode-row {
@@ -4746,10 +4906,10 @@ export function StudioShell() {
           width: min(var(--studio-composer-shell-max), calc(100% - 24px));
           margin-left: auto;
           margin-right: auto;
-        }
-        [data-appearance="light"] .studio-polish .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
+          background: var(--studio-composer-glass) !important;
+          backdrop-filter: var(--studio-composer-glass-blur) !important;
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-composer-preview-fallback {
           padding: 20px;
@@ -6856,7 +7016,7 @@ export function StudioShell() {
           flex-direction: column;
         }
         .studio-history-floating-panel {
-          width: min(360px, 100vw);
+          width: 100%;
         }
         .studio-history-floating-head {
           display: flex;
@@ -7581,7 +7741,7 @@ export function StudioShell() {
         </Panel>
         <PanelResizeHandle className="cursor-resize" />
         <Panel defaultSize={76} minSize={42}>
-
+      <StudioWorkspaceColumn settingsOpen={settingsOpen} isMobile={isMobile} settingsPanelProps={settingsPanelProps}>
       <main className={`${STYLE.main}${activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? " studio-composer-bg" : ""}`}>
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
           <UnifiedTabStrip
@@ -7614,6 +7774,7 @@ export function StudioShell() {
               <History className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             <StudioSettingsLauncher
+              isActive={settingsOpen}
               onOpenSettingsTab={openSettingsTab}
             />
           </div>
@@ -7678,6 +7839,8 @@ export function StudioShell() {
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
+            videoModelSlug={videoModelSlug}
+            setVideoModelSlug={setVideoModelSlug}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
@@ -7704,6 +7867,7 @@ export function StudioShell() {
           />
         ) : null}
       </main>
+      </StudioWorkspaceColumn>
         </Panel>
       </PanelGroup>
 
@@ -7748,25 +7912,6 @@ export function StudioShell() {
           activeThreadId={activeThreadId}
           onSelectThread={openHistoryThread}
           onClose={() => setHistoryOpen(false)}
-        />
-      ) : null}
-      {settingsOpen ? (
-        <SettingsFloatingPanel
-          settingsSection={settingsSection}
-          currentUser={currentUser}
-          payments={payments}
-          notifications={notifications}
-          billingAccount={billingAccount}
-          pricing={pricing}
-          bankAccounts={bankAccounts}
-          subscriptionPlans={subscriptionPlans}
-          onClose={() => {
-            setSettingsOpen(false);
-            if (isMobile) setMobileSection("composer");
-          }}
-          onSaveAccount={(values) => void updateAccountDetails(values).then(() => setStatus("Account updated."))}
-          customCursorEnabled={customCursorEnabled}
-          onCustomCursorChange={setCustomCursorEnabled}
         />
       ) : null}
       {contextMenu ? (
@@ -7823,6 +7968,8 @@ function StudioComposer({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  videoModelSlug,
+  setVideoModelSlug,
   elementType,
   setElementType,
   presets,
@@ -8137,11 +8284,13 @@ function StudioComposer({
                   setImageResolution={setImageResolution}
                   resolution={resolution}
                   setResolution={setResolution}
-                  durationSeconds={durationSeconds}
-                  setDurationSeconds={setDurationSeconds}
-                  audioEnabled={audioEnabled}
-                  setAudioEnabled={setAudioEnabled}
-                  attachments={attachments}
+            durationSeconds={durationSeconds}
+            setDurationSeconds={setDurationSeconds}
+            audioEnabled={audioEnabled}
+            setAudioEnabled={setAudioEnabled}
+            videoModelSlug={videoModelSlug}
+            setVideoModelSlug={setVideoModelSlug}
+            attachments={attachments}
                   startFrameAttachmentId={startFrameAttachmentId}
                   setStartFrameAttachmentId={setStartFrameAttachmentId}
                 />
@@ -8446,6 +8595,8 @@ function StudioComposerInlineSettings({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  videoModelSlug,
+  setVideoModelSlug,
   attachments = [],
   startFrameAttachmentId = "",
   setStartFrameAttachmentId,
@@ -8479,9 +8630,13 @@ function StudioComposerInlineSettings({
     { value: "4K", label: "4K", meta: "GPT Image 2 max" },
   ];
   const resolutionItems = [
-    { value: "854x480", label: "480p", meta: "Seedance 2.0 draft" },
-    { value: "1280x720", label: "720p", meta: "Seedance 2.0 standard" },
-    { value: "1920x1080", label: "1080p", meta: "Seedance 2.0 max" },
+    { value: "854x480", label: "480p", meta: "Draft" },
+    { value: "1280x720", label: "720p", meta: "Standard" },
+    { value: "1920x1080", label: "1080p", meta: "Max" },
+  ];
+  const videoModelItems = [
+    { value: "seedance-2.0", label: "Seedance 2.0", meta: "Default" },
+    { value: "kling-3.0-i2v", label: "Kling 3.0", meta: "Faces" },
   ];
   const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
@@ -8522,6 +8677,16 @@ function StudioComposerInlineSettings({
           hideLabel
         />
       )}
+      {mode === "video" ? (
+        <StudioInlineSettingSelect
+          icon={Video}
+          label="Video model"
+          value={videoModelSlug}
+          items={videoModelItems}
+          onChange={setVideoModelSlug}
+          hideLabel
+        />
+      ) : null}
       {mode === "video" ? (
         <StudioInlineSettingPopover
           icon={Clock3}
@@ -8730,13 +8895,14 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
   );
 }
 
-function StudioSettingsLauncher({ onOpenSettingsTab }) {
+function StudioSettingsLauncher({ onOpenSettingsTab, isActive }) {
   return (
                       <button
                         type="button"
-      className="studio-settings-pill studio-settings-trigger"
+      className={`studio-settings-pill studio-settings-trigger${isActive ? " is-active" : ""}`}
       title="Settings"
       aria-label="Open settings"
+      aria-pressed={isActive}
       onClick={() => onOpenSettingsTab("general")}
     >
       <Settings className="h-3.5 w-3.5" aria-hidden="true" />
@@ -10736,7 +10902,27 @@ function paymentCustomerName(payment) {
   return payment.customer?.name ?? payment.customer?.email ?? payment.customer?.phone ?? "Unknown customer";
 }
 
-function SettingsFloatingPanel({
+function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, children }) {
+  if (settingsOpen && isMobile) {
+    return <SettingsSidePanel {...settingsPanelProps} />;
+  }
+  if (settingsOpen && !isMobile) {
+    return (
+      <PanelGroup direction="horizontal" autoSaveId="studio-settings-h" className="studio-workspace-panels h-full min-w-0">
+        <Panel defaultSize={72} minSize={42}>
+          {children}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel defaultSize={28} minSize={18} maxSize={42}>
+          <SettingsSidePanel {...settingsPanelProps} />
+        </Panel>
+      </PanelGroup>
+    );
+  }
+  return children;
+}
+
+function SettingsSidePanel({
   settingsSection,
   currentUser,
   payments,
@@ -10751,28 +10937,27 @@ function SettingsFloatingPanel({
   onCustomCursorChange,
 }) {
   return (
-    <div className="studio-settings-floating-overlay" role="dialog" aria-label="Studio settings">
-      <button type="button" className="studio-settings-floating-backdrop" onClick={onClose} aria-label="Close settings" />
-      <aside className="studio-settings-floating-panel">
-        <header className="studio-settings-floating-head">
-          <span>Settings</span>
-          <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">×</button>
-        </header>
-        <SettingsWorkspacePane
-          tab={settingsSection}
-          currentUser={currentUser}
-          payments={payments}
-          notifications={notifications}
-          billingAccount={billingAccount}
-          pricing={pricing}
-          bankAccounts={bankAccounts}
-          subscriptionPlans={subscriptionPlans}
-          onSaveAccount={onSaveAccount}
-          customCursorEnabled={customCursorEnabled}
-          onCustomCursorChange={onCustomCursorChange}
-        />
-      </aside>
-    </div>
+    <aside className="studio-settings-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft">
+      <div className={`${STYLE.panelHead} shrink-0`}>
+        <span className="text-sm font-medium text-cursor-text-bright">Settings</span>
+        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close settings">
+          ×
+        </button>
+      </div>
+      <SettingsWorkspacePane
+        tab={settingsSection}
+        currentUser={currentUser}
+        payments={payments}
+        notifications={notifications}
+        billingAccount={billingAccount}
+        pricing={pricing}
+        bankAccounts={bankAccounts}
+        subscriptionPlans={subscriptionPlans}
+        onSaveAccount={onSaveAccount}
+        customCursorEnabled={customCursorEnabled}
+        onCustomCursorChange={onCustomCursorChange}
+      />
+    </aside>
   );
 }
 
@@ -10943,53 +11128,53 @@ function SettingsWorkspacePane({
 
         {section === "billing" ? (
           <div className="studio-settings-stack">
-            <section className="cursor-settings-section studio-settings-billing-panel">
+            <section className="cursor-settings-section studio-settings-billing-summary">
               <div className="studio-settings-balance-block">
                 <span>Available credits</span>
-                <strong>{billingAccount?.creditBalance ?? 0}</strong>
-                <small>{billingAccount?.reservedCredits ?? 0} reserved</small>
-                </div>
-              <div className="studio-settings-rows">
-                <div className="studio-settings-row">
-                  <span>Plan</span>
-                  <strong>{billingAccount?.subscription?.planName ?? "None"}</strong>
-                  </div>
-                <div className="studio-settings-row">
-                  <span>Renewal</span>
-                  <strong>{billingAccount?.subscription ? formatDate(billingAccount.subscription.currentPeriodEnd) : "None"}</strong>
-                </div>
-                <div className="studio-settings-row">
-                  <span>Latest payment</span>
-                  <strong>
-                    {(payments ?? [])[0]
-                      ? `${humanizePaymentStatus((payments ?? [])[0].status)} · $${((payments ?? [])[0].amountCents / 100).toFixed(2)}`
-                      : "None"}
-                  </strong>
-                </div>
+                <strong>{(billingAccount?.creditBalance ?? 0).toLocaleString()}</strong>
+                <small>{(billingAccount?.reservedCredits ?? 0).toLocaleString()} reserved</small>
               </div>
-              </section>
-            <section className="cursor-settings-section studio-settings-simple-card">
+              <dl className="studio-settings-stat-list">
+                <div className="studio-settings-stat-row">
+                  <dt>Plan</dt>
+                  <dd>{billingAccount?.subscription?.planName ?? "None"}</dd>
+                </div>
+                <div className="studio-settings-stat-row">
+                  <dt>Renewal</dt>
+                  <dd>{billingAccount?.subscription ? formatDate(billingAccount.subscription.currentPeriodEnd) : "None"}</dd>
+                </div>
+                <div className="studio-settings-stat-row">
+                  <dt>Latest payment</dt>
+                  <dd>
+                    {(payments ?? [])[0]
+                      ? `${humanizePaymentStatus((payments ?? [])[0].status)} · ${formatMoney((payments ?? [])[0].amountCents)}`
+                      : "None"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+            <section className="cursor-settings-section studio-settings-invoices-card">
               <div className="studio-settings-card-title">Invoices</div>
               <div className="studio-settings-invoice-list">
                 {(payments ?? []).slice(0, 6).map((payment) => {
                   const paymentUrl = payment.receiptUrl ?? (payment.externalPaymentId?.startsWith("http") ? payment.externalPaymentId : null);
                   return (
                     <div key={payment._id} className="studio-settings-invoice-row">
-                  <div>
+                      <div>
                         <strong>{payment.subscriptionPlanId ? "Subscription invoice" : "Credit invoice"}</strong>
                         <span>{formatDate(payment.createdAt)} · {humanizePaymentStatus(payment.status)}</span>
-                  </div>
+                      </div>
                       {paymentUrl ? (
                         <a href={paymentUrl} target="_blank" rel="noreferrer">Open</a>
                       ) : (
-                        <span>${(payment.amountCents / 100).toFixed(2)}</span>
+                        <span>{formatMoney(payment.amountCents)}</span>
                       )}
                     </div>
                   );
                 })}
                 {!payments?.length ? <p className="studio-settings-empty">No invoices yet.</p> : null}
-                </div>
-              </section>
+              </div>
+            </section>
           </div>
         ) : null}
 
@@ -11004,21 +11189,23 @@ function SettingsWorkspacePane({
                   {thankYouSummary.kind === "subscription" ? "subscription" : "credits"} once payment is confirmed.
                 </p>
                 <div className="studio-settings-thankyou-summary">
-                  <div className="studio-settings-row">
-                    <span>Order</span>
-                    <strong>{thankYouSummary.title}</strong>
-                  </div>
-                  <div className="studio-settings-row">
-                    <span>Amount paid</span>
-                    <strong>{formatMoney(thankYouSummary.amountCents)}</strong>
-                  </div>
-                  <div className="studio-settings-row">
-                    <span>{thankYouSummary.kind === "subscription" ? "Monthly credits" : "Credits"}</span>
-                    <strong>
-                      {thankYouSummary.credits}
-                      {thankYouSummary.kind === "subscription" ? "/mo" : ""}
-                    </strong>
-                  </div>
+                  <dl className="studio-settings-stat-list">
+                    <div className="studio-settings-stat-row">
+                      <dt>Order</dt>
+                      <dd>{thankYouSummary.title}</dd>
+                    </div>
+                    <div className="studio-settings-stat-row">
+                      <dt>Amount paid</dt>
+                      <dd>{formatMoney(thankYouSummary.amountCents)}</dd>
+                    </div>
+                    <div className="studio-settings-stat-row">
+                      <dt>{thankYouSummary.kind === "subscription" ? "Monthly credits" : "Credits"}</dt>
+                      <dd>
+                        {thankYouSummary.credits.toLocaleString()}
+                        {thankYouSummary.kind === "subscription" ? "/mo" : ""}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
                 <button type="button" className="cursor-settings-action" onClick={resetPaymentDraft}>
                   Back to plans

@@ -9,6 +9,7 @@ import {
 } from "./lib/elementSheetGuides";
 import { MAX_GENERATION_REFERENCE_ASSETS } from "./lib/elementAssetModel";
 import { appendVideoReferenceTags, startFramePromptPrefix } from "./lib/videoGeneration";
+import { listVideoModelsPublic, resolveVideoModel } from "./lib/videoModels";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
   errorResponse,
@@ -796,6 +797,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse({ presets }));
     }
 
+    if (request.method === "GET" && route === "video-models") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      return finish(jsonResponse({ models: listVideoModelsPublic() }));
+    }
+
     if (request.method === "GET" && route === "generations") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
@@ -869,6 +876,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
         startFrameAssetId?: Id<"assets">;
+        videoModel?: string;
       }>(request);
 
       const mode = body.mode ?? "image";
@@ -923,6 +931,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         startFrameAssetId?: Id<"assets">;
         wait?: boolean;
         skipPromptEnhancement?: boolean;
+        videoModel?: string;
       }>(request);
 
       if (!body.prompt?.trim()) {
@@ -986,6 +995,23 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         userPrompt = `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
       } else if (mode === "video" && referenceImageLabels.length) {
         userPrompt = appendVideoReferenceTags(userPrompt, referenceImageLabels);
+      }
+
+      let resolvedVideoModel;
+      if (mode === "video") {
+        try {
+          resolvedVideoModel = resolveVideoModel(body.videoModel);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Invalid video model";
+          return finish(errorResponse(message));
+        }
+        if (resolvedVideoModel.requiresStartFrame && !startFrameUrl) {
+          return finish(
+            errorResponse(
+              `${resolvedVideoModel.label} requires startFrameAssetId (storyboard opening still).`,
+            ),
+          );
+        }
       }
 
       if (mergedReferenceAssetIds.length > MAX_GENERATION_REFERENCE_ASSETS) {
@@ -1089,7 +1115,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         tier,
         resolvedModel:
           mode === "video"
-            ? (process.env.GATEWAY_VIDEO_MODEL_ID ?? "bytedance/seedance-2.0")
+            ? resolvedVideoModel!.gatewayModelId
             : (process.env.GATEWAY_IMAGE_MODEL_ID ?? "openai/gpt-image-2"),
         stylePresetId: preset.id,
         userPrompt,
@@ -1131,6 +1157,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
               status: "queued",
               folderId,
               mode,
+              videoModel: resolvedVideoModel?.slug,
             },
             202,
           ),
@@ -1153,6 +1180,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceInputs,
         startFrameUrl,
         skipPromptEnhancement: body.skipPromptEnhancement,
+        videoModel: body.videoModel,
       });
 
       const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {

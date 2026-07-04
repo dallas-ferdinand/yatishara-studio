@@ -12,7 +12,6 @@ import {
   generateScript as generateScriptWithGateway,
   generateVideo,
   imageModelForRequest,
-  videoModelForRequest,
 } from "./lib/aiGateway";
 import { referenceInputValidator } from "./lib/referenceInput";
 import { shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
@@ -21,6 +20,7 @@ import {
   startFramePromptPrefix,
   videoReferenceTag,
 } from "./lib/videoGeneration";
+import { resolveVideoModel } from "./lib/videoModels";
 
 function finalizeVideoPrompt(
   prompt: string,
@@ -75,6 +75,7 @@ const getJobRunContextRef = internalQueryRef<
       _id: Id<"generationJobs">;
       userPrompt: string;
       mode: "image" | "video";
+      resolvedModel: string;
       durationSeconds?: number;
       resolution?: string;
       aspectRatio?: string;
@@ -313,6 +314,7 @@ export const runFlow = action({
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceSummaries: v.optional(v.array(v.string())),
     startFrameUrl: v.optional(v.string()),
+    videoModel: v.optional(v.string()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -327,7 +329,7 @@ export const runFlow = action({
     assetIds?: Id<"assets">[];
     externalTaskId?: string;
   }> => {
-    const resolvedModel = modelForRequest(args.mode);
+    const resolvedModel = modelForRequest(args.mode, args.videoModel);
     const referenceInputs = args.referenceInputs ?? [];
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
@@ -397,6 +399,7 @@ export const runFlow = action({
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
+          modelId: job.resolvedModel,
           startFrameUrl: args.startFrameUrl,
           referenceImageUrls,
           referenceVideoUrls: referenceInputs
@@ -540,6 +543,7 @@ async function executeQueuedApiJob(
         resolution: args.resolution,
         durationSeconds: args.durationSeconds,
         generateAudio: args.audioEnabled ?? false,
+        modelId: job.resolvedModel,
         startFrameUrl: args.startFrameUrl,
         referenceImageUrls,
         referenceVideoUrls: referenceInputs
@@ -605,6 +609,7 @@ export const runGenerationForApi = action({
     referenceInputs: v.optional(v.array(referenceInputValidator)),
     startFrameUrl: v.optional(v.string()),
     skipPromptEnhancement: v.optional(v.boolean()),
+    videoModel: v.optional(v.string()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -613,7 +618,7 @@ export const runGenerationForApi = action({
   }),
   handler: async (ctx, args) => {
     const referenceInputs = args.referenceInputs ?? [];
-    const resolvedModel = modelForRequest(args.mode);
+    const resolvedModel = modelForRequest(args.mode, args.videoModel);
     const prepared = await ctx.runMutation(prepareApiGenerationRef, {
       userId: args.userId,
       folderId: args.folderId,
@@ -732,8 +737,11 @@ export const runScriptForApi = action({
   },
 });
 
-function modelForRequest(mode: "image" | "video"): string {
-  return mode === "video" ? videoModelForRequest() : imageModelForRequest();
+function modelForRequest(mode: "image" | "video", videoModel?: string): string {
+  if (mode === "video") {
+    return resolveVideoModel(videoModel).gatewayModelId;
+  }
+  return imageModelForRequest();
 }
 
 async function saveGeneratedMedia(

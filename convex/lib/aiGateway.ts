@@ -15,6 +15,7 @@ import {
   type ElementSheetType,
 } from "./elementSheets";
 import { normalizeAudioMimeType, type ReferenceInput } from "./referenceInput";
+import { isSeedanceGatewayModel } from "./videoModels";
 
 export type GenerationMode = "image" | "video";
 
@@ -35,7 +36,9 @@ export type VideoGenerationInput = {
   resolution?: string;
   durationSeconds?: number;
   generateAudio: boolean;
-  /** Storyboard / opening shot — Seedance first_frame (I2V). Required for on-camera characters. */
+  /** Gateway model id, e.g. bytedance/seedance-2.0 or klingai/kling-v3.0-i2v */
+  modelId?: string;
+  /** Storyboard / opening shot — first_frame I2V. Required for on-camera characters. */
   startFrameUrl?: string;
   referenceImageUrls: string[];
   referenceVideoUrls: string[];
@@ -188,26 +191,28 @@ export async function generateImage(
 export async function generateVideo(
   input: VideoGenerationInput,
 ): Promise<GeneratedMedia> {
-  const model = requiredEnv("GATEWAY_VIDEO_MODEL_ID");
+  const model = input.modelId?.trim() || requiredEnv("GATEWAY_VIDEO_MODEL_ID");
+  const seedance = isSeedanceGatewayModel(model);
   const startFrameUrl = input.startFrameUrl?.trim();
-  const referenceImageUrls = input.referenceImageUrls;
-  const referenceVideoUrls = input.referenceVideoUrls;
-  const referenceAudioUrls = input.referenceAudioUrls;
+  const referenceImageUrls = seedance ? input.referenceImageUrls : [];
+  const referenceVideoUrls = seedance ? input.referenceVideoUrls : [];
+  const referenceAudioUrls = seedance ? input.referenceAudioUrls : [];
   const hasStartFrame = Boolean(startFrameUrl);
   const hasReferenceImages = referenceImageUrls.length > 0;
   const hasReferenceVideos = referenceVideoUrls.length > 0;
   const hasReferenceAudio = referenceAudioUrls.length > 0;
-  const useProviderReferenceImages = hasStartFrame && hasReferenceImages;
+  const useProviderReferenceImages = seedance && hasStartFrame && hasReferenceImages;
 
   // frameImages and inputReferences cannot be combined (AI SDK). With a start frame,
-  // prop/location refs go through providerOptions.bytedance.referenceImages.
+  // prop/location refs go through providerOptions.bytedance.referenceImages (Seedance only).
   const legacyInputReferences =
+    seedance &&
     !hasStartFrame &&
     (hasReferenceImages || hasReferenceVideos || hasReferenceAudio)
       ? [...referenceImageUrls, ...referenceVideoUrls, ...referenceAudioUrls]
       : undefined;
   const multimodalProviderRefs =
-    hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
+    seedance && hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
 
   const result = await experimental_generateVideo({
     model: gateway.videoModel(model),
@@ -220,22 +225,24 @@ export async function generateVideo(
       ? [{ image: startFrameUrl!, frameType: "first_frame" as const }]
       : undefined,
     inputReferences: legacyInputReferences,
-    providerOptions: {
-      bytedance: {
-        pollTimeoutMs: VIDEO_POLL_TIMEOUT_MS,
-        ...(useProviderReferenceImages
-          ? { referenceImages: referenceImageUrls }
-          : !hasStartFrame && hasReferenceImages
-            ? { referenceImages: referenceImageUrls }
-            : {}),
-        ...(multimodalProviderRefs && hasReferenceVideos
-          ? { referenceVideos: referenceVideoUrls }
-          : {}),
-        ...(multimodalProviderRefs && hasReferenceAudio
-          ? { referenceAudio: referenceAudioUrls }
-          : {}),
-      },
-    },
+    providerOptions: seedance
+      ? {
+          bytedance: {
+            pollTimeoutMs: VIDEO_POLL_TIMEOUT_MS,
+            ...(useProviderReferenceImages
+              ? { referenceImages: referenceImageUrls }
+              : !hasStartFrame && hasReferenceImages
+                ? { referenceImages: referenceImageUrls }
+                : {}),
+            ...(multimodalProviderRefs && hasReferenceVideos
+              ? { referenceVideos: referenceVideoUrls }
+              : {}),
+            ...(multimodalProviderRefs && hasReferenceAudio
+              ? { referenceAudio: referenceAudioUrls }
+              : {}),
+          },
+        }
+      : undefined,
   });
   return {
     data: result.video.uint8Array,

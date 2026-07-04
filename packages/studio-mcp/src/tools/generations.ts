@@ -16,8 +16,12 @@ const estimateSchema = {
     .string()
     .optional()
     .describe(
-      "Storyboard / opening still for video (Seedance first_frame). Required when people are on camera. Generate via studio_generate_image first.",
+      "Storyboard / opening still for video (first_frame I2V). Required when people are on camera. Generate via studio_generate_image first.",
     ),
+  videoModel: z
+    .enum(["seedance-2.0", "kling-3.0-i2v"])
+    .optional()
+    .describe("Video engine. Default seedance-2.0. Use kling-3.0-i2v for easier human faces (requires startFrameAssetId)."),
 };
 
 const rawPresetHint =
@@ -39,6 +43,7 @@ export function registerGenerationTools(server: McpServer) {
             referenceAssetIds: args.referenceAssetIds,
             referenceElementIds: args.referenceElementIds,
             startFrameAssetId: args.startFrameAssetId,
+            videoModel: args.videoModel,
             mode: args.mode ?? "image",
           }),
         }),
@@ -46,7 +51,13 @@ export function registerGenerationTools(server: McpServer) {
   );
 
   server.tool(
-    "studio_estimate_production",
+    "studio_list_video_models",
+    "List available video generation models (Seedance 2.0 default, Kling 3.0 I2V secondary).",
+    {},
+    async () => jsonResult(await studioFetch("/video-models")),
+  );
+
+  server.tool(
     "Estimate total production budget for multiple generation items (props, shots, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cinema-ad-production budget approval.",
     {
       items: z.array(
@@ -156,7 +167,11 @@ Wait ≥65s between video calls (1 req/min gateway quota). ${rawPresetHint}`,
       startFrameAssetId: z
         .string()
         .optional()
-        .describe("Storyboard asset ID — Seedance first_frame. Required when people appear on camera."),
+        .describe("Storyboard asset ID — first_frame I2V. Required for Kling and when people appear on camera."),
+      videoModel: z
+        .enum(["seedance-2.0", "kling-3.0-i2v"])
+        .optional()
+        .describe("Video engine. Default seedance-2.0. kling-3.0-i2v for human-heavy shots (requires startFrameAssetId)."),
       skipPromptEnhancement: z.boolean().optional(),
     },
     async (args) => {

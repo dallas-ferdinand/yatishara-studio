@@ -32,7 +32,19 @@ All image and video generation:
 }
 ```
 
-Models (via API env): GPT Image 2 (images), Seedance 2.0 (video).
+Models (via API env): GPT Image 2 (images). Video: **Seedance 2.0** (default) or **Kling 3.0 I2V** (`videoModel: "kling-3.0-i2v"`) for human-heavy shots.
+
+```json
+{ "videoModel": "seedance-2.0" }
+```
+
+or
+
+```json
+{ "videoModel": "kling-3.0-i2v", "startFrameAssetId": "<storyboard-id>" }
+```
+
+List models: `studio_list_video_models`.
 
 ## Phase D — Prop / character sheets
 
@@ -74,6 +86,7 @@ studio_estimate_generation({ mode: "video", resolution: "1280x720", durationSeco
 studio_generate_video({
   prompt: shot_packet.generation_prompt,
   startFrameAssetId: shot_packet.startFrameAssetId,
+  // videoModel: "kling-3.0-i2v",  // optional — easier on human faces; requires startFrameAssetId
   stylePreset: "story-ad",
   skipPromptEnhancement: true,
   referenceElementIds: shot_packet.referenceElementIds,

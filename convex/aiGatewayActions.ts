@@ -75,6 +75,7 @@ export const generateVideoInternal = internalAction({
     referenceImageUrls: v.array(v.string()),
     referenceVideoUrls: v.array(v.string()),
     referenceAudioUrls: v.array(v.string()),
+    modelId: v.optional(v.string()),
   },
   returns: v.object({
     data: v.bytes(),
