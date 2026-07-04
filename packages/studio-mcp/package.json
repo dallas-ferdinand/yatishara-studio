@@ -1,6 +1,6 @@
 {
   "name": "@yatishara/studio-mcp",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "MCP server for Yatishara Studio — folders, generation, documents, and elements",
   "type": "module",
   "bin": {

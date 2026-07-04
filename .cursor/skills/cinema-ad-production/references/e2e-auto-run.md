@@ -45,7 +45,9 @@ Reply: `budget approved`
 
 ### Expected — automation
 
-- [ ] **Phase gates** ([phase-gates.md](phase-gates.md)): `iteration_log` has specialist build + scrutiny entries for A, B, C before any `studio_generate_*`
+- [ ] **Phase gates** + `studio_validate_production_gates` before each generate phase ([phase-gates.md](phase-gates.md), [gate-validation.md](gate-validation.md))
+- [ ] **Iteration proof** — `iteration_log` has per-step entries with `round`, `role`, `subagent_artifact`, and `round_summary.blocking_count === 0` (or round-3 compromise) for A, B, D, C before `studio_generate_*`
+- [ ] Manifest audit between B and D ([manifest-audit.md](manifest-audit.md))
 - [ ] Phase A→B→D→C→bible→E.5→E with **no human gates** (but **with** full specialist iteration)
 - [ ] Orchestrator did **not** draft packets without loading specialist SKILL.md files
 - [ ] Phase D uses `studio_generate_element_sheet` for honey jar prop

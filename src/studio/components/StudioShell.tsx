@@ -235,7 +235,6 @@ export function StudioShell() {
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [videoModelSlug, setVideoModelSlug] = useState("seedance-2.0");
   const [elementType, setElementType] = useState("character");
   const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
   const [flowPending, setFlowPending] = useState(false);
@@ -522,7 +521,6 @@ export function StudioShell() {
           hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
           hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
           audioEnabled: mode === "video" ? audioEnabled : undefined,
-          videoModel: mode === "video" ? videoModelSlug : undefined,
         }
       : "skip",
   );
@@ -543,7 +541,6 @@ export function StudioShell() {
       resolution,
       durationSeconds,
       audioEnabled,
-      videoModelSlug,
       selectedStylePresetId,
     };
     const next = composerContextsRef.current[composerContextKey];
@@ -556,7 +553,6 @@ export function StudioShell() {
     setResolution(next?.resolution ?? "1280x720");
     setDurationSeconds(next?.durationSeconds ?? "4");
     setAudioEnabled(next?.audioEnabled ?? false);
-    setVideoModelSlug(next?.videoModelSlug ?? "seedance-2.0");
     setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
     composerKeyRef.current = composerContextKey;
   }, [composerContextKey]);
@@ -1540,7 +1536,6 @@ export function StudioShell() {
           : undefined,
         referenceInputs: mode === "video" ? generationReferences : undefined,
         startFrameUrl: mode === "video" ? videoStartFrameUrl : undefined,
-        videoModel: mode === "video" ? videoModelSlug : undefined,
       });
       setDraft("");
       setAttachments([]);
@@ -7840,8 +7835,6 @@ export function StudioShell() {
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
-            videoModelSlug={videoModelSlug}
-            setVideoModelSlug={setVideoModelSlug}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
@@ -7969,8 +7962,6 @@ function StudioComposer({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
-  videoModelSlug,
-  setVideoModelSlug,
   elementType,
   setElementType,
   presets,
@@ -8030,7 +8021,6 @@ function StudioComposer({
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
-    videoModel: mode === "video" ? videoModelSlug : undefined,
     referenceInputs: generationReferences,
     elementType,
     elementReferenceCounts,
@@ -8290,8 +8280,6 @@ function StudioComposer({
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
-            videoModelSlug={videoModelSlug}
-            setVideoModelSlug={setVideoModelSlug}
             attachments={attachments}
                   startFrameAttachmentId={startFrameAttachmentId}
                   setStartFrameAttachmentId={setStartFrameAttachmentId}
@@ -8597,8 +8585,6 @@ function StudioComposerInlineSettings({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
-  videoModelSlug,
-  setVideoModelSlug,
   attachments = [],
   startFrameAttachmentId = "",
   setStartFrameAttachmentId,
@@ -8635,10 +8621,6 @@ function StudioComposerInlineSettings({
     { value: "854x480", label: "480p", meta: "Draft" },
     { value: "1280x720", label: "720p", meta: "Standard" },
     { value: "1920x1080", label: "1080p", meta: "Max" },
-  ];
-  const videoModelItems = [
-    { value: "seedance-2.0", label: "Seedance 2.0", meta: "Default" },
-    { value: "kling-3.0-i2v", label: "Kling 3.0", meta: "Faces" },
   ];
   const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
@@ -8679,16 +8661,6 @@ function StudioComposerInlineSettings({
           hideLabel
         />
       )}
-      {mode === "video" ? (
-        <StudioInlineSettingSelect
-          icon={Video}
-          label="Video model"
-          value={videoModelSlug}
-          items={videoModelItems}
-          onChange={setVideoModelSlug}
-          hideLabel
-        />
-      ) : null}
       {mode === "video" ? (
         <StudioInlineSettingPopover
           icon={Clock3}
@@ -11627,7 +11599,6 @@ function composerCreditCost({
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
   audioEnabled,
-  videoModel,
   referenceInputs,
   elementType,
   elementReferenceCounts,
@@ -11655,7 +11626,6 @@ function composerCreditCost({
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
-    videoModel,
   });
 }
 

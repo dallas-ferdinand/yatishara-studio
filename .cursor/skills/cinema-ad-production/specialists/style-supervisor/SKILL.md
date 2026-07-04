@@ -1,15 +1,22 @@
 ---
 name: style-supervisor-cinema-ad
 description: >-
-  Style supervisor for cinema ad production. Maintains cross-asset style bible
-  and scrutinizes visual consistency across prop sheets, character refs, and
-  video clips. Use in Phase D and Phase E. Explicit invocation only.
+  Style supervisor for cinema ad production. Maintains cross-asset style bible,
+  Seedance anti-gloss look, and scrutinizes visual consistency across prop
+  sheets, character refs, storyboards, and video clips. Use in Phase D and
+  Phase E. Explicit invocation only.
 disable-model-invocation: true
 ---
 
 # Style Supervisor
 
-Owns **one look across all generated assets** — props, people, sets, clips.
+Owns **one look across all generated assets** — props, people, sets, storyboard stills, clips. Publishes Seedance look bible per [../../references/seedance-cinematic-look.md](../../references/seedance-cinematic-look.md).
+
+## Mandatory read
+
+1. [../../references/seedance-cinematic-look.md](../../references/seedance-cinematic-look.md)
+2. [../../references/seedance-translation-foundation.md](../../references/seedance-translation-foundation.md) — look prefix split
+3. [references/style-bible.md](references/style-bible.md)
 
 ## Outputs
 
@@ -17,23 +24,27 @@ Owns **one look across all generated assets** — props, people, sets, clips.
 
 ```json
 {
-  "photorealism": "documentary_observational",
-  "era": "contemporary_lived_in",
-  "color_world": "warm_neutral_domestic",
+  "seedance_cinematic": true,
+  "photorealism": "seedance_cinematic_documentary",
+  "camera_body": "body:observational",
+  "grain": "subtle_35mm_film_grain_visible",
   "skin_texture": "natural_not_retouched",
+  "lighting": "motivated_practical_natural_only",
   "product_treatment": "witness_background_not_hero",
-  "forbidden": ["teal_orange_blockbuster", "catalog_gloss", "ad_smile"],
+  "forbidden": ["cgi_gloss", "ai_plastic_skin", "catalog_product_hero_light", "teal_orange_blockbuster"],
   "repertoire_refs": ["style:doc-observe", "style:warm-domestic"]
 }
 ```
 
-Inject `style_bible_refs` into every prop_sheet_prompt and shot `generation_prompt` opening line.
+- **Storyboard prompts** get **FULL** look prefix from seedance-cinematic-look.md
+- **generation_prompt** gets **abbreviated PRESERVE** only — style-supervisor flags full prefix on I2V as blocking (via seedance-translator)
 
 ## Active phases
 
 - **Phase D** — scrutinize all approved assets for cross-match
+- **Phase E.5** — storyboard still anti-gloss scrutiny
 - **Phase E** — scrutinize video clips vs bible + prop sheets
-- **Phase C text** — provide style line for director merge (optional)
+- **Phase C** — optional style line for director merge
 
 ## Builder mode
 
@@ -47,6 +58,8 @@ View assets alongside each other (open multiple images). Check:
 - Props and sets feel same household/world
 - No one asset more "commercial" than others
 - Character skin/light matches set establishing
+- Film grain present — not mobile-game gloss
+- Storyboard matches bible before video gen
 
 ```json
 {

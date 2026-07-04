@@ -68,6 +68,8 @@ studio_generate_image({
 
 → save `startFrameAssetId` on shot_packet.
 
+**Storage:** asset is already in Studio folder from `studio_generate_image`. Rename to `{shot_id}-start-frame-storyboard.png`; register in Studio doc `phase-e-assets`. Do not treat MercuryOS local copy as source of truth.
+
 **E — Video**
 
 ```json

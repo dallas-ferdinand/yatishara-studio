@@ -1,5 +1,9 @@
 # Emotional temperature (not emotion labels)
 
+**Research basis:** Cross-channel coherence per [perceptual-foundation.md](perceptual-foundation.md) §8 — temperature is how **camera, light, sound, and cut** align to produce viewer response without labeling feelings.
+
+**Deep canons:** [storytelling-foundation.md](storytelling-foundation.md) · [lighting-foundation.md](lighting-foundation.md) · [sound-foundation.md](sound-foundation.md) · [attention-foundation.md](attention-foundation.md) · [research-canon-map.md](research-canon-map.md)
+
 ## What the pipeline plans shot-by-shot
 
 **No.** Specialists do **not** write "sad", "happy", "tense" in shot packets or generation prompts. Joe foundation forbids emotion labels.
@@ -15,7 +19,7 @@
 | Music | composer | `music:none` vs soft underscore |
 | Camera | dp | Static observe vs push on pause |
 
-Director merge ensures temperature is **coherent** across channels for each shot_id.
+Director merge ensures temperature is **coherent** across channels per [perceptual-foundation.md](perceptual-foundation.md) §8 — scrutiny checks **perceptual conflict**, not "is this sad enough."
 
 ## Per-shot emotional temperature block (optional in shot_packet)
 
@@ -26,6 +30,9 @@ Director merge ensures temperature is **coherent** across channels for each shot
     "behavior_proof": "hands stop before second mug",
     "sonic_register": "near_silence",
     "light_register": "soft_morning",
+    "camera_register": "eye_level_observational",
+    "perceptual_goal": "viewer completes unfinished ritual via Kuleshov pair S02→S03",
+    "research_refs": ["research:kuleshov-sequence", "research:chion-synchresis"],
     "repertoire_refs": ["temp:quiet-hold", "temp:unfinished-ritual"]
   }
 }

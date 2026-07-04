@@ -35,7 +35,28 @@ studio_generate_image({
 
 Save `assets[0].id` as `shot_packet.startFrameAssetId`.
 
-Storyboard prompt must describe **one still** — composition, light, who is in frame, witness props. Not motion.
+Storyboard prompt must describe **one still** — composition at `camera.shot_size_open`, light, who is in frame. **No dolly/pan/travel verbs** (motion is `generation_prompt`). Grammar: [seedance-translation-foundation.md](seedance-translation-foundation.md) §5 (FRAME/FG/MG/BG).
+
+**Aspect ratio:** `aspectRatio` on storyboard **must match brief** (e.g. `9:16` TikTok). I2V models follow input frame shape.
+
+## Seedance pass-through framing (E.5 storyboard)
+
+Start frames are scanned for photoreal faces. **Framing in `storyboard_prompt` determines pass rate** — not just using `startFrameAssetId`.
+
+| Cast `sourceMode` | Storyboard `shot_size_open` | Face in frame |
+|-------------------|----------------------------|---------------|
+| `photographic` (real likeness) | **MWS or wider** — never ECU/MCU face-forward | ≤25% of frame; prefer OTS, 3/4 profile, partial occlusion |
+| `designed` (fictional) | MCU acceptable | Standard composition OK |
+| Any | Push-in shots | Storyboard opens **wider** than end frame; video prompt does the push |
+
+**Photographic cast rules (mandatory in Phase C director merge):**
+
+1. `storyboard_prompt` must not request "face clearly visible", "close-up on face", or "portrait"
+2. Prefer over-the-shoulder, 3/4 profile, or mid-ground figure in environment
+3. Hands, props, and negative space carry identity — not a centered face plate
+4. If E.5 still fails Seedance filter after wide framing → log compromise; retry with back-of-head or silhouette storyboard; last resort `videoModel: "kling-3.0-i2v"` on video step only
+
+**Scrutiny:** If pore-level face detail is readable at thumbnail size, flag `negotiate` — likely Seedance block on video step.
 
 ### Step 2 — Video
 
@@ -62,7 +83,7 @@ Add to each `shot_packet`:
 |-------|----------|-------|
 | `storyboard_prompt` | Yes | Single still for GPT Image 2 |
 | `startFrameAssetId` | Before video | From step 1 output |
-| `generation_prompt` | Yes | Motion/camera only — people already in start frame |
+| `generation_prompt` | Yes | Motion/camera/sound only — people already in start frame; **60–100 words** |
 | `referenceElementIds` | Yes | Full audit list; Studio splits attach vs prompt |
 
 ## Web app

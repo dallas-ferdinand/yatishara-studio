@@ -1,0 +1,13 @@
+{
+  "packet_type": "scrutiny_report",
+  "phase": "C",
+  "round": 1,
+  "step": "round_summary",
+  "blocking_count": 0,
+  "negotiate_count": 0,
+  "note_count": 0,
+  "rebuild_scope": [],
+  "reviews_artifact": "generation/iterations/C-r1-scrutiny-report.json",
+  "advance": true,
+  "director_statement": null
+}

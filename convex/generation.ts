@@ -923,11 +923,15 @@ function resolveVideoPricingModel(args: {
   tier: "image" | "pro_video" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
-}): "seedance-2.0" | "kling-3.0-i2v" | undefined {
+}): "seedance-2.0" | "kling-3.0-i2v" | "veo-3.1" | undefined {
   if (args.tier !== "pro_video") {
     return undefined;
   }
-  if (args.videoModel === "seedance-2.0" || args.videoModel === "kling-3.0-i2v") {
+  if (
+    args.videoModel === "seedance-2.0" ||
+    args.videoModel === "kling-3.0-i2v" ||
+    args.videoModel === "veo-3.1"
+  ) {
     return args.videoModel;
   }
   if (args.resolvedModel) {

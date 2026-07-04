@@ -15,7 +15,7 @@ Target output: **Production Bible** + **approved clips** for 60–180 second ads
 | A | Story | story-architect | director-joe or director-ernesto | production-designer, character-continuity | `story_packet` |
 | B | World | production-designer, character-continuity, location-scout | director | dp, gaffer, sound-designer | `world_packet` |
 | D | Visual assets | prop-master, style-supervisor | director | prop-master visual, style-supervisor | `approved_asset_registry[]` |
-| C | Shotcraft | dp, gaffer, sound-designer, composer, editor, motion-designer, colorist | director | all Phase C roles | `shot_packets[]` (+ `storyboard_prompt` when cast on camera) |
+| C | Shotcraft | editor (first), dp, gaffer, sound-designer, composer, motion-designer, colorist | director | Phase C builders + character-continuity + **seedance-translator** + **continuity-supervisor** | `shot_packets[]` (+ `storyboard_prompt` when cast on camera) |
 | E.5 | Start frames | orchestrator (Studio MCP) | — | prop-master, style-supervisor visual | `startFrameAssetId` per shot (when cast on camera) |
 | E | Video gen + review | orchestrator (Studio MCP) | director | prop-master, dp, style-supervisor visual | `approved_clips[]` |
 
@@ -39,9 +39,13 @@ See [ernesto-routing.md](ernesto-routing.md).
 
 | Duration | Scenes | Shots |
 |----------|--------|-------|
+| 15s | 1 | 3–5 |
+| 30s | 1–2 | 5–7 |
 | 60s | 3–4 | 8–12 |
 | 90s | 4–6 | 10–18 |
 | 180s | 6–8 | 16–24 |
+
+See [timing-foundation.md](timing-foundation.md) for ASL, gen clip math, peak-end positions.
 
 ## Automated run flow
 
@@ -49,6 +53,7 @@ See [ernesto-routing.md](ernesto-routing.md).
 plan → Phase 0 (uploads, Q&A) → Phase 0.5 budget → [HUMAN APPROVE]
 run → Phase A (×3) → story_packet
     → Phase B (×3) → world_packet
+    → Manifest audit → asset-manifest.json
     → Phase D (×3) → element sheets → visual scrutiny → approved_asset_registry
     → Phase C (×3) → shot_packets[] (reference approved assets + storyboard_prompt when cast on camera)
     → Production Bible (internal) → Phase E.5 (×3 per shot w/ cast) → startFrameAssetId

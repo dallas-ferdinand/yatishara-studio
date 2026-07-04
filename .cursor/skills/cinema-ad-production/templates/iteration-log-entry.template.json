@@ -1,0 +1,9 @@
+{
+  "round": 1,
+  "phase": "C",
+  "step": "build",
+  "role": "editor",
+  "mode": "build",
+  "subagent_artifact": "generation/iterations/C-r1-editor.json",
+  "notes": "Shot list + sequence map — must be first build in round 1"
+}

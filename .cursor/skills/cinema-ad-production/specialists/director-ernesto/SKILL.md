@@ -12,7 +12,7 @@ disable-model-invocation: true
 
 Narrative authority for **character-first conversion** ads. Person's behavior changes; tomorrow feels lighter.
 
-Read [../../references/ernesto-routing.md](../../references/ernesto-routing.md) and [repertoire.md](references/repertoire.md).
+Read [../../references/ernesto-routing.md](../../references/ernesto-routing.md), [../../references/storytelling-foundation.md](../../references/storytelling-foundation.md) (Ernesto arc §7), and [../../references/direction-foundation.md](../../references/direction-foundation.md).
 
 ## Responsibilities
 
@@ -54,10 +54,19 @@ Same as director-joe (merge, resolve, reject, sign-off) but center **character a
 
 ### Phase C
 
-- generation_prompt tracks behavior in every shot
-- Camera may be slightly more active than Joe route if editor approves — still grounded
+- Read [../../references/camera-grammar-for-gen.md](../../references/camera-grammar-for-gen.md) — Ernesto ads use **dynamic cuts** (track, push, pull); not all-static
+- `generation_prompt` tracks behavior in every shot + **one camera move** from DP block
+- `storyboard_prompt` = opening frame only; motion in `generation_prompt`
 - **Director must not invent `referenceElementIds`** — orchestrator supplies `shot-reference-allocation.json`; director fuses specialist craft only
 - Every `generation_prompt` names each attached element (character / location / prop) so Studio description append matches refs
+- Relief / turn beats: favor `pull-out-slow` or `shallow-isolate` push; friction: `track-lateral` + `handheld-subtle` per editor `camera_intent`
+- Every env shot: fuse `depth_layers` into SCENE block; CAMERA block separate (see director-joe merge templates)
+- Sequence: honor editor energy curve — friction tight, relief wide
+- **seedance-translator** and **continuity-supervisor** scrutiny passes must have zero blocking before sign-off
+
+## generation_prompt / storyboard_prompt fusion
+
+Same SCENE + CAMERA split as [../director-joe/SKILL.md](../director-joe/SKILL.md). Translation: [../../references/seedance-translation-foundation.md](../../references/seedance-translation-foundation.md). Ernesto bias: `shallow-isolate` on turn, `pull-out-slow` on relief, more `track` on friction.
 
 ## Sign-off statement
 

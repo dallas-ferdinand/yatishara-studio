@@ -65,7 +65,21 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
     }
   ],
   "closing_line": "",
-  "narrator_close": ""
+  "narrator_close": "",
+  "transportation_hooks": [],
+  "peak_beat": {
+    "scene_id": "",
+    "observable_action": "",
+    "research_ref": "research:peak-end-rule"
+  },
+  "end_anchor": {
+    "scene_id": "",
+    "closing_line": "",
+    "research_ref": "research:peak-end-rule"
+  },
+  "inference_chain": [],
+  "audience_projection_prompt": "",
+  "research_refs": []
 }
 ```
 
@@ -116,23 +130,62 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
   "duration_sec": 2.5,
   "action": "Hands reach for second mug; pause mid-reach.",
   "camera": {
+    "shot_size_open": "mws",
+    "shot_size_end": "cu",
     "lens": "50mm",
     "height": "counter_level",
+    "angle": "neutral",
     "framing": "medium_close_hands",
-    "movement": "static_observe_push_last_0.5s",
-    "repertoire_refs": []
+    "movement": "push_in_slow",
+    "movement_subject": "prop:witness-chair",
+    "speed": "slow",
+    "stability": "gimbal",
+    "spatial_motion": true,
+    "layer_device": "foreground-wipe",
+    "depth_layers": {
+      "foreground": "soft mug rim entering frame left",
+      "midground": "hands and witness mug on counter",
+      "background": "kitchen window soft depth"
+    },
+    "parallax_note": "FG mug rim slides faster on push",
+    "rhythm_pattern": "settle-travel-breathe",
+    "timing_beats": ["0.0-0.6s settle", "0.6-3.2s push-in + parallax", "3.2-4.0s breathe"],
+    "angle_psychology_rationale": "eye-level peer observation — embodied witness posture",
+    "gaze_resonance": "observational_third_person",
+    "proxemic_zone": "social",
+    "forbidden": ["pan", "tilt", "zoom"],
+    "repertoire_refs": ["lens:50mm-intimate", "move:push-in-slow"]
   },
   "lighting": {
     "key": "soft_window_left",
     "fill": "ambient_bounce",
     "contrast": "low_warm",
-    "repertoire_refs": []
+    "key_fill_ratio": "2:1",
+    "contrast_register": "high_key_comfort",
+    "lighting_setup_id": "light-setup:2-45-rembrandt",
+    "color_temp_k": 5600,
+    "motivation_psychology": "window side key — ordinary truthful morning",
+    "light_planes": ["fg_soft", "mg_window_key", "bg_fill"],
+    "research_refs": ["research:key-fill-empathy", "research:huttunen-face-setups"],
+    "repertoire_refs": ["light:window-key-soft"]
   },
   "sound": {
+    "primary_sound": "soft ceramic mug base contact on wooden table",
+    "secondary_sound": "cotton cloth fold off-screen",
+    "ambience": "quiet_kitchen_room_tone",
     "bed": "quiet_kitchen_room_tone",
-    "sfx": ["ceramic_mug_slide", "distant_bird"],
-    "silence_beats": ["0.8-1.2s hold at pause"],
-    "repertoire_refs": []
+    "sfx": ["ceramic_mug_slide"],
+    "silence_beats": ["0.8-1.2s after slide"],
+    "sound_sphere": "foley_primary",
+    "point_of_audition": "object_intimate",
+    "diegetic_class": "on_screen",
+    "synchresis_lock": true,
+    "stream_priority": "primary_foley",
+    "rendering": "close_dry",
+    "listening_mode_primary": "causal",
+    "synchresis_pair": "mug on visible counter — ceramic slide",
+    "research_refs": ["research:chion-synchresis", "research:murch-dense-clarity"],
+    "repertoire_refs": ["sfx:ceramic-mug-base-contact"]
   },
   "music": {
     "presence": "none",
@@ -175,7 +228,9 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
 
 `startFrameAssetId` — Studio asset ID from E.5 storyboard output. **Required before video** when `cast_on_camera: true`.
 
-`generation_prompt` is 150–400 words, Seedance-ready, **motion/camera only** when cast on camera (people already in start frame). Use `## Generation prompt` heading when embedded in markdown bible.
+`generation_prompt` is **60–100 words**, **Seedance I2V-ready** per [seedance-translation-foundation.md](seedance-translation-foundation.md): abbreviated PRESERVE line + `SCENE:` / `CAMERA:` / `SOUND:` / `CONSTRAINTS:` — **motion only** when `startFrameAssetId` set (people in start frame). One spatial camera move + timing beats + stability line per [camera-grammar-for-gen.md](camera-grammar-for-gen.md). Use `## Generation prompt` heading when embedded in markdown bible.
+
+`storyboard_prompt` is **120–200 words**, **full frame spec** per [seedance-translation-foundation.md](seedance-translation-foundation.md): FULL look prefix + `FRAME:` / `FOREGROUND:` / `MIDGROUND:` / `BACKGROUND:` / `LIGHT:` — **no travel verbs**.
 
 `reference_assets` — IDs from `approved_asset_registry` (Phase D).
 
@@ -219,6 +274,12 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
     "angles_complete": true,
     "style_bible_match": true
   },
+  "seedance_checks": {
+    "grain_visible": true,
+    "anti_gloss": true,
+    "motivated_light": true,
+    "no_catalog_hero_light": true
+  },
   "revision_prompt_delta": "",
   "severity": "blocking"
 }
@@ -247,11 +308,30 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
   "packet_type": "scrutiny_report",
   "phase": "C",
   "round": 2,
-  "reviews": [],
+  "step": "round_summary",
   "blocking_count": 1,
   "negotiate_count": 0,
-  "note_count": 2
+  "note_count": 2,
+  "rebuild_scope": ["S04"]
 }
 ```
 
-Templates: [../templates/](../templates/)
+## iteration_log entry (per subagent step)
+
+Append to `production-state.json` → `iteration_log.{phase}[]`:
+
+```json
+{
+  "round": 1,
+  "phase": "B",
+  "step": "scrutiny",
+  "role": "gaffer",
+  "mode": "scrutiny",
+  "subagent_artifact": "generation/iterations/B-r1-gaffer-scrutiny.json",
+  "blocking_count": 0
+}
+```
+
+**Gate rule:** signed-off phases require every build/merge/scrutiny role for that phase, `subagent_artifact` on each step, and final `round_summary.blocking_count === 0` for `signed_off_clean`. See [iteration-protocol.md](iteration-protocol.md).
+
+Templates: [../templates/iteration-log-entry.template.json](../templates/iteration-log-entry.template.json), [../templates/iteration-round-summary.template.json](../templates/iteration-round-summary.template.json)

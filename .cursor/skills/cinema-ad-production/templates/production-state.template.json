@@ -1,0 +1,42 @@
+{
+  "slug": "",
+  "budget_approved": false,
+  "approved_cap_credits": 0,
+  "director_route": null,
+  "phase_signoffs": {
+    "A": { "status": "pending", "rounds": 0, "director_statement": null },
+    "B": { "status": "pending", "rounds": 0, "director_statement": null },
+    "D": { "status": "pending", "rounds": 0, "director_statement": null },
+    "C": { "status": "pending", "rounds": 0, "director_statement": null }
+  },
+  "iteration_log": {
+    "A": [],
+    "B": [],
+    "D": [],
+    "C": [],
+    "E5": [],
+    "E": []
+  },
+  "story_packet": null,
+  "world_packet": null,
+  "shot_packets": [],
+  "approved_asset_registry": [],
+  "approved_clips": [],
+  "compromises": [],
+  "iteration": {
+    "active_phase": null,
+    "active_round": 0,
+    "blocking_conflicts": [],
+    "last_step": null
+  },
+  "production_bible": {
+    "document_id": null,
+    "emitted_at": null
+  },
+  "resume": {
+    "last_completed_phase": null,
+    "e5_completed_shot_ids": [],
+    "e_completed_shot_ids": [],
+    "interrupted_at": null
+  }
+}

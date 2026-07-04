@@ -28,7 +28,11 @@ Input: approved story_packet
 
 Output: world_packet `sets[]` entries per scene
 
+**Mandatory read:** [../../references/staging-foundation.md](../../references/staging-foundation.md)
+
 Read [references/set-archetypes.md](references/set-archetypes.md) and [references/prop-language.md](references/prop-language.md).
+
+Output `witness_object_placement`, `window_direction`, `staging_depth`, `lived_in_score`, `inference_cues[]` per staging-foundation.
 
 Cite IDs like `set:domestic-kitchen-lived-in`, `prop:hero-witness-background`.
 

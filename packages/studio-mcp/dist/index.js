@@ -7,11 +7,12 @@ import { registerDocumentTools } from "./tools/documents.js";
 import { registerElementTools } from "./tools/elements.js";
 import { registerFolderTools } from "./tools/folders.js";
 import { registerGenerationTools } from "./tools/generations.js";
+import { registerProductionTools } from "./tools/production.js";
 import { registerTrashTools } from "./tools/trash.js";
 requireConfig();
 const server = new McpServer({
     name: "yatishara-studio",
-    version: "0.2.2",
+    version: "0.2.5",
 });
 registerAccountTools(server);
 registerFolderTools(server);
@@ -19,6 +20,7 @@ registerAssetTools(server);
 registerDocumentTools(server);
 registerElementTools(server);
 registerGenerationTools(server);
+registerProductionTools(server);
 registerTrashTools(server);
 const transport = new StdioServerTransport();
 await server.connect(transport);

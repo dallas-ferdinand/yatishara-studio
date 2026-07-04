@@ -47,7 +47,7 @@ Elements have two states — **unbuilt** (upload refs only) and **built** (`shee
 
 Never pass raw upload refs to video/image generation for a built element — use `referenceElementIds` or the `sheetAssetId`.
 
-## Tools (32)
+## Tools (33)
 
 | Tool | Purpose |
 |------|---------|
@@ -81,8 +81,9 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_list_generations` | Recent jobs |
 | `studio_get_generation` | Poll job status |
 | `studio_generate_image` | Sync image gen — **storyboard stills** with full `referenceElementIds` (characters included) |
-| `studio_list_video_models` | Seedance 2.0 (default) and Kling 3.0 I2V |
-| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; optional **`videoModel`** (`seedance-2.0` \| `kling-3.0-i2v`); `referenceElementIds` for prop/location refs |
+| `studio_list_video_models` | Seedance 2.0 |
+| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs; optional `videoModel: "kling-3.0-i2v"` fallback |
+| `studio_validate_production_gates` | Pre-flight cinema gate check — pass `production-state.json` body before `studio_generate_*` |
 | `studio_generate_script` | Script → document |
 
 ## Cinema ad production defaults
@@ -90,12 +91,14 @@ Never pass raw upload refs to video/image generation for a built element — use
 For `@cinema-ad-production` automated runs, always pass:
 
 ```json
-{ "stylePreset": "raw", "skipPromptEnhancement": true }
+{ "stylePreset": "story-ad", "skipPromptEnhancement": true }
 ```
+
+Use `raw` only for non-cinema ad-hoc tests. Call `studio_validate_production_gates` before phase generate batches.
 
 Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
 
-**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. Use `videoModel: "kling-3.0-i2v"` when Seedance blocks photoreal faces. No `scene` element type. See `.cursor/skills/cinema-ad-production/references/start-frame-workflow.md`.
+**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cinema-ad-production/references/start-frame-workflow.md`.
 
 Budget: `studio_estimate_production` before `plan` mode budget approval.
 

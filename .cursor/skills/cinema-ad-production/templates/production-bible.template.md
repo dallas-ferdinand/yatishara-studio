@@ -58,7 +58,7 @@
 
 #### Generation prompt
 
-<!-- 150-400 words Seedance-ready; motion/camera when start frame carries cast -->
+<!-- 60–100 words I2V motion brief: PRESERVE + SCENE/CAMERA/SOUND/CONSTRAINTS per seedance-translation-foundation.md -->
 
 ---
 

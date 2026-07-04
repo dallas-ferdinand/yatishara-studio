@@ -9,7 +9,7 @@ import {
 } from "./lib/elementSheetGuides";
 import { MAX_GENERATION_REFERENCE_ASSETS } from "./lib/elementAssetModel";
 import { appendVideoReferenceTags, startFramePromptPrefix } from "./lib/videoGeneration";
-import { listVideoModelsPublic, resolveVideoModel } from "./lib/videoModels";
+import { listVideoModelsForMcp, listVideoModelsPublic, resolvePublicVideoModel } from "./lib/videoModels";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
   errorResponse,
@@ -800,7 +800,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
     if (request.method === "GET" && route === "video-models") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
-      return finish(jsonResponse({ models: listVideoModelsPublic() }));
+      const scope = url.searchParams.get("scope");
+      const models =
+        scope === "mcp"
+          ? listVideoModelsForMcp()
+          : listVideoModelsPublic({ uiOnly: true });
+      return finish(jsonResponse({ models }));
     }
 
     if (request.method === "GET" && route === "generations") {
@@ -900,6 +905,16 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         }
       }
 
+      let estimateVideoModel: string | undefined;
+      if (mode === "video" && body.videoModel) {
+        try {
+          estimateVideoModel = resolvePublicVideoModel(body.videoModel).slug;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Invalid video model";
+          return finish(errorResponse(message));
+        }
+      }
+
       const estimate = await ctx.runQuery(internal.studioApiInternal.estimateGenerationCost, {
         userId: auth.userId,
         sandboxFolderId: auth.sandboxFolderId,
@@ -908,7 +923,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds: body.durationSeconds,
         audioEnabled: body.audioEnabled,
         referenceAssetIds: estimateAssetIds.length ? estimateAssetIds : undefined,
-        videoModel: body.videoModel,
+        videoModel: estimateVideoModel,
       });
       return finish(jsonResponse(estimate));
     }
@@ -1001,7 +1016,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       let resolvedVideoModel;
       if (mode === "video") {
         try {
-          resolvedVideoModel = resolveVideoModel(body.videoModel);
+          resolvedVideoModel = resolvePublicVideoModel(body.videoModel);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Invalid video model";
           return finish(errorResponse(message));
@@ -1181,7 +1196,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceInputs,
         startFrameUrl,
         skipPromptEnhancement: body.skipPromptEnhancement,
-        videoModel: body.videoModel,
+        videoModel: resolvedVideoModel?.slug,
       });
 
       const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {

@@ -1,4 +1,10 @@
-export type VideoModelSlug = "seedance-2.0" | "kling-3.0-i2v";
+export type VideoModelSlug = "seedance-2.0" | "kling-3.0-i2v" | "veo-3.1";
+
+/** MCP/API explicit picks — hidden from Studio UI composer and public catalog. */
+export const MCP_EXPLICIT_VIDEO_MODEL_SLUGS: VideoModelSlug[] = [
+  "kling-3.0-i2v",
+  "veo-3.1",
+];
 
 export type VideoModelDef = {
   slug: VideoModelSlug;
@@ -7,6 +13,8 @@ export type VideoModelDef = {
   description: string;
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
+  /** When false, model stays API/MCP-wired but hidden from Studio composer UI. */
+  uiVisible?: boolean;
 };
 
 export const VIDEO_MODELS: VideoModelDef[] = [
@@ -18,15 +26,27 @@ export const VIDEO_MODELS: VideoModelDef[] = [
       "Default — physics, multimodal refs, multi-shot. Strict filter on photoreal faces in input images.",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
+    uiVisible: true,
   },
   {
     slug: "kling-3.0-i2v",
     label: "Kling 3.0 I2V",
     gatewayModelId: "klingai/kling-v3.0-i2v",
     description:
-      "Secondary — cinematic faces and start-frame I2V. Easier on human likeness; prop refs via prompt.",
+      "MCP only — cinematic faces and start-frame I2V. Easier on human likeness; prop refs via prompt.",
     requiresStartFrame: true,
     supportsMultimodalRefs: false,
+    uiVisible: false,
+  },
+  {
+    slug: "veo-3.1",
+    label: "Veo 3.1",
+    gatewayModelId: "google/veo-3.1-generate-001",
+    description:
+      "MCP only — Google Veo 3.1 I2V (quality ceiling). personGeneration allow_all for face cinema tests.",
+    requiresStartFrame: false,
+    supportsMultimodalRefs: false,
+    uiVisible: false,
   },
 ];
 
@@ -44,7 +64,7 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
     );
     if (found) return found;
     throw new Error(
-      `Unknown video model: ${normalized}. Use seedance-2.0 or kling-3.0-i2v.`,
+      `Unknown video model: ${normalized}. Use seedance-2.0, kling-3.0-i2v, or veo-3.1.`,
     );
   }
   return (
@@ -52,13 +72,42 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
   );
 }
 
+/** Public API / MCP — uiVisible models by default; MCP explicit slugs when caller passes videoModel. */
+export function resolvePublicVideoModel(slug?: string | null): VideoModelDef {
+  const normalized = slug?.trim() as VideoModelSlug | undefined;
+  if (
+    normalized &&
+    MCP_EXPLICIT_VIDEO_MODEL_SLUGS.includes(normalized)
+  ) {
+    return resolveVideoModel(normalized);
+  }
+  const model = resolveVideoModel(slug);
+  if (model.uiVisible === false) {
+    throw new Error(
+      `${model.label} is not available. Video generation uses Seedance 2.0.`,
+    );
+  }
+  return model;
+}
+
 export function isSeedanceGatewayModel(modelId: string): boolean {
   return modelId.includes("seedance");
+}
+
+export function isVeoGatewayModel(modelId: string): boolean {
+  return modelId.includes("veo");
+}
+
+export function isKlingGatewayModel(modelId: string): boolean {
+  return modelId.includes("kling");
 }
 
 export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoModelSlug {
   if (gatewayModelId.includes("kling")) {
     return "kling-3.0-i2v";
+  }
+  if (gatewayModelId.includes("veo")) {
+    return "veo-3.1";
   }
   return "seedance-2.0";
 }
@@ -67,7 +116,28 @@ export function videoPricingModelFromSlug(slug?: string | null): VideoModelSlug 
   return resolveVideoModel(slug).slug;
 }
 
-export function listVideoModelsPublic(): Array<{
+export function listVideoModelsForMcp(): Array<{
+  slug: VideoModelSlug;
+  label: string;
+  description: string;
+  requiresStartFrame: boolean;
+  supportsMultimodalRefs: boolean;
+  isDefault: boolean;
+  mcpOnly: boolean;
+}> {
+  const defaultSlug = defaultVideoModelSlug();
+  return VIDEO_MODELS.map((model) => ({
+    slug: model.slug,
+    label: model.label,
+    description: model.description,
+    requiresStartFrame: model.requiresStartFrame,
+    supportsMultimodalRefs: model.supportsMultimodalRefs,
+    isDefault: model.slug === defaultSlug,
+    mcpOnly: model.uiVisible === false,
+  }));
+}
+
+export function listVideoModelsPublic(options?: { uiOnly?: boolean }): Array<{
   slug: VideoModelSlug;
   label: string;
   description: string;
@@ -76,7 +146,10 @@ export function listVideoModelsPublic(): Array<{
   isDefault: boolean;
 }> {
   const defaultSlug = defaultVideoModelSlug();
-  return VIDEO_MODELS.map((model) => ({
+  const models = options?.uiOnly
+    ? VIDEO_MODELS.filter((model) => model.uiVisible !== false)
+    : VIDEO_MODELS;
+  return models.map((model) => ({
     slug: model.slug,
     label: model.label,
     description: model.description,

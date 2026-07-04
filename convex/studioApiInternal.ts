@@ -639,8 +639,11 @@ export const estimateGenerationCost = internalQuery({
       audioEnabled: args.audioEnabled,
       videoModel:
         args.mode === "video"
-          ? ((args.videoModel as "seedance-2.0" | "kling-3.0-i2v" | undefined) ??
-            "seedance-2.0")
+          ? ((args.videoModel as
+              | "seedance-2.0"
+              | "kling-3.0-i2v"
+              | "veo-3.1"
+              | undefined) ?? "seedance-2.0")
           : undefined,
       ...referenceFlags,
     });

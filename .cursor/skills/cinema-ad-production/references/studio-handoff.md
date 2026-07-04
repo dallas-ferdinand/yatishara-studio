@@ -32,19 +32,9 @@ All image and video generation:
 }
 ```
 
-Models (via API env): GPT Image 2 (images). Video: **Seedance 2.0** (default) or **Kling 3.0 I2V** (`videoModel: "kling-3.0-i2v"`) for human-heavy shots.
+Models (via API env): GPT Image 2 (images). Video: **Seedance 2.0** default — optional per-shot `videoModel: "kling-3.0-i2v"` fallback when Seedance blocks start frames (log in compromises).
 
-```json
-{ "videoModel": "seedance-2.0" }
-```
-
-or
-
-```json
-{ "videoModel": "kling-3.0-i2v", "startFrameAssetId": "<storyboard-id>" }
-```
-
-List models: `studio_list_video_models`.
+List models: `studio_list_video_models` (returns Seedance only; Kling available via explicit `videoModel` param).
 
 ## Phase D — Prop / character sheets
 
@@ -77,7 +67,9 @@ studio_generate_image({
 
 Record `assets[0].id` as `shot_packet.startFrameAssetId`.
 
-## Phase E — Video gen
+## Phase E — Video gen (Seedance default)
+
+Default: no `videoModel` (Seedance 2.0). **Fallback:** `videoModel: "kling-3.0-i2v"` when real-person filter blocks after wide storyboard reframe — log compromise, same `startFrameAssetId` workflow.
 
 ### Per shot
 
@@ -86,15 +78,17 @@ studio_estimate_generation({ mode: "video", resolution: "1280x720", durationSeco
 studio_generate_video({
   prompt: shot_packet.generation_prompt,
   startFrameAssetId: shot_packet.startFrameAssetId,
-  // videoModel: "kling-3.0-i2v",  // optional — easier on human faces; requires startFrameAssetId
   stylePreset: "story-ad",
   skipPromptEnhancement: true,
   referenceElementIds: shot_packet.referenceElementIds,
   durationSeconds: shot_packet.generation_duration_sec,
   aspectRatio: brief aspect ratio,
-  folderId: "..."
+  folderId: "...",
+  videoModel: "kling-3.0-i2v"
 })
 ```
+
+Omit `videoModel` unless Seedance failed on this shot.
 
 `generation_duration_sec` — Studio min **4**. When editorial `duration_sec` < 4, generate at 4 and set `editorial_trim_sec` on shot_packet.
 
@@ -128,7 +122,8 @@ After each clip:
 
 | Failure | Action |
 |---------|--------|
-| Real person filter | Missing start frame — run E.5 storyboard; do not attach character sheets to video |
+| Real person filter (no start frame) | Run E.5 storyboard; do not attach character sheets to video |
+| Real person filter (start frame exists) | Widen `storyboard_prompt` per [start-frame-workflow.md](start-frame-workflow.md); regen E.5; then `videoModel: "kling-3.0-i2v"` if still blocked |
 | Prop drift in clip | Re-attach prop sheet; tighten prompt; regen |
 | Wrong material | Return to Phase D prop revision |
 | Style mismatch | style-supervisor revises bible line; regen |

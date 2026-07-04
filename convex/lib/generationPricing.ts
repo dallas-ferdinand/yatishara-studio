@@ -40,9 +40,17 @@ export const KLING_VIDEO_BASE_CREDITS_PER_BLOCK: Record<string, number> = {
   "1920x1080": 37,
 };
 
-export type VideoPricingModel = "seedance-2.0" | "kling-3.0-i2v";
+/** Veo 3.1 — credits per 5-second block (Vertex gateway; MCP-only path). */
+export const VEO_VIDEO_BASE_CREDITS_PER_BLOCK: Record<string, number> = {
+  "854x480": 45,
+  "1280x720": 75,
+  "1920x1080": 150,
+};
+
+export type VideoPricingModel = "seedance-2.0" | "kling-3.0-i2v" | "veo-3.1";
 
 export const KLING_VIDEO_AUDIO_SURCHARGE_PER_BLOCK = 5;
+export const VEO_VIDEO_AUDIO_SURCHARGE_PER_BLOCK = 8;
 
 /** Per 5-second block surcharges */
 export const VIDEO_AUDIO_SURCHARGE_PER_BLOCK = 7;
@@ -94,7 +102,9 @@ export function videoBaseCreditsPerBlock(
   const table =
     videoModel === "kling-3.0-i2v"
       ? KLING_VIDEO_BASE_CREDITS_PER_BLOCK
-      : SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK;
+      : videoModel === "veo-3.1"
+        ? VEO_VIDEO_BASE_CREDITS_PER_BLOCK
+        : SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK;
   if (resolution === "854x480") {
     return table["854x480"];
   }
@@ -121,11 +131,13 @@ export function videoCreditCost(args: {
     perBlock +=
       videoModel === "kling-3.0-i2v"
         ? KLING_VIDEO_AUDIO_SURCHARGE_PER_BLOCK
-        : VIDEO_AUDIO_SURCHARGE_PER_BLOCK;
+        : videoModel === "veo-3.1"
+          ? VEO_VIDEO_AUDIO_SURCHARGE_PER_BLOCK
+          : VIDEO_AUDIO_SURCHARGE_PER_BLOCK;
   }
 
-  if (videoModel === "kling-3.0-i2v") {
-    // Kling I2V: start frame only — prop/location refs are prompt-only, no multimodal billing.
+  if (videoModel === "kling-3.0-i2v" || videoModel === "veo-3.1") {
+    // Kling/Veo I2V: start frame + prompt; no Seedance multimodal ref surcharges.
     return perBlock * blocks + PLATFORM_OVERHEAD_CREDITS_MEDIA;
   }
 

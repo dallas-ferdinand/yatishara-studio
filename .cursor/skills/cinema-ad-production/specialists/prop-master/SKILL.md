@@ -32,28 +32,23 @@ Fields required:
 
 ### Mode 2: EXECUTE (orchestrator)
 
-**Preferred — Studio element sheet API** (2-panel prop/character sheets):
+**Route by `sourceMode`** — see [../../references/element-source-modes.md](../../references/element-source-modes.md).
+
+| sourceMode | Steps |
+|------------|-------|
+| **photographic** | Upload refs → `studio_create_element` → `studio_generate_element_sheet` |
+| **designed** | `studio_create_element { sourceMode: designed, description }` → **one** `studio_generate_element_sheet` — **never** `studio_generate_image` plates first |
+
+**Location designed with props:** build prop sheets first, then `studio_generate_element_sheet { referenceElementIds: [prop elements] }`.
+
+**Preferred API:**
 
 ```
-studio_create_element({ type: "prop", name, folderId, sourceAssetIds })
-studio_generate_element_sheet({ elementId, resolution: "2K", referenceAssetIds })
+studio_create_element({ type, name, sourceMode: "designed", description, folderId })
+studio_generate_element_sheet({ elementId, resolution: "2K", referenceElementIds?: [...] })
 ```
 
-Aligns with `buildElementSheetImagePrompt` in Studio — gray background, no text, front + three-quarter views.
-
-**Fallback — 3×3 cinema grid** when angles/layout need custom layout:
-
-```
-studio_generate_image({
-  prompt: prop_sheet_prompt,
-  stylePreset: "raw",
-  skipPromptEnhancement: true,
-  resolution: "2K",
-  referenceAssetIds: [...]
-})
-```
-
-Use [references/prop-sheet-spec.md](references/prop-sheet-spec.md) for 3×3 grid prompt structure.
+**Forbidden for designed:** generating 2–3 throwaway reference images to satisfy min ref count — wastes credits.
 
 ### Mode 3: VISUAL SCRUTINY (mandatory)
 

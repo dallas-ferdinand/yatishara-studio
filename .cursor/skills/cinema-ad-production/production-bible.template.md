@@ -54,7 +54,7 @@
 
 #### Generation prompt
 
-<!-- 150-400 words Seedance-ready -->
+<!-- 60–100 words I2V motion brief: PRESERVE + SCENE/CAMERA/SOUND/CONSTRAINTS -->
 
 ---
 

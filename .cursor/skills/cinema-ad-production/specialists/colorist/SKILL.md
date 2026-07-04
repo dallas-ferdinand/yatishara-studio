@@ -17,9 +17,11 @@ Owns **look** — grade palette per scene/shot, continuity across time passage.
 
 ## Builder mode
 
+**Mandatory read:** [../../references/color-foundation.md](../../references/color-foundation.md)
+
 Read [references/grade-palettes.md](references/grade-palettes.md).
 
-Align with gaffer `contrast` IDs.
+Output `grade_register`, `continuity_lock`, `research_refs` aligned to gaffer `contrast` + emotional temperature.
 
 ## Scrutiny mode
 

@@ -3553,15 +3553,21 @@
   border-radius: 8px;
 }
 
-/* Image dock preview — theme canvas, sidebar-style top bar */
+/* Image dock preview — glass panel with theme canvas inside */
 .cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
-  background: var(--color-cursor-bg);
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-surface) 34%, transparent)
+  );
   border: 1px solid var(--color-cursor-border-soft);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(8px));
 }
 [data-appearance="light"] .cursor-attach-preview-dock:has(.cursor-attach-preview-image) {
-  background: #fff;
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--mos-bg) 34%, transparent)
+  );
 }
 .cursor-attach-preview-dock:has(.cursor-attach-preview-image) .cursor-attach-preview-head {
   background: var(--color-cursor-sidebar) !important;
@@ -7994,13 +8000,20 @@
 
 /* --- composer focus: keep default glass bg; accent ring via border/shadow only --- */
 
-/* --- mode switcher (type tiles: blur on ::before, not nested on host) --- */
+/* --- mode switcher (type tiles: panel + per-tile glass) --- */
 .studio-polish .studio-mode-switcher {
-  background: transparent !important;
+  background: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 34%, transparent)
+  ) !important;
   border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11));
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  );
 }
 
 .studio-polish .studio-mode-row {
@@ -8019,13 +8032,10 @@
   z-index: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: var(
-    --studio-composer-glass-muted,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)
-  );
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
   transition:
     background 160ms cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -8039,8 +8049,8 @@
 .studio-polish .studio-mode-row:hover::before {
   background: color-mix(
     in srgb,
-    var(--studio-composer-glass-muted, color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)) 70%,
-    var(--color-cursor-hover, #1e293b) 30%
+    var(--studio-composer-glass-strong, color-mix(in srgb, var(--color-mos-composer, #07111f) 48%, transparent)) 55%,
+    transparent
   );
 }
 
@@ -8048,15 +8058,15 @@
   background:
     radial-gradient(
       circle at 16% 0%,
-      color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+      color-mix(in srgb, var(--cursor-accent) 18%, transparent),
       transparent 48%
     ),
     color-mix(
       in srgb,
-      var(--cursor-accent-dim, var(--cursor-accent)) 38%,
-      var(--studio-composer-glass-strong, color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent)) 62%
+      var(--cursor-accent-dim, var(--cursor-accent)) 24%,
+      var(--studio-composer-glass-strong, color-mix(in srgb, var(--color-mos-composer, #07111f) 48%, transparent)) 76%
     );
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 [data-appearance="light"] .studio-polish .studio-mode-row::before {

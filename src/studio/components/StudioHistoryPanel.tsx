@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock3, MessageSquare, Search, X } from "lucide-react";
+import { ResizableSideSheet } from "./ResizableSideSheet";
 
 const GROUP_ORDER = ["Today", "Yesterday", "This week", "Older"];
 
@@ -78,10 +79,17 @@ export function StudioHistoryPanel({ threads = [], activeThreadId, onSelectThrea
   const totalLabel = threads.length === 1 ? "1 thread" : `${threads.length} threads`;
 
   return (
-    <div className="studio-settings-floating-overlay" role="dialog" aria-label="Generation history" aria-modal="true">
-      <button type="button" className="studio-settings-floating-backdrop" onClick={onClose} aria-label="Close history" />
-      <aside className="studio-settings-floating-panel studio-history-floating-panel">
-        <header className="studio-history-floating-head">
+    <ResizableSideSheet
+      ariaLabel="Generation history"
+      backdropLabel="Close history"
+      onClose={onClose}
+      autoSaveId="studio-history-w"
+      defaultSize={25}
+      minSize={18}
+      maxSize={40}
+      panelClassName="studio-history-floating-panel"
+    >
+      <header className="studio-history-floating-head">
           <div className="studio-history-head-copy">
             <h2 className="studio-history-head-title">History</h2>
             <p className="studio-history-head-meta">{totalLabel}</p>
@@ -162,7 +170,6 @@ export function StudioHistoryPanel({ threads = [], activeThreadId, onSelectThrea
             ))
           )}
         </div>
-      </aside>
-    </div>
+    </ResizableSideSheet>
   );
 }

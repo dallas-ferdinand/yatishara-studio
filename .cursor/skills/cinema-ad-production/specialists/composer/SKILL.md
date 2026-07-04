@@ -19,9 +19,11 @@ Owns **score plan** — when music exists, how it enters, ducks, exits.
 
 ## Builder mode
 
+**Mandatory read:** [../../references/music-foundation.md](../../references/music-foundation.md) when `music.presence` ≠ none.
+
 Read [references/music-arcs.md](references/music-arcs.md).
 
-Per shot: `presence`, `entry`, `ducking`, `repertoire_refs`.
+Per shot: `presence`, `entry`, `ducking`, `music_register`, `repertoire_refs`.
 
 ## Scrutiny mode
 
@@ -29,6 +31,7 @@ Flag `blocking` if merged shot has music under documented silence beat.
 
 ## References
 
+- [../../references/music-foundation.md](../../references/music-foundation.md)
 - [references/music-arcs.md](references/music-arcs.md)
 - [references/repertoire.md](references/repertoire.md)
 - [references/conflicts.md](references/conflicts.md)

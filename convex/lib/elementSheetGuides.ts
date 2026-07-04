@@ -21,8 +21,8 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
   character: {
     minImageRefs: 3,
     minImageRefsDesigned: 0,
-    recommendedMin: 20,
-    recommendedMax: 30,
+    recommendedMin: 4,
+    recommendedMax: 8,
     outputDescription:
       "One 16:9 image with three panels: full-body front, full-body back, head closeup (single visible face).",
     uploadChecklist: [

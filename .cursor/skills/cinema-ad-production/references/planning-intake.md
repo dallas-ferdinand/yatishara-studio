@@ -14,7 +14,7 @@ Extract when present:
 
 ## Required Q&A (ask if missing)
 
-1. **Duration:** 60 / 90 / 180 seconds
+1. **Duration:** 15 / 30 / 60 / 90 / 180 seconds — see [timing-foundation.md](timing-foundation.md) §10
 2. **Aspect ratio:** 16:9 / 9:16 / 1:1
 3. **Goal:** brand_affinity (Joe) / conversion (Ernesto)
 4. **Witness object OR character arc** — which narrative engine
@@ -27,7 +27,8 @@ Extract when present:
 
 - Product photo upload → default `must_match_refs: true` for hero prop
 - Logo upload → register as separate flat-mark asset requirement
-- No duration stated → ask; do not assume 60s
+- No duration stated → ask; do not assume 60s or 90s
+- "Short" / "social" / "bumper" without seconds → default **15s** or **30s**, confirm with user
 - Conversion language ("buy", "CTA", "offer") → route Ernesto
 - Witness-object language ("memory", "ritual", "object") → route Joe
 

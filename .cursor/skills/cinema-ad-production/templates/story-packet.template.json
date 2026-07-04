@@ -19,5 +19,19 @@
     }
   ],
   "closing_line": "",
-  "narrator_close": ""
+  "narrator_close": "",
+  "transportation_hooks": [],
+  "peak_beat": {
+    "scene_id": "",
+    "observable_action": "",
+    "research_ref": "research:peak-end-rule"
+  },
+  "end_anchor": {
+    "scene_id": "",
+    "closing_line": "",
+    "research_ref": "research:peak-end-rule"
+  },
+  "inference_chain": [],
+  "audience_projection_prompt": "",
+  "research_refs": []
 }

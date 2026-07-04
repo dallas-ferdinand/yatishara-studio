@@ -12,7 +12,9 @@ disable-model-invocation: true
 
 Narrative authority for witness-object brand films. **Merge** and **final sign-off** only — does not replace department builders.
 
-Read [../../references/joe-foundation.md](../../references/joe-foundation.md) before every merge.
+Read [../../references/joe-foundation.md](../../references/joe-foundation.md) before every merge.  
+Phase A: also [../../references/storytelling-foundation.md](../../references/storytelling-foundation.md).  
+Phase C: [../../references/direction-foundation.md](../../references/direction-foundation.md) + [../../references/seedance-translation-foundation.md](../../references/seedance-translation-foundation.md) + [../../references/research-canon-map.md](../../references/research-canon-map.md).
 
 ## Responsibilities
 
@@ -57,7 +59,7 @@ When reviewing merged direction from other specialists' scrutiny (meta-review):
 - Witness object named and present across scenes
 - Scenes use observable_actions only
 - Narrator rare; closing_line reveals truth
-- Scene durations sum to brief target
+- Scene durations sum to brief target ±2s — verify against [../../references/timing-foundation.md](../../references/timing-foundation.md) tier
 
 ### Phase B — World
 
@@ -68,17 +70,57 @@ When reviewing merged direction from other specialists' scrutiny (meta-review):
 ### Phase C — Shotcraft
 
 - Fuse dp + gaffer + sound + composer + editor + motion + color into one direction per shot
-- Write `generation_prompt` per shot (150–400 words)
-- Camera observes; no spectacle unless brief demands
+- Read [../../references/camera-grammar-for-gen.md](../../references/camera-grammar-for-gen.md) before merging camera prose
+- Write **`storyboard_prompt`** (opening frame, no travel) and **`generation_prompt`** (motion + ONE camera move) per shot when cast on camera
+- DP `camera` block is authoritative — director translates to prompt prose; do not invent a second move
 - Prefer ambient SFX over score in generation_prompt unless composer specified music
 
 ## generation_prompt fusion template
 
+See [../../references/seedance-translation-foundation.md](../../references/seedance-translation-foundation.md) — **60–100 word I2V budget**.
+
 ```
-[Scene context one sentence]. [Observable action beat by beat]. [Camera: lens, height, movement]. [Light: motivated source, contrast]. [Sound: bed, key SFX, silence]. [Color grade one line]. [Continuity locks]. Patient observational camera. No emotion labels. No on-screen text unless specified.
+[PRESERVE line — abbreviated look, NOT full Alexa prefix]
+
+SCENE: [Micro-action verbs only — hands, steam, cloth]. [Optional secondary motion].
+
+CAMERA: [shot_size_open]→[shot_size_end], [lens], [height]. ONE [spatial move + slow]. [Parallax FG/MG/BG]. [timing_beats: settle-travel-breathe]. Stable gimbal through space; no optical zoom, no morphing.
+
+SOUND: [diegetic line + silence ms]. No score.
+
+CONSTRAINTS: Preserve exact appearance from start frame. [Background static / one motion]. Prop lock if referenced.
 ```
 
-## Sign-off statement
+## storyboard_prompt fusion template
+
+```
+[FULL look prefix from seedance-cinematic-look.md]
+
+FRAME: Single still, [aspect ratio]. [Lens], [height], [shot_size_open].
+FOREGROUND: [soft layer]. MIDGROUND: [sharp subject + pose + upper-third position]. BACKGROUND: [context].
+LIGHT: [one motivated line]. PROP LOCK: [if reference sheet].
+No motion blur. No travel verbs. No on-screen text.
+```
+
+Before sign-off each Phase C round, verify every shot against [../../references/perceptual-foundation.md](../../references/perceptual-foundation.md) §8 matrix and deep canons [lighting-foundation.md](../../references/lighting-foundation.md) + [sound-foundation.md](../../references/sound-foundation.md):
+
+- Camera height matches temperature (no high-angle on ordinary-morning)
+- `key_fill_ratio` + `lighting_setup_id` match `light_register` (Joe faces: setups 1–3 only)
+- `color_temp_k` motivated by scene sources
+- `synchresis_lock` + `primary_sound` match visible surfaces
+- `sound_sphere` — one foreground stream per beat
+- `silence_beats` align with camera breathe
+- Editor `kuleshov_pairs` have glance before object
+- **seedance-translator** and **continuity-supervisor** scrutiny passes have zero blocking conflicts
+- Sequence map has `peak_shot_ids` + `end_anchor` per [storytelling-foundation.md](../../references/storytelling-foundation.md)
+- `attention_driver` + `subject_thirds_position` per [attention-foundation.md](../../references/attention-foundation.md)
+- `depth_layers` + one `sharp_plane` per [depth-and-layering-for-gen.md](../../references/depth-and-layering-for-gen.md)
+
+## storyboard_prompt fusion template
+
+*(Moved to seedance-translation-foundation — use FRAME/FG/MG/BG template above.)*
+
+## Perceptual coherence check (director merge)
 
 End each phase with:
 

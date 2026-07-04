@@ -15,7 +15,7 @@ import {
   type ElementSheetType,
 } from "./elementSheets";
 import { normalizeAudioMimeType, type ReferenceInput } from "./referenceInput";
-import { isSeedanceGatewayModel } from "./videoModels";
+import { isSeedanceGatewayModel, isVeoGatewayModel } from "./videoModels";
 
 export type GenerationMode = "image" | "video";
 
@@ -192,6 +192,10 @@ export async function generateVideo(
   input: VideoGenerationInput,
 ): Promise<GeneratedMedia> {
   const model = input.modelId?.trim() || requiredEnv("GATEWAY_VIDEO_MODEL_ID");
+  if (isVeoGatewayModel(model)) {
+    return generateVeoVideo(model, input);
+  }
+
   const seedance = isSeedanceGatewayModel(model);
   const startFrameUrl = input.startFrameUrl?.trim();
   const referenceImageUrls = seedance ? input.referenceImageUrls : [];
@@ -250,6 +254,40 @@ export async function generateVideo(
   };
 }
 
+async function generateVeoVideo(
+  model: string,
+  input: VideoGenerationInput,
+): Promise<GeneratedMedia> {
+  const startFrameUrl = input.startFrameUrl?.trim();
+  const prompt =
+    startFrameUrl != null && startFrameUrl.length > 0
+      ? { image: startFrameUrl, text: input.prompt }
+      : input.prompt;
+
+  const result = await experimental_generateVideo({
+    model: gateway.videoModel(model),
+    // Veo I2V uses { image, text } prompt shape via Vertex provider.
+    prompt: prompt as never,
+    aspectRatio: normalizeAspectRatio(input.aspectRatio),
+    resolution: normalizeVeoResolution(input.resolution) as never,
+    duration: normalizeVeoDuration(input.durationSeconds),
+    generateAudio: input.generateAudio,
+    providerOptions: {
+      vertex: {
+        pollTimeoutMs: VIDEO_POLL_TIMEOUT_MS,
+        resizeMode: "crop",
+        generateAudio: input.generateAudio,
+        personGeneration: "allow_all",
+        enhancePrompt: false,
+      },
+    },
+  });
+  return {
+    data: result.video.uint8Array,
+    mediaType: result.video.mediaType || "video/mp4",
+  };
+}
+
 export function imageModelForRequest(): string {
   return requiredEnv("GATEWAY_IMAGE_MODEL_ID");
 }
@@ -296,6 +334,23 @@ function normalizeSize(
     "864x480": "854x480",
   };
   return map[resolution.toLowerCase()] ?? map[resolution];
+}
+
+function normalizeVeoResolution(resolution: string | undefined): "720p" | "1080p" {
+  if (
+    resolution === "1920x1080" ||
+    resolution?.toLowerCase() === "1080p"
+  ) {
+    return "1080p";
+  }
+  return "720p";
+}
+
+function normalizeVeoDuration(durationSeconds?: number): 4 | 6 | 8 {
+  const duration = Math.ceil(Number(durationSeconds) || 4);
+  if (duration <= 4) return 4;
+  if (duration <= 6) return 6;
+  return 8;
 }
 
 function contentPartForReference(reference: ReferenceInput): Array<

@@ -8,7 +8,8 @@
 
 | Field | Value |
 |-------|-------|
-| Duration | {60\|90\|180}s |
+| Duration | {15\|30\|60\|90\|180}s |
+| Duration tier | {15s_social_punch\|30s_social_standard\|60s_broadcast_short\|90s_brand_standard\|180s_long_form} |
 | Aspect ratio | {16:9\|9:16\|1:1} |
 | Goal | {brand_affinity\|conversion} |
 | Director route | {joe\|ernesto} |

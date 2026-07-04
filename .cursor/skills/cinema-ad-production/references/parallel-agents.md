@@ -9,11 +9,12 @@ Orchestrator **must** launch Task subagents for parallel builds. Director merge 
 | A scrutiny | production-designer, character-continuity | 2 subagents |
 | B build | production-designer, character-continuity, location-scout | 3 subagents |
 | B scrutiny | dp, gaffer, sound-designer | 3 subagents |
-| D manifest | asset-manifest-compute | 1 subagent after B merge |
+| D manifest | manifest audit subagent → asset-manifest.json ([manifest-audit.md](manifest-audit.md)) |
 | D spec build | prop-master + character-continuity + location-scout | 3 parallel |
 | D sheet gen | visual scrutiny per asset batch | max 3 parallel Read+scrutiny |
 | C build | editor first, then dp, gaffer, sound, composer, colorist, motion-designer | 4+ subagents |
-| C scrutiny | all Phase C roles | parallel read-only |
+| C merge | director-joe or director-ernesto | sequential |
+| C scrutiny | dp, gaffer, sound, composer, editor, motion-designer, colorist, character-continuity, **seedance-translator**, **continuity-supervisor** | parallel read-only |
 | E.5 storyboard | **sequential** per shot w/ cast; visual scrutiny before video | max 3 parallel Read+scrutiny on stills |
 | E video | **sequential** 1/min rate limit; scrutiny parallel | respect API limits; **≥65s** between video calls |
 
@@ -48,7 +49,7 @@ Orchestrator **must** call `Read` on generated images. Launch scrutiny subagents
 { "skipPromptEnhancement": true, "stylePreset": "story-ad" }
 ```
 
-Every `generation_prompt` must include mandatory prefix from [seedance-cinematic-look.md](seedance-cinematic-look.md).
+Every `generation_prompt` must follow [seedance-translation-foundation.md](seedance-translation-foundation.md) — **seedance-translator** scrutinizes after director merge.
 
 **No `studio_generate_video` until Phase C signed off** with seedance prefix on every shot **and** `storyboard_prompt` on every shot with cast on camera.
 
