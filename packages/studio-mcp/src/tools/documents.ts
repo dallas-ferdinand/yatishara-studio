@@ -30,7 +30,7 @@ export function registerDocumentTools(server: McpServer) {
 
   server.tool(
     "studio_update_document",
-    "Update a document title, markdown content, or folder. Requires write scope.",
+    "Rename a document (title), edit markdown content, or move it to another folder. Requires write scope.",
     {
       documentId: z.string(),
       title: z.string().optional(),

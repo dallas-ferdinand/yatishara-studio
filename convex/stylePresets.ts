@@ -43,6 +43,15 @@ type PresetSeed = {
 
 const defaults: PresetSeed[] = [
   {
+    name: "Raw",
+    slug: "raw",
+    kind: "any",
+    tagline: "Direct model pass — no preset rewrite",
+    storytelling: false,
+    systemInstructions: "",
+    scriptInstructions: "",
+  },
+  {
     name: "Story ad",
     slug: "story-ad",
     kind: "video",
@@ -51,7 +60,7 @@ const defaults: PresetSeed[] = [
     systemInstructions:
       "Patient observational filmmaking. Ordinary object as silent witness while human life happens around it. Natural light, hands, tables, doorways, worn surfaces. The camera observes; it never performs.",
     scriptInstructions:
-      "Full Joe Elliott treatment. Witness object introduced early. Minimal dialogue, silence where it hurts or heals. Narrator only near the end with one reflective human truth line.",
+      "Full Joe Elliott witness-object treatment. Run the decision engine before scenes: name witness object, invisible truth, behavior proof, time passage, closing revelation. Witness object introduced early. Minimal dialogue, silence where it hurts or heals. Narrator only near the end with one reflective human truth line. If brief needs character transformation (conversion), note Ernesto-style character turn instead.",
   },
   {
     name: "Cinematic",

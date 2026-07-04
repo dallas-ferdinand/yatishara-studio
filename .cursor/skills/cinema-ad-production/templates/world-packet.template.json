@@ -1,0 +1,32 @@
+{
+  "packet_type": "world",
+  "version": 1,
+  "sets": [
+    {
+      "scene_id": "SC01",
+      "location_type": "",
+      "era": "",
+      "props": [],
+      "textures": [],
+      "hero_object_placement": ""
+    }
+  ],
+  "characters": [
+    {
+      "character_id": "C01",
+      "description": "",
+      "wardrobe": "",
+      "age_range": "",
+      "continuity_locks": []
+    }
+  ],
+  "locations": [
+    {
+      "location_id": "LOC01",
+      "scene_ids": [],
+      "interior_exterior": "interior",
+      "architectural_character": "",
+      "weather_time": ""
+    }
+  ]
+}

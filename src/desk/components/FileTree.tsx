@@ -160,10 +160,14 @@ function startFileDragPreview(event, entry, workspaceId) {
 
   const rect = source.getBoundingClientRect();
   const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
+  const isElement = entry.studioKind === "element";
+  const elementThumb = isElement && entry.thumbnailUrl && !isVideoFileUrl(entry.thumbnailUrl)
+    ? entry.thumbnailUrl
+    : null;
   const mediaKind = entry.type === "dir" || entry.type === "parent"
     ? null
     : fileViewerKind(entry?.ext ?? fileExt(entry?.path ?? entry?.name ?? ""));
-  const isMedia = mediaKind === "image" || mediaKind === "video";
+  const isMedia = mediaKind === "image" || mediaKind === "video" || Boolean(elementThumb);
   const reduceMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   source.setAttribute("data-drag-source", "");
@@ -251,7 +255,17 @@ function startFileDragPreview(event, entry, workspaceId) {
     img.style.display = "block";
     chip.appendChild(img);
 
-    const badgeIcon = isVideo ? "film" : "image";
+    const badgeIcon = isElement
+      ? entry.elementType === "character"
+        ? "user"
+        : entry.elementType === "prop"
+          ? "package"
+          : entry.elementType === "location"
+            ? "mapPin"
+            : "fileText"
+      : isVideo
+        ? "film"
+        : "image";
     const iconHtml = svgIcon(badgeIcon, 14);
     if (iconHtml) {
       const badge = document.createElement("span");

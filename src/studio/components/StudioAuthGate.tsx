@@ -15,30 +15,15 @@ import { BrandMark } from "@/components/brand-mark";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { StudioShell } from "./StudioShell";
-import { STUDIO_SCENE_ALL_PATHS } from "@/studio/lib/studio-scene-backgrounds";
+import {
+  STUDIO_AUTH_BACKGROUND_PATHS,
+  studioSceneThemeIdFromPath,
+} from "@/studio/lib/studio-scene-backgrounds";
+import { SCHEMES } from "@/mos-app/theme.js";
 
-const AUTH_BACKGROUND_IMAGES = [...STUDIO_SCENE_ALL_PATHS];
+const AUTH_BACKGROUND_IMAGES = [...STUDIO_AUTH_BACKGROUND_PATHS];
 
 const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
-
-const AUTH_BACKGROUND_THEMES = [
-  { key: "gold", accent: "#c4a574" },
-  { key: "ember", accent: "#fb923c" },
-  { key: "mint", accent: "#4ade80" },
-  { key: "violet", accent: "#c084fc" },
-  { key: "rose", accent: "#fb7185" },
-  { key: "cobalt", accent: "#60a5fa" },
-  { key: "coral", accent: "#f472b6" },
-  { key: "sage", accent: "#86efac" },
-  { key: "cherry", accent: "#f87171" },
-  { key: "teal", accent: "#2dd4bf" },
-  { key: "lime", accent: "#a3e635" },
-  { key: "fuchsia", accent: "#e879f9" },
-  { key: "copper", accent: "#d97706" },
-  { key: "indigo", accent: "#818cf8" },
-  { key: "space", accent: "#38bdf8" },
-  { key: "agent", accent: "#22c55e" },
-];
 
 function hexToRgbString(hex: string) {
   const value = hex.replace("#", "");
@@ -46,10 +31,9 @@ function hexToRgbString(hex: string) {
 }
 
 function getAuthThemeForBackground(path: string) {
-  return (
-    AUTH_BACKGROUND_THEMES.find((theme) => path.includes(theme.key)) ??
-    AUTH_BACKGROUND_THEMES[AUTH_BACKGROUND_THEMES.length - 1]
-  );
+  const themeId = studioSceneThemeIdFromPath(path);
+  const scheme = SCHEMES[themeId as keyof typeof SCHEMES] ?? SCHEMES.agent;
+  return { key: themeId, accent: scheme.accent };
 }
 
 type WhatsAppCodeStep = {

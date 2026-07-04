@@ -19,3 +19,22 @@ export async function isFolderInSandbox(
   }
   return false;
 }
+
+export async function isFolderDescendantOf(
+  ctx: QueryCtx,
+  folderId: Id<"folders">,
+  ancestorId: Id<"folders">,
+): Promise<boolean> {
+  let current: Id<"folders"> | undefined = folderId;
+  while (current) {
+    if (current === ancestorId) {
+      return true;
+    }
+    const folder: Doc<"folders"> | null = await ctx.db.get("folders", current);
+    if (!folder) {
+      return false;
+    }
+    current = folder.parentId;
+  }
+  return false;
+}

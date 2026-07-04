@@ -223,6 +223,7 @@ export function StudioShell() {
   const [flowPending, setFlowPending] = useState(false);
   const [status, setStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState("general");
   const [mobileSection, setMobileSection] = useState("composer");
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -316,24 +317,21 @@ export function StudioShell() {
         !["image", "video", "audio"].includes(attachment.kind) ||
         /^https?:\/\//i.test(attachment.mediaUrl ?? "")
       ) {
-        // Not a direct media asset; it may still carry source media below.
+        // Not a direct media asset; elements resolve via their sheet below.
       } else {
         queries[`attachment:${attachment.id}`] = {
           query: api.assets.signedReadUrl,
           args: { assetId: attachment.studioId, expiresUnix: assetUrlExpiresUnix },
         };
       }
-      for (const sourceAsset of attachment.sourceAssets ?? []) {
-        if (
-          !sourceAsset?.studioId ||
-          !["image", "video", "audio"].includes(sourceAsset.kind) ||
-          /^https?:\/\//i.test(sourceAsset.mediaUrl ?? "")
-        ) {
-          continue;
-        }
-        queries[`element-source:${attachment.id}:${sourceAsset.studioId}`] = {
+      if (
+        attachment.studioKind === "element" &&
+        attachment.sheetAsset?.studioId &&
+        !/^https?:\/\//i.test(attachment.sheetAsset.mediaUrl ?? "")
+      ) {
+        queries[`element-sheet:${attachment.id}`] = {
           query: api.assets.signedReadUrl,
-          args: { assetId: sourceAsset.studioId, expiresUnix: assetUrlExpiresUnix },
+          args: { assetId: attachment.sheetAsset.studioId, expiresUnix: assetUrlExpiresUnix },
         };
       }
     }
@@ -777,13 +775,19 @@ export function StudioShell() {
     setMode("element");
   }
 
-  function openSettingsTab() {
+  function openSettingsTab(section = "general") {
+    setSettingsSection(section);
     setOpenTabs((tabs) => tabs.filter((tab) => !tab.startsWith("settings:")));
     if (activeTab.startsWith("settings:")) {
       setActiveTab(COMPOSER_TAB);
     }
     if (isMobile) setMobileSection("settings");
     setSettingsOpen(true);
+  }
+
+  function openCreditsPane() {
+    const balance = billingAccount?.creditBalance ?? entitlement?.creditBalance ?? 0;
+    openSettingsTab(balance > 0 ? "billing" : "top-up");
   }
 
   function openAdminTab(tab) {
@@ -899,14 +903,14 @@ export function StudioShell() {
       throw new Error("Pick a folder and name your element first.");
     }
     const uploadedAssets = values.uploadedAssets ?? [];
-    const sourceAssetIds = values.sourceAssetIds?.length
+    const referenceAssetIds = values.sourceAssetIds?.length
       ? values.sourceAssetIds
       : uploadedAssets.map((asset) => asset.assetId).filter(Boolean);
     const id = await createElement({
       folderId: activeFolder._id,
       type: values.elementType,
       name: values.name.trim(),
-      sourceAssetIds,
+      referenceAssetIds,
     });
     const referenceInputs =
       values.referenceInputs?.length
@@ -923,16 +927,16 @@ export function StudioShell() {
       description = result.description;
       sheetAssetId = result.sheetAssetId;
     }
-    const allSourceAssetIds = sheetAssetId ? [sheetAssetId, ...sourceAssetIds] : sourceAssetIds;
     const elementRecord = {
       _id: id,
       name: values.name.trim(),
       type: values.elementType,
       description,
-      sourceAssetIds: allSourceAssetIds,
+      referenceAssetIds,
+      sheetAssetId,
       updatedAt: Date.now(),
     };
-    const sourceAssetEntries = allSourceAssetIds
+    const referenceAssetEntries = referenceAssetIds
       .map((assetId) => {
         const uploaded = uploadedAssets.find((asset) => asset.assetId === assetId);
         if (uploaded) return uploadedElementAssetToEntry(uploaded);
@@ -941,7 +945,12 @@ export function StudioShell() {
       })
       .filter(Boolean);
     const entry = elementToEntry(elementRecord, assetsWithPreviewUrls ?? []);
-    entry.sourceAssets = sourceAssetEntries;
+    entry.referenceAssets = referenceAssetEntries;
+    if (sheetAssetId) {
+      const sheetAsset = assetsWithPreviewUrls?.find((item) => item._id === sheetAssetId);
+      entry.sheetAsset = sheetAsset ? assetToEntry(sheetAsset) : null;
+      entry.buildStatus = "built";
+    }
     attachEntry(entry);
     setStatus(`@${values.name.trim()} attached to your request.`);
     return id;
@@ -984,9 +993,11 @@ export function StudioShell() {
       [`element:${entry.studioId}`]: {
         ...entry,
         description: result.description,
+        sheetAssetId: result.sheetAssetId,
+        buildStatus: result.sheetAssetId ? "built" : entry.buildStatus,
       },
     }));
-    return result.description;
+    return result;
   }
 
   async function renameEntry(entry) {
@@ -1008,7 +1019,7 @@ export function StudioShell() {
       elementId: entry.studioId,
       name: values.name.trim(),
       description: values.description?.trim() || undefined,
-      sourceAssetIds: values.sourceAssetIds ?? [],
+      referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
     });
     setTabEntrySnapshots((snapshots) => ({
       ...snapshots,
@@ -1016,8 +1027,10 @@ export function StudioShell() {
         ...entry,
         name: `@${values.name.trim()}`,
         description: values.description?.trim() || undefined,
-        sourceAssetIds: values.sourceAssetIds ?? [],
-        sourceAssets: values.sourceAssets ?? entry.sourceAssets,
+        referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
+        referenceAssets: values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets,
+        sheetAsset: values.sheetAsset ?? entry.sheetAsset,
+        buildStatus: values.sheetAsset || entry.sheetAsset ? "built" : "unbuilt",
       },
     }));
   }
@@ -1235,6 +1248,7 @@ export function StudioShell() {
           audioReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "audio").length,
         });
         if (entitlement && entitlement.creditBalance < sheetCost) {
+          openSettingsTab("top-up");
           throw new Error(
             entitlement.reason ?? `You need ${sheetCost} credits to build this ${elementSheetLabel(elementType)}.`,
           );
@@ -1282,6 +1296,7 @@ export function StudioShell() {
         );
       }
       if (entitlement && !entitlement.canGenerate) {
+        openSettingsTab("top-up");
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
       const threadId = await createThread({
@@ -1822,28 +1837,13 @@ export function StudioShell() {
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) {
           position: relative;
           transform-origin: center center;
-          transform: scale(1);
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) :where(svg, .icon-inline) {
-          transform: scale(1);
-          transition:
-            transform var(--studio-motion-fast) var(--studio-motion-ease),
-            color var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) {
           transform: scale(var(--studio-hover-scale));
-          box-shadow:
-            0 2px 8px color-mix(in srgb, #000 14%, transparent),
-            0 0 14px var(--studio-glow-soft);
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) :where(svg, .icon-inline) {
-          transform: scale(calc(1 / var(--studio-hover-scale)));
+          box-shadow: 0 1px 4px color-mix(in srgb, #000 16%, transparent);
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) {
           transform: scale(var(--studio-press-scale));
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) :where(svg, .icon-inline) {
-          transform: scale(calc(1 / var(--studio-press-scale)));
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip):focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 42%, transparent);
@@ -1852,22 +1852,6 @@ export function StudioShell() {
         }
         .studio-polish :where(.cursor-tree-row, .desk-file-list-row, .desk-file-breadcrumbs-chip):active {
           transform: scale(var(--studio-press-scale));
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn)::after {
-          content: "";
-          position: absolute;
-          inset: -2px;
-          border-radius: inherit;
-          border: 1px solid transparent;
-          opacity: 0;
-          transform: scale(0.86);
-          transition: opacity 220ms ease, transform 240ms var(--studio-motion-spring), border-color 220ms ease;
-          pointer-events: none;
-        }
-        .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn):active::after {
-          opacity: 1;
-          transform: scale(1.08);
-          border-color: color-mix(in srgb, var(--cursor-accent) 34%, transparent);
         }
         .studio-polish .cursor-panel-head {
           border-bottom: 0 !important;
@@ -2401,6 +2385,7 @@ export function StudioShell() {
           background: var(--color-cursor-hover) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
+          transform: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab {
           border-color: var(--color-cursor-border-soft) !important;
@@ -2936,6 +2921,91 @@ export function StudioShell() {
           color: var(--cursor-accent);
           font-size: 12px;
           font-weight: 700;
+        }
+        .studio-settings-payment-card {
+          display: grid;
+          gap: 12px;
+        }
+        .studio-bank-card.is-selected {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-settings-receipt-dropzone {
+          display: grid;
+          justify-items: center;
+          gap: 6px;
+          width: 100%;
+          min-height: 148px;
+          border: 1px dashed color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          border-radius: 16px;
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 58%),
+            color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          padding: 18px 16px;
+          color: var(--color-cursor-muted);
+          text-align: center;
+          cursor: pointer;
+          font-family: inherit;
+        }
+        .studio-settings-receipt-dropzone.has-file {
+          border-style: solid;
+          color: var(--color-cursor-text);
+        }
+        .studio-settings-receipt-dropzone strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+        }
+        .studio-settings-receipt-dropzone span {
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        .studio-settings-receipt-submit {
+          width: 100%;
+          min-height: 40px;
+        }
+        .studio-settings-receipt-submit:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-settings-thankyou {
+          display: grid;
+          gap: 12px;
+          text-align: center;
+        }
+        .studio-settings-thankyou-kicker {
+          margin: 0;
+          color: var(--cursor-accent);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .studio-settings-thankyou h3 {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 20px;
+        }
+        .studio-settings-thankyou-lead {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .studio-settings-thankyou-summary {
+          display: grid;
+          gap: 8px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          padding: 12px;
+          text-align: left;
+        }
+        .studio-polish .studio-credit-pill {
+          cursor: pointer;
+        }
+        .studio-polish .studio-credit-pill:hover:not(:disabled) {
+          transform: none;
+          box-shadow: none;
         }
         .studio-settings-feed p {
           display: grid;
@@ -3491,7 +3561,22 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-badge {
-          display: none;
+          inset: auto auto 6px 6px;
+          width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          background: rgba(10, 12, 16, 0.62);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+          color: rgba(255, 255, 255, 0.92);
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-badge svg,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-badge svg {
+          width: 11px;
+          height: 11px;
+          stroke-width: 2.25;
+          filter: none;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-folder svg,
         .studio-polish .desk-file-preview-item .desk-file-thumb-folder svg {
@@ -3872,11 +3957,8 @@ export function StudioShell() {
           text-align: center;
           cursor: pointer;
           transform-origin: center center;
-          transform: scale(1);
           transition:
-            background var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
             color var(--studio-motion-fast) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
@@ -3885,26 +3967,14 @@ export function StudioShell() {
           height: 15px;
           flex: 0 0 auto;
           stroke-width: 2.15;
-          transform: scale(1);
-          transition: transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-mode-row:hover {
           color: var(--color-cursor-text);
           transform: scale(var(--studio-hover-scale));
-          box-shadow:
-            0 2px 8px color-mix(in srgb, #000 14%, transparent),
-            0 0 14px var(--studio-glow-soft);
-        }
-        .studio-mode-row:hover svg {
-          transform: scale(calc(1 / var(--studio-hover-scale)));
         }
         .studio-mode-row.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
           color: var(--color-cursor-text-bright);
-          transform: scale(1.008);
-        }
-        .studio-mode-row.is-active svg {
-          transform: scale(calc(1 / 1.008));
         }
         .studio-mode-row span {
           display: block;
@@ -4617,7 +4687,7 @@ export function StudioShell() {
             background var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring);
+            transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-pill-btn:hover,
         .studio-pill-btn[aria-expanded="true"] {
@@ -5782,6 +5852,85 @@ export function StudioShell() {
           grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
           gap: 14px;
           align-items: start;
+        }
+        .studio-admin-payments-shell {
+          position: relative;
+        }
+        .studio-admin-payment-sidebar-backdrop {
+          position: fixed;
+          inset: 0;
+          z-index: 80;
+          border: 0;
+          background: color-mix(in srgb, #000 42%, transparent);
+        }
+        .studio-admin-payment-sidebar {
+          position: fixed;
+          top: 0;
+          right: 0;
+          z-index: 81;
+          display: flex;
+          width: min(420px, 100vw);
+          height: 100dvh;
+          flex-direction: column;
+          gap: 14px;
+          overflow: auto;
+          border-left: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-bg);
+          padding: 16px;
+          box-shadow: -16px 0 40px color-mix(in srgb, #000 24%, transparent);
+        }
+        .studio-admin-payment-sidebar-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-admin-payment-sidebar-head h3 {
+          margin: 4px 0 0;
+        }
+        .studio-admin-status-field {
+          display: grid;
+          gap: 6px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+        }
+        .studio-admin-status-field select {
+          min-height: 38px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          padding: 0 10px;
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          font-family: inherit;
+        }
+        .studio-admin-receipt-preview {
+          display: grid;
+          gap: 8px;
+          min-height: 0;
+          flex: 1;
+        }
+        .studio-admin-receipt-image,
+        .studio-admin-receipt-frame {
+          width: 100%;
+          min-height: 280px;
+          max-height: 52vh;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          object-fit: contain;
+        }
+        .studio-admin-receipt-frame {
+          border: 0;
+        }
+        .studio-admin-receipt-preview a {
+          color: var(--cursor-accent);
+          font-size: 12px;
+          font-weight: 650;
+          text-decoration: none;
         }
         .studio-admin-table-wrap {
           overflow: auto;
@@ -7148,7 +7297,7 @@ export function StudioShell() {
                 onAction={runCreateAction}
               />
             ) : null}
-            <CreditPill entitlement={entitlement} />
+            <CreditPill entitlement={entitlement} onClick={openCreditsPane} />
             {isAdminUser ? (
               <AdminQuickLinks onOpenAdminTab={openAdminTab} />
             ) : null}
@@ -7197,6 +7346,7 @@ export function StudioShell() {
             adminCustomers={adminCustomers}
             payments={payments}
             onOpenSettings={() => openSettingsTab("general")}
+            onOpenCredits={openCreditsPane}
             onOpenAdminTab={openAdminTab}
             onSeedStylePresets={() => seedStylePresets()}
             onGeneratePresetThumbnails={() => generatePresetThumbnails({ force: true })}
@@ -7237,6 +7387,8 @@ export function StudioShell() {
             pricing={pricing}
             disabled={flowPending}
             status={status}
+            entitlement={entitlement}
+            onOpenCredits={openCreditsPane}
             onSubmit={handleSubmit}
             onDropEntry={(entry, range) => attachEntry(entry, range)}
             onUploadFiles={(files) => uploadComposerFiles(files)}
@@ -7292,6 +7444,7 @@ export function StudioShell() {
       ) : null}
       {settingsOpen ? (
         <SettingsFloatingPanel
+          settingsSection={settingsSection}
           currentUser={currentUser}
           payments={payments}
           notifications={notifications}
@@ -7369,6 +7522,8 @@ function StudioComposer({
   pricing,
   disabled,
   status,
+  entitlement,
+  onOpenCredits,
   onSubmit,
   onDropEntry,
   onUploadFiles,
@@ -7697,7 +7852,18 @@ function StudioComposer({
             <button
               type="button"
               disabled={disabled || !draft.trim()}
-              onClick={() => void onSubmit()}
+              onClick={() => {
+                const needsTopUp =
+                  entitlement &&
+                  (isElementMode
+                    ? entitlement.creditBalance < cost
+                    : !entitlement.canGenerate);
+                if (needsTopUp) {
+                  onOpenCredits?.();
+                  return;
+                }
+                void onSubmit();
+              }}
               className={`studio-generate-btn${isElementMode ? " is-element-mode" : ""}`}
               title={isElementMode ? `Build ${elementSheetLabel(elementType)}` : "Generate content"}
             >
@@ -8356,14 +8522,27 @@ function elementSheetReferenceInputs(sourceAssets = []) {
     });
 }
 
-function resolveElementSourceAssets(entry, assets) {
-  const ids = entry.sourceAssetIds ?? [];
+function resolveElementReferenceAssets(entry, assets) {
+  const ids = entry.referenceAssetIds ?? entry.sourceAssetIds ?? [];
   return ids
     .map((assetId) => {
       const asset = (assets ?? []).find((item) => item._id === assetId || item.studioId === assetId);
       return asset ? assetToEntry(asset) : null;
     })
     .filter(Boolean);
+}
+
+function resolveElementSheetAsset(entry, assets) {
+  if (!entry.sheetAssetId && !entry.sheetAsset) {
+    return null;
+  }
+  if (entry.sheetAsset) {
+    return entry.sheetAsset;
+  }
+  const asset = (assets ?? []).find(
+    (item) => item._id === entry.sheetAssetId || item.studioId === entry.sheetAssetId,
+  );
+  return asset ? assetToEntry(asset) : null;
 }
 
 function uploadedElementAssetToEntry(asset) {
@@ -8458,7 +8637,11 @@ function createComposerAttachmentToken(attachment) {
     studioKind: attachment.studioKind,
     studioId: attachment.studioId,
     elementType: attachment.elementType,
+    buildStatus: attachment.buildStatus,
     description: attachment.description,
+    referenceAssetIds: attachment.referenceAssetIds,
+    sheetAssetId: attachment.sheetAssetId,
+    sheetAsset: attachment.sheetAsset,
     sourceAssetIds: attachment.sourceAssetIds,
     sourceAssets: attachment.sourceAssets,
     thumbnailUrl: attachment.thumbnailUrl,
@@ -8498,13 +8681,20 @@ function createComposerAttachmentToken(attachment) {
 
   const kind = document.createElement("span");
   kind.className = "studio-inline-tag-kind";
-  const isPreviewAsset = attachment.thumbnailUrl && (attachment.kind === "image" || attachment.kind === "video");
-  if (isPreviewAsset) {
+  const isElement = attachment.studioKind === "element";
+  const elementThumb = isElement ? attachment.thumbnailUrl : null;
+  const isPreviewAsset =
+    !isElement && attachment.thumbnailUrl && (attachment.kind === "image" || attachment.kind === "video");
+  if (isPreviewAsset || elementThumb) {
     token.classList.add("studio-inline-tag--preview");
-    const media = attachment.kind === "video" ? document.createElement("video") : document.createElement("img");
+    const media = !isElement && attachment.kind === "video"
+      ? document.createElement("video")
+      : document.createElement("img");
     media.className = "studio-inline-tag-media";
-    media.src = attachment.kind === "video" ? (attachment.mediaUrl ?? attachment.thumbnailUrl) : attachment.thumbnailUrl;
-    if (attachment.kind === "video") {
+    media.src = !isElement && attachment.kind === "video"
+      ? (attachment.mediaUrl ?? attachment.thumbnailUrl)
+      : attachment.thumbnailUrl;
+    if (!isElement && attachment.kind === "video") {
       media.muted = true;
       media.playsInline = true;
       media.preload = "metadata";
@@ -8520,7 +8710,15 @@ function createComposerAttachmentToken(attachment) {
   label.className = "studio-inline-tag-label";
   label.textContent = attachment.label;
 
-  if ((attachment.kind === "image" || attachment.kind === "video") && attachment.thumbnailUrl) {
+  if (isElement && elementThumb) {
+    // Element chip: sheet thumb only, type icon overlaid — same style as image/video chips.
+    token.classList.add("studio-inline-tag--image-only");
+    token.title = attachment.label ?? "Element";
+    const overlay = document.createElement("span");
+    overlay.className = "studio-inline-tag-overlay";
+    overlay.appendChild(createComposerTokenIcon(elementTokenIconKind(attachment.elementType)));
+    token.append(kind, overlay);
+  } else if ((attachment.kind === "image" || attachment.kind === "video") && attachment.thumbnailUrl) {
     token.classList.add("studio-inline-tag--image-only");
     token.title = attachment.label ?? attachment.filename ?? (attachment.kind === "video" ? "Video" : "Image");
     const overlay = document.createElement("span");
@@ -8533,10 +8731,17 @@ function createComposerAttachmentToken(attachment) {
   return token;
 }
 
+function elementTokenIconKind(elementType) {
+  if (elementType === "character") return "user";
+  if (elementType === "prop") return "package";
+  if (elementType === "location") return "map-pin";
+  return "sparkles";
+}
+
 function composerTokenIconKind(attachment) {
   if (attachment.kind === "image" || attachment.kind === "video" || attachment.kind === "audio") return attachment.kind;
   if (attachment.studioKind === "folder") return "folder";
-  if (attachment.studioKind === "element") return "sparkles";
+  if (attachment.studioKind === "element") return elementTokenIconKind(attachment.elementType);
   if (attachment.studioKind === "document") return "file";
   return attachment.kind ?? "file";
 }
@@ -8587,9 +8792,23 @@ function createComposerTokenIcon(kind) {
       "M16 13H8",
       "M16 17H8",
     ],
+    user: [
+      "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2",
+      "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+    ],
+    package: [
+      "M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z",
+      "M12 22V12",
+      "m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7",
+      "m7.5 4.27 9 5.15",
+    ],
+    "map-pin": [
+      "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0",
+      "M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+    ],
   };
   const iconKey =
-    kind === "image" || kind === "video" || kind === "video-play" || kind === "audio" || kind === "folder" || kind === "sparkles"
+    kind === "image" || kind === "video" || kind === "video-play" || kind === "audio" || kind === "folder" || kind === "sparkles" || kind === "user" || kind === "package" || kind === "map-pin"
       ? kind
       : kind === "context" || kind === "element"
         ? "sparkles"
@@ -9288,7 +9507,8 @@ function ActivePane({
 function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onBuildSheet, onUploadElementFiles, onTrash }) {
   const [name, setName] = useState(entry.name.replace(/^@/, ""));
   const [description, setDescription] = useState(entry.description ?? "");
-  const [sourceAssets, setSourceAssets] = useState(entry.sourceAssets ?? []);
+  const [sourceAssets, setSourceAssets] = useState(entry.referenceAssets ?? entry.sourceAssets ?? []);
+  const [sheetPreview, setSheetPreview] = useState(entry.sheetAsset ?? null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [buildingSheet, setBuildingSheet] = useState(false);
@@ -9299,7 +9519,8 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   useEffect(() => {
     setName(entry.name.replace(/^@/, ""));
     setDescription(entry.description ?? "");
-    setSourceAssets(resolveElementSourceAssets(entry, assets));
+    setSourceAssets(resolveElementReferenceAssets(entry, assets));
+    setSheetPreview(entry.sheetAsset ?? resolveElementSheetAsset(entry, assets));
     setMessage("");
   }, [assets, entry]);
 
@@ -9311,8 +9532,9 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
       await onUpdate(entry, {
         name,
         description,
-        sourceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
-        sourceAssets,
+        referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
+        referenceAssets: sourceAssets,
+        sheetAsset: entry.sheetAsset,
       });
       setMessage("Saved.");
     } catch (error) {
@@ -9343,8 +9565,14 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     setMessage("");
     try {
       const nextDescription = await onBuildSheet(draftEntry, sourceAssets, description);
-      if (nextDescription) {
-        setDescription(nextDescription);
+      if (nextDescription?.description) {
+        setDescription(nextDescription.description);
+      }
+      if (nextDescription?.sheetAssetId && assets?.length) {
+        const built = assets.find((item) => item._id === nextDescription.sheetAssetId);
+        if (built) {
+          setSheetPreview(assetToEntry(built));
+        }
       }
       setMessage(`${sheetLabel.charAt(0).toUpperCase()}${sheetLabel.slice(1)} ready.`);
     } catch (error) {
@@ -9358,9 +9586,12 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     ...entry,
     name: `@${name.trim() || entry.name.replace(/^@/, "")}`,
     description,
-    sourceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
-    sourceAssets,
+    referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
+    referenceAssets: sourceAssets,
+    sheetAsset: sheetPreview ?? resolveElementSheetAsset(entry, assets),
+    buildStatus: sheetPreview || entry.sheetAssetId ? "built" : "unbuilt",
   };
+  const sheetAsset = draftEntry.sheetAsset;
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -9370,7 +9601,10 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             <p className="studio-section-kicker">{entry.kindLabel}</p>
             <h2 className="mt-2 text-2xl font-semibold text-cursor-text-bright">{entry.name}</h2>
             <p className="mt-2 text-sm text-cursor-muted">
-              Build a {sheetLabel} from reference media — used when you attach this element to generation.
+              Upload reference photos, build a {sheetLabel}, then attach to generation — only the built sheet is sent to the model, not raw uploads.
+            </p>
+            <p className="mt-1 text-xs text-cursor-muted">
+              Status: {sheetAsset ? "Built — ready for generation" : "Unbuilt — add refs and build sheet"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -9412,6 +9646,20 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             />
           </label>
         </div>
+
+        {sheetAsset ? (
+          <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.03] p-4">
+            <p className="text-sm font-semibold text-cursor-text-bright">Built sheet</p>
+            <p className="mt-1 text-xs text-cursor-muted">This image is attached when you use this element in generation.</p>
+            {sheetAsset.mediaUrl || sheetAsset.thumbnailUrl ? (
+              <img
+                src={sheetAsset.thumbnailUrl ?? sheetAsset.mediaUrl}
+                alt={`${entry.name} sheet`}
+                className="mt-4 max-h-64 w-full rounded-xl object-contain bg-black/20"
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.03] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -9635,10 +9883,7 @@ function AdminWorkspacePane({
       return payment.status === paymentFilter;
     })
     .sort((a, b) => b.createdAt - a.createdAt);
-  const selectedPayment =
-    safePayments.find((payment) => payment._id === selectedPaymentId) ??
-    visiblePayments[0] ??
-    null;
+  const selectedPayment = safePayments.find((payment) => payment._id === selectedPaymentId) ?? null;
 
   async function reviewPayment(paymentId, status, rejectionReason) {
     setReviewStatus("Updating payment...");
@@ -9654,10 +9899,14 @@ function AdminWorkspacePane({
     }
   }
 
-  async function rejectPayment(paymentId) {
-    const reason = window.prompt("Why reject this payment?", "Receipt could not be verified.");
-    if (reason === null) return;
-    await reviewPayment(paymentId, "rejected", reason);
+  async function handleAdminPaymentStatusChange(paymentId, status) {
+    if (status === "rejected") {
+      const reason = window.prompt("Why reject this payment?", "Receipt could not be verified.");
+      if (reason === null) return;
+      await reviewPayment(paymentId, status, reason);
+      return;
+    }
+    await reviewPayment(paymentId, status);
   }
 
   async function runSetup(label, action) {
@@ -9710,17 +9959,17 @@ function AdminWorkspacePane({
         </nav>
 
         {tab === "payments" ? (
-          <>
+          <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
-              <AdminMetricCard label="Pending payments" value={pendingPayments.length} body="Receipts waiting for review." />
-              <AdminMetricCard label="Approved payments" value={completedPayments.length} body="Completed payments and credit grants." />
-              <AdminMetricCard label="Rejected payments" value={rejectedPayments.length} body="Rejected or unverifiable receipts." />
+              <AdminMetricCard label="Pending review" value={pendingPayments.length} body="Awaiting receipt review or approval." />
+              <AdminMetricCard label="Approved" value={completedPayments.length} body="Completed payments and credit grants." />
+              <AdminMetricCard label="Rejected" value={rejectedPayments.length} body="Rejected or unverifiable receipts." />
             </section>
             <section className="studio-admin-card studio-admin-table-card">
               <div className="studio-admin-table-head">
                 <div>
-                  <p className="studio-admin-card-kicker">Payment queue</p>
-                  <h3>Review receipts</h3>
+                  <p className="studio-admin-card-kicker">Payments</p>
+                  <h3>All payment activity</h3>
                 </div>
                 <div className="studio-admin-filter-tabs" role="group" aria-label="Payment filters">
                   {[
@@ -9742,68 +9991,48 @@ function AdminWorkspacePane({
                   ))}
                 </div>
               </div>
-              <div className="studio-admin-payment-layout">
-                <div className="studio-admin-table-wrap">
-                  <table className="studio-admin-table">
-                    <thead>
-                      <tr>
-                        <th>Customer</th>
-                        <th>Type</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Created</th>
-                        <th>Receipt</th>
-                        <th>Actions</th>
+              <div className="studio-admin-table-wrap">
+                <table className="studio-admin-table">
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Type</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePayments.map((payment) => (
+                      <tr
+                        key={payment._id}
+                        className={selectedPaymentId === payment._id ? "is-selected" : ""}
+                        onClick={() => setSelectedPaymentId(payment._id)}
+                      >
+                        <td>
+                          <strong>{paymentCustomerName(payment)}</strong>
+                          <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
+                        </td>
+                        <td>{payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")}</td>
+                        <td>{formatMoney(payment.amountCents)}</td>
+                        <td><PaymentStatusPill status={payment.status} /></td>
+                        <td>{formatDate(payment.createdAt)}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {visiblePayments.map((payment) => (
-                        <tr
-                          key={payment._id}
-                          className={selectedPayment?._id === payment._id ? "is-selected" : ""}
-                          onClick={() => setSelectedPaymentId(payment._id)}
-                        >
-                          <td>
-                            <strong>{paymentCustomerName(payment)}</strong>
-                            <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
-                          </td>
-                          <td>{payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")}</td>
-                          <td>{formatMoney(payment.amountCents)}</td>
-                          <td><PaymentStatusPill status={payment.status} /></td>
-                          <td>{formatDate(payment.createdAt)}</td>
-                          <td>
-                            {payment.receiptUrl ? (
-                              <a href={payment.receiptUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-                                Open
-                              </a>
-                            ) : (
-                              <span>No receipt</span>
-                            )}
-                          </td>
-                          <td>
-                            <PaymentActions
-                              payment={payment}
-                              onReceived={() => void reviewPayment(payment._id, "receipt_received")}
-                              onApprove={() => void reviewPayment(payment._id, "payment_completed")}
-                              onReject={() => void rejectPayment(payment._id)}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {!visiblePayments.length ? <p className="studio-settings-empty">No payments match this filter.</p> : null}
-                </div>
-                <PaymentDetailPanel
-                  payment={selectedPayment}
-                  onReceived={() => selectedPayment ? void reviewPayment(selectedPayment._id, "receipt_received") : undefined}
-                  onApprove={() => selectedPayment ? void reviewPayment(selectedPayment._id, "payment_completed") : undefined}
-                  onReject={() => selectedPayment ? void rejectPayment(selectedPayment._id) : undefined}
-                />
+                    ))}
+                  </tbody>
+                </table>
+                {!visiblePayments.length ? <p className="studio-settings-empty">No payments match this filter.</p> : null}
               </div>
               {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
             </section>
-          </>
+            {selectedPayment ? (
+              <AdminPaymentSidebar
+                payment={selectedPayment}
+                onClose={() => setSelectedPaymentId(null)}
+                onStatusChange={(paymentId, status) => void handleAdminPaymentStatusChange(paymentId, status)}
+              />
+            ) : null}
+          </div>
         ) : tab === "customers" ? (
           <section className="studio-admin-card studio-admin-table-card">
             <div className="studio-admin-table-head">
@@ -9957,56 +10186,60 @@ function AdminMetricCard({ label, value, body }) {
   );
 }
 
-function PaymentActions({ payment, onReceived, onApprove, onReject }) {
-  if (payment.status === "payment_completed" || payment.status === "rejected") {
-    return <span className="studio-admin-muted-action">Closed</span>;
-  }
+function AdminPaymentSidebar({ payment, onClose, onStatusChange }) {
+  const receiptIsImage = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(payment.receiptUrl ?? "");
   return (
-    <div className="studio-payment-review-actions" onClick={(event) => event.stopPropagation()}>
-      {payment.status === "receipt_uploaded" ? <button type="button" onClick={onReceived}>Received</button> : null}
-      <button type="button" onClick={onApprove}>Approve</button>
-      <button type="button" onClick={onReject}>Reject</button>
-    </div>
-  );
-}
-
-function PaymentDetailPanel({ payment, onReceived, onApprove, onReject }) {
-  if (!payment) {
-    return (
-      <aside className="studio-admin-detail-panel">
-        <p className="studio-admin-card-kicker">Payment detail</p>
-        <h3>No payment selected</h3>
-        <p>Select a payment to review the receipt and account details.</p>
+    <>
+      <button type="button" className="studio-admin-payment-sidebar-backdrop" onClick={onClose} aria-label="Close payment details" />
+      <aside className="studio-admin-payment-sidebar">
+        <header className="studio-admin-payment-sidebar-head">
+          <div>
+            <p className="studio-admin-card-kicker">Payment</p>
+            <h3>{formatMoney(payment.amountCents)}</h3>
+          </div>
+          <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </header>
+        <div className="studio-admin-detail-list">
+          <BankLine label="Customer" value={paymentCustomerName(payment)} />
+          <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
+          <BankLine label="Type" value={payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")} />
+          <BankLine label="Credits" value={payment.creditsGranted ?? "Subscription grant"} />
+          <BankLine label="Bank" value={payment.bankAccountLabel ?? "Unassigned"} />
+          <BankLine label="Created" value={formatDate(payment.createdAt)} />
+          <BankLine label="Reviewed" value={payment.reviewedAt ? formatDate(payment.reviewedAt) : "Not reviewed"} />
+        </div>
+        <label className="studio-admin-status-field">
+          <span>Status</span>
+          <select
+            value={payment.status}
+            onChange={(event) => onStatusChange(payment._id, event.target.value)}
+          >
+            <option value="receipt_uploaded">Receipt uploaded</option>
+            <option value="receipt_received">Receipt received</option>
+            <option value="payment_completed">Payment approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        {payment.rejectionReason ? <p className="studio-admin-rejection-note">{payment.rejectionReason}</p> : null}
+        <div className="studio-admin-receipt-preview">
+          <p className="studio-admin-card-kicker">Receipt</p>
+          {payment.receiptUrl ? (
+            receiptIsImage ? (
+              <img src={payment.receiptUrl} alt="Payment receipt" className="studio-admin-receipt-image" />
+            ) : (
+              <iframe title="Payment receipt" src={payment.receiptUrl} className="studio-admin-receipt-frame" />
+            )
+          ) : (
+            <p className="studio-settings-empty">No receipt uploaded yet.</p>
+          )}
+          {payment.receiptUrl ? (
+            <a href={payment.receiptUrl} target="_blank" rel="noreferrer">Open receipt in new tab</a>
+          ) : null}
+        </div>
       </aside>
-    );
-  }
-  const canReview = payment.status !== "payment_completed" && payment.status !== "rejected";
-  return (
-    <aside className="studio-admin-detail-panel">
-      <p className="studio-admin-card-kicker">Payment detail</p>
-      <h3>{formatMoney(payment.amountCents)}</h3>
-      <div className="studio-admin-detail-list">
-        <BankLine label="Customer" value={paymentCustomerName(payment)} />
-        <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
-        <BankLine label="Type" value={payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")} />
-        <BankLine label="Credits" value={payment.creditsGranted ?? "Subscription grant"} />
-        <BankLine label="Bank" value={payment.bankAccountLabel ?? "Unassigned"} />
-        <BankLine label="Created" value={formatDate(payment.createdAt)} />
-        <BankLine label="Reviewed" value={payment.reviewedAt ? formatDate(payment.reviewedAt) : "Not reviewed"} />
-      </div>
-      <PaymentStatusPill status={payment.status} />
-      {payment.rejectionReason ? <p className="studio-admin-rejection-note">{payment.rejectionReason}</p> : null}
-      <div className="studio-admin-detail-actions">
-        {payment.receiptUrl ? <a href={payment.receiptUrl} target="_blank" rel="noreferrer">Open receipt</a> : <span>No receipt uploaded</span>}
-        {canReview ? (
-          <>
-            {payment.status === "receipt_uploaded" ? <button type="button" onClick={onReceived}>Mark received</button> : null}
-            <button type="button" onClick={onApprove}>Approve payment</button>
-            <button type="button" onClick={onReject}>Reject</button>
-          </>
-        ) : null}
-      </div>
-    </aside>
+    </>
   );
 }
 
@@ -10041,6 +10274,7 @@ function paymentCustomerName(payment) {
 }
 
 function SettingsFloatingPanel({
+  settingsSection,
   currentUser,
   payments,
   notifications,
@@ -10062,7 +10296,7 @@ function SettingsFloatingPanel({
           <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">×</button>
         </header>
         <SettingsWorkspacePane
-          tab="general"
+          tab={settingsSection}
           currentUser={currentUser}
           payments={payments}
           notifications={notifications}
@@ -10097,9 +10331,15 @@ function SettingsWorkspacePane({
   const [selectedPlanName, setSelectedPlanName] = useState("Studio");
   const [selectedSubscriptionPlanName, setSelectedSubscriptionPlanName] = useState("Studio");
   const [isPaymentStep, setIsPaymentStep] = useState(false);
+  const [isThankYouStep, setIsThankYouStep] = useState(false);
+  const [thankYouSummary, setThankYouSummary] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("");
   const [pendingReceiptPaymentId, setPendingReceiptPaymentId] = useState(null);
+  const [receiptDraftFile, setReceiptDraftFile] = useState(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
+  const [selectedBankId, setSelectedBankId] = useState(null);
   const receiptInputRef = useRef(null);
+  const paymentInitRef = useRef(false);
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
   const submitBankPayment = useMutation(api.billing.submitBankPayment);
@@ -10119,8 +10359,14 @@ function SettingsWorkspacePane({
   }, [selectedSubscriptionPlanName, subscriptionOptions]);
   function resetPaymentDraft() {
     setIsPaymentStep(false);
+    setIsThankYouStep(false);
+    setThankYouSummary(null);
     setPendingReceiptPaymentId(null);
+    setReceiptDraftFile(null);
+    setReceiptUploading(false);
+    setSelectedBankId(null);
     setPaymentStatus("");
+    paymentInitRef.current = false;
   }
   function selectTopUpPlan(planName, proceedToPayment = false) {
     setSelectedPlanName(planName);
@@ -10138,7 +10384,8 @@ function SettingsWorkspacePane({
     if (creditMode === "top-up" && !selectedPlan) return;
     if (creditMode === "subscription" && !selectedSubscriptionPlan) return;
     const isSubscription = creditMode === "subscription";
-    setPaymentStatus("Creating payment request...");
+    setSelectedBankId(bankAccountId);
+    setPaymentStatus("Preparing payment...");
     try {
       const paymentId = await submitBankPayment({
         bankAccountId,
@@ -10148,13 +10395,15 @@ function SettingsWorkspacePane({
         reference: isSubscription ? `Subscription: ${selectedSubscriptionPlan.name}` : `Top up: ${selectedPlan.name}`,
       });
       setPendingReceiptPaymentId(paymentId);
-      setPaymentStatus(`Payment request created for ${isSubscription ? selectedSubscriptionPlan.name : selectedPlan.name}. Upload receipt to finish.`);
+      setPaymentStatus("Transfer the amount below, then upload your receipt.");
     } catch (error) {
+      paymentInitRef.current = false;
       setPaymentStatus(error instanceof Error ? error.message : "Payment request failed.");
     }
   }
   async function handleReceiptUpload(file) {
     if (!pendingReceiptPaymentId || !file) return;
+    setReceiptUploading(true);
     setPaymentStatus("Uploading receipt...");
     try {
       const upload = await reserveReceiptUpload({
@@ -10172,11 +10421,31 @@ function SettingsWorkspacePane({
       });
       if (!res.ok) throw new Error("Receipt upload failed");
       await completeReceiptUpload({ paymentId: pendingReceiptPaymentId, byteSize: file.size });
-      setPaymentStatus("Receipt uploaded. We will review and activate once payment clears.");
+      const isSubscription = creditMode === "subscription";
+      setThankYouSummary({
+        title: isSubscription ? selectedSubscriptionPlan.name : selectedPlan.name,
+        amountCents: isSubscription ? selectedSubscriptionPlan.amountCents : selectedPlan.amountCents,
+        credits: isSubscription ? selectedSubscriptionPlan.credits : selectedPlan.credits,
+        kind: isSubscription ? "subscription" : "top-up",
+      });
+      setIsThankYouStep(true);
+      setIsPaymentStep(false);
+      setReceiptDraftFile(null);
+      setPaymentStatus("");
     } catch (error) {
       setPaymentStatus(error instanceof Error ? error.message : "Receipt upload failed.");
+    } finally {
+      setReceiptUploading(false);
     }
   }
+  useEffect(() => {
+    if (!isPaymentStep || isThankYouStep || pendingReceiptPaymentId) return;
+    const banks = bankAccounts ?? [];
+    if (!banks.length) return;
+    if (paymentInitRef.current) return;
+    paymentInitRef.current = true;
+    void handleBankPayment(banks[0]._id);
+  }, [isPaymentStep, isThankYouStep, pendingReceiptPaymentId, bankAccounts]);
   const items = [
     { id: "general", label: "Appearance" },
     { id: "account", label: "Account details" },
@@ -10262,7 +10531,37 @@ function SettingsWorkspacePane({
 
         {section === "top-up" ? (
           <div className="studio-settings-stack">
-            {!isPaymentStep ? (
+            {isThankYouStep && thankYouSummary ? (
+              <section className="cursor-settings-section studio-settings-thankyou">
+                <p className="studio-settings-thankyou-kicker">Thank you</p>
+                <h3>We received your payment details</h3>
+                <p className="studio-settings-thankyou-lead">
+                  We will review your receipt and activate your{" "}
+                  {thankYouSummary.kind === "subscription" ? "subscription" : "credits"} once payment is confirmed.
+                </p>
+                <div className="studio-settings-thankyou-summary">
+                  <div className="studio-settings-row">
+                    <span>Order</span>
+                    <strong>{thankYouSummary.title}</strong>
+                  </div>
+                  <div className="studio-settings-row">
+                    <span>Amount paid</span>
+                    <strong>{formatMoney(thankYouSummary.amountCents)}</strong>
+                  </div>
+                  <div className="studio-settings-row">
+                    <span>{thankYouSummary.kind === "subscription" ? "Monthly credits" : "Credits"}</span>
+                    <strong>
+                      {thankYouSummary.credits}
+                      {thankYouSummary.kind === "subscription" ? "/mo" : ""}
+                    </strong>
+                  </div>
+                </div>
+                <button type="button" className="cursor-settings-action" onClick={resetPaymentDraft}>
+                  Back to plans
+                </button>
+              </section>
+            ) : null}
+            {!isPaymentStep && !isThankYouStep ? (
               <>
             <section className="cursor-settings-section studio-settings-credit-switch">
               <button
@@ -10322,7 +10621,7 @@ function SettingsWorkspacePane({
                             selectTopUpPlan(plan.name, true);
                           }}
                         >
-                          {selectedPlan?.name === plan.name && isPaymentStep ? "Selected" : "Choose"}
+                          Choose
                         </button>
                 </div>
                     </div>
@@ -10361,7 +10660,7 @@ function SettingsWorkspacePane({
                             selectSubscriptionPlan(plan.name, true);
                           }}
                         >
-                          {selectedSubscriptionPlan?.name === plan.name && isPaymentStep ? "Selected" : "Choose"}
+                          Choose
                         </button>
                       </div>
                     </div>
@@ -10372,8 +10671,8 @@ function SettingsWorkspacePane({
               </section>
               </>
             ) : null}
-            {isPaymentStep ? (
-              <section className="cursor-settings-section studio-settings-simple-card">
+            {isPaymentStep && !isThankYouStep ? (
+              <section className="cursor-settings-section studio-settings-simple-card studio-settings-payment-card">
                 <div className="studio-settings-payment-head">
                   <div>
                     <h4>{creditMode === "subscription" ? selectedSubscriptionPlan?.name : selectedPlan?.name}</h4>
@@ -10388,22 +10687,13 @@ function SettingsWorkspacePane({
                   </button>
                 </div>
                 <p className="studio-settings-payment-lead">
-                  Payment for {creditMode === "subscription" ? selectedSubscriptionPlan?.name : selectedPlan?.name}. Choose a bank account, then upload receipt.
+                  Send a bank transfer for the amount below, then upload your receipt to finish.
                 </p>
                 <div className="studio-settings-bank-list">
                   {(bankAccounts ?? []).map((bank) => (
                     <div
                       key={bank._id}
-                      className="studio-bank-card studio-bank-card-button"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => void handleBankPayment(bank._id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          void handleBankPayment(bank._id);
-                        }
-                      }}
+                      className={`studio-bank-card${selectedBankId === bank._id ? " is-selected" : ""}`}
                     >
                       <p className="studio-bank-card-title">{bank.label}</p>
                       <BankLine label="Bank" value={bank.bankName} />
@@ -10412,28 +10702,41 @@ function SettingsWorkspacePane({
                       <BankLine label="Type" value={bank.accountType} />
                     </div>
                   ))}
-                  {paymentStatus ? <p className="studio-settings-payment-status">{paymentStatus}</p> : null}
-                  <input
-                    ref={receiptInputRef}
-                    className="hidden"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(event) => {
-                      const file = event.currentTarget.files?.[0];
-                      event.currentTarget.value = "";
-                      if (file) void handleReceiptUpload(file);
-                    }}
-                  />
-                  {pendingReceiptPaymentId ? (
-                    <button
-                      type="button"
-                      className="cursor-settings-action"
-                      onClick={() => receiptInputRef.current?.click()}
-                    >
-                      Upload receipt
-                    </button>
+                  {!bankAccounts?.length ? (
+                    <p className="studio-settings-empty">Bank transfer is not configured yet. Contact support.</p>
                   ) : null}
                 </div>
+                <input
+                  ref={receiptInputRef}
+                  className="hidden"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] ?? null;
+                    event.currentTarget.value = "";
+                    setReceiptDraftFile(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  className={`studio-settings-receipt-dropzone${receiptDraftFile ? " has-file" : ""}`}
+                  onClick={() => receiptInputRef.current?.click()}
+                >
+                  <Upload className="h-5 w-5" aria-hidden="true" />
+                  <strong>{receiptDraftFile ? receiptDraftFile.name : "Upload payment receipt"}</strong>
+                  <span>{receiptDraftFile ? "Tap to replace receipt" : "PNG, JPG, or PDF after you transfer"}</span>
+                </button>
+                {paymentStatus ? <p className="studio-settings-payment-status">{paymentStatus}</p> : null}
+                <button
+                  type="button"
+                  className="studio-settings-receipt-submit cursor-settings-action"
+                  disabled={!receiptDraftFile || !pendingReceiptPaymentId || receiptUploading}
+                  onClick={() => {
+                    if (receiptDraftFile) void handleReceiptUpload(receiptDraftFile);
+                  }}
+                >
+                  {receiptUploading ? "Submitting receipt..." : "Submit receipt"}
+                </button>
               </section>
             ) : null}
           </div>
@@ -10713,12 +11016,27 @@ function humanizePaymentStatus(status) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending";
 }
 
-function CreditPill({ entitlement }) {
+function CreditPill({ entitlement, onClick }) {
+  const label = entitlement ? `${entitlement.creditBalance} Credits` : "Credits";
+  if (!onClick) {
+    return (
+      <span className="studio-credit-pill inline-flex h-6 items-center gap-1 rounded-full border border-cursor-border bg-cursor-panel px-2 text-[11px] font-semibold leading-none text-cursor-muted">
+        <Coins className="h-3 w-3 shrink-0" aria-hidden="true" />
+        {label}
+      </span>
+    );
+  }
   return (
-    <span className="studio-credit-pill inline-flex h-6 items-center gap-1 rounded-full border border-cursor-border bg-cursor-panel px-2 text-[11px] font-semibold leading-none text-cursor-muted">
+    <button
+      type="button"
+      className="studio-credit-pill inline-flex h-6 items-center gap-1 rounded-full border border-cursor-border bg-cursor-panel px-2 text-[11px] font-semibold leading-none text-cursor-muted"
+      onClick={onClick}
+      title={entitlement?.creditBalance ? "View credits" : "Add credits"}
+      aria-label={entitlement?.creditBalance ? "View credits and billing" : "Add credits"}
+    >
       <Coins className="h-3 w-3 shrink-0" aria-hidden="true" />
-      {entitlement ? `${entitlement.creditBalance} Credits` : "Credits"}
-    </span>
+      {label}
+    </button>
   );
 }
 
@@ -10791,12 +11109,33 @@ function isVideoFileUrl(url) {
 }
 
 function elementToEntry(element, assets = []) {
-  const sourceAssets = (element.sourceAssetIds ?? [])
+  let referenceAssetIds = element.referenceAssetIds ?? [];
+  let sheetAssetId = element.sheetAssetId;
+
+  if (!element.referenceAssetIds?.length && !element.sheetAssetId && element.sourceAssetIds?.length) {
+    const firstId = element.sourceAssetIds[0];
+    const firstAsset = (assets ?? []).find((item) => item._id === firstId || item.studioId === firstId);
+    if (firstAsset?.name?.includes("-sheet.")) {
+      sheetAssetId = firstId;
+      referenceAssetIds = element.sourceAssetIds.slice(1);
+    } else {
+      referenceAssetIds = element.sourceAssetIds;
+    }
+  }
+
+  const referenceAssets = referenceAssetIds
     .map((assetId) => {
       const asset = (assets ?? []).find((item) => item._id === assetId || item.studioId === assetId);
       return asset ? assetToEntry(asset) : null;
     })
     .filter(Boolean);
+  const sheetAsset = sheetAssetId
+    ? (() => {
+        const asset = (assets ?? []).find((item) => item._id === sheetAssetId || item.studioId === sheetAssetId);
+        return asset ? assetToEntry(asset) : null;
+      })()
+    : null;
+
   return {
     type: "file",
     name: `@${element.name}`,
@@ -10809,8 +11148,17 @@ function elementToEntry(element, assets = []) {
     studioId: element._id,
     folderId: element.folderId,
     elementType: element.type,
-    sourceAssetIds: element.sourceAssetIds ?? [],
-    sourceAssets,
+    buildStatus: sheetAssetId || sheetAsset ? "built" : "unbuilt",
+    builtAt: element.builtAt,
+    referenceAssetIds,
+    referenceAssets,
+    sheetAssetId,
+    sheetAsset,
+    thumbnailUrl: sheetAsset?.thumbnailUrl ?? sheetAsset?.mediaUrl,
+    mediaUrl: sheetAsset?.mediaUrl ?? sheetAsset?.thumbnailUrl,
+    mimeType: sheetAsset?.mimeType,
+    sourceAssetIds: referenceAssetIds,
+    sourceAssets: referenceAssets,
     kindLabel:
       element.type === "character"
         ? "Person"
@@ -10925,11 +11273,17 @@ function entryToAttachment(entry) {
     studioKind,
     studioId: entry.studioId,
     elementType: entry.elementType,
+    buildStatus: entry.buildStatus,
     description: entry.description,
-    sourceAssetIds: entry.sourceAssetIds,
-    sourceAssets: entry.sourceAssets,
-    thumbnailUrl: entry.thumbnailUrl,
-    mediaUrl: entry.mediaUrl,
+    referenceAssetIds: entry.referenceAssetIds ?? entry.sourceAssetIds,
+    referenceAssets: entry.referenceAssets ?? entry.sourceAssets,
+    sheetAssetId: entry.sheetAssetId,
+    sheetAsset: entry.sheetAsset,
+    sourceAssetIds: entry.referenceAssetIds ?? entry.sourceAssetIds,
+    sourceAssets: entry.referenceAssets ?? entry.sourceAssets,
+    mimeType: entry.mimeType ?? entry.sheetAsset?.mimeType,
+    thumbnailUrl: entry.sheetAsset?.thumbnailUrl ?? entry.sheetAsset?.mediaUrl ?? entry.thumbnailUrl,
+    mediaUrl: entry.sheetAsset?.mediaUrl ?? entry.mediaUrl,
   };
 }
 
@@ -10950,8 +11304,9 @@ function buildPromptWithAttachments(prompt, attachments) {
         `- @${item.label}`,
         item.kind ? `kind: ${item.kind}` : "",
         item.elementType ? `element: ${elementTypeLabel(item.elementType)}` : "",
+        item.buildStatus ? `build: ${item.buildStatus}` : "",
         item.description ? `notes: ${item.description}` : "",
-        item.sourceAssets?.length ? `media: ${item.sourceAssets.map((asset) => asset.name).join(", ")}` : "",
+        item.sheetAsset?.name ? `sheet: ${item.sheetAsset.name}` : "",
         item.displayPath ? `path: ${item.displayPath}` : item.path ? `path: ${displayWorkspacePath(item.path)}` : "",
         item.filename ? `file: ${item.filename}` : "",
       ]
@@ -10965,17 +11320,27 @@ function buildPromptWithAttachments(prompt, attachments) {
 function generationReferenceInputs(attachments, signedUrls = {}) {
   return attachments
     .flatMap((attachment) => {
+      if (attachment.studioKind === "element") {
+        const sheet = attachment.sheetAsset;
+        if (!sheet) {
+          // Unbuilt element: no sheet to send. Its notes still ride along in the prompt.
+          return [];
+        }
+        const url =
+          sheet.mediaUrl ??
+          signedUrls[`element-sheet:${attachment.id}`] ??
+          sheet.thumbnailUrl;
+        if (!url || !/^https?:\/\//i.test(url)) {
+          return [];
+        }
+        return [{ kind: "image", url, mimeType: sheet.mimeType }];
+      }
       const direct = {
         kind: attachment.kind,
         url: attachment.mediaUrl ?? signedUrls[`attachment:${attachment.id}`] ?? attachment.thumbnailUrl,
         mimeType: attachment.mimeType,
       };
-      const sourceRefs = (attachment.sourceAssets ?? []).map((asset) => ({
-        kind: asset.kind,
-        url: asset.mediaUrl ?? signedUrls[`element-source:${attachment.id}:${asset.studioId}`] ?? asset.thumbnailUrl,
-        mimeType: asset.mimeType,
-      }));
-      return [direct, ...sourceRefs];
+      return [direct];
     })
     .filter((reference) =>
       ["image", "video", "audio"].includes(reference.kind) &&

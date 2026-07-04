@@ -81,6 +81,12 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
 
 export function explorerEntryIcon(entry) {
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
+  if (entry?.studioKind === "element") {
+    if (entry.elementType === "character") return "user";
+    if (entry.elementType === "prop") return "package";
+    if (entry.elementType === "location") return "mapPin";
+    return "fileText";
+  }
   return fileIconName(entry?.name ?? entry?.path ?? "");
 }
 

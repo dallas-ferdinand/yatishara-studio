@@ -15,7 +15,7 @@ Create keys in Studio → Settings → API keys. Scopes:
 | Scope | Allows |
 |-------|--------|
 | `read` | Account, folders, assets, documents, elements, presets, list/get generations |
-| `write` | Create folders, upload assets, create/update documents and elements |
+| `write` | Create/update folders, assets, documents, elements; trash/restore |
 | `generate` | Image, video, and script generation (uses credits) |
 
 ## Discovery
@@ -38,9 +38,12 @@ GET /api/v1/folders?parentId=
 GET /api/v1/folders/:id
 GET /api/v1/folders/:id/contents
 POST /api/v1/folders
+PATCH /api/v1/folders/:id
 ```
 
 `POST` body: `{ "name", "parentId?", "icon?", "color?" }`
+
+`PATCH` body: `{ "name?", "icon?", "color?", "parentId?" }` — rename or move folder. Cannot move the API key sandbox root or into its own subfolder.
 
 If `folderId` is omitted on write/generate calls, the key’s default folder (or root Studio folder) is used.
 
@@ -48,9 +51,12 @@ If `folderId` is omitted on write/generate calls, the key’s default folder (or
 
 ```http
 GET /api/v1/assets/:id
+PATCH /api/v1/assets/:id
 POST /api/v1/assets/upload
 POST /api/v1/assets/upload-inline
 ```
+
+`PATCH` body: `{ "name?", "folderId?" }` — rename or move image/video/audio asset.
 
 **Two-step upload** (`/assets/upload`):
 
@@ -70,15 +76,55 @@ DELETE /api/v1/documents/:id
 POST /api/v1/documents/:id/restore
 ```
 
+`PATCH` body: `{ "title?", "contentMarkdown?", "folderId?" }` — rename, edit content, or move document.
+
 ## Elements
 
+Elements have two states:
+
+- **Unbuilt** — `referenceAssetIds` (upload photos) only. Not usable in generation yet.
+- **Built** — `sheetAssetId` set (generated reference sheet). Generation uses the **sheet image + description**, never the raw upload refs.
+
 ```http
-GET /api/v1/elements?type=character|prop|location|doc
+GET /api/v1/elements?type=character|prop|location|doc&folderId=...
 GET /api/v1/elements/:id
+PATCH /api/v1/elements/:id
 POST /api/v1/elements
+POST /api/v1/elements/:id/generate-text-sheet
+POST /api/v1/elements/:id/generate-sheet
 DELETE /api/v1/elements/:id
 POST /api/v1/elements/:id/restore
+GET /api/v1/elements/production-guide
 ```
+
+Element responses include `buildStatus` (`unbuilt`|`built`), `referenceAssetIds`, `referenceAssets`, `sheetAssetId`, `sheetAsset`, `sheetUrl`.
+
+`PATCH` body: `{ "name?", "description?", "folderId?", "referenceAssetIds?", "sourceDocumentId?" }` — `referenceAssetIds` must be upload photos only (never the sheet asset). Max 10.
+
+**Sheet guide** (`GET /elements/sheet-guide?type=character|prop|location`) — min/recommended reference photo counts, fidelity rules, and workflow for agents. **Production guide** (`GET /elements/production-guide`) — build states and generation rules.
+
+**Generate text sheet** (`POST /elements/:id/generate-text-sheet`):
+
+Requires `generate` + `write` scopes. Generates the markdown production write-up (identity locks, gen prompt) from reference photos and saves it as the element `description`. Same min-ref rules as the image sheet. Response: `{ "elementId", "description", "element" }`.
+
+**Generate sheet** (`POST /elements/:id/generate-sheet`):
+
+Requires `generate` + `write` scopes. Rejects `type: "doc"`. Minimum reference **images** before generate: character **3**, prop **2**, location **2** (recommended up to ~8 / 6 / 6). Captures features exactly from refs — no restyling. Sets `sheetAssetId` and `buildStatus: "built"`.
+
+```json
+{
+  "referenceAssetIds": [],
+  "resolution": "2K"
+}
+```
+
+Response: `{ "assetId", "elementId", "sheetUrl", "creditsSpent", "buildStatus", "element" }`
+
+Uses GPT Image 2 directly (no preset prompt enhancement).
+
+### Using elements in generation
+
+Pass `referenceElementIds` to `POST /generations` (and `/generations/estimate`). Each element must be **built**; the API attaches its sheet image as a reference and appends its description to the prompt. Unbuilt elements return `400`. Max 10 total reference assets per generation; image mode requires at least one image ref if any refs are passed.
 
 ## Trash
 
@@ -102,7 +148,7 @@ POST /api/v1/elements/:id/restore
 GET /api/v1/style-presets?kind=image|video|any
 ```
 
-Use the `slug` field as `stylePreset` when generating.
+Use the `slug` field as `stylePreset` when generating. Use `raw` with `skipPromptEnhancement: true` to pass prompts directly to the model without preset rewrite.
 
 ## Generation
 
@@ -113,6 +159,24 @@ POST /api/v1/generations/estimate
 ```
 
 Body: `{ mode: "image"|"video"|"script", resolution?, durationSeconds?, audioEnabled?, referenceAssetIds? }`
+
+### Estimate batch (production budget)
+
+```http
+POST /api/v1/generations/estimate-batch
+```
+
+```json
+{
+  "items": [
+    { "label": "prop_honey_jar", "mode": "image", "resolution": "2K", "hasReferenceInput": true, "maxRounds": 3 },
+    { "label": "shot_S01", "mode": "video", "resolution": "1280x720", "durationSeconds": 6, "maxRounds": 3 }
+  ],
+  "contingencyPercent": 15
+}
+```
+
+Response includes `subtotalCredits`, `contingencyCredits`, `totalCredits`, `totalTTD`, `creditPriceTTD` (0.5), `creditBalance`, `canGenerate`.
 
 ### Generate
 
@@ -128,7 +192,8 @@ GET /api/v1/generations/:id
 {
   "mode": "image",
   "prompt": "…",
-  "stylePreset": "realism",
+  "stylePreset": "raw",
+  "skipPromptEnhancement": true,
   "resolution": "2K",
   "aspectRatio": "16:9",
   "referenceAssetIds": [],
@@ -142,6 +207,8 @@ GET /api/v1/generations/:id
 {
   "mode": "video",
   "prompt": "…",
+  "stylePreset": "raw",
+  "skipPromptEnhancement": true,
   "durationSeconds": 6,
   "wait": false
 }
@@ -153,7 +220,8 @@ GET /api/v1/generations/:id
 {
   "mode": "script",
   "prompt": "Write a 30s ad script for…",
-  "stylePreset": "realism"
+  "stylePreset": "raw",
+  "skipPromptEnhancement": true
 }
 ```
 

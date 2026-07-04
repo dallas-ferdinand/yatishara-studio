@@ -13,7 +13,7 @@ export function registerAssetTools(server: McpServer) {
 
   server.tool(
     "studio_upload_asset",
-    "Upload a file to a folder via base64. Requires write scope. Use returned asset ID as referenceAssetIds for generation.",
+    "Upload a reference photo or media file to a folder. For element sheets: upload multiple angles first (see studio_element_sheet_guide). Requires write scope.",
     {
       folderId: z.string().optional(),
       name: z.string(),
@@ -26,6 +26,23 @@ export function registerAssetTools(server: McpServer) {
         await studioFetch("/assets/upload-inline", {
           method: "POST",
           body: JSON.stringify({ folderId, name, kind, mimeType, dataBase64 }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_update_asset",
+    "Rename an asset (image, video, audio) or move it to another folder. Requires write scope.",
+    {
+      assetId: z.string(),
+      name: z.string().optional(),
+      folderId: z.string().optional(),
+    },
+    async ({ assetId, name, folderId }) =>
+      jsonResult(
+        await studioFetch(`/assets/${encodeURIComponent(assetId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name, folderId }),
         }),
       ),
   );

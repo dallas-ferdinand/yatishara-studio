@@ -1,4 +1,5 @@
 import { GEN_PROMPT_HEADING } from "./creativeDirection";
+import { sheetFidelityPromptSuffix } from "./elementSheetGuides";
 
 export type ElementSheetType = "character" | "prop" | "location" | "doc";
 
@@ -36,6 +37,7 @@ export function buildElementSheetImagePrompt(args: {
   name: string;
 }): string | null {
   const name = args.name.trim() || "the subject";
+  const fidelity = sheetFidelityPromptSuffix(args.type);
   switch (args.type) {
     case "character":
       return [
@@ -44,6 +46,7 @@ export function buildElementSheetImagePrompt(args: {
         "Identical person in every panel: exactly the same face structure, hairstyle, hair texture and volume, skin tone, build, height, and wardrobe. Do not restyle, do not idealize, do not change the hair.",
         "Match the identity in the attached reference images exactly if provided.",
         SHEET_IMAGE_BASE_RULES,
+        fidelity,
       ].join(" ");
     case "prop":
       return [
@@ -51,6 +54,7 @@ export function buildElementSheetImagePrompt(args: {
         "Identical object in both panels: exactly the same materials, colors, proportions, branding, and wear. No hands, no people.",
         "Match the object in the attached reference images exactly if provided.",
         SHEET_IMAGE_BASE_RULES,
+        fidelity,
       ].join(" ");
     case "location":
       return [
@@ -58,6 +62,7 @@ export function buildElementSheetImagePrompt(args: {
         "Bright, clean, high-end commercial look. No people, no text, no logos, no watermarks.",
         "Match the space in the attached reference images exactly if provided.",
         "Photorealistic, documentary-grade detail — not illustration, not 3D render style.",
+        fidelity,
       ].join(" ");
     case "doc":
       return null;

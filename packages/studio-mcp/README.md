@@ -27,10 +27,10 @@ stdio MCP server for [Yatishara Studio](https://studio.yatishara.com). Browse fo
 ## Tools
 
 - `studio_health` / `studio_credit_balance`
-- `studio_list_folders`, `studio_folder_contents`, `studio_create_folder`
-- `studio_get_asset`, `studio_upload_asset`
+- `studio_list_folders`, `studio_folder_contents`, `studio_create_folder`, `studio_update_folder`
+- `studio_get_asset`, `studio_upload_asset`, `studio_update_asset`
 - `studio_get_document`, `studio_create_document`, `studio_update_document`
-- `studio_list_elements`, `studio_get_element`, `studio_create_element`
+- `studio_list_elements`, `studio_get_element`, `studio_create_element`, `studio_update_element`
 - `studio_list_trash`, `studio_trash`, `studio_restore`
 - `studio_list_presets`, `studio_estimate_generation`
 - `studio_list_generations`, `studio_get_generation`

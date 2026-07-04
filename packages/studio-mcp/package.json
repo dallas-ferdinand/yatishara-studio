@@ -1,6 +1,6 @@
 {
   "name": "@yatishara/studio-mcp",
-  "version": "0.2.0",
+  "version": "0.2.4",
   "description": "MCP server for Yatishara Studio — folders, generation, documents, and elements",
   "type": "module",
   "bin": {
@@ -20,8 +20,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
-    "typescript": "^5.8.2"
+    "@types/node": "^22.20.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18"

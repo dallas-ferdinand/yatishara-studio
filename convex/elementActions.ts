@@ -4,10 +4,15 @@ import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { action, type ActionCtx } from "./_generated/server";
-import { api } from "./_generated/api";
-import { generateElementSheet, generateImage } from "./lib/aiGateway";
-import { buildElementSheetImagePrompt } from "./lib/elementSheets";
-import { putObject } from "./lib/bunny";
+import { api, internal } from "./_generated/api";
+import { generateElementSheet } from "./lib/aiGateway";
+import { assertEnoughSheetImageReferences } from "./lib/elementSheetGuides";
+import {
+  generateElementSheetImage,
+  sheetImageCreditEstimate,
+} from "./lib/generateElementSheet";
+import { imageCreditCost } from "./lib/generationPricing";
+import { referenceInputValidator } from "./lib/referenceInput";
 
 const chargeTextGenerationRef = makeFunctionReference<
   "mutation",
@@ -39,10 +44,149 @@ const refundTextGenerationRef = makeFunctionReference<
   null
 >("generation:refundTextGeneration");
 
-import { referenceInputValidator } from "./lib/referenceInput";
+function uiSheetCallbacks(ctx: ActionCtx) {
+  return {
+    chargeImage: async (args: {
+      folderId: Id<"folders">;
+      resolution: string;
+      hasReferenceInput: boolean;
+    }) => {
+      const transactionId = await ctx.runMutation(chargeImageGenerationRef, {
+        folderId: args.folderId,
+        resolution: args.resolution,
+        hasReferenceInput: args.hasReferenceInput,
+      });
+      return {
+        transactionId,
+        creditsSpent: imageCreditCost({
+          resolution: args.resolution,
+          hasReferenceInput: args.hasReferenceInput,
+        }),
+      };
+    },
+    refundCredit: async (args: {
+      transactionId: Id<"creditTransactions">;
+      reason?: string;
+    }) => ctx.runMutation(refundTextGenerationRef, args),
+    createSheetAsset: async (args: {
+      elementId: Id<"elements">;
+      name: string;
+      mimeType: string;
+    }) => ctx.runMutation(api.elements.createSheetAsset, args),
+    setBuiltSheet: async (args: {
+      elementId: Id<"elements">;
+      sheetAssetId: Id<"assets">;
+    }) => {
+      await ctx.runMutation(api.elements.setBuiltSheet, args);
+    },
+  };
+}
 
-const SHEET_IMAGE_RESOLUTION = "2K";
-const SHEET_IMAGE_ASPECT_RATIO = "16:9";
+function apiSheetCallbacks(ctx: ActionCtx, userId: Id<"users">) {
+  return {
+    chargeImage: async (args: {
+      folderId: Id<"folders">;
+      resolution: string;
+      hasReferenceInput: boolean;
+    }) =>
+      ctx.runMutation(internal.generation.chargeImageForUser, {
+        userId,
+        folderId: args.folderId,
+        resolution: args.resolution,
+        hasReferenceInput: args.hasReferenceInput,
+      }),
+    refundCredit: async (args: {
+      transactionId: Id<"creditTransactions">;
+      reason?: string;
+    }) =>
+      ctx.runMutation(internal.generation.refundCreditTransactionForUser, {
+        userId,
+        transactionId: args.transactionId,
+        reason: args.reason,
+      }),
+    createSheetAsset: async (args: {
+      elementId: Id<"elements">;
+      name: string;
+      mimeType: string;
+    }) =>
+      ctx.runMutation(internal.elements.createSheetAssetForUser, {
+        userId,
+        ...args,
+      }),
+    setBuiltSheet: async (args: {
+      elementId: Id<"elements">;
+      sheetAssetId: Id<"assets">;
+    }) => {
+      await ctx.runMutation(internal.elements.setBuiltSheetForUser, {
+        userId,
+        ...args,
+      });
+    },
+  };
+}
+
+async function generateElementTextSheetCore(
+  ctx: ActionCtx,
+  args: {
+    elementId: Id<"elements">;
+    referenceInputs: Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>;
+    existingNotes?: string;
+  },
+): Promise<string> {
+  const element = await ctx.runQuery(api.elements.get, {
+    elementId: args.elementId,
+  });
+  if (!element) {
+    throw new Error("Element not found.");
+  }
+  if (!element.folderId) {
+    throw new Error("Element must live in a folder before generating a sheet.");
+  }
+  const referenceInputs = args.referenceInputs.filter((input) =>
+    /^https?:\/\//i.test(input.url),
+  );
+  const imageRefCount = referenceInputs.filter((input) => input.kind === "image").length;
+  assertEnoughSheetImageReferences({
+    type: element.type,
+    imageRefCount,
+  });
+  if (
+    !referenceInputs.length &&
+    !args.existingNotes?.trim() &&
+    !element.description?.trim() &&
+    !element.name.trim()
+  ) {
+    throw new Error("Add reference media or notes before generating a sheet.");
+  }
+
+  const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
+    folderId: element.folderId,
+    imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
+    videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
+    audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+  });
+
+  try {
+    const description = await generateElementSheet({
+      elementType: element.type,
+      name: element.name,
+      existingNotes: args.existingNotes ?? element.description,
+      referenceInputs,
+    });
+    await ctx.runMutation(api.elements.update, {
+      elementId: element._id,
+      description,
+    });
+    return description;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Sheet generation failed";
+    await ctx.runMutation(refundTextGenerationRef, {
+      transactionId,
+      reason: message,
+    });
+    throw error;
+  }
+}
 
 export const generateSheet = action({
   args: {
@@ -67,129 +211,246 @@ export const generateSheet = action({
     if (!element.folderId) {
       throw new Error("Element must live in a folder before generating a sheet.");
     }
-    const referenceInputs = args.referenceInputs.filter((input) =>
-      /^https?:\/\//i.test(input.url),
+
+    const description = await generateElementTextSheetCore(ctx, {
+      elementId: args.elementId,
+      referenceInputs: args.referenceInputs,
+      existingNotes: args.existingNotes,
+    });
+
+    // Notes (doc) elements are text-only — no sheet image to build.
+    if (element.type === "doc") {
+      return { description };
+    }
+
+    const resolved = await ctx.runQuery(internal.studioApiInternal.resolveElementAssetsForUser, {
+      userId: element.ownerId,
+      elementId: element._id,
+    });
+
+    const callbacks = uiSheetCallbacks(ctx);
+    const sheetResult = await generateElementSheetImage(ctx, {
+      element: {
+        _id: element._id,
+        folderId: element.folderId,
+        type: element.type,
+        name: element.name,
+        referenceAssetIds: resolved.referenceAssetIds,
+      },
+      referenceUrls: args.referenceInputs
+        .filter((input) => input.kind === "image")
+        .map((input) => input.url),
+      ...callbacks,
+    });
+
+    return { description, sheetAssetId: sheetResult.assetId };
+  },
+});
+
+export const generateElementTextSheetForApi = action({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    elementId: v.id("elements"),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    expiresUnix: v.number(),
+  },
+  returns: v.object({
+    elementId: v.id("elements"),
+    description: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      elementId: args.elementId,
+      expiresUnix: args.expiresUnix,
+    });
+    if (element.type === "doc") {
+      throw new Error("Doc elements do not support text sheet generation.");
+    }
+    if (!element.folderId) {
+      throw new Error("Element must live in a folder before generating a sheet.");
+    }
+
+    const referenceAssetIds = (args.referenceAssetIds ??
+      element.referenceAssetIds) as Id<"assets">[];
+    const imageRefCount = await ctx.runQuery(
+      internal.studioApiInternal.countImageAssetsForApi,
+      {
+        userId: args.userId,
+        sandboxFolderId: args.sandboxFolderId,
+        assetIds: referenceAssetIds,
+      },
     );
-    if (!referenceInputs.length && !args.existingNotes?.trim() && !element.description?.trim() && !element.name.trim()) {
+    assertEnoughSheetImageReferences({
+      type: element.type,
+      imageRefCount,
+    });
+
+    const refs = referenceAssetIds.length
+      ? await ctx.runQuery(internal.studioApiInternal.getAssetReferenceUrls, {
+          userId: args.userId,
+          sandboxFolderId: args.sandboxFolderId,
+          assetIds: referenceAssetIds,
+          expiresUnix: args.expiresUnix,
+        })
+      : [];
+
+    const referenceInputs = refs
+      .filter((ref: { kind: string; url: string }) => /^https?:\/\//i.test(ref.url))
+      .map((ref: { kind: string; url: string; mimeType: string }) => ({
+        kind: ref.kind as "image" | "video" | "audio",
+        url: ref.url,
+        mimeType: ref.mimeType,
+      }));
+
+    if (
+      !referenceInputs.length &&
+      !element.description?.trim() &&
+      !element.name.trim()
+    ) {
       throw new Error("Add reference media or notes before generating a sheet.");
     }
 
-    const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
-      folderId: element.folderId,
-      imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
-      videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
-      audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
-    });
+    const { transactionId } = await ctx.runMutation(
+      internal.studioApiInternal.chargeTextGenerationForApi,
+      {
+        userId: args.userId,
+        sandboxFolderId: args.sandboxFolderId,
+        folderId: element.folderId as Id<"folders">,
+        imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
+        videoReferenceCount: referenceInputs.filter((input) => input.kind === "video").length,
+        audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
+      },
+    );
 
     let description: string;
     try {
       description = await generateElementSheet({
         elementType: element.type,
         name: element.name,
-        existingNotes: args.existingNotes ?? element.description,
+        existingNotes: element.description,
         referenceInputs,
       });
-      await ctx.runMutation(api.elements.update, {
-        elementId: element._id,
+      await ctx.runMutation(internal.studioApiInternal.updateElementForApi, {
+        userId: args.userId,
+        sandboxFolderId: args.sandboxFolderId,
+        elementId: args.elementId,
         description,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Sheet generation failed";
-      await ctx.runMutation(refundTextGenerationRef, {
+      const message = error instanceof Error ? error.message : "Text sheet generation failed";
+      await ctx.runMutation(internal.generation.refundCreditTransactionForUser, {
+        userId: args.userId,
         transactionId,
         reason: message,
       });
       throw error;
     }
 
-    const sheetAssetId = await generateSheetImage(ctx, {
-      element: {
-        _id: element._id,
-        folderId: element.folderId,
-        type: element.type,
-        name: element.name,
-        sourceAssetIds: element.sourceAssetIds,
-      },
-      referenceUrls: referenceInputs
-        .filter((input) => input.kind === "image")
-        .map((input) => input.url),
-    });
-
-    return { description, sheetAssetId };
+    return {
+      elementId: args.elementId,
+      description,
+    };
   },
 });
 
-/**
- * Generates the multi-angle reference sheet image (clean gray background,
- * no text, one visible face) and attaches it as the element's primary
- * source asset. Notes elements skip this — they are text-only.
- */
-async function generateSheetImage(
-  ctx: ActionCtx,
+export const generateElementSheetForApi = action({
   args: {
-    element: {
-      _id: Id<"elements">;
-      folderId: Id<"folders">;
-      type: "character" | "prop" | "location" | "doc";
-      name: string;
-      sourceAssetIds: Id<"assets">[];
-    };
-    referenceUrls: string[];
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    elementId: v.id("elements"),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    resolution: v.optional(v.union(v.literal("1K"), v.literal("2K"))),
+    expiresUnix: v.number(),
   },
-): Promise<Id<"assets"> | undefined> {
-  const prompt = buildElementSheetImagePrompt({
-    type: args.element.type,
-    name: args.element.name,
-  });
-  if (!prompt) return undefined;
-
-  const imageTransactionId = await ctx.runMutation(chargeImageGenerationRef, {
-    folderId: args.element.folderId,
-    resolution: SHEET_IMAGE_RESOLUTION,
-    hasReferenceInput: args.referenceUrls.length > 0,
-  });
-
-  try {
-    const result = await generateImage({
-      prompt,
-      aspectRatio: SHEET_IMAGE_ASPECT_RATIO,
-      resolution: SHEET_IMAGE_RESOLUTION,
-      referenceUrls: args.referenceUrls,
+  returns: v.object({
+    assetId: v.id("assets"),
+    elementId: v.id("elements"),
+    sheetUrl: v.string(),
+    creditsSpent: v.number(),
+    buildStatus: v.union(v.literal("unbuilt"), v.literal("built")),
+  }),
+  handler: async (ctx, args): Promise<{
+    assetId: Id<"assets">;
+    elementId: Id<"elements">;
+    sheetUrl: string;
+    creditsSpent: number;
+    buildStatus: "unbuilt" | "built";
+  }> => {
+    const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      elementId: args.elementId,
+      expiresUnix: args.expiresUnix,
     });
-    const image = result.images[0];
-    if (!image) {
-      throw new Error("Sheet image generation returned no image.");
+    if (element.type === "doc") {
+      throw new Error("Doc elements do not support sheet image generation.");
     }
-    const extension = image.mediaType.includes("jpeg")
-      ? "jpg"
-      : image.mediaType.includes("webp")
-        ? "webp"
-        : "png";
-    const safeName = args.element.name.trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "element";
-    const created: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
-      api.elements.createSheetAsset,
+    if (!element.folderId) {
+      throw new Error("Element must live in a folder before generating a sheet.");
+    }
+
+    const referenceAssetIds = (args.referenceAssetIds ??
+      element.referenceAssetIds) as Id<"assets">[];
+    const imageRefCount = await ctx.runQuery(
+      internal.studioApiInternal.countImageAssetsForApi,
       {
-        elementId: args.element._id,
-        name: `${safeName}-sheet.${extension}`,
-        mimeType: image.mediaType,
+        userId: args.userId,
+        sandboxFolderId: args.sandboxFolderId,
+        assetIds: referenceAssetIds,
       },
     );
-    await putObject({
-      path: created.bunnyPath,
-      body: image.data,
-      contentType: image.mediaType,
+    assertEnoughSheetImageReferences({
+      type: element.type,
+      imageRefCount,
     });
-    await ctx.runMutation(api.elements.update, {
-      elementId: args.element._id,
-      sourceAssetIds: [created.assetId, ...args.element.sourceAssetIds],
+
+    const refs = referenceAssetIds.length
+      ? await ctx.runQuery(internal.studioApiInternal.getAssetReferenceUrls, {
+          userId: args.userId,
+          sandboxFolderId: args.sandboxFolderId,
+          assetIds: referenceAssetIds,
+          expiresUnix: args.expiresUnix,
+        })
+      : [];
+    const referenceUrls = refs
+      .filter((ref: { kind: string; url: string }) => ref.kind === "image")
+      .map((ref: { url: string }) => ref.url);
+
+    const callbacks = apiSheetCallbacks(ctx, args.userId);
+    const result = await generateElementSheetImage(ctx, {
+      element: {
+        _id: args.elementId,
+        folderId: element.folderId as Id<"folders">,
+        type: element.type,
+        name: element.name,
+        referenceAssetIds,
+      },
+      referenceUrls,
+      resolution: args.resolution,
+      ...callbacks,
     });
-    return created.assetId;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Sheet image generation failed";
-    await ctx.runMutation(refundTextGenerationRef, {
-      transactionId: imageTransactionId,
-      reason: message,
+
+    const asset = await ctx.runQuery(internal.studioApiInternal.getAsset, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      assetId: result.assetId,
+      expiresUnix: args.expiresUnix,
     });
-    throw error;
-  }
-}
+    if (!asset?.url) {
+      throw new Error("Sheet asset URL unavailable.");
+    }
+
+    return {
+      assetId: result.assetId,
+      elementId: args.elementId,
+      sheetUrl: asset.url,
+      creditsSpent: result.creditsSpent,
+      buildStatus: "built",
+    };
+  },
+});
+
+export { sheetImageCreditEstimate };

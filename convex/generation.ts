@@ -461,6 +461,7 @@ export const prepareApiGeneration = internalMutation({
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
+    skipPromptEnhancement: v.optional(v.boolean()),
   },
   returns: v.object({
     threadId: v.id("generationThreads"),
@@ -517,6 +518,7 @@ export const prepareApiGeneration = internalMutation({
       reservedCreditTransactionId,
       source: "api",
       apiKeyId: args.apiKeyId,
+      skipPromptEnhancement: args.skipPromptEnhancement,
       createdAt: now,
       updatedAt: now,
     });
@@ -566,11 +568,13 @@ export const getJobRunContext = internalQuery({
       error: v.optional(v.string()),
       reservedCreditTransactionId: v.optional(v.id("creditTransactions")),
       spentCreditTransactionId: v.optional(v.id("creditTransactions")),
+      skipPromptEnhancement: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
     }),
     preset: v.object({
       _id: v.id("stylePresets"),
+      slug: v.string(),
       name: v.string(),
       systemInstructions: v.string(),
       scriptInstructions: v.optional(v.string()),
@@ -609,11 +613,13 @@ export const getJobRunContext = internalQuery({
         error: job.error,
         reservedCreditTransactionId: job.reservedCreditTransactionId,
         spentCreditTransactionId: job.spentCreditTransactionId,
+        skipPromptEnhancement: job.skipPromptEnhancement,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
       },
       preset: {
         _id: preset._id,
+        slug: preset.slug,
         name: preset.name,
         systemInstructions: preset.systemInstructions,
         scriptInstructions: preset.scriptInstructions,
@@ -1175,3 +1181,82 @@ async function refundReservedCredits(
     createdAt: now,
   });
 }
+
+export const chargeImageForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    resolution: v.optional(v.string()),
+    hasReferenceInput: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    transactionId: v.id("creditTransactions"),
+    creditsSpent: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await requireFolderForUser(ctx, args.userId, args.folderId);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    const creditsSpent = imageCreditCost({
+      resolution: args.resolution,
+      hasReferenceInput: args.hasReferenceInput,
+    });
+    const now = Date.now();
+    if (!account || account.creditBalance < creditsSpent) {
+      throw new Error(insufficientCreditsMessage(creditsSpent));
+    }
+    const balanceAfter = account.creditBalance - creditsSpent;
+    await ctx.db.patch(account._id, {
+      creditBalance: balanceAfter,
+      updatedAt: now,
+    });
+    const transactionId = await ctx.db.insert("creditTransactions", {
+      userId: args.userId,
+      billingAccountId: account._id,
+      kind: "spent",
+      amount: -creditsSpent,
+      balanceAfter,
+      reason: "Image generation",
+      createdAt: now,
+    });
+    return { transactionId, creditsSpent };
+  },
+});
+
+export const refundCreditTransactionForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    transactionId: v.id("creditTransactions"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const transaction = await ctx.db.get("creditTransactions", args.transactionId);
+    if (!transaction || transaction.userId !== args.userId || transaction.amount >= 0) {
+      return null;
+    }
+    const account = await ctx.db.get("billingAccounts", transaction.billingAccountId);
+    if (!account || account.userId !== args.userId) {
+      return null;
+    }
+    const refundAmount = Math.abs(transaction.amount);
+    const now = Date.now();
+    const balanceAfter = account.creditBalance + refundAmount;
+    await ctx.db.patch(account._id, {
+      creditBalance: balanceAfter,
+      updatedAt: now,
+    });
+    await ctx.db.insert("creditTransactions", {
+      userId: args.userId,
+      billingAccountId: account._id,
+      kind: "refunded",
+      amount: refundAmount,
+      balanceAfter,
+      reason: args.reason ?? "Generation failed",
+      createdAt: now,
+    });
+    return null;
+  },
+});

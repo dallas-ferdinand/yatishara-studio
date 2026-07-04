@@ -1,7 +1,12 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 import { buildAssetPath } from "./lib/bunny";
+import {
+  assertReferenceCount,
+  referenceAssetIdsFromInput,
+} from "./lib/elementAssetModel";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const elementType = v.union(
@@ -20,6 +25,9 @@ const elementReturn = v.object({
   name: v.string(),
   description: v.optional(v.string()),
   sourceAssetIds: v.array(v.id("assets")),
+  referenceAssetIds: v.optional(v.array(v.id("assets"))),
+  sheetAssetId: v.optional(v.id("assets")),
+  builtAt: v.optional(v.number()),
   sourceDocumentId: v.optional(v.id("documents")),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
@@ -29,16 +37,21 @@ const elementReturn = v.object({
 export const list = authedQuery({
   args: {
     type: v.optional(elementType),
+    folderId: v.optional(v.id("folders")),
     includeDeleted: v.optional(v.boolean()),
   },
   returns: v.array(elementReturn),
   handler: async (ctx, args) => {
-    const elements = args.type !== undefined
-      ? await listByType(ctx, args.type)
-      : await ctx.db
-          .query("elements")
-          .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
-          .collect();
+    let elements =
+      args.type !== undefined
+        ? await listByType(ctx, args.type)
+        : await ctx.db
+            .query("elements")
+            .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
+            .collect();
+    if (args.folderId !== undefined) {
+      elements = elements.filter((element) => element.folderId === args.folderId);
+    }
     return args.includeDeleted ? elements : elements.filter((element) => !element.deletedAt);
   },
 });
@@ -73,7 +86,8 @@ export const create = authedMutation({
     name: v.string(),
     description: v.optional(v.string()),
     folderId: v.optional(v.id("folders")),
-    sourceAssetIds: v.array(v.id("assets")),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
   },
   returns: v.id("elements"),
@@ -81,7 +95,9 @@ export const create = authedMutation({
     if (args.folderId) {
       await requireFolderOwner(ctx, args.folderId);
     }
-    for (const assetId of args.sourceAssetIds) {
+    const referenceAssetIds = referenceAssetIdsFromInput(args);
+    assertReferenceCount(referenceAssetIds.length);
+    for (const assetId of referenceAssetIds) {
       await requireAssetOwner(ctx, assetId);
     }
     if (args.sourceDocumentId) {
@@ -94,7 +110,8 @@ export const create = authedMutation({
       type: args.type,
       name: args.name.trim(),
       description: args.description,
-      sourceAssetIds: args.sourceAssetIds,
+      sourceAssetIds: referenceAssetIds,
+      referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
       createdAt: now,
       updatedAt: now,
@@ -108,6 +125,7 @@ export const update = authedMutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     folderId: v.optional(v.id("folders")),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
   },
@@ -117,9 +135,21 @@ export const update = authedMutation({
     if (args.folderId !== undefined) {
       await requireFolderOwner(ctx, args.folderId);
     }
-    if (args.sourceAssetIds !== undefined) {
-      for (const assetId of args.sourceAssetIds) {
+    const nextReferenceAssetIds =
+      args.referenceAssetIds !== undefined
+        ? args.referenceAssetIds
+        : args.sourceAssetIds !== undefined
+          ? args.sourceAssetIds
+          : undefined;
+    if (nextReferenceAssetIds !== undefined) {
+      assertReferenceCount(nextReferenceAssetIds.length);
+      for (const assetId of nextReferenceAssetIds) {
         await requireAssetOwner(ctx, assetId);
+        if (element.sheetAssetId && assetId === element.sheetAssetId) {
+          throw new Error(
+            "referenceAssetIds must be upload photos only — do not include the built sheet asset.",
+          );
+        }
       }
     }
     if (args.sourceDocumentId !== undefined) {
@@ -129,7 +159,12 @@ export const update = authedMutation({
       ...(args.name !== undefined ? { name: args.name.trim() } : {}),
       ...(args.description !== undefined ? { description: args.description } : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
-      ...(args.sourceAssetIds !== undefined ? { sourceAssetIds: args.sourceAssetIds } : {}),
+      ...(nextReferenceAssetIds !== undefined
+        ? {
+            referenceAssetIds: nextReferenceAssetIds,
+            sourceAssetIds: nextReferenceAssetIds,
+          }
+        : {}),
       ...(args.sourceDocumentId !== undefined
         ? { sourceDocumentId: args.sourceDocumentId }
         : {}),
@@ -175,6 +210,24 @@ export const createSheetAsset = authedMutation({
   },
 });
 
+export const setBuiltSheet = authedMutation({
+  args: {
+    elementId: v.id("elements"),
+    sheetAssetId: v.id("assets"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const element = await requireElementOwner(ctx, args.elementId);
+    const now = Date.now();
+    await ctx.db.patch(element._id, {
+      sheetAssetId: args.sheetAssetId,
+      builtAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
 export const moveToTrash = authedMutation({
   args: { elementId: v.id("elements") },
   returns: v.null(),
@@ -200,6 +253,74 @@ export const restore = authedMutation({
     return null;
   },
 });
+
+export const createSheetAssetForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    elementId: v.id("elements"),
+    name: v.string(),
+    mimeType: v.string(),
+  },
+  returns: v.object({
+    assetId: v.id("assets"),
+    bunnyPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const element = await requireElementForUser(ctx, args.userId, args.elementId);
+    if (!element.folderId) {
+      throw new Error("Element must live in a folder before generating a sheet.");
+    }
+    const now = Date.now();
+    const assetId = await ctx.db.insert("assets", {
+      ownerId: args.userId,
+      folderId: element.folderId,
+      name: args.name,
+      kind: "image",
+      mimeType: args.mimeType,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const bunnyPath = buildAssetPath({
+      userId: args.userId,
+      folderId: element.folderId,
+      assetId,
+      filename: args.name,
+    });
+    await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+    return { assetId, bunnyPath };
+  },
+});
+
+export const setBuiltSheetForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    elementId: v.id("elements"),
+    sheetAssetId: v.id("assets"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const element = await requireElementForUser(ctx, args.userId, args.elementId);
+    const now = Date.now();
+    await ctx.db.patch(element._id, {
+      sheetAssetId: args.sheetAssetId,
+      builtAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+async function requireElementForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  elementId: Id<"elements">,
+) {
+  const element = await ctx.db.get("elements", elementId);
+  if (!element || element.ownerId !== userId || element.deletedAt) {
+    throw new Error("Element not found");
+  }
+  return element;
+}
 
 async function requireElementOwner(
   ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },

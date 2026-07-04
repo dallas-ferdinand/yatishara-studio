@@ -15,6 +15,7 @@ import {
   videoModelForRequest,
 } from "./lib/aiGateway";
 import { referenceInputValidator } from "./lib/referenceInput";
+import { shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
 
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
@@ -55,8 +56,10 @@ const getJobRunContextRef = internalQueryRef<
       durationSeconds?: number;
       resolution?: string;
       aspectRatio?: string;
+      skipPromptEnhancement?: boolean;
     };
     preset: {
+      slug: string;
       name: string;
       systemInstructions: string;
       scriptInstructions?: string;
@@ -206,6 +209,7 @@ const prepareApiGenerationRef = internalMutationRef<
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
+    skipPromptEnhancement?: boolean;
   },
   { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> }
 >("generation:prepareApiGeneration");
@@ -463,26 +467,32 @@ async function executeQueuedApiJob(
   try {
     await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
     const { job, preset } = await ctx.runQuery(getJobRunContextRef, { jobId: args.jobId });
-    const enhancedPrompt = await enhancePromptWithFallback({
-      userPrompt: job.userPrompt,
-      presetName: preset.name,
-      presetInstructions: preset.systemInstructions,
-      scriptInstructions: preset.scriptInstructions,
-      negativePrompt: preset.negativePrompt,
-      outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
-      storytellingEnabled: preset.storytelling,
-      durationSeconds: job.durationSeconds ?? args.durationSeconds,
-      resolution: job.resolution ?? args.resolution,
-      aspectRatio: job.aspectRatio ?? args.aspectRatio,
-      hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
-      hasImageReference:
-        referenceInputs.some((input) => input.kind === "image") ||
-        Boolean(args.referenceUrls?.length),
+    const skipEnhancement = shouldSkipPromptEnhancement({
+      skipPromptEnhancement: job.skipPromptEnhancement,
+      presetSlug: preset.slug,
     });
+    const enhancedPrompt = skipEnhancement
+      ? job.userPrompt
+      : await enhancePromptWithFallback({
+          userPrompt: job.userPrompt,
+          presetName: preset.name,
+          presetInstructions: preset.systemInstructions,
+          scriptInstructions: preset.scriptInstructions,
+          negativePrompt: preset.negativePrompt,
+          outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
+          storytellingEnabled: preset.storytelling,
+          durationSeconds: job.durationSeconds ?? args.durationSeconds,
+          resolution: job.resolution ?? args.resolution,
+          aspectRatio: job.aspectRatio ?? args.aspectRatio,
+          hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
+          hasImageReference:
+            referenceInputs.some((input) => input.kind === "image") ||
+            Boolean(args.referenceUrls?.length),
+        });
     await ctx.runMutation(setEnhancedPromptRef, {
       jobId: args.jobId,
       enhancedPrompt,
-      negativePrompt: preset.negativePrompt,
+      negativePrompt: skipEnhancement ? undefined : preset.negativePrompt,
     });
 
     if (args.mode === "video") {
@@ -556,6 +566,7 @@ export const runGenerationForApi = action({
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
+    skipPromptEnhancement: v.optional(v.boolean()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -588,6 +599,7 @@ export const runGenerationForApi = action({
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      skipPromptEnhancement: args.skipPromptEnhancement,
     });
     const executed = await executeQueuedApiJob(ctx, {
       jobId: prepared.jobId,
@@ -615,13 +627,18 @@ export const runScriptForApi = action({
     stylePresetId: v.id("stylePresets"),
     userPrompt: v.string(),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
+    skipScriptEnhancement: v.optional(v.boolean()),
   },
   returns: v.object({
     documentId: v.id("documents"),
     title: v.string(),
     creditsSpent: v.number(),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    documentId: Id<"documents">;
+    title: string;
+    creditsSpent: number;
+  }> => {
     const referenceInputs = args.referenceInputs ?? [];
     const preset = await ctx.runQuery(api.stylePresets.get, {
       presetId: args.stylePresetId,
@@ -637,15 +654,21 @@ export const runScriptForApi = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const contentMarkdown = await generateScriptWithGateway({
-        userPrompt: args.userPrompt,
-        presetName: preset.name,
-        presetInstructions: preset.systemInstructions,
-        scriptInstructions: preset.scriptInstructions,
-        storytellingEnabled: preset.storytelling,
-        negativePrompt: preset.negativePrompt,
-        referenceInputs,
+      const skipScript = shouldSkipPromptEnhancement({
+        skipPromptEnhancement: args.skipScriptEnhancement,
+        presetSlug: preset.slug,
       });
+      const contentMarkdown = skipScript
+        ? args.userPrompt.trim()
+        : await generateScriptWithGateway({
+            userPrompt: args.userPrompt,
+            presetName: preset.name,
+            presetInstructions: preset.systemInstructions,
+            scriptInstructions: preset.scriptInstructions,
+            storytellingEnabled: preset.storytelling,
+            negativePrompt: preset.negativePrompt,
+            referenceInputs,
+          });
       const title = scriptTitle(args.userPrompt, contentMarkdown);
       const documentId = await ctx.runMutation(createDocumentForApiRef, {
         userId: args.userId,

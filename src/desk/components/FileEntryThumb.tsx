@@ -22,6 +22,13 @@ function entryKind(entry) {
   return fileViewerKind(entry?.ext ?? fileExt(entry?.path ?? entry?.name ?? ""));
 }
 
+export function elementBadgeIcon(elementType) {
+  if (elementType === "character") return "user";
+  if (elementType === "prop") return "package";
+  if (elementType === "location") return "mapPin";
+  return "fileText";
+}
+
 function TextSnippet({ path, workspaceId, className }) {
   const [snippet, setSnippet] = useState("");
   const [failed, setFailed] = useState(false);
@@ -101,6 +108,21 @@ export function FileEntryThumb({
     visual = (
       <div className="desk-file-thumb-folder">
         <Icon name={icon} size={size === "preview" ? 40 : 30} className={folderIconClass} />
+      </div>
+    );
+  } else if (entry?.studioKind === "element") {
+    const badge = elementBadgeIcon(entry.elementType);
+    const sheetUrl = thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : null;
+    visual = sheetUrl ? (
+      <>
+        <img src={sheetUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
+        <span className="desk-file-thumb-badge" aria-hidden>
+          <Icon name={badge} size={14} />
+        </span>
+      </>
+    ) : (
+      <div className="desk-file-thumb-fallback">
+        <Icon name={badge} size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
       </div>
     );
   } else {

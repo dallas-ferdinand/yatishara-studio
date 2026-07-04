@@ -172,7 +172,13 @@ export default defineSchema({
     type: elementType,
     name: v.string(),
     description: v.optional(v.string()),
+    /** @deprecated Use referenceAssetIds — kept for legacy rows only */
     sourceAssetIds: v.array(v.id("assets")),
+    /** Uploaded photos used only to build the sheet — not sent to generation */
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    /** Built reference sheet image — used when element is attached to generation */
+    sheetAssetId: v.optional(v.id("assets")),
+    builtAt: v.optional(v.number()),
     sourceDocumentId: v.optional(v.id("documents")),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -256,6 +262,7 @@ export default defineSchema({
     spentCreditTransactionId: v.optional(v.id("creditTransactions")),
     source: v.optional(generationSource),
     apiKeyId: v.optional(v.id("apiKeys")),
+    skipPromptEnhancement: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

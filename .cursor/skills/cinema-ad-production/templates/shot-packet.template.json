@@ -1,0 +1,43 @@
+{
+  "packet_type": "shot",
+  "shot_id": "S01",
+  "scene_id": "SC01",
+  "duration_sec": 0,
+  "action": "",
+  "camera": {
+    "lens": "",
+    "height": "",
+    "framing": "",
+    "movement": "",
+    "repertoire_refs": []
+  },
+  "lighting": {
+    "key": "",
+    "fill": "",
+    "contrast": "",
+    "repertoire_refs": []
+  },
+  "sound": {
+    "bed": "",
+    "sfx": [],
+    "silence_beats": [],
+    "repertoire_refs": []
+  },
+  "music": {
+    "presence": "none",
+    "entry": null,
+    "ducking": null,
+    "repertoire_refs": []
+  },
+  "color": {
+    "grade": "",
+    "repertoire_refs": []
+  },
+  "motion_graphics": {
+    "presence": "none"
+  },
+  "dialogue": null,
+  "narrator": null,
+  "continuity_locks": [],
+  "generation_prompt": ""
+}

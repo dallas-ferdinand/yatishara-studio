@@ -3,8 +3,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { buildAssetPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
-import { isFolderInSandbox } from "./lib/studioApi/folderScope";
-import { creditCostForGeneration, textCreditCost } from "./lib/generationPricing";
+import {
+  assertReferenceCount,
+  referenceAssetIdsFromInput,
+  resolveElementAssets,
+} from "./lib/elementAssetModel";
+import { isFolderDescendantOf, isFolderInSandbox } from "./lib/studioApi/folderScope";
+import { creditCostForGeneration, CREDIT_PRICE_TTD, textCreditCost } from "./lib/generationPricing";
 
 const folderShape = v.object({
   id: v.id("folders"),
@@ -332,6 +337,42 @@ export const createFolder = internalMutation({
   },
 });
 
+export const updateFolderForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    folderId: v.id("folders"),
+    name: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    parentId: v.optional(v.id("folders")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    if (args.folderId === args.sandboxFolderId && args.parentId !== undefined) {
+      throw new Error("Cannot move sandbox root folder");
+    }
+    if (args.parentId !== undefined) {
+      if (args.parentId === args.folderId) {
+        throw new Error("Folder cannot be moved into itself");
+      }
+      await requireFolderForUser(ctx, args.userId, args.parentId, args.sandboxFolderId);
+      if (await isFolderDescendantOf(ctx, args.parentId, args.folderId)) {
+        throw new Error("Folder cannot be moved into its own subfolder");
+      }
+    }
+    await ctx.db.patch(args.folderId, {
+      ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+      ...(args.icon !== undefined ? { icon: args.icon } : {}),
+      ...(args.color !== undefined ? { color: args.color } : {}),
+      ...(args.parentId !== undefined ? { parentId: args.parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const getAsset = internalQuery({
   args: {
     userId: v.id("users"),
@@ -607,6 +648,122 @@ export const estimateGenerationCost = internalQuery({
   },
 });
 
+export const estimateBatchProduction = internalQuery({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    items: v.array(
+      v.object({
+        label: v.string(),
+        mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
+        resolution: v.optional(v.string()),
+        durationSeconds: v.optional(v.number()),
+        audioEnabled: v.optional(v.boolean()),
+        hasReferenceInput: v.optional(v.boolean()),
+        referenceAssetIds: v.optional(v.array(v.id("assets"))),
+        maxRounds: v.number(),
+      }),
+    ),
+    contingencyPercent: v.optional(v.number()),
+  },
+  returns: v.object({
+    items: v.array(
+      v.object({
+        label: v.string(),
+        unitCost: v.number(),
+        maxRounds: v.number(),
+        subtotal: v.number(),
+      }),
+    ),
+    subtotalCredits: v.number(),
+    contingencyCredits: v.number(),
+    totalCredits: v.number(),
+    totalTTD: v.number(),
+    creditBalance: v.number(),
+    canGenerate: v.boolean(),
+    creditPriceTTD: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    const creditBalance = account?.creditBalance ?? 0;
+    const contingencyPercent = Math.max(0, args.contingencyPercent ?? 15);
+
+    const items = [];
+    let subtotalCredits = 0;
+
+    for (const item of args.items) {
+      const maxRounds = Math.max(1, Math.ceil(item.maxRounds));
+      let unitCost = 0;
+
+      if (item.mode === "script") {
+        const refs = await loadReferenceKinds(
+          ctx,
+          args.userId,
+          item.referenceAssetIds ?? [],
+          args.sandboxFolderId,
+        );
+        unitCost = textCreditCost({
+          imageReferenceCount: refs.filter((k) => k === "image").length,
+          videoReferenceCount: refs.filter((k) => k === "video").length,
+          audioReferenceCount: refs.filter((k) => k === "audio").length,
+        });
+      } else {
+        const resolution =
+          item.resolution ?? (item.mode === "image" ? "2K" : "1280x720");
+        const tier = item.mode === "video" ? ("pro_video" as const) : ("image" as const);
+        const referenceFlags =
+          item.referenceAssetIds?.length
+            ? await referenceFlagsForAssets(
+                ctx,
+                args.userId,
+                item.referenceAssetIds,
+                item.mode,
+                args.sandboxFolderId,
+              )
+            : {
+                hasReferenceInput: item.hasReferenceInput ?? false,
+                hasVideoReferenceInput: false,
+                hasNonVideoReferenceInput: false,
+              };
+        unitCost = creditCostForGeneration({
+          tier,
+          resolution,
+          durationSeconds: item.durationSeconds,
+          audioEnabled: item.audioEnabled,
+          ...referenceFlags,
+        });
+      }
+
+      const subtotal = unitCost * maxRounds;
+      subtotalCredits += subtotal;
+      items.push({
+        label: item.label,
+        unitCost,
+        maxRounds,
+        subtotal,
+      });
+    }
+
+    const contingencyCredits = Math.ceil(subtotalCredits * (contingencyPercent / 100));
+    const totalCredits = subtotalCredits + contingencyCredits;
+    const totalTTD = totalCredits * CREDIT_PRICE_TTD;
+
+    return {
+      items,
+      subtotalCredits,
+      contingencyCredits,
+      totalCredits,
+      totalTTD,
+      creditBalance,
+      canGenerate: creditBalance >= totalCredits,
+      creditPriceTTD: CREDIT_PRICE_TTD,
+    };
+  },
+});
+
 export const resolveStylePresetBySlug = internalQuery({
   args: { slug: v.string() },
   returns: v.union(
@@ -806,6 +963,35 @@ export const updateDocumentForApi = internalMutation({
   },
 });
 
+export const updateAssetForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    assetId: v.id("assets"),
+    name: v.optional(v.string()),
+    folderId: v.optional(v.id("folders")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get("assets", args.assetId);
+    if (!asset || asset.ownerId !== args.userId || asset.deletedAt) {
+      throw new Error("Asset not found");
+    }
+    if (!(await isFolderInSandbox(ctx, asset.folderId, args.sandboxFolderId))) {
+      throw new Error("Asset not found");
+    }
+    if (args.folderId !== undefined) {
+      await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    }
+    await ctx.db.patch(asset._id, {
+      ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+      ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const listElementsForApi = internalQuery({
   args: {
     userId: v.id("users"),
@@ -818,6 +1004,7 @@ export const listElementsForApi = internalQuery({
         v.literal("doc"),
       ),
     ),
+    folderId: v.optional(v.id("folders")),
     expiresUnix: v.number(),
   },
   returns: v.array(v.any()),
@@ -837,6 +1024,9 @@ export const listElementsForApi = internalQuery({
     const active = elements.filter((e) => !e.deletedAt);
     const scoped = [];
     for (const element of active) {
+      if (args.folderId !== undefined && element.folderId !== args.folderId) {
+        continue;
+      }
       if (!element.folderId || (await isFolderInSandbox(ctx, element.folderId, args.sandboxFolderId))) {
         scoped.push(element);
       }
@@ -844,6 +1034,83 @@ export const listElementsForApi = internalQuery({
     return await Promise.all(
       scoped.map(async (element) => formatElement(ctx, element, args.expiresUnix)),
     );
+  },
+});
+
+export const resolveElementAssetsForUser = internalQuery({
+  args: {
+    userId: v.id("users"),
+    elementId: v.id("elements"),
+  },
+  returns: v.object({
+    referenceAssetIds: v.array(v.id("assets")),
+    sheetAssetId: v.optional(v.id("assets")),
+    buildStatus: v.union(v.literal("unbuilt"), v.literal("built")),
+    builtAt: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const element = await ctx.db.get("elements", args.elementId);
+    if (!element || element.ownerId !== args.userId || element.deletedAt) {
+      throw new Error("Element not found");
+    }
+    const resolved = await resolveElementAssets(ctx, element);
+    return {
+      referenceAssetIds: resolved.referenceAssetIds,
+      sheetAssetId: resolved.sheetAssetId,
+      buildStatus: resolved.buildStatus,
+      builtAt: resolved.builtAt,
+    };
+  },
+});
+
+export const resolveReferenceElementIds = internalQuery({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    elementIds: v.array(v.id("elements")),
+  },
+  returns: v.object({
+    referenceAssetIds: v.array(v.id("assets")),
+    promptLines: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const referenceAssetIds: Id<"assets">[] = [];
+    const promptLines: string[] = [];
+    const unbuiltElementNames: string[] = [];
+
+    for (const elementId of args.elementIds) {
+      const element = await ctx.db.get("elements", elementId);
+      if (!element || element.ownerId !== args.userId || element.deletedAt) {
+        throw new Error(`Element not found: ${elementId}`);
+      }
+      if (
+        element.folderId &&
+        !(await isFolderInSandbox(ctx, element.folderId, args.sandboxFolderId))
+      ) {
+        throw new Error(`Element not found: ${elementId}`);
+      }
+      const resolved = await resolveElementAssets(ctx, element);
+      if (resolved.buildStatus !== "built" || !resolved.sheetAssetId) {
+        unbuiltElementNames.push(element.name);
+        continue;
+      }
+      referenceAssetIds.push(resolved.sheetAssetId);
+      if (element.description?.trim()) {
+        promptLines.push(
+          `${element.type} @${element.name}:\n${element.description.trim()}`,
+        );
+      } else {
+        promptLines.push(`${element.type} @${element.name} (built sheet attached)`);
+      }
+    }
+
+    if (unbuiltElementNames.length) {
+      throw new Error(
+        `Elements must be built before use in generation (missing sheet): ${unbuiltElementNames.join(", ")}. Call generate-sheet first.`,
+      );
+    }
+
+    return { referenceAssetIds, promptLines };
   },
 });
 
@@ -880,6 +1147,7 @@ export const createElementForApi = internalMutation({
     name: v.string(),
     description: v.optional(v.string()),
     folderId: v.optional(v.id("folders")),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
   },
@@ -888,7 +1156,9 @@ export const createElementForApi = internalMutation({
     if (args.folderId) {
       await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
     }
-    for (const assetId of args.sourceAssetIds ?? []) {
+    const referenceAssetIds = referenceAssetIdsFromInput(args);
+    assertReferenceCount(referenceAssetIds.length);
+    for (const assetId of referenceAssetIds) {
       const asset = await ctx.db.get("assets", assetId);
       if (!asset || asset.ownerId !== args.userId || asset.deletedAt) {
         throw new Error("Asset not found");
@@ -913,11 +1183,112 @@ export const createElementForApi = internalMutation({
       type: args.type,
       name: args.name.trim(),
       description: args.description?.trim(),
-      sourceAssetIds: args.sourceAssetIds ?? [],
+      sourceAssetIds: referenceAssetIds,
+      referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const updateElementForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    elementId: v.id("elements"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    folderId: v.optional(v.id("folders")),
+    referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    sourceAssetIds: v.optional(v.array(v.id("assets"))),
+    sourceDocumentId: v.optional(v.id("documents")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const element = await ctx.db.get("elements", args.elementId);
+    if (!element || element.ownerId !== args.userId || element.deletedAt) {
+      throw new Error("Element not found");
+    }
+    if (
+      element.folderId &&
+      !(await isFolderInSandbox(ctx, element.folderId, args.sandboxFolderId))
+    ) {
+      throw new Error("Element not found");
+    }
+    if (args.folderId !== undefined) {
+      await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    }
+    const nextReferenceAssetIds =
+      args.referenceAssetIds !== undefined
+        ? args.referenceAssetIds
+        : args.sourceAssetIds !== undefined
+          ? args.sourceAssetIds
+          : undefined;
+    if (nextReferenceAssetIds !== undefined) {
+      assertReferenceCount(nextReferenceAssetIds.length);
+      for (const assetId of nextReferenceAssetIds) {
+        const asset = await ctx.db.get("assets", assetId);
+        if (!asset || asset.ownerId !== args.userId || asset.deletedAt) {
+          throw new Error("Asset not found");
+        }
+        if (!(await isFolderInSandbox(ctx, asset.folderId, args.sandboxFolderId))) {
+          throw new Error("Asset not found");
+        }
+        if (element.sheetAssetId && assetId === element.sheetAssetId) {
+          throw new Error(
+            "referenceAssetIds must be upload photos only — do not include the built sheet asset.",
+          );
+        }
+      }
+    }
+    if (args.sourceDocumentId !== undefined) {
+      const doc = await ctx.db.get("documents", args.sourceDocumentId);
+      if (!doc || doc.ownerId !== args.userId || doc.deletedAt) {
+        throw new Error("Document not found");
+      }
+      if (!(await isFolderInSandbox(ctx, doc.folderId, args.sandboxFolderId))) {
+        throw new Error("Document not found");
+      }
+    }
+    await ctx.db.patch(element._id, {
+      ...(args.name !== undefined ? { name: args.name.trim() } : {}),
+      ...(args.description !== undefined ? { description: args.description } : {}),
+      ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
+      ...(nextReferenceAssetIds !== undefined
+        ? {
+            referenceAssetIds: nextReferenceAssetIds,
+            sourceAssetIds: nextReferenceAssetIds,
+          }
+        : {}),
+      ...(args.sourceDocumentId !== undefined
+        ? { sourceDocumentId: args.sourceDocumentId }
+        : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const countImageAssetsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    assetIds: v.array(v.id("assets")),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    let count = 0;
+    for (const assetId of args.assetIds) {
+      const asset = await ctx.db.get("assets", assetId);
+      if (!asset || asset.ownerId !== args.userId || asset.deletedAt || asset.kind !== "image") {
+        continue;
+      }
+      if (await isFolderInSandbox(ctx, asset.folderId, args.sandboxFolderId)) {
+        count += 1;
+      }
+    }
+    return count;
   },
 });
 
@@ -1528,8 +1899,9 @@ async function formatElement(
   element: Doc<"elements">,
   expiresUnix: number,
 ) {
-  const sourceAssets = await Promise.all(
-    element.sourceAssetIds.map(async (assetId) => {
+  const resolved = await resolveElementAssets(ctx, element);
+  const referenceAssets = await Promise.all(
+    resolved.referenceAssetIds.map(async (assetId) => {
       const asset = await ctx.db.get("assets", assetId);
       if (!asset || asset.deletedAt) {
         return null;
@@ -1537,14 +1909,32 @@ async function formatElement(
       return await formatAsset(ctx, asset, expiresUnix);
     }),
   );
+  let sheetAsset = null;
+  let sheetUrl: string | undefined;
+  if (resolved.sheetAssetId) {
+    const asset = await ctx.db.get("assets", resolved.sheetAssetId);
+    if (asset && !asset.deletedAt) {
+      sheetAsset = await formatAsset(ctx, asset, expiresUnix);
+      sheetUrl = sheetAsset.url;
+    }
+  }
   return {
     id: element._id,
     type: element.type,
     name: element.name,
     description: element.description,
     folderId: element.folderId,
-    sourceAssetIds: element.sourceAssetIds,
-    sourceAssets: sourceAssets.filter(Boolean),
+    buildStatus: resolved.buildStatus,
+    builtAt: resolved.builtAt,
+    referenceAssetIds: resolved.referenceAssetIds,
+    referenceAssets: referenceAssets.filter(Boolean),
+    sheetAssetId: resolved.sheetAssetId,
+    sheetAsset,
+    sheetUrl,
+    /** @deprecated Upload refs only — use referenceAssetIds */
+    sourceAssetIds: resolved.referenceAssetIds,
+    /** @deprecated Use referenceAssets */
+    sourceAssets: referenceAssets.filter(Boolean),
     sourceDocumentId: element.sourceDocumentId,
     createdAt: element.createdAt,
     updatedAt: element.updatedAt,

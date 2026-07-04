@@ -1,9 +1,27 @@
 /**
  * Joe Elliott Storytelling Foundation — studio-wide narrative DNA.
- * Applied to script generation and prompt enhancement unless explicitly overridden.
+ * Original Yatishara philosophy (not a real ad director). Sync with
+ * mercuryos `.agents/skills/joe-elliott/references/foundation.md`.
+ * For character-first conversion ads, route creators to Ernesto instead.
  */
 
+export const STORYTELLING_DECISION_ENGINE = `Decision engine (answer before writing):
+1. Witness object — what ordinary thing stays in frame while life changes?
+2. Invisible truth — what human truth lives here?
+3. Quiet conflict — what life-pressure (no villain)?
+4. Behavior proof — what observable action shows emotion (never label it)?
+5. Time passage — what changed vs what never changed?
+6. Audience projection — what memory will they supply from their own life?
+7. Closing revelation — one line that reveals truth, not plot summary.
+If the brief needs character transformation more than object memory, use Ernesto-style character-first storytelling instead.`;
+
 export const STORYTELLING_FOUNDATION = `# JOE ELLIOTT STORYTELLING FOUNDATION
+
+## What this is
+
+**Joe Elliott** is an original Yatishara storytelling philosophy — not an imitation of a real ad director. Dallas developed it: find extraordinary emotional weight in ordinary objects. The product is rarely the hero — the human truth is.
+
+---
 
 ## Purpose
 
@@ -315,19 +333,61 @@ The product becomes associated with that memory.
 
 Not because the advertisement demanded it.
 
-Because the audience completed the meaning themselves.`;
+Because the audience completed the meaning themselves.
+
+---
+
+## Why Joe works (buying mechanism)
+
+Joe sells **meaning**, not features. Past → meaning → identity → purchase. Viewers think "That's my life." Buying feels like agreeing with a truth.
+
+**Strength:** brand building — people remember the ad years later; the brand attaches to memory.
+
+**Weakness:** comparison shoppers (price, urgency, "who's cheaper") — Joe points backward at memory, not forward at relief.
+
+---
+
+## Joe vs character-first (Ernesto)
+
+| | Joe Elliott | Ernesto |
+|--|-------------|---------|
+| Center | Object witnesses life | Person's behavior changes |
+| Question | What object holds this experience? | What behavior proves life got lighter? |
+| Buys | Affinity — "that's my life" | Conversion — "that's happening to me" |
+| Time | Backward (memory) | Forward (tomorrow lighter) |
+
+Yatishara default: ~30% Joe · ~70% Ernesto. Pick from brief goal.
+
+---
+
+## Decision engine
+
+${STORYTELLING_DECISION_ENGINE}
+
+---
+
+## When to use Joe in Studio
+
+Use **Story ad** preset when the brief wants witness-object brand film (bed, chair, honey, home comfort). Use **Cinematic/Realism + Ernesto beat sheet** when the brief needs a character turn and conversion.
+
+---
+
+## Reference structure (THE BED)
+
+Empty object → life beats across time → object unchanged, people changed → reflective narrator close → simple product, no hard sell. The object is never the story; viewers project their own memories.`;
 
 /**
  * Distilled foundation for prompt enhancement (video/image). The full document
  * is reserved for script generation where the model has room to use it.
  */
-export const STORYTELLING_COMPACT = `Storytelling principles:
+export const STORYTELLING_COMPACT = `Storytelling principles (Joe Elliott — original witness-object philosophy):
 - The product is a silent witness, never the hero. Life happens around it.
 - Show observable behavior only — never emotion labels ("sad", "peaceful", "loving").
 - Objects carry memory: hands, tables, doorways, mugs, blankets, worn surfaces, sunlight, steam.
 - Conflict is quiet and comes from life itself: growing older, leaving home, missing someone.
 - The camera observes; it does not perform. Patient shots. Let actions finish. Trust silence and faces.
-- The ending reveals what the story was truly about — it never summarizes or sells.`;
+- The ending reveals what the story was truly about — it never summarizes or sells.
+- Sells meaning and affinity ("that's my life"), not character transformation — use Ernesto-style beats if conversion is the goal.`;
 
 export const STORYTELLING_NEVER = [
   "Never make the product the hero or plot solution.",
@@ -395,11 +455,13 @@ export function storytellingSystemLayer(
   if (outputKind === "script") {
     return [
       "You are a storyteller trained in the Joe Elliott Storytelling Foundation.",
+      "Joe Elliott is an original Yatishara philosophy — not a celebrity reference.",
       "Every script must reveal invisible human meaning inside ordinary objects.",
       "The product is a silent witness — never the hero, never the plot solution.",
       "Show observable behavior; never label emotions.",
       "Conflict is quiet. The camera observes; it does not perform.",
-      "The audience should remember someone from their own life.",
+      "The audience should remember someone from their own life and complete the meaning themselves.",
+      STORYTELLING_DECISION_ENGINE,
       STORYTELLING_NEVER,
     ].join(" ");
   }

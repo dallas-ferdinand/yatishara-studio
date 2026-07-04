@@ -1,0 +1,23 @@
+{
+  "packet_type": "story",
+  "version": 1,
+  "director_route": "joe",
+  "logline": "",
+  "human_truth": "",
+  "witness_object": "",
+  "character_arc": null,
+  "duration_sec": 90,
+  "scenes": [
+    {
+      "scene_id": "SC01",
+      "title": "",
+      "duration_sec": 0,
+      "beats": [],
+      "dialogue": [],
+      "narrator": null,
+      "observable_actions": []
+    }
+  ],
+  "closing_line": "",
+  "narrator_close": ""
+}

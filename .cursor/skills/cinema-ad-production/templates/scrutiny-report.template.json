@@ -1,0 +1,19 @@
+{
+  "packet_type": "scrutiny_report",
+  "phase": "A",
+  "round": 1,
+  "reviews": [
+    {
+      "mode": "scrutiny",
+      "role": "",
+      "shot_id": null,
+      "scene_id": "SC01",
+      "approve": true,
+      "conflicts": [],
+      "notes": []
+    }
+  ],
+  "blocking_count": 0,
+  "negotiate_count": 0,
+  "note_count": 0
+}

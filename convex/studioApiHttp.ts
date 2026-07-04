@@ -2,6 +2,12 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { hashApiKey } from "./lib/studioApi/crypto";
+import {
+  ELEMENT_PRODUCTION_GUIDE,
+  ELEMENT_SHEET_REFERENCE_POLICY,
+  sheetReferencePolicy,
+} from "./lib/elementSheetGuides";
+import { MAX_GENERATION_REFERENCE_ASSETS } from "./lib/elementAssetModel";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
   errorResponse,
@@ -260,6 +266,41 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
       return finish(jsonResponse({ folder }));
     }
+    if (request.method === "PATCH" && folderMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const folderId = folderMatch[1] as Id<"folders">;
+      const body = await readJsonBody<{
+        name?: string;
+        icon?: string;
+        color?: string;
+        parentId?: Id<"folders">;
+      }>(request);
+      try {
+        await ctx.runMutation(internal.studioApiInternal.updateFolderForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          folderId,
+          name: body.name,
+          icon: body.icon,
+          color: body.color,
+          parentId: body.parentId,
+        });
+        const folder = await ctx.runQuery(internal.studioApiInternal.getFolder, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          folderId,
+        });
+        if (!folder) {
+          return finish(errorResponse("Folder not found", 404));
+        }
+        return finish(jsonResponse({ folder }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Update failed";
+        const status = message.includes("not found") ? 404 : 400;
+        return finish(errorResponse(message, status));
+      }
+    }
     if (request.method === "DELETE" && folderMatch) {
       const auth = await authFor("write", "write");
       if (auth instanceof Response) return finish(auth);
@@ -305,6 +346,38 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         return finish(errorResponse("Asset not found", 404));
       }
       return finish(jsonResponse({ asset }));
+    }
+    if (request.method === "PATCH" && assetMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const assetId = assetMatch[1] as Id<"assets">;
+      const body = await readJsonBody<{
+        name?: string;
+        folderId?: Id<"folders">;
+      }>(request);
+      try {
+        await ctx.runMutation(internal.studioApiInternal.updateAssetForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          assetId,
+          name: body.name,
+          folderId: body.folderId,
+        });
+        const asset = await ctx.runQuery(internal.studioApiInternal.getAsset, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          assetId,
+          expiresUnix,
+        });
+        if (!asset) {
+          return finish(errorResponse("Asset not found", 404));
+        }
+        return finish(jsonResponse({ asset }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Update failed";
+        const status = message.includes("not found") ? 404 : 400;
+        return finish(errorResponse(message, status));
+      }
     }
     if (request.method === "DELETE" && assetMatch) {
       const auth = await authFor("write", "write");
@@ -489,6 +562,43 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
     }
 
+    if (request.method === "GET" && route === "elements/production-guide") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      return finish(
+        jsonResponse({
+          guide: ELEMENT_PRODUCTION_GUIDE,
+          note: "Elements have unbuilt (refs only) and built (sheetAssetId) states. Generation uses the sheet, not upload refs.",
+        }),
+      );
+    }
+
+    if (request.method === "GET" && route === "elements/sheet-guide") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const type = url.searchParams.get("type") as
+        | "character"
+        | "prop"
+        | "location"
+        | "doc"
+        | null;
+      if (!type || type === "doc") {
+        return finish(
+          errorResponse("type query param required: character, prop, or location"),
+        );
+      }
+      const guide = sheetReferencePolicy(type);
+      return finish(
+        jsonResponse({
+          type,
+          guide,
+          all: ELEMENT_SHEET_REFERENCE_POLICY,
+          note:
+            "studio_create_element only registers the element. studio_generate_element_sheet builds the sheet image. Upload refs first; do not restyle subjects.",
+        }),
+      );
+    }
+
     if (request.method === "GET" && route === "elements") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
@@ -498,10 +608,13 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         | "location"
         | "doc"
         | null;
+      const folderIdRaw = url.searchParams.get("folderId");
+      const folderId = parseOptionalId(folderIdRaw) as Id<"folders"> | undefined;
       const elements = await ctx.runQuery(internal.studioApiInternal.listElementsForApi, {
         userId: auth.userId,
         sandboxFolderId: auth.sandboxFolderId,
         type: type ?? undefined,
+        folderId,
         expiresUnix,
       });
       return finish(jsonResponse({ elements }));
@@ -515,6 +628,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         name?: string;
         description?: string;
         folderId?: Id<"folders">;
+        referenceAssetIds?: Id<"assets">[];
         sourceAssetIds?: Id<"assets">[];
         sourceDocumentId?: Id<"documents">;
       }>(request);
@@ -528,6 +642,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         name: body.name,
         description: body.description,
         folderId: body.folderId,
+        referenceAssetIds: body.referenceAssetIds ?? body.sourceAssetIds,
         sourceAssetIds: body.sourceAssetIds,
         sourceDocumentId: body.sourceDocumentId,
       });
@@ -538,6 +653,70 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         expiresUnix,
       });
       return finish(jsonResponse({ element }, 201));
+    }
+
+    const elementTextSheetMatch = route.match(/^elements\/([^/]+)\/generate-text-sheet$/);
+    if (request.method === "POST" && elementTextSheetMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const elementId = elementTextSheetMatch[1] as Id<"elements">;
+      const body = await readJsonBody<{
+        referenceAssetIds?: Id<"assets">[];
+      }>(request);
+      try {
+        const result = await ctx.runAction(api.elementActions.generateElementTextSheetForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          elementId,
+          referenceAssetIds: body.referenceAssetIds,
+          expiresUnix,
+        });
+        const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          elementId,
+          expiresUnix,
+        });
+        return finish(jsonResponse({ ...result, element }, 201));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Text sheet generation failed";
+        const status =
+          message.includes("not found") || message.includes("Not found") ? 404 : 400;
+        return finish(errorResponse(message, status));
+      }
+    }
+
+    const elementSheetMatch = route.match(/^elements\/([^/]+)\/generate-sheet$/);
+    if (request.method === "POST" && elementSheetMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const elementId = elementSheetMatch[1] as Id<"elements">;
+      const body = await readJsonBody<{
+        referenceAssetIds?: Id<"assets">[];
+        resolution?: "1K" | "2K";
+      }>(request);
+      try {
+        const result = await ctx.runAction(api.elementActions.generateElementSheetForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          elementId,
+          referenceAssetIds: body.referenceAssetIds,
+          resolution: body.resolution,
+          expiresUnix,
+        });
+        const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          elementId,
+          expiresUnix,
+        });
+        return finish(jsonResponse({ ...result, element }, 201));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Sheet generation failed";
+        const status =
+          message.includes("not found") || message.includes("Not found") ? 404 : 400;
+        return finish(errorResponse(message, status));
+      }
     }
 
     const elementMatch = route.match(/^elements\/([^/]+)$/);
@@ -556,6 +735,42 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           return finish(jsonResponse({ element }));
         } catch {
           return finish(errorResponse("Element not found", 404));
+        }
+      }
+      if (request.method === "PATCH") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          name?: string;
+          description?: string;
+          folderId?: Id<"folders">;
+          referenceAssetIds?: Id<"assets">[];
+          sourceAssetIds?: Id<"assets">[];
+          sourceDocumentId?: Id<"documents">;
+        }>(request);
+        try {
+          await ctx.runMutation(internal.studioApiInternal.updateElementForApi, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            elementId,
+            name: body.name,
+            description: body.description,
+            folderId: body.folderId,
+            referenceAssetIds: body.referenceAssetIds ?? body.sourceAssetIds,
+            sourceAssetIds: body.sourceAssetIds,
+            sourceDocumentId: body.sourceDocumentId,
+          });
+          const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            elementId,
+            expiresUnix,
+          });
+          return finish(jsonResponse({ element }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Update failed";
+          const status = message.includes("not found") ? 404 : 400;
+          return finish(errorResponse(message, status));
         }
       }
       if (request.method === "DELETE") {
@@ -615,6 +830,37 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse(job));
     }
 
+    if (request.method === "POST" && route === "generations/estimate-batch") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+
+      const body = await readJsonBody<{
+        items?: Array<{
+          label: string;
+          mode: "image" | "video" | "script";
+          resolution?: string;
+          durationSeconds?: number;
+          audioEnabled?: boolean;
+          hasReferenceInput?: boolean;
+          referenceAssetIds?: Id<"assets">[];
+          maxRounds: number;
+        }>;
+        contingencyPercent?: number;
+      }>(request);
+
+      if (!body.items?.length) {
+        return finish(errorResponse("items array is required"));
+      }
+
+      const estimate = await ctx.runQuery(internal.studioApiInternal.estimateBatchProduction, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        items: body.items,
+        contingencyPercent: body.contingencyPercent,
+      });
+      return finish(jsonResponse(estimate));
+    }
+
     if (request.method === "POST" && route === "generations/estimate") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
@@ -625,11 +871,27 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds?: number;
         audioEnabled?: boolean;
         referenceAssetIds?: Id<"assets">[];
+        referenceElementIds?: Id<"elements">[];
       }>(request);
 
       const mode = body.mode ?? "image";
       if (mode !== "image" && mode !== "video" && mode !== "script") {
         return finish(errorResponse("mode must be image, video, or script"));
+      }
+
+      let estimateAssetIds = body.referenceAssetIds ?? [];
+      if (body.referenceElementIds?.length) {
+        try {
+          const resolved = await ctx.runQuery(internal.studioApiInternal.resolveReferenceElementIds, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            elementIds: body.referenceElementIds,
+          });
+          estimateAssetIds = [...new Set([...estimateAssetIds, ...resolved.referenceAssetIds])];
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Element resolution failed";
+          return finish(errorResponse(message, message.includes("not found") ? 404 : 400));
+        }
       }
 
       const estimate = await ctx.runQuery(internal.studioApiInternal.estimateGenerationCost, {
@@ -639,7 +901,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         resolution: body.resolution,
         durationSeconds: body.durationSeconds,
         audioEnabled: body.audioEnabled,
-        referenceAssetIds: body.referenceAssetIds,
+        referenceAssetIds: estimateAssetIds.length ? estimateAssetIds : undefined,
       });
       return finish(jsonResponse(estimate));
     }
@@ -658,7 +920,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds?: number;
         audioEnabled?: boolean;
         referenceAssetIds?: Id<"assets">[];
+        referenceElementIds?: Id<"elements">[];
         wait?: boolean;
+        skipPromptEnhancement?: boolean;
       }>(request);
 
       if (!body.prompt?.trim()) {
@@ -678,11 +942,41 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         return finish(errorResponse(`Style preset not found: ${presetSlug}`, 404));
       }
 
+      let userPrompt = body.prompt.trim();
+      let mergedReferenceAssetIds = [...(body.referenceAssetIds ?? [])];
+
+      if (body.referenceElementIds?.length) {
+        try {
+          const resolved = await ctx.runQuery(internal.studioApiInternal.resolveReferenceElementIds, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            elementIds: body.referenceElementIds,
+          });
+          mergedReferenceAssetIds = [
+            ...new Set([...mergedReferenceAssetIds, ...resolved.referenceAssetIds]),
+          ];
+          if (resolved.promptLines.length) {
+            userPrompt = `${userPrompt}\n\nElement references:\n${resolved.promptLines.join("\n\n")}`;
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Element resolution failed";
+          return finish(errorResponse(message, message.includes("not found") ? 404 : 400));
+        }
+      }
+
+      if (mergedReferenceAssetIds.length > MAX_GENERATION_REFERENCE_ASSETS) {
+        return finish(
+          errorResponse(
+            `At most ${MAX_GENERATION_REFERENCE_ASSETS} reference assets per generation`,
+          ),
+        );
+      }
+
       let referenceUrls: string[] | undefined;
       let referenceInputs:
         | Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>
         | undefined;
-      if (body.referenceAssetIds?.length) {
+      if (mergedReferenceAssetIds.length) {
         const refs: Array<{
           assetId: Id<"assets">;
           kind: "image" | "video" | "audio" | "document";
@@ -691,11 +985,19 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         }> = await ctx.runQuery(internal.studioApiInternal.getAssetReferenceUrls, {
           userId: auth.userId,
         sandboxFolderId: auth.sandboxFolderId,
-          assetIds: body.referenceAssetIds,
+          assetIds: mergedReferenceAssetIds,
           expiresUnix,
         });
         if (mode === "image") {
-          referenceUrls = refs.filter((ref) => ref.kind === "image").map((ref) => ref.url);
+          const imageRefs = refs.filter((ref) => ref.kind === "image");
+          if (refs.length > 0 && imageRefs.length === 0) {
+            return finish(
+              errorResponse(
+                "Image generation requires at least one image reference asset. Video/audio/document refs cannot be used as image references.",
+              ),
+            );
+          }
+          referenceUrls = imageRefs.map((ref) => ref.url);
         } else {
           referenceInputs = refs.map((ref) => ({
             kind: ref.kind === "document" ? "image" : ref.kind,
@@ -711,8 +1013,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           folderId,
           apiKeyId: auth.apiKeyId,
           stylePresetId: preset.id,
-          userPrompt: body.prompt.trim(),
+          userPrompt,
           referenceInputs,
+          skipScriptEnhancement: body.skipPromptEnhancement,
         });
         const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
           userId: auth.userId,
@@ -765,8 +1068,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             ? (process.env.GATEWAY_VIDEO_MODEL_ID ?? "bytedance/seedance-2.0")
             : (process.env.GATEWAY_IMAGE_MODEL_ID ?? "openai/gpt-image-2"),
         stylePresetId: preset.id,
-        userPrompt: body.prompt.trim(),
-        title: body.prompt.trim().slice(0, 64) || "API generation",
+        userPrompt,
+        title: userPrompt.slice(0, 64) || "API generation",
         audioEnabled: body.audioEnabled,
         aspectRatio,
         resolution,
@@ -780,6 +1083,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         hasNonVideoReferenceInput:
           mode === "video" &&
           referenceInputsList.some((input) => input.kind === "image" || input.kind === "audio"),
+        skipPromptEnhancement: body.skipPromptEnhancement,
       };
 
       if (body.wait === false) {
@@ -822,6 +1126,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds: body.durationSeconds,
         referenceUrls,
         referenceInputs,
+        skipPromptEnhancement: body.skipPromptEnhancement,
       });
 
       const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {

@@ -1,0 +1,15 @@
+{
+  "packet_type": "prop",
+  "prop_spec_id": "prop:witness-jar-honey",
+  "visual_description": "",
+  "material_refs": ["mat:worn-glass", "wear:medium"],
+  "generation_prompt": "",
+  "prop_sheet_prompt": "",
+  "prop_sheet_layout": "sheet:grid-3x3",
+  "negative_prompt": "text, words, hands, person, colored background, logo, advertisement",
+  "style_bible_refs": [],
+  "round": 1,
+  "approved": false,
+  "file_path": null,
+  "studio_asset_id": null
+}

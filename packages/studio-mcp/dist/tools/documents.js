@@ -10,7 +10,7 @@ export function registerDocumentTools(server) {
         method: "POST",
         body: JSON.stringify({ folderId, title, contentMarkdown }),
     })));
-    server.tool("studio_update_document", "Update a document title, markdown content, or folder. Requires write scope.", {
+    server.tool("studio_update_document", "Rename a document (title), edit markdown content, or move it to another folder. Requires write scope.", {
         documentId: z.string(),
         title: z.string().optional(),
         contentMarkdown: z.string().optional(),
