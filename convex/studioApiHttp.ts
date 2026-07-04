@@ -908,6 +908,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         durationSeconds: body.durationSeconds,
         audioEnabled: body.audioEnabled,
         referenceAssetIds: estimateAssetIds.length ? estimateAssetIds : undefined,
+        videoModel: body.videoModel,
       });
       return finish(jsonResponse(estimate));
     }

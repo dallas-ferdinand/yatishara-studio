@@ -21,11 +21,28 @@ export const IMAGE_CREDITS_BY_RESOLUTION: Record<string, number> = {
 export const IMAGE_REFERENCE_SURCHARGE = 8;
 
 /** Seedance 2.0 — credits per 5-second block by output resolution */
-export const VIDEO_BASE_CREDITS_PER_BLOCK: Record<string, number> = {
+export const SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK: Record<string, number> = {
   "854x480": 36,
   "1280x720": 61,
   "1920x1080": 133,
 };
+
+/** @deprecated use SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK */
+export const VIDEO_BASE_CREDITS_PER_BLOCK = SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK;
+
+/**
+ * Kling 3.0 I2V — credits per 5-second block (Vercel gateway COGS ~$0.084/s 720p,
+ * ~$0.112/s with audio vs Seedance ~$0.25/s 720p). Lower base; no multimodal ref surcharges.
+ */
+export const KLING_VIDEO_BASE_CREDITS_PER_BLOCK: Record<string, number> = {
+  "854x480": 10,
+  "1280x720": 17,
+  "1920x1080": 37,
+};
+
+export type VideoPricingModel = "seedance-2.0" | "kling-3.0-i2v";
+
+export const KLING_VIDEO_AUDIO_SURCHARGE_PER_BLOCK = 5;
 
 /** Per 5-second block surcharges */
 export const VIDEO_AUDIO_SURCHARGE_PER_BLOCK = 7;
@@ -70,14 +87,21 @@ export function videoDurationBlocks(durationSeconds?: number): number {
   return Math.ceil(duration / 5);
 }
 
-export function videoBaseCreditsPerBlock(resolution: string | undefined): number {
+export function videoBaseCreditsPerBlock(
+  resolution: string | undefined,
+  videoModel: VideoPricingModel = "seedance-2.0",
+): number {
+  const table =
+    videoModel === "kling-3.0-i2v"
+      ? KLING_VIDEO_BASE_CREDITS_PER_BLOCK
+      : SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK;
   if (resolution === "854x480") {
-    return VIDEO_BASE_CREDITS_PER_BLOCK["854x480"];
+    return table["854x480"];
   }
   if (resolution === "1920x1080") {
-    return VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"];
+    return table["1920x1080"];
   }
-  return VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"];
+  return table["1280x720"];
 }
 
 export function videoCreditCost(args: {
@@ -87,13 +111,24 @@ export function videoCreditCost(args: {
   hasVideoReferenceInput?: boolean;
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
+  videoModel?: VideoPricingModel;
 }): number {
+  const videoModel = args.videoModel ?? "seedance-2.0";
   const blocks = videoDurationBlocks(args.durationSeconds);
-  let perBlock = videoBaseCreditsPerBlock(args.resolution);
+  let perBlock = videoBaseCreditsPerBlock(args.resolution, videoModel);
 
   if (args.audioEnabled) {
-    perBlock += VIDEO_AUDIO_SURCHARGE_PER_BLOCK;
+    perBlock +=
+      videoModel === "kling-3.0-i2v"
+        ? KLING_VIDEO_AUDIO_SURCHARGE_PER_BLOCK
+        : VIDEO_AUDIO_SURCHARGE_PER_BLOCK;
   }
+
+  if (videoModel === "kling-3.0-i2v") {
+    // Kling I2V: start frame only — prop/location refs are prompt-only, no multimodal billing.
+    return perBlock * blocks + PLATFORM_OVERHEAD_CREDITS_MEDIA;
+  }
+
   if (args.hasVideoReferenceInput) {
     perBlock += VIDEO_VIDEO_REFERENCE_SURCHARGE_PER_BLOCK;
   }
@@ -141,6 +176,7 @@ export function creditCostForGeneration(args: {
   hasVideoReferenceInput?: boolean;
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
+  videoModel?: VideoPricingModel;
 }): number {
   if (args.tier === "pro_video") {
     return videoCreditCost(args);

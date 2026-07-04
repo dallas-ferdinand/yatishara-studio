@@ -1,6 +1,11 @@
 import { v } from "convex/values";
 import { authedQuery } from "./lib/customFunctions";
-import { listVideoModelsPublic } from "./lib/videoModels";
+import { listVideoModelsPublic, videoPricingModelFromGatewayId } from "./lib/videoModels";
+import {
+  KLING_VIDEO_BASE_CREDITS_PER_BLOCK,
+  SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK,
+  videoCreditCost,
+} from "./lib/generationPricing";
 
 export const list = authedQuery({
   args: {},
@@ -12,7 +17,20 @@ export const list = authedQuery({
       requiresStartFrame: v.boolean(),
       supportsMultimodalRefs: v.boolean(),
       isDefault: v.boolean(),
+      creditsPer5sBlock720p: v.number(),
+      creditsPer5sBlock1080p: v.number(),
     }),
   ),
-  handler: async () => listVideoModelsPublic(),
+  handler: async () =>
+    listVideoModelsPublic().map((model) => ({
+      ...model,
+      creditsPer5sBlock720p:
+        model.slug === "kling-3.0-i2v"
+          ? KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"]
+          : SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
+      creditsPer5sBlock1080p:
+        model.slug === "kling-3.0-i2v"
+          ? KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"]
+          : SEEDANCE_VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
+    })),
 });

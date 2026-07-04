@@ -56,6 +56,17 @@ export function isSeedanceGatewayModel(modelId: string): boolean {
   return modelId.includes("seedance");
 }
 
+export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoModelSlug {
+  if (gatewayModelId.includes("kling")) {
+    return "kling-3.0-i2v";
+  }
+  return "seedance-2.0";
+}
+
+export function videoPricingModelFromSlug(slug?: string | null): VideoModelSlug {
+  return resolveVideoModel(slug).slug;
+}
+
 export function listVideoModelsPublic(): Array<{
   slug: VideoModelSlug;
   label: string;

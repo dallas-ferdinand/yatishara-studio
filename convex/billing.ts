@@ -11,6 +11,7 @@ import {
   PLATFORM_OVERHEAD_CREDITS_TEXT,
   TEXT_GENERATION_BASE_CREDITS,
   VIDEO_BASE_CREDITS_PER_BLOCK,
+  KLING_VIDEO_BASE_CREDITS_PER_BLOCK,
 } from "./lib/generationPricing";
 
 const paymentStatus = v.union(
@@ -40,6 +41,8 @@ const pricingReturn = v.object({
   videoCredits480p: v.number(),
   videoCredits720p: v.number(),
   videoCredits1080p: v.number(),
+  klingVideoCredits720p: v.number(),
+  klingVideoCredits1080p: v.number(),
   platformOverheadCreditsMedia: v.number(),
   platformOverheadCreditsText: v.number(),
   textCredits: v.number(),
@@ -94,6 +97,8 @@ export const getPricing = authedQuery({
       videoCredits480p: VIDEO_BASE_CREDITS_PER_BLOCK["854x480"],
       videoCredits720p: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
       videoCredits1080p: VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
+      klingVideoCredits720p: KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
+      klingVideoCredits1080p: KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
       platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,
       platformOverheadCreditsText: PLATFORM_OVERHEAD_CREDITS_TEXT,
       textCredits: TEXT_GENERATION_BASE_CREDITS + PLATFORM_OVERHEAD_CREDITS_TEXT,

@@ -522,6 +522,7 @@ export function StudioShell() {
           hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
           hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
           audioEnabled: mode === "video" ? audioEnabled : undefined,
+          videoModel: mode === "video" ? videoModelSlug : undefined,
         }
       : "skip",
   );
@@ -8029,6 +8030,7 @@ function StudioComposer({
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
+    videoModel: mode === "video" ? videoModelSlug : undefined,
     referenceInputs: generationReferences,
     elementType,
     elementReferenceCounts,
@@ -11625,6 +11627,7 @@ function composerCreditCost({
   hasVideoReferenceInput,
   hasNonVideoReferenceInput,
   audioEnabled,
+  videoModel,
   referenceInputs,
   elementType,
   elementReferenceCounts,
@@ -11652,6 +11655,7 @@ function composerCreditCost({
     hasVideoReferenceInput,
     hasNonVideoReferenceInput,
     audioEnabled,
+    videoModel,
   });
 }
 

@@ -10,6 +10,7 @@ import {
   imageCreditCost,
   textCreditCost,
 } from "./lib/generationPricing";
+import { videoPricingModelFromGatewayId } from "./lib/videoModels";
 
 const generationMode = v.union(v.literal("image"), v.literal("video"));
 const generationTier = v.union(
@@ -212,6 +213,7 @@ export const canGenerate = authedQuery({
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     audioEnabled: v.optional(v.boolean()),
+    videoModel: v.optional(v.string()),
   },
   returns: v.object({
     canGenerate: v.boolean(),
@@ -243,7 +245,7 @@ export const canGenerate = authedQuery({
         reason: "Video duration must be between 4 and 15 seconds.",
       };
     }
-    const cost = creditCostForGeneration({
+    const cost = generationCreditCost({
       tier: args.tier,
       resolution: args.resolution,
       durationSeconds: args.durationSeconds,
@@ -251,6 +253,7 @@ export const canGenerate = authedQuery({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
+      videoModel: args.videoModel,
     });
     const creditBalance = account?.creditBalance ?? 0;
     const hasActiveSubscription = await hasActiveSubscriptionForUser(
@@ -308,6 +311,7 @@ export const createQueuedJob = authedMutation({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
+      resolvedModel: args.resolvedModel,
     });
     const jobId = await ctx.db.insert("generationJobs", {
       ownerId: ctx.user._id,
@@ -415,6 +419,7 @@ export const internalCreateQueuedJob = internalMutation({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
+      resolvedModel: args.resolvedModel,
     });
     const jobId = await ctx.db.insert("generationJobs", {
       ownerId: args.userId,
@@ -515,6 +520,7 @@ export const prepareApiGeneration = internalMutation({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
+      resolvedModel: args.resolvedModel,
     });
     const jobId = await ctx.db.insert("generationJobs", {
       ownerId: args.userId,
@@ -913,6 +919,46 @@ function insufficientCreditsMessage(cost: number): string {
   return `Generation needs ${cost} credits. Top up to continue.`;
 }
 
+function resolveVideoPricingModel(args: {
+  tier: "image" | "pro_video" | "low" | "medium" | "high";
+  videoModel?: string;
+  resolvedModel?: string;
+}): "seedance-2.0" | "kling-3.0-i2v" | undefined {
+  if (args.tier !== "pro_video") {
+    return undefined;
+  }
+  if (args.videoModel === "seedance-2.0" || args.videoModel === "kling-3.0-i2v") {
+    return args.videoModel;
+  }
+  if (args.resolvedModel) {
+    return videoPricingModelFromGatewayId(args.resolvedModel);
+  }
+  return "seedance-2.0";
+}
+
+function generationCreditCost(args: {
+  tier: "image" | "pro_video" | "low" | "medium" | "high";
+  resolution?: string;
+  durationSeconds?: number;
+  hasReferenceInput?: boolean;
+  hasVideoReferenceInput?: boolean;
+  hasNonVideoReferenceInput?: boolean;
+  audioEnabled?: boolean;
+  videoModel?: string;
+  resolvedModel?: string;
+}): number {
+  return creditCostForGeneration({
+    tier: args.tier,
+    resolution: args.resolution,
+    durationSeconds: args.durationSeconds,
+    hasReferenceInput: args.hasReferenceInput,
+    hasVideoReferenceInput: args.hasVideoReferenceInput,
+    hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+    audioEnabled: args.audioEnabled,
+    videoModel: resolveVideoPricingModel(args),
+  });
+}
+
 async function reserveCreditsForJob(
   ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
   args: {
@@ -923,6 +969,8 @@ async function reserveCreditsForJob(
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
     audioEnabled?: boolean;
+    videoModel?: string;
+    resolvedModel?: string;
   },
 ): Promise<Id<"creditTransactions">> {
   return await reserveCreditsForUser(ctx, ctx.user._id, args);
@@ -939,13 +987,15 @@ async function reserveCreditsForUser(
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
     audioEnabled?: boolean;
+    videoModel?: string;
+    resolvedModel?: string;
   },
 ): Promise<Id<"creditTransactions">> {
   const account = await ctx.db
     .query("billingAccounts")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
-  const cost = creditCostForGeneration(args);
+  const cost = generationCreditCost(args);
   const now = Date.now();
   if (!account || account.creditBalance < cost) {
     throw new Error(insufficientCreditsMessage(cost));
@@ -1134,7 +1184,7 @@ async function settleReservedCredits(
   if (!account) {
     return undefined;
   }
-  const cost = creditCostForGeneration({
+  const cost = generationCreditCost({
     tier: job.tier,
     resolution: job.resolution,
     durationSeconds: job.durationSeconds,
@@ -1142,6 +1192,7 @@ async function settleReservedCredits(
     hasVideoReferenceInput: job.hasVideoReferenceInput,
     hasNonVideoReferenceInput: job.hasNonVideoReferenceInput,
     audioEnabled: job.audioEnabled,
+    resolvedModel: job.resolvedModel,
   });
   const now = Date.now();
   await ctx.db.patch(account._id, {
@@ -1172,7 +1223,7 @@ async function refundReservedCredits(
   if (!account) {
     return;
   }
-  const cost = creditCostForGeneration({
+  const cost = generationCreditCost({
     tier: job.tier,
     resolution: job.resolution,
     durationSeconds: job.durationSeconds,
@@ -1180,6 +1231,7 @@ async function refundReservedCredits(
     hasVideoReferenceInput: job.hasVideoReferenceInput,
     hasNonVideoReferenceInput: job.hasNonVideoReferenceInput,
     audioEnabled: job.audioEnabled,
+    resolvedModel: job.resolvedModel,
   });
   const now = Date.now();
   const balanceAfter = account.creditBalance + cost;

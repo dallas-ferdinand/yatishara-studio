@@ -552,6 +552,7 @@ export const estimateGenerationCost = internalQuery({
     durationSeconds: v.optional(v.number()),
     audioEnabled: v.optional(v.boolean()),
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    videoModel: v.optional(v.string()),
   },
   returns: v.object({
     mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
@@ -636,6 +637,11 @@ export const estimateGenerationCost = internalQuery({
       resolution,
       durationSeconds: args.durationSeconds,
       audioEnabled: args.audioEnabled,
+      videoModel:
+        args.mode === "video"
+          ? ((args.videoModel as "seedance-2.0" | "kling-3.0-i2v" | undefined) ??
+            "seedance-2.0")
+          : undefined,
       ...referenceFlags,
     });
     const canGenerate = creditBalance >= cost;
