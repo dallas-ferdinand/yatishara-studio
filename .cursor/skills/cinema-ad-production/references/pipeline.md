@@ -15,7 +15,8 @@ Target output: **Production Bible** + **approved clips** for 60–180 second ads
 | A | Story | story-architect | director-joe or director-ernesto | production-designer, character-continuity | `story_packet` |
 | B | World | production-designer, character-continuity, location-scout | director | dp, gaffer, sound-designer | `world_packet` |
 | D | Visual assets | prop-master, style-supervisor | director | prop-master visual, style-supervisor | `approved_asset_registry[]` |
-| C | Shotcraft | dp, gaffer, sound-designer, composer, editor, motion-designer, colorist | director | all Phase C roles | `shot_packets[]` |
+| C | Shotcraft | dp, gaffer, sound-designer, composer, editor, motion-designer, colorist | director | all Phase C roles | `shot_packets[]` (+ `storyboard_prompt` when cast on camera) |
+| E.5 | Start frames | orchestrator (Studio MCP) | — | prop-master, style-supervisor visual | `startFrameAssetId` per shot (when cast on camera) |
 | E | Video gen + review | orchestrator (Studio MCP) | director | prop-master, dp, style-supervisor visual | `approved_clips[]` |
 
 ## Human gates
@@ -49,8 +50,9 @@ plan → Phase 0 (uploads, Q&A) → Phase 0.5 budget → [HUMAN APPROVE]
 run → Phase A (×3) → story_packet
     → Phase B (×3) → world_packet
     → Phase D (×3) → element sheets → visual scrutiny → approved_asset_registry
-    → Phase C (×3) → shot_packets[] (reference approved assets)
-    → Production Bible (internal) → Phase E (×3 per shot) → approved_clips
+    → Phase C (×3) → shot_packets[] (reference approved assets + storyboard_prompt when cast on camera)
+    → Production Bible (internal) → Phase E.5 (×3 per shot w/ cast) → startFrameAssetId
+    → Phase E (×3 per shot) → approved_clips
     → cost ledger close + summary
 ```
 
@@ -64,6 +66,8 @@ run → Phase A (×3) → story_packet
 Emotional temperature: [emotional-temperature.md](emotional-temperature.md)
 
 Visual asset loop: [visual-asset-pipeline.md](visual-asset-pipeline.md)
+
+Start frames (people on camera): [start-frame-workflow.md](start-frame-workflow.md)
 
 Parallel agents: [parallel-agents.md](parallel-agents.md)
 

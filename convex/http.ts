@@ -28,9 +28,11 @@ for (const path of exactGetPost) {
 
 http.route({ pathPrefix: "/api/v1/folders/", method: "GET", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/folders/", method: "POST", handler: studioApiV1 });
+http.route({ pathPrefix: "/api/v1/folders/", method: "PATCH", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/folders/", method: "DELETE", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/assets/", method: "GET", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/assets/", method: "POST", handler: studioApiV1 });
+http.route({ pathPrefix: "/api/v1/assets/", method: "PATCH", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/assets/", method: "DELETE", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/documents/", method: "GET", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/documents/", method: "PATCH", handler: studioApiV1 });
@@ -38,8 +40,10 @@ http.route({ pathPrefix: "/api/v1/documents/", method: "POST", handler: studioAp
 http.route({ pathPrefix: "/api/v1/documents/", method: "DELETE", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/elements/", method: "GET", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/elements/", method: "POST", handler: studioApiV1 });
+http.route({ pathPrefix: "/api/v1/elements/", method: "PATCH", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/elements/", method: "DELETE", handler: studioApiV1 });
 http.route({ pathPrefix: "/api/v1/generations/", method: "GET", handler: studioApiV1 });
+http.route({ pathPrefix: "/api/v1/generations/", method: "POST", handler: studioApiV1 });
 
 http.route({
   pathPrefix: "/api/v1/",

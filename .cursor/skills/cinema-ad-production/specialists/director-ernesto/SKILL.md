@@ -56,6 +56,8 @@ Same as director-joe (merge, resolve, reject, sign-off) but center **character a
 
 - generation_prompt tracks behavior in every shot
 - Camera may be slightly more active than Joe route if editor approves — still grounded
+- **Director must not invent `referenceElementIds`** — orchestrator supplies `shot-reference-allocation.json`; director fuses specialist craft only
+- Every `generation_prompt` names each attached element (character / location / prop) so Studio description append matches refs
 
 ## Sign-off statement
 

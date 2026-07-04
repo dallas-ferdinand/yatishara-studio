@@ -7,13 +7,15 @@ const elementType = z.enum(["character", "prop", "location", "doc"]);
 const CREATE_ELEMENT_GUIDE =
   "Creates the element record ONLY (buildStatus=unbuilt) — does not build a sheet image. " +
   "Before calling: read studio_element_sheet_guide. " +
-  "Flow: upload refs → create with referenceAssetIds → generate text/image sheet → buildStatus=built.";
+  "sourceMode photographic = real person/object + upload referenceAssetIds. " +
+  "sourceMode designed = fictional character/prop/location + rich description — NO photo refs, NO throwaway plates before generate-sheet.";
 
 const GENERATE_SHEET_GUIDE =
   "BUILDS the reference sheet image (GPT Image 2) and sets sheetAssetId (buildStatus=built). " +
-  "Uses referenceAssetIds (upload photos) — NOT the sheet itself. " +
-  "Returns element with sheetUrl, sheetAssetId, referenceAssets. " +
-  "For generation use referenceElementIds or sheetAssetId — never raw referenceAssetIds.";
+  "designed: one call from description — no reference photos required. " +
+  "photographic: uses referenceAssetIds (upload photos). " +
+  "location designed: pass referenceElementIds with built prop sheets to compose set dressing. " +
+  "For video gen use referenceElementIds — never raw upload refs.";
 
 const GENERATE_TEXT_SHEET_GUIDE =
   "Generates the markdown production bible (description) from reference photos. " +
@@ -98,8 +100,14 @@ export function registerElementTools(server: McpServer) {
         .optional()
         .describe("Deprecated alias for referenceAssetIds"),
       sourceDocumentId: z.string().optional(),
+      sourceMode: z
+        .enum(["photographic", "designed"])
+        .optional()
+        .describe(
+          "photographic = real subject with upload refs. designed = fictional asset from description only (no throwaway plates).",
+        ),
     },
-    async ({ type, name, description, folderId, referenceAssetIds, sourceAssetIds, sourceDocumentId }) =>
+    async ({ type, name, description, folderId, referenceAssetIds, sourceAssetIds, sourceDocumentId, sourceMode }) =>
       jsonResult(
         await studioFetch("/elements", {
           method: "POST",
@@ -110,6 +118,7 @@ export function registerElementTools(server: McpServer) {
             folderId,
             referenceAssetIds: referenceAssetIds ?? sourceAssetIds,
             sourceDocumentId,
+            sourceMode,
           }),
         }),
       ),
@@ -169,14 +178,22 @@ export function registerElementTools(server: McpServer) {
       referenceAssetIds: z
         .array(z.string())
         .optional()
-        .describe("Override element referenceAssetIds for sheet build"),
+        .describe("Override element referenceAssetIds for sheet build (photographic mode)"),
+      referenceElementIds: z
+        .array(z.string())
+        .optional()
+        .describe("Built prop/character element IDs to attach when composing location sheets"),
+      sourceMode: z
+        .enum(["photographic", "designed"])
+        .optional()
+        .describe("Override element sourceMode for this sheet build"),
       resolution: z.enum(["1K", "2K"]).optional(),
     },
-    async ({ elementId, referenceAssetIds, resolution }) =>
+    async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution }) =>
       jsonResult(
         await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
           method: "POST",
-          body: JSON.stringify({ referenceAssetIds, resolution }),
+          body: JSON.stringify({ referenceAssetIds, referenceElementIds, sourceMode, resolution }),
         }),
       ),
   );

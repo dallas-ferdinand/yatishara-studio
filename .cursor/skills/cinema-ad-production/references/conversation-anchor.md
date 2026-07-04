@@ -2,7 +2,8 @@
 
 **Date:** 2026-07-03  
 **Who:** Dallas  
-**Workspace:** `/opt/yatishara-studio` (Yatishara Studio)
+**Canonical source:** `/opt/yatishara-studio/.cursor/skills/cinema-ad-production/`  
+**MercuryOS mirror:** `/opt/mercuryos/.cursor/skills/cinema-ad-production/` (+ `.agents/skills/`)
 
 ## Evolution
 

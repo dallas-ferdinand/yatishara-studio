@@ -35,11 +35,11 @@ Fields required:
 **Preferred — Studio element sheet API** (2-panel prop/character sheets):
 
 ```
-studio_create_element({ type: "prop", name, folderId, referenceAssetIds })   // unbuilt
-studio_generate_element_sheet({ elementId, resolution: "2K" })               // built — sets sheetAssetId
+studio_create_element({ type: "prop", name, folderId, sourceAssetIds })
+studio_generate_element_sheet({ elementId, resolution: "2K", referenceAssetIds })
 ```
 
-Aligns with `buildElementSheetImagePrompt` in Studio — gray background, no text, front + three-quarter views. Downstream generation must use `referenceElementIds` (or the `sheetAssetId`), never the raw upload refs.
+Aligns with `buildElementSheetImagePrompt` in Studio — gray background, no text, front + three-quarter views.
 
 **Fallback — 3×3 cinema grid** when angles/layout need custom layout:
 

@@ -31,7 +31,7 @@ Stage director for the **creative department**. You run phases, iterations, pack
 4. **Auto-advance after bible** — Phase E runs automatically; no mid-pipeline human gates ([references/auto-approval.md](references/auto-approval.md)).
 5. **Load specialist SKILL.md** from `specialists/` when executing that role's builder or scrutiny pass.
 6. **Visual scrutiny requires viewing** — never approve props or clips from prompt text alone ([references/visual-asset-pipeline.md](references/visual-asset-pipeline.md)).
-7. **Reference allocation is mandatory** — orchestrator computes `referenceElementIds[]` per shot from `approved_asset_registry` before director merge; intercut shots include all locations. Phase E uses `referenceElementIds` only — never raw upload refs. **People on camera:** storyboard still → `startFrameAssetId` before video ([references/start-frame-workflow.md](references/start-frame-workflow.md), [references/shot-reference-allocation.md](references/shot-reference-allocation.md)). **No `scene` element type.**
+7. **Reference allocation is mandatory** — orchestrator computes `referenceElementIds[]` per shot from `approved_asset_registry` before director merge; intercut shots include all locations. Phase E uses `referenceElementIds` only — never raw upload refs. See [references/shot-reference-allocation.md](references/shot-reference-allocation.md).
 8. **All Studio generation uses direct prompts** — `{ skipPromptEnhancement: true }` plus optional `stylePreset: "story-ad"` or `"realism"`. Do **not** use slug `raw` unless `studio_list_presets` confirms it exists.
 9. **Cost ledger** — enforce approved cap before each generate ([references/cost-ledger.md](references/cost-ledger.md)).
 
@@ -49,7 +49,7 @@ budget approved → Phase A (≤3 rounds, Task subagents + director merge) → s
                → Phase B (≤3 rounds, 3 parallel builds + scrutiny subagents) → sign off
                → Phase D (style bible w/ seedance look + visual scrutiny) → sign off
                → Phase C (editor first, parallel specialist builds, seedance prompt prefix) → sign off
-               → Production Bible → Phase E.5 (start frames when cast on camera) → Phase E video (ONLY after all gates; film-grain scrutiny per clip)
+               → Production Bible → Phase E (ONLY after all gates; film-grain scrutiny per clip)
 ```
 
 **Orchestrator must launch `Task` subagents** — see [references/phase-gates.md](references/phase-gates.md) and [references/parallel-agents.md](references/parallel-agents.md). Writing packets yourself is forbidden.
@@ -92,7 +92,6 @@ Production progress:
 - [ ] style_bible published
 - [ ] Phase C round 1/2/3 → shot_packets[] signed off
 - [ ] Production Bible emitted to Studio folder
-- [ ] Phase E.5 per-shot storyboard stills → `startFrameAssetId` (when cast on camera)
 - [ ] Phase E per-shot video gen + visual scrutiny
 - [ ] approved_clips complete
 - [ ] cost-ledger.json closed
@@ -167,7 +166,7 @@ Launch parallel subagents per [references/parallel-agents.md](references/paralle
 1. **EDITOR shot list first**
 2. **REFERENCE ALLOCATE** — compute `generation/shot-reference-allocation.json` from registry + world_packet ([references/shot-reference-allocation.md](references/shot-reference-allocation.md)) — **before** director merge
 3. **BUILD** (parallel Task subagents) — dp, gaffer, sound, composer, editor, motion-designer, colorist
-4. **MERGE** — director fuses specialist builds + `generation_prompt` + `storyboard_prompt` (when cast on camera) + allocated `referenceElementIds[]` + `reference_assets[]` + `reference_element_map` + `emotional_temperature`
+4. **MERGE** — director fuses specialist builds + `generation_prompt` + allocated `referenceElementIds[]` + `reference_assets[]` + `reference_element_map` + `emotional_temperature`
 5. **SCRUTINIZE** — all Phase C roles on merged shots (dp, gaffer, sound, composer, editor, motion-designer, colorist)
 6. Auto-advance
 
@@ -185,27 +184,14 @@ Write to Studio folder via `studio_create_document`. **Immediately proceed to Ph
 
 ## Phase E — Video generation + visual scrutiny (automatic)
 
-Per shot_packet — follow [references/start-frame-workflow.md](references/start-frame-workflow.md) and [references/studio-handoff.md](references/studio-handoff.md).
+Per shot_packet:
 
-**MCP defaults:** `{ skipPromptEnhancement: true, stylePreset: "story-ad" }`. **Never** attach character sheets to video refs — people identity lives in the start frame + prompt text.
+1. **EXECUTE** — `studio_generate_video({ stylePreset: "raw", skipPromptEnhancement: true, ... })`
+2. **VISUAL SCRUTINY** — prop-master, dp, style-supervisor — **must view clip**
+3. **REVISE** — max 3 rounds per shot
+4. **REGISTRY** — `approved_clips[]`
 
-### E.5 — Storyboard (start frame) — when cast on camera
-
-1. **GATE** — `storyboard_prompt` present on shot_packet (from Phase C); `referenceElementIds` from allocation
-2. **ESTIMATE + EXECUTE** — `studio_generate_image({ prompt: storyboard_prompt, referenceElementIds, stylePreset: "story-ad", skipPromptEnhancement: true, resolution: "2K", aspectRatio, folderId })`
-3. **VISUAL SCRUTINY** — prop-master, style-supervisor — **Read** the still (composition, cast, props, grain)
-4. Save `assets[0].id` as `shot_packet.startFrameAssetId`
-
-Shots with **no people on camera** skip E.5 — go straight to video with `referenceElementIds` only.
-
-### E — Video
-
-1. **GATE** — when cast on camera, `startFrameAssetId` must be set; every `generation_prompt` has mandatory seedance prefix ([references/seedance-cinematic-look.md](references/seedance-cinematic-look.md))
-2. **ESTIMATE + EXECUTE** — `studio_generate_video({ prompt: generation_prompt, startFrameAssetId, referenceElementIds, stylePreset: "story-ad", skipPromptEnhancement: true, durationSeconds: generation_duration_sec, aspectRatio, folderId })`
-3. **WAIT ≥65s** before the next video API call (gateway rate limit)
-4. **VISUAL SCRUTINY** — prop-master, dp, style-supervisor — **must view clip**
-5. **REVISE** — max 3 rounds per shot (regen storyboard if cast/prop wrong; regen video if motion/style wrong)
-6. **REGISTRY** — `approved_clips[]`
+See [references/studio-handoff.md](references/studio-handoff.md).
 
 ---
 
@@ -262,7 +248,6 @@ Final message: summary + folder ID + total credits spent + compromises log.
 - [references/phase-gates.md](references/phase-gates.md) — **mandatory before any generation**
 - [references/element-source-modes.md](references/element-source-modes.md) — **photographic vs designed — no throwaway plates**
 - [references/shot-reference-allocation.md](references/shot-reference-allocation.md) — **mandatory per-shot referenceElementIds before merge**
-- [references/start-frame-workflow.md](references/start-frame-workflow.md) — **E.5 storyboard → startFrameAssetId before video when cast on camera**
 
 ## Downstream
 

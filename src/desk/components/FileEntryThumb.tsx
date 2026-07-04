@@ -29,6 +29,78 @@ export function elementBadgeIcon(elementType) {
   return "fileText";
 }
 
+function peekItemIcon(item) {
+  if (item.kind === "element" && item.elementType) {
+    return elementBadgeIcon(item.elementType);
+  }
+  if (item.icon) return item.icon;
+  if (item.kind === "document") return "fileText";
+  if (item.kind === "video") return "film";
+  if (item.kind === "image") return "image";
+  return "file";
+}
+
+function peekDisplayName(label) {
+  const raw = String(label ?? "").replace(/^@/, "").trim();
+  if (!raw) return "Item";
+  return raw.length > 18 ? `${raw.slice(0, 17)}…` : raw;
+}
+
+function FolderPeekStack({ items, size = "grid" }) {
+  const cards = (items ?? []).slice(0, 3);
+  if (!cards.length) return null;
+  const iconSize = size === "preview" ? 16 : 13;
+  return (
+    <div className="desk-folder-peek-stack" data-count={cards.length} aria-hidden="true">
+      {cards.map((item, index) => (
+        <div
+          key={`${item.label}-${index}`}
+          className={`desk-folder-peek-card desk-folder-peek-card--${index}${item.kind === "element" ? " desk-folder-peek-card--element" : ""}`}
+        >
+          <div className="desk-folder-peek-card-media">
+            {item.thumbnailUrl ? (
+              <img src={item.thumbnailUrl} alt="" loading="lazy" decoding="async" />
+            ) : (
+              <span className="desk-folder-peek-icon">
+                <Icon name={peekItemIcon(item)} size={iconSize} className="text-cursor-muted" />
+              </span>
+            )}
+          </div>
+          <span className="desk-folder-peek-label" title={item.label}>
+            {peekDisplayName(item.label)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FolderThumbVisual({ entry, icon, folderIconClass, size }) {
+  const peekItems = entry?.peekItems ?? [];
+  const hasPeek = peekItems.length > 0 && entry?.type === "dir";
+  if (hasPeek) {
+    return (
+      <div className="desk-file-thumb-folder desk-file-thumb-folder--peek">
+        <FolderPeekStack items={peekItems} size={size} />
+      </div>
+    );
+  }
+  return (
+    <div className="desk-file-thumb-folder">
+      <Icon name={icon} size={size === "preview" ? 40 : 30} className={folderIconClass} />
+    </div>
+  );
+}
+
+function ThumbPeekLabel({ name }) {
+  const text = peekDisplayName(name);
+  return (
+    <span className="desk-file-thumb-peek-label" title={name}>
+      {text}
+    </span>
+  );
+}
+
 function TextSnippet({ path, workspaceId, className }) {
   const [snippet, setSnippet] = useState("");
   const [failed, setFailed] = useState(false);
@@ -103,23 +175,28 @@ export function FileEntryThumb({
       <Icon name={icon} size={size === "preview" ? 36 : 26} className={folderIconClass} />
     </div>
   );
+  let inlinePeekLabel = false;
 
   if (kind === "dir" || kind === "parent") {
     visual = (
-      <div className="desk-file-thumb-folder">
-        <Icon name={icon} size={size === "preview" ? 40 : 30} className={folderIconClass} />
-      </div>
+      <FolderThumbVisual
+        entry={entry}
+        icon={icon}
+        folderIconClass={folderIconClass}
+        size={size}
+      />
     );
   } else if (entry?.studioKind === "element") {
     const badge = elementBadgeIcon(entry.elementType);
     const sheetUrl = thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : null;
     visual = sheetUrl ? (
-      <>
+      <div className="desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--element">
         <img src={sheetUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
         <span className="desk-file-thumb-badge" aria-hidden>
           <Icon name={badge} size={14} />
         </span>
-      </>
+        <ThumbPeekLabel name={label} />
+      </div>
     ) : (
       <div className="desk-file-thumb-fallback">
         <Icon name={badge} size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
@@ -131,34 +208,37 @@ export function FileEntryThumb({
 
     if (isImage && thumbUrl) {
       visual = (
-        <>
+        <div className="desk-file-thumb-peek-wrap">
           <img src={thumbUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="image" size={14} />
           </span>
-        </>
+          <ThumbPeekLabel name={label} />
+        </div>
       );
     } else if (isImage && mediaUrl) {
       visual = (
-        <>
+        <div className="desk-file-thumb-peek-wrap">
           <img src={mediaUrl} alt="" className="desk-file-thumb-image" loading="lazy" decoding="async" />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="image" size={14} />
           </span>
-        </>
+          <ThumbPeekLabel name={label} />
+        </div>
       );
     } else if (isVideo && thumbUrl && !isVideoFileUrl(thumbUrl)) {
       visual = (
-        <>
+        <div className="desk-file-thumb-peek-wrap">
           <img src={thumbUrl} alt="" className="desk-file-thumb-video" loading="lazy" decoding="async" />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="film" size={14} />
           </span>
-        </>
+          <ThumbPeekLabel name={label} />
+        </div>
       );
     } else if (isVideo && (mediaUrl || thumbUrl)) {
       visual = (
-        <>
+        <div className="desk-file-thumb-peek-wrap">
           <video
             src={mediaUrl ?? thumbUrl}
             poster={thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined}
@@ -171,7 +251,8 @@ export function FileEntryThumb({
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="film" size={14} />
           </span>
-        </>
+          <ThumbPeekLabel name={label} />
+        </div>
       );
     } else if (kind === "audio" && mediaUrl) {
       visual = (
@@ -186,10 +267,19 @@ export function FileEntryThumb({
     }
   }
 
+  inlinePeekLabel =
+    kind !== "dir" &&
+    kind !== "parent" &&
+    (entry?.studioKind === "element"
+      ? Boolean(thumbUrl && !isVideoFileUrl(thumbUrl))
+      : kind === "image" || kind === "video"
+        ? Boolean(thumbUrl || mediaUrl)
+        : false);
+
   return (
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>
       <div className="desk-file-thumb-visual">{visual}</div>
-      {showLabel ? (
+      {showLabel && !inlinePeekLabel ? (
         <span className="desk-file-thumb-label" title={entry?.path ? displayEntryPath(entry) : label}>
           {label}
         </span>

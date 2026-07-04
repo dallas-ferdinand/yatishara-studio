@@ -39,8 +39,13 @@
   "dialogue": null,
   "narrator": null,
   "continuity_locks": [],
+  "cast_on_camera": true,
+  "reference_assets": [],
+  "referenceElementIds": [],
+  "reference_element_map": {},
+  "generation_duration_sec": 4,
+  "editorial_trim_sec": null,
   "storyboard_prompt": "",
   "startFrameAssetId": null,
-  "referenceElementIds": [],
   "generation_prompt": ""
 }

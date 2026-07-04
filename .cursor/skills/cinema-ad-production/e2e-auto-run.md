@@ -46,15 +46,12 @@ Reply: `budget approved`
 ### Expected — automation
 
 - [ ] **Phase gates** ([phase-gates.md](phase-gates.md)): `iteration_log` has specialist build + scrutiny entries for A, B, C before any `studio_generate_*`
-- [ ] Phase A→B→D→C→bible→E.5→E with **no human gates** (but **with** full specialist iteration)
+- [ ] Phase A→B→D→C→bible→E with **no human gates** (but **with** full specialist iteration)
 - [ ] Orchestrator did **not** draft packets without loading specialist SKILL.md files
 - [ ] Phase D uses `studio_generate_element_sheet` for honey jar prop
 - [ ] Prop-master **Read**s sheet image (visual scrutiny, not text-only)
-- [ ] Production Bible written; Phase E.5 + E start **without** stopping for approval
-- [ ] Shots with cast: `storyboard_prompt` on shot_packet → `studio_generate_image` → `startFrameAssetId` before video
-- [ ] Video gen uses `{ stylePreset: "story-ad", skipPromptEnhancement: true, startFrameAssetId, referenceElementIds }`
-- [ ] Character sheets **not** attached as video image refs
-- [ ] ≥65s wait between consecutive `studio_generate_video` calls
+- [ ] Production Bible written; Phase E starts **without** stopping for approval
+- [ ] Video gen uses `{ stylePreset: "raw", skipPromptEnhancement: true }`
 - [ ] `cost-ledger.json` tracks spend vs cap
 - [ ] Final summary: folder ID, total credits, compromises
 
@@ -62,9 +59,7 @@ Reply: `budget approved`
 
 | Check | How |
 |-------|-----|
-| Raw preset skips enhancement | `POST /generations` with `skipPromptEnhancement: true` → job enhanced prompt equals user prompt |
-| Start frame video | `POST /generations` with `startFrameAssetId` + `referenceElementIds` → character sheets excluded from video refs |
-| Storyboard image | `POST /generations` mode image with full `referenceElementIds` → all sheets attach |
+| Raw preset skips enhancement | `POST /generations` with `stylePreset: "raw", skipPromptEnhancement: true` → job enhanced prompt equals user prompt |
 | Element sheet | `POST /elements/:id/generate-sheet` → gray bg sheet, `creditsSpent` returned |
 | Batch estimate | `POST /generations/estimate-batch` → `totalTTD = totalCredits × 0.5` |
 | MCP tools | `studio_estimate_production`, `studio_generate_element_sheet` respond |

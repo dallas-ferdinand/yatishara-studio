@@ -9,6 +9,7 @@ After Phase 0 planning, draft line items from a lightweight story skeleton (scen
 | Prop sheets | N props × up to 3 rounds × `imageCreditCost(2K, refs)` |
 | Character sheets | M characters × up to 3 rounds × same |
 | Set plates | optional locations × up to 3 rounds × same |
+| Storyboard stills (E.5) | S shots with cast × up to 3 rounds × `imageCreditCost(2K, refs)` |
 | Video shots | S shots × duration × `videoCreditCost(720p)` × up to 3 rounds |
 | Contingency | +15% (configurable via `contingencyPercent`) |
 
@@ -18,7 +19,8 @@ After Phase 0 planning, draft line items from a lightweight story skeleton (scen
 studio_estimate_production({
   items: [
     { label: "prop_honey_jar", mode: "image", resolution: "2K", hasReferenceInput: true, maxRounds: 3 },
-    { label: "shot_S01", mode: "video", resolution: "1280x720", durationSeconds: 6, referenceAssetIds: [], maxRounds: 3 }
+    { label: "shot_S01_storyboard", mode: "image", resolution: "2K", hasReferenceInput: true, maxRounds: 3 },
+    { label: "shot_S01", mode: "video", resolution: "1280x720", durationSeconds: 6, hasReferenceInput: true, maxRounds: 3 }
   ],
   contingencyPercent: 15
 })

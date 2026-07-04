@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { resolveElementAssets } from "./lib/elementAssetModel";
+import { signBunnyCdnUrl } from "./lib/bunny";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -16,6 +18,142 @@ const folderReturn = v.object({
   createdAt: v.number(),
   updatedAt: v.number(),
 });
+
+const folderPeekItem = v.object({
+  kind: v.union(
+    v.literal("image"),
+    v.literal("video"),
+    v.literal("document"),
+    v.literal("element"),
+    v.literal("file"),
+  ),
+  thumbnailUrl: v.optional(v.string()),
+  label: v.string(),
+  elementType: v.optional(
+    v.union(v.literal("character"), v.literal("prop"), v.literal("location"), v.literal("doc")),
+  ),
+  icon: v.optional(v.string()),
+});
+
+const folderWithPeeksReturn = v.object({
+  ...folderReturn.fields,
+  peekItems: v.array(folderPeekItem),
+});
+
+const PEEK_LIMIT = 3;
+
+async function signedAssetThumbnail(
+  asset: Doc<"assets">,
+  expiresUnix: number | undefined,
+): Promise<string | undefined> {
+  const path =
+    asset.thumbnailPath ??
+    (asset.kind === "image" && asset.bunnyPath ? asset.bunnyPath : undefined);
+  if (!path || expiresUnix === undefined) {
+    return undefined;
+  }
+  return await signBunnyCdnUrl(path, expiresUnix);
+}
+
+async function collectFolderPeekItems(
+  ctx: QueryCtx,
+  ownerId: Id<"users">,
+  folderId: Id<"folders">,
+  expiresUnix: number | undefined,
+) {
+  type PeekCandidate = {
+    kind: "image" | "video" | "document" | "element" | "file";
+    priority: number;
+    updatedAt: number;
+    thumbnailUrl?: string;
+    label: string;
+    elementType?: "character" | "prop" | "location" | "doc";
+    icon?: string;
+  };
+
+  const candidates: PeekCandidate[] = [];
+
+  const assets = (
+    await ctx.db
+      .query("assets")
+      .withIndex("by_folder", (q) => q.eq("folderId", folderId))
+      .collect()
+  ).filter((asset) => !asset.deletedAt);
+
+  for (const asset of assets) {
+    if (asset.kind === "image" || asset.kind === "video") {
+      candidates.push({
+        kind: asset.kind,
+        priority: asset.kind === "image" ? 100 : 90,
+        updatedAt: asset.updatedAt,
+        thumbnailUrl: await signedAssetThumbnail(asset, expiresUnix),
+        label: asset.name,
+      });
+      continue;
+    }
+    candidates.push({
+      kind: "file",
+      priority: asset.kind === "audio" ? 40 : 35,
+      updatedAt: asset.updatedAt,
+      label: asset.name,
+      icon: asset.kind === "audio" ? "music" : "file",
+    });
+  }
+
+  const documents = (
+    await ctx.db
+      .query("documents")
+      .withIndex("by_folder", (q) => q.eq("folderId", folderId))
+      .collect()
+  ).filter((doc) => !doc.deletedAt);
+
+  for (const doc of documents) {
+    candidates.push({
+      kind: "document",
+      priority: 60,
+      updatedAt: doc.updatedAt,
+      label: doc.title,
+      icon: "fileText",
+    });
+  }
+
+  const elements = (
+    await ctx.db
+      .query("elements")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect()
+  ).filter((element) => element.folderId === folderId && !element.deletedAt);
+
+  for (const element of elements) {
+    const resolved = await resolveElementAssets(ctx, element);
+    let thumbnailUrl: string | undefined;
+    if (resolved.sheetAssetId) {
+      const sheet = await ctx.db.get("assets", resolved.sheetAssetId);
+      if (sheet) {
+        thumbnailUrl = await signedAssetThumbnail(sheet, expiresUnix);
+      }
+    }
+    candidates.push({
+      kind: "element",
+      priority: thumbnailUrl ? 85 : 55,
+      updatedAt: element.updatedAt,
+      thumbnailUrl,
+      label: element.name,
+      elementType: element.type,
+    });
+  }
+
+  return candidates
+    .sort((a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt)
+    .slice(0, PEEK_LIMIT)
+    .map(({ kind, thumbnailUrl, label, elementType, icon }) => ({
+      kind,
+      thumbnailUrl,
+      label,
+      elementType,
+      icon,
+    }));
+}
 
 export const list = authedQuery({
   args: {
@@ -32,6 +170,38 @@ export const list = authedQuery({
       )
       .collect();
     return args.includeDeleted ? folders : folders.filter((folder) => !folder.deletedAt);
+  },
+});
+
+export const listWithPeeks = authedQuery({
+  args: {
+    parentId: v.optional(v.union(v.id("folders"), v.null())),
+    includeDeleted: v.optional(v.boolean()),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(folderWithPeeksReturn),
+  handler: async (ctx, args) => {
+    const parentId = args.parentId === null ? undefined : args.parentId;
+    const folders = await ctx.db
+      .query("folders")
+      .withIndex("by_owner_and_parent", (q) =>
+        q.eq("ownerId", ctx.user._id).eq("parentId", parentId),
+      )
+      .collect();
+    const visibleFolders = args.includeDeleted
+      ? folders
+      : folders.filter((folder) => !folder.deletedAt);
+    return await Promise.all(
+      visibleFolders.map(async (folder) => ({
+        ...folder,
+        peekItems: await collectFolderPeekItems(
+          ctx,
+          ctx.user._id,
+          folder._id,
+          args.expiresUnix,
+        ),
+      })),
+    );
   },
 });
 

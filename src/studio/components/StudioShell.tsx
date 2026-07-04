@@ -276,7 +276,10 @@ export function StudioShell() {
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const adminPayments = useQuery(api.billing.adminListPayments, isAdminUser ? {} : "skip");
   const adminCustomers = useQuery(api.users.adminListCustomers, isAdminUser ? {} : "skip");
-  const topFolders = useQuery(api.folders.list, hasCurrentUser ? {} : "skip");
+  const topFolders = useQuery(
+    api.folders.listWithPeeks,
+    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+  );
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
   const selectedFolder = useQuery(
     api.folders.get,
@@ -292,8 +295,10 @@ export function StudioShell() {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
   const childFolders = useQuery(
-    api.folders.list,
-    hasCurrentUser && activeFolder && !isTrashView ? { parentId: activeFolder._id } : "skip",
+    api.folders.listWithPeeks,
+    hasCurrentUser && activeFolder && !isTrashView
+      ? { parentId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
+      : "skip",
   );
   const trashedFolders = useQuery(api.folders.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
   const trashedAssets = useQuery(api.assets.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
@@ -382,6 +387,40 @@ export function StudioShell() {
       }),
     [assetPreviewUrls, assets],
   );
+  const elementLinkedAssetIds = useMemo(() => {
+    const folderAssetIds = new Set((assets ?? []).map((asset) => asset._id));
+    const linked = new Set();
+    for (const element of elements ?? []) {
+      for (const assetId of element.referenceAssetIds ?? element.sourceAssetIds ?? []) {
+        if (!folderAssetIds.has(assetId)) {
+          linked.add(assetId);
+        }
+      }
+      if (element.sheetAssetId && !folderAssetIds.has(element.sheetAssetId)) {
+        linked.add(element.sheetAssetId);
+      }
+    }
+    return [...linked];
+  }, [assets, elements]);
+  const linkedElementAssets = useQuery(
+    api.assets.listByIds,
+    hasCurrentUser && elementLinkedAssetIds.length
+      ? { assetIds: elementLinkedAssetIds, expiresUnix: assetUrlExpiresUnix }
+      : "skip",
+  );
+  /** Folder assets plus element-linked assets in other folders (sheets, upload refs). */
+  const assetLookupPool = useMemo(() => {
+    const byId = new Map();
+    for (const asset of assetsWithPreviewUrls ?? []) {
+      byId.set(asset._id, asset);
+    }
+    for (const asset of linkedElementAssets ?? []) {
+      if (!byId.has(asset._id)) {
+        byId.set(asset._id, asset);
+      }
+    }
+    return [...byId.values()];
+  }, [assetsWithPreviewUrls, linkedElementAssets]);
   const trashedAssetsWithPreviewUrls = useMemo(
     () =>
       trashedAssets?.map((asset) => {
@@ -708,6 +747,7 @@ export function StudioShell() {
       assets: assetsWithPreviewUrls,
       documents,
       elements: elements?.filter((element) => element.folderId === activeFolder?._id),
+      assetLookupPool,
     });
 
     const rootFolderId = navTrail[0]?.id;
@@ -723,6 +763,7 @@ export function StudioShell() {
     navTrail,
     childFolders,
     assetsWithPreviewUrls,
+    assetLookupPool,
     documents,
     elements,
     folderContentLoading,
@@ -794,18 +835,25 @@ export function StudioShell() {
       tabDescriptor({
         key,
         threads,
-        assets: assetsWithPreviewUrls ?? assets,
+        assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
         documents,
         elements,
         snapshots: tabEntrySnapshots,
       }),
     );
     return descriptors.filter(Boolean);
-  }, [openTabs, threads, assetsWithPreviewUrls, assets, documents, elements, tabEntrySnapshots]);
+  }, [openTabs, threads, assetLookupPool, assetsWithPreviewUrls, assets, documents, elements, tabEntrySnapshots]);
 
   const activeEntry = useMemo(
-    () => findEntryByTab(activeTab, { threads, assets: assetsWithPreviewUrls ?? assets, documents, elements, snapshots: tabEntrySnapshots }),
-    [activeTab, threads, assetsWithPreviewUrls, assets, documents, elements, tabEntrySnapshots],
+    () =>
+      findEntryByTab(activeTab, {
+        threads,
+        assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
+        documents,
+        elements,
+        snapshots: tabEntrySnapshots,
+      }),
+    [activeTab, threads, assetLookupPool, assetsWithPreviewUrls, assets, documents, elements, tabEntrySnapshots],
   );
   const activeAdminTab = activeTab.startsWith("admin:") ? activeTab.slice("admin:".length) : null;
   const activeBillingTab = activeTab.startsWith("billing:") ? activeTab.slice("billing:".length) : null;
@@ -1052,14 +1100,14 @@ export function StudioShell() {
       .map((assetId) => {
         const uploaded = uploadedAssets.find((asset) => asset.assetId === assetId);
         if (uploaded) return uploadedElementAssetToEntry(uploaded);
-        const asset = assetsWithPreviewUrls?.find((item) => item._id === assetId);
+        const asset = assetLookupPool?.find((item) => item._id === assetId);
         return asset ? assetToEntry(asset) : null;
       })
       .filter(Boolean);
-    const entry = elementToEntry(elementRecord, assetsWithPreviewUrls ?? []);
+    const entry = elementToEntry(elementRecord, assetLookupPool ?? []);
     entry.referenceAssets = referenceAssetEntries;
     if (sheetAssetId) {
-      const sheetAsset = assetsWithPreviewUrls?.find((item) => item._id === sheetAssetId);
+      const sheetAsset = assetLookupPool?.find((item) => item._id === sheetAssetId);
       entry.sheetAsset = sheetAsset ? assetToEntry(sheetAsset) : null;
       entry.buildStatus = "built";
     }
@@ -3712,6 +3760,14 @@ export function StudioShell() {
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-peek-wrap),
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-peek-wrap) {
+          clip-path: inset(0 round 10px);
+        }
+        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder--peek) .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder--peek) .desk-file-thumb-visual {
+          overflow: visible;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-badge {
@@ -7566,7 +7622,7 @@ export function StudioShell() {
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
-            assets={assetsWithPreviewUrls ?? []}
+            assets={assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? [])}
             events={events}
             threads={threads ?? []}
             activeThreadId={activeThreadId}
@@ -11448,7 +11504,8 @@ function CreditPill({ entitlement, onClick }) {
   );
 }
 
-function buildFlatEntries({ folder, parent, loading, folders, assets, documents, elements }) {
+function buildFlatEntries({ folder, parent, loading, folders, assets, documents, elements, assetLookupPool }) {
+  const lookup = assetLookupPool ?? assets;
   return {
     loading: loading ?? !folder,
     parent,
@@ -11456,7 +11513,7 @@ function buildFlatEntries({ folder, parent, loading, folders, assets, documents,
       ...(folders ?? []).map(folderToEntry),
       ...(documents ?? []).map(documentToEntry),
       ...(assets ?? []).map(assetToEntry),
-      ...(elements ?? []).map((element) => elementToEntry(element, assets)),
+      ...(elements ?? []).map((element) => elementToEntry(element, lookup)),
     ],
   };
 }
@@ -11471,6 +11528,7 @@ function folderToEntry(folder) {
     mtimeMs: folder.updatedAt,
     studioKind: "folder",
     studioId: folder._id,
+    peekItems: folder.peekItems ?? [],
   };
 }
 

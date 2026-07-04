@@ -49,9 +49,11 @@ For each shot_id, full breakdown:
 - Camera, lighting, sound, music, color, motion graphics
 - `emotional_temperature` (register + behavior_proof — not emotion labels)
 - `reference_assets[]`
+- `referenceElementIds[]`
 - Dialogue / narrator if any
 - Continuity locks
-- **## Generation prompt** — fused Seedance-ready block
+- **`## Storyboard prompt`** — single still (required when cast on camera; Phase E.5)
+- **## Generation prompt** — fused Seedance-ready block (motion/camera when start frame used)
 
 Even 2-second shots get full technical breakdown + generation prompt.
 
@@ -80,7 +82,7 @@ Statement: One paragraph confirming bible is generation-ready.
 
 ## After emit
 
-Orchestrator writes bible to Studio folder and **immediately continues to Phase E**. Bible is an internal artifact — not a human approval gate.
+Orchestrator writes bible to Studio folder and **immediately continues to Phase E.5 (when cast) then Phase E**. Bible is an internal artifact — not a human approval gate.
 
 See [auto-approval.md](auto-approval.md).
 

@@ -41,6 +41,7 @@ import type * as lib_studioApi_folderScope from "../lib/studioApi/folderScope.js
 import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js";
 import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
 import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
+import type * as lib_videoGeneration from "../lib/videoGeneration.js";
 import type * as notifications from "../notifications.js";
 import type * as notificationsActions from "../notificationsActions.js";
 import type * as studioApiActions from "../studioApiActions.js";
@@ -91,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   "lib/studioApi/httpHelpers": typeof lib_studioApi_httpHelpers;
   "lib/studioApi/openapi": typeof lib_studioApi_openapi;
   "lib/studioApi/scopes": typeof lib_studioApi_scopes;
+  "lib/videoGeneration": typeof lib_videoGeneration;
   notifications: typeof notifications;
   notificationsActions: typeof notificationsActions;
   studioApiActions: typeof studioApiActions;

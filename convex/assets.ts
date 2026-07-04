@@ -134,6 +134,42 @@ export const signedReadUrl = authedQuery({
   },
 });
 
+/** Resolve assets by ID regardless of folder — for element sheet/ref lookups after reorganize. */
+export const listByIds = authedQuery({
+  args: {
+    assetIds: v.array(v.id("assets")),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(assetReturn),
+  handler: async (ctx, args) => {
+    const uniqueIds = [...new Set(args.assetIds)];
+    const expiresUnix = args.expiresUnix;
+    const results = [];
+    for (const assetId of uniqueIds) {
+      const asset = await ctx.db.get("assets", assetId);
+      if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) {
+        continue;
+      }
+      if (expiresUnix === undefined) {
+        results.push(asset);
+        continue;
+      }
+      results.push({
+        ...asset,
+        signedReadUrl: asset.bunnyPath
+          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+          : undefined,
+        signedThumbnailUrl: asset.thumbnailPath
+          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
+          : asset.bunnyPath && asset.kind === "image"
+            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+            : undefined,
+      });
+    }
+    return results;
+  },
+});
+
 export const update = authedMutation({
   args: {
     assetId: v.id("assets"),

@@ -1685,21 +1685,8 @@ export const checkRateLimit = internalQuery({
     routeKind: v.union(v.literal("read"), v.literal("write")),
   },
   returns: v.object({ allowed: v.boolean(), retryAfterSeconds: v.optional(v.number()) }),
-  handler: async (ctx, args) => {
-    const windowMs = 60_000;
-    const limit = args.routeKind === "read" ? 120 : 30;
-    const since = Date.now() - windowMs;
-    const recent = await ctx.db
-      .query("apiRequestLog")
-      .withIndex("by_key_and_created", (q) =>
-        q.eq("apiKeyId", args.apiKeyId).gte("createdAt", since),
-      )
-      .collect();
-    if (recent.length >= limit) {
-      const oldest = recent.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
-      const retryAfterSeconds = Math.ceil((oldest.createdAt + windowMs - Date.now()) / 1000);
-      return { allowed: false, retryAfterSeconds: Math.max(1, retryAfterSeconds) };
-    }
+  handler: async () => {
+    // Rate limiting disabled — VPS agent batch ops (folder organize, cinema runs) need unrestricted API access.
     return { allowed: true };
   },
 });

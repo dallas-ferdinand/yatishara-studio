@@ -52,13 +52,9 @@
 **Motion graphics:**  
 **Continuity locks:**  
 
-#### Storyboard prompt
-
-<!-- Required when cast on camera — single still for Phase E.5 -->
-
 #### Generation prompt
 
-<!-- 150-400 words Seedance-ready; motion/camera when start frame carries cast -->
+<!-- 150-400 words Seedance-ready -->
 
 ---
 
@@ -81,4 +77,4 @@
 
 ---
 
-*Internal artifact — Phase E.5 (start frames) + Phase E proceed automatically after bible is written (no human gate).*
+*Internal artifact — Phase E proceeds automatically after bible is written (no human gate).*

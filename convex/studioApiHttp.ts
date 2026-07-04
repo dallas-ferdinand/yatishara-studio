@@ -46,17 +46,6 @@ async function authenticateRequest(
   if (requiredScope && !scopes.has(requiredScope)) {
     return errorResponse(`Missing required scope: ${requiredScope}`, 403);
   }
-  const limit = await ctx.runQuery(internal.studioApiInternal.checkRateLimit, {
-    apiKeyId: auth.apiKeyId,
-    routeKind,
-  });
-  if (!limit.allowed) {
-    return jsonResponse(
-      { error: "Rate limit exceeded" },
-      429,
-      { "Retry-After": String(limit.retryAfterSeconds ?? 60) },
-    );
-  }
   await ctx.runMutation(internal.studioApiInternal.touchApiKeyLastUsed, {
     apiKeyId: auth.apiKeyId,
   });

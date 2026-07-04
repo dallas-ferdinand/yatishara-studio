@@ -14,7 +14,7 @@ Proceed to next phase/round when **any** of:
 ## Never wait for Dallas mid-pipeline
 
 - Production Bible is an **internal artifact**, not an approval gate
-- Phase E.5 + E start automatically after bible is written
+- Phase E starts automatically after bible is written
 - Director merge + auto sign-off when scrutiny passes
 
 ## Fast-path exception

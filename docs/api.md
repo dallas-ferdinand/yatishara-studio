@@ -233,13 +233,9 @@ Job responses include `threadId`, `stylePresetSlug`, and `creditsSpent` when ava
 
 ## Rate limits
 
-Per API key, rolling 60-second window:
+**Disabled** for VPS agent / cinema batch operations (folder organize, multi-asset moves). Audit logging via `apiRequestLog` still runs.
 
-- Read routes: 120 requests
-- Write/generate routes: 30 requests
-- Concurrent in-flight image/video jobs: 10
-
-`429` responses include `Retry-After`.
+Concurrent in-flight image/video generation jobs: 10 per API key.
 
 ## MCP
 

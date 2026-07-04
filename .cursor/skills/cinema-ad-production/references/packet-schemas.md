@@ -151,6 +151,10 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
   "narrator": null,
   "continuity_locks": ["mug_color_matches_S02", "window_light_direction_consistent"],
   "reference_assets": ["PROP_honey_jar_v2"],
+  "referenceElementIds": ["ks7xxxxxxxx"],
+  "reference_element_map": { "PROP_honey_jar_v2": "ks7xxxxxxxx" },
+  "generation_duration_sec": 4,
+  "editorial_trim_sec": null,
   "emotional_temperature": {
     "register": "quiet_hold",
     "behavior_proof": "",
@@ -158,13 +162,28 @@ JSON-shaped blocks for handoffs. Orchestrator accumulates these; no runtime pars
     "light_register": "",
     "repertoire_refs": []
   },
+  "cast_on_camera": true,
+  "storyboard_prompt": "",
+  "startFrameAssetId": null,
   "generation_prompt": ""
 }
 ```
 
-`generation_prompt` is 150–400 words, Seedance-ready, observable actions only. Use `## Generation prompt` heading when embedded in markdown bible.
+`cast_on_camera` — true when any character appears in frame; drives E.5 requirement.
+
+`storyboard_prompt` — **required when `cast_on_camera: true`**. Single still for `studio_generate_image` (Phase E.5). Composition, light, who is in frame — not motion. See [start-frame-workflow.md](start-frame-workflow.md).
+
+`startFrameAssetId` — Studio asset ID from E.5 storyboard output. **Required before video** when `cast_on_camera: true`.
+
+`generation_prompt` is 150–400 words, Seedance-ready, **motion/camera only** when cast on camera (people already in start frame). Use `## Generation prompt` heading when embedded in markdown bible.
 
 `reference_assets` — IDs from `approved_asset_registry` (Phase D).
+
+`referenceElementIds` — **required** built Studio element IDs. Used for E.5 storyboard (`studio_generate_image` — all sheets attach) and E video (`studio_generate_video` — prop/location sheets attach; character sheets prompt-only). Computed by orchestrator per [shot-reference-allocation.md](shot-reference-allocation.md). Never raw upload refs.
+
+`reference_element_map` — audit `{ asset_id: element_id }` per shot.
+
+`generation_duration_sec` — Studio video min 4s; if editorial `duration_sec` < 4, set `generation_duration_sec: 4` and `editorial_trim_sec`.
 
 ## prop_packet
 
