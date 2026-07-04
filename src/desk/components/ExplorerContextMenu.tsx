@@ -13,11 +13,13 @@ function buildMenuItems(entry, {
   createItems,
   onRequestRename,
   onRequestDelete,
+  inTrashView = false,
 }) {
   if (!entry) return [];
 
   const isBlank = entry.type === "blank";
   const isParent = entry.type === "parent";
+  const isTrashFolder = entry.studioKind === "trash";
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -30,6 +32,14 @@ function buildMenuItems(entry, {
         ...(canCreateFile ? [{ id: "new-file", label: "New note" }] : []),
         ...(canCreateFolder ? [{ id: "new-folder", label: "New folder" }] : []),
       ];
+  if (isTrashFolder) {
+    items.push({ id: "open", label: "Open folder" });
+    return items;
+  }
+  if (isBlank && inTrashView) {
+    items.push({ id: "refresh", label: "Refresh" });
+    return items;
+  }
   if (isBlank) {
     items.push(...creationItems);
     if (creationItems.length) items.push({ id: "sep-blank", sep: true });
@@ -42,6 +52,15 @@ function buildMenuItems(entry, {
     items.push({ id: "open", label: "Open folder" });
   } else {
     items.push({ id: "open", label: "Open" });
+  }
+
+  if (inTrashView && !isBlank && !isParent) {
+    items.push({ id: "copy-path", label: "Copy item link" });
+    if (onRequestDelete) {
+      items.push({ id: "sep-trash-restore", sep: true });
+      items.push({ id: "delete", label: "Restore" });
+    }
+    return items;
   }
 
   if (!isBlank) {
@@ -82,6 +101,7 @@ export function ExplorerContextMenu({
   canCreateFile = false,
   canCreateFolder = false,
   createItems,
+  inTrashView = false,
 }) {
   const menuRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
@@ -96,6 +116,7 @@ export function ExplorerContextMenu({
         createItems,
         onRequestRename,
         onRequestDelete,
+        inTrashView,
       }),
     [
       entry,
@@ -106,6 +127,7 @@ export function ExplorerContextMenu({
       createItems,
       onRequestRename,
       onRequestDelete,
+      inTrashView,
     ],
   );
 

@@ -66,6 +66,18 @@ import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
+const TRASH_FOLDER_ID = "__trash__";
+const TRASH_ACTIVE_FOLDER = { _id: TRASH_FOLDER_ID, name: "Trash" };
+const TRASH_FOLDER_ENTRY = {
+  type: "dir",
+  name: "Trash",
+  path: "/Studio/Trash",
+  displayPath: displayWorkspacePath("/Studio/Trash"),
+  modified: 0,
+  mtimeMs: 0,
+  studioKind: "trash",
+  studioId: TRASH_FOLDER_ID,
+};
 const CREATE_MENU_ITEMS = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
@@ -172,17 +184,21 @@ export function StudioShell() {
   const createFolder = useMutation(api.folders.create);
   const updateFolder = useMutation(api.folders.update);
   const trashFolder = useMutation(api.folders.moveToTrash);
+  const restoreFolder = useMutation(api.folders.restore);
   const createDocument = useMutation(api.documents.create);
   const updateDocument = useMutation(api.documents.update);
   const trashDocument = useMutation(api.documents.moveToTrash);
+  const restoreDocument = useMutation(api.documents.restore);
   const createElement = useMutation(api.elements.create);
   const updateElement = useMutation(api.elements.update);
   const trashElement = useMutation(api.elements.moveToTrash);
+  const restoreElement = useMutation(api.elements.restore);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const completeUpload = useMutation(api.assets.completeUpload);
   const updateAsset = useMutation(api.assets.update);
   const duplicateAsset = useMutation(api.assets.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
+  const restoreAsset = useMutation(api.assets.restore);
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
@@ -260,28 +276,42 @@ export function StudioShell() {
   const adminPayments = useQuery(api.billing.adminListPayments, isAdminUser ? {} : "skip");
   const adminCustomers = useQuery(api.users.adminListCustomers, isAdminUser ? {} : "skip");
   const topFolders = useQuery(api.folders.list, hasCurrentUser ? {} : "skip");
+  const isTrashView = activeFolderId === TRASH_FOLDER_ID;
   const selectedFolder = useQuery(
     api.folders.get,
-    hasCurrentUser && activeFolderId ? { folderId: activeFolderId } : "skip",
+    hasCurrentUser && activeFolderId && !isTrashView ? { folderId: activeFolderId } : "skip",
   );
-  const activeFolder = activeFolderId
-    ? (selectedFolder ?? folderByIdRef.current.get(activeFolderId) ?? topFolders?.find((folder) => folder._id === activeFolderId) ?? null)
-    : (topFolders?.[0] ?? null);
+  const activeFolder = isTrashView
+    ? TRASH_ACTIVE_FOLDER
+    : activeFolderId
+      ? (selectedFolder ?? folderByIdRef.current.get(activeFolderId) ?? topFolders?.find((folder) => folder._id === activeFolderId) ?? null)
+      : (topFolders?.[0] ?? null);
 
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
   const childFolders = useQuery(
     api.folders.list,
-    hasCurrentUser && activeFolder ? { parentId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder && !isTrashView ? { parentId: activeFolder._id } : "skip",
+  );
+  const trashedFolders = useQuery(api.folders.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
+  const trashedAssets = useQuery(api.assets.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
+  const trashedDocuments = useQuery(api.documents.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
+  const trashedElementsRaw = useQuery(
+    api.elements.list,
+    hasCurrentUser && isTrashView ? { includeDeleted: true } : "skip",
+  );
+  const trashedElements = useMemo(
+    () => (trashedElementsRaw ?? []).filter((element) => element.deletedAt),
+    [trashedElementsRaw],
   );
   const assets = useQuery(
     api.assets.listByFolder,
-    hasCurrentUser && activeFolder ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder && !isTrashView ? { folderId: activeFolder._id } : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    hasCurrentUser && activeFolder ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder && !isTrashView ? { folderId: activeFolder._id } : "skip",
   );
   const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
   const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
@@ -297,7 +327,8 @@ export function StudioShell() {
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
     if (!hasCurrentUser) return queries;
-    for (const asset of assets ?? []) {
+    const previewAssets = isTrashView ? (trashedAssets ?? []) : (assets ?? []);
+    for (const asset of previewAssets) {
       if (!asset?._id || !["image", "video"].includes(asset.kind)) continue;
       queries[`asset:${asset._id}`] = {
         query: api.assets.signedReadUrl,
@@ -305,7 +336,7 @@ export function StudioShell() {
       };
     }
     return queries;
-  }, [assetUrlExpiresUnix, assets, hasCurrentUser]);
+  }, [assetUrlExpiresUnix, assets, hasCurrentUser, isTrashView, trashedAssets]);
   const assetPreviewUrls = useQueries(assetPreviewQueries);
   const attachmentUrlQueries = useMemo(() => {
     const queries = {};
@@ -349,6 +380,18 @@ export function StudioShell() {
         };
       }),
     [assetPreviewUrls, assets],
+  );
+  const trashedAssetsWithPreviewUrls = useMemo(
+    () =>
+      trashedAssets?.map((asset) => {
+        const previewUrl = assetPreviewUrls[`asset:${asset._id}`];
+        return {
+          ...asset,
+          signedReadUrl: asset.signedReadUrl ?? previewUrl,
+          signedThumbnailUrl: asset.signedThumbnailUrl ?? (asset.kind === "image" ? previewUrl : undefined),
+        };
+      }),
+    [assetPreviewUrls, trashedAssets],
   );
   const presets = useQuery(
     api.stylePresets.listEnabled,
@@ -602,17 +645,24 @@ export function StudioShell() {
     };
   }, []);
 
-  const folderContentLoading = Boolean(
-    activeFolder &&
-      (childFolders === undefined ||
-        assetsWithPreviewUrls === undefined ||
-        documents === undefined ||
-        elements === undefined),
-  );
+  const folderContentLoading = isTrashView
+    ? Boolean(
+        trashedFolders === undefined ||
+          trashedAssets === undefined ||
+          trashedDocuments === undefined ||
+          trashedElementsRaw === undefined,
+      )
+    : Boolean(
+        activeFolder &&
+          (childFolders === undefined ||
+            assetsWithPreviewUrls === undefined ||
+            documents === undefined ||
+            elements === undefined),
+      );
 
-  const currentEntries = useMemo(
-    () =>
-      buildFlatEntries({
+  const currentEntries = useMemo(() => {
+    if (isTrashView) {
+      return buildFlatEntries({
         folder: activeFolder,
         parent:
           navTrail.length > 1
@@ -623,14 +673,54 @@ export function StudioShell() {
                 studioId: navTrail[navTrail.length - 2].id,
               }
             : null,
-        loading: !activeFolder || folderContentLoading,
-        folders: childFolders,
-        assets: assetsWithPreviewUrls,
-        documents,
-        elements: elements?.filter((element) => element.folderId === activeFolder?._id),
-      }),
-    [activeFolder, navTrail, childFolders, assetsWithPreviewUrls, documents, elements, folderContentLoading],
-  );
+        loading: folderContentLoading,
+        folders: trashedFolders,
+        assets: trashedAssetsWithPreviewUrls,
+        documents: trashedDocuments,
+        elements: trashedElements,
+      });
+    }
+
+    const entries = buildFlatEntries({
+      folder: activeFolder,
+      parent:
+        navTrail.length > 1
+          ? {
+              type: "parent",
+              name: "Back",
+              path: `/Studio/${navTrail[navTrail.length - 2].name}`,
+              studioId: navTrail[navTrail.length - 2].id,
+            }
+          : null,
+      loading: !activeFolder || folderContentLoading,
+      folders: childFolders,
+      assets: assetsWithPreviewUrls,
+      documents,
+      elements: elements?.filter((element) => element.folderId === activeFolder?._id),
+    });
+
+    const rootFolderId = navTrail[0]?.id;
+    if (rootFolderId && activeFolderId === rootFolderId) {
+      return {
+        ...entries,
+        entries: [TRASH_FOLDER_ENTRY, ...(entries.entries ?? [])],
+      };
+    }
+    return entries;
+  }, [
+    activeFolderId,
+    navTrail,
+    childFolders,
+    assetsWithPreviewUrls,
+    documents,
+    elements,
+    folderContentLoading,
+    isTrashView,
+    trashedFolders,
+    trashedAssetsWithPreviewUrls,
+    trashedDocuments,
+    trashedElements,
+  ]);
 
   const rootEntries = useMemo(
     () => ({
@@ -760,6 +850,7 @@ export function StudioShell() {
   }
 
   function runCreateAction(action) {
+    if (isTrashView) return;
     if (action === "upload") {
       fileInputRef.current?.click();
       return;
@@ -828,7 +919,17 @@ export function StudioShell() {
   }
 
   function handleEntryOpen(entry) {
+    if (entry.studioKind === "trash") {
+      setActiveFolderId(TRASH_FOLDER_ID);
+      setNavTrail((trail) => {
+        const existing = trail.findIndex((crumb) => crumb.id === TRASH_FOLDER_ID);
+        if (existing >= 0) return trail.slice(0, existing + 1);
+        return [...trail, { id: TRASH_FOLDER_ID, name: "Trash" }];
+      });
+      return;
+    }
     if (entry.type === "dir") {
+      if (isTrashView) return;
       setActiveFolderId(entry.studioId);
       setNavTrail((trail) => {
         const existing = trail.findIndex((crumb) => crumb.id === entry.studioId);
@@ -1052,7 +1153,7 @@ export function StudioShell() {
   }
 
   async function trashEntry(entry) {
-    if (!entry) return;
+    if (!entry || isTrashView || entry.studioKind === "trash") return;
     const ok = window.confirm(`Move "${entry.name}" to trash?`);
     if (!ok) return;
     if (entry.studioKind === "folder") {
@@ -1067,7 +1168,23 @@ export function StudioShell() {
     closeTab(`${entry.studioKind}:${entry.studioId}`);
   }
 
+  async function restoreEntry(entry) {
+    if (!entry || entry.studioKind === "trash") return;
+    const ok = window.confirm(`Restore "${entry.name}"?`);
+    if (!ok) return;
+    if (entry.studioKind === "folder") {
+      await restoreFolder({ folderId: entry.studioId });
+    } else if (entry.studioKind === "document") {
+      await restoreDocument({ documentId: entry.studioId });
+    } else if (entry.studioKind === "asset") {
+      await restoreAsset({ assetId: entry.studioId });
+    } else if (entry.studioKind === "element") {
+      await restoreElement({ elementId: entry.studioId });
+    }
+  }
+
   function handleEntryDrop(event, targetEntry) {
+    if (isTrashView || targetEntry?.studioKind === "trash") return;
     if (!targetEntry?.studioId) return;
     const raw = event.dataTransfer?.getData(EXPLORER_DND_TYPE);
     if (!raw) return;
@@ -7466,17 +7583,20 @@ export function StudioShell() {
           entry={contextMenu.entry}
           x={contextMenu.x}
           y={contextMenu.y}
-          canCreateFile
-          canCreateFolder
+          canCreateFile={!isTrashView}
+          canCreateFolder={!isTrashView}
+          inTrashView={isTrashView}
           createItems={CREATE_MENU_ITEMS}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
+            if (isTrashView) return;
             setContextMenu(null);
             void renameEntry(entry);
           }}
           onRequestDelete={(entry) => {
             setContextMenu(null);
-            void trashEntry(entry);
+            if (isTrashView) void restoreEntry(entry);
+            else void trashEntry(entry);
           }}
           onAction={(action, entry) => {
             setContextMenu(null);
@@ -10397,7 +10517,6 @@ function SettingsWorkspacePane({
       setPendingReceiptPaymentId(paymentId);
       setPaymentStatus("Transfer the amount below, then upload your receipt.");
     } catch (error) {
-      paymentInitRef.current = false;
       setPaymentStatus(error instanceof Error ? error.message : "Payment request failed.");
     }
   }
@@ -10444,7 +10563,9 @@ function SettingsWorkspacePane({
     if (!banks.length) return;
     if (paymentInitRef.current) return;
     paymentInitRef.current = true;
-    void handleBankPayment(banks[0]._id);
+    void handleBankPayment(banks[0]._id).catch(() => {
+      paymentInitRef.current = false;
+    });
   }, [isPaymentStep, isThankYouStep, pendingReceiptPaymentId, bankAccounts]);
   const items = [
     { id: "general", label: "Appearance" },

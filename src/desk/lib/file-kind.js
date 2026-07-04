@@ -80,6 +80,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
 }
 
 export function explorerEntryIcon(entry) {
+  if (entry?.studioKind === "trash") return "trash";
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "element") {
     if (entry.elementType === "character") return "user";
