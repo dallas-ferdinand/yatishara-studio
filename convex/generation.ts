@@ -69,6 +69,7 @@ const eventReturn = v.object({
   fromFolderId: v.optional(v.id("folders")),
   toFolderId: v.optional(v.id("folders")),
   createdAt: v.number(),
+  error: v.optional(v.string()),
   resultAssets: v.optional(v.array(v.object({
     _id: v.id("assets"),
     name: v.string(),
@@ -109,9 +110,25 @@ export const listEvents = authedQuery({
     const assets = (await Promise.all(resultAssetIds.map((assetId) => ctx.db.get("assets", assetId))))
       .filter((asset): asset is Doc<"assets"> => asset !== null);
     const assetsById = new Map(assets.map((asset) => [asset._id, asset]));
-    return await Promise.all(events.map(async (event) => ({
-      ...event,
-      resultAssets: event.assetIds?.length
+    const jobIds = Array.from(
+      new Set(
+        events
+          .map((event) => event.generationJobId)
+          .filter((jobId): jobId is Id<"generationJobs"> => jobId !== undefined),
+      ),
+    );
+    const jobs = (await Promise.all(jobIds.map((jobId) => ctx.db.get("generationJobs", jobId)))).filter(
+      (job): job is Doc<"generationJobs"> => job !== null,
+    );
+    const jobsById = new Map(jobs.map((job) => [job._id, job]));
+    return await Promise.all(events.map(async (event) => {
+      const job = event.generationJobId ? jobsById.get(event.generationJobId) : null;
+      return {
+        ...event,
+        ...(event.kind === "stage" && event.stage === "failed" && job?.error
+          ? { error: job.error }
+          : {}),
+        resultAssets: event.assetIds?.length
         ? await Promise.all(
             event.assetIds
               .map((assetId) => assetsById.get(assetId))
@@ -133,7 +150,8 @@ export const listEvents = authedQuery({
               })),
           )
         : undefined,
-    })));
+      };
+    }));
   },
 });
 

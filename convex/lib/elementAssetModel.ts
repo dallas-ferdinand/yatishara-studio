@@ -3,7 +3,7 @@ import type { QueryCtx } from "../_generated/server";
 
 export type ElementBuildStatus = "unbuilt" | "built";
 
-export const MAX_ELEMENT_REFERENCE_ASSETS = 10;
+export const MAX_ELEMENT_REFERENCE_ASSETS = 30;
 export const MAX_GENERATION_REFERENCE_ASSETS = 10;
 
 export function isSheetAssetFilename(name: string): boolean {

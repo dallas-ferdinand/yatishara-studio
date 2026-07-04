@@ -35,35 +35,58 @@ const SHEET_IMAGE_BASE_RULES = [
 export function buildElementSheetImagePrompt(args: {
   type: ElementSheetType;
   name: string;
+  description?: string;
+  sourceMode?: "photographic" | "designed";
 }): string | null {
   const name = args.name.trim() || "the subject";
-  const fidelity = sheetFidelityPromptSuffix(args.type);
+  const sourceMode = args.sourceMode ?? "photographic";
+  const fidelity = sheetFidelityPromptSuffix(args.type, sourceMode);
+  const specBlock = args.description?.trim()
+    ? `Visual specification: ${args.description.trim()}`
+    : "";
   switch (args.type) {
     case "character":
       return [
         `Character reference sheet of ${name} in three panels side by side: full-body front view standing in a neutral pose, full-body back view standing, and a large head-and-shoulders closeup.`,
         "The face is clearly visible ONLY in the closeup panel — exactly one visible face in the whole image so a video model has a single face to lock onto.",
-        "Identical person in every panel: exactly the same face structure, hairstyle, hair texture and volume, skin tone, build, height, and wardrobe. Do not restyle, do not idealize, do not change the hair.",
-        "Match the identity in the attached reference images exactly if provided.",
+        sourceMode === "designed"
+          ? "Design this fictional character from the written specification — identical person in every panel."
+          : "Identical person in every panel: exactly the same face structure, hairstyle, hair texture and volume, skin tone, build, height, and wardrobe. Match attached reference photos exactly.",
+        specBlock,
+        sourceMode === "photographic"
+          ? "Match the identity in the attached reference images exactly if provided."
+          : "",
         SHEET_IMAGE_BASE_RULES,
         fidelity,
-      ].join(" ");
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "prop":
       return [
         `Product reference sheet of ${name} in two panels side by side: straight-on front view and a three-quarter perspective view.`,
-        "Identical object in both panels: exactly the same materials, colors, proportions, branding, and wear. No hands, no people.",
-        "Match the object in the attached reference images exactly if provided.",
+        "Identical object in both panels: exactly the same materials, colors, proportions, and wear. No hands, no people.",
+        specBlock,
+        sourceMode === "photographic"
+          ? "Match the object in the attached reference images exactly if provided."
+          : "",
         SHEET_IMAGE_BASE_RULES,
         fidelity,
-      ].join(" ");
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "location":
       return [
         `Location reference plate of ${name}: a single wide establishing shot from a three-quarter angle to give the space depth for camera movement.`,
-        "Bright, clean, high-end commercial look. No people, no text, no logos, no watermarks.",
-        "Match the space in the attached reference images exactly if provided.",
-        "Photorealistic, documentary-grade detail — not illustration, not 3D render style.",
+        "Documentary Caribbean domestic realism where applicable. No people, no text, no logos, no watermarks.",
+        specBlock,
+        sourceMode === "photographic"
+          ? "Match the space in the attached reference images exactly if provided."
+          : "If prop reference sheets are attached, place those exact objects in the set dressing.",
+        "Photorealistic, documentary-grade detail with subtle film grain — not illustration, not 3D render style.",
         fidelity,
-      ].join(" ");
+      ]
+        .filter(Boolean)
+        .join(" ");
     case "doc":
       return null;
   }

@@ -172,6 +172,13 @@ export default defineSchema({
     type: elementType,
     name: v.string(),
     description: v.optional(v.string()),
+    /**
+     * photographic = real subject; sheet must match uploaded reference photos (min refs).
+     * designed = fictional prop/character/location; direct sheet from description — no photo refs required.
+     */
+    sourceMode: v.optional(
+      v.union(v.literal("photographic"), v.literal("designed")),
+    ),
     /** @deprecated Use referenceAssetIds — kept for legacy rows only */
     sourceAssetIds: v.array(v.id("assets")),
     /** Uploaded photos used only to build the sheet — not sent to generation */

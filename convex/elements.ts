@@ -7,6 +7,7 @@ import {
   assertReferenceCount,
   referenceAssetIdsFromInput,
 } from "./lib/elementAssetModel";
+import { inferElementSourceMode } from "./lib/elementSheetGuides";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const elementType = v.union(
@@ -16,6 +17,8 @@ const elementType = v.union(
   v.literal("doc"),
 );
 
+const elementSourceMode = v.union(v.literal("photographic"), v.literal("designed"));
+
 const elementReturn = v.object({
   _id: v.id("elements"),
   _creationTime: v.number(),
@@ -24,6 +27,7 @@ const elementReturn = v.object({
   type: elementType,
   name: v.string(),
   description: v.optional(v.string()),
+  sourceMode: v.optional(elementSourceMode),
   sourceAssetIds: v.array(v.id("assets")),
   referenceAssetIds: v.optional(v.array(v.id("assets"))),
   sheetAssetId: v.optional(v.id("assets")),
@@ -89,6 +93,7 @@ export const create = authedMutation({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
+    sourceMode: v.optional(elementSourceMode),
   },
   returns: v.id("elements"),
   handler: async (ctx, args) => {
@@ -104,12 +109,19 @@ export const create = authedMutation({
       await requireDocumentOwner(ctx, args.sourceDocumentId);
     }
     const now = Date.now();
+    const sourceMode =
+      args.sourceMode ??
+      inferElementSourceMode({
+        type: args.type,
+        imageRefCount: referenceAssetIds.length,
+      });
     return await ctx.db.insert("elements", {
       ownerId: ctx.user._id,
       folderId: args.folderId,
       type: args.type,
       name: args.name.trim(),
       description: args.description,
+      sourceMode,
       sourceAssetIds: referenceAssetIds,
       referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
