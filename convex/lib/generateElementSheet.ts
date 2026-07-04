@@ -12,6 +12,8 @@ export type ElementSheetTarget = {
   folderId: Id<"folders">;
   type: "character" | "prop" | "location" | "doc";
   name: string;
+  description?: string;
+  sourceMode?: "photographic" | "designed";
   referenceAssetIds: Id<"assets">[];
 };
 
@@ -60,9 +62,12 @@ export async function generateElementSheetImage(
   },
 ): Promise<GenerateElementSheetImageResult> {
   const resolution = args.resolution ?? "2K";
+  const sourceMode = args.element.sourceMode ?? "photographic";
   const prompt = buildElementSheetImagePrompt({
     type: args.element.type,
     name: args.element.name,
+    description: args.element.description,
+    sourceMode,
   });
   if (!prompt) {
     throw new Error("Element type does not support sheet image generation.");

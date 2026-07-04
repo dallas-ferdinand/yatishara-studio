@@ -6,7 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { action, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { generateElementSheet } from "./lib/aiGateway";
-import { assertEnoughSheetImageReferences } from "./lib/elementSheetGuides";
+import { assertSheetGenerationReady, inferElementSourceMode } from "./lib/elementSheetGuides";
 import {
   generateElementSheetImage,
   sheetImageCreditEstimate,
@@ -146,11 +146,20 @@ async function generateElementTextSheetCore(
     /^https?:\/\//i.test(input.url),
   );
   const imageRefCount = referenceInputs.filter((input) => input.kind === "image").length;
-  assertEnoughSheetImageReferences({
+  const sourceMode =
+    element.sourceMode ??
+    inferElementSourceMode({
+      type: element.type,
+      imageRefCount,
+    });
+  assertSheetGenerationReady({
     type: element.type,
     imageRefCount,
+    sourceMode,
+    description: args.existingNotes ?? element.description,
   });
   if (
+    sourceMode === "photographic" &&
     !referenceInputs.length &&
     !args.existingNotes?.trim() &&
     !element.description?.trim() &&
@@ -283,9 +292,16 @@ export const generateElementTextSheetForApi = action({
         assetIds: referenceAssetIds,
       },
     );
-    assertEnoughSheetImageReferences({
+    assertSheetGenerationReady({
       type: element.type,
       imageRefCount,
+      sourceMode:
+        element.sourceMode ??
+        inferElementSourceMode({
+          type: element.type,
+          imageRefCount,
+        }),
+      description: element.description,
     });
 
     const refs = referenceAssetIds.length
@@ -362,6 +378,8 @@ export const generateElementSheetForApi = action({
     sandboxFolderId: v.id("folders"),
     elementId: v.id("elements"),
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
+    referenceElementIds: v.optional(v.array(v.id("elements"))),
+    sourceMode: v.optional(v.union(v.literal("photographic"), v.literal("designed"))),
     resolution: v.optional(v.union(v.literal("1K"), v.literal("2K"))),
     expiresUnix: v.number(),
   },
@@ -402,9 +420,18 @@ export const generateElementSheetForApi = action({
         assetIds: referenceAssetIds,
       },
     );
-    assertEnoughSheetImageReferences({
+    const sourceMode =
+      args.sourceMode ??
+      element.sourceMode ??
+      inferElementSourceMode({
+        type: element.type,
+        imageRefCount,
+      });
+    assertSheetGenerationReady({
       type: element.type,
       imageRefCount,
+      sourceMode,
+      description: element.description,
     });
 
     const refs = referenceAssetIds.length
@@ -415,9 +442,35 @@ export const generateElementSheetForApi = action({
           expiresUnix: args.expiresUnix,
         })
       : [];
-    const referenceUrls = refs
+    let referenceUrls = refs
       .filter((ref: { kind: string; url: string }) => ref.kind === "image")
       .map((ref: { url: string }) => ref.url);
+
+    if (args.referenceElementIds?.length) {
+      const composed = await ctx.runQuery(
+        internal.studioApiInternal.resolveReferenceElementIds,
+        {
+          userId: args.userId,
+          sandboxFolderId: args.sandboxFolderId,
+          elementIds: args.referenceElementIds,
+        },
+      );
+      const elementSheetUrls = await ctx.runQuery(
+        internal.studioApiInternal.getAssetReferenceUrls,
+        {
+          userId: args.userId,
+          sandboxFolderId: args.sandboxFolderId,
+          assetIds: composed.referenceAssetIds,
+          expiresUnix: args.expiresUnix,
+        },
+      );
+      referenceUrls = [
+        ...referenceUrls,
+        ...elementSheetUrls
+          .filter((ref: { kind: string; url: string }) => ref.kind === "image")
+          .map((ref: { url: string }) => ref.url),
+      ];
+    }
 
     const callbacks = apiSheetCallbacks(ctx, args.userId);
     const result = await generateElementSheetImage(ctx, {
@@ -426,6 +479,8 @@ export const generateElementSheetForApi = action({
         folderId: element.folderId as Id<"folders">,
         type: element.type,
         name: element.name,
+        description: element.description,
+        sourceMode,
         referenceAssetIds,
       },
       referenceUrls,
