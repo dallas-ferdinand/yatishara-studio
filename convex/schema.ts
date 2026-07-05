@@ -434,8 +434,8 @@ export default defineSchema({
     p256dh: v.string(),
     auth: v.string(),
     userAgent: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
