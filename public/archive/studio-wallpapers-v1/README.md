@@ -14,6 +14,13 @@ These assets were the original Studio chat backgrounds. They were labeled `-4k` 
 
 ## Replacement
 
-New scene files live in `/public/studio-scene-*-4k.webp` (3840×2160, cinematic photorealistic stills).
+New scene files live in `/public/studio-scene-*-4k.webp` (3840×2160, illustrated cartoon matte-painting backgrounds).
 
-Background pack options are now **Scenes** (photoreal wallpaper) and **Clean** (no image).
+Background pack options are now **Scenes** (illustrated cartoon wallpaper) and **Clean** (no image).
+
+## Regenerating (Cursor image gen only)
+
+1. Generate PNGs with **Cursor image gen** into `assets/` (see prompts in `scripts/studio-wallpaper-prompts.mjs`)
+2. Run `node scripts/process-studio-wallpapers.mjs all` to upscale to 4K WebP in `public/`
+
+Do **not** use Studio/Vercel API for wallpaper regen — Cursor image gen only.

@@ -30,6 +30,7 @@ export function captureStripLayout(
 ) {
   const rects = measureTabRects(stripEl, selector);
   const stripRect = stripEl?.getBoundingClientRect?.();
+  const scrollLeft = stripEl?.scrollLeft ?? 0;
   const newChatRect = newChatEl?.getBoundingClientRect?.();
   const anchorLeft = rects[0]?.left ?? stripRect?.left ?? 0;
   const tabWidth = rects[0]?.width > 0 ? rects[0].width : UNIFIED_TAB_WIDTH_PX;
@@ -39,6 +40,8 @@ export function captureStripLayout(
       : tabWidth;
   return {
     anchorLeft,
+    stripLeft: stripRect?.left ?? anchorLeft,
+    scrollLeft,
     tabWidth,
     tabStep: measuredStep > 0 ? measuredStep : tabWidth,
     tabCount: Math.max(tabCount ?? 0, rects.length),
@@ -65,15 +68,15 @@ export function ghostTargetAtInsertIndex(layout, insertIndex) {
  * Uses a collapsed slot grid (n-1 slots packed from strip anchor) so midpoints
  * match where remaining tabs sit after the dragged tab is removed from the row.
  */
-export function insertionIndexAmongCollapsed(dragLeadingX, anchorLeft, tabWidth, otherCount, tabStep = tabWidth) {
+export function insertionIndexAmongCollapsed(dragLeadingContentX, tabWidth, otherCount, tabStep = tabWidth) {
   const width = tabWidth > 0 ? tabWidth : UNIFIED_TAB_WIDTH_PX;
   const step = tabStep > 0 ? tabStep : width;
   const count = Math.max(0, otherCount | 0);
   if (!count) return 0;
 
   for (let i = 0; i < count; i++) {
-    const mid = anchorLeft + i * step + width / 2;
-    if (dragLeadingX < mid) return i;
+    const mid = i * step + width / 2;
+    if (dragLeadingContentX < mid) return i;
   }
   return count;
 }
@@ -132,14 +135,15 @@ export function resolveDragOrder({
   lastStripIndex = -1,
   lastLeadingX = dragLeadingX,
 }) {
-  const { anchorLeft, tabWidth, tabStep } = layout ?? {};
+  const { tabWidth, tabStep } = layout ?? {};
   const otherCount = Math.max(0, order.length - 1);
+  const width = tabWidth > 0 ? tabWidth : UNIFIED_TAB_WIDTH_PX;
+  const step = tabStep > 0 ? tabStep : width;
   const insertIndex = insertionIndexAmongCollapsed(
     dragLeadingX,
-    anchorLeft ?? 0,
-    tabWidth ?? UNIFIED_TAB_WIDTH_PX,
+    width,
     otherCount,
-    tabStep ?? tabWidth ?? UNIFIED_TAB_WIDTH_PX
+    step
   );
   if (!shouldAcceptStripIndex(insertIndex, lastStripIndex, dragLeadingX, lastLeadingX)) {
     return { order, stripIndex: lastStripIndex, leadingX: lastLeadingX, changed: false };

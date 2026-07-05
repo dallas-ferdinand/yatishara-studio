@@ -54,6 +54,7 @@ export async function generateElementSheetImage(
   args: {
     element: ElementSheetTarget;
     referenceUrls: string[];
+    stylePresetSlug?: string;
     resolution?: "1K" | "2K";
     chargeImage: ChargeImage;
     refundCredit: RefundCredit;
@@ -68,6 +69,7 @@ export async function generateElementSheetImage(
     name: args.element.name,
     description: args.element.description,
     sourceMode,
+    stylePresetSlug: args.stylePresetSlug,
   });
   if (!prompt) {
     throw new Error("Element type does not support sheet image generation.");

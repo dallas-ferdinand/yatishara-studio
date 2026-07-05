@@ -15,7 +15,7 @@ import {
   type ElementSheetType,
 } from "./elementSheets";
 import { normalizeAudioMimeType, type ReferenceInput } from "./referenceInput";
-import { isSeedanceGatewayModel, isVeoGatewayModel } from "./videoModels";
+import { isKlingGatewayModel, isSeedanceGatewayModel } from "./videoModels";
 
 export type GenerationMode = "image" | "video";
 
@@ -50,10 +50,17 @@ export type ScriptGenerationInput = {
   presetName?: string;
   presetInstructions: string;
   scriptInstructions?: string;
+  /** @deprecated use scriptType */
+  scriptTypeInstructions?: string;
+  scriptType?: string;
+  presetSlug?: string;
+  referenceIntent?: string;
   storytellingEnabled?: boolean;
   negativePrompt?: string;
   attachedScriptMarkdown?: string[];
   referenceInputs: ReferenceInput[];
+  hasRawImageReference?: boolean;
+  hasElementReference?: boolean;
 };
 
 export type GeneratedMedia = {
@@ -82,11 +89,16 @@ export async function enhancePrompt(input: EnhancementInput): Promise<string> {
     storytellingEnabled: input.storytellingEnabled,
     negativePrompt: input.negativePrompt,
     outputKind: input.outputKind,
+    scriptType: input.scriptType,
+    referenceIntent: input.referenceIntent,
+    presetSlug: input.presetSlug,
     durationSeconds: input.durationSeconds,
     resolution: input.resolution,
     aspectRatio: input.aspectRatio,
     hasVideoReference: input.hasVideoReference,
     hasImageReference: input.hasImageReference,
+    hasRawImageReference: input.hasRawImageReference,
+    hasElementReference: input.hasElementReference,
     attachedScriptMarkdown: input.attachedScriptMarkdown,
     referenceSummaries: input.referenceSummaries,
   };
@@ -135,16 +147,25 @@ export async function generateElementSheet(input: ElementSheetInput): Promise<st
 
 export async function generateScript(input: ScriptGenerationInput): Promise<string> {
   const hasAudioReference = input.referenceInputs.some((reference) => reference.kind === "audio");
+  const hasImageReference =
+    input.referenceInputs.some((reference) => reference.kind === "image") ||
+    Boolean(input.hasRawImageReference || input.hasElementReference);
   const context: CreativeDirectionContext = {
     userPrompt: input.userPrompt,
     presetName: input.presetName,
     presetInstructions: input.presetInstructions,
     scriptInstructions: input.scriptInstructions,
+    scriptType: input.scriptType,
+    referenceIntent: input.referenceIntent,
+    presetSlug: input.presetSlug,
     storytellingEnabled: input.storytellingEnabled,
     negativePrompt: input.negativePrompt,
     outputKind: "script",
     attachedScriptMarkdown: input.attachedScriptMarkdown,
     hasAudioReference,
+    hasImageReference,
+    hasRawImageReference: input.hasRawImageReference,
+    hasElementReference: input.hasElementReference,
   };
   const result = await generateText({
     model: gateway.languageModel(textModelId()),
@@ -192,11 +213,8 @@ export async function generateVideo(
   input: VideoGenerationInput,
 ): Promise<GeneratedMedia> {
   const model = input.modelId?.trim() || requiredEnv("GATEWAY_VIDEO_MODEL_ID");
-  if (isVeoGatewayModel(model)) {
-    return generateVeoVideo(model, input);
-  }
-
   const seedance = isSeedanceGatewayModel(model);
+  const kling = isKlingGatewayModel(model);
   const startFrameUrl = input.startFrameUrl?.trim();
   const referenceImageUrls = seedance ? input.referenceImageUrls : [];
   const referenceVideoUrls = seedance ? input.referenceVideoUrls : [];
@@ -246,41 +264,13 @@ export async function generateVideo(
               : {}),
           },
         }
-      : undefined,
-  });
-  return {
-    data: result.video.uint8Array,
-    mediaType: result.video.mediaType || "video/mp4",
-  };
-}
-
-async function generateVeoVideo(
-  model: string,
-  input: VideoGenerationInput,
-): Promise<GeneratedMedia> {
-  const startFrameUrl = input.startFrameUrl?.trim();
-  const prompt =
-    startFrameUrl != null && startFrameUrl.length > 0
-      ? { image: startFrameUrl, text: input.prompt }
-      : input.prompt;
-
-  const result = await experimental_generateVideo({
-    model: gateway.videoModel(model),
-    // Veo I2V uses { image, text } prompt shape via Vertex provider.
-    prompt: prompt as never,
-    aspectRatio: normalizeAspectRatio(input.aspectRatio),
-    resolution: normalizeVeoResolution(input.resolution) as never,
-    duration: normalizeVeoDuration(input.durationSeconds),
-    generateAudio: input.generateAudio,
-    providerOptions: {
-      vertex: {
-        pollTimeoutMs: VIDEO_POLL_TIMEOUT_MS,
-        resizeMode: "crop",
-        generateAudio: input.generateAudio,
-        personGeneration: "allow_all",
-        enhancePrompt: false,
-      },
-    },
+      : kling
+        ? {
+            klingai: {
+              mode: "pro",
+            },
+          }
+        : undefined,
   });
   return {
     data: result.video.uint8Array,
@@ -334,23 +324,6 @@ function normalizeSize(
     "864x480": "854x480",
   };
   return map[resolution.toLowerCase()] ?? map[resolution];
-}
-
-function normalizeVeoResolution(resolution: string | undefined): "720p" | "1080p" {
-  if (
-    resolution === "1920x1080" ||
-    resolution?.toLowerCase() === "1080p"
-  ) {
-    return "1080p";
-  }
-  return "720p";
-}
-
-function normalizeVeoDuration(durationSeconds?: number): 4 | 6 | 8 {
-  const duration = Math.ceil(Number(durationSeconds) || 4);
-  if (duration <= 4) return 4;
-  if (duration <= 6) return 6;
-  return 8;
 }
 
 function contentPartForReference(reference: ReferenceInput): Array<

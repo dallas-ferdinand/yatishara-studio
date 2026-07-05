@@ -431,6 +431,14 @@ export function setColorScheme(id) {
   applyTheme(id, getAppearanceMode());
 }
 
+/** Pick a random accent theme and light/dark mode (empty-state logo easter egg). */
+export function randomizeTheme() {
+  const schemeIds = Object.keys(SCHEMES);
+  const nextScheme = schemeIds[Math.floor(Math.random() * schemeIds.length)] ?? "agent";
+  const nextMode = Math.random() < 0.5 ? "light" : "dark";
+  applyTheme(nextScheme, nextMode);
+}
+
 export function initTheme() {
   applyTheme(getSchemeId(), getAppearanceMode());
 }

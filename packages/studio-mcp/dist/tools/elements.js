@@ -13,10 +13,11 @@ const GENERATE_SHEET_GUIDE = "BUILDS the reference sheet image (GPT Image 2) and
 const GENERATE_TEXT_SHEET_GUIDE = "Generates the markdown production bible (description) from reference photos. " +
     "Does not build the sheet image — call studio_generate_element_sheet after. " +
     "Parity with Studio UI Build sheet text step.";
+const stylePresetSheetFieldDesc = "Style slug: unstyled|raw (photoreal reference sheet, no cartoon stylization), or toon-prime (default cartoon), toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol";
 const UPDATE_ELEMENT_GUIDE = "Update referenceAssetIds (upload photos only — never include sheetAssetId). " +
     "Rebuild sheet after changing refs.";
 export function registerElementTools(server) {
-    server.tool("studio_production_guide", "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and cinema generation defaults.", {}, async () => jsonResult(await studioFetch("/elements/production-guide")));
+    server.tool("studio_production_guide", "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement — no Flash rewrite before Seedance).", {}, async () => jsonResult(await studioFetch("/elements/production-guide")));
     server.tool("studio_element_sheet_guide", "READ FIRST before character/prop/location sheets. Returns min/recommended reference photo counts, upload checklist, fidelity locks, output layout, and step-by-step MCP workflow.", {
         type: elementType.exclude(["doc"]).optional().describe("character, prop, or location — omit to return all three guides"),
     }, async ({ type }) => {
@@ -117,8 +118,18 @@ export function registerElementTools(server) {
             .optional()
             .describe("Override element sourceMode for this sheet build"),
         resolution: z.enum(["1K", "2K"]).optional(),
-    }, async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution }) => jsonResult(await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
+        stylePresetSlug: z
+            .string()
+            .optional()
+            .describe(stylePresetSheetFieldDesc),
+    }, async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution, stylePresetSlug }) => jsonResult(await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
         method: "POST",
-        body: JSON.stringify({ referenceAssetIds, referenceElementIds, sourceMode, resolution }),
+        body: JSON.stringify({
+            referenceAssetIds,
+            referenceElementIds,
+            sourceMode,
+            resolution,
+            stylePresetSlug,
+        }),
     })));
 }

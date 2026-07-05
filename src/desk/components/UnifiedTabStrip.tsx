@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./Icons";
 import {
   TAB_DRAG_LEADING_INSET_PX,
@@ -22,6 +23,7 @@ function tabFromKey(tabs, key) {
 }
 
 function stripTabsEqual(prev, next) {
+  if (prev.disableDrag !== next.disableDrag) return false;
   if (prev.activeKey !== next.activeKey) return false;
   const a = prev.tabs ?? [];
   const b = next.tabs ?? [];
@@ -32,8 +34,10 @@ function stripTabsEqual(prev, next) {
       a[i].title !== b[i].title ||
       a[i].status !== b[i].status ||
       a[i].tabSignal !== b[i].tabSignal ||
+      a[i].previewUrl !== b[i].previewUrl ||
       Boolean(a[i].dirty) !== Boolean(b[i].dirty) ||
-      Boolean(a[i].loading) !== Boolean(b[i].loading)
+      Boolean(a[i].loading) !== Boolean(b[i].loading) ||
+      a[i].previewUrl !== b[i].previewUrl
     ) {
       return false;
     }
@@ -49,6 +53,7 @@ function UnifiedTabStripInner({
   onReorder,
   onSetTabOrder,
   onNewChat,
+  disableDrag = false,
 }) {
   const stripRef = useRef(null);
   const newChatRef = useRef(null);
@@ -83,6 +88,7 @@ function UnifiedTabStripInner({
   }, []);
 
   useEffect(() => {
+    if (disableDrag) return;
     const previousOrder = previousOrderRef.current;
     if (previousOrder && baseOrder.length > previousOrder.length) {
       const addedKey = baseOrder.find((key) => !previousOrder.includes(key));
@@ -98,7 +104,7 @@ function UnifiedTabStripInner({
       }
     }
     previousOrderRef.current = baseOrder;
-  }, [baseOrder]);
+  }, [baseOrder, disableDrag]);
 
   useEffect(() => {
     return () => {
@@ -166,7 +172,11 @@ function UnifiedTabStripInner({
       pendingRef.current = null;
 
       const insertIndex = drag.insertIndex ?? 0;
-      const target = ghostTargetAtInsertIndex(drag.layout, insertIndex);
+      const placeholderEl = stripRef.current?.querySelector(".cursor-unified-tab-placeholder");
+      const placeholderRect = placeholderEl?.getBoundingClientRect?.();
+      const target = placeholderRect
+        ? { x: placeholderRect.left, y: placeholderRect.top }
+        : ghostTargetAtInsertIndex(drag.layout, insertIndex);
       const fromX = drag.ghostX;
       const fromY = drag.ghostY;
       const toX = target.x;
@@ -262,7 +272,9 @@ function UnifiedTabStripInner({
       stripRect.top,
       stripRect.bottom - state.height
     );
-    const dragLeadingX = ghostX + TAB_DRAG_LEADING_INSET_PX;
+    const stripLeft = state.layout?.stripLeft ?? state.layout?.anchorLeft ?? stripRect.left;
+    const scrollLeft = state.layout?.scrollLeft ?? stripRef.current?.scrollLeft ?? 0;
+    const dragLeadingX = ghostX - stripLeft + scrollLeft + TAB_DRAG_LEADING_INSET_PX;
 
     const resolved = resolveDragOrder({
       order: state.order,
@@ -398,9 +410,13 @@ function UnifiedTabStripInner({
         "[data-tab-key]",
         newChatRef.current
       );
-      const dragLeadingX = pending.startX - pending.offsetX + TAB_DRAG_LEADING_INSET_PX;
 
       const captureEl = tabRefs.current.get(pending.key);
+      const tabRect = captureEl?.getBoundingClientRect?.();
+      const offsetX = tabRect ? e.clientX - tabRect.left : pending.offsetX;
+      const offsetY = tabRect ? e.clientY - tabRect.top : pending.offsetY;
+      const width = tabRect?.width ?? pending.width;
+      const height = tabRect?.height ?? pending.height;
       try {
         captureEl?.setPointerCapture?.(pending.pointerId);
       } catch {
@@ -411,15 +427,17 @@ function UnifiedTabStripInner({
         {
           key: pending.key,
           pointerId: pending.pointerId,
-          offsetX: pending.offsetX,
-          offsetY: pending.offsetY,
-          width: pending.width,
-          height: pending.height,
+          offsetX,
+          offsetY,
+          width,
+          height,
           order,
           layout,
           stripIndex: -1,
-          lastLeadingX: dragLeadingX,
-          ghostYBase: pending.startY - pending.offsetY,
+          lastLeadingX: tabRect
+            ? tabRect.left - (layout.stripLeft ?? layout.anchorLeft ?? tabRect.left) + (layout.scrollLeft ?? 0) + TAB_DRAG_LEADING_INSET_PX
+            : pending.startX - pending.offsetX + TAB_DRAG_LEADING_INSET_PX,
+          ghostYBase: tabRect?.top ?? pending.startY - pending.offsetY,
           captureEl,
         },
         e.clientX,
@@ -525,6 +543,7 @@ function UnifiedTabStripInner({
   const ghostTab = dragUi ? tabFromKey(tabs, dragUi.key) : null;
 
   useLayoutEffect(() => {
+    if (disableDrag) return;
     const previousRects = flipRectsRef.current;
     if (!previousRects?.size) return;
     flipRectsRef.current = null;
@@ -564,15 +583,43 @@ function UnifiedTabStripInner({
       window.cancelAnimationFrame(frame);
       window.clearTimeout(cleanup);
     };
-  }, [stripItems]);
+  }, [stripItems, disableDrag]);
+
+  const ghostLayer =
+    !disableDrag && dragUi && ghostTab && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className={`cursor-unified-tab-ghost${dragUi.settling ? " is-settling" : ""}${draggingFirstTab ? " is-first-drag" : ""}`}
+            style={{
+              width: dragUi.width,
+              height: dragUi.height,
+              transform: `translate3d(${dragUi.ghostX}px, ${dragUi.ghostY}px, 0)`,
+            }}
+            onTransitionEnd={onGhostSettleEnd}
+            aria-hidden
+          >
+            <Icon
+              name={workspaceTabIcon(ghostTab)}
+              size={13}
+              className="text-cursor-muted shrink-0"
+            />
+            <span className="cursor-unified-tab-label">
+              {ghostTab.kind === "file" && ghostTab.dirty ? "• " : ""}
+              {ghostTab.title}
+            </span>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
+    <>
     <div
       ref={stripRef}
-      className={`cursor-unified-tabs${isDragging ? " is-dragging-strip" : ""}${isSettling ? " is-settling-strip" : ""}`}
+      className={`cursor-unified-tabs${disableDrag ? " is-compact" : ""}${isDragging ? " is-dragging-strip" : ""}${isSettling ? " is-settling-strip" : ""}`}
       role="tablist"
       aria-label="Workspace tabs"
-      onPointerMove={onTabPointerMove}
+      onPointerMove={disableDrag ? undefined : onTabPointerMove}
     >
       {stripItems.map((item, itemIndex) => {
         if (item.kind === "placeholder") {
@@ -600,6 +647,8 @@ function UnifiedTabStripInner({
             tab.status === "awaiting" ||
             tab.status === "error");
         const active = tab.key === activeKey;
+        const previewUrl = tab.previewUrl;
+        const showPreview = tab.kind === "file" && previewUrl;
         return (
           <div
             key={tab.key}
@@ -612,7 +661,7 @@ function UnifiedTabStripInner({
             data-tab-key={tab.key}
             data-tab-signal={tab.kind === "chat" ? tab.tabSignal ?? "" : undefined}
             aria-selected={active}
-            className={`cursor-unified-tab${active ? " is-active" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${enteringKey === tab.key ? " is-entering" : ""}`}
+            className={`cursor-unified-tab${active ? " is-active" : ""}${showPreview ? " has-preview" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${!disableDrag && enteringKey === tab.key ? " is-entering" : ""}`}
             style={{ "--tab-stack": 100 - tabVisualIndex }}
             title={
               tab.kind === "file"
@@ -621,9 +670,9 @@ function UnifiedTabStripInner({
                   ? `${tab.title} — ${chatTabTitle}`
                   : tab.title
             }
-            onPointerDown={(e) => onTabPointerDown(tab, e)}
-            onPointerUp={(e) => onTabPointerUp(tab, e)}
-            onPointerCancel={onTabPointerCancel}
+            onPointerDown={disableDrag ? undefined : (e) => onTabPointerDown(tab, e)}
+            onPointerUp={disableDrag ? undefined : (e) => onTabPointerUp(tab, e)}
+            onPointerCancel={disableDrag ? undefined : onTabPointerCancel}
             onAuxClick={(e) => onMiddleClose(tab, e)}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return;
@@ -642,11 +691,21 @@ function UnifiedTabStripInner({
               onSelect(tab.key);
             }}
           >
-            <Icon
-              name={workspaceTabIcon(tab)}
-              size={13}
-              className="text-cursor-muted shrink-0 pointer-events-none"
-            />
+            {tab.previewUrl ? (
+              <span className="cursor-unified-tab-preview shrink-0 pointer-events-none" aria-hidden="true">
+                {tab.previewKind === "video" ? (
+                  <video src={tab.previewUrl} muted playsInline preload="metadata" />
+                ) : (
+                  <img src={tab.previewUrl} alt="" loading="lazy" />
+                )}
+              </span>
+            ) : (
+              <Icon
+                name={workspaceTabIcon(tab)}
+                size={13}
+                className="text-cursor-muted shrink-0 pointer-events-none"
+              />
+            )}
             <span className="cursor-unified-tab-label pointer-events-none">
               {tab.kind === "file" && tab.dirty ? "• " : ""}
               {tab.title}
@@ -694,29 +753,9 @@ function UnifiedTabStripInner({
           <Icon name="plus" size={14} />
         </button>
       ) : null}
-      {dragUi && ghostTab ? (
-        <div
-          className={`cursor-unified-tab-ghost${dragUi.settling ? " is-settling" : ""}${draggingFirstTab ? " is-first-drag" : ""}`}
-          style={{
-            width: dragUi.width,
-            height: dragUi.height,
-            transform: `translate3d(${dragUi.ghostX}px, ${dragUi.ghostY}px, 0)`,
-          }}
-          onTransitionEnd={onGhostSettleEnd}
-          aria-hidden
-        >
-          <Icon
-            name={workspaceTabIcon(ghostTab)}
-            size={13}
-            className="text-cursor-muted shrink-0"
-          />
-          <span className="cursor-unified-tab-label">
-            {ghostTab.kind === "file" && ghostTab.dirty ? "• " : ""}
-            {ghostTab.title}
-          </span>
-        </div>
-      ) : null}
     </div>
+    {ghostLayer}
+    </>
   );
 }
 

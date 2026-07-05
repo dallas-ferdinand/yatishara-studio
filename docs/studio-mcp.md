@@ -75,30 +75,34 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_list_trash` | List soft-deleted items |
 | `studio_trash` | Move item to trash |
 | `studio_restore` | Restore from trash |
-| `studio_list_presets` | Style presets (includes `raw`) |
+| `studio_list_presets` | Style presets (includes `unstyled` for MCP handoff) |
 | `studio_estimate_generation` | Single-call credit cost check (accepts `referenceElementIds`) |
 | `studio_estimate_production` | Batch budget with credits + TT$ |
 | `studio_list_generations` | Recent jobs |
 | `studio_get_generation` | Poll job status |
 | `studio_generate_image` | Sync image gen — **storyboard stills** with full `referenceElementIds` (characters included) |
-| `studio_list_video_models` | Seedance 2.0 |
-| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs; optional `videoModel: "kling-3.0-i2v"` fallback |
-| `studio_validate_production_gates` | Pre-flight cinema gate check — pass `production-state.json` body before `studio_generate_*` |
+| `studio_list_video_models` | **seedance-2.0** (default) + **kling-3.0-i2v** (MCP-only choice) |
+| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs; **`videoModel`** explicit choice (`seedance-2.0` or `kling-3.0-i2v`) |
+| `studio_validate_production_gates` | Pre-flight cartoon gate check — pass `production-state.json` body before `studio_generate_*` |
 | `studio_generate_script` | Script → document |
 
-## Cinema ad production defaults
+## Cartoon ad production defaults
 
-For `@cinema-ad-production` automated runs, always pass:
+For `@cartoon-ad-production` automated runs, pass **verbatim handoff prompts** (no GPT rewrite, no start-frame prefix injection):
 
 ```json
-{ "stylePreset": "story-ad", "skipPromptEnhancement": true }
+{ "stylePreset": "unstyled", "skipPromptEnhancement": true }
 ```
 
-Use `raw` only for non-cinema ad-hoc tests. Call `studio_validate_production_gates` before phase generate batches.
+`unstyled` is MCP/API-only — empty preset instructions; your `storyboard_prompt` / `generation_prompt` reach Seedance as written.
+
+Style families for **metadata or styled rewrite** (set `skipPromptEnhancement: false` if you want GPT enhancement): `toon-prime`, `toon-adult`, `toon-surreal`, `toon-family`, `toon-cgi`, `toon-neon-idol`. Pass `stylePresetSlug` on `studio_generate_element_sheet`.
+
+`raw` is an alias for `unstyled`. Call `studio_validate_production_gates` before phase generate batches.
 
 Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
 
-**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cinema-ad-production/references/start-frame-workflow.md`.
+**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cartoon-ad-production/references/start-frame-workflow.md`.
 
 Budget: `studio_estimate_production` before `plan` mode budget approval.
 

@@ -1,91 +1,97 @@
-/** Cinematic scene prompts for Studio theme backgrounds — Seedance film-grade vocabulary. */
-export const CINEMATIC_SUFFIX =
-  "Photorealistic cinematic film still as if shot on ARRI Alexa 65 with Cooke anamorphic lens. Dramatic motivated lighting, shallow depth of field, controlled color grade, subtle film grain. Empty atmospheric environment — no people, no faces, no text, no logos. 16:9 widescreen establishing shot. Ultra-high detail, documentary-grade textures, real-world physical materials.";
+/** Illustrated cartoon scene prompts for Studio theme backgrounds — painted animation matte style. */
+export const CARTOON_DARK_SUFFIX =
+  "Premium traditional animated film background painting, illustrated matte-painting with atmospheric depth and clear foreground-midground-background planes. Stylized cel-friendly environment art — painted shapes, soft gradient skies, gentle color wash, readable silhouettes. NO photorealism, NO photography, NO film grain, NO camera lens bokeh, NO live-action textures, NO people, NO faces, NO text, NO logos. 16:9 widescreen establishing shot. Cinematic mood through illustrated color and light design.";
 
-export const LIGHT_SPATIAL_SUFFIX =
-  "Photorealistic cinematic establishing shot, bright high-key Mercury OS empty space. Stark white architecture with clear spatial depth — visible floor plane, walls, ceiling, perspective lines receding to a distant vanishing point or horizon. Theme accent as soft ambient colored light (skylight, window glow, or horizon wash). Surfaces are white marble, white plaster, or white concrete with subtle real texture. NO vignette, NO dark corners, NO edge darkening, NO gray muddy shadows — but DO show readable room volume and depth. Empty — no people, no furniture clutter, no text, no logos. 16:9 widescreen architectural still.";
+export const CARTOON_LIGHT_SUFFIX =
+  "Premium illustrated animated environment background, bright high-key spatial interior or landscape. White or near-white architectural volumes with clear perspective depth — floor, walls, ceiling or horizon receding to a vanishing point. Theme accent as soft painted ambient colored light wash. Painted gouache/watercolor texture on stylized forms, not photography. NO vignette crush, NO dark corners, NO photoreal materials, NO people, NO furniture clutter, NO text, NO logos. 16:9 widescreen architectural establishing still.";
+
+/** @deprecated Photoreal dark suffix — replaced by CARTOON_DARK_SUFFIX */
+export const CINEMATIC_SUFFIX = CARTOON_DARK_SUFFIX;
+
+/** @deprecated Photoreal light suffix — replaced by CARTOON_LIGHT_SUFFIX */
+export const LIGHT_SPATIAL_SUFFIX = CARTOON_LIGHT_SUFFIX;
 
 /** Light-mode spatial backgrounds — AI-generated (Cursor image gen), then upscaled to 4K WebP. */
 export const STUDIO_LIGHT_SCENE_PROMPTS = {
   agent: {
     file: "studio-scene-agent-genesis-light-4k.webp",
     png: "studio-scene-agent-genesis-light.png",
-    prompt: `Long white minimalist creative studio interior in one-point perspective, polished white floor, white walls, glass partitions receding into distance, emerald green accent light through tall windows, empty quiet workspace you can walk into. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `Long white minimalist creative studio interior in one-point perspective, polished white floor, white walls, glass partitions receding into distance, emerald green accent light through tall windows, empty quiet workspace you can walk into. ${CARTOON_LIGHT_SUFFIX}`,
   },
   gold: {
     file: "studio-scene-gold-archive-light-4k.webp",
     png: "studio-scene-gold-archive-light.png",
-    prompt: `Grand white marble archive hall with columns and vaulted ceiling, perspective down a long gallery, warm golden sunlight through high clerestory windows, white stone floor with soft reflection, empty classical space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `Grand white marble archive hall with columns and vaulted ceiling, perspective down a long gallery, warm golden sunlight through high clerestory windows, white stone floor with soft reflection, empty classical space. ${CARTOON_LIGHT_SUFFIX}`,
   },
   ocean: {
     file: "studio-scene-ocean-depth-light-4k.webp",
     png: "studio-scene-ocean-depth-light.png",
-    prompt: `White coastal observation deck or gallery open to the sea, white walls and floor, wide opening framing soft cyan ocean horizon and pale sky, sea breeze light filling a real architectural space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White coastal observation deck or gallery open to the sea, white walls and floor, wide opening framing soft cyan ocean horizon and pale sky, sea breeze light filling a real architectural space. ${CARTOON_LIGHT_SUFFIX}`,
   },
   ember: {
     file: "studio-scene-ember-forge-light-4k.webp",
     png: "studio-scene-ember-forge-light.png",
-    prompt: `White industrial loft with high ceiling and white concrete floor, warm orange ambient light from large side windows, distant white brick wall, empty forge-inspired volume with real depth. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White industrial loft with high ceiling and white concrete floor, warm orange ambient light from large side windows, distant white brick wall, empty forge-inspired volume with real depth. ${CARTOON_LIGHT_SUFFIX}`,
   },
   mint: {
     file: "studio-scene-mint-meadow-light-4k.webp",
     png: "studio-scene-mint-meadow-light.png",
-    prompt: `White glass pavilion in a meadow, floor-to-ceiling windows on three sides, mint green morning light across white interior floor, distant white fog and trees through glass, serene spatial interior. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White glass pavilion in a meadow, floor-to-ceiling windows on three sides, mint green morning light across white interior floor, distant white fog and trees through glass, serene spatial interior. ${CARTOON_LIGHT_SUFFIX}`,
   },
   violet: {
     file: "studio-scene-violet-dusk-light-4k.webp",
     png: "studio-scene-violet-dusk-light.png",
-    prompt: `White modern gallery cube with tall walls and polished white floor, soft violet purple twilight glow through a large rectangular opening at the far end, calm empty exhibition space with perspective. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White modern gallery cube with tall walls and polished white floor, soft violet purple twilight glow through a large rectangular opening at the far end, calm empty exhibition space with perspective. ${CARTOON_LIGHT_SUFFIX}`,
   },
   rose: {
     file: "studio-scene-rose-bloom-light-4k.webp",
     png: "studio-scene-rose-bloom-light.png",
-    prompt: `White garden conservatory with white stone floor and white iron frame glass roof, rose pink diffused daylight, white courtyard visible through arched openings, romantic empty pavilion space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White garden conservatory with white stone floor and white iron frame glass roof, rose pink diffused daylight, white courtyard visible through arched openings, romantic empty pavilion space. ${CARTOON_LIGHT_SUFFIX}`,
   },
   cobalt: {
     file: "studio-scene-cobalt-skyline-light-4k.webp",
     png: "studio-scene-cobalt-skyline-light.png",
-    prompt: `White rooftop terrace room with low white walls, open sky above, cobalt blue daylight, distant white city skyline at eye level, empty urban observatory with clear spatial depth. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White rooftop terrace room with low white walls, open sky above, cobalt blue daylight, distant white city skyline at eye level, empty urban observatory with clear spatial depth. ${CARTOON_LIGHT_SUFFIX}`,
   },
   coral: {
     file: "studio-scene-coral-reef-light-4k.webp",
     png: "studio-scene-coral-reef-light.png",
-    prompt: `White underwater observation tunnel or aquarium gallery, curved white walls and floor, soft coral pink caustic light rippling on white surfaces, blue-white water glow at the far end, immersive empty space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White underwater observation tunnel or aquarium gallery, curved white walls and floor, soft coral pink caustic light rippling on white surfaces, blue-white water glow at the far end, immersive empty space. ${CARTOON_LIGHT_SUFFIX}`,
   },
   sage: {
     file: "studio-scene-sage-grove-light-4k.webp",
     png: "studio-scene-sage-grove-light.png",
-    prompt: `White forest chapel or pavilion among trees, white wooden floor and posts, sage green dappled light through canopy visible beyond open sides, quiet grove interior with depth. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White forest chapel or pavilion among trees, white wooden floor and posts, sage green dappled light through canopy visible beyond open sides, quiet grove interior with depth. ${CARTOON_LIGHT_SUFFIX}`,
   },
   cherry: {
     file: "studio-scene-cherry-pulse-light-4k.webp",
     png: "studio-scene-cherry-pulse-light.png",
-    prompt: `White urban passage between white buildings, wet white pavement reflecting cherry red ambient city glow, perspective down a narrow bright alley space, empty high-key street volume. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White urban passage between white buildings, wet white pavement reflecting cherry red ambient city glow, perspective down a narrow bright alley space, empty high-key street volume. ${CARTOON_LIGHT_SUFFIX}`,
   },
   teal: {
     file: "studio-scene-teal-lagoon-light-4k.webp",
     png: "studio-scene-teal-lagoon-light.png",
-    prompt: `White beach cabana or lagoon deck interior, white sand-toned floor, open front facing turquoise shallow water and pale sky, teal light filling a sheltered coastal space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White beach cabana or lagoon deck interior, white sand-toned floor, open front facing turquoise shallow water and pale sky, teal light filling a sheltered coastal space. ${CARTOON_LIGHT_SUFFIX}`,
   },
   lime: {
     file: "studio-scene-lime-canopy-light-4k.webp",
     png: "studio-scene-lime-canopy-light.png",
-    prompt: `White atrium with skylight opening to jungle canopy above, white walls and floor, lime green sun shafts through leaves far overhead, vertical spatial volume looking upward and outward. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White atrium with skylight opening to jungle canopy above, white walls and floor, lime green sun shafts through leaves far overhead, vertical spatial volume looking upward and outward. ${CARTOON_LIGHT_SUFFIX}`,
   },
   fuchsia: {
     file: "studio-scene-fuchsia-neon-light-4k.webp",
     png: "studio-scene-fuchsia-neon-light.png",
-    prompt: `White Tokyo-style covered arcade interior, white tile floor and white ceiling, fuchsia magenta neon ambient glow from distant storefronts, perspective down a bright empty passage. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White Tokyo-style covered arcade interior, white tile floor and white ceiling, fuchsia magenta neon ambient glow from distant storefronts, perspective down a bright empty passage. ${CARTOON_LIGHT_SUFFIX}`,
   },
   copper: {
     file: "studio-scene-copper-foundry-light-4k.webp",
     png: "studio-scene-copper-foundry-light.png",
-    prompt: `White foundry hall with tall white walls and white concrete floor, warm copper orange light from molten glow far at the end of the space, industrial cathedral volume, empty. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White foundry hall with tall white walls and white concrete floor, warm copper orange light from molten glow far at the end of the space, industrial cathedral volume, empty. ${CARTOON_LIGHT_SUFFIX}`,
   },
   indigo: {
     file: "studio-scene-indigo-midnight-light-4k.webp",
     png: "studio-scene-indigo-midnight-light.png",
-    prompt: `White penthouse room before floor-to-ceiling glass, white floor and minimal white walls, soft indigo blue city twilight outside, interior still bright high-key, empty night view space. ${LIGHT_SPATIAL_SUFFIX}`,
+    prompt: `White penthouse room before floor-to-ceiling glass, white floor and minimal white walls, soft indigo blue city twilight outside, interior still bright high-key, empty night view space. ${CARTOON_LIGHT_SUFFIX}`,
   },
 };
 
@@ -300,66 +306,86 @@ export const STUDIO_LIGHT_SCENE_PROMPT_LIST = Object.entries(STUDIO_LIGHT_SCENE_
 export const STUDIO_SCENE_PROMPTS = {
   agent: {
     file: "studio-scene-agent-genesis-4k.webp",
-    prompt: `Modern creative studio interior at blue hour, emerald green accent ambient light on minimalist glass desks, floor-to-ceiling windows with soft city bokeh outside, quiet empty workspace. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-agent-genesis.png",
+    prompt: `Modern creative studio interior at blue hour, emerald green accent ambient light on minimalist glass desks, floor-to-ceiling windows with soft illustrated city glow outside, quiet empty workspace. ${CARTOON_DARK_SUFFIX}`,
   },
   gold: {
     file: "studio-scene-gold-archive-4k.webp",
-    prompt: `Grand vintage archive library, floor-to-ceiling leather-bound books, warm tungsten reading lamps, golden dust motes floating in a single sun shaft, worn oak tables. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-gold-archive.png",
+    prompt: `Grand vintage archive library, floor-to-ceiling leather-bound books, warm golden reading lamps, golden dust motes in a painted sun shaft, worn oak tables. ${CARTOON_DARK_SUFFIX}`,
   },
   ocean: {
     file: "studio-scene-ocean-depth-4k.webp",
-    prompt: `Open ocean horizon at pre-dawn, gentle rolling waves catching first cyan light, vast calm sea meeting soft sky gradient, minimal composition. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-ocean-depth.png",
+    prompt: `Open ocean horizon at pre-dawn, gentle rolling waves catching first cyan light, vast calm sea meeting soft sky gradient, minimal painted seascape composition. ${CARTOON_DARK_SUFFIX}`,
   },
   ember: {
     file: "studio-scene-ember-forge-4k.webp",
-    prompt: `Traditional blacksmith forge interior, orange fire glow reflecting on hammered steel and brick, wisps of smoke, dramatic chiaroscuro, worn tools on bench. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-ember-forge.png",
+    prompt: `Traditional blacksmith forge interior, orange fire glow reflecting on hammered steel and brick, wisps of smoke, dramatic chiaroscuro, worn tools on bench. ${CARTOON_DARK_SUFFIX}`,
   },
   mint: {
     file: "studio-scene-mint-meadow-4k.webp",
-    prompt: `Misty green meadow at first light, dew on wild grass, distant tree line fading into soft fog, patient wide landscape. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-mint-meadow.png",
+    prompt: `Misty green meadow at first light, dew on wild grass, distant tree line fading into soft fog, patient wide painted landscape. ${CARTOON_DARK_SUFFIX}`,
   },
   violet: {
     file: "studio-scene-violet-dusk-4k.webp",
-    prompt: `Purple twilight over rolling lavender fields, distant hills under violet sky, last warm rim light on horizon, serene rural landscape. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-violet-dusk.png",
+    prompt: `Purple twilight over rolling lavender fields, distant hills under violet sky, last warm rim light on horizon, serene rural painted landscape. ${CARTOON_DARK_SUFFIX}`,
   },
   rose: {
     file: "studio-scene-rose-bloom-4k.webp",
-    prompt: `Rain-wet English rose garden after shower, soft pink petals with water droplets, overcast diffused light, stone path between beds. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-rose-bloom.png",
+    prompt: `Rain-wet English rose garden after shower, soft pink petals with water droplets, overcast diffused light, stone path between beds. ${CARTOON_DARK_SUFFIX}`,
   },
   cobalt: {
     file: "studio-scene-cobalt-skyline-4k.webp",
-    prompt: `Metropolitan skyline at blue hour from high terrace, glass towers reflecting last light, cool cobalt sky deepening, empty rooftop foreground. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-cobalt-skyline.png",
+    prompt: `Metropolitan skyline at blue hour from high terrace, glass towers reflecting last light, cool cobalt sky deepening, empty rooftop foreground. ${CARTOON_DARK_SUFFIX}`,
   },
   coral: {
     file: "studio-scene-coral-reef-4k.webp",
-    prompt: `Underwater coral reef in clear tropical water, sunlight caustics dancing on colorful coral formations, gentle particulate, serene marine still. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-coral-reef.png",
+    prompt: `Underwater coral reef in clear tropical water, sunlight caustics dancing on colorful coral formations, gentle particulate, serene painted marine still. ${CARTOON_DARK_SUFFIX}`,
   },
   sage: {
     file: "studio-scene-sage-grove-4k.webp",
-    prompt: `Ancient temperate forest grove, moss-covered boulders, dappled green canopy light on fern floor, quiet old-growth atmosphere. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-sage-grove.png",
+    prompt: `Ancient temperate forest grove, moss-covered boulders, dappled green canopy light on fern floor, quiet old-growth painted atmosphere. ${CARTOON_DARK_SUFFIX}`,
   },
   cherry: {
     file: "studio-scene-cherry-pulse-4k.webp",
-    prompt: `Rain-slick urban alley at night, red neon reflections on wet asphalt, steam rising from grate, cinematic noir mood without people. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-cherry-pulse.png",
+    prompt: `Rain-slick urban alley at night, red neon reflections on wet asphalt, steam rising from grate, cinematic noir mood without people. ${CARTOON_DARK_SUFFIX}`,
   },
   teal: {
     file: "studio-scene-teal-lagoon-4k.webp",
-    prompt: `Tropical lagoon from elevated view, turquoise shallow water over white sand, palm shadows, crystal clear Caribbean clarity. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-teal-lagoon.png",
+    prompt: `Tropical lagoon from elevated view, turquoise shallow water over white sand, palm shadows, crystal clear Caribbean clarity. ${CARTOON_DARK_SUFFIX}`,
   },
   lime: {
     file: "studio-scene-lime-canopy-4k.webp",
-    prompt: `Dense jungle canopy viewed from below, bright lime-green leaves against sky, sun shafts piercing foliage, humid tropical atmosphere. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-lime-canopy.png",
+    prompt: `Dense jungle canopy viewed from below, bright lime-green leaves against sky, sun shafts piercing foliage, humid tropical painted atmosphere. ${CARTOON_DARK_SUFFIX}`,
   },
   fuchsia: {
     file: "studio-scene-fuchsia-neon-4k.webp",
-    prompt: `Neon-lit Asian city street at night, magenta and fuchsia sign glow on wet pavement, bokeh lights receding into depth, cyberpunk color without crowds. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-fuchsia-neon.png",
+    prompt: `Neon-lit Asian city street at night, magenta and fuchsia sign glow on wet pavement, illustrated bokeh lights receding into depth, cyberpunk color without crowds. ${CARTOON_DARK_SUFFIX}`,
   },
   copper: {
     file: "studio-scene-copper-foundry-4k.webp",
-    prompt: `Industrial copper foundry interior, molten metal orange glow, steam and sparks frozen in still frame, rust and patina textures on machinery. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-copper-foundry.png",
+    prompt: `Industrial copper foundry interior, molten metal orange glow, steam and sparks frozen in still frame, rust and patina textures on machinery. ${CARTOON_DARK_SUFFIX}`,
   },
   indigo: {
     file: "studio-scene-indigo-midnight-4k.webp",
-    prompt: `Moonlit quiet city viewed through tall window at midnight, deep indigo sky, soft interior silhouette edge, distant amber street lights. ${CINEMATIC_SUFFIX}`,
+    png: "studio-scene-indigo-midnight.png",
+    prompt: `Moonlit quiet city viewed through tall window at midnight, deep indigo sky, soft interior silhouette edge, distant amber street lights. ${CARTOON_DARK_SUFFIX}`,
   },
 };
+
+export const STUDIO_SCENE_PROMPT_LIST = Object.entries(STUDIO_SCENE_PROMPTS).map(
+  ([id, spec]) => ({ id, ...spec }),
+);

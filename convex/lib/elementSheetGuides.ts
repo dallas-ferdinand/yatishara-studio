@@ -32,11 +32,10 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
       "Optional: back view, detail of hair, hands, shoes, or signature accessory",
     ],
     fidelityLocks: [
-      "Do NOT restyle, beautify, slim, age-shift, or change ethnicity",
-      "Do NOT change hairstyle, hair length, hair texture, or hair color",
-      "Do NOT change skin tone, face structure, body build, or height",
-      "Do NOT add or remove wardrobe, jewelry, tattoos, scars, or accessories",
-      "Capture exactly what the reference photos show — documentary fidelity only",
+      "Do NOT restyle into photoreal or anime/manga defaults",
+      "Do NOT change hairstyle, hair length, line weight, or palette registers",
+      "Do NOT change face structure, body build, or wardrobe design",
+      "Capture identity as consistent cartoon design — stylized fidelity only",
     ],
     designedWorkflow: [
       "studio_create_element { type: character, sourceMode: designed, description: full visual spec }",
@@ -207,15 +206,16 @@ export const ELEMENT_PRODUCTION_GUIDE = {
     "VIDEO storyboard (studio_generate_image): all referenceElementIds — compose cast + props + locations into one still",
     "VIDEO clip (studio_generate_video): startFrameAssetId required when people on camera; prop/location sheets as [Image N] refs only; character sheets NOT attached — identity lives in start frame + prompt",
     "No scene element type — start frame is a per-shot asset, not a registry element",
-    "Cinema defaults: skipPromptEnhancement true, stylePreset realism or story-ad for video",
+    "Direct handoff: stylePreset unstyled + skipPromptEnhancement true on studio_generate_image and studio_generate_video — NO Flash/GPT rewrite; prompts reach Seedance/GPT Image 2 verbatim (see direct-prompt-handoff.md in cartoon-ad-production skill)",
+    "stylePresetSlug on studio_generate_element_sheet — unstyled|raw (photoreal sheet, no cartoon stylization) or toon-prime|toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol from production bible",
     "Visually inspect sheetUrl after build before production video",
   ],
   mcpWorkflowDesigned: [
     "studio_element_sheet_guide",
     "studio_create_element { sourceMode: designed, description: full visual spec }",
     "studio_generate_element_sheet → sheetAssetId, buildStatus=built",
-    "studio_generate_image { referenceElementIds } → storyboard still → startFrameAssetId",
-    "studio_generate_video { startFrameAssetId, referenceElementIds }",
+    "studio_generate_image { stylePreset: unstyled, skipPromptEnhancement: true, referenceElementIds } → storyboard still → startFrameAssetId",
+    "studio_generate_video { stylePreset: unstyled, skipPromptEnhancement: true, startFrameAssetId, referenceElementIds }",
   ],
   mcpWorkflowPhotographic: [
     "studio_element_sheet_guide",
@@ -223,19 +223,28 @@ export const ELEMENT_PRODUCTION_GUIDE = {
     "studio_create_element { sourceMode: photographic, referenceAssetIds }",
     "studio_generate_element_text_sheet (optional)",
     "studio_generate_element_sheet → sheetAssetId, buildStatus=built",
-    "studio_generate_image { referenceElementIds } → storyboard still → startFrameAssetId",
-    "studio_generate_video { startFrameAssetId, referenceElementIds }",
+    "studio_generate_image { stylePreset: unstyled, skipPromptEnhancement: true, referenceElementIds } → storyboard still → startFrameAssetId",
+    "studio_generate_video { stylePreset: unstyled, skipPromptEnhancement: true, startFrameAssetId, referenceElementIds }",
   ],
 };
 
 export function sheetFidelityPromptSuffix(
   type: ElementSheetType,
   sourceMode: ElementSourceMode = "photographic",
+  styleFamily: string = "toon-prime",
 ): string {
+  const unstyled = styleFamily === "unstyled" || styleFamily === "raw";
   if (sourceMode === "designed") {
+    if (unstyled) {
+      return [
+        "DESIGNED ASSET: Invent from the written specification below — this is not a photo-match task.",
+        "Maintain documentary photorealism, natural skin texture, subtle film grain, no catalog gloss.",
+        "Do not add text, logos, or watermarks.",
+      ].join(" ");
+    }
     return [
-      "DESIGNED ASSET: Invent from the written specification below — this is not a photo-match task.",
-      "Maintain documentary photorealism, natural skin texture, subtle film grain, no catalog gloss.",
+      "DESIGNED ASSET: Invent from the written specification below — stylized cartoon turnaround.",
+      `Style family: ${styleFamily}. Maintain consistent line weight, flat cel shading, locked palette registers — no photoreal skin, no film grain, no catalog gloss.`,
       "Do not add text, logos, or watermarks.",
     ].join(" ");
   }
@@ -243,9 +252,18 @@ export function sheetFidelityPromptSuffix(
   if (!policy) {
     return "";
   }
+  const fidelityLocks = unstyled
+    ? [
+        "Do NOT restyle, beautify, slim, age-shift, or change ethnicity",
+        "Do NOT change hairstyle, hair length, hair texture, or hair color",
+        "Do NOT change skin tone, face structure, body build, or height",
+        "Do NOT add or remove wardrobe, jewelry, tattoos, scars, or accessories",
+        "Capture exactly what the reference photos show — documentary fidelity only",
+      ]
+    : policy.fidelityLocks;
   return [
     "CRITICAL FIDELITY: This is a production reference sheet, not a creative reinterpretation.",
-    ...policy.fidelityLocks.map((rule) => `- ${rule}`),
+    ...fidelityLocks.map((rule) => `- ${rule}`),
     "If reference images are attached, treat them as ground truth — reproduce visible features exactly.",
   ].join(" ");
 }

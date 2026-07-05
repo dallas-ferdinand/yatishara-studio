@@ -14,6 +14,7 @@ import {
   type ElementSourceMode,
 } from "./lib/elementSheetGuides";
 import { creditCostForGeneration, CREDIT_PRICE_TTD, textCreditCost } from "./lib/generationPricing";
+import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 
 const folderShape = v.object({
   id: v.id("folders"),
@@ -642,7 +643,6 @@ export const estimateGenerationCost = internalQuery({
           ? ((args.videoModel as
               | "seedance-2.0"
               | "kling-3.0-i2v"
-              | "veo-3.1"
               | undefined) ?? "seedance-2.0")
           : undefined,
       ...referenceFlags,
@@ -777,6 +777,19 @@ export const estimateBatchProduction = internalQuery({
   },
 });
 
+const DEPRECATED_PRESET_SLUGS: Record<string, string> = {
+  "story-ad": "toon-prime",
+  realism: "toon-prime",
+  cinematic: "toon-prime",
+  "product-studio": "toon-prime",
+  "social-hook": "toon-prime",
+  hypermotion: "toon-prime",
+  anime: "toon-prime",
+  "3d-cgi": "toon-cgi",
+  "footage-vfx": "toon-prime",
+  raw: "unstyled",
+};
+
 export const resolveStylePresetBySlug = internalQuery({
   args: { slug: v.string() },
   returns: v.union(
@@ -785,13 +798,15 @@ export const resolveStylePresetBySlug = internalQuery({
       slug: v.string(),
       name: v.string(),
       kind: v.union(v.literal("image"), v.literal("video"), v.literal("any")),
+      migratedFrom: v.optional(v.string()),
     }),
     v.null(),
   ),
   handler: async (ctx, args) => {
+    const resolvedSlug = DEPRECATED_PRESET_SLUGS[args.slug] ?? args.slug;
     const preset = await ctx.db
       .query("stylePresets")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .withIndex("by_slug", (q) => q.eq("slug", resolvedSlug))
       .unique();
     if (!preset || !preset.enabled) {
       return null;
@@ -801,6 +816,7 @@ export const resolveStylePresetBySlug = internalQuery({
       slug: preset.slug,
       name: preset.name,
       kind: preset.kind,
+      migratedFrom: resolvedSlug !== args.slug ? args.slug : undefined,
     };
   },
 });
@@ -823,6 +839,7 @@ export const getGenerationJob = internalQuery({
       error: v.optional(v.string()),
       source: v.optional(v.string()),
       stylePresetSlug: v.optional(v.string()),
+      resolvedModel: v.optional(v.string()),
       creditsSpent: v.optional(v.number()),
       assets: v.array(assetShape),
       createdAt: v.number(),
@@ -860,6 +877,7 @@ export const listGenerationJobs = internalQuery({
       error: v.optional(v.string()),
       source: v.optional(v.string()),
       stylePresetSlug: v.optional(v.string()),
+      resolvedModel: v.optional(v.string()),
       creditsSpent: v.optional(v.number()),
       assets: v.array(assetShape),
       createdAt: v.number(),
@@ -1089,6 +1107,9 @@ export const resolveReferenceElementIds = internalQuery({
     elementIds: v.array(v.id("elements")),
     /** video: attach prop/location sheets only (Seedance real-person filter). image: attach all sheets. */
     generationMode: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    /** full = element bibles on job prompt. gateway_kling = compact stubs (shot packet keeps full definition). */
+    promptAppendStyle: v.optional(v.union(v.literal("full"), v.literal("gateway_kling"))),
+    hasStartFrame: v.optional(v.boolean()),
   },
   returns: v.object({
     referenceAssetIds: v.array(v.id("assets")),
@@ -1108,6 +1129,8 @@ export const resolveReferenceElementIds = internalQuery({
     const referenceImageLabels: Array<{ tag: string; label: string }> = [];
     const unbuiltElementNames: string[] = [];
     const videoMode = args.generationMode === "video";
+    const compactKling = args.promptAppendStyle === "gateway_kling";
+    const hasStartFrame = args.hasStartFrame === true;
     let referenceImageIndex = 0;
 
     for (const elementId of args.elementIds) {
@@ -1128,17 +1151,32 @@ export const resolveReferenceElementIds = internalQuery({
       }
       const attachSheet =
         !videoMode || element.type === "prop" || element.type === "location";
+      let imageTag: string | undefined;
       if (attachSheet) {
         referenceAssetIds.push(resolved.sheetAssetId);
         referenceImageIndex += 1;
+        imageTag = `[Image ${referenceImageIndex}]`;
         referenceImageLabels.push({
-          tag: `[Image ${referenceImageIndex}]`,
+          tag: imageTag,
           label: `${element.type} @${element.name}`,
         });
       } else {
         skippedCharacterSheetIds.push(elementId);
       }
-      if (element.description?.trim()) {
+      if (compactKling) {
+        promptLines.push(
+          compactElementPromptLine(
+            {
+              type: element.type,
+              name: element.name,
+              description: element.description,
+              attachSheet,
+              imageTag,
+            },
+            { hasStartFrame, isCharacter: element.type === "character" },
+          ),
+        );
+      } else if (element.description?.trim()) {
         promptLines.push(
           `${element.type} @${element.name}:\n${element.description.trim()}`,
         );
@@ -1929,6 +1967,7 @@ async function formatGenerationJob(
     error: job.error,
     source: job.source,
     stylePresetSlug: preset?.slug,
+    resolvedModel: job.resolvedModel,
     creditsSpent,
     assets,
     createdAt: job.createdAt,

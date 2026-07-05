@@ -14,29 +14,41 @@ import {
   imageModelForRequest,
 } from "./lib/aiGateway";
 import { referenceInputValidator } from "./lib/referenceInput";
-import { shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
+import { isDirectPromptMode, shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
 import {
-  appendVideoReferenceTags,
-  startFramePromptPrefix,
-  videoReferenceTag,
+  normalizeScriptType,
+  scriptDocumentTitle,
+} from "./lib/composerScriptTypes";
+import { normalizeReferenceIntent } from "./lib/referenceIntent";
+import {
+  extractCreativeVideoPrompt,
+  finalizeGatewayVideoPrompt,
 } from "./lib/videoGeneration";
 import { resolveVideoModel } from "./lib/videoModels";
+import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
 
 function finalizeVideoPrompt(
   prompt: string,
-  args: { startFrameUrl?: string; referenceImageCount: number },
+  args: {
+    startFrameUrl?: string;
+    referenceImageCount: number;
+    gatewayModelId: string;
+    skipPromptEnhancement?: boolean;
+    presetSlug?: string;
+  },
 ): string {
-  const labels = Array.from({ length: args.referenceImageCount }, (_, index) => ({
-    tag: videoReferenceTag(index + 1),
-    label: `reference image ${index + 1}`,
-  }));
-  if (args.startFrameUrl) {
-    return `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(prompt, labels)}`;
-  }
-  if (labels.length) {
-    return appendVideoReferenceTags(prompt, labels);
-  }
-  return prompt;
+  const directPrompt = isDirectPromptMode({
+    skipPromptEnhancement: args.skipPromptEnhancement,
+    presetSlug: args.presetSlug,
+  });
+  return finalizeGatewayVideoPrompt({
+    prompt,
+    startFrameUrl: args.startFrameUrl,
+    referenceImageCount: args.referenceImageCount,
+    gatewayModelId: args.gatewayModelId,
+    creativePrompt: extractCreativeVideoPrompt(prompt),
+    directPrompt,
+  });
 }
 
 const createQueuedJobRef = makeFunctionReference<
@@ -55,6 +67,7 @@ const createQueuedJobRef = makeFunctionReference<
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
+    skipPromptEnhancement?: boolean;
   },
   Id<"generationJobs">
 >("generation:createQueuedJob");
@@ -252,6 +265,11 @@ export const generateScript = action({
     userPrompt: v.string(),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
+    skipPromptEnhancement: v.optional(v.boolean()),
+    scriptType: v.optional(v.string()),
+    referenceIntent: v.optional(v.string()),
+    hasRawImageReference: v.optional(v.boolean()),
+    hasElementReference: v.optional(v.boolean()),
   },
   returns: v.object({
     documentId: v.id("documents"),
@@ -271,19 +289,34 @@ export const generateScript = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const contentMarkdown = await generateScriptWithGateway({
-        userPrompt: args.userPrompt,
-        presetName: preset.name,
-        presetInstructions: preset.systemInstructions,
-        scriptInstructions: preset.scriptInstructions,
-        storytellingEnabled: preset.storytelling,
-        negativePrompt: preset.negativePrompt,
-        attachedScriptMarkdown: args.attachedScriptMarkdown,
-        referenceInputs,
+      const skipEnhancement = shouldSkipPromptEnhancement({
+        skipPromptEnhancement: args.skipPromptEnhancement,
+        presetSlug: preset.slug,
       });
+      const contentMarkdown = skipEnhancement
+        ? args.userPrompt.trim()
+        : await generateScriptWithGateway({
+            userPrompt: args.userPrompt,
+            presetName: preset.name,
+            presetInstructions: preset.systemInstructions,
+            scriptInstructions: preset.scriptInstructions,
+            scriptType: normalizeScriptType(args.scriptType),
+            presetSlug: preset.slug,
+            referenceIntent: normalizeReferenceIntent(args.referenceIntent),
+            storytellingEnabled: preset.storytelling,
+            negativePrompt: preset.negativePrompt,
+            attachedScriptMarkdown: args.attachedScriptMarkdown,
+            referenceInputs,
+            hasRawImageReference: args.hasRawImageReference,
+            hasElementReference: args.hasElementReference,
+          });
       const documentId = await ctx.runMutation(createDocumentRef, {
         folderId: args.folderId,
-        title: scriptTitle(args.userPrompt, contentMarkdown),
+        title: scriptDocumentTitle(
+          normalizeScriptType(args.scriptType),
+          args.userPrompt,
+          contentMarkdown,
+        ),
         contentMarkdown,
       });
       return { documentId };
@@ -315,6 +348,10 @@ export const runFlow = action({
     referenceSummaries: v.optional(v.array(v.string())),
     startFrameUrl: v.optional(v.string()),
     videoModel: v.optional(v.string()),
+    skipPromptEnhancement: v.optional(v.boolean()),
+    referenceIntent: v.optional(v.string()),
+    hasRawImageReference: v.optional(v.boolean()),
+    hasElementReference: v.optional(v.boolean()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -351,6 +388,7 @@ export const runFlow = action({
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      skipPromptEnhancement: args.skipPromptEnhancement,
     });
 
     try {
@@ -361,28 +399,38 @@ export const runFlow = action({
       const { job, preset } = await ctx.runQuery(getJobRunContextRef, {
         jobId,
       });
-      const enhancedPrompt = await enhancePromptWithFallback({
-        userPrompt: job.userPrompt,
-        presetName: preset.name,
-        presetInstructions: preset.systemInstructions,
-        scriptInstructions: preset.scriptInstructions,
-        negativePrompt: preset.negativePrompt,
-        outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
-        storytellingEnabled: preset.storytelling,
-        durationSeconds: job.durationSeconds ?? args.durationSeconds,
-        resolution: job.resolution ?? args.resolution,
-        aspectRatio: job.aspectRatio ?? args.aspectRatio,
-        hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
-        hasImageReference:
-          referenceInputs.some((input) => input.kind === "image") ||
-          Boolean(args.referenceUrls?.length),
-        attachedScriptMarkdown: args.attachedScriptMarkdown,
-        referenceSummaries: args.referenceSummaries,
+      const skipEnhancement = shouldSkipPromptEnhancement({
+        skipPromptEnhancement: job.skipPromptEnhancement,
+        presetSlug: preset.slug,
       });
+      const enhancedPrompt = skipEnhancement
+        ? job.userPrompt
+        : await enhancePromptWithFallback({
+            userPrompt: job.userPrompt,
+            presetName: preset.name,
+            presetInstructions: preset.systemInstructions,
+            scriptInstructions: preset.scriptInstructions,
+            negativePrompt: preset.negativePrompt,
+            outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
+            storytellingEnabled: preset.storytelling,
+            presetSlug: preset.slug,
+            referenceIntent: normalizeReferenceIntent(args.referenceIntent),
+            durationSeconds: job.durationSeconds ?? args.durationSeconds,
+            resolution: job.resolution ?? args.resolution,
+            aspectRatio: job.aspectRatio ?? args.aspectRatio,
+            hasVideoReference: referenceInputs.some((input) => input.kind === "video"),
+            hasImageReference:
+              referenceInputs.some((input) => input.kind === "image") ||
+              Boolean(args.referenceUrls?.length),
+            hasRawImageReference: args.hasRawImageReference,
+            hasElementReference: args.hasElementReference,
+            attachedScriptMarkdown: args.attachedScriptMarkdown,
+            referenceSummaries: args.referenceSummaries,
+          });
       await ctx.runMutation(setEnhancedPromptRef, {
         jobId,
         enhancedPrompt,
-        negativePrompt: preset.negativePrompt,
+        negativePrompt: skipEnhancement ? undefined : preset.negativePrompt,
       });
 
       if (args.mode === "video") {
@@ -392,6 +440,9 @@ export const runFlow = action({
         const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
           startFrameUrl: args.startFrameUrl,
           referenceImageCount: referenceImageUrls.length,
+          gatewayModelId: job.resolvedModel,
+          skipPromptEnhancement: job.skipPromptEnhancement,
+          presetSlug: preset.slug,
         });
         const video = await generateVideo({
           prompt: videoPrompt,
@@ -457,7 +508,7 @@ export const runFlow = action({
       const message = error instanceof Error ? error.message : "Generation failed";
       await ctx.runMutation(failJobRef, {
         jobId,
-        error: message,
+        error: friendlyGenerationErrorText(message, args.mode === "video" ? "video" : "image"),
       });
       throw error;
     }
@@ -475,6 +526,11 @@ export const executeApiJob = action({
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
     startFrameUrl: v.optional(v.string()),
+    referenceIntent: v.optional(v.string()),
+    hasRawImageReference: v.optional(v.boolean()),
+    hasElementReference: v.optional(v.boolean()),
+    attachedScriptMarkdown: v.optional(v.array(v.string())),
+    referenceSummaries: v.optional(v.array(v.string())),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -495,6 +551,11 @@ async function executeQueuedApiJob(
     referenceUrls?: string[];
     referenceInputs?: Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>;
     startFrameUrl?: string;
+    referenceIntent?: string;
+    hasRawImageReference?: boolean;
+    hasElementReference?: boolean;
+    attachedScriptMarkdown?: string[];
+    referenceSummaries?: string[];
   },
 ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
   const referenceInputs = args.referenceInputs ?? [];
@@ -515,6 +576,8 @@ async function executeQueuedApiJob(
           negativePrompt: preset.negativePrompt,
           outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
           storytellingEnabled: preset.storytelling,
+          presetSlug: preset.slug,
+          referenceIntent: normalizeReferenceIntent(args.referenceIntent),
           durationSeconds: job.durationSeconds ?? args.durationSeconds,
           resolution: job.resolution ?? args.resolution,
           aspectRatio: job.aspectRatio ?? args.aspectRatio,
@@ -522,6 +585,10 @@ async function executeQueuedApiJob(
           hasImageReference:
             referenceInputs.some((input) => input.kind === "image") ||
             Boolean(args.referenceUrls?.length),
+          hasRawImageReference: args.hasRawImageReference,
+          hasElementReference: args.hasElementReference,
+          attachedScriptMarkdown: args.attachedScriptMarkdown,
+          referenceSummaries: args.referenceSummaries,
         });
     await ctx.runMutation(setEnhancedPromptRef, {
       jobId: args.jobId,
@@ -536,6 +603,9 @@ async function executeQueuedApiJob(
       const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
         startFrameUrl: args.startFrameUrl,
         referenceImageCount: referenceImageUrls.length,
+        gatewayModelId: job.resolvedModel,
+        skipPromptEnhancement: job.skipPromptEnhancement,
+        presetSlug: preset.slug,
       });
       const video = await generateVideo({
         prompt: videoPrompt,
@@ -587,7 +657,10 @@ async function executeQueuedApiJob(
     return { jobId: args.jobId, assetIds };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Generation failed";
-    await ctx.runMutation(failJobRef, { jobId: args.jobId, error: message });
+    await ctx.runMutation(failJobRef, {
+      jobId: args.jobId,
+      error: friendlyGenerationErrorText(message, args.mode === "video" ? "video" : "image"),
+    });
     throw error;
   }
 }
@@ -610,6 +683,9 @@ export const runGenerationForApi = action({
     startFrameUrl: v.optional(v.string()),
     skipPromptEnhancement: v.optional(v.boolean()),
     videoModel: v.optional(v.string()),
+    referenceIntent: v.optional(v.string()),
+    hasRawImageReference: v.optional(v.boolean()),
+    hasElementReference: v.optional(v.boolean()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -653,7 +729,9 @@ export const runGenerationForApi = action({
       audioEnabled: args.audioEnabled,
       referenceUrls: args.referenceUrls,
       referenceInputs,
-      startFrameUrl: args.startFrameUrl,
+      referenceIntent: args.referenceIntent,
+      hasRawImageReference: args.hasRawImageReference,
+      hasElementReference: args.hasElementReference,
     });
     return {
       jobId: prepared.jobId,
@@ -672,6 +750,10 @@ export const runScriptForApi = action({
     userPrompt: v.string(),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
     skipScriptEnhancement: v.optional(v.boolean()),
+    scriptType: v.optional(v.string()),
+    referenceIntent: v.optional(v.string()),
+    hasRawImageReference: v.optional(v.boolean()),
+    hasElementReference: v.optional(v.boolean()),
   },
   returns: v.object({
     documentId: v.id("documents"),
@@ -709,11 +791,20 @@ export const runScriptForApi = action({
             presetName: preset.name,
             presetInstructions: preset.systemInstructions,
             scriptInstructions: preset.scriptInstructions,
+            scriptType: normalizeScriptType(args.scriptType),
+            presetSlug: preset.slug,
+            referenceIntent: normalizeReferenceIntent(args.referenceIntent),
             storytellingEnabled: preset.storytelling,
             negativePrompt: preset.negativePrompt,
             referenceInputs,
+            hasRawImageReference: args.hasRawImageReference,
+            hasElementReference: args.hasElementReference,
           });
-      const title = scriptTitle(args.userPrompt, contentMarkdown);
+      const title = scriptDocumentTitle(
+        normalizeScriptType(args.scriptType),
+        args.userPrompt,
+        contentMarkdown,
+      );
       const documentId = await ctx.runMutation(createDocumentForApiRef, {
         userId: args.userId,
         folderId: args.folderId,
@@ -804,14 +895,6 @@ function internalQueryRef<Args extends Record<string, unknown>, Return>(
   >;
 }
 
-function scriptTitle(userPrompt: string, contentMarkdown: string): string {
-  const markdownTitle = contentMarkdown
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("# "));
-  const title = markdownTitle?.replace(/^#\s+/, "").trim() || userPrompt.trim();
-  return (title || "Generated script").slice(0, 60);
-}
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -837,11 +920,15 @@ async function enhancePromptWithFallback(args: {
   negativePrompt?: string;
   outputKind: "image_prompt" | "video_prompt";
   storytellingEnabled?: boolean;
+  presetSlug?: string;
+  referenceIntent?: string;
   durationSeconds?: number;
   resolution?: string;
   aspectRatio?: string;
   hasVideoReference?: boolean;
   hasImageReference?: boolean;
+  hasRawImageReference?: boolean;
+  hasElementReference?: boolean;
   attachedScriptMarkdown?: string[];
   referenceSummaries?: string[];
 }): Promise<string> {
@@ -854,11 +941,15 @@ async function enhancePromptWithFallback(args: {
       negativePrompt: args.negativePrompt,
       outputKind: args.outputKind,
       storytellingEnabled: args.storytellingEnabled,
+      presetSlug: args.presetSlug,
+      referenceIntent: args.referenceIntent,
       durationSeconds: args.durationSeconds,
       resolution: args.resolution,
       aspectRatio: args.aspectRatio,
       hasVideoReference: args.hasVideoReference,
       hasImageReference: args.hasImageReference,
+      hasRawImageReference: args.hasRawImageReference,
+      hasElementReference: args.hasElementReference,
       attachedScriptMarkdown: args.attachedScriptMarkdown,
       referenceSummaries: args.referenceSummaries ?? [],
     });

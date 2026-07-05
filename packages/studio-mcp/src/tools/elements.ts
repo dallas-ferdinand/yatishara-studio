@@ -22,6 +22,9 @@ const GENERATE_TEXT_SHEET_GUIDE =
   "Does not build the sheet image — call studio_generate_element_sheet after. " +
   "Parity with Studio UI Build sheet text step.";
 
+const stylePresetSheetFieldDesc =
+  "Style slug: unstyled|raw (photoreal reference sheet, no cartoon stylization), or toon-prime (default cartoon), toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol";
+
 const UPDATE_ELEMENT_GUIDE =
   "Update referenceAssetIds (upload photos only — never include sheetAssetId). " +
   "Rebuild sheet after changing refs.";
@@ -29,7 +32,7 @@ const UPDATE_ELEMENT_GUIDE =
 export function registerElementTools(server: McpServer) {
   server.tool(
     "studio_production_guide",
-    "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and cinema generation defaults.",
+    "READ FIRST for character/prop/location pipelines. Explains unbuilt vs built states, when to use sheet vs upload refs, and direct-prompt generation defaults (unstyled + skipPromptEnhancement — no Flash rewrite before Seedance).",
     {},
     async () => jsonResult(await studioFetch("/elements/production-guide")),
   );
@@ -188,12 +191,22 @@ export function registerElementTools(server: McpServer) {
         .optional()
         .describe("Override element sourceMode for this sheet build"),
       resolution: z.enum(["1K", "2K"]).optional(),
+      stylePresetSlug: z
+        .string()
+        .optional()
+        .describe(stylePresetSheetFieldDesc),
     },
-    async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution }) =>
+    async ({ elementId, referenceAssetIds, referenceElementIds, sourceMode, resolution, stylePresetSlug }) =>
       jsonResult(
         await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
           method: "POST",
-          body: JSON.stringify({ referenceAssetIds, referenceElementIds, sourceMode, resolution }),
+          body: JSON.stringify({
+            referenceAssetIds,
+            referenceElementIds,
+            sourceMode,
+            resolution,
+            stylePresetSlug,
+          }),
         }),
       ),
   );

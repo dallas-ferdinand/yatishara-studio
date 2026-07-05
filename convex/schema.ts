@@ -498,4 +498,19 @@ export default defineSchema({
     .index("by_target_user", ["targetUserId"])
     .index("by_payment", ["paymentId"])
     .index("by_generation_job", ["generationJobId"]),
+
+  videoEditProjects: defineTable({
+    ownerId: v.id("users"),
+    folderId: v.id("folders"),
+    name: v.string(),
+    projectJson: v.string(),
+    sourceAssetId: v.optional(v.id("assets")),
+    outputAssetId: v.optional(v.id("assets")),
+    deletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_folder", ["folderId"])
+    .index("by_source_asset", ["sourceAssetId"]),
 });

@@ -6,7 +6,7 @@ import { icon as svgIcon } from "@mos-app/icons.js";
 import { FileEntryThumb } from "./FileEntryThumb";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
 import { formatFileDate } from "@/desk/lib/explorer-file-actions";
-import { writeExplorerDragData } from "@/desk/lib/explorer-dnd";
+import { clearActiveExplorerDrag, writeExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
@@ -569,12 +569,14 @@ function FileEntryButton({
   onOpen,
   enableLongPress,
   onLongPress,
+  longPressDelay,
   onContextMenu,
   onDragStart,
   onDropEntry,
 }) {
   const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
-    enableLongPress && onLongPress ? () => onLongPress(entry) : undefined,
+    enableLongPress && onLongPress ? (coords) => onLongPress(entry, coords) : undefined,
+    { delay: longPressDelay },
   );
 
   const isDir = entry.type === "dir";
@@ -660,6 +662,7 @@ function renderEntryRows({
   onEntryDragStart,
   onEntryDrop,
   enableLongPress,
+  longPressDelay,
   rowClass,
   pinnedFolderIconClass,
   entryLabel,
@@ -681,6 +684,7 @@ function renderEntryRows({
               label={label}
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
+              longPressDelay={longPressDelay}
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -727,6 +731,7 @@ function renderEntryRows({
               label={label}
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
+              longPressDelay={longPressDelay}
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -760,6 +765,7 @@ function renderEntryRows({
             label={label}
             onOpen={() => onEntry(e)}
             enableLongPress={enableLongPress}
+            longPressDelay={longPressDelay}
             onLongPress={onEntryLongPress}
             onContextMenu={(ev) => onEntryContextMenu(ev, e)}
             onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -796,6 +802,7 @@ export function FileTree({
   pinnedPaths,
   pinnedShortcuts = [],
   enableLongPress = false,
+  longPressDelay,
   onEntryLongPress,
   onEntryContextMenu,
   onBlankContextMenu,
@@ -844,6 +851,7 @@ export function FileTree({
     startFileDragPreview(e, entry, workspaceId);
     const cleanupDragCursor = () => {
       document.body.classList.remove("is-drag-cursor");
+      clearActiveExplorerDrag();
       document.removeEventListener("drop", cleanupDragCursor);
       document.removeEventListener("dragend", cleanupDragCursor);
     };
@@ -890,9 +898,10 @@ export function FileTree({
     onEntryLongPress,
     onEntryContextMenu: onContext,
     onEntryDragStart,
-    onEntryDrop,
-    enableLongPress,
-    rowClass,
+  onEntryDrop,
+  enableLongPress,
+  longPressDelay,
+  rowClass,
     pinnedFolderIconClass,
     entryLabel,
     entryMeta,

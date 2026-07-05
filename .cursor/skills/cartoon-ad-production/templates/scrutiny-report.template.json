@@ -1,0 +1,25 @@
+{
+  "mode": "visual_scrutiny",
+  "role": "style-supervisor",
+  "asset_id": "PROP_honey_jar_v1",
+  "file_path": "generation/refs/prop-honey-jar-v1.png",
+  "viewed": true,
+  "approve": false,
+  "checks": {
+    "matches_material": true,
+    "no_text": true,
+    "no_wrong_background": true,
+    "angles_complete": true,
+    "style_bible_match": true
+  },
+  "style_checks": {
+    "line_consistent": true,
+    "palette_locked": true,
+    "flat_cel_shading": true,
+    "expression_readable": true,
+    "no_photoreal_drift": true,
+    "no_film_grain": true
+  },
+  "revision_prompt_delta": "",
+  "severity": "blocking"
+}

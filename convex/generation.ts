@@ -71,6 +71,7 @@ const eventReturn = v.object({
   toFolderId: v.optional(v.id("folders")),
   createdAt: v.number(),
   error: v.optional(v.string()),
+  jobMode: v.optional(generationMode),
   resultAssets: v.optional(v.array(v.object({
     _id: v.id("assets"),
     name: v.string(),
@@ -126,6 +127,7 @@ export const listEvents = authedQuery({
       const job = event.generationJobId ? jobsById.get(event.generationJobId) : null;
       return {
         ...event,
+        ...(job?.mode ? { jobMode: job.mode } : {}),
         ...(event.kind === "stage" && event.stage === "failed" && job?.error
           ? { error: job.error }
           : {}),
@@ -233,7 +235,7 @@ export const canGenerate = authedQuery({
         creditBalance: account?.creditBalance ?? 0,
         cost: 0,
         hasActiveSubscription: false,
-        reason: "4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.",
+        reason: "4K video isn't available yet. Try 1080p or 720p for now.",
       };
     }
     if (args.tier === "pro_video" && !isSupportedVideoDuration(args.durationSeconds)) {
@@ -287,6 +289,7 @@ export const createQueuedJob = authedMutation({
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
+    skipPromptEnhancement: v.optional(v.boolean()),
   },
   returns: v.id("generationJobs"),
   handler: async (ctx, args) => {
@@ -331,6 +334,7 @@ export const createQueuedJob = authedMutation({
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       reservedCreditTransactionId,
+      skipPromptEnhancement: args.skipPromptEnhancement,
       source: "ui",
       createdAt: now,
       updatedAt: now,
@@ -916,22 +920,18 @@ async function requireJob(ctx: QueryCtx | MutationCtx, jobId: Id<"generationJobs
 }
 
 function insufficientCreditsMessage(cost: number): string {
-  return `Generation needs ${cost} credits. Top up to continue.`;
+  return `You need ${cost} credits to generate this. Top up to continue.`;
 }
 
 function resolveVideoPricingModel(args: {
   tier: "image" | "pro_video" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
-}): "seedance-2.0" | "kling-3.0-i2v" | "veo-3.1" | undefined {
+}): "seedance-2.0" | "kling-3.0-i2v" | undefined {
   if (args.tier !== "pro_video") {
     return undefined;
   }
-  if (
-    args.videoModel === "seedance-2.0" ||
-    args.videoModel === "kling-3.0-i2v" ||
-    args.videoModel === "veo-3.1"
-  ) {
+  if (args.videoModel === "seedance-2.0" || args.videoModel === "kling-3.0-i2v") {
     return args.videoModel;
   }
   if (args.resolvedModel) {

@@ -22,12 +22,39 @@ const estimateSchema = {
     .string()
     .optional()
     .describe(
-      'Video model slug. Default seedance-2.0. MCP-only: "kling-3.0-i2v", "veo-3.1" (faces via personGeneration allow_all).',
+      'Explicit video model choice. Call studio_list_video_models first. Omit = seedance-2.0 (Studio UI default). MCP-only: kling-3.0-i2v for start-frame I2V with faces.',
     ),
 };
 
-const cinemaPresetHint =
-  'Cinema default: stylePreset "story-ad" with skipPromptEnhancement: true — observational look without preset rewrite of user prompt.';
+const cartoonPresetHint =
+  'MCP handoff default: stylePreset "unstyled" + skipPromptEnhancement true (prompt reaches Seedance verbatim). Use toon-prime|toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol only when you want GPT rewrite (set skipPromptEnhancement: false).';
+
+const stylePresetFieldDesc =
+  "Preset slug: unstyled (default MCP handoff — no style rewrite), raw (alias), or toon-prime|toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol";
+
+const stylePresetSheetFieldDesc =
+  "Style slug: unstyled|raw (photoreal reference sheet, no cartoon stylization), or toon-prime (default cartoon), toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol";
+
+const scriptTypeFieldDesc =
+  "Script output type: production (full timed script), storyboard (panel beats + storyboard/generation prompts), shot_list (table of shots), image_prompt (still brief + ## Generation prompt), video_prompt (Seedance beats + video prompt), scene_split (multiple ## Scene N blocks), style_guide (cartoon look bible), element_brief (character/prop/location bible), reference_sheet_guide (multi-panel sheet build guide), vo_script (narrator/VO lines only). Enhancement runs when skipPromptEnhancement is false.";
+
+const referenceIntentFieldDesc =
+  "How attached references influence rewrite: auto (infer from preset), stylize (translate uploads into preset look), match_reference (photographic fidelity), element_lock (built element sheets are canonical).";
+
+const COMPOSER_SCRIPT_TYPE_ENUM = [
+  "production",
+  "storyboard",
+  "shot_list",
+  "image_prompt",
+  "video_prompt",
+  "scene_split",
+  "style_guide",
+  "element_brief",
+  "reference_sheet_guide",
+  "vo_script",
+] as const;
+
+const REFERENCE_INTENT_ENUM = ["auto", "stylize", "match_reference", "element_lock"] as const;
 
 export function registerGenerationTools(server: McpServer) {
   server.tool(
@@ -54,13 +81,13 @@ export function registerGenerationTools(server: McpServer) {
 
   server.tool(
     "studio_list_video_models",
-    "List video models for MCP selection. Includes MCP-only models (kling-3.0-i2v, veo-3.1) not shown in Studio UI.",
+    "List video models for MCP selection. Includes kling-3.0-i2v (MCP-only, not in Studio UI).",
     {},
     async () => jsonResult(await studioFetch("/video-models?scope=mcp")),
   );
 
   server.tool(
-    "Estimate total production budget for multiple generation items (props, shots, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cinema-ad-production budget approval.",
+    "Estimate total production budget for multiple generation items (props, shots, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cartoon-ad-production budget approval.",
     {
       items: z.array(
         z.object({
@@ -115,11 +142,13 @@ export function registerGenerationTools(server: McpServer) {
 
   server.tool(
     "studio_generate_image",
-    `Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds). ${cinemaPresetHint}`,
+    `Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds).
+
+DEFAULT: skipPromptEnhancement=true + stylePreset unstyled — prompt goes DIRECT to GPT Image 2 with NO rewrite pass. ${cartoonPresetHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
-      stylePreset: z.string().optional().describe('Preset slug, e.g. realism or raw'),
+      stylePreset: z.string().optional().describe(stylePresetFieldDesc),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional().describe("1K, 2K, or 4K"),
       referenceAssetIds: z.array(z.string()).optional().describe("Direct asset IDs (e.g. sheetAssetId)"),
@@ -127,7 +156,8 @@ export function registerGenerationTools(server: McpServer) {
         .array(z.string())
         .optional()
         .describe("Built element IDs — uses sheet image + description, not upload refs"),
-      skipPromptEnhancement: z.boolean().optional().describe("Default true for cinema"),
+      skipPromptEnhancement: z.boolean().optional().describe("Default true — pass prompt verbatim (use with unstyled preset)"),
+      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
     },
     async (args) =>
       jsonResult(
@@ -137,7 +167,7 @@ export function registerGenerationTools(server: McpServer) {
             mode: "image",
             wait: true,
             ...args,
-            stylePreset: args.stylePreset ?? "story-ad",
+            stylePreset: args.stylePreset ?? "unstyled",
             skipPromptEnhancement: args.skipPromptEnhancement ?? true,
           }),
         }),
@@ -148,17 +178,19 @@ export function registerGenerationTools(server: McpServer) {
     "studio_generate_video",
     `Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Async + poll (up to 5 min).
 
+DEFAULT: skipPromptEnhancement=true + stylePreset unstyled — your prompt goes DIRECT to Seedance/Kling with NO GPT rewrite pass. Only optional [Image N] ref lines append when referenceElementIds are set; startFrameAssetId attaches as I2V first_frame separately.
+
 VIDEO WITH PEOPLE (required workflow):
 1. studio_generate_image — storyboard still with referenceElementIds (characters + props + locations compose the opening shot)
 2. studio_generate_video — pass startFrameAssetId from step 1 + referenceElementIds for prop/location lock. Characters are IN the start frame, not face-sheet refs.
 
-Wait ≥65s between video calls (1 req/min gateway quota). ${cinemaPresetHint}
+Wait ≥65s between video calls (1 req/min gateway quota). ${cartoonPresetHint}
 
-videoModel: default seedance-2.0 (Studio UI). MCP-only: kling-3.0-i2v (start-frame faces), veo-3.1 (Google Veo 3.1 I2V, personGeneration allow_all for face tests).`,
+videoModel: explicit choice — call studio_list_video_models. Omit = seedance-2.0. Pass kling-3.0-i2v when production selects Kling (start-frame I2V, faces).`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
-      stylePreset: z.string().optional(),
+      stylePreset: z.string().optional().describe(stylePresetFieldDesc),
       aspectRatio: z.string().optional(),
       resolution: z.string().optional().describe("854x480, 1280x720, or 1920x1080"),
       durationSeconds: z.number().optional().describe("4-15 seconds"),
@@ -173,11 +205,12 @@ videoModel: default seedance-2.0 (Studio UI). MCP-only: kling-3.0-i2v (start-fra
         .optional()
         .describe("Storyboard asset ID — first_frame I2V. Required when people appear on camera."),
       skipPromptEnhancement: z.boolean().optional(),
+      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
       videoModel: z
         .string()
         .optional()
         .describe(
-          'Default seedance-2.0. MCP-only: "kling-3.0-i2v", "veo-3.1" (faces / real-person filter bypass tests).',
+          'Explicit model slug from studio_list_video_models. Omit = seedance-2.0. Use kling-3.0-i2v when chosen for I2V/faces.',
         ),
     },
     async (args) => {
@@ -187,7 +220,7 @@ videoModel: default seedance-2.0 (Studio UI). MCP-only: kling-3.0-i2v (start-fra
           mode: "video",
           wait: false,
           ...args,
-          stylePreset: args.stylePreset ?? "story-ad",
+          stylePreset: args.stylePreset ?? "unstyled",
           skipPromptEnhancement: args.skipPromptEnhancement ?? true,
         }),
       });
@@ -199,14 +232,16 @@ videoModel: default seedance-2.0 (Studio UI). MCP-only: kling-3.0-i2v (start-fra
 
   server.tool(
     "studio_generate_script",
-    `Generate a script document in a folder. Call studio_estimate_generation with mode=script first. Upload audio refs for voice briefs — Flash listens to attached audio. Returns documentId and title. ${cinemaPresetHint}`,
+    `Generate a script document in a folder. Call studio_estimate_generation with mode=script first. Upload audio refs for voice briefs — Flash listens to attached audio. Returns documentId and title. ${cartoonPresetHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
-      stylePreset: z.string().optional(),
+      stylePreset: z.string().optional().describe(stylePresetFieldDesc),
       referenceAssetIds: z.array(z.string()).optional(),
       referenceElementIds: z.array(z.string()).optional(),
       skipPromptEnhancement: z.boolean().optional(),
+      scriptType: z.enum(COMPOSER_SCRIPT_TYPE_ENUM).optional().describe(scriptTypeFieldDesc),
+      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
     },
     async (args) =>
       jsonResult(
@@ -215,8 +250,9 @@ videoModel: default seedance-2.0 (Studio UI). MCP-only: kling-3.0-i2v (start-fra
           body: JSON.stringify({
             mode: "script",
             ...args,
-            stylePreset: args.stylePreset ?? "story-ad",
+            stylePreset: args.stylePreset ?? "unstyled",
             skipPromptEnhancement: args.skipPromptEnhancement ?? true,
+            scriptType: args.scriptType ?? "production",
           }),
         }),
       ),

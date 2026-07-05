@@ -247,14 +247,33 @@ export const restore = authedMutation({
 });
 
 export const listTrash = authedQuery({
-  args: {},
+  args: {
+    expiresUnix: v.optional(v.number()),
+  },
   returns: v.array(assetReturn),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const assets = await ctx.db
       .query("assets")
       .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
       .collect();
-    return assets.filter((asset) => asset.deletedAt !== undefined);
+    const visibleAssets = assets.filter((asset) => asset.deletedAt !== undefined);
+    if (args.expiresUnix === undefined) {
+      return visibleAssets;
+    }
+    const expiresUnix = args.expiresUnix;
+    return await Promise.all(
+      visibleAssets.map(async (asset) => ({
+        ...asset,
+        signedReadUrl: asset.bunnyPath
+          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+          : undefined,
+        signedThumbnailUrl: asset.thumbnailPath
+          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
+          : asset.bunnyPath && asset.kind === "image"
+            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
+            : undefined,
+      })),
+    );
   },
 });
 

@@ -47,7 +47,7 @@ export function FileBreadcrumbs({
         {crumbs.map((crumb, i) => (
           <span key={crumb.path || "root"} className="desk-file-breadcrumbs-segment">
             {i > 0 ? (
-              <Icon name="chevR" size={10} className="desk-file-breadcrumbs-sep" aria-hidden />
+              <Icon name="chevR" size={12} className="desk-file-breadcrumbs-sep" aria-hidden />
             ) : null}
             <button
               type="button"

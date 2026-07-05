@@ -98,6 +98,14 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "pulse") return "infinity";
   if (tab.kind === "buckets") return "bucket";
   if (tab.kind === "settings") return "settings";
+  if (tab.studioKind === "element") {
+    if (tab.elementType === "character") return "user";
+    if (tab.elementType === "prop") return "package";
+    if (tab.elementType === "location") return "mapPin";
+    return "fileText";
+  }
+  if (tab.studioKind === "document") return "fileText";
+  if (tab.studioKind === "folder") return "folder";
   const path = tab.path ?? tab.title ?? "";
   if (tab.ext) return fileIconName(`file${tab.ext.startsWith(".") ? tab.ext : `.${tab.ext}`}`);
   return fileIconName(path);

@@ -1,9 +1,8 @@
-export type VideoModelSlug = "seedance-2.0" | "kling-3.0-i2v" | "veo-3.1";
+export type VideoModelSlug = "seedance-2.0" | "kling-3.0-i2v";
 
 /** MCP/API explicit picks — hidden from Studio UI composer and public catalog. */
 export const MCP_EXPLICIT_VIDEO_MODEL_SLUGS: VideoModelSlug[] = [
   "kling-3.0-i2v",
-  "veo-3.1",
 ];
 
 export type VideoModelDef = {
@@ -38,16 +37,6 @@ export const VIDEO_MODELS: VideoModelDef[] = [
     supportsMultimodalRefs: false,
     uiVisible: false,
   },
-  {
-    slug: "veo-3.1",
-    label: "Veo 3.1",
-    gatewayModelId: "google/veo-3.1-generate-001",
-    description:
-      "MCP only — Google Veo 3.1 I2V (quality ceiling). personGeneration allow_all for face cinema tests.",
-    requiresStartFrame: false,
-    supportsMultimodalRefs: false,
-    uiVisible: false,
-  },
 ];
 
 export function defaultVideoModelSlug(): VideoModelSlug {
@@ -64,7 +53,7 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
     );
     if (found) return found;
     throw new Error(
-      `Unknown video model: ${normalized}. Use seedance-2.0, kling-3.0-i2v, or veo-3.1.`,
+      `Unknown video model: ${normalized}. Use seedance-2.0 or kling-3.0-i2v.`,
     );
   }
   return (
@@ -94,10 +83,6 @@ export function isSeedanceGatewayModel(modelId: string): boolean {
   return modelId.includes("seedance");
 }
 
-export function isVeoGatewayModel(modelId: string): boolean {
-  return modelId.includes("veo");
-}
-
 export function isKlingGatewayModel(modelId: string): boolean {
   return modelId.includes("kling");
 }
@@ -105,9 +90,6 @@ export function isKlingGatewayModel(modelId: string): boolean {
 export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoModelSlug {
   if (gatewayModelId.includes("kling")) {
     return "kling-3.0-i2v";
-  }
-  if (gatewayModelId.includes("veo")) {
-    return "veo-3.1";
   }
   return "seedance-2.0";
 }

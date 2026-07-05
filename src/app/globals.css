@@ -7,6 +7,7 @@
 @import "../mos-css/chat-motion.css";
 @import "../mos-css/mos-tooltip.css";
 @import "../desk/desk-shell.css";
+@import "../studio/editor/studio-editor.css";
 @import "../desk/chat-overrides.css";
 /* mos-ui-polish.css removed — 7665 lines of dead .mos-ui-* code, zero usage */
 

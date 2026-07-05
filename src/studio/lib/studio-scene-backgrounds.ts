@@ -1,4 +1,4 @@
-/** Studio theme scene wallpaper paths (dark cinematic + light spatial). */
+/** Studio theme scene wallpaper paths (dark illustrated + light spatial illustrated). */
 
 export const STUDIO_SCENE_SLUG_TO_THEME_ID = {
   "agent-genesis": "agent",

@@ -3,8 +3,22 @@ import {
   storytellingUserSection,
   STORYTELLING_NEVER,
 } from "./storytellingFoundation";
+import {
+  GEN_PROMPT_HEADING,
+  getScriptTypeDefinition,
+  normalizeScriptType,
+  scriptTypeSystemPrompt,
+  scriptTypeUserLayers,
+  type ComposerScriptTypeSlug,
+} from "./composerScriptTypes";
+import {
+  referenceIntentEnhancementLayer,
+  referenceIntentProductionNotes,
+  resolveReferenceIntent,
+  type ReferenceIntentSlug,
+} from "./referenceIntent";
 
-export const GEN_PROMPT_HEADING = "## Generation prompt";
+export { GEN_PROMPT_HEADING } from "./composerScriptTypes";
 
 export type CreativeOutputKind = "script" | "image_prompt" | "video_prompt";
 
@@ -15,6 +29,9 @@ export type CreativeDirectionContext = {
   scriptInstructions?: string;
   negativePrompt?: string;
   outputKind: CreativeOutputKind;
+  scriptType?: ComposerScriptTypeSlug | string;
+  referenceIntent?: ReferenceIntentSlug | string;
+  presetSlug?: string;
   /** When false, the preset's own energy leads and only the show-don't-tell core applies. Defaults to true. */
   storytellingEnabled?: boolean;
   durationSeconds?: number;
@@ -22,9 +39,13 @@ export type CreativeDirectionContext = {
   aspectRatio?: string;
   hasVideoReference?: boolean;
   hasImageReference?: boolean;
+  hasRawImageReference?: boolean;
+  hasElementReference?: boolean;
   hasAudioReference?: boolean;
   attachedScriptMarkdown?: string[];
   referenceSummaries?: string[];
+  /** @deprecated use scriptType + scriptTypeUserLayers */
+  scriptTypeInstructions?: string;
 };
 
 const BASE_RULES =
@@ -72,10 +93,30 @@ function mergedNegativePrompt(context: CreativeDirectionContext): string | undef
   return parts.length ? parts.join("\n\n") : undefined;
 }
 
+function resolvedReferenceIntent(context: CreativeDirectionContext): ReferenceIntentSlug {
+  return resolveReferenceIntent({
+    intent: context.referenceIntent,
+    presetSlug: context.presetSlug,
+    hasRawImageRef: context.hasRawImageReference ?? context.hasImageReference,
+    hasElementAttachment: context.hasElementReference,
+    hasBuiltElementRef: context.hasElementReference,
+    hasVideoRef: context.hasVideoReference,
+  });
+}
+
 export function buildCreativeSystemPrompt(
   context: Pick<
     CreativeDirectionContext,
-    "outputKind" | "hasVideoReference" | "storytellingEnabled" | "durationSeconds"
+    | "outputKind"
+    | "hasVideoReference"
+    | "storytellingEnabled"
+    | "durationSeconds"
+    | "scriptType"
+    | "referenceIntent"
+    | "presetSlug"
+    | "hasRawImageReference"
+    | "hasImageReference"
+    | "hasElementReference"
   >,
 ): string {
   const narrative = storytellingActive(context)
@@ -85,45 +126,45 @@ export function buildCreativeSystemPrompt(
       })
     : SHOW_DONT_TELL_CORE;
 
+  const refIntent = resolvedReferenceIntent(context as CreativeDirectionContext);
+  const refLayer = referenceIntentEnhancementLayer(refIntent, context.outputKind);
+
   if (context.outputKind === "script") {
-    return [
-      narrative,
-      "Write production-ready Markdown scripts for short-form video.",
-      "Include shot timing, visual notes, minimal dialogue, audio/SFX notes.",
-      `End with a section titled exactly "${GEN_PROMPT_HEADING}" — a single Seedance-ready prompt distilled from the script.`,
-      BASE_RULES,
-    ].join(" ");
+    const scriptType = normalizeScriptType(context.scriptType);
+    return [narrative, scriptTypeSystemPrompt(scriptType), refLayer, BASE_RULES].filter(Boolean).join(" ");
   }
 
   if (context.outputKind === "video_prompt") {
-    if (context.hasVideoReference) {
-      return [
-        narrative,
-        "Rewrite into Seedance 2.0 footage VFX prompt.",
-        "Lock unchanged elements. Name exact frame the effect begins.",
-        "One primary camera move per beat. Film-grade lens, lighting, grade vocabulary.",
-        BASE_RULES,
-      ].join(" ");
-    }
-    return [
-      narrative,
-      "Rewrite into Seedance 2.0 text-to-video prompt.",
-      "Short style header, then timed beats when duration is known.",
-      "One primary camera move per beat. Specify light, environment, observable action, SFX.",
-      BASE_RULES,
-    ].join(" ");
+    const base = context.hasVideoReference
+      ? [
+          narrative,
+          "Rewrite into Seedance 2.0 footage VFX prompt.",
+          "Lock unchanged elements. Name exact frame the effect begins.",
+          "One primary camera move per beat.",
+        ]
+      : [
+          narrative,
+          "Rewrite into Seedance 2.0 text-to-video prompt.",
+          "Short style header, then timed beats when duration is known.",
+          "One primary camera move per beat. Specify light, environment, observable action, SFX.",
+        ];
+    return [...base, refLayer, BASE_RULES].filter(Boolean).join(" ");
   }
 
   return [
     narrative,
     "Rewrite into a GPT Image 2 prompt.",
     "Composition, lighting, lens, materials — one clearly generatable still image.",
+    refLayer,
     BASE_RULES,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function buildCreativeUserPrompt(context: CreativeDirectionContext): string {
   const sections: string[] = [];
+  const refIntent = resolvedReferenceIntent(context);
 
   if (storytellingActive(context)) {
     sections.push(storytellingUserSection(context.outputKind));
@@ -132,10 +173,32 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
   if (context.presetName) {
     sections.push(`Creative preset: ${context.presetName}`);
   }
-  sections.push(`Preset direction:\n${context.presetInstructions}`);
+
+  const directPreset =
+    context.presetSlug === "unstyled" || context.presetSlug === "raw";
+  if (!directPreset && context.presetInstructions?.trim()) {
+    sections.push(`Preset direction:\n${context.presetInstructions.trim()}`);
+  } else if (directPreset) {
+    sections.push("Preset direction: Direct handoff — do not inject style rewrite beyond the user brief.");
+  }
 
   if (context.outputKind === "script" && context.scriptInstructions?.trim()) {
     sections.push(`Preset script notes:\n${context.scriptInstructions.trim()}`);
+  }
+
+  if (context.outputKind === "script") {
+    const scriptType = normalizeScriptType(context.scriptType);
+    const typeLayers = scriptTypeUserLayers(scriptType);
+    if (typeLayers) {
+      sections.push(`Script type specification:\n${typeLayers}`);
+    }
+    const def = getScriptTypeDefinition(scriptType);
+    sections.push(`Required output structure:\n${def.description}`);
+  }
+
+  const refIntentLayer = referenceIntentEnhancementLayer(refIntent, context.outputKind);
+  if (refIntentLayer && context.outputKind !== "script") {
+    sections.push(refIntentLayer);
   }
 
   const negative = mergedNegativePrompt(context);
@@ -148,8 +211,13 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
     if (context.durationSeconds) production.push(`Duration: ${context.durationSeconds}s`);
     if (context.resolution) production.push(`Resolution: ${context.resolution}`);
     if (context.aspectRatio) production.push(`Aspect ratio: ${context.aspectRatio}`);
-    if (context.hasVideoReference) production.push("Video reference attached: use footage-VFX framing.");
-    if (context.hasImageReference) production.push("Image reference attached: lock subject/product consistency.");
+    production.push(
+      ...referenceIntentProductionNotes(
+        refIntent,
+        Boolean(context.hasImageReference),
+        Boolean(context.hasVideoReference),
+      ),
+    );
     if (production.length) sections.push(`Production:\n${production.join("\n")}`);
   }
 
@@ -160,7 +228,7 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
   const attachedScripts = context.attachedScriptMarkdown ?? [];
   if (attachedScripts.length) {
     sections.push(
-      `Attached scripts (honor their human truth and witness object; extract observational visual language):\n${attachedScripts
+      `Attached scripts (honor their human truth and witness object; extract stylized animated visual language):\n${attachedScripts
         .map((script, index) => `Script ${index + 1}:\n${script.trim()}`)
         .join("\n\n")}`,
     );
@@ -173,16 +241,17 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
         "Voice brief: one or more audio attachments follow this text. Listen to them as the creator's spoken direction — honor their intent, tone, product details, and any specific lines they mention.",
       );
     }
-    sections.push(
-      [
-        "Return Markdown only.",
-        storytellingActive(context)
-          ? "Follow the required script structure from the storytelling foundation."
-          : "Structure: title, concept, timed shot-by-shot scenes, minimal dialogue, visual and audio notes.",
-        `Include "${GEN_PROMPT_HEADING}" as the final section.`,
-        "The generation prompt must describe only what the camera can see — concrete action, light, and objects.",
-      ].join(" "),
-    );
+    const scriptType = normalizeScriptType(context.scriptType);
+    const def = getScriptTypeDefinition(scriptType);
+    const closing: string[] = ["Return Markdown only.", "Use a clear # title at the top."];
+    if (def.includesGenerationPrompt) {
+      closing.push(`Include "${GEN_PROMPT_HEADING}" when this document type requires it.`);
+    }
+    if (def.includesStoryboardPrompt) {
+      closing.push(`Include "## Storyboard prompt" when cast or hero object appears on camera.`);
+    }
+    closing.push("Observable action and concrete visual detail only in generation sections.");
+    sections.push(closing.join(" "));
     return sections.filter(Boolean).join("\n\n");
   }
 
@@ -190,7 +259,7 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
   sections.push(`User request:\n${promptSeed}`);
   sections.push(
     storytellingActive(context)
-      ? "Return only the final model-ready prompt text. Embody the storytelling principles on screen — observable life, witness object, patient camera. No preamble."
+      ? "Return only the final model-ready prompt text. Embody witness-object principles in stylized animation — readable expression, held poses, witness object. No preamble."
       : "Return only the final model-ready prompt text. Stay true to the preset's energy and the user's request. No preamble.",
   );
   return sections.filter(Boolean).join("\n\n");

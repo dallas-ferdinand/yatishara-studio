@@ -7,7 +7,7 @@ const MOVE_THRESHOLD = 12;
 
 /** Touch long-press for mobile context menus (does not block normal taps). */
 export function useLongPress(
-  onLongPress: (() => void) | undefined,
+  onLongPress: ((coords: { x: number; y: number }) => void) | undefined,
   { delay = DEFAULT_DELAY }: { delay?: number } = {}
 ) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -28,7 +28,7 @@ export function useLongPress(
       clear();
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
-        onLongPress();
+        onLongPress({ x: startRef.current.x, y: startRef.current.y });
       }, delay);
     },
     [clear, delay, onLongPress]

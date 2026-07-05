@@ -1,5 +1,5 @@
 /**
- * Cinema production gate validation — mirrors phase-gates.md.
+ * Cartoon production gate validation — mirrors phase-gates.md.
  * Pure JSON validation; no Studio API calls.
  */
 export type ProductionState = {
@@ -22,6 +22,8 @@ export type ProductionState = {
         startFrameAssetId?: string | null;
         generation_prompt?: string;
         camera?: {
+            shot_size_open?: string;
+            shot_size_end?: string;
             spatial_motion?: boolean;
             movement?: string;
             timing_beats?: unknown[];

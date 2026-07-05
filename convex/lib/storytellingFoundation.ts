@@ -380,21 +380,21 @@ Empty object → life beats across time → object unchanged, people changed →
  * Distilled foundation for prompt enhancement (video/image). The full document
  * is reserved for script generation where the model has room to use it.
  */
-export const STORYTELLING_COMPACT = `Storytelling principles (Joe Elliott — original witness-object philosophy):
-- The product is a silent witness, never the hero. Life happens around it.
-- Show observable behavior only — never emotion labels ("sad", "peaceful", "loving").
-- Objects carry memory: hands, tables, doorways, mugs, blankets, worn surfaces, sunlight, steam.
+export const STORYTELLING_COMPACT = `Storytelling principles (Joe Elliott — witness-object philosophy in stylized animation):
+- The product is a silent witness, never the hero. Life happens around it in a readable cartoon world.
+- Show observable behavior only — readable expression, held poses, squash on reaction — never emotion labels ("sad", "peaceful", "loving").
+- Objects carry memory in designed domestic staging: hands, tables, doorways, mugs, worn surfaces, cel-lit windows.
 - Conflict is quiet and comes from life itself: growing older, leaving home, missing someone.
-- The camera observes; it does not perform. Patient shots. Let actions finish. Trust silence and faces.
+- The frame holds; motion is purposeful. Let actions finish. Trust silence, faces, and witness objects.
 - The ending reveals what the story was truly about — it never summarizes or sells.
-- Sells meaning and affinity ("that's my life"), not character transformation — use Ernesto-style beats if conversion is the goal.`;
+- Emotional realism inside a stylized world — not documentary photorealism.`;
 
 export const STORYTELLING_NEVER = [
   "Never make the product the hero or plot solution.",
-  "Never explain emotions directly — only observable behavior.",
+  "Never explain emotions directly — only observable behavior and readable expression.",
   "Never hype, exaggerate, or sell in narrator voice.",
   "Never write like a clever advertisement.",
-  "Never use spectacle or visual excess when quiet observation serves the story.",
+  "Never use photoreal spectacle or film-grain documentary language when stylized holds serve the story.",
   "Never summarize the ending — reveal the human truth underneath.",
   "Never use life-or-death villain conflict unless the brief explicitly requires it.",
 ].join("\n");
@@ -423,7 +423,7 @@ Only if needed — usually one reflective line near the end. Never persuasive. N
 One simple line that reveals what the story was truly about. Do not summarize plot.
 
 ## Generation prompt
-Model-ready Seedance/video prompt distilled from the script: patient observational camera, specific objects, hands, light, timed beats, SFX over music unless brief requests audio.`;
+Model-ready video prompt distilled from the script: held cartoon framing, readable expression, specific objects, cel-motivated light, timed beats, SFX over music unless brief requests audio.`;
 
 /**
  * Beat guidance scaled to the actual clip length. The full 7-step arc needs
@@ -459,8 +459,8 @@ export function storytellingSystemLayer(
       "Every script must reveal invisible human meaning inside ordinary objects.",
       "The product is a silent witness — never the hero, never the plot solution.",
       "Show observable behavior; never label emotions.",
-      "Conflict is quiet. The camera observes; it does not perform.",
-      "The audience should remember someone from their own life and complete the meaning themselves.",
+      "Conflict is quiet. Frames hold for readable expression; motion serves behavior proof.",
+      "The audience should remember someone from their own life and complete the meaning themselves — in a stylized animated world.",
       STORYTELLING_DECISION_ENGINE,
       STORYTELLING_NEVER,
     ].join(" ");
@@ -469,27 +469,27 @@ export function storytellingSystemLayer(
   if (outputKind === "video_prompt") {
     if (options?.hasVideoReference) {
       return [
-        "Preserve the human truth already in the footage: observational camera, behavior not emotion labels.",
-        "Lock footage elements explicitly. VFX serves memory and meaning, not spectacle for its own sake.",
+        "Preserve the human truth already in the footage: readable behavior, not emotion labels.",
+        "Lock footage elements explicitly. VFX serves memory and meaning in stylized worlds.",
         STORYTELLING_NEVER,
       ].join(" ");
     }
     return [
-      "Rewrite into a Seedance prompt that embodies quiet observational storytelling on screen.",
+      "Rewrite into a video prompt that embodies quiet witness-object storytelling in stylized animation.",
       storytellingBeatsForDuration(options?.durationSeconds),
       "Describe observable actions only — never 'sad', 'happy', 'peaceful'.",
-      "Camera observes patiently; actions finish; trust silence, faces, objects.",
-      "Visual focus: hands, doorways, tables, light, steam, worn objects — not spectacle.",
+      "Held poses and readable expressions; actions finish; trust silence, faces, objects.",
+      "Visual focus: hands, doorways, tables, cel light, steam, worn objects — not photoreal spectacle.",
       "Prefer ambient SFX over background music unless audio is requested.",
       STORYTELLING_NEVER,
     ].join(" ");
   }
 
   return [
-    "Rewrite into an image prompt with lived-in observational visual language.",
-    "Focus on objects that carry memory, hands, lived-in detail, patient natural light.",
-    "Suggest a moment of ordinary life — behavior visible, emotion discovered not labeled.",
-    "Avoid ad-style hero product glamour unless the brief explicitly demands packshot.",
+    "Rewrite into an image prompt with stylized animated visual language.",
+    "Focus on objects that carry memory, hands, designed domestic detail, cel-motivated light.",
+    "Suggest a moment of ordinary animated life — behavior visible, emotion discovered not labeled.",
+    "Avoid photoreal packshot glamour unless the brief explicitly demands it.",
     STORYTELLING_NEVER,
   ].join(" ");
 }
@@ -509,6 +509,6 @@ export function storytellingUserSection(outputKind: "script" | "image_prompt" | 
 
   return [
     "Storytelling visual principles (apply to the still image):",
-    "Objects carry memory. Hands, light, worn surfaces. Observable life — never labeled emotion.",
+    "Objects carry memory in stylized staging. Hands, cel light, worn surfaces. Observable life — never labeled emotion.",
   ].join("\n\n");
 }

@@ -1,5 +1,5 @@
 /**
- * Cinema production gate validation — mirrors phase-gates.md.
+ * Cartoon production gate validation — mirrors phase-gates.md.
  * Pure JSON validation; no Studio API calls.
  */
 
@@ -24,7 +24,13 @@ export type ProductionState = {
     storyboard_prompt?: string;
     startFrameAssetId?: string | null;
     generation_prompt?: string;
-    camera?: { spatial_motion?: boolean; movement?: string; timing_beats?: unknown[] };
+    camera?: {
+      shot_size_open?: string;
+      shot_size_end?: string;
+      spatial_motion?: boolean;
+      movement?: string;
+      timing_beats?: unknown[];
+    };
   }>;
   story_packet?: { duration_sec?: number; scenes?: unknown[] };
   approved_clips?: unknown[];
@@ -82,32 +88,34 @@ function findShot(state: ProductionState, shotId?: string) {
   return state.shot_packets?.find((s) => s.shot_id === shotId);
 }
 
-function seedancePrefixPresent(prompt?: string): boolean {
+function cartoonPrefixPresent(prompt?: string): boolean {
   if (!prompt?.trim()) return false;
   return (
-    prompt.includes("Seedance 2.0 cinematic") ||
-    prompt.includes("seedance_cinematic") ||
-    prompt.includes("film grain") ||
-    prompt.includes("Preserve start-frame composition")
+    prompt.includes("Preserve start-frame cartoon look") ||
+    prompt.includes("flat cel shading") ||
+    prompt.includes("consistent line weight") ||
+    prompt.includes("PRESERVE start-frame")
   );
 }
 
-function wordCount(text?: string): number {
-  if (!text?.trim()) return 0;
-  return text.trim().split(/\s+/).length;
-}
+const PHOTOREAL_LEAK_RE =
+  /\b(Shot on ARRI Alexa|film grain|natural skin texture|documentary-grade|photorealistic|live-action footage|observational camera)\b/i;
 
 const FORBIDDEN_ZOOM_RE = /\b(zoom\s+in|zoom\s+out|snap\s+zoom|optical\s+zoom)\b/i;
 
-const FULL_LOOK_ON_I2V_RE = /Shot on ARRI Alexa/i;
+const FULL_LOOK_ON_I2V_RE =
+  /\b(Traditional 2D cel animation|flat two-tone shading|Shot on ARRI Alexa)\b/i;
 const TRAVEL_VERB_RE = /\b(dolly|pan|track|push-in|pull-out|crane|orbit)\b/i;
 
-function validateSeedanceTranslation(
+function validateToonTranslation(
   prompt?: string,
   opts?: { castOnCamera?: boolean },
 ): string[] {
   const issues: string[] = [];
   if (!prompt?.trim()) return issues;
+  if (PHOTOREAL_LEAK_RE.test(prompt)) {
+    issues.push("contains photoreal leakage (grain/Alexa/documentary language)");
+  }
   if (!prompt.includes("SCENE:")) {
     issues.push("missing SCENE: header");
   }
@@ -121,11 +129,22 @@ function validateSeedanceTranslation(
   if (FORBIDDEN_ZOOM_RE.test(prompt)) {
     issues.push("contains forbidden zoom language — use dolly/track");
   }
-  if (opts?.castOnCamera && FULL_LOOK_ON_I2V_RE.test(prompt)) {
-    issues.push("full look prefix on I2V — use abbreviated PRESERVE line only");
+  if (opts?.castOnCamera && FULL_LOOK_ON_I2V_RE.test(prompt) && prompt.includes("Traditional 2D cel")) {
+    issues.push("full cartoon look prefix on I2V — use abbreviated PRESERVE line only");
+  }
+  if (opts?.castOnCamera && /Shot on ARRI Alexa/i.test(prompt)) {
+    issues.push("Alexa prefix on I2V — forbidden in cartoon production");
   }
   return issues;
 }
+
+function wordCount(text?: string): number {
+  if (!text?.trim()) return 0;
+  return text.trim().split(/\s+/).length;
+}
+
+const ECU_CU_FACE_RE =
+  /\b(ECU|extreme close[- ]?up|close[- ]?up|CU)\b.*\b(face|eyes|portrait|head[- ]?on)\b/i;
 
 function validateStoryboardPrompt(prompt?: string): string[] {
   const issues: string[] = [];
@@ -133,11 +152,36 @@ function validateStoryboardPrompt(prompt?: string): string[] {
   if (!prompt.includes("FRAME:")) {
     issues.push("missing FRAME: header");
   }
-  if (!prompt.includes("Seedance 2.0 cinematic") && !prompt.includes("film grain")) {
-    issues.push("missing FULL look prefix");
+  if (
+    !prompt.includes("flat cel") &&
+    !prompt.includes("2D cel") &&
+    !prompt.includes("stylized") &&
+    !prompt.includes("cartoon")
+  ) {
+    issues.push("missing FULL cartoon look prefix");
+  }
+  if (PHOTOREAL_LEAK_RE.test(prompt)) {
+    issues.push("contains photoreal leakage in storyboard");
   }
   if (TRAVEL_VERB_RE.test(prompt)) {
     issues.push("contains travel verbs — motion belongs in generation_prompt only");
+  }
+  if (ECU_CU_FACE_RE.test(prompt)) {
+    issues.push("ECU/CU face-forward framing — risky for I2V; use MWS+ for photographic cast");
+  }
+  return issues;
+}
+
+function validateConsistencyConstraints(prompt?: string): string[] {
+  const issues: string[] = [];
+  if (!prompt?.trim()) return issues;
+  if (!prompt.includes("CONSTRAINTS:")) {
+    issues.push("missing CONSTRAINTS: header");
+  } else if (
+    !/no (wardrobe|ink|photoreal|color)/i.test(prompt) &&
+    !/preserve start/i.test(prompt)
+  ) {
+    issues.push("CONSTRAINTS should include preserve + no drift clauses");
   }
   return issues;
 }
@@ -221,7 +265,7 @@ export function validateProductionGates(args: {
           `G-C storyboard: shot ${shot.shot_id ?? "?"} missing storyboard_prompt`,
         );
       }
-      const translationIssues = validateSeedanceTranslation(shot.generation_prompt, {
+      const translationIssues = validateToonTranslation(shot.generation_prompt, {
         castOnCamera: shot.cast_on_camera,
       });
       const storyboardIssues = shot.cast_on_camera
@@ -231,7 +275,7 @@ export function validateProductionGates(args: {
       const useBlockers = ["E5", "E", "GENERATE"].includes(target);
 
       for (const issue of translationIssues) {
-        const msg = `G-C seedance translation: shot ${shot.shot_id ?? "?"} ${issue}`;
+        const msg = `G-C toon translation: shot ${shot.shot_id ?? "?"} ${issue}`;
         if (useBlockers) blockers.push(msg);
         else warnings.push(msg);
       }
@@ -240,17 +284,27 @@ export function validateProductionGates(args: {
         if (useBlockers && shot.cast_on_camera) blockers.push(msg);
         else warnings.push(msg);
       }
+      if (shot.cast_on_camera && useBlockers) {
+        for (const issue of validateConsistencyConstraints(shot.generation_prompt)) {
+          warnings.push(`G-C consistency: shot ${shot.shot_id ?? "?"} ${issue}`);
+        }
+        if (!shot.camera?.shot_size_open) {
+          warnings.push(
+            `G-C framing: shot ${shot.shot_id ?? "?"} missing camera.shot_size_open in packet`,
+          );
+        }
+      }
       if (
         shot.cast_on_camera &&
-        !seedancePrefixPresent(shot.generation_prompt) &&
+        !cartoonPrefixPresent(shot.generation_prompt) &&
         useBlockers
       ) {
         blockers.push(
-          `G-C seedance: shot ${shot.shot_id ?? "?"} generation_prompt missing PRESERVE line`,
+          `G-C toon: shot ${shot.shot_id ?? "?"} generation_prompt missing PRESERVE cartoon line`,
         );
-      } else if (shot.cast_on_camera && !seedancePrefixPresent(shot.generation_prompt)) {
+      } else if (shot.cast_on_camera && !cartoonPrefixPresent(shot.generation_prompt)) {
         warnings.push(
-          `G-C seedance: shot ${shot.shot_id ?? "?"} generation_prompt may lack PRESERVE/look line`,
+          `G-C toon: shot ${shot.shot_id ?? "?"} generation_prompt may lack PRESERVE/look line`,
         );
       }
     }

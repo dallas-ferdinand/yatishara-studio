@@ -202,6 +202,7 @@ export const generateSheet = action({
     elementId: v.id("elements"),
     referenceInputs: v.array(referenceInputValidator),
     existingNotes: v.optional(v.string()),
+    stylePresetSlug: v.optional(v.string()),
   },
   returns: v.object({
     description: v.string(),
@@ -244,11 +245,14 @@ export const generateSheet = action({
         folderId: element.folderId,
         type: element.type,
         name: element.name,
+        description: element.description,
+        sourceMode: element.sourceMode,
         referenceAssetIds: resolved.referenceAssetIds,
       },
       referenceUrls: args.referenceInputs
         .filter((input) => input.kind === "image")
         .map((input) => input.url),
+      stylePresetSlug: args.stylePresetSlug ?? "toon-prime",
       ...callbacks,
     });
 
@@ -380,6 +384,7 @@ export const generateElementSheetForApi = action({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     referenceElementIds: v.optional(v.array(v.id("elements"))),
     sourceMode: v.optional(v.union(v.literal("photographic"), v.literal("designed"))),
+    stylePresetSlug: v.optional(v.string()),
     resolution: v.optional(v.union(v.literal("1K"), v.literal("2K"))),
     expiresUnix: v.number(),
   },
@@ -485,6 +490,7 @@ export const generateElementSheetForApi = action({
       },
       referenceUrls,
       resolution: args.resolution,
+      stylePresetSlug: args.stylePresetSlug ?? "toon-prime",
       ...callbacks,
     });
 

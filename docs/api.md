@@ -128,7 +128,7 @@ Pass `referenceElementIds` to `POST /generations` (and `/generations/estimate`).
 
 **Video mode:** pass **`startFrameAssetId`** when people are on camera (storyboard still → Seedance `first_frame`). Only **prop** and **location** element sheets attach as `[Image N]` video refs. **Character** elements: description in prompt + identity in start frame — never attach character sheets to video (Seedance real-person filter). **Image mode:** all built element sheets attach as references.
 
-See `GET /elements/production-guide` and [start-frame-workflow.md](../.cursor/skills/cinema-ad-production/references/start-frame-workflow.md).
+See `GET /elements/production-guide` and [start-frame-workflow.md](../.cursor/skills/cartoon-ad-production/references/start-frame-workflow.md).
 
 ## Trash
 

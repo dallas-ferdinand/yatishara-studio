@@ -1,0 +1,408 @@
+/* Studio video editor */
+
+.studio-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--mos-bg);
+  color: var(--mos-text);
+}
+
+.studio-editor-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Preview */
+
+.studio-editor-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: #050505;
+}
+
+.studio-editor-preview-stage {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.studio-editor-preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  cursor: pointer;
+  display: block;
+}
+
+.studio-editor-preview-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 1rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.75rem;
+}
+
+/* Transport */
+
+.studio-editor-transport {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 36px;
+  padding: 0.25rem 0.65rem;
+  border-top: 1px solid var(--mos-border);
+  border-bottom: 1px solid var(--mos-border);
+  background: var(--mos-panel);
+  flex-shrink: 0;
+}
+
+.studio-editor-transport-left,
+.studio-editor-transport-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.studio-editor-transport-right {
+  justify-content: flex-end;
+}
+
+.studio-editor-transport-left button,
+.studio-editor-transport-right .studio-editor-zoom button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--mos-text-soft);
+  display: grid;
+  place-items: center;
+}
+
+.studio-editor-transport-left button:hover:not(:disabled),
+.studio-editor-transport-right .studio-editor-zoom button:hover {
+  background: var(--mos-hover);
+  color: var(--mos-text);
+}
+
+.studio-editor-transport-left button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.studio-editor-transport-center {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.studio-editor-transport-play {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-bg);
+  color: var(--mos-text);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.studio-editor-transport-time {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--mos-muted);
+  white-space: nowrap;
+}
+
+.studio-editor-transport-sep {
+  margin: 0 0.35rem;
+  opacity: 0.4;
+}
+
+.studio-editor-zoom {
+  display: inline-flex;
+  gap: 0;
+}
+
+.studio-editor-export-btn {
+  height: 28px;
+  padding: 0 0.65rem;
+  margin-left: 0.25rem;
+  border-radius: 6px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-bg);
+  color: var(--mos-text);
+  font-size: 0.72rem;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+.studio-editor-export-btn:hover:not(:disabled) {
+  background: var(--mos-hover);
+}
+
+.studio-editor-export-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Timeline */
+
+.studio-editor-timeline-wrap {
+  flex-shrink: 0;
+  height: 132px;
+  display: flex;
+  flex-direction: column;
+  background: var(--mos-composer, #eceef2);
+  color: var(--mos-text);
+  border-top: 1px solid var(--mos-border);
+}
+
+.studio-editor-timeline-scroll {
+  overflow: auto;
+  flex: 1;
+}
+
+.studio-editor-timeline-canvas {
+  position: relative;
+  min-height: 88px;
+}
+
+.studio-editor-ruler {
+  position: relative;
+  border-bottom: 1px solid var(--mos-border);
+  cursor: pointer;
+  background: color-mix(in srgb, var(--mos-panel) 88%, transparent);
+}
+
+.studio-editor-ruler-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.58rem;
+  color: var(--mos-muted);
+  padding-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.studio-editor-track-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid color-mix(in srgb, var(--mos-border) 80%, transparent);
+}
+
+.studio-editor-track-row.is-drop-target .studio-editor-track-lane {
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 8%, var(--mos-composer, #dfe1e6));
+}
+
+.studio-editor-track-rail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--mos-panel) 90%, transparent);
+  border-right: 1px solid var(--mos-border);
+  flex-shrink: 0;
+}
+
+.studio-editor-track-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-bg);
+  color: var(--mos-muted);
+  display: grid;
+  place-items: center;
+}
+
+.studio-editor-track-btn.is-static {
+  cursor: default;
+}
+
+.studio-editor-track-btn.is-active {
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 12%, var(--mos-bg));
+  color: var(--cursor-accent, #2563eb);
+  border-color: color-mix(in srgb, var(--cursor-accent, #2563eb) 30%, var(--mos-border));
+}
+
+.studio-editor-track-lane {
+  position: relative;
+  background: color-mix(in srgb, var(--mos-composer, #dfe1e6) 92%, #000 8%);
+}
+
+body.is-drag-cursor .studio-editor-clip {
+  pointer-events: none;
+}
+
+.studio-editor-clip {
+  position: absolute;
+  top: 3px;
+  height: calc(100% - 6px);
+  border-radius: 4px;
+  cursor: grab;
+  user-select: none;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mos-border) 70%, #fff 30%);
+}
+
+.studio-editor-clip.is-video {
+  background: #101114;
+}
+
+.studio-editor-clip.is-audio {
+  background: color-mix(in srgb, #22c55e 22%, var(--mos-panel));
+  border-color: color-mix(in srgb, #22c55e 35%, var(--mos-border));
+}
+
+.studio-editor-clip.is-selected {
+  box-shadow: 0 0 0 1.5px var(--cursor-accent, #2563eb);
+  z-index: 2;
+}
+
+.studio-editor-filmstrip {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.studio-editor-filmstrip img {
+  height: 100%;
+  width: 44px;
+  object-fit: cover;
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.studio-editor-filmstrip-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.studio-editor-drop-ghost {
+  position: absolute;
+  top: 3px;
+  height: calc(100% - 6px);
+  border-radius: 4px;
+  border: 1.5px dashed var(--cursor-accent, #2563eb);
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 10%, transparent);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.studio-editor-drop-ghost-label {
+  display: block;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.6rem;
+  color: var(--cursor-accent, #2563eb);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-editor-clip-label {
+  display: block;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--mos-text-soft);
+}
+
+.studio-editor-clip.is-audio .studio-editor-clip-label {
+  color: color-mix(in srgb, #166534 80%, var(--mos-text));
+}
+
+.studio-editor-clip-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 3;
+}
+
+.studio-editor-clip-handle.is-left {
+  left: 0;
+}
+
+.studio-editor-clip-handle.is-right {
+  right: 0;
+}
+
+.studio-editor-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--mos-text);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.studio-editor-playhead::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 10px;
+  border-radius: 1px 1px 0 0;
+  background: var(--mos-text);
+}
+
+.studio-editor-snap-guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--cursor-accent, #2563eb);
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0.75;
+}
+
+.studio-editor-snap-guide::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--cursor-accent, #2563eb);
+}
+
+@media (max-width: 720px) {
+  .studio-editor-timeline-wrap {
+    height: 120px;
+  }
+
+  .studio-editor-transport-time {
+    font-size: 0.66rem;
+  }
+}

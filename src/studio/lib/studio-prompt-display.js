@@ -16,6 +16,8 @@ function parseReferenceMeta(meta = "") {
     else if (key === "path") out.path = value;
     else if (key === "file") out.filename = value;
     else if (key === "media") out.media = value;
+    else if (key === "thumb") out.thumb = value;
+    else if (key === "studio") out.studioId = value;
   }
   return out;
 }
@@ -86,4 +88,73 @@ export function composerTokenIconKind(ref) {
   if (ref?.elementType) return "sparkles";
   if (kind === "folder") return "folder";
   return "file";
+}
+
+function findAssetById(assets, id) {
+  if (!id) return null;
+  return (assets ?? []).find((asset) => asset._id === id || asset.studioId === id) ?? null;
+}
+
+function findElementById(elements, id) {
+  if (!id) return null;
+  return (elements ?? []).find((element) => element._id === id || element.studioId === id) ?? null;
+}
+
+/** Resolve thumbnail preview for a stored prompt reference line. */
+export function resolveStudioPromptRefPreview(ref, { assets = [], elements = [] } = {}) {
+  const path = String(ref?.path ?? "");
+  const assetMatch = path.match(/\/Studio\/assets\/([^/.]+)/);
+  if (assetMatch) {
+    const asset = findAssetById(assets, assetMatch[1]);
+    if (asset) {
+      const kind = asset.kind ?? ref?.kind ?? "file";
+      return {
+        thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+        mediaUrl: asset.signedReadUrl,
+        kind,
+        elementType: ref?.elementType,
+      };
+    }
+  }
+
+  const elementMatch = path.match(/\/Studio\/elements\/([^/.]+)/);
+  if (elementMatch) {
+    const element = findElementById(elements, elementMatch[1]);
+    if (element) {
+      const sheetId = element.sheetAssetId ?? element.sourceAssetIds?.[0];
+      const sheet = sheetId ? findAssetById(assets, sheetId) : null;
+      return {
+        thumbnailUrl: sheet?.signedThumbnailUrl ?? sheet?.signedReadUrl,
+        mediaUrl: sheet?.signedReadUrl,
+        kind: "image",
+        elementType: element.type ?? ref?.elementType,
+      };
+    }
+  }
+
+  const label = String(ref?.label ?? "").trim().toLowerCase();
+  if (label) {
+    const element = (elements ?? []).find((item) => String(item.name ?? "").trim().toLowerCase() === label);
+    if (element) {
+      const sheetId = element.sheetAssetId ?? element.sourceAssetIds?.[0];
+      const sheet = sheetId ? findAssetById(assets, sheetId) : null;
+      return {
+        thumbnailUrl: sheet?.signedThumbnailUrl ?? sheet?.signedReadUrl,
+        mediaUrl: sheet?.signedReadUrl,
+        kind: "image",
+        elementType: element.type ?? ref?.elementType,
+      };
+    }
+    const asset = (assets ?? []).find((item) => String(item.name ?? "").trim().toLowerCase() === label);
+    if (asset) {
+      return {
+        thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+        mediaUrl: asset.signedReadUrl,
+        kind: asset.kind ?? ref?.kind ?? "file",
+        elementType: ref?.elementType,
+      };
+    }
+  }
+
+  return null;
 }

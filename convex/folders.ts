@@ -41,6 +41,26 @@ const folderWithPeeksReturn = v.object({
 });
 
 const PEEK_LIMIT = 3;
+/** Max folders visited per peek (BFS) — finds nested media without deep recursion. */
+const MAX_PEEK_FOLDER_VISITS = 24;
+
+type PeekCandidate = {
+  kind: "image" | "video" | "document" | "element" | "file";
+  priority: number;
+  updatedAt: number;
+  thumbnailUrl?: string;
+  label: string;
+  elementType?: "character" | "prop" | "location" | "doc";
+  icon?: string;
+};
+
+type PeekItemOutput = {
+  kind: PeekCandidate["kind"];
+  thumbnailUrl?: string;
+  label: string;
+  elementType?: PeekCandidate["elementType"];
+  icon?: string;
+};
 
 async function signedAssetThumbnail(
   asset: Doc<"assets">,
@@ -55,22 +75,53 @@ async function signedAssetThumbnail(
   return await signBunnyCdnUrl(path, expiresUnix);
 }
 
-async function collectFolderPeekItems(
+function candidateToPeekItem(candidate: PeekCandidate): PeekItemOutput {
+  return {
+    kind: candidate.kind,
+    thumbnailUrl: candidate.thumbnailUrl,
+    label: candidate.label,
+    elementType: candidate.elementType,
+    icon: candidate.icon,
+  };
+}
+
+function folderFallbackPeek(folderName: string): PeekItemOutput {
+  return {
+    kind: "file",
+    label: folderName,
+    icon: "folder",
+  };
+}
+
+function sortChildFolders(folders: Doc<"folders">[]) {
+  return [...folders].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || b.updatedAt - a.updatedAt,
+  );
+}
+
+async function listChildFolders(
+  ctx: QueryCtx,
+  ownerId: Id<"users">,
+  folderId: Id<"folders">,
+): Promise<Doc<"folders">[]> {
+  return sortChildFolders(
+    (
+      await ctx.db
+        .query("folders")
+        .withIndex("by_owner_and_parent", (q) =>
+          q.eq("ownerId", ownerId).eq("parentId", folderId),
+        )
+        .collect()
+    ).filter((folder) => !folder.deletedAt),
+  );
+}
+
+async function collectDirectFolderPeekCandidates(
   ctx: QueryCtx,
   ownerId: Id<"users">,
   folderId: Id<"folders">,
   expiresUnix: number | undefined,
-) {
-  type PeekCandidate = {
-    kind: "image" | "video" | "document" | "element" | "file";
-    priority: number;
-    updatedAt: number;
-    thumbnailUrl?: string;
-    label: string;
-    elementType?: "character" | "prop" | "location" | "doc";
-    icon?: string;
-  };
-
+): Promise<PeekCandidate[]> {
   const candidates: PeekCandidate[] = [];
 
   const assets = (
@@ -80,25 +131,27 @@ async function collectFolderPeekItems(
       .collect()
   ).filter((asset) => !asset.deletedAt);
 
-  for (const asset of assets) {
-    if (asset.kind === "image" || asset.kind === "video") {
-      candidates.push({
-        kind: asset.kind,
-        priority: asset.kind === "image" ? 100 : 90,
+  const assetCandidates = await Promise.all(
+    assets.map(async (asset): Promise<PeekCandidate> => {
+      if (asset.kind === "image" || asset.kind === "video") {
+        return {
+          kind: asset.kind,
+          priority: asset.kind === "image" ? 100 : 90,
+          updatedAt: asset.updatedAt,
+          thumbnailUrl: await signedAssetThumbnail(asset, expiresUnix),
+          label: asset.name,
+        };
+      }
+      return {
+        kind: "file",
+        priority: asset.kind === "audio" ? 40 : 35,
         updatedAt: asset.updatedAt,
-        thumbnailUrl: await signedAssetThumbnail(asset, expiresUnix),
         label: asset.name,
-      });
-      continue;
-    }
-    candidates.push({
-      kind: "file",
-      priority: asset.kind === "audio" ? 40 : 35,
-      updatedAt: asset.updatedAt,
-      label: asset.name,
-      icon: asset.kind === "audio" ? "music" : "file",
-    });
-  }
+        icon: asset.kind === "audio" ? "music" : "file",
+      };
+    }),
+  );
+  candidates.push(...assetCandidates);
 
   const documents = (
     await ctx.db
@@ -117,42 +170,103 @@ async function collectFolderPeekItems(
     });
   }
 
-  const elements = (
+  const videoEdits = (
     await ctx.db
-      .query("elements")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .query("videoEditProjects")
+      .withIndex("by_folder", (q) => q.eq("folderId", folderId))
       .collect()
-  ).filter((element) => element.folderId === folderId && !element.deletedAt);
+  ).filter((project) => !project.deletedAt);
 
-  for (const element of elements) {
-    const resolved = await resolveElementAssets(ctx, element);
-    let thumbnailUrl: string | undefined;
-    if (resolved.sheetAssetId) {
-      const sheet = await ctx.db.get("assets", resolved.sheetAssetId);
-      if (sheet) {
-        thumbnailUrl = await signedAssetThumbnail(sheet, expiresUnix);
-      }
-    }
+  for (const project of videoEdits) {
     candidates.push({
-      kind: "element",
-      priority: thumbnailUrl ? 85 : 55,
-      updatedAt: element.updatedAt,
-      thumbnailUrl,
-      label: element.name,
-      elementType: element.type,
+      kind: "file",
+      priority: 70,
+      updatedAt: project.updatedAt,
+      label: project.name,
+      icon: "scissors",
     });
   }
 
+  const elements = (
+    await ctx.db
+      .query("elements")
+      .withIndex("by_folder", (q) => q.eq("folderId", folderId))
+      .collect()
+  ).filter((element) => !element.deletedAt);
+
+  const elementCandidates = await Promise.all(
+    elements.map(async (element): Promise<PeekCandidate> => {
+      const resolved = await resolveElementAssets(ctx, element);
+      let thumbnailUrl: string | undefined;
+      if (resolved.sheetAssetId) {
+        const sheet = await ctx.db.get("assets", resolved.sheetAssetId);
+        if (sheet) {
+          thumbnailUrl = await signedAssetThumbnail(sheet, expiresUnix);
+        }
+      }
+      return {
+        kind: "element",
+        priority: thumbnailUrl ? 85 : 55,
+        updatedAt: element.updatedAt,
+        thumbnailUrl,
+        label: element.name,
+        elementType: element.type,
+      };
+    }),
+  );
+  candidates.push(...elementCandidates);
+
+  return candidates;
+}
+
+function peekCandidatesToItems(candidates: PeekCandidate[]): PeekItemOutput[] {
   return candidates
     .sort((a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt)
     .slice(0, PEEK_LIMIT)
-    .map(({ kind, thumbnailUrl, label, elementType, icon }) => ({
-      kind,
-      thumbnailUrl,
-      label,
-      elementType,
-      icon,
-    }));
+    .map(candidateToPeekItem);
+}
+
+/** Breadth-first peek: surfaces nested media even when direct children are subfolders only. */
+async function collectFolderPeekItems(
+  ctx: QueryCtx,
+  ownerId: Id<"users">,
+  folderId: Id<"folders">,
+  expiresUnix: number | undefined,
+): Promise<PeekItemOutput[]> {
+  const queue: Id<"folders">[] = [folderId];
+  const visited = new Set<string>();
+  const candidates: PeekCandidate[] = [];
+
+  while (queue.length > 0 && visited.size < MAX_PEEK_FOLDER_VISITS) {
+    const currentId = queue.shift()!;
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    candidates.push(
+      ...(await collectDirectFolderPeekCandidates(ctx, ownerId, currentId, expiresUnix)),
+    );
+
+    if (candidates.length >= PEEK_LIMIT) {
+      return peekCandidatesToItems(candidates);
+    }
+
+    for (const child of await listChildFolders(ctx, ownerId, currentId)) {
+      queue.push(child._id);
+    }
+  }
+
+  if (candidates.length > 0) {
+    return peekCandidatesToItems(candidates);
+  }
+
+  const childFolders = await listChildFolders(ctx, ownerId, folderId);
+  if (childFolders.length === 0) {
+    return [];
+  }
+
+  return childFolders
+    .slice(0, PEEK_LIMIT)
+    .map((folder) => folderFallbackPeek(folder.name));
 }
 
 export const list = authedQuery({

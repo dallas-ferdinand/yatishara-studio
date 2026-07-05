@@ -9,6 +9,8 @@ import {
 } from "./lib/elementSheetGuides";
 import { MAX_GENERATION_REFERENCE_ASSETS } from "./lib/elementAssetModel";
 import { appendVideoReferenceTags, startFramePromptPrefix } from "./lib/videoGeneration";
+import { isDirectPromptMode } from "./lib/skipPromptEnhancement";
+import { assertKlingGatewayPromptLength } from "./lib/klingGatewayPrompt";
 import { listVideoModelsForMcp, listVideoModelsPublic, resolvePublicVideoModel } from "./lib/videoModels";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
@@ -689,6 +691,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         referenceElementIds?: Id<"elements">[];
         sourceMode?: "photographic" | "designed";
         resolution?: "1K" | "2K";
+        stylePresetSlug?: string;
       }>(request);
       try {
         const result = await ctx.runAction(api.elementActions.generateElementSheetForApi, {
@@ -699,6 +702,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           referenceElementIds: body.referenceElementIds,
           sourceMode: body.sourceMode,
           resolution: body.resolution,
+          stylePresetSlug: body.stylePresetSlug,
           expiresUnix,
         });
         const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
@@ -906,7 +910,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
 
       let estimateVideoModel: string | undefined;
-      if (mode === "video" && body.videoModel) {
+      if (mode === "video") {
         try {
           estimateVideoModel = resolvePublicVideoModel(body.videoModel).slug;
         } catch (error) {
@@ -948,6 +952,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         wait?: boolean;
         skipPromptEnhancement?: boolean;
         videoModel?: string;
+        scriptType?: string;
+        referenceIntent?: string;
       }>(request);
 
       if (!body.prompt?.trim()) {
@@ -959,7 +965,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
 
       const folderId = await resolveFolderId(ctx, auth, body.folderId);
-      const presetSlug = body.stylePreset ?? "realism";
+      const presetSlug = body.stylePreset ?? "toon-prime";
       const preset = await ctx.runQuery(internal.studioApiInternal.resolveStylePresetBySlug, {
         slug: presetSlug,
       });
@@ -968,8 +974,22 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
 
       let userPrompt = body.prompt.trim();
+      const creativePrompt = userPrompt;
       let mergedReferenceAssetIds = [...(body.referenceAssetIds ?? [])];
       let referenceImageLabels: Array<{ tag: string; label: string }> = [];
+
+      let resolvedVideoModel;
+      if (mode === "video") {
+        try {
+          resolvedVideoModel = resolvePublicVideoModel(body.videoModel);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Invalid video model";
+          return finish(errorResponse(message));
+        }
+      }
+
+      const klingVideo =
+        mode === "video" && resolvedVideoModel?.slug === "kling-3.0-i2v";
 
       if (body.referenceElementIds?.length) {
         try {
@@ -978,6 +998,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             sandboxFolderId: auth.sandboxFolderId,
             elementIds: body.referenceElementIds,
             generationMode: mode === "video" ? "video" : mode === "image" ? "image" : undefined,
+            promptAppendStyle: klingVideo ? "gateway_kling" : "full",
+            hasStartFrame: Boolean(body.startFrameAssetId),
           });
           mergedReferenceAssetIds = [
             ...new Set([...mergedReferenceAssetIds, ...resolved.referenceAssetIds]),
@@ -1008,25 +1030,33 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           return finish(errorResponse("startFrameAssetId must be an image asset"));
         }
         startFrameUrl = startRef.url;
-        userPrompt = `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
+        const directPrompt = isDirectPromptMode({
+          skipPromptEnhancement: body.skipPromptEnhancement,
+          presetSlug: preset.slug,
+        });
+        userPrompt = directPrompt
+          ? appendVideoReferenceTags(userPrompt, referenceImageLabels)
+          : `${startFramePromptPrefix()}\n\n${appendVideoReferenceTags(userPrompt, referenceImageLabels)}`;
       } else if (mode === "video" && referenceImageLabels.length) {
         userPrompt = appendVideoReferenceTags(userPrompt, referenceImageLabels);
       }
 
-      let resolvedVideoModel;
-      if (mode === "video") {
-        try {
-          resolvedVideoModel = resolvePublicVideoModel(body.videoModel);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Invalid video model";
-          return finish(errorResponse(message));
-        }
+      if (mode === "video" && resolvedVideoModel) {
         if (resolvedVideoModel.requiresStartFrame && !startFrameUrl) {
           return finish(
             errorResponse(
               `${resolvedVideoModel.label} requires startFrameAssetId (storyboard opening still).`,
             ),
           );
+        }
+      }
+
+      if (klingVideo) {
+        try {
+          assertKlingGatewayPromptLength({ prompt: userPrompt, creativePrompt });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Kling prompt too long";
+          return finish(errorResponse(message));
         }
       }
 
@@ -1073,6 +1103,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         }
       }
 
+      const hasElementReference = Boolean(body.referenceElementIds?.length);
+      const hasRawImageReference = Boolean(body.referenceAssetIds?.length);
+
       if (mode === "script") {
         const result = await ctx.runAction(api.generationActions.runScriptForApi, {
           userId: auth.userId,
@@ -1082,6 +1115,10 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           userPrompt,
           referenceInputs,
           skipScriptEnhancement: body.skipPromptEnhancement,
+          scriptType: body.scriptType,
+          referenceIntent: body.referenceIntent,
+          hasRawImageReference,
+          hasElementReference,
         });
         const document = await ctx.runQuery(internal.studioApiInternal.getDocument, {
           userId: auth.userId,
@@ -1164,6 +1201,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           referenceUrls,
           referenceInputs,
           startFrameUrl,
+          referenceIntent: body.referenceIntent,
+          hasRawImageReference,
+          hasElementReference,
         });
         return finish(
           jsonResponse(
@@ -1197,6 +1237,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         startFrameUrl,
         skipPromptEnhancement: body.skipPromptEnhancement,
         videoModel: resolvedVideoModel?.slug,
+        referenceIntent: body.referenceIntent,
+        hasRawImageReference,
+        hasElementReference,
       });
 
       const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {

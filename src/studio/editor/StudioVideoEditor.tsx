@@ -1,0 +1,217 @@
+// @ts-nocheck
+"use client";
+
+import { useAction, useMutation, useQuery } from "convex/react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { api } from "../../../convex/_generated/api";
+import { EditorPreview } from "./EditorPreview";
+import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
+import {
+  clipDuration,
+  createEmptyProject,
+  createInitialState,
+  projectEndTime,
+  reducer,
+} from "./editorState";
+
+export function StudioVideoEditor({
+  folderId,
+  projectId,
+  sourceAssetId,
+  sourceAssetName,
+  tabKey,
+  onOpenAsset,
+  onStatus,
+  onProjectSaved,
+}) {
+  const [urlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+  const saveTimerRef = useRef(null);
+
+  const existing = useQuery(
+    api.videoEdits.get,
+    projectId ? { projectId } : "skip",
+  );
+  const existingBySource = useQuery(
+    api.videoEdits.getBySourceAsset,
+    sourceAssetId && !projectId ? { sourceAssetId } : "skip",
+  );
+  const folderAssets = useQuery(api.assets.listByFolder, {
+    folderId,
+    expiresUnix: urlExpiresUnix,
+  });
+
+  const saveProject = useMutation(api.videoEdits.save);
+  const exportProject = useAction(api.videoEditActions.exportVideo);
+
+  const [state, dispatch] = useReducer(reducer, null, () =>
+    createInitialState(
+      createEmptyProject({
+        name: sourceAssetName ? `${sourceAssetName} edit` : "New edit",
+        folderId,
+        sourceAssetId,
+      }),
+    ),
+  );
+  const [hydrated, setHydrated] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [localProjectId, setLocalProjectId] = useState(projectId ?? null);
+
+  useEffect(() => {
+    if (hydrated) return;
+    const saved = existing ?? existingBySource;
+    if (projectId && existing === undefined) return;
+    if (sourceAssetId && !projectId && existingBySource === undefined) return;
+    if (saved?.project) {
+      dispatch({ type: "replace_project", project: saved.project });
+      setLocalProjectId(saved._id);
+      onProjectSaved?.(saved._id, saved.name);
+      setHydrated(true);
+      return;
+    }
+    if (sourceAssetId && folderAssets === undefined) return;
+    if (sourceAssetId && folderAssets?.length) {
+      const source = folderAssets.find((asset) => asset._id === sourceAssetId);
+      if (source) {
+        dispatch({
+          type: "add_clip",
+          clip: {
+            assetId: source._id,
+            trackId: "track-video",
+            startTime: 0,
+            trimIn: 0,
+            trimOut: 4,
+            label: source.name,
+            kind: "video",
+          },
+        });
+      }
+    }
+    setHydrated(true);
+  }, [existing, existingBySource, folderAssets, hydrated, projectId, sourceAssetId]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      void saveProject({
+        projectId: localProjectId ?? undefined,
+        folderId,
+        name: state.project.name,
+        project: state.project,
+        sourceAssetId,
+      }).then((result) => {
+        if (result?.projectId) {
+          if (!localProjectId) {
+            setLocalProjectId(result.projectId);
+            onProjectSaved?.(result.projectId, state.project.name);
+          }
+        }
+      });
+    }, 800);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [state.project, hydrated, localProjectId, folderId, sourceAssetId, saveProject, onProjectSaved]);
+
+  const mediaItems = useMemo(() => {
+    return (folderAssets ?? [])
+      .filter((asset) => asset.kind === "video" || asset.kind === "audio" || asset.kind === "image")
+      .map((asset) => ({
+        assetId: asset._id,
+        name: asset.name,
+        kind: asset.kind,
+        url: asset.signedReadUrl,
+        thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+      }));
+  }, [folderAssets]);
+
+  const mediaById = useMemo(() => new Map(mediaItems.map((item) => [item.assetId, item])), [mediaItems]);
+
+  const timelineDuration = Math.max(state.project.duration, projectEndTime(state.project));
+
+  const selectedClip = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
+  const canSplit =
+    Boolean(selectedClip) &&
+    state.ui.playhead > selectedClip.startTime + 0.05 &&
+    state.ui.playhead < selectedClip.startTime + clipDuration(selectedClip) - 0.05;
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    onStatus?.("Rendering your video…");
+    try {
+      let pid = localProjectId;
+      if (!pid) {
+        const saved = await saveProject({
+          folderId,
+          name: state.project.name,
+          project: state.project,
+          sourceAssetId,
+        });
+        pid = saved.projectId;
+        setLocalProjectId(pid);
+      }
+      const result = await exportProject({
+        projectId: pid,
+        folderId,
+        name: state.project.name,
+        project: state.project,
+      });
+      onStatus?.("Export ready.");
+      if (result?.assetId) onOpenAsset?.(result.assetId);
+    } catch (error) {
+      onStatus?.(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }, [exportProject, folderId, localProjectId, onOpenAsset, onStatus, saveProject, sourceAssetId, state.project]);
+
+  return (
+    <div className="studio-editor">
+      <div className="studio-editor-body">
+        <EditorPreview
+          project={state.project}
+          playhead={state.ui.playhead}
+          playing={state.ui.playing}
+          mediaById={mediaById}
+          onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
+          onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+        />
+        <EditorTransportBar
+          playing={state.ui.playing}
+          playhead={state.ui.playhead}
+          duration={timelineDuration}
+          canUndo={state.past.length > 0}
+          canRedo={state.future.length > 0}
+          canSplit={canSplit}
+          hasSelection={Boolean(state.ui.selectedClipId)}
+          exporting={exporting}
+          pixelsPerSecond={state.ui.pixelsPerSecond}
+          onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+          onUndo={() => dispatch({ type: "undo" })}
+          onRedo={() => dispatch({ type: "redo" })}
+          onSplit={() => dispatch({ type: "split_at_playhead" })}
+          onDelete={() => dispatch({ type: "delete_selected" })}
+          onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
+          onExport={() => void handleExport()}
+        />
+        <EditorTimeline
+          project={state.project}
+          playhead={state.ui.playhead}
+          pixelsPerSecond={state.ui.pixelsPerSecond}
+          selectedClipId={state.ui.selectedClipId}
+          mediaById={mediaById}
+          onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
+          onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
+          onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
+          onMoveClip={(clipId, startTime, trackId, live) =>
+            dispatch({ type: "move_clip", clipId, startTime, trackId, live })
+          }
+          onTrimClip={(clipId, trimIn, trimOut, startTime, live) =>
+            dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
+          }
+          onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
+        />
+      </div>
+    </div>
+  );
+}

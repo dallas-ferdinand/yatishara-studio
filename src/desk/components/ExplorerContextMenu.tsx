@@ -78,7 +78,7 @@ function buildMenuItems(entry, {
     if (isFile) items.push({ id: "download", label: "Download" });
     if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });
     items.push({ id: "sep-1", sep: true });
-    if (!isParent) items.push({ id: "attach", label: isDir ? "Use folder" : "Use this" });
+    if (!isParent) items.push({ id: "attach", label: isDir ? "Use folder in chat" : "Use in chat" });
     if (!isParent && onRequestDelete) {
       items.push({ id: "sep-2", sep: true });
       items.push({ id: "delete", label: isDir ? "Delete folder" : "Delete", danger: true });
