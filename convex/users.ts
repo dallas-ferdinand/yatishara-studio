@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
+import { userHasPassword } from "./passwordAuth";
 
 export const current = authedQuery({
   args: {},
@@ -9,6 +10,7 @@ export const current = authedQuery({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
+    hasPassword: v.boolean(),
   }),
   handler: async (ctx) => {
     return {
@@ -17,6 +19,7 @@ export const current = authedQuery({
       email: ctx.user.email,
       phone: ctx.user.phone,
       role: ctx.user.role,
+      hasPassword: await userHasPassword(ctx, ctx.user),
     };
   },
 });

@@ -13212,15 +13212,23 @@ function CustomCursorSettings({ enabled, onChange }) {
 }
 
 function AccountDetailsCard({ currentUser, onSave }) {
+  const setPassword = useAction(api.passwordAuth.setPassword);
   const [name, setName] = useState(currentUser?.name ?? "");
   const [email, setEmail] = useState(currentUser?.email ?? "");
   const [phone, setPhone] = useState(currentUser?.phone ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [saved, setSaved] = useState("");
+  const [passwordSaved, setPasswordSaved] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
   useEffect(() => {
     setName(currentUser?.name ?? "");
     setEmail(currentUser?.email ?? "");
     setPhone(currentUser?.phone ?? "");
   }, [currentUser?.name, currentUser?.email, currentUser?.phone]);
+  const canSetPassword = Boolean((email || phone).trim());
   return (
     <section className="cursor-settings-section studio-account-card">
       <div className="studio-account-fields">
@@ -13249,6 +13257,88 @@ function AccountDetailsCard({ currentUser, onSave }) {
           Save account
         </button>
         {saved ? <span className="studio-account-saved">{saved}</span> : null}
+      </div>
+      <div className="studio-account-fields" style={{ marginTop: "1.25rem" }}>
+        <p className="text-sm text-white/55">
+          {currentUser?.hasPassword
+            ? "Change your sign-in password."
+            : "Add a password so you can sign in without a code next time."}
+        </p>
+        {currentUser?.hasPassword ? (
+          <label>
+            <span>Current password</span>
+            <input
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              placeholder="Current password"
+              type="password"
+              autoComplete="current-password"
+            />
+          </label>
+        ) : null}
+        <label>
+          <span>{currentUser?.hasPassword ? "New password" : "Password"}</span>
+          <input
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            placeholder="At least 8 characters"
+            type="password"
+            autoComplete="new-password"
+            disabled={!canSetPassword}
+          />
+        </label>
+        <label>
+          <span>Confirm password</span>
+          <input
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            placeholder="Repeat password"
+            type="password"
+            autoComplete="new-password"
+            disabled={!canSetPassword}
+          />
+        </label>
+        {!canSetPassword ? (
+          <p className="text-xs text-white/45">Save an email or phone first, then add a password.</p>
+        ) : null}
+      </div>
+      <div className="studio-account-actions">
+        <button
+          type="button"
+          className="cursor-settings-action"
+          disabled={!canSetPassword || passwordBusy}
+          onClick={() => {
+            setPasswordError("");
+            setPasswordSaved("");
+            if (newPassword.length < 8) {
+              setPasswordError("Password must be at least 8 characters");
+              return;
+            }
+            if (newPassword !== confirmPassword) {
+              setPasswordError("Passwords do not match");
+              return;
+            }
+            setPasswordBusy(true);
+            void setPassword({
+              newPassword,
+              currentPassword: currentUser?.hasPassword ? currentPassword : undefined,
+            })
+              .then(() => {
+                setCurrentPassword("");
+                setNewPassword("");
+                setConfirmPassword("");
+                setPasswordSaved(currentUser?.hasPassword ? "Password updated" : "Password added");
+              })
+              .catch((err) => {
+                setPasswordError(err instanceof Error ? err.message : "Could not save password");
+              })
+              .finally(() => setPasswordBusy(false));
+          }}
+        >
+          {currentUser?.hasPassword ? "Update password" : "Add password"}
+        </button>
+        {passwordSaved ? <span className="studio-account-saved">{passwordSaved}</span> : null}
+        {passwordError ? <span className="text-sm text-red-300">{passwordError}</span> : null}
       </div>
     </section>
   );

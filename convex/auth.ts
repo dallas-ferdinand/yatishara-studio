@@ -6,6 +6,8 @@ import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials"
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { Password } from "@convex-dev/auth/providers/Password";
+import { PhonePassword } from "./phonePasswordAuth";
 import { ResendOTP } from "./ResendOTP";
 
 type ConsumeWhatsAppArgs = {
@@ -125,7 +127,7 @@ const WhatsAppOTP = ConvexCredentials({
 });
 
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
-  providers: [ResendOTP, WhatsAppOTP],
+  providers: [ResendOTP, WhatsAppOTP, Password, PhonePassword],
   callbacks: {
     createOrUpdateUser,
   },
