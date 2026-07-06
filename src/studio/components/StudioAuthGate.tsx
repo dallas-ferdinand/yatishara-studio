@@ -9,6 +9,7 @@ import {
   Lock,
   Mail,
   Phone,
+  UserRound,
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -124,9 +125,9 @@ type IdentifyContact =
 
 type SignInStep =
   | "identify"
-  | { contact: IdentifyContact; phase: "choose" | "password" }
-  | { contact: { kind: "email"; email: string }; phase: "email-code" }
-  | ({ contact: { kind: "whatsapp"; phone: string }; phase: "whatsapp-code" } & WhatsAppCodeStep);
+  | { contact: IdentifyContact; phase: "password" }
+  | { contact: { kind: "email"; email: string }; phase: "email-code"; hasPassword: boolean }
+  | ({ contact: { kind: "whatsapp"; phone: string }; phase: "whatsapp-code"; hasPassword: boolean } & WhatsAppCodeStep);
 
 function StudioSignIn() {
   const { signIn } = useAuthActions();
@@ -142,7 +143,6 @@ function StudioSignIn() {
 
   const isWhatsAppCodeStep = step !== "identify" && step.phase === "whatsapp-code";
   const isEmailCodeStep = step !== "identify" && step.phase === "email-code";
-  const isChooseStep = step !== "identify" && step.phase === "choose";
   const isPasswordStep = step !== "identify" && step.phase === "password";
   const inputMode = detectInputMode(identifierInput);
   const whatsAppExpiry =
@@ -160,16 +160,17 @@ function StudioSignIn() {
     setStep("identify");
   };
 
-  const startEmailCode = async (email: string) => {
+  const startEmailCode = async (email: string, hasPassword = false) => {
     await signIn("resend-otp", { email });
-    setStep({ contact: { kind: "email", email }, phase: "email-code" });
+    setStep({ contact: { kind: "email", email }, phase: "email-code", hasPassword });
   };
 
-  const startWhatsAppCode = async (phone: string) => {
+  const startWhatsAppCode = async (phone: string, hasPassword = false) => {
     const request = await startWhatsApp({ phone });
     setStep({
       contact: { kind: "whatsapp", phone },
       phase: "whatsapp-code",
+      hasPassword,
       ...withWhatsAppClientExpiry(request),
     });
     setNowMs(Date.now());
@@ -203,6 +204,7 @@ function StudioSignIn() {
         setStep({
           contact: step.contact,
           phase: "whatsapp-code",
+          hasPassword: step.hasPassword,
           ...withWhatsAppClientExpiry(request),
         });
         setNowMs(Date.now());
@@ -233,9 +235,7 @@ function StudioSignIn() {
             ? "Check your email"
             : isWhatsAppCodeStep
               ? "Open WhatsApp"
-              : isPasswordStep
-                ? "Enter password"
-                : "Sign in"
+              : "Sign in"
       }
     >
       <form
@@ -270,7 +270,7 @@ function StudioSignIn() {
                   }
                   return;
                 }
-                setStep({ contact, phase: "choose" });
+                setStep({ contact, phase: "password" });
               })
               .catch((err: unknown) => {
                 setError(err instanceof Error ? err.message : "Sign-in failed");
@@ -350,10 +350,12 @@ function StudioSignIn() {
               Email or WhatsApp
             </span>
             <span className="studio-auth-field flex items-center gap-3 rounded-2xl border border-white/15 bg-transparent px-4 py-3.5 shadow-inner shadow-white/[0.03] backdrop-blur-xl transition">
-              {inputMode === "email" ? (
+              {contactInputIcon(identifierInput) === "email" ? (
                 <Mail className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
-              ) : (
+              ) : contactInputIcon(identifierInput) === "phone" ? (
                 <Phone className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
+              ) : (
+                <UserRound className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
               )}
               <input
                 className="min-w-0 flex-1 bg-transparent text-lg text-white outline-none placeholder:text-white/35"
@@ -376,56 +378,6 @@ function StudioSignIn() {
               e.g. you@example.com or +1 (868) 000-0000
             </span>
           </label>
-        ) : null}
-
-        {isChooseStep ? (
-          <div className="space-y-3">
-            <p className="text-sm text-white/55">{contactLabel}</p>
-            <button
-              className="studio-auth-primary group flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-base font-semibold shadow-lg shadow-black/20 transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setError("");
-                setNotice("");
-                setStep({ contact: step.contact, phase: "password" });
-              }}
-            >
-              <Lock className="h-5 w-5" aria-hidden="true" />
-              Sign in with password
-            </button>
-            <button
-              className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setPending(true);
-                setError("");
-                setNotice("");
-                const run =
-                  step.contact.kind === "email"
-                    ? startEmailCode(step.contact.email)
-                    : startWhatsAppCode(step.contact.phone);
-                void run
-                  .catch((err: unknown) => {
-                    setError(err instanceof Error ? err.message : "Could not send code");
-                  })
-                  .finally(() => setPending(false));
-              }}
-            >
-              {step.contact.kind === "email" ? (
-                <>
-                  <Mail className="mr-1 inline h-4 w-4" aria-hidden="true" />
-                  Get email code
-                </>
-              ) : (
-                <>
-                  <WhatsAppIcon className="mr-1 inline h-4 w-4" />
-                  Get WhatsApp code
-                </>
-              )}
-            </button>
-          </div>
         ) : null}
 
         {isPasswordStep ? (
@@ -451,6 +403,27 @@ function StudioSignIn() {
                 />
               </span>
             </label>
+            <button
+              className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setPending(true);
+                setError("");
+                setNotice("");
+                const run =
+                  step.contact.kind === "email"
+                    ? startEmailCode(step.contact.email, true)
+                    : startWhatsAppCode(step.contact.phone, true);
+                void run
+                  .catch((err: unknown) => {
+                    setError(err instanceof Error ? err.message : "Could not send code");
+                  })
+                  .finally(() => setPending(false));
+              }}
+            >
+              {step.contact.kind === "email" ? "Get email code instead" : "Get WhatsApp code instead"}
+            </button>
           </>
         ) : null}
 
@@ -470,6 +443,19 @@ function StudioSignIn() {
                 autoFocus
               />
             </label>
+            {step.hasPassword ? (
+              <button
+                className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none"
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                  setStep({ contact: step.contact, phase: "password" });
+                }}
+              >
+                Enter password instead
+              </button>
+            ) : null}
           </>
         ) : null}
 
@@ -531,6 +517,19 @@ function StudioSignIn() {
                 )}
               </button>
             </div>
+            {step.hasPassword ? (
+              <button
+                className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none"
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setNotice("");
+                  setStep({ contact: step.contact, phase: "password" });
+                }}
+              >
+                Enter password instead
+              </button>
+            ) : null}
           </div>
         ) : null}
         {notice ? (
@@ -571,7 +570,7 @@ function StudioSignIn() {
         ) : null}
         {step !== "identify" ? (
           <button
-            className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none"
+            className="w-full cursor-pointer bg-transparent py-1 text-sm text-white/55 underline-offset-4 transition hover:text-white hover:underline focus:outline-none"
             type="button"
             onClick={resetToIdentify}
           >
@@ -600,6 +599,12 @@ function detectInputMode(value: string): "email" | "phone" {
   if (!trimmed) return "phone";
   if (trimmed.includes("@") || /[a-zA-Z]/.test(trimmed)) return "email";
   return "phone";
+}
+
+function contactInputIcon(value: string): "profile" | "email" | "phone" {
+  const trimmed = value.trim();
+  if (!trimmed) return "profile";
+  return detectInputMode(value);
 }
 
 function parseContactInput(value: string): IdentifyContact | null {
