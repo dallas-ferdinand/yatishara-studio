@@ -9,6 +9,7 @@ import {
   type EditorTrack,
 } from "./types";
 import { nextTrackId } from "./editorTimelineUtils";
+import { computeRippleInsertForNewClip } from "./editorRipple";
 
 export function newClipId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -114,6 +115,12 @@ export type EditorAction =
   | { type: "update_clip"; clipId: string; patch: Partial<EditorClip> }
   | { type: "set_joint_transition"; jointKey: string; transition: EditorClip["transitionOut"] }
   | { type: "move_clip"; clipId: string; startTime: number; trackId?: string; live?: boolean }
+  | {
+      type: "apply_track_layout";
+      placements: Array<{ clipId: string; startTime: number; trackId: string }>;
+      live?: boolean;
+    }
+  | { type: "ripple_add_clip"; clip: Omit<EditorClip, "id">; centerTime: number }
   | { type: "trim_clip"; clipId: string; trimIn: number; trimOut: number; startTime?: number; live?: boolean }
   | { type: "toggle_track_mute"; trackId: string }
   | { type: "replace_project"; project: EditorProject };
@@ -327,6 +334,50 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
       };
       return action.live ? { ...state, project: nextProject } : withHistory(state, nextProject);
+    }
+    case "apply_track_layout": {
+      const positionById = new Map(action.placements.map((p) => [p.clipId, p]));
+      const clips = state.project.clips.map((clip) => {
+        const placement = positionById.get(clip.id);
+        if (!placement) return clip;
+        const track = state.project.tracks.find((item) => item.id === placement.trackId);
+        return {
+          ...clip,
+          startTime: Math.max(0, placement.startTime),
+          trackId: placement.trackId,
+          kind: track?.kind ?? clip.kind,
+        };
+      });
+      const nextProject = {
+        ...state.project,
+        clips,
+        duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
+      };
+      return action.live ? { ...state, project: nextProject } : withHistory(state, nextProject);
+    }
+    case "ripple_add_clip": {
+      const track = trackForClip(state.project.tracks, action.clip);
+      const clip: EditorClip = {
+        ...action.clip,
+        id: newClipId(),
+        trackId: track.id,
+        kind: track.kind,
+      };
+      const placements = computeRippleInsertForNewClip({
+        project: state.project,
+        trackId: track.id,
+        clip,
+        centerTime: action.centerTime,
+      });
+      const positionById = new Map(placements.map((p) => [p.clipId, p]));
+      const updated = state.project.clips.map((item) => {
+        const placement = positionById.get(item.id);
+        if (!placement) return item;
+        return { ...item, startTime: placement.startTime, trackId: placement.trackId };
+      });
+      const placed = positionById.get(clip.id)!;
+      const clips = [...updated, { ...clip, startTime: placed.startTime, trackId: placed.trackId }];
+      return withHistory(state, { ...state.project, clips });
     }
     case "trim_clip": {
       const clips = state.project.clips.map((clip) => {

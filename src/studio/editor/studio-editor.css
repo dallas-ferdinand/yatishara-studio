@@ -809,6 +809,51 @@ body.is-drag-cursor .studio-editor-clip {
   font-weight: 600;
 }
 
+.studio-editor-clip.is-ripple-dimmed {
+  opacity: 0.28;
+}
+
+.studio-editor-track-row.is-ripple-active .studio-editor-track-lane {
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 6%, var(--mos-composer, #dfe1e6) 94%);
+}
+
+.studio-editor-ripple-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.studio-editor-ripple-ghost {
+  position: absolute;
+  top: calc(50% + 1px);
+  height: calc(50% - 4px);
+  border-radius: 4px;
+  border: 1.5px dashed color-mix(in srgb, var(--cursor-accent, #2563eb) 65%, #fff);
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 14%, transparent);
+  overflow: hidden;
+  opacity: 0.92;
+}
+
+.studio-editor-ripple-ghost.is-dragged {
+  border-style: solid;
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 22%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cursor-accent, #2563eb) 25%, transparent);
+}
+
+.studio-editor-ripple-ghost.is-video {
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 10%, #101114);
+}
+
+.studio-editor-ripple-ghost.is-audio {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  border-color: color-mix(in srgb, #22c55e 50%, var(--cursor-accent, #2563eb));
+}
+
+.studio-editor-ripple-ghost.is-text {
+  background: color-mix(in srgb, #a855f7 16%, transparent);
+}
+
 .studio-editor-clip.is-dragging {
   cursor: grabbing;
   z-index: 4;

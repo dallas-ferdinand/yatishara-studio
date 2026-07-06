@@ -82,7 +82,7 @@ export function EditorToolbar({
 
 export function EditorModeHint({ mode }) {
   const hints = {
-    select: "Select and move clips. Alt+drag to skip snap.",
+    select: "Select and move clips. Drag between clips to ripple the row. Alt+drag = free overlap.",
     fade: "Pick a clip, then set fade in/out on edges or use presets.",
     transition: "Click the diamond between two clips to add a transition.",
     text: "Add titles on overlay tracks. Select a text clip to style it.",

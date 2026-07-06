@@ -254,6 +254,25 @@ export function StudioVideoEditor({
               dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
             }
             onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
+            onApplyTrackLayout={(placements) =>
+              dispatch({ type: "apply_track_layout", placements, live: false })
+            }
+            onRippleAddClip={(clip) =>
+              dispatch({
+                type: "ripple_add_clip",
+                clip: {
+                  assetId: clip.assetId,
+                  trackId: clip.trackId,
+                  startTime: clip.startTime,
+                  trimIn: clip.trimIn,
+                  trimOut: clip.trimOut,
+                  sourceDuration: clip.sourceDuration,
+                  label: clip.label,
+                  kind: clip.kind,
+                },
+                centerTime: clip.centerTime,
+              })
+            }
           />
         </div>
         <EditorInspector
