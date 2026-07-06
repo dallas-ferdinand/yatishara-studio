@@ -9,12 +9,215 @@
   color: var(--mos-text);
 }
 
+.studio-editor-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .studio-editor-body {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
+
+/* Inspector */
+
+.studio-editor-inspector {
+  width: 220px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--mos-border);
+  background: var(--mos-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-editor-inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--mos-border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--mos-text);
+}
+
+.studio-editor-inspector-body {
+  flex: 1;
+  overflow: auto;
+  padding: 0.55rem 0.65rem;
+}
+
+.studio-editor-inspector-empty {
+  padding: 0.65rem;
+  font-size: 0.68rem;
+  color: var(--mos-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.studio-editor-inspector-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-bg);
+  font-size: 0.68rem;
+  color: var(--mos-text);
+}
+
+.studio-editor-inspector-btn:hover {
+  background: var(--mos-hover);
+}
+
+.studio-editor-inspector-section {
+  margin-bottom: 0.75rem;
+}
+
+.studio-editor-inspector-section h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mos-muted);
+  font-weight: 600;
+}
+
+.studio-editor-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.45rem;
+}
+
+.studio-editor-chip {
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--mos-border);
+  background: var(--mos-bg);
+  font-size: 0.62rem;
+  color: var(--mos-text-soft);
+}
+
+.studio-editor-chip.is-active {
+  border-color: color-mix(in srgb, var(--cursor-accent, #2563eb) 45%, var(--mos-border));
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 10%, var(--mos-bg));
+  color: var(--cursor-accent, #2563eb);
+}
+
+.studio-editor-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.studio-editor-field-row label,
+.studio-editor-field-full {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.6rem;
+  color: var(--mos-muted);
+}
+
+.studio-editor-field-row input,
+.studio-editor-field-full input,
+.studio-editor-textarea {
+  border: 1px solid var(--mos-border);
+  border-radius: 5px;
+  background: var(--mos-bg);
+  color: var(--mos-text);
+  font-size: 0.68rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.studio-editor-textarea {
+  width: 100%;
+  resize: vertical;
+  margin-bottom: 0.45rem;
+}
+
+.studio-editor-range {
+  width: 100%;
+}
+
+.studio-editor-inspector-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.6rem;
+  color: var(--mos-muted);
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--mos-border);
+}
+
+.studio-editor-shortcuts {
+  margin-top: auto;
+  padding: 0.55rem 0.65rem;
+  border-top: 1px solid var(--mos-border);
+  font-size: 0.58rem;
+  color: var(--mos-muted);
+}
+
+.studio-editor-shortcuts h4 {
+  margin: 0 0 0.3rem;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.studio-editor-shortcuts dl {
+  margin: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.studio-editor-shortcuts dl > div {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr;
+  gap: 0.25rem;
+}
+
+.studio-editor-shortcuts dt {
+  font-weight: 600;
+  color: var(--mos-text-soft);
+}
+
+.studio-editor-shortcuts dd {
+  margin: 0;
+}
+
+/* Text overlay in preview */
+
+.studio-editor-text-overlay {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 12%;
+  text-align: center;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  z-index: 2;
+  line-height: 1.15;
+}
+
+.studio-editor-text-overlay.is-align-left {
+  text-align: left;
+}
+
+.studio-editor-text-overlay.is-align-right {
+  text-align: right;
+}
+
 
 /* Preview */
 
@@ -166,7 +369,7 @@
 
 .studio-editor-timeline-wrap {
   flex-shrink: 0;
-  height: 132px;
+  height: 158px;
   display: flex;
   flex-direction: column;
   background: var(--mos-composer, #eceef2);
@@ -270,6 +473,54 @@ body.is-drag-cursor .studio-editor-clip {
 .studio-editor-clip.is-audio {
   background: color-mix(in srgb, #22c55e 22%, var(--mos-panel));
   border-color: color-mix(in srgb, #22c55e 35%, var(--mos-border));
+}
+
+.studio-editor-clip.is-text {
+  background: color-mix(in srgb, #a855f7 18%, var(--mos-panel));
+  border-color: color-mix(in srgb, #a855f7 35%, var(--mos-border));
+}
+
+.studio-editor-clip.is-text .studio-editor-clip-label.is-text {
+  color: color-mix(in srgb, #6b21a8 70%, var(--mos-text));
+  font-weight: 600;
+}
+
+.studio-editor-clip.is-dragging {
+  cursor: grabbing;
+  z-index: 4;
+  opacity: 0.92;
+}
+
+.studio-editor-clip-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.studio-editor-clip-fade.is-in {
+  left: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.55), transparent);
+}
+
+.studio-editor-clip-fade.is-out {
+  position: absolute;
+  background: linear-gradient(270deg, rgba(0, 0, 0, 0.55), transparent);
+}
+
+.studio-editor-clip-transition-badge {
+  position: absolute;
+  top: 2px;
+  right: 10px;
+  z-index: 4;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #fff;
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 75%, #000);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+  line-height: 1.2;
 }
 
 .studio-editor-clip.is-selected {
@@ -398,8 +649,19 @@ body.is-drag-cursor .studio-editor-clip {
 }
 
 @media (max-width: 720px) {
+  .studio-editor-main {
+    flex-direction: column;
+  }
+
+  .studio-editor-inspector {
+    width: 100%;
+    max-height: 180px;
+    border-left: none;
+    border-top: 1px solid var(--mos-border);
+  }
+
   .studio-editor-timeline-wrap {
-    height: 120px;
+    height: 148px;
   }
 
   .studio-editor-transport-time {

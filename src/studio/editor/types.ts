@@ -1,4 +1,28 @@
-export type TrackKind = "video" | "audio";
+export type TrackKind = "video" | "audio" | "text";
+
+export type TransitionType = "none" | "crossfade" | "dipToBlack" | "wipeLeft";
+
+export type TextAnimation = "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
+
+export type ClipEffects = {
+  fadeIn?: number;
+  fadeOut?: number;
+  volume?: number;
+};
+
+export type ClipTransition = {
+  type: TransitionType;
+  duration: number;
+};
+
+export type TextClipContent = {
+  text: string;
+  fontSize?: number;
+  color?: string;
+  align?: "left" | "center" | "right";
+  animation?: TextAnimation;
+  animationDuration?: number;
+};
 
 export type EditorTrack = {
   id: string;
@@ -10,7 +34,7 @@ export type EditorTrack = {
 
 export type EditorClip = {
   id: string;
-  assetId: string;
+  assetId?: string;
   trackId: string;
   /** Timeline position in seconds */
   startTime: number;
@@ -22,12 +46,15 @@ export type EditorClip = {
   sourceDuration?: number;
   label: string;
   kind: TrackKind;
+  effects?: ClipEffects;
+  transitionOut?: ClipTransition;
+  text?: TextClipContent;
 };
 
 export type EditorMediaItem = {
   assetId: string;
   name: string;
-  kind: TrackKind | "image";
+  kind: "video" | "audio" | "image";
   url?: string;
   thumbnailUrl?: string;
   duration?: number;
@@ -58,13 +85,15 @@ export type EditorState = {
 
 export const DEFAULT_TRACKS: EditorTrack[] = [
   { id: "track-video", kind: "video", label: "Video" },
-  { id: "track-audio", kind: "audio", label: "Music" },
+  { id: "track-text", kind: "text", label: "Text" },
+  { id: "track-audio", kind: "audio", label: "Audio" },
 ];
 
 export const MIN_PPS = 24;
 export const MAX_PPS = 240;
 export const DEFAULT_PPS = 72;
 export const VIDEO_TRACK_HEIGHT = 44;
+export const TEXT_TRACK_HEIGHT = 28;
 export const AUDIO_TRACK_HEIGHT = 30;
 export const TRACK_RAIL_WIDTH = 34;
 export const RULER_HEIGHT = 18;

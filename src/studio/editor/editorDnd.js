@@ -17,11 +17,14 @@ export function defaultClipDuration(mediaKind) {
 
 export function trackAcceptsMediaKind(trackKind, mediaKind) {
   if (trackKind === "audio") return mediaKind === "audio";
+  if (trackKind === "text") return false;
   return mediaKind === "video" || mediaKind === "image";
 }
 
 export function clipKindForTrack(trackKind, mediaKind) {
-  return trackKind === "audio" ? "audio" : "video";
+  if (trackKind === "audio") return "audio";
+  if (trackKind === "text") return "text";
+  return "video";
 }
 
 export function isTimelineDropDrag(event) {

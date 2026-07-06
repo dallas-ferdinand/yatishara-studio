@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { clipOpacityAtLocalTime, textAnimationStyle } from "./editorEffects";
 import { clipAtPlayhead, clipDuration, projectEndTime } from "./editorState";
 
 export function EditorPreview({
@@ -22,14 +23,31 @@ export function EditorPreview({
 
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
+  const textTrack = project.tracks.find((track) => track.kind === "text");
   const videoClip = videoTrack ? clipAtPlayhead(project, videoTrack.id, playhead) : null;
   const audioClip = audioTrack ? clipAtPlayhead(project, audioTrack.id, playhead) : null;
+  const textClips =
+    textTrack?.id
+      ? project.clips.filter((clip) => {
+          if (clip.trackId !== textTrack.id) return false;
+          const end = clip.startTime + clipDuration(clip);
+          return playhead >= clip.startTime && playhead < end;
+        })
+      : [];
   const videoMedia = videoClip ? mediaById.get(videoClip.assetId) : null;
   const audioMedia = audioClip ? mediaById.get(audioClip.assetId) : null;
   const videoUrl = videoMedia?.url;
   const audioUrl = audioMedia?.url;
   const videoIsImage = videoMedia?.kind === "image";
   const audioMuted = Boolean(audioTrack?.muted);
+
+  const videoOpacity = videoClip
+    ? clipOpacityAtLocalTime(
+        videoClip.effects,
+        clipDuration(videoClip),
+        playhead - videoClip.startTime,
+      )
+    : 1;
 
   playheadRef.current = playhead;
   playingRef.current = playing;
@@ -96,6 +114,8 @@ export function EditorPreview({
     }
 
     audio.muted = audioMuted;
+    const volume = audioClip.effects?.volume ?? 1;
+    audio.volume = Math.max(0, Math.min(1, volume));
     const target = Math.max(audioClip.trimIn, Math.min(local, audioClip.trimOut - 0.02));
     if (Math.abs(audio.currentTime - target) > 0.2) {
       audio.currentTime = target;
@@ -103,7 +123,7 @@ export function EditorPreview({
 
     if (playing && !audioMuted) void audio.play().catch(() => {});
     else audio.pause();
-  }, [playhead, audioClip?.id, audioClip?.assetId, audioClip?.startTime, audioClip?.trimIn, audioClip?.trimOut, audioUrl, audioMuted, playing]);
+  }, [playhead, audioClip?.id, audioClip?.assetId, audioClip?.startTime, audioClip?.trimIn, audioClip?.trimOut, audioUrl, audioMuted, playing, audioClip?.effects?.volume]);
 
   return (
     <div className="studio-editor-preview">
@@ -114,6 +134,7 @@ export function EditorPreview({
               className="studio-editor-preview-video"
               src={videoUrl}
               alt=""
+              style={{ opacity: videoOpacity }}
               onClick={() => onPlayingChange(!playing)}
             />
           ) : (
@@ -122,6 +143,7 @@ export function EditorPreview({
               className="studio-editor-preview-video"
               playsInline
               preload="auto"
+              style={{ opacity: videoOpacity }}
               onClick={() => onPlayingChange(!playing)}
             />
           )
@@ -130,6 +152,30 @@ export function EditorPreview({
             <p>Drag clips from the file manager onto the timeline</p>
           </div>
         )}
+        {textClips.map((clip) => {
+          const local = playhead - clip.startTime;
+          const duration = clipDuration(clip);
+          const anim = textAnimationStyle(
+            clip.text?.animation,
+            clip.text?.animationDuration ?? 0.5,
+            local,
+            duration,
+          );
+          return (
+            <div
+              key={clip.id}
+              className={`studio-editor-text-overlay is-align-${clip.text?.align ?? "center"}`}
+              style={{
+                opacity: anim.opacity,
+                transform: anim.transform,
+                color: clip.text?.color ?? "#fff",
+                fontSize: `${clip.text?.fontSize ?? 42}px`,
+              }}
+            >
+              {clip.text?.text}
+            </div>
+          );
+        })}
       </div>
       {audioUrl ? <audio ref={audioRef} preload="auto" className="sr-only" /> : null}
     </div>

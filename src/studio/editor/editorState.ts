@@ -32,13 +32,31 @@ export function createEmptyProject(args: {
   folderId: string;
   sourceAssetId?: string;
 }): EditorProject {
-  return {
+  return normalizeProject({
     name: args.name,
     folderId: args.folderId,
     sourceAssetId: args.sourceAssetId,
     duration: 30,
     tracks: DEFAULT_TRACKS.map((track) => ({ ...track })),
     clips: [],
+  });
+}
+
+/** Ensure saved projects include newer tracks (e.g. text) without dropping clips. */
+export function normalizeProject(project: EditorProject): EditorProject {
+  const tracks = [...project.tracks];
+  for (const defaultTrack of DEFAULT_TRACKS) {
+    if (!tracks.some((track) => track.id === defaultTrack.id)) {
+      tracks.push({ ...defaultTrack });
+    }
+  }
+  return {
+    ...project,
+    tracks,
+    clips: project.clips.map((clip) => ({
+      ...clip,
+      effects: clip.effects ?? undefined,
+    })),
   };
 }
 
@@ -76,8 +94,11 @@ export type EditorAction =
   | { type: "set_playing"; playing: boolean }
   | { type: "set_zoom"; pixelsPerSecond: number }
   | { type: "delete_selected" }
+  | { type: "duplicate_selected" }
   | { type: "split_at_playhead" }
   | { type: "add_clip"; clip: Omit<EditorClip, "id"> }
+  | { type: "add_text_clip"; startTime?: number }
+  | { type: "update_clip"; clipId: string; patch: Partial<EditorClip> }
   | { type: "move_clip"; clipId: string; startTime: number; trackId?: string; live?: boolean }
   | { type: "trim_clip"; clipId: string; trimIn: number; trimOut: number; startTime?: number; live?: boolean }
   | { type: "toggle_track_mute"; trackId: string }
@@ -126,6 +147,56 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
     case "delete_selected": {
       if (!state.ui.selectedClipId) return state;
       const clips = state.project.clips.filter((clip) => clip.id !== state.ui.selectedClipId);
+      return {
+        ...withHistory(state, { ...state.project, clips }),
+        ui: { ...state.ui, selectedClipId: null },
+      };
+    }
+    case "duplicate_selected": {
+      const clip = state.project.clips.find((item) => item.id === state.ui.selectedClipId);
+      if (!clip) return state;
+      const end = clip.startTime + clipDuration(clip);
+      const duplicate: EditorClip = {
+        ...clip,
+        id: newClipId(),
+        startTime: end + 0.05,
+        label: `${clip.label} copy`,
+      };
+      return withHistory(state, {
+        ...state.project,
+        clips: [...state.project.clips, duplicate],
+      });
+    }
+    case "add_text_clip": {
+      const textTrack = state.project.tracks.find((track) => track.kind === "text");
+      if (!textTrack) return state;
+      const startTime = action.startTime ?? state.ui.playhead;
+      const clip: EditorClip = {
+        id: newClipId(),
+        trackId: textTrack.id,
+        startTime: Math.max(0, startTime),
+        trimIn: 0,
+        trimOut: 3,
+        label: "Text",
+        kind: "text",
+        text: {
+          text: "Your text",
+          fontSize: 42,
+          color: "#ffffff",
+          align: "center",
+          animation: "fadeIn",
+          animationDuration: 0.5,
+        },
+      };
+      return withHistory(state, {
+        ...state.project,
+        clips: [...state.project.clips, clip],
+      });
+    }
+    case "update_clip": {
+      const clips = state.project.clips.map((clip) =>
+        clip.id === action.clipId ? { ...clip, ...action.patch, id: clip.id } : clip,
+      );
       return withHistory(state, { ...state.project, clips });
     }
     case "split_at_playhead": {
@@ -161,15 +232,18 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       });
     }
     case "move_clip": {
-      const clips = state.project.clips.map((clip) =>
-        clip.id === action.clipId
-          ? {
-              ...clip,
-              startTime: Math.max(0, action.startTime),
-              trackId: action.trackId ?? clip.trackId,
-            }
-          : clip,
-      );
+      const clips = state.project.clips.map((clip) => {
+        if (clip.id !== action.clipId) return clip;
+        const nextTrackId = action.trackId ?? clip.trackId;
+        const track = state.project.tracks.find((item) => item.id === nextTrackId);
+        const nextKind = track?.kind ?? clip.kind;
+        return {
+          ...clip,
+          startTime: Math.max(0, action.startTime),
+          trackId: nextTrackId,
+          kind: nextKind,
+        };
+      });
       const nextProject = {
         ...state.project,
         clips,
@@ -207,8 +281,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return {
         ...state,
         project: {
-          ...action.project,
-          duration: Math.max(action.project.duration, projectEndTime(action.project)),
+          ...normalizeProject(action.project),
+          duration: Math.max(action.project.duration, projectEndTime(normalizeProject(action.project))),
         },
         past: [],
         future: [],

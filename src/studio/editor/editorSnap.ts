@@ -51,8 +51,12 @@ export function snapClipStart(
   clipDurationSec: number,
   snapTimes: number[],
   thresholdSec: number,
+  disableSnap = false,
 ): { startTime: number; guide: number | null } {
   const start = Math.max(0, proposedStart);
+  if (disableSnap) {
+    return { startTime: start, guide: null };
+  }
   const end = start + clipDurationSec;
 
   const startSnap = nearestSnap(start, snapTimes, thresholdSec);
@@ -73,8 +77,9 @@ export function snapClipMove(
   proposedStart: number,
   snapTimes: number[],
   thresholdSec: number,
+  disableSnap = false,
 ): { startTime: number; guide: number | null } {
-  return snapClipStart(proposedStart, clipDuration(clip), snapTimes, thresholdSec);
+  return snapClipStart(proposedStart, clipDuration(clip), snapTimes, thresholdSec, disableSnap);
 }
 
 export function snapTrimLeft(
@@ -83,7 +88,11 @@ export function snapTrimLeft(
   proposedStart: number,
   snapTimes: number[],
   thresholdSec: number,
+  disableSnap = false,
 ): { trimIn: number; startTime: number; guide: number | null } {
+  if (disableSnap) {
+    return { trimIn: proposedTrimIn, startTime: proposedStart, guide: null };
+  }
   const startSnap = nearestSnap(proposedStart, snapTimes, thresholdSec);
   if (startSnap.snapped) {
     const delta = startSnap.time - proposedStart;
@@ -101,7 +110,11 @@ export function snapTrimRight(
   proposedTrimOut: number,
   snapTimes: number[],
   thresholdSec: number,
+  disableSnap = false,
 ): { trimOut: number; guide: number | null } {
+  if (disableSnap) {
+    return { trimOut: proposedTrimOut, guide: null };
+  }
   const endTime = clip.startTime + (proposedTrimOut - clip.trimIn);
   const endSnap = nearestSnap(endTime, snapTimes, thresholdSec);
   if (endSnap.snapped) {

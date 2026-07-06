@@ -5,6 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { EditorPreview } from "./EditorPreview";
+import { EditorInspector } from "./EditorInspector";
 import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
 import {
   clipDuration,
@@ -13,6 +14,8 @@ import {
   projectEndTime,
   reducer,
 } from "./editorState";
+import { useEditorHotkeys } from "./useEditorHotkeys";
+import { MAX_PPS, MIN_PPS } from "./types";
 
 export function StudioVideoEditor({
   folderId,
@@ -132,6 +135,7 @@ export function StudioVideoEditor({
   const selectedClip = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
   const canSplit =
     Boolean(selectedClip) &&
+    selectedClip.kind !== "text" &&
     state.ui.playhead > selectedClip.startTime + 0.05 &&
     state.ui.playhead < selectedClip.startTime + clipDuration(selectedClip) - 0.05;
 
@@ -165,51 +169,83 @@ export function StudioVideoEditor({
     }
   }, [exportProject, folderId, localProjectId, onOpenAsset, onStatus, saveProject, sourceAssetId, state.project]);
 
+  useEditorHotkeys({
+    onPlayToggle: () => dispatch({ type: "set_playing", playing: !state.ui.playing }),
+    onUndo: () => dispatch({ type: "undo" }),
+    onRedo: () => dispatch({ type: "redo" }),
+    onDelete: () => dispatch({ type: "delete_selected" }),
+    onSplit: () => dispatch({ type: "split_at_playhead" }),
+    onDuplicate: () => dispatch({ type: "duplicate_selected" }),
+    onNudgePlayhead: (delta) =>
+      dispatch({
+        type: "set_playhead",
+        time: Math.max(0, Math.min(timelineDuration, state.ui.playhead + delta)),
+      }),
+    onZoom: (delta) =>
+      dispatch({
+        type: "set_zoom",
+        pixelsPerSecond: Math.max(MIN_PPS, Math.min(MAX_PPS, state.ui.pixelsPerSecond + delta)),
+      }),
+    onDeselect: () => dispatch({ type: "select_clip", clipId: null }),
+    canUndo: state.past.length > 0,
+    canRedo: state.future.length > 0,
+    canSplit,
+    hasSelection: Boolean(state.ui.selectedClipId),
+  });
+
   return (
     <div className="studio-editor">
-      <div className="studio-editor-body">
-        <EditorPreview
-          project={state.project}
+      <div className="studio-editor-main">
+        <div className="studio-editor-body">
+          <EditorPreview
+            project={state.project}
+            playhead={state.ui.playhead}
+            playing={state.ui.playing}
+            mediaById={mediaById}
+            onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
+            onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+          />
+          <EditorTransportBar
+            playing={state.ui.playing}
+            playhead={state.ui.playhead}
+            duration={timelineDuration}
+            canUndo={state.past.length > 0}
+            canRedo={state.future.length > 0}
+            canSplit={canSplit}
+            hasSelection={Boolean(state.ui.selectedClipId)}
+            exporting={exporting}
+            pixelsPerSecond={state.ui.pixelsPerSecond}
+            onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+            onUndo={() => dispatch({ type: "undo" })}
+            onRedo={() => dispatch({ type: "redo" })}
+            onSplit={() => dispatch({ type: "split_at_playhead" })}
+            onDelete={() => dispatch({ type: "delete_selected" })}
+            onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
+            onExport={() => void handleExport()}
+          />
+          <EditorTimeline
+            project={state.project}
+            playhead={state.ui.playhead}
+            pixelsPerSecond={state.ui.pixelsPerSecond}
+            selectedClipId={state.ui.selectedClipId}
+            mediaById={mediaById}
+            onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
+            onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
+            onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
+            onMoveClip={(clipId, startTime, trackId, live) =>
+              dispatch({ type: "move_clip", clipId, startTime, trackId, live })
+            }
+            onTrimClip={(clipId, trimIn, trimOut, startTime, live) =>
+              dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
+            }
+            onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
+          />
+        </div>
+        <EditorInspector
+          clip={selectedClip}
           playhead={state.ui.playhead}
-          playing={state.ui.playing}
-          mediaById={mediaById}
-          onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
-          onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
-        />
-        <EditorTransportBar
-          playing={state.ui.playing}
-          playhead={state.ui.playhead}
-          duration={timelineDuration}
-          canUndo={state.past.length > 0}
-          canRedo={state.future.length > 0}
-          canSplit={canSplit}
-          hasSelection={Boolean(state.ui.selectedClipId)}
-          exporting={exporting}
-          pixelsPerSecond={state.ui.pixelsPerSecond}
-          onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
-          onUndo={() => dispatch({ type: "undo" })}
-          onRedo={() => dispatch({ type: "redo" })}
-          onSplit={() => dispatch({ type: "split_at_playhead" })}
-          onDelete={() => dispatch({ type: "delete_selected" })}
-          onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
-          onExport={() => void handleExport()}
-        />
-        <EditorTimeline
-          project={state.project}
-          playhead={state.ui.playhead}
-          pixelsPerSecond={state.ui.pixelsPerSecond}
-          selectedClipId={state.ui.selectedClipId}
-          mediaById={mediaById}
-          onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
-          onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
-          onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
-          onMoveClip={(clipId, startTime, trackId, live) =>
-            dispatch({ type: "move_clip", clipId, startTime, trackId, live })
-          }
-          onTrimClip={(clipId, trimIn, trimOut, startTime, live) =>
-            dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
-          }
-          onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
+          onUpdateClip={(clipId, patch) => dispatch({ type: "update_clip", clipId, patch })}
+          onAddTextClip={() => dispatch({ type: "add_text_clip" })}
         />
       </div>
     </div>

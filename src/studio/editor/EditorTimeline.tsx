@@ -8,6 +8,7 @@ import {
   Play,
   Scissors,
   Trash2,
+  Type,
   Undo2,
   Redo2,
   Volume2,
@@ -37,9 +38,35 @@ import {
   MAX_PPS,
   MIN_PPS,
   RULER_HEIGHT,
+  TEXT_TRACK_HEIGHT,
   TRACK_RAIL_WIDTH,
   VIDEO_TRACK_HEIGHT,
 } from "./types";
+
+function trackHeightForKind(kind) {
+  if (kind === "text") return TEXT_TRACK_HEIGHT;
+  if (kind === "audio") return AUDIO_TRACK_HEIGHT;
+  return VIDEO_TRACK_HEIGHT;
+}
+
+function FadeOverlay({ fadeIn, fadeOut, duration, pps }) {
+  const fadeInPx = (fadeIn ?? 0) * pps;
+  const fadeOutPx = (fadeOut ?? 0) * pps;
+  return (
+    <>
+      {fadeInPx > 2 ? (
+        <span className="studio-editor-clip-fade is-in" style={{ width: fadeInPx }} aria-hidden="true" />
+      ) : null}
+      {fadeOutPx > 2 ? (
+        <span
+          className="studio-editor-clip-fade is-out"
+          style={{ width: fadeOutPx, right: 0 }}
+          aria-hidden="true"
+        />
+      ) : null}
+    </>
+  );
+}
 
 function TimelineClipBlock({
   clip,
@@ -52,63 +79,91 @@ function TimelineClipBlock({
   onMove,
   onTrim,
   onSnapGuide,
+  resolveTrackAtY,
 }) {
   const width = clipDuration(clip) * pps;
   const left = clip.startTime * pps;
   const [dragging, setDragging] = useState(null);
   const isVideo = clip.kind === "video";
+  const isText = clip.kind === "text";
   const thresholdSec = snapThresholdSec(pps);
   const widthPx = Math.max(width, 28);
+  const duration = clipDuration(clip);
 
   const onPointerDown = (event, mode) => {
     event.stopPropagation();
     onSelect(clip.id);
     const startX = event.clientX;
+    const startY = event.clientY;
     const originStart = clip.startTime;
+    const originTrackId = clip.trackId;
     const originTrimIn = clip.trimIn;
     const originTrimOut = clip.trimOut;
     const snapTimes = collectSnapTimes(project, clip.trackId, clip.id, playhead);
     let lastStart = originStart;
+    let lastTrackId = originTrackId;
     let lastTrimIn = originTrimIn;
     let lastTrimOut = originTrimOut;
     setDragging(mode);
 
+    const targetEl = event.currentTarget;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
     const onMoveEvent = (moveEvent) => {
+      const disableSnap = moveEvent.altKey;
       const deltaPx = moveEvent.clientX - startX;
       const deltaSec = deltaPx / pps;
 
       if (mode === "move") {
+        const targetTrackId = resolveTrackAtY?.(moveEvent.clientY) ?? originTrackId;
+        const targetTrack = project.tracks.find((track) => track.id === targetTrackId);
+        const allowedTrackId =
+          targetTrack && targetTrack.kind === clip.kind ? targetTrackId : originTrackId;
         const rawStart = Math.max(0, originStart + deltaSec);
-        const { startTime, guide } = snapClipMove(clip, rawStart, snapTimes, thresholdSec);
+        const trackForSnap = allowedTrackId || originTrackId;
+        const moveSnapTimes = collectSnapTimes(project, trackForSnap, clip.id, playhead);
+        const { startTime, guide } = snapClipMove(clip, rawStart, moveSnapTimes, thresholdSec, disableSnap);
         lastStart = startTime;
+        lastTrackId = allowedTrackId;
         onSnapGuide?.(guide);
-        onMove(clip.id, startTime, undefined, true);
+        onMove(
+          clip.id,
+          startTime,
+          lastTrackId !== originTrackId ? lastTrackId : undefined,
+          true,
+        );
       } else if (mode === "trim-left") {
         const rawTrimIn = Math.min(originTrimOut - 0.05, Math.max(0, originTrimIn + deltaSec));
         const trimDelta = rawTrimIn - originTrimIn;
-        const rawStart = originStart + trimDelta;
-        const snapped = snapTrimLeft(clip, rawTrimIn, rawStart, snapTimes, thresholdSec);
+        const rawStart = Math.max(0, originStart + trimDelta);
+        const snapped = snapTrimLeft(clip, rawTrimIn, rawStart, snapTimes, thresholdSec, disableSnap);
         lastTrimIn = snapped.trimIn;
         lastStart = snapped.startTime;
         onSnapGuide?.(snapped.guide);
         onTrim(clip.id, snapped.trimIn, originTrimOut, snapped.startTime, true);
       } else if (mode === "trim-right") {
         const rawTrimOut = Math.max(originTrimIn + 0.05, originTrimOut + deltaSec);
-        const snapped = snapTrimRight(clip, rawTrimOut, snapTimes, thresholdSec);
+        const snapped = snapTrimRight(clip, rawTrimOut, snapTimes, thresholdSec, disableSnap);
         lastTrimOut = snapped.trimOut;
         onSnapGuide?.(snapped.guide);
         onTrim(clip.id, originTrimIn, snapped.trimOut, undefined, true);
       }
     };
 
-    const onUp = () => {
+    const onUp = (upEvent) => {
+      try {
+        targetEl.releasePointerCapture?.(upEvent.pointerId);
+      } catch {
+        /* ignore */
+      }
       setDragging(null);
       onSnapGuide?.(null);
       window.removeEventListener("pointermove", onMoveEvent);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
 
       if (mode === "move") {
-        onMove(clip.id, lastStart, undefined, false);
+        onMove(clip.id, lastStart, lastTrackId !== originTrackId ? lastTrackId : undefined, false);
       } else if (mode === "trim-left") {
         onTrim(clip.id, lastTrimIn, lastTrimOut, lastStart, false);
       } else if (mode === "trim-right") {
@@ -118,6 +173,7 @@ function TimelineClipBlock({
 
     window.addEventListener("pointermove", onMoveEvent);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   return (
@@ -125,20 +181,38 @@ function TimelineClipBlock({
       className={`studio-editor-clip is-${clip.kind}${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`}
       style={{ left, width: widthPx }}
       onPointerDown={(event) => onPointerDown(event, "move")}
+      title={clip.label}
     >
-      {isVideo ? (
+      {isText ? (
+        <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
+      ) : isVideo ? (
         <ClipFilmstrip media={media} label={clip.label} widthPx={widthPx} />
       ) : (
         <span className="studio-editor-clip-label">{clip.label}</span>
       )}
-      <span
-        className="studio-editor-clip-handle is-left"
-        onPointerDown={(event) => onPointerDown(event, "trim-left")}
-      />
-      <span
-        className="studio-editor-clip-handle is-right"
-        onPointerDown={(event) => onPointerDown(event, "trim-right")}
-      />
+      <FadeOverlay fadeIn={clip.effects?.fadeIn} fadeOut={clip.effects?.fadeOut} duration={duration} pps={pps} />
+      {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
+        <span className="studio-editor-clip-transition-badge" title={`${clip.transitionOut.type} out`}>
+          {clip.transitionOut.type === "crossfade" ? "×" : "→"}
+        </span>
+      ) : null}
+      {!isText ? (
+        <>
+          <span
+            className="studio-editor-clip-handle is-left"
+            onPointerDown={(event) => onPointerDown(event, "trim-left")}
+          />
+          <span
+            className="studio-editor-clip-handle is-right"
+            onPointerDown={(event) => onPointerDown(event, "trim-right")}
+          />
+        </>
+      ) : (
+        <span
+          className="studio-editor-clip-handle is-right"
+          onPointerDown={(event) => onPointerDown(event, "trim-right")}
+        />
+      )}
     </div>
   );
 }
@@ -177,8 +251,16 @@ function TrackRailButton({ track, onToggleMute }) {
     );
   }
 
+  if (track.kind === "text") {
+    return (
+      <span className="studio-editor-track-btn is-static" aria-hidden="true" title="Text track">
+        <Type size={ICON} aria-hidden="true" />
+      </span>
+    );
+  }
+
   return (
-    <span className="studio-editor-track-btn is-static" aria-hidden="true">
+    <span className="studio-editor-track-btn is-static" aria-hidden="true" title="Video track">
       <Film size={ICON} aria-hidden="true" />
     </span>
   );
@@ -213,10 +295,10 @@ export function EditorTransportBar({
         <button type="button" disabled={!canRedo} onClick={onRedo} title="Redo" aria-label="Redo">
           <Redo2 size={ICON} aria-hidden="true" />
         </button>
-        <button type="button" disabled={!canSplit} onClick={onSplit} title="Split at playhead" aria-label="Split">
+        <button type="button" disabled={!canSplit} onClick={onSplit} title="Split at playhead (S)" aria-label="Split">
           <Scissors size={ICON} aria-hidden="true" />
         </button>
-        <button type="button" disabled={!hasSelection} onClick={onDelete} title="Delete clip" aria-label="Delete">
+        <button type="button" disabled={!hasSelection} onClick={onDelete} title="Delete clip (Del)" aria-label="Delete">
           <Trash2 size={ICON} aria-hidden="true" />
         </button>
       </div>
@@ -271,10 +353,26 @@ export function EditorTimeline({
   onToggleTrackMute,
 }) {
   const scrollRef = useRef(null);
+  const trackRowRefs = useRef(new Map());
   const timelineWidth = Math.max(project.duration * pixelsPerSecond + 240, 720);
   const [dropPreview, setDropPreview] = useState(null);
   const [snapGuideTime, setSnapGuideTime] = useState(null);
   const snapThreshold = snapThresholdSec(pixelsPerSecond);
+
+  const resolveTrackAtY = useCallback(
+    (clientY) => {
+      for (const track of project.tracks) {
+        const row = trackRowRefs.current.get(track.id);
+        if (!row) continue;
+        const rect = row.getBoundingClientRect();
+        if (clientY >= rect.top && clientY <= rect.bottom) {
+          return track.id;
+        }
+      }
+      return null;
+    },
+    [project.tracks],
+  );
 
   const timeFromClientX = useCallback(
     (clientX, laneEl) => {
@@ -394,12 +492,16 @@ export function EditorTimeline({
             ))}
           </div>
           {project.tracks.map((track) => {
-            const trackHeight = track.kind === "video" ? VIDEO_TRACK_HEIGHT : AUDIO_TRACK_HEIGHT;
+            const trackHeight = trackHeightForKind(track.kind);
             const preview = dropPreview?.trackId === track.id ? dropPreview : null;
             return (
               <div
                 key={track.id}
-                className={`studio-editor-track-row${preview ? " is-drop-target" : ""}`}
+                ref={(node) => {
+                  if (node) trackRowRefs.current.set(track.id, node);
+                  else trackRowRefs.current.delete(track.id);
+                }}
+                className={`studio-editor-track-row is-${track.kind}${preview ? " is-drop-target" : ""}`}
                 style={{ height: trackHeight }}
                 onDragOver={(event) => onTrackDragOver(event, track)}
                 onDragLeave={(event) => onTrackDragLeave(event, track)}
@@ -433,6 +535,7 @@ export function EditorTimeline({
                           onSelect={onSelectClip}
                           onMove={onMoveClip}
                           onSnapGuide={setSnapGuideTime}
+                          resolveTrackAtY={resolveTrackAtY}
                           onTrim={(clipId, trimIn, trimOut, startTime, live) => {
                             onTrimClip(clipId, trimIn, trimOut, startTime, live);
                           }}
