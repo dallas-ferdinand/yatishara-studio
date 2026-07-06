@@ -1,35 +1,56 @@
 import type { ClipEffects, TextAnimation, TextClipContent, TransitionType } from "./types";
 
 export const FADE_PRESETS = [
-  { id: "none", label: "None", fadeIn: 0, fadeOut: 0 },
-  { id: "soft", label: "Soft", fadeIn: 0.4, fadeOut: 0.4 },
-  { id: "cinematic", label: "Cinematic", fadeIn: 0.8, fadeOut: 1.0 },
-  { id: "flash", label: "Flash in", fadeIn: 0.15, fadeOut: 0.6 },
+  { id: "none", label: "None", fadeIn: 0, fadeOut: 0, icon: "circle" },
+  { id: "soft", label: "Soft", fadeIn: 0.4, fadeOut: 0.4, icon: "sun" },
+  { id: "cinematic", label: "Cinematic", fadeIn: 0.8, fadeOut: 1.0, icon: "film" },
+  { id: "flash", label: "Flash", fadeIn: 0.15, fadeOut: 0.6, icon: "zap" },
+  { id: "audio-out", label: "Audio tail", fadeIn: 0, fadeOut: 1.2, icon: "volume" },
 ] as const;
 
-export const TRANSITION_TEMPLATES: Array<{
+export const TRANSITION_LIBRARY: Array<{
   id: TransitionType;
   label: string;
   duration: number;
+  icon: string;
+  group: "cut" | "dissolve" | "motion" | "stylized";
 }> = [
-  { id: "none", label: "Cut", duration: 0 },
-  { id: "crossfade", label: "Crossfade", duration: 0.5 },
-  { id: "dipToBlack", label: "Dip to black", duration: 0.4 },
-  { id: "wipeLeft", label: "Wipe left", duration: 0.45 },
+  { id: "none", label: "Hard cut", duration: 0, icon: "scissors", group: "cut" },
+  { id: "crossfade", label: "Crossfade", duration: 0.5, icon: "blend", group: "dissolve" },
+  { id: "dipToBlack", label: "Dip black", duration: 0.45, icon: "moon", group: "dissolve" },
+  { id: "dipToWhite", label: "Dip white", duration: 0.4, icon: "sun", group: "dissolve" },
+  { id: "wipeLeft", label: "Wipe left", duration: 0.45, icon: "arrow-left", group: "motion" },
+  { id: "wipeRight", label: "Wipe right", duration: 0.45, icon: "arrow-right", group: "motion" },
+  { id: "wipeUp", label: "Wipe up", duration: 0.45, icon: "arrow-up", group: "motion" },
+  { id: "slideLeft", label: "Slide", duration: 0.5, icon: "move", group: "motion" },
+  { id: "zoomIn", label: "Zoom", duration: 0.4, icon: "zoom-in", group: "stylized" },
+  { id: "blur", label: "Blur", duration: 0.35, icon: "sparkles", group: "stylized" },
 ];
+
+/** @deprecated use TRANSITION_LIBRARY */
+export const TRANSITION_TEMPLATES = TRANSITION_LIBRARY;
 
 export const TEXT_ANIMATION_TEMPLATES: Array<{
   id: TextAnimation;
   label: string;
   duration: number;
+  icon: string;
 }> = [
-  { id: "none", label: "Static", duration: 0 },
-  { id: "fadeIn", label: "Fade in", duration: 0.5 },
-  { id: "fadeOut", label: "Fade out", duration: 0.5 },
-  { id: "slideUp", label: "Slide up", duration: 0.55 },
-  { id: "slideDown", label: "Slide down", duration: 0.55 },
-  { id: "popIn", label: "Pop in", duration: 0.4 },
+  { id: "none", label: "Static", duration: 0, icon: "type" },
+  { id: "fadeIn", label: "Fade in", duration: 0.5, icon: "sunrise" },
+  { id: "fadeOut", label: "Fade out", duration: 0.5, icon: "sunset" },
+  { id: "slideUp", label: "Slide up", duration: 0.55, icon: "arrow-up" },
+  { id: "slideDown", label: "Slide down", duration: 0.55, icon: "arrow-down" },
+  { id: "popIn", label: "Pop", duration: 0.4, icon: "zap" },
 ];
+
+export const EDITOR_MODES = [
+  { id: "select", label: "Edit", icon: "mouse-pointer" },
+  { id: "fade", label: "Fade", icon: "sun" },
+  { id: "transition", label: "Transitions", icon: "blend" },
+  { id: "text", label: "Text", icon: "type" },
+  { id: "layers", label: "Layers", icon: "layers" },
+] as const;
 
 export const DEFAULT_TEXT_STYLE: TextClipContent = {
   text: "Your text",
@@ -66,6 +87,20 @@ export function applyFadePreset(effects: ClipEffects | undefined, presetId: stri
   return { ...effects, fadeIn: preset.fadeIn, fadeOut: preset.fadeOut };
 }
 
+export function toggleFadeEdge(
+  effects: ClipEffects | undefined,
+  edge: "in" | "out",
+  duration = 0.5,
+): ClipEffects {
+  const current = effects ?? {};
+  if (edge === "in") {
+    const on = (current.fadeIn ?? 0) > 0;
+    return { ...current, fadeIn: on ? 0 : duration };
+  }
+  const on = (current.fadeOut ?? 0) > 0;
+  return { ...current, fadeOut: on ? 0 : duration };
+}
+
 export function textAnimationStyle(
   animation: TextAnimation | undefined,
   animationDuration: number,
@@ -100,4 +135,8 @@ export function textAnimationStyle(
     return { opacity: Math.min(1, t * 1.4), transform: `scale(${scale})` };
   }
   return { opacity: 1, transform: "none" };
+}
+
+export function transitionLabel(type: TransitionType | undefined): string {
+  return TRANSITION_LIBRARY.find((item) => item.id === type)?.label ?? "Cut";
 }

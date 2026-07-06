@@ -66,7 +66,13 @@ function hexToFfmpegColor(hex?: string): string {
 
 function xfadeTransition(type: string): string {
   if (type === "dipToBlack") return "fadeblack";
+  if (type === "dipToWhite") return "fadewhite";
   if (type === "wipeLeft") return "wipeleft";
+  if (type === "wipeRight") return "wiperight";
+  if (type === "wipeUp") return "wipeup";
+  if (type === "slideLeft") return "slideleft";
+  if (type === "zoomIn") return "zoomin";
+  if (type === "blur") return "smoothleft";
   return "fade";
 }
 

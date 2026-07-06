@@ -3,7 +3,7 @@
 
 import { useEffect, useRef } from "react";
 import { clipOpacityAtLocalTime, textAnimationStyle } from "./editorEffects";
-import { clipAtPlayhead, clipDuration, projectEndTime } from "./editorState";
+import { clipAtPlayhead, clipDuration, projectEndTime, topVideoClipAtPlayhead } from "./editorState";
 
 export function EditorPreview({
   project,
@@ -23,17 +23,16 @@ export function EditorPreview({
 
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
-  const textTrack = project.tracks.find((track) => track.kind === "text");
-  const videoClip = videoTrack ? clipAtPlayhead(project, videoTrack.id, playhead) : null;
+  const textTracks = project.tracks.filter((track) => track.kind === "text");
+  const videoClip = topVideoClipAtPlayhead(project, playhead);
   const audioClip = audioTrack ? clipAtPlayhead(project, audioTrack.id, playhead) : null;
-  const textClips =
-    textTrack?.id
-      ? project.clips.filter((clip) => {
-          if (clip.trackId !== textTrack.id) return false;
-          const end = clip.startTime + clipDuration(clip);
-          return playhead >= clip.startTime && playhead < end;
-        })
-      : [];
+  const textClips = textTracks.flatMap((track) =>
+    project.clips.filter((clip) => {
+      if (clip.trackId !== track.id) return false;
+      const end = clip.startTime + clipDuration(clip);
+      return playhead >= clip.startTime && playhead < end;
+    }),
+  );
   const videoMedia = videoClip ? mediaById.get(videoClip.assetId) : null;
   const audioMedia = audioClip ? mediaById.get(audioClip.assetId) : null;
   const videoUrl = videoMedia?.url;

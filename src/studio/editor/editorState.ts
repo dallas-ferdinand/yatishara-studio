@@ -1,12 +1,14 @@
 import {
   DEFAULT_PPS,
   DEFAULT_TRACKS,
+  LEGACY_TRACK_MAP,
   type EditorClip,
+  type EditorMode,
   type EditorProject,
   type EditorState,
   type EditorTrack,
-  type TrackKind,
 } from "./types";
+import { nextTrackId } from "./editorTimelineUtils";
 
 export function newClipId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -42,7 +44,6 @@ export function createEmptyProject(args: {
   });
 }
 
-/** Ensure saved projects include newer tracks (e.g. text) without dropping clips. */
 export function normalizeProject(project: EditorProject): EditorProject {
   const tracks = [...project.tracks];
   for (const defaultTrack of DEFAULT_TRACKS) {
@@ -50,14 +51,19 @@ export function normalizeProject(project: EditorProject): EditorProject {
       tracks.push({ ...defaultTrack });
     }
   }
-  return {
-    ...project,
-    tracks,
-    clips: project.clips.map((clip) => ({
+
+  const clips = project.clips.map((clip) => {
+    const trackId = LEGACY_TRACK_MAP[clip.trackId] ?? clip.trackId;
+    const track = tracks.find((item) => item.id === trackId);
+    return {
       ...clip,
+      trackId: track?.id ?? trackId,
+      kind: track?.kind ?? clip.kind,
       effects: clip.effects ?? undefined,
-    })),
-  };
+    };
+  });
+
+  return { ...project, tracks, clips };
 }
 
 export function createInitialState(project: EditorProject): EditorState {
@@ -66,8 +72,11 @@ export function createInitialState(project: EditorProject): EditorState {
     ui: {
       playhead: 0,
       selectedClipId: null,
+      selectedJointKey: null,
       pixelsPerSecond: DEFAULT_PPS,
       playing: false,
+      inspectorOpen: true,
+      editorMode: "select",
     },
     past: [],
     future: [],
@@ -90,22 +99,38 @@ export type EditorAction =
   | { type: "undo" }
   | { type: "redo" }
   | { type: "select_clip"; clipId: string | null }
+  | { type: "select_joint"; jointKey: string | null }
   | { type: "set_playhead"; time: number }
   | { type: "set_playing"; playing: boolean }
   | { type: "set_zoom"; pixelsPerSecond: number }
+  | { type: "set_inspector_open"; open: boolean }
+  | { type: "set_editor_mode"; mode: EditorMode }
   | { type: "delete_selected" }
   | { type: "duplicate_selected" }
   | { type: "split_at_playhead" }
   | { type: "add_clip"; clip: Omit<EditorClip, "id"> }
-  | { type: "add_text_clip"; startTime?: number }
+  | { type: "add_text_clip"; startTime?: number; trackId?: string }
+  | { type: "add_track_layer"; kind: "video" | "text" }
   | { type: "update_clip"; clipId: string; patch: Partial<EditorClip> }
+  | { type: "set_joint_transition"; jointKey: string; transition: EditorClip["transitionOut"] }
   | { type: "move_clip"; clipId: string; startTime: number; trackId?: string; live?: boolean }
   | { type: "trim_clip"; clipId: string; trimIn: number; trimOut: number; startTime?: number; live?: boolean }
   | { type: "toggle_track_mute"; trackId: string }
   | { type: "replace_project"; project: EditorProject };
 
-function trackForKind(tracks: EditorTrack[], kind: TrackKind): EditorTrack {
-  return tracks.find((track) => track.kind === kind) ?? tracks[0];
+function trackForClip(tracks: EditorTrack[], clip: Omit<EditorClip, "id">): EditorTrack {
+  if (clip.trackId) {
+    const explicit = tracks.find((track) => track.id === clip.trackId);
+    if (explicit) return explicit;
+  }
+  return tracks.find((track) => track.kind === clip.kind) ?? tracks[0]!;
+}
+
+function targetTextTrack(state: EditorState, trackId?: string): EditorTrack | null {
+  if (trackId) {
+    return state.project.tracks.find((track) => track.id === trackId && track.kind === "text") ?? null;
+  }
+  return state.project.tracks.find((track) => track.kind === "text") ?? null;
 }
 
 export function reducer(state: EditorState, action: EditorAction): EditorState {
@@ -131,7 +156,25 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     }
     case "select_clip":
-      return { ...state, ui: { ...state.ui, selectedClipId: action.clipId } };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          selectedClipId: action.clipId,
+          selectedJointKey: null,
+        },
+      };
+    case "select_joint":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          selectedJointKey: action.jointKey,
+          selectedClipId: null,
+          editorMode: action.jointKey ? "transition" : state.ui.editorMode,
+          inspectorOpen: action.jointKey ? true : state.ui.inspectorOpen,
+        },
+      };
     case "set_playhead":
       return {
         ...state,
@@ -144,6 +187,18 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, ui: { ...state.ui, playing: action.playing } };
     case "set_zoom":
       return { ...state, ui: { ...state.ui, pixelsPerSecond: action.pixelsPerSecond } };
+    case "set_inspector_open":
+      return { ...state, ui: { ...state.ui, inspectorOpen: action.open } };
+    case "set_editor_mode":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          editorMode: action.mode,
+          inspectorOpen: true,
+          selectedJointKey: action.mode === "transition" ? state.ui.selectedJointKey : null,
+        },
+      };
     case "delete_selected": {
       if (!state.ui.selectedClipId) return state;
       const clips = state.project.clips.filter((clip) => clip.id !== state.ui.selectedClipId);
@@ -168,7 +223,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       });
     }
     case "add_text_clip": {
-      const textTrack = state.project.tracks.find((track) => track.kind === "text");
+      const textTrack = targetTextTrack(state, action.trackId);
       if (!textTrack) return state;
       const startTime = action.startTime ?? state.ui.playhead;
       const clip: EditorClip = {
@@ -193,15 +248,36 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         clips: [...state.project.clips, clip],
       });
     }
+    case "add_track_layer": {
+      const id = nextTrackId(state.project, action.kind);
+      const label =
+        action.kind === "video"
+          ? `V${state.project.tracks.filter((t) => t.kind === "video").length + 1}`
+          : action.kind === "text"
+            ? `Text ${state.project.tracks.filter((t) => t.kind === "text").length + 1}`
+            : "Audio";
+      const track: EditorTrack = { id, kind: action.kind, label };
+      return withHistory(state, {
+        ...state.project,
+        tracks: [...state.project.tracks, track],
+      });
+    }
     case "update_clip": {
       const clips = state.project.clips.map((clip) =>
         clip.id === action.clipId ? { ...clip, ...action.patch, id: clip.id } : clip,
       );
       return withHistory(state, { ...state.project, clips });
     }
+    case "set_joint_transition": {
+      const [leftId] = action.jointKey.split("::");
+      const clips = state.project.clips.map((clip) =>
+        clip.id === leftId ? { ...clip, transitionOut: action.transition } : clip,
+      );
+      return withHistory(state, { ...state.project, clips });
+    }
     case "split_at_playhead": {
       const clip = state.project.clips.find((item) => item.id === state.ui.selectedClipId);
-      if (!clip) return state;
+      if (!clip || clip.kind === "text") return state;
       const t = state.ui.playhead;
       const clipEnd = clip.startTime + clipDuration(clip);
       if (t <= clip.startTime + 0.05 || t >= clipEnd - 0.05) return state;
@@ -220,11 +296,12 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return withHistory(state, { ...state.project, clips });
     }
     case "add_clip": {
-      const track = trackForKind(state.project.tracks, action.clip.kind);
+      const track = trackForClip(state.project.tracks, action.clip);
       const clip: EditorClip = {
         ...action.clip,
         id: newClipId(),
-        trackId: action.clip.trackId || track.id,
+        trackId: track.id,
+        kind: track.kind,
       };
       return withHistory(state, {
         ...state.project,
@@ -236,12 +313,12 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         if (clip.id !== action.clipId) return clip;
         const nextTrackId = action.trackId ?? clip.trackId;
         const track = state.project.tracks.find((item) => item.id === nextTrackId);
-        const nextKind = track?.kind ?? clip.kind;
+        if (track && track.kind !== clip.kind) return { ...clip, startTime: Math.max(0, action.startTime) };
         return {
           ...clip,
           startTime: Math.max(0, action.startTime),
           trackId: nextTrackId,
-          kind: nextKind,
+          kind: track?.kind ?? clip.kind,
         };
       });
       const nextProject = {
@@ -300,6 +377,15 @@ export function clipAtPlayhead(project: EditorProject, trackId: string, time: nu
       return time >= clip.startTime && time < end;
     }) ?? null
   );
+}
+
+export function topVideoClipAtPlayhead(project: EditorProject, time: number): EditorClip | null {
+  const videoTracks = project.tracks.filter((track) => track.kind === "video");
+  for (let i = videoTracks.length - 1; i >= 0; i--) {
+    const clip = clipAtPlayhead(project, videoTracks[i]!.id, time);
+    if (clip) return clip;
+  }
+  return null;
 }
 
 export function formatTimecode(seconds: number): string {

@@ -15,7 +15,12 @@ import {
   VolumeX,
   ZoomIn,
   ZoomOut,
+  Sunrise,
+  Sunset,
+  Sparkles,
 } from "lucide-react";
+import { transitionLabel } from "./editorEffects";
+import { transitionJointsOnTrack } from "./editorTimelineUtils";
 import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
 import {
   collectSnapTimes,
@@ -191,6 +196,16 @@ function TimelineClipBlock({
         <span className="studio-editor-clip-label">{clip.label}</span>
       )}
       <FadeOverlay fadeIn={clip.effects?.fadeIn} fadeOut={clip.effects?.fadeOut} duration={duration} pps={pps} />
+      {(clip.effects?.fadeIn ?? 0) > 0 ? (
+        <span className="studio-editor-clip-edge-icon is-in" title="Fade in">
+          <Sunrise size={10} aria-hidden="true" />
+        </span>
+      ) : null}
+      {(clip.effects?.fadeOut ?? 0) > 0 ? (
+        <span className="studio-editor-clip-edge-icon is-out" title="Fade out">
+          <Sunset size={10} aria-hidden="true" />
+        </span>
+      ) : null}
       {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
         <span className="studio-editor-clip-transition-badge" title={`${clip.transitionOut.type} out`}>
           {clip.transitionOut.type === "crossfade" ? "×" : "→"}
@@ -236,33 +251,57 @@ function DropGhost({ preview, pps, mediaById }) {
   );
 }
 
+function TransitionJointMarker({ joint, leftClip, pps, selected, onSelect }) {
+  const left = joint.time * pps - 10;
+  const hasTransition = leftClip?.transitionOut?.type && leftClip.transitionOut.type !== "none";
+  return (
+    <button
+      type="button"
+      className={`studio-editor-joint${selected ? " is-selected" : ""}${hasTransition ? " has-transition" : ""}`}
+      style={{ left: Math.max(0, left) }}
+      title={hasTransition ? transitionLabel(leftClip.transitionOut.type) : "Add transition"}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect(joint.key);
+      }}
+    >
+      <Sparkles size={11} aria-hidden="true" />
+    </button>
+  );
+}
+
 function TrackRailButton({ track, onToggleMute }) {
   if (track.kind === "audio") {
     return (
-      <button
-        type="button"
-        className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
-        aria-label={track.muted ? "Unmute track" : "Mute track"}
-        title={track.muted ? "Unmute" : "Mute"}
-        onClick={() => onToggleMute(track.id)}
-      >
-        {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
-      </button>
+      <div className="studio-editor-track-rail-inner">
+        <span className="studio-editor-track-label">{track.label}</span>
+        <button
+          type="button"
+          className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
+          aria-label={track.muted ? "Unmute track" : "Mute track"}
+          title={track.muted ? "Unmute" : "Mute"}
+          onClick={() => onToggleMute(track.id)}
+        >
+          {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
+        </button>
+      </div>
     );
   }
 
   if (track.kind === "text") {
     return (
-      <span className="studio-editor-track-btn is-static" aria-hidden="true" title="Text track">
+      <div className="studio-editor-track-rail-inner" title="Text layer">
+        <span className="studio-editor-track-label">{track.label}</span>
         <Type size={ICON} aria-hidden="true" />
-      </span>
+      </div>
     );
   }
 
   return (
-    <span className="studio-editor-track-btn is-static" aria-hidden="true" title="Video track">
+    <div className="studio-editor-track-rail-inner" title={track.label}>
+      <span className="studio-editor-track-label">{track.label}</span>
       <Film size={ICON} aria-hidden="true" />
-    </span>
+    </div>
   );
 }
 
@@ -276,7 +315,6 @@ export function EditorTransportBar({
   canRedo,
   canSplit,
   hasSelection,
-  exporting,
   pixelsPerSecond,
   onPlayingChange,
   onUndo,
@@ -284,7 +322,6 @@ export function EditorTransportBar({
   onSplit,
   onDelete,
   onZoom,
-  onExport,
 }) {
   return (
     <div className="studio-editor-transport">
@@ -326,14 +363,6 @@ export function EditorTransportBar({
             <ZoomIn size={ICON} aria-hidden="true" />
           </button>
         </div>
-        <button
-          type="button"
-          className="studio-editor-export-btn"
-          disabled={exporting}
-          onClick={onExport}
-        >
-          {exporting ? "Exporting…" : "Export"}
-        </button>
       </div>
     </div>
   );
@@ -344,8 +373,11 @@ export function EditorTimeline({
   playhead,
   pixelsPerSecond,
   selectedClipId,
+  selectedJointKey,
+  editorMode,
   mediaById,
   onSelectClip,
+  onSelectJoint,
   onSetPlayhead,
   onAddClip,
   onMoveClip,
@@ -515,6 +547,7 @@ export function EditorTimeline({
                   onPointerDown={(event) => {
                     if (event.target === event.currentTarget) {
                       onSelectClip(null);
+                      onSelectJoint?.(null);
                       onSetPlayhead(timeFromClientX(event.clientX, event.currentTarget));
                     }
                   }}
@@ -532,7 +565,10 @@ export function EditorTimeline({
                           media={media}
                           project={project}
                           playhead={playhead}
-                          onSelect={onSelectClip}
+                          onSelect={(id) => {
+                            onSelectJoint?.(null);
+                            onSelectClip(id);
+                          }}
                           onMove={onMoveClip}
                           onSnapGuide={setSnapGuideTime}
                           resolveTrackAtY={resolveTrackAtY}
@@ -542,6 +578,18 @@ export function EditorTimeline({
                         />
                       );
                     })}
+                  {track.kind === "video"
+                    ? transitionJointsOnTrack(project, track.id).map((joint) => (
+                        <TransitionJointMarker
+                          key={joint.key}
+                          joint={joint}
+                          leftClip={project.clips.find((c) => c.id === joint.leftClipId)}
+                          pps={pixelsPerSecond}
+                          selected={selectedJointKey === joint.key}
+                          onSelect={onSelectJoint}
+                        />
+                      ))
+                    : null}
                   <DropGhost preview={preview} pps={pixelsPerSecond} mediaById={mediaById} />
                 </div>
               </div>

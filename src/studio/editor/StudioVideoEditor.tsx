@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import { EditorPreview } from "./EditorPreview";
 import { EditorInspector } from "./EditorInspector";
 import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
+import { EditorToolbar, EditorModeHint } from "./EditorToolbar";
 import {
   clipDuration,
   createEmptyProject,
@@ -15,6 +16,7 @@ import {
   reducer,
 } from "./editorState";
 import { useEditorHotkeys } from "./useEditorHotkeys";
+import { jointByKey } from "./editorTimelineUtils";
 import { MAX_PPS, MIN_PPS } from "./types";
 
 export function StudioVideoEditor({
@@ -30,10 +32,7 @@ export function StudioVideoEditor({
   const [urlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const saveTimerRef = useRef(null);
 
-  const existing = useQuery(
-    api.videoEdits.get,
-    projectId ? { projectId } : "skip",
-  );
+  const existing = useQuery(api.videoEdits.get, projectId ? { projectId } : "skip");
   const existingBySource = useQuery(
     api.videoEdits.getBySourceAsset,
     sourceAssetId && !projectId ? { sourceAssetId } : "skip",
@@ -79,7 +78,7 @@ export function StudioVideoEditor({
           type: "add_clip",
           clip: {
             assetId: source._id,
-            trackId: "track-video",
+            trackId: "track-v1",
             startTime: 0,
             trimIn: 0,
             trimOut: 4,
@@ -103,11 +102,9 @@ export function StudioVideoEditor({
         project: state.project,
         sourceAssetId,
       }).then((result) => {
-        if (result?.projectId) {
-          if (!localProjectId) {
-            setLocalProjectId(result.projectId);
-            onProjectSaved?.(result.projectId, state.project.name);
-          }
+        if (result?.projectId && !localProjectId) {
+          setLocalProjectId(result.projectId);
+          onProjectSaved?.(result.projectId, state.project.name);
         }
       });
     }, 800);
@@ -131,8 +128,9 @@ export function StudioVideoEditor({
   const mediaById = useMemo(() => new Map(mediaItems.map((item) => [item.assetId, item])), [mediaItems]);
 
   const timelineDuration = Math.max(state.project.duration, projectEndTime(state.project));
-
   const selectedClip = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId) ?? null;
+  const selectedJoint = jointByKey(state.project, state.ui.selectedJointKey);
+
   const canSplit =
     Boolean(selectedClip) &&
     selectedClip.kind !== "text" &&
@@ -186,7 +184,10 @@ export function StudioVideoEditor({
         type: "set_zoom",
         pixelsPerSecond: Math.max(MIN_PPS, Math.min(MAX_PPS, state.ui.pixelsPerSecond + delta)),
       }),
-    onDeselect: () => dispatch({ type: "select_clip", clipId: null }),
+    onDeselect: () => {
+      dispatch({ type: "select_clip", clipId: null });
+      dispatch({ type: "select_joint", jointKey: null });
+    },
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
     canSplit,
@@ -195,7 +196,20 @@ export function StudioVideoEditor({
 
   return (
     <div className="studio-editor">
-      <div className="studio-editor-main">
+      <EditorToolbar
+        editorMode={state.ui.editorMode}
+        inspectorOpen={state.ui.inspectorOpen}
+        exporting={exporting}
+        onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
+        onToggleInspector={() =>
+          dispatch({ type: "set_inspector_open", open: !state.ui.inspectorOpen })
+        }
+        onExport={() => void handleExport()}
+      />
+      <EditorModeHint mode={state.ui.editorMode} />
+      <div
+        className={`studio-editor-main${state.ui.inspectorOpen ? " is-inspector-open" : " is-inspector-closed"}`}
+      >
         <div className="studio-editor-body">
           <EditorPreview
             project={state.project}
@@ -213,7 +227,6 @@ export function StudioVideoEditor({
             canRedo={state.future.length > 0}
             canSplit={canSplit}
             hasSelection={Boolean(state.ui.selectedClipId)}
-            exporting={exporting}
             pixelsPerSecond={state.ui.pixelsPerSecond}
             onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
             onUndo={() => dispatch({ type: "undo" })}
@@ -221,15 +234,17 @@ export function StudioVideoEditor({
             onSplit={() => dispatch({ type: "split_at_playhead" })}
             onDelete={() => dispatch({ type: "delete_selected" })}
             onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
-            onExport={() => void handleExport()}
           />
           <EditorTimeline
             project={state.project}
             playhead={state.ui.playhead}
             pixelsPerSecond={state.ui.pixelsPerSecond}
             selectedClipId={state.ui.selectedClipId}
+            selectedJointKey={state.ui.selectedJointKey}
+            editorMode={state.ui.editorMode}
             mediaById={mediaById}
             onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
+            onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
             onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
             onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
             onMoveClip={(clipId, startTime, trackId, live) =>
@@ -242,10 +257,21 @@ export function StudioVideoEditor({
           />
         </div>
         <EditorInspector
+          open={state.ui.inspectorOpen}
+          editorMode={state.ui.editorMode}
           clip={selectedClip}
+          jointKey={selectedJoint?.key ?? null}
+          project={state.project}
           playhead={state.ui.playhead}
           onUpdateClip={(clipId, patch) => dispatch({ type: "update_clip", clipId, patch })}
-          onAddTextClip={() => dispatch({ type: "add_text_clip" })}
+          onSetJointTransition={(jointKey, transition) =>
+            dispatch({ type: "set_joint_transition", jointKey, transition })
+          }
+          onAddTextClip={() => {
+            dispatch({ type: "set_editor_mode", mode: "text" });
+            dispatch({ type: "add_text_clip" });
+          }}
+          onAddTrackLayer={(kind) => dispatch({ type: "add_track_layer", kind })}
         />
       </div>
     </div>
