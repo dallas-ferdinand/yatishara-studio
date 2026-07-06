@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { clipOpacityAtLocalTime, textAnimationStyle } from "./editorEffects";
 import { clipAtPlayhead, clipDuration, projectEndTime, topVideoClipAtPlayhead } from "./editorState";
 
@@ -48,10 +48,23 @@ export function EditorPreview({
       )
     : 1;
 
+  const clipsSig = useMemo(
+    () =>
+      project.clips
+        .map((c) => `${c.id}:${c.startTime}:${c.trimIn}:${c.trimOut}:${c.trackId}:${c.assetId ?? ""}`)
+        .join("|"),
+    [project.clips],
+  );
+
   playheadRef.current = playhead;
   playingRef.current = playing;
   const projectRef = useRef(project);
   projectRef.current = project;
+
+  useEffect(() => {
+    lastVideoKeyRef.current = null;
+    lastAudioKeyRef.current = null;
+  }, [clipsSig]);
 
   useEffect(() => {
     if (!playing) return;
@@ -86,28 +99,46 @@ export function EditorPreview({
     if (!video || !videoClip || !videoUrl || videoIsImage) return;
 
     const local = playhead - videoClip.startTime + videoClip.trimIn;
-    const key = `${videoClip.assetId}:${videoClip.id}`;
-    if (lastVideoKeyRef.current !== key) {
+    const key = `${videoClip.id}:${videoClip.assetId}:${videoClip.startTime}:${videoClip.trimIn}:${videoClip.trimOut}`;
+    const clipChanged = lastVideoKeyRef.current !== key;
+    if (clipChanged) {
       if (video.src !== videoUrl) video.src = videoUrl;
       lastVideoKeyRef.current = key;
     }
 
     const target = Math.max(videoClip.trimIn, Math.min(local, videoClip.trimOut - 0.02));
-    if (Math.abs(video.currentTime - target) > 0.2) {
-      video.currentTime = target;
+    const seekThreshold = playing ? 0.06 : 0.15;
+    if (clipChanged || Math.abs(video.currentTime - target) > seekThreshold) {
+      try {
+        video.currentTime = target;
+      } catch {
+        /* ignore seek races */
+      }
     }
 
     if (playing) void video.play().catch(() => {});
     else video.pause();
-  }, [playhead, videoClip?.id, videoClip?.assetId, videoClip?.startTime, videoClip?.trimIn, videoClip?.trimOut, videoUrl, videoIsImage, playing]);
+  }, [
+    playhead,
+    playing,
+    videoClip?.id,
+    videoClip?.assetId,
+    videoClip?.startTime,
+    videoClip?.trimIn,
+    videoClip?.trimOut,
+    videoUrl,
+    videoIsImage,
+    clipsSig,
+  ]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioClip || !audioUrl) return;
 
     const local = playhead - audioClip.startTime + audioClip.trimIn;
-    const key = `${audioClip.assetId}:${audioClip.id}`;
-    if (lastAudioKeyRef.current !== key) {
+    const key = `${audioClip.id}:${audioClip.assetId}:${audioClip.startTime}:${audioClip.trimIn}:${audioClip.trimOut}`;
+    const clipChanged = lastAudioKeyRef.current !== key;
+    if (clipChanged) {
       if (audio.src !== audioUrl) audio.src = audioUrl;
       lastAudioKeyRef.current = key;
     }
@@ -116,13 +147,30 @@ export function EditorPreview({
     const volume = audioClip.effects?.volume ?? 1;
     audio.volume = Math.max(0, Math.min(1, volume));
     const target = Math.max(audioClip.trimIn, Math.min(local, audioClip.trimOut - 0.02));
-    if (Math.abs(audio.currentTime - target) > 0.2) {
-      audio.currentTime = target;
+    const seekThreshold = playing ? 0.06 : 0.15;
+    if (clipChanged || Math.abs(audio.currentTime - target) > seekThreshold) {
+      try {
+        audio.currentTime = target;
+      } catch {
+        /* ignore */
+      }
     }
 
     if (playing && !audioMuted) void audio.play().catch(() => {});
     else audio.pause();
-  }, [playhead, audioClip?.id, audioClip?.assetId, audioClip?.startTime, audioClip?.trimIn, audioClip?.trimOut, audioUrl, audioMuted, playing, audioClip?.effects?.volume]);
+  }, [
+    playhead,
+    playing,
+    audioClip?.id,
+    audioClip?.assetId,
+    audioClip?.startTime,
+    audioClip?.trimIn,
+    audioClip?.trimOut,
+    audioUrl,
+    audioMuted,
+    audioClip?.effects?.volume,
+    clipsSig,
+  ]);
 
   return (
     <div className="studio-editor-preview">
@@ -147,9 +195,7 @@ export function EditorPreview({
             />
           )
         ) : (
-          <div className="studio-editor-preview-empty">
-            <p>Drag clips from the file manager onto the timeline</p>
-          </div>
+          <div className="studio-editor-preview-empty" aria-hidden="true" />
         )}
         {textClips.map((clip) => {
           const local = playhead - clip.startTime;

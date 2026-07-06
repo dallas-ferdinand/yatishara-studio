@@ -11,6 +11,7 @@ import {
   Moon,
   MousePointer2,
   Move,
+  Plus,
   Scissors,
   Sparkles,
   Sun,
@@ -32,7 +33,7 @@ import {
 import { clipDuration } from "./editorState";
 import { jointByKey, leftClipForJoint } from "./editorTimelineUtils";
 
-const ICON = 16;
+const ICON = 18;
 const MODE_ICONS = {
   "mouse-pointer": MousePointer2,
   sun: Sun,
@@ -54,22 +55,22 @@ const TRANSITION_ICONS = {
   sparkles: Sparkles,
 };
 
-function TransitionCard({ template, active, disabled, onClick }) {
+function TransitionRow({ template, active, disabled, onClick }) {
   const Icon = TRANSITION_ICONS[template.icon] ?? Sparkles;
   return (
     <button
       type="button"
-      className={`studio-editor-lib-card${active ? " is-active" : ""}${disabled ? " is-disabled" : ""}`}
+      className={`studio-editor-transition-row${active ? " is-active" : ""}${disabled ? " is-disabled" : ""}`}
       disabled={disabled}
       onClick={onClick}
       title={template.label}
     >
-      <span className="studio-editor-lib-card-icon">
-        <Icon size={18} aria-hidden="true" />
+      <span className="studio-editor-transition-row-icon">
+        <Icon size={16} aria-hidden="true" />
       </span>
-      <span className="studio-editor-lib-card-label">{template.label}</span>
+      <span className="studio-editor-transition-row-label">{template.label}</span>
       {template.duration > 0 ? (
-        <span className="studio-editor-lib-card-meta">{template.duration}s</span>
+        <span className="studio-editor-transition-row-meta">{template.duration}s</span>
       ) : null}
     </button>
   );
@@ -98,110 +99,110 @@ export function EditorInspector({
 
   return (
     <aside className="studio-editor-inspector">
-      <div className="studio-editor-inspector-rail">
-        <div className="studio-editor-mode-rail" role="tablist" aria-label="Edit tools">
-          {EDITOR_MODES.map((mode) => {
-            const Icon = MODE_ICONS[mode.icon] ?? MousePointer2;
-            const active = editorMode === mode.id;
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                className={`studio-editor-mode-tab${active ? " is-active" : ""}`}
-                title={mode.label}
-                onClick={() => onModeChange(mode.id)}
-              >
-                <Icon size={15} aria-hidden="true" />
-                <span>{mode.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      <nav className="studio-editor-mode-stack" role="tablist" aria-label="Edit tools">
+        {EDITOR_MODES.map((mode) => {
+          const Icon = MODE_ICONS[mode.icon] ?? MousePointer2;
+          const active = editorMode === mode.id;
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              className={`studio-editor-mode-icon${active ? " is-active" : ""}`}
+              title={mode.label}
+              onClick={() => onModeChange(mode.id)}
+            >
+              <Icon size={17} aria-hidden="true" />
+            </button>
+          );
+        })}
+        <div className="studio-editor-mode-stack-spacer" />
         <button
           type="button"
-          className="studio-editor-export-primary"
+          className="studio-editor-mode-export"
           disabled={exporting}
+          title={exporting ? "Exporting…" : "Export"}
           onClick={onExport}
         >
-          <Download size={15} aria-hidden="true" />
-          {exporting ? "Exporting…" : "Export"}
+          <Download size={17} aria-hidden="true" />
         </button>
-      </div>
+      </nav>
 
-      <div className="studio-editor-inspector-body">
-        {showTransition ? (
-          <section className="studio-editor-inspector-section">
-            <h4>Transitions</h4>
-            <div className={`studio-editor-lib-grid${!joint ? " is-muted" : ""}`}>
-              {TRANSITION_LIBRARY.map((template) => {
-                const current = jointLeft?.transitionOut?.type ?? "none";
-                const active = current === template.id;
-                return (
-                  <TransitionCard
-                    key={template.id}
-                    template={template}
-                    active={active}
-                    disabled={!joint}
-                    onClick={() => {
-                      if (!joint) return;
-                      onSetJointTransition(
-                        joint.key,
-                        template.id === "none"
-                          ? undefined
-                          : { type: template.id, duration: template.duration },
-                      );
-                    }}
+      <div className="studio-editor-inspector-main">
+        <div className="studio-editor-inspector-body">
+          {showTransition ? (
+            <section className="studio-editor-inspector-section">
+              <h4>Transitions</h4>
+              <div className={`studio-editor-transition-list${!joint ? " is-muted" : ""}`}>
+                {TRANSITION_LIBRARY.map((template) => {
+                  const current = jointLeft?.transitionOut?.type ?? "none";
+                  const active = current === template.id;
+                  return (
+                    <TransitionRow
+                      key={template.id}
+                      template={template}
+                      active={active}
+                      disabled={!joint}
+                      onClick={() => {
+                        if (!joint) return;
+                        onSetJointTransition(
+                          joint.key,
+                          template.id === "none"
+                            ? undefined
+                            : { type: template.id, duration: template.duration },
+                        );
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              {jointLeft?.transitionOut?.type && jointLeft.transitionOut.type !== "none" ? (
+                <label className="studio-editor-field-full">
+                  Duration
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={2}
+                    step={0.05}
+                    value={jointLeft.transitionOut.duration}
+                    onChange={(e) =>
+                      onUpdateClip(jointLeft.id, {
+                        transitionOut: {
+                          type: jointLeft.transitionOut!.type,
+                          duration: Number(e.target.value) || 0.5,
+                        },
+                      })
+                    }
                   />
-                );
-              })}
-            </div>
-            {jointLeft?.transitionOut?.type && jointLeft.transitionOut.type !== "none" ? (
-              <label className="studio-editor-field-full">
-                Duration (s)
-                <input
-                  type="number"
-                  min={0.1}
-                  max={2}
-                  step={0.05}
-                  value={jointLeft.transitionOut.duration}
-                  onChange={(e) =>
-                    onUpdateClip(jointLeft.id, {
-                      transitionOut: {
-                        type: jointLeft.transitionOut!.type,
-                        duration: Number(e.target.value) || 0.5,
-                      },
-                    })
-                  }
-                />
-              </label>
-            ) : null}
-          </section>
-        ) : null}
+                </label>
+              ) : null}
+            </section>
+          ) : null}
 
-        {showFade && clip ? <FadePanel clip={clip} onUpdateClip={onUpdateClip} /> : null}
+          {showFade && clip ? <FadePanel clip={clip} onUpdateClip={onUpdateClip} /> : null}
 
-        {showText ? (
-          <TextPanel
-            clip={clip}
-            playhead={playhead}
-            onUpdateClip={onUpdateClip}
-            onAddTextClip={onAddTextClip}
-          />
-        ) : null}
+          {showText ? (
+            <TextPanel
+              clip={clip}
+              playhead={playhead}
+              onUpdateClip={onUpdateClip}
+              onAddTextClip={onAddTextClip}
+            />
+          ) : null}
 
-        {showLayers ? <LayersPanel project={project} onAddTrackLayer={onAddTrackLayer} /> : null}
+          {showLayers ? <LayersPanel project={project} onAddTrackLayer={onAddTrackLayer} /> : null}
 
-        {clip ? (
-          <section className="studio-editor-inspector-section studio-editor-inspector-meta">
-            <div><strong>Start</strong> {clip.startTime.toFixed(2)}s</div>
-            <div><strong>Length</strong> {clipDuration(clip).toFixed(2)}s</div>
-            {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
-              <div><strong>Out</strong> {transitionLabel(clip.transitionOut.type)}</div>
-            ) : null}
-          </section>
-        ) : null}
+          {clip ? (
+            <section className="studio-editor-inspector-section studio-editor-inspector-meta">
+              <div><strong>Start</strong> {clip.startTime.toFixed(2)}s</div>
+              <div><strong>Length</strong> {clipDuration(clip).toFixed(2)}s</div>
+              {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
+                <div><strong>Out</strong> {transitionLabel(clip.transitionOut.type)}</div>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
       </div>
     </aside>
   );
@@ -228,7 +229,7 @@ function FadePanel({ clip, onUpdateClip }) {
         >
           <Sunrise size={ICON} aria-hidden="true" />
           <span>In</span>
-          <em>{(effects.fadeIn ?? 0) > 0 ? `${effects.fadeIn}s` : "—"}</em>
+          <em>{(effects.fadeIn ?? 0) > 0 ? `${effects.fadeIn}s` : "Off"}</em>
         </button>
         <button
           type="button"
@@ -238,7 +239,7 @@ function FadePanel({ clip, onUpdateClip }) {
         >
           <Sunset size={ICON} aria-hidden="true" />
           <span>Out</span>
-          <em>{(effects.fadeOut ?? 0) > 0 ? `${effects.fadeOut}s` : "—"}</em>
+          <em>{(effects.fadeOut ?? 0) > 0 ? `${effects.fadeOut}s` : "Off"}</em>
         </button>
       </div>
       <div className="studio-editor-preset-grid">
@@ -259,7 +260,7 @@ function FadePanel({ clip, onUpdateClip }) {
       </div>
       <div className="studio-editor-field-row">
         <label>
-          In (s)
+          Fade in
           <input
             type="number"
             min={0}
@@ -270,7 +271,7 @@ function FadePanel({ clip, onUpdateClip }) {
           />
         </label>
         <label>
-          Out (s)
+          Fade out
           <input
             type="number"
             min={0}
@@ -284,7 +285,7 @@ function FadePanel({ clip, onUpdateClip }) {
       {isAudio ? (
         <label className="studio-editor-field-full">
           <span className="studio-editor-range-label">
-            <Volume2 size={14} aria-hidden="true" /> Volume
+            <Volume2 size={16} aria-hidden="true" /> Volume
           </span>
           <input
             type="range"
@@ -307,7 +308,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
       <section className="studio-editor-inspector-section">
         <button type="button" className="studio-editor-primary-btn" onClick={() => onAddTextClip()}>
           <Type size={ICON} aria-hidden="true" />
-          Add text · {playhead.toFixed(1)}s
+          Add text at {playhead.toFixed(1)}s
         </button>
       </section>
     );
@@ -325,7 +326,7 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
     <section className="studio-editor-inspector-section">
       <textarea
         className="studio-editor-textarea"
-        rows={3}
+        rows={4}
         placeholder="Headline"
         value={clip.text?.text ?? ""}
         onChange={(e) => patchText({ text: e.target.value })}
@@ -362,14 +363,14 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
           </button>
         ))}
       </div>
-      <div className="studio-editor-lib-grid is-compact">
+      <div className="studio-editor-animation-list">
         {TEXT_ANIMATION_TEMPLATES.map((template) => {
           const active = (clip.text?.animation ?? "none") === template.id;
           return (
             <button
               key={template.id}
               type="button"
-              className={`studio-editor-lib-card is-compact${active ? " is-active" : ""}`}
+              className={`studio-editor-animation-btn${active ? " is-active" : ""}`}
               onClick={() =>
                 patchText({
                   animation: template.id,
@@ -377,13 +378,13 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
                 })
               }
             >
-              <span className="studio-editor-lib-card-label">{template.label}</span>
+              {template.label}
             </button>
           );
         })}
       </div>
       <label className="studio-editor-field-full">
-        Anim (s)
+        Animation length
         <input
           type="number"
           min={0}
@@ -400,33 +401,49 @@ function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
 function LayersPanel({ project, onAddTrackLayer }) {
   const videoTracks = project.tracks.filter((t) => t.kind === "video");
   const textTracks = project.tracks.filter((t) => t.kind === "text");
+  const audioTracks = project.tracks.filter((t) => t.kind === "audio");
 
   return (
     <section className="studio-editor-inspector-section">
-      <div className="studio-editor-layer-list">
-        <div>
-          <strong>Video</strong>
-          <ul>
-            {videoTracks.map((track) => (
-              <li key={track.id}>{track.label}</li>
-            ))}
-          </ul>
-          <button type="button" className="studio-editor-secondary-btn" onClick={() => onAddTrackLayer("video")}>
-            + Video
-          </button>
-        </div>
-        <div>
-          <strong>Text</strong>
-          <ul>
-            {textTracks.map((track) => (
-              <li key={track.id}>{track.label}</li>
-            ))}
-          </ul>
-          <button type="button" className="studio-editor-secondary-btn" onClick={() => onAddTrackLayer("text")}>
-            + Text
-          </button>
-        </div>
+      <div className="studio-editor-layer-groups">
+        <LayerGroup
+          title="Video"
+          tracks={videoTracks}
+          onAdd={() => onAddTrackLayer("video")}
+        />
+        <LayerGroup
+          title="Text"
+          tracks={textTracks}
+          onAdd={() => onAddTrackLayer("text")}
+        />
+        <LayerGroup
+          title="Audio"
+          tracks={audioTracks}
+          onAdd={null}
+        />
       </div>
     </section>
+  );
+}
+
+function LayerGroup({ title, tracks, onAdd }) {
+  return (
+    <div className="studio-editor-layer-group">
+      <div className="studio-editor-layer-group-head">
+        <strong>{title}</strong>
+        {onAdd ? (
+          <button type="button" className="studio-editor-layer-add" onClick={onAdd} title={`Add ${title.toLowerCase()} layer`}>
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      {tracks.length ? (
+        <ul className="studio-editor-layer-items">
+          {tracks.map((track) => (
+            <li key={track.id}>{track.label}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

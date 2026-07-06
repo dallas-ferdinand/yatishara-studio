@@ -109,11 +109,10 @@ export const LEGACY_TRACK_MAP: Record<string, string> = {
 
 export const DEFAULT_TRACKS: EditorTrack[] = [
   { id: "track-v1", kind: "video", label: "V1" },
-  { id: "track-v2", kind: "video", label: "V2" },
-  { id: "track-t1", kind: "text", label: "Title" },
-  { id: "track-t2", kind: "text", label: "Overlay" },
   { id: "track-audio", kind: "audio", label: "Audio" },
 ];
+
+export const TRACK_INSERT_HEIGHT = 8;
 
 export const MIN_PPS = 24;
 export const MAX_PPS = 240;

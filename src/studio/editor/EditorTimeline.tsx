@@ -45,6 +45,7 @@ import {
   MIN_PPS,
   RULER_HEIGHT,
   TEXT_TRACK_HEIGHT,
+  TRACK_INSERT_HEIGHT,
   TRACK_RAIL_WIDTH,
   VIDEO_TRACK_HEIGHT,
 } from "./types";
@@ -104,9 +105,11 @@ function TimelineClipBlock({
   playhead,
   onSelect,
   onMove,
+  onMoveToTrack,
   onTrim,
   onSnapGuide,
-  resolveTrackAtY,
+  resolveDropTarget,
+  onHighlightInsert,
   onRipplePreview,
   onApplyRippleLayout,
   rippleActive,
@@ -135,6 +138,7 @@ function TimelineClipBlock({
     let lastTrimIn = originTrimIn;
     let lastTrimOut = originTrimOut;
     let lastRipplePlacements = null;
+    let lastInsertAt = null;
     let freeMove = false;
     setDragging(mode);
 
@@ -147,14 +151,22 @@ function TimelineClipBlock({
       const deltaSec = deltaPx / pps;
 
       if (mode === "move") {
-        const targetTrackId = resolveTrackAtY?.(moveEvent.clientY) ?? originTrackId;
-        const targetTrack = project.tracks.find((track) => track.id === targetTrackId);
-        const allowedTrackId =
-          targetTrack && targetTrack.kind === clip.kind ? targetTrackId : originTrackId;
+        const target = resolveDropTarget?.(moveEvent.clientY, clip.kind);
+        let allowedTrackId = originTrackId;
+        lastInsertAt = null;
+        onHighlightInsert?.(null);
+
+        if (target?.type === "insert") {
+          lastInsertAt = target.index;
+          onHighlightInsert?.(target.index);
+        } else if (target?.type === "track") {
+          allowedTrackId = target.trackId;
+        }
+
         const rawStart = Math.max(0, originStart + deltaSec);
         freeMove = disableSnap;
 
-        if (disableSnap) {
+        if (disableSnap || lastInsertAt !== null) {
           onRipplePreview?.(null);
           const trackForSnap = allowedTrackId || originTrackId;
           const moveSnapTimes = collectSnapTimes(project, trackForSnap, clip.id, playhead);
@@ -162,7 +174,9 @@ function TimelineClipBlock({
           lastStart = startTime;
           lastTrackId = allowedTrackId;
           onSnapGuide?.(guide);
-          onMove(clip.id, startTime, lastTrackId !== originTrackId ? lastTrackId : undefined, true);
+          if (!lastInsertAt) {
+            onMove(clip.id, startTime, lastTrackId !== originTrackId ? lastTrackId : undefined, true);
+          }
         } else {
           const centerTime = rawStart + clipDuration(clip) / 2;
           const placements = computeRippleLayout({
@@ -209,12 +223,20 @@ function TimelineClipBlock({
       setDragging(null);
       onSnapGuide?.(null);
       onRipplePreview?.(null);
+      onHighlightInsert?.(null);
       window.removeEventListener("pointermove", onMoveEvent);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
 
       if (mode === "move") {
-        if (!freeMove && lastRipplePlacements?.length) {
+        if (lastInsertAt !== null) {
+          onMoveToTrack?.({
+            clipId: clip.id,
+            startTime: lastStart,
+            insertTrackAt: lastInsertAt,
+            ripplePlacements: !freeMove ? lastRipplePlacements : undefined,
+          });
+        } else if (!freeMove && lastRipplePlacements?.length) {
           onApplyRippleLayout?.(lastRipplePlacements);
         } else {
           onMove(clip.id, lastStart, lastTrackId !== originTrackId ? lastTrackId : undefined, false);
@@ -279,6 +301,19 @@ function TimelineClipBlock({
         />
       )}
     </div>
+  );
+}
+
+function TrackInsertZone({ index, active, onDragOver, onDragLeave, onDrop }) {
+  return (
+    <div
+      className={`studio-editor-track-insert${active ? " is-active" : ""}`}
+      style={{ height: TRACK_INSERT_HEIGHT, marginLeft: TRACK_RAIL_WIDTH }}
+      onDragOver={(event) => onDragOver(event, index)}
+      onDragLeave={(event) => onDragLeave(event, index)}
+      onDrop={(event) => onDrop(event, index)}
+      aria-hidden="true"
+    />
   );
 }
 
@@ -435,23 +470,55 @@ export function EditorTimeline({
   onToggleTrackMute,
   onApplyTrackLayout,
   onRippleAddClip,
+  onMoveToTrack,
 }) {
   const scrollRef = useRef(null);
   const trackRowRefs = useRef(new Map());
+  const insertZoneRefs = useRef(new Map());
   const timelineWidth = Math.max(project.duration * pixelsPerSecond + 240, 720);
   const [dropPreview, setDropPreview] = useState(null);
   const [ripplePreview, setRipplePreview] = useState(null);
   const [snapGuideTime, setSnapGuideTime] = useState(null);
+  const [activeInsert, setActiveInsert] = useState(null);
+  const [externalDrag, setExternalDrag] = useState(false);
   const snapThreshold = snapThresholdSec(pixelsPerSecond);
 
-  const resolveTrackAtY = useCallback(
-    (clientY) => {
-      for (const track of project.tracks) {
+  const resolveDropTarget = useCallback(
+    (clientY, clipKind) => {
+      const gapPx = 7;
+      const tracks = project.tracks;
+
+      for (let index = 0; index <= tracks.length; index += 1) {
+        let boundaryY = null;
+        if (index === 0) {
+          const first = tracks[0] ? trackRowRefs.current.get(tracks[0].id) : null;
+          if (first) boundaryY = first.getBoundingClientRect().top;
+        } else if (index === tracks.length) {
+          const last = tracks[tracks.length - 1]
+            ? trackRowRefs.current.get(tracks[tracks.length - 1].id)
+            : null;
+          if (last) boundaryY = last.getBoundingClientRect().bottom;
+        } else {
+          const prev = trackRowRefs.current.get(tracks[index - 1]!.id);
+          const next = trackRowRefs.current.get(tracks[index]!.id);
+          if (prev && next) {
+            const prevRect = prev.getBoundingClientRect();
+            const nextRect = next.getBoundingClientRect();
+            boundaryY = (prevRect.bottom + nextRect.top) / 2;
+          }
+        }
+        if (boundaryY !== null && Math.abs(clientY - boundaryY) <= gapPx) {
+          return { type: "insert", index };
+        }
+      }
+
+      for (const track of tracks) {
         const row = trackRowRefs.current.get(track.id);
         if (!row) continue;
         const rect = row.getBoundingClientRect();
         if (clientY >= rect.top && clientY <= rect.bottom) {
-          return track.id;
+          if (track.kind === clipKind) return { type: "track", trackId: track.id };
+          return null;
         }
       }
       return null;
@@ -573,15 +640,73 @@ export function EditorTimeline({
     [onAddClip, onRippleAddClip, timeFromClientX, project, playhead, snapThreshold],
   );
 
+  const onInsertDragOver = useCallback(
+    (event, index) => {
+      if (!isTimelineDropDrag(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setActiveInsert(index);
+      setDropPreview(null);
+      setRipplePreview(null);
+    },
+    [],
+  );
+
+  const onInsertDragLeave = useCallback((event, index) => {
+    if (event.currentTarget.contains(event.relatedTarget)) return;
+    setActiveInsert((prev) => (prev === index ? null : prev));
+  }, []);
+
+  const onInsertDrop = useCallback(
+    (event, index) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setActiveInsert(null);
+      setDropPreview(null);
+      setRipplePreview(null);
+      setSnapGuideTime(null);
+
+      const payload = readTimelineDropPayload(event);
+      if (!payload) return;
+
+      const lane = scrollRef.current?.querySelector(".studio-editor-track-row .studio-editor-track-lane");
+      const rawStart = lane ? timeFromClientX(event.clientX, lane) : 0;
+      const centerTime = rawStart + payload.duration / 2;
+      const kind = payload.mediaKind === "audio" ? "audio" : "video";
+
+      onRippleAddClip?.({
+        assetId: payload.assetId,
+        trackId: "",
+        startTime: rawStart,
+        trimIn: 0,
+        trimOut: payload.duration,
+        sourceDuration: payload.duration,
+        label: payload.name,
+        kind,
+        centerTime,
+        insertTrackAt: index,
+      });
+    },
+    [onRippleAddClip, timeFromClientX],
+  );
+
   useEffect(() => {
+    const onDragEnter = (event) => {
+      if (isTimelineDropDrag(event)) setExternalDrag(true);
+    };
     const clearPreview = () => {
       setDropPreview(null);
       setRipplePreview(null);
       setSnapGuideTime(null);
+      setActiveInsert(null);
+      setExternalDrag(false);
     };
+    document.addEventListener("dragenter", onDragEnter);
     document.addEventListener("dragend", clearPreview);
     document.addEventListener("drop", clearPreview);
     return () => {
+      document.removeEventListener("dragenter", onDragEnter);
       document.removeEventListener("dragend", clearPreview);
       document.removeEventListener("drop", clearPreview);
     };
@@ -616,24 +741,39 @@ export function EditorTimeline({
               </span>
             ))}
           </div>
-          {project.tracks.map((track) => {
+          {project.tracks.map((track, trackIndex) => {
             const trackHeight = trackHeightForKind(track.kind);
             const preview = dropPreview?.trackId === track.id ? dropPreview : null;
             const trackRipple = ripplePreview?.trackId === track.id ? ripplePreview : null;
             const rippleClipIds = new Set(trackRipple?.placements.map((p) => p.clipId) ?? []);
             return (
-              <div
-                key={track.id}
-                ref={(node) => {
-                  if (node) trackRowRefs.current.set(track.id, node);
-                  else trackRowRefs.current.delete(track.id);
-                }}
-                className={`studio-editor-track-row is-${track.kind}${preview ? " is-drop-target" : ""}${trackRipple ? " is-ripple-active" : ""}`}
-                style={{ height: trackHeight }}
-                onDragOver={(event) => onTrackDragOver(event, track)}
-                onDragLeave={(event) => onTrackDragLeave(event, track)}
-                onDrop={(event) => onTrackDrop(event, track)}
-              >
+              <div key={track.id}>
+                <div
+                  ref={(node) => {
+                    if (node) insertZoneRefs.current.set(trackIndex, node);
+                    else insertZoneRefs.current.delete(trackIndex);
+                  }}
+                  className={`studio-editor-track-insert-wrap${externalDrag || activeInsert !== null ? " is-visible" : ""}`}
+                >
+                  <TrackInsertZone
+                    index={trackIndex}
+                    active={activeInsert === trackIndex}
+                    onDragOver={onInsertDragOver}
+                    onDragLeave={onInsertDragLeave}
+                    onDrop={onInsertDrop}
+                  />
+                </div>
+                <div
+                  ref={(node) => {
+                    if (node) trackRowRefs.current.set(track.id, node);
+                    else trackRowRefs.current.delete(track.id);
+                  }}
+                  className={`studio-editor-track-row is-${track.kind}${preview ? " is-drop-target" : ""}${trackRipple ? " is-ripple-active" : ""}`}
+                  style={{ height: trackHeight }}
+                  onDragOver={(event) => onTrackDragOver(event, track)}
+                  onDragLeave={(event) => onTrackDragLeave(event, track)}
+                  onDrop={(event) => onTrackDrop(event, track)}
+                >
                 <div className="studio-editor-track-rail" style={{ width: TRACK_RAIL_WIDTH }}>
                   <TrackRailButton track={track} onToggleMute={onToggleTrackMute} />
                 </div>
@@ -697,10 +837,12 @@ export function EditorTimeline({
                             onSelectClip(id);
                           }}
                           onMove={onMoveClip}
+                          onMoveToTrack={onMoveToTrack}
                           onSnapGuide={setSnapGuideTime}
+                          onHighlightInsert={setActiveInsert}
                           onRipplePreview={setRipplePreview}
                           onApplyRippleLayout={onApplyTrackLayout}
-                          resolveTrackAtY={resolveTrackAtY}
+                          resolveDropTarget={resolveDropTarget}
                           onTrim={(clipId, trimIn, trimOut, startTime, live) => {
                             onTrimClip(clipId, trimIn, trimOut, startTime, live);
                           }}
@@ -722,8 +864,24 @@ export function EditorTimeline({
                   <DropGhost preview={trackRipple ? null : preview} pps={pixelsPerSecond} mediaById={mediaById} />
                 </div>
               </div>
+              </div>
             );
           })}
+          <div
+            ref={(node) => {
+              if (node) insertZoneRefs.current.set(project.tracks.length, node);
+              else insertZoneRefs.current.delete(project.tracks.length);
+            }}
+            className={`studio-editor-track-insert-wrap${externalDrag || activeInsert !== null ? " is-visible" : ""}`}
+          >
+            <TrackInsertZone
+              index={project.tracks.length}
+              active={activeInsert === project.tracks.length}
+              onDragOver={onInsertDragOver}
+              onDragLeave={onInsertDragLeave}
+              onDrop={onInsertDrop}
+            />
+          </div>
           <div
             className="studio-editor-playhead"
             style={{ left: TRACK_RAIL_WIDTH + playhead * pixelsPerSecond }}

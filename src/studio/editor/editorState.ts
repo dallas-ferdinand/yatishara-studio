@@ -8,7 +8,12 @@ import {
   type EditorState,
   type EditorTrack,
 } from "./types";
-import { nextTrackId } from "./editorTimelineUtils";
+import {
+  defaultInsertIndex,
+  insertTrackAt,
+  nextTrackId,
+  trackLabelForKind,
+} from "./editorTimelineUtils";
 import { computeRippleInsertForNewClip } from "./editorRipple";
 
 export function newClipId(): string {
@@ -47,10 +52,11 @@ export function createEmptyProject(args: {
 
 export function normalizeProject(project: EditorProject): EditorProject {
   const tracks = [...project.tracks];
-  for (const defaultTrack of DEFAULT_TRACKS) {
-    if (!tracks.some((track) => track.id === defaultTrack.id)) {
-      tracks.push({ ...defaultTrack });
-    }
+  if (!tracks.some((track) => track.kind === "video")) {
+    tracks.unshift({ id: "track-v1", kind: "video", label: "V1" });
+  }
+  if (!tracks.some((track) => track.kind === "audio")) {
+    tracks.push({ id: "track-audio", kind: "audio", label: "Audio" });
   }
 
   const clips = project.clips.map((clip) => {
@@ -96,6 +102,13 @@ function withHistory(state: EditorState, nextProject: EditorProject): EditorStat
   };
 }
 
+function withEdit(state: EditorState, nextProject: EditorProject): EditorState {
+  return {
+    ...withHistory(state, nextProject),
+    ui: { ...state.ui, playing: false },
+  };
+}
+
 export type EditorAction =
   | { type: "undo" }
   | { type: "redo" }
@@ -120,7 +133,15 @@ export type EditorAction =
       placements: Array<{ clipId: string; startTime: number; trackId: string }>;
       live?: boolean;
     }
-  | { type: "ripple_add_clip"; clip: Omit<EditorClip, "id">; centerTime: number }
+  | { type: "ripple_add_clip"; clip: Omit<EditorClip, "id">; centerTime: number; insertTrackAt?: number }
+  | {
+      type: "move_clip_to_track";
+      clipId: string;
+      startTime: number;
+      trackId?: string;
+      insertTrackAt?: number;
+      ripplePlacements?: Array<{ clipId: string; startTime: number; trackId: string }>;
+    }
   | { type: "trim_clip"; clipId: string; trimIn: number; trimOut: number; startTime?: number; live?: boolean }
   | { type: "toggle_track_mute"; trackId: string }
   | { type: "replace_project"; project: EditorProject };
@@ -138,6 +159,14 @@ function targetTextTrack(state: EditorState, trackId?: string): EditorTrack | nu
     return state.project.tracks.find((track) => track.id === trackId && track.kind === "text") ?? null;
   }
   return state.project.tracks.find((track) => track.kind === "text") ?? null;
+}
+
+function ensureTextTrack(state: EditorState): { project: EditorProject; track: EditorTrack } {
+  const existing = targetTextTrack(state);
+  if (existing) return { project: state.project, track: existing };
+  const inserted = insertTrackAt(state.project, "text", defaultInsertIndex(state.project.tracks, "text"));
+  const track = inserted.project.tracks.find((item) => item.id === inserted.trackId)!;
+  return { project: inserted.project, track };
 }
 
 export function reducer(state: EditorState, action: EditorAction): EditorState {
@@ -210,8 +239,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       if (!state.ui.selectedClipId) return state;
       const clips = state.project.clips.filter((clip) => clip.id !== state.ui.selectedClipId);
       return {
-        ...withHistory(state, { ...state.project, clips }),
-        ui: { ...state.ui, selectedClipId: null },
+        ...withEdit(state, { ...state.project, clips }),
+        ui: { ...state.ui, selectedClipId: null, playing: false },
       };
     }
     case "duplicate_selected": {
@@ -230,8 +259,12 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       });
     }
     case "add_text_clip": {
-      const textTrack = targetTextTrack(state, action.trackId);
-      if (!textTrack) return state;
+      const { project: textProject, track: textTrack } = action.trackId
+        ? {
+            project: state.project,
+            track: targetTextTrack(state, action.trackId) ?? ensureTextTrack(state).track,
+          }
+        : ensureTextTrack(state);
       const startTime = action.startTime ?? state.ui.playhead;
       const clip: EditorClip = {
         id: newClipId(),
@@ -250,24 +283,18 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           animationDuration: 0.5,
         },
       };
-      return withHistory(state, {
-        ...state.project,
-        clips: [...state.project.clips, clip],
-      });
+      return withHistory(
+        { ...state, project: textProject },
+        {
+          ...textProject,
+          clips: [...textProject.clips, clip],
+        },
+      );
     }
     case "add_track_layer": {
-      const id = nextTrackId(state.project, action.kind);
-      const label =
-        action.kind === "video"
-          ? `V${state.project.tracks.filter((t) => t.kind === "video").length + 1}`
-          : action.kind === "text"
-            ? `Text ${state.project.tracks.filter((t) => t.kind === "text").length + 1}`
-            : "Audio";
-      const track: EditorTrack = { id, kind: action.kind, label };
-      return withHistory(state, {
-        ...state.project,
-        tracks: [...state.project.tracks, track],
-      });
+      const index = defaultInsertIndex(state.project.tracks, action.kind);
+      const inserted = insertTrackAt(state.project, action.kind, index);
+      return withHistory(state, inserted.project);
     }
     case "update_clip": {
       const clips = state.project.clips.map((clip) =>
@@ -300,7 +327,10 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       const clips = state.project.clips
         .filter((item) => item.id !== clip.id)
         .concat([left, right]);
-      return withHistory(state, { ...state.project, clips });
+      return {
+        ...withEdit(state, { ...state.project, clips }),
+        ui: { ...state.ui, selectedClipId: right.id, playing: false },
+      };
     }
     case "add_clip": {
       const track = trackForClip(state.project.tracks, action.clip);
@@ -353,10 +383,61 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         clips,
         duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
       };
-      return action.live ? { ...state, project: nextProject } : withHistory(state, nextProject);
+      return action.live ? { ...state, project: nextProject } : withEdit(state, nextProject);
+    }
+    case "move_clip_to_track": {
+      const moving = state.project.clips.find((clip) => clip.id === action.clipId);
+      if (!moving) return state;
+
+      let project = state.project;
+      let trackId = action.trackId ?? moving.trackId;
+
+      if (action.insertTrackAt !== undefined) {
+        const inserted = insertTrackAt(project, moving.kind, action.insertTrackAt);
+        project = inserted.project;
+        trackId = inserted.trackId;
+      }
+
+      if (action.ripplePlacements?.length) {
+        const positionById = new Map(action.ripplePlacements.map((p) => [p.clipId, p]));
+        const clips = project.clips.map((clip) => {
+          const placement = positionById.get(clip.id);
+          if (!placement) return clip;
+          const track = project.tracks.find((item) => item.id === placement.trackId);
+          return {
+            ...clip,
+            startTime: Math.max(0, placement.startTime),
+            trackId: placement.trackId,
+            kind: track?.kind ?? clip.kind,
+          };
+        });
+        return withEdit(state, { ...project, clips });
+      }
+
+      const clips = project.clips.map((clip) => {
+        if (clip.id !== action.clipId) return clip;
+        const track = project.tracks.find((item) => item.id === trackId);
+        return {
+          ...clip,
+          startTime: Math.max(0, action.startTime),
+          trackId,
+          kind: track?.kind ?? clip.kind,
+        };
+      });
+      return withEdit(state, { ...project, clips });
     }
     case "ripple_add_clip": {
-      const track = trackForClip(state.project.tracks, action.clip);
+      let project = state.project;
+      let trackId = action.clip.trackId;
+
+      if (action.insertTrackAt !== undefined) {
+        const kind = action.clip.kind ?? "video";
+        const inserted = insertTrackAt(project, kind, action.insertTrackAt);
+        project = inserted.project;
+        trackId = inserted.trackId;
+      }
+
+      const track = trackForClip(project.tracks, { ...action.clip, trackId });
       const clip: EditorClip = {
         ...action.clip,
         id: newClipId(),
@@ -364,20 +445,20 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         kind: track.kind,
       };
       const placements = computeRippleInsertForNewClip({
-        project: state.project,
+        project,
         trackId: track.id,
         clip,
         centerTime: action.centerTime,
       });
       const positionById = new Map(placements.map((p) => [p.clipId, p]));
-      const updated = state.project.clips.map((item) => {
+      const updated = project.clips.map((item) => {
         const placement = positionById.get(item.id);
         if (!placement) return item;
         return { ...item, startTime: placement.startTime, trackId: placement.trackId };
       });
       const placed = positionById.get(clip.id)!;
       const clips = [...updated, { ...clip, startTime: placed.startTime, trackId: placed.trackId }];
-      return withHistory(state, { ...state.project, clips });
+      return withEdit(state, { ...project, clips });
     }
     case "trim_clip": {
       const clips = state.project.clips.map((clip) => {

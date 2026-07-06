@@ -267,6 +267,17 @@ export function StudioVideoEditor({
                       kind: clip.kind,
                     },
                     centerTime: clip.centerTime,
+                    insertTrackAt: clip.insertTrackAt,
+                  })
+                }
+                onMoveToTrack={(payload) =>
+                  dispatch({
+                    type: "move_clip_to_track",
+                    clipId: payload.clipId,
+                    startTime: payload.startTime,
+                    trackId: payload.trackId,
+                    insertTrackAt: payload.insertTrackAt,
+                    ripplePlacements: payload.ripplePlacements,
                   })
                 }
               />
@@ -275,9 +286,9 @@ export function StudioVideoEditor({
         </Panel>
         <PanelResizeHandle className="studio-editor-resize cursor-resize" />
         <Panel
-          defaultSize={28}
-          minSize={18}
-          maxSize={42}
+          defaultSize={34}
+          minSize={24}
+          maxSize={48}
           collapsible
           collapsedSize={0}
           className="min-h-0 min-w-0"

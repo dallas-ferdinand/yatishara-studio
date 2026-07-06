@@ -1,4 +1,4 @@
-import type { EditorClip, EditorProject, TrackKind, TransitionJoint } from "./types";
+import type { EditorClip, EditorProject, EditorTrack, TrackKind, TransitionJoint } from "./types";
 import { clipDuration } from "./editorState";
 
 const JOINT_GAP_SEC = 0.75;
@@ -57,5 +57,37 @@ export function nextTrackId(project: EditorProject, kind: TrackKind): string {
   const n = existing.length + 1;
   if (kind === "video") return `track-v${n}`;
   if (kind === "text") return `track-t${n}`;
-  return `track-audio-${n}`;
+  return n === 1 ? "track-audio" : `track-audio-${n}`;
+}
+
+export function trackLabelForKind(project: EditorProject, kind: TrackKind): string {
+  const count = project.tracks.filter((track) => track.kind === kind).length + 1;
+  if (kind === "video") return `V${count}`;
+  if (kind === "text") return count === 1 ? "Title" : `Text ${count}`;
+  return count === 1 ? "Audio" : `Audio ${count}`;
+}
+
+export function defaultInsertIndex(tracks: EditorTrack[], kind: TrackKind): number {
+  if (kind === "audio") return tracks.length;
+  if (kind === "text") {
+    const audioIdx = tracks.findIndex((track) => track.kind === "audio");
+    return audioIdx === -1 ? tracks.length : audioIdx;
+  }
+  const idx = tracks.findIndex((track) => track.kind !== "video");
+  return idx === -1 ? tracks.length : idx;
+}
+
+export function insertTrackAt(
+  project: EditorProject,
+  kind: TrackKind,
+  index: number,
+): { project: EditorProject; trackId: string } {
+  const track = {
+    id: nextTrackId(project, kind),
+    kind,
+    label: trackLabelForKind(project, kind),
+  };
+  const tracks = [...project.tracks];
+  tracks.splice(Math.max(0, Math.min(index, tracks.length)), 0, track);
+  return { project: { ...project, tracks }, trackId: track.id };
 }
