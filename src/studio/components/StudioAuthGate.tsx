@@ -358,7 +358,7 @@ function StudioSignIn() {
               <input
                 className="min-w-0 flex-1 bg-transparent text-lg text-white outline-none placeholder:text-white/35"
                 name="identifier"
-                placeholder="you@example.com or +1 (868) 000-0000"
+                placeholder="Enter email or number"
                 type="text"
                 inputMode={inputMode === "email" ? "email" : "tel"}
                 autoComplete="username"
@@ -371,6 +371,9 @@ function StudioSignIn() {
                 }}
                 required
               />
+            </span>
+            <span className="mt-1.5 block text-xs text-white/38">
+              e.g. you@example.com or +1 (868) 000-0000
             </span>
           </label>
         ) : null}
