@@ -12,7 +12,7 @@ import {
   defaultInsertIndex,
   insertTrackAt,
   nextTrackId,
-  trackLabelForKind,
+  pruneEmptyTracks,
 } from "./editorTimelineUtils";
 import { computeRippleInsertForNewClip } from "./editorRipple";
 
@@ -70,7 +70,7 @@ export function normalizeProject(project: EditorProject): EditorProject {
     };
   });
 
-  return { ...project, tracks, clips };
+  return pruneEmptyTracks({ ...project, tracks, clips });
 }
 
 export function createInitialState(project: EditorProject): EditorState {
@@ -91,11 +91,15 @@ export function createInitialState(project: EditorProject): EditorState {
 }
 
 function withHistory(state: EditorState, nextProject: EditorProject): EditorState {
+  const pruned = pruneEmptyTracks({
+    ...nextProject,
+    duration: Math.max(nextProject.duration, projectEndTime(nextProject)),
+  });
   return {
     ...state,
     project: {
-      ...nextProject,
-      duration: Math.max(nextProject.duration, projectEndTime(nextProject)),
+      ...pruned,
+      duration: Math.max(pruned.duration, projectEndTime(pruned)),
     },
     past: [...state.past.slice(-49), state.project],
     future: [],

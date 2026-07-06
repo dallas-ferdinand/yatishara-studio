@@ -91,3 +91,39 @@ export function insertTrackAt(
   tracks.splice(Math.max(0, Math.min(index, tracks.length)), 0, track);
   return { project: { ...project, tracks }, trackId: track.id };
 }
+
+const TRACK_KIND_ORDER: Record<TrackKind, number> = { video: 0, text: 1, audio: 2 };
+
+export function visibleTracks(project: EditorProject) {
+  const clipTrackIds = new Set(project.clips.map((clip) => clip.trackId));
+  const kept = project.tracks.filter((track) => clipTrackIds.has(track.id));
+
+  if (!kept.some((track) => track.kind === "video")) {
+    const fallback = project.tracks.find((track) => track.kind === "video");
+    kept.unshift(fallback ?? { id: "track-v1", kind: "video", label: "V1" });
+  }
+  if (!kept.some((track) => track.kind === "audio")) {
+    const fallback = project.tracks.find((track) => track.kind === "audio");
+    kept.push(fallback ?? { id: "track-audio", kind: "audio", label: "Audio" });
+  }
+
+  return [...kept].sort((a, b) => {
+    const byKind = TRACK_KIND_ORDER[a.kind] - TRACK_KIND_ORDER[b.kind];
+    if (byKind !== 0) return byKind;
+    return project.tracks.findIndex((t) => t.id === a.id) - project.tracks.findIndex((t) => t.id === b.id);
+  });
+}
+
+export function pruneEmptyTracks(project: EditorProject): EditorProject {
+  const clipTrackIds = new Set(project.clips.map((clip) => clip.trackId));
+  const tracks = project.tracks.filter((track) => clipTrackIds.has(track.id));
+
+  if (!tracks.some((track) => track.kind === "video")) {
+    tracks.unshift(project.tracks.find((t) => t.kind === "video") ?? { id: "track-v1", kind: "video", label: "V1" });
+  }
+  if (!tracks.some((track) => track.kind === "audio")) {
+    tracks.push(project.tracks.find((t) => t.kind === "audio") ?? { id: "track-audio", kind: "audio", label: "Audio" });
+  }
+
+  return { ...project, tracks };
+}

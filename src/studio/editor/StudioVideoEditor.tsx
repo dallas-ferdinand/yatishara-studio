@@ -201,9 +201,9 @@ export function StudioVideoEditor({
         autoSaveId="studio-video-editor-h"
         className="studio-editor-panels min-h-0 min-w-0 flex-1"
       >
-        <Panel defaultSize={72} minSize={40} className="min-h-0 min-w-0">
+        <Panel defaultSize={78} minSize={50} className="min-h-0 min-w-0">
           <PanelGroup direction="vertical" autoSaveId="studio-video-editor-v" className="studio-editor-panels min-h-0 h-full">
-            <Panel defaultSize={58} minSize={22} className="min-h-0 min-w-0">
+            <Panel defaultSize={48} minSize={28} className="min-h-0 min-w-0">
               <EditorPreview
                 project={state.project}
                 playhead={state.ui.playhead}
@@ -214,7 +214,7 @@ export function StudioVideoEditor({
               />
             </Panel>
             <PanelResizeHandle className="studio-editor-resize studio-editor-resize-y" />
-            <Panel defaultSize={42} minSize={24} className="min-h-0 min-w-0 flex flex-col">
+            <Panel defaultSize={52} minSize={30} className="min-h-0 min-w-0 flex flex-col">
               <EditorTransportBar
                 playing={state.ui.playing}
                 playhead={state.ui.playhead}
@@ -286,9 +286,9 @@ export function StudioVideoEditor({
         </Panel>
         <PanelResizeHandle className="studio-editor-resize cursor-resize" />
         <Panel
-          defaultSize={34}
-          minSize={24}
-          maxSize={48}
+          defaultSize={22}
+          minSize={16}
+          maxSize={36}
           collapsible
           collapsedSize={0}
           className="min-h-0 min-w-0"

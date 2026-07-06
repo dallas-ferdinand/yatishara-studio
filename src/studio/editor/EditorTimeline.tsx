@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Film,
   Pause,
@@ -20,7 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { transitionLabel } from "./editorEffects";
-import { transitionJointsOnTrack } from "./editorTimelineUtils";
+import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
 import { computeRippleLayout, computeRippleInsertForNewClip } from "./editorRipple";
 import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
 import {
@@ -140,14 +140,20 @@ function TimelineClipBlock({
     let lastRipplePlacements = null;
     let lastInsertAt = null;
     let freeMove = false;
+    let moved = mode !== "move";
     setDragging(mode);
 
     const targetEl = event.currentTarget;
     event.currentTarget.setPointerCapture?.(event.pointerId);
 
     const onMoveEvent = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      moved = true;
+
       const disableSnap = moveEvent.altKey;
-      const deltaPx = moveEvent.clientX - startX;
+      const deltaPx = dx;
       const deltaSec = deltaPx / pps;
 
       if (mode === "move") {
@@ -229,6 +235,7 @@ function TimelineClipBlock({
       window.removeEventListener("pointercancel", onUp);
 
       if (mode === "move") {
+        if (!moved) return;
         if (lastInsertAt !== null) {
           onMoveToTrack?.({
             clipId: clip.id,
@@ -481,12 +488,13 @@ export function EditorTimeline({
   const [snapGuideTime, setSnapGuideTime] = useState(null);
   const [activeInsert, setActiveInsert] = useState(null);
   const [externalDrag, setExternalDrag] = useState(false);
+  const displayTracks = useMemo(() => visibleTracks(project), [project.tracks, project.clips]);
   const snapThreshold = snapThresholdSec(pixelsPerSecond);
 
   const resolveDropTarget = useCallback(
     (clientY, clipKind) => {
       const gapPx = 7;
-      const tracks = project.tracks;
+      const tracks = visibleTracks(project);
 
       for (let index = 0; index <= tracks.length; index += 1) {
         let boundaryY = null;
@@ -508,7 +516,11 @@ export function EditorTimeline({
           }
         }
         if (boundaryY !== null && Math.abs(clientY - boundaryY) <= gapPx) {
-          return { type: "insert", index };
+          const insertAt =
+            index >= tracks.length
+              ? project.tracks.length
+              : project.tracks.findIndex((t) => t.id === tracks[index]!.id);
+          return { type: "insert", index: insertAt };
         }
       }
 
@@ -523,7 +535,7 @@ export function EditorTimeline({
       }
       return null;
     },
-    [project.tracks],
+    [project],
   );
 
   const timeFromClientX = useCallback(
@@ -741,7 +753,8 @@ export function EditorTimeline({
               </span>
             ))}
           </div>
-          {project.tracks.map((track, trackIndex) => {
+          {displayTracks.map((track) => {
+            const trackIndex = project.tracks.findIndex((item) => item.id === track.id);
             const trackHeight = trackHeightForKind(track.kind);
             const preview = dropPreview?.trackId === track.id ? dropPreview : null;
             const trackRipple = ripplePreview?.trackId === track.id ? ripplePreview : null;

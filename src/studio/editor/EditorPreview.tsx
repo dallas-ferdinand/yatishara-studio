@@ -3,7 +3,215 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { clipOpacityAtLocalTime, textAnimationStyle } from "./editorEffects";
-import { clipAtPlayhead, clipDuration, projectEndTime, topVideoClipAtPlayhead } from "./editorState";
+import {
+  clipAtPlayhead,
+  clipDuration,
+  projectEndTime,
+  topVideoClipAtPlayhead,
+} from "./editorState";
+
+function timelineFromMediaTime(clip, mediaTime) {
+  return clip.startTime + (mediaTime - clip.trimIn);
+}
+
+function mediaTimeFromTimeline(clip, timelineTime) {
+  return clip.trimIn + (timelineTime - clip.startTime);
+}
+
+function clampMediaTime(clip, mediaTime) {
+  return Math.max(clip.trimIn, Math.min(mediaTime, clip.trimOut - 0.02));
+}
+
+function bindElement(el, url, clip, timelineTime) {
+  if (!el || !url || !clip) return false;
+  const key = `${clip.id}:${url}`;
+  if (el.dataset.editorBind !== key) {
+    el.src = url;
+    el.dataset.editorBind = key;
+  }
+  const target = clampMediaTime(clip, mediaTimeFromTimeline(clip, timelineTime));
+  if (Math.abs(el.currentTime - target) > 0.04) {
+    try {
+      el.currentTime = target;
+    } catch {
+      /* ignore */
+    }
+  }
+  return true;
+}
+
+export function useEditorPlayback({
+  project,
+  playhead,
+  playing,
+  mediaById,
+  onPlayheadChange,
+  onPlayingChange,
+  videoRef,
+  audioRef,
+}) {
+  const projectRef = useRef(project);
+  const playheadRef = useRef(playhead);
+  const playingRef = useRef(playing);
+  const rafRef = useRef(null);
+  const boundVideoClipRef = useRef(null);
+  const boundAudioClipRef = useRef(null);
+
+  const clipsSig = useMemo(
+    () =>
+      project.clips
+        .map((c) => `${c.id}:${c.startTime}:${c.trimIn}:${c.trimOut}:${c.trackId}:${c.assetId ?? ""}`)
+        .join("|"),
+    [project.clips],
+  );
+
+  projectRef.current = project;
+  playheadRef.current = playhead;
+  playingRef.current = playing;
+
+  useEffect(() => {
+    boundVideoClipRef.current = null;
+    boundAudioClipRef.current = null;
+    for (const el of [videoRef.current, audioRef.current]) {
+      if (el) el.dataset.editorBind = "";
+    }
+  }, [clipsSig, videoRef, audioRef]);
+
+  // Scrub / pause: timeline drives media
+  useEffect(() => {
+    if (playing) return;
+
+    const proj = projectRef.current;
+    const ph = playheadRef.current;
+    const video = videoRef.current;
+    const audio = audioRef.current;
+    const videoClip = topVideoClipAtPlayhead(proj, ph);
+    const audioTrack = proj.tracks.find((t) => t.kind === "audio");
+    const audioClip = audioTrack ? clipAtPlayhead(proj, audioTrack.id, ph) : null;
+
+    if (video && videoClip) {
+      const url = mediaById.get(videoClip.assetId)?.url;
+      const media = mediaById.get(videoClip.assetId);
+      if (url && media?.kind !== "image") {
+        bindElement(video, url, videoClip, ph);
+        video.pause();
+        boundVideoClipRef.current = videoClip.id;
+      }
+    }
+
+    if (audio && audioClip) {
+      const url = mediaById.get(audioClip.assetId)?.url;
+      if (url) {
+        bindElement(audio, url, audioClip, ph);
+        audio.muted = Boolean(audioTrack?.muted);
+        audio.volume = Math.max(0, Math.min(1, audioClip.effects?.volume ?? 1));
+        audio.pause();
+        boundAudioClipRef.current = audioClip.id;
+      }
+    }
+  }, [playing, playhead, clipsSig, mediaById, videoRef, audioRef]);
+
+  // Play: media master clock
+  useEffect(() => {
+    if (!playing) {
+      videoRef.current?.pause();
+      audioRef.current?.pause();
+      return;
+    }
+
+    let lastWall = performance.now();
+
+    const advanceGap = (dt) => {
+      const proj = projectRef.current;
+      const end = projectEndTime(proj);
+      const next = Math.min(end, playheadRef.current + dt);
+      if (next >= end - 0.01) {
+        onPlayheadChange(end);
+        onPlayingChange(false);
+        return;
+      }
+      onPlayheadChange(next);
+    };
+
+    const tick = (now) => {
+      if (!playingRef.current) return;
+
+      const proj = projectRef.current;
+      const ph = playheadRef.current;
+      const video = videoRef.current;
+      const audio = audioRef.current;
+      const videoClip = topVideoClipAtPlayhead(proj, ph);
+      const audioTrack = proj.tracks.find((t) => t.kind === "audio");
+      const audioClip = audioTrack ? clipAtPlayhead(proj, audioTrack.id, ph) : null;
+
+      if (videoClip) {
+        const media = mediaById.get(videoClip.assetId);
+        const url = media?.url;
+        if (url && media?.kind !== "image") {
+          if (boundVideoClipRef.current !== videoClip.id) {
+            bindElement(video, url, videoClip, ph);
+            boundVideoClipRef.current = videoClip.id;
+          }
+
+          if (video.paused) void video.play().catch(() => {});
+
+          if (video.readyState >= 2) {
+            const next = timelineFromMediaTime(videoClip, video.currentTime);
+            const clipEnd = videoClip.startTime + clipDuration(videoClip);
+            if (next >= clipEnd - 0.02) {
+              const after = clipEnd + 0.001;
+              if (after >= projectEndTime(proj) - 0.01) {
+                onPlayheadChange(projectEndTime(proj));
+                onPlayingChange(false);
+                return;
+              }
+              onPlayheadChange(after);
+              boundVideoClipRef.current = null;
+            } else {
+              playheadRef.current = next;
+              onPlayheadChange(next);
+            }
+          }
+        } else {
+          advanceGap(Math.min(0.05, (now - lastWall) / 1000));
+        }
+      } else {
+        advanceGap(Math.min(0.05, (now - lastWall) / 1000));
+      }
+
+      if (audio && audioClip) {
+        const url = mediaById.get(audioClip.assetId)?.url;
+        if (url) {
+          if (boundAudioClipRef.current !== audioClip.id) {
+            bindElement(audio, url, audioClip, playheadRef.current);
+            boundAudioClipRef.current = audioClip.id;
+          }
+          audio.muted = Boolean(audioTrack?.muted);
+          audio.volume = Math.max(0, Math.min(1, audioClip.effects?.volume ?? 1));
+          const target = clampMediaTime(audioClip, mediaTimeFromTimeline(audioClip, playheadRef.current));
+          if (Math.abs(audio.currentTime - target) > 0.12) {
+            try {
+              audio.currentTime = target;
+            } catch {
+              /* ignore */
+            }
+          }
+          if (!audioTrack?.muted && audio.paused) void audio.play().catch(() => {});
+        }
+      } else {
+        audio?.pause();
+      }
+
+      lastWall = now;
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [playing, clipsSig, mediaById, onPlayheadChange, onPlayingChange, videoRef, audioRef]);
+}
 
 export function EditorPreview({
   project,
@@ -15,16 +223,10 @@ export function EditorPreview({
 }) {
   const videoRef = useRef(null);
   const audioRef = useRef(null);
-  const rafRef = useRef(null);
-  const playheadRef = useRef(playhead);
-  const playingRef = useRef(playing);
-  const lastVideoKeyRef = useRef(null);
-  const lastAudioKeyRef = useRef(null);
 
-  const videoTrack = project.tracks.find((track) => track.kind === "video");
-  const audioTrack = project.tracks.find((track) => track.kind === "audio");
   const textTracks = project.tracks.filter((track) => track.kind === "text");
   const videoClip = topVideoClipAtPlayhead(project, playhead);
+  const audioTrack = project.tracks.find((track) => track.kind === "audio");
   const audioClip = audioTrack ? clipAtPlayhead(project, audioTrack.id, playhead) : null;
   const textClips = textTracks.flatMap((track) =>
     project.clips.filter((clip) => {
@@ -33,12 +235,11 @@ export function EditorPreview({
       return playhead >= clip.startTime && playhead < end;
     }),
   );
+
   const videoMedia = videoClip ? mediaById.get(videoClip.assetId) : null;
-  const audioMedia = audioClip ? mediaById.get(audioClip.assetId) : null;
   const videoUrl = videoMedia?.url;
-  const audioUrl = audioMedia?.url;
   const videoIsImage = videoMedia?.kind === "image";
-  const audioMuted = Boolean(audioTrack?.muted);
+  const hasAudio = Boolean(audioClip && mediaById.get(audioClip.assetId)?.url);
 
   const videoOpacity = videoClip
     ? clipOpacityAtLocalTime(
@@ -48,134 +249,21 @@ export function EditorPreview({
       )
     : 1;
 
-  const clipsSig = useMemo(
-    () =>
-      project.clips
-        .map((c) => `${c.id}:${c.startTime}:${c.trimIn}:${c.trimOut}:${c.trackId}:${c.assetId ?? ""}`)
-        .join("|"),
-    [project.clips],
-  );
-
-  playheadRef.current = playhead;
-  playingRef.current = playing;
-  const projectRef = useRef(project);
-  projectRef.current = project;
-
-  useEffect(() => {
-    lastVideoKeyRef.current = null;
-    lastAudioKeyRef.current = null;
-  }, [clipsSig]);
-
-  useEffect(() => {
-    if (!playing) return;
-
-    let lastFrame = performance.now();
-    const tick = (now) => {
-      if (!playingRef.current) return;
-
-      const dt = Math.min(0.05, (now - lastFrame) / 1000);
-      lastFrame = now;
-      const end = projectEndTime(projectRef.current);
-      const next = playheadRef.current + dt;
-
-      if (next >= end) {
-        onPlayheadChange(end);
-        onPlayingChange(false);
-        return;
-      }
-
-      onPlayheadChange(next);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [playing, onPlayheadChange, onPlayingChange]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !videoClip || !videoUrl || videoIsImage) return;
-
-    const local = playhead - videoClip.startTime + videoClip.trimIn;
-    const key = `${videoClip.id}:${videoClip.assetId}:${videoClip.startTime}:${videoClip.trimIn}:${videoClip.trimOut}`;
-    const clipChanged = lastVideoKeyRef.current !== key;
-    if (clipChanged) {
-      if (video.src !== videoUrl) video.src = videoUrl;
-      lastVideoKeyRef.current = key;
-    }
-
-    const target = Math.max(videoClip.trimIn, Math.min(local, videoClip.trimOut - 0.02));
-    const seekThreshold = playing ? 0.06 : 0.15;
-    if (clipChanged || Math.abs(video.currentTime - target) > seekThreshold) {
-      try {
-        video.currentTime = target;
-      } catch {
-        /* ignore seek races */
-      }
-    }
-
-    if (playing) void video.play().catch(() => {});
-    else video.pause();
-  }, [
+  useEditorPlayback({
+    project,
     playhead,
     playing,
-    videoClip?.id,
-    videoClip?.assetId,
-    videoClip?.startTime,
-    videoClip?.trimIn,
-    videoClip?.trimOut,
-    videoUrl,
-    videoIsImage,
-    clipsSig,
-  ]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !audioClip || !audioUrl) return;
-
-    const local = playhead - audioClip.startTime + audioClip.trimIn;
-    const key = `${audioClip.id}:${audioClip.assetId}:${audioClip.startTime}:${audioClip.trimIn}:${audioClip.trimOut}`;
-    const clipChanged = lastAudioKeyRef.current !== key;
-    if (clipChanged) {
-      if (audio.src !== audioUrl) audio.src = audioUrl;
-      lastAudioKeyRef.current = key;
-    }
-
-    audio.muted = audioMuted;
-    const volume = audioClip.effects?.volume ?? 1;
-    audio.volume = Math.max(0, Math.min(1, volume));
-    const target = Math.max(audioClip.trimIn, Math.min(local, audioClip.trimOut - 0.02));
-    const seekThreshold = playing ? 0.06 : 0.15;
-    if (clipChanged || Math.abs(audio.currentTime - target) > seekThreshold) {
-      try {
-        audio.currentTime = target;
-      } catch {
-        /* ignore */
-      }
-    }
-
-    if (playing && !audioMuted) void audio.play().catch(() => {});
-    else audio.pause();
-  }, [
-    playhead,
-    playing,
-    audioClip?.id,
-    audioClip?.assetId,
-    audioClip?.startTime,
-    audioClip?.trimIn,
-    audioClip?.trimOut,
-    audioUrl,
-    audioMuted,
-    audioClip?.effects?.volume,
-    clipsSig,
-  ]);
+    mediaById,
+    onPlayheadChange,
+    onPlayingChange,
+    videoRef,
+    audioRef,
+  });
 
   return (
     <div className="studio-editor-preview">
       <div className="studio-editor-preview-stage">
-        {videoUrl ? (
+        {videoClip && videoUrl ? (
           videoIsImage ? (
             <img
               className="studio-editor-preview-video"
@@ -206,12 +294,17 @@ export function EditorPreview({
             local,
             duration,
           );
+          const textOpacity = clipOpacityAtLocalTime(
+            clip.effects,
+            duration,
+            local,
+          );
           return (
             <div
               key={clip.id}
               className={`studio-editor-text-overlay is-align-${clip.text?.align ?? "center"}`}
               style={{
-                opacity: anim.opacity,
+                opacity: anim.opacity * textOpacity,
                 transform: anim.transform,
                 color: clip.text?.color ?? "#fff",
                 fontSize: `${clip.text?.fontSize ?? 42}px`,
@@ -222,7 +315,7 @@ export function EditorPreview({
           );
         })}
       </div>
-      {audioUrl ? <audio ref={audioRef} preload="auto" className="sr-only" /> : null}
+      {hasAudio ? <audio ref={audioRef} preload="auto" className="sr-only" /> : null}
     </div>
   );
 }

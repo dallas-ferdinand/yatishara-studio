@@ -51,10 +51,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.35rem;
-  width: 52px;
+  gap: 0.3rem;
+  width: 44px;
   flex-shrink: 0;
-  padding: 0.55rem 0.4rem;
+  padding: 0.45rem 0.3rem;
   border-right: 1px solid var(--mos-border);
   background: color-mix(in srgb, var(--mos-panel) 92%, var(--mos-bg) 8%);
 }
@@ -68,8 +68,8 @@
 .studio-editor-mode-export {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
@@ -1118,17 +1118,23 @@ body.is-drag-cursor .studio-editor-clip {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 8px;
+  width: 12px;
   cursor: ew-resize;
-  z-index: 3;
+  z-index: 8;
+}
+
+.studio-editor-clip.is-selected .studio-editor-clip-handle {
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 18%, transparent);
 }
 
 .studio-editor-clip-handle.is-left {
   left: 0;
+  border-radius: 4px 0 0 4px;
 }
 
 .studio-editor-clip-handle.is-right {
   right: 0;
+  border-radius: 0 4px 4px 0;
 }
 
 .studio-editor-playhead {
