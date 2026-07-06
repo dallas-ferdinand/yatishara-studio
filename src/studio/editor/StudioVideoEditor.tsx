@@ -3,11 +3,11 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
 import { EditorPreview } from "./EditorPreview";
 import { EditorInspector } from "./EditorInspector";
 import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
-import { EditorToolbar, EditorModeHint } from "./EditorToolbar";
 import {
   clipDuration,
   createEmptyProject,
@@ -195,104 +195,114 @@ export function StudioVideoEditor({
   });
 
   return (
-    <div className="studio-editor">
-      <EditorToolbar
-        editorMode={state.ui.editorMode}
-        inspectorOpen={state.ui.inspectorOpen}
-        exporting={exporting}
-        onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
-        onToggleInspector={() =>
-          dispatch({ type: "set_inspector_open", open: !state.ui.inspectorOpen })
-        }
-        onExport={() => void handleExport()}
-      />
-      <EditorModeHint mode={state.ui.editorMode} />
-      <div
-        className={`studio-editor-main${state.ui.inspectorOpen ? " is-inspector-open" : " is-inspector-closed"}`}
+    <div className="studio-editor h-full">
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-video-editor-h"
+        className="studio-editor-panels min-h-0 min-w-0 flex-1"
       >
-        <div className="studio-editor-body">
-          <EditorPreview
-            project={state.project}
-            playhead={state.ui.playhead}
-            playing={state.ui.playing}
-            mediaById={mediaById}
-            onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
-            onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
-          />
-          <EditorTransportBar
-            playing={state.ui.playing}
-            playhead={state.ui.playhead}
-            duration={timelineDuration}
-            canUndo={state.past.length > 0}
-            canRedo={state.future.length > 0}
-            canSplit={canSplit}
-            hasSelection={Boolean(state.ui.selectedClipId)}
-            pixelsPerSecond={state.ui.pixelsPerSecond}
-            onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
-            onUndo={() => dispatch({ type: "undo" })}
-            onRedo={() => dispatch({ type: "redo" })}
-            onSplit={() => dispatch({ type: "split_at_playhead" })}
-            onDelete={() => dispatch({ type: "delete_selected" })}
-            onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
-          />
-          <EditorTimeline
-            project={state.project}
-            playhead={state.ui.playhead}
-            pixelsPerSecond={state.ui.pixelsPerSecond}
-            selectedClipId={state.ui.selectedClipId}
-            selectedJointKey={state.ui.selectedJointKey}
+        <Panel defaultSize={72} minSize={40} className="min-h-0 min-w-0">
+          <PanelGroup direction="vertical" autoSaveId="studio-video-editor-v" className="studio-editor-panels min-h-0 h-full">
+            <Panel defaultSize={58} minSize={22} className="min-h-0 min-w-0">
+              <EditorPreview
+                project={state.project}
+                playhead={state.ui.playhead}
+                playing={state.ui.playing}
+                mediaById={mediaById}
+                onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
+                onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+              />
+            </Panel>
+            <PanelResizeHandle className="studio-editor-resize studio-editor-resize-y" />
+            <Panel defaultSize={42} minSize={24} className="min-h-0 min-w-0 flex flex-col">
+              <EditorTransportBar
+                playing={state.ui.playing}
+                playhead={state.ui.playhead}
+                duration={timelineDuration}
+                canUndo={state.past.length > 0}
+                canRedo={state.future.length > 0}
+                canSplit={canSplit}
+                hasSelection={Boolean(state.ui.selectedClipId)}
+                pixelsPerSecond={state.ui.pixelsPerSecond}
+                onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
+                onUndo={() => dispatch({ type: "undo" })}
+                onRedo={() => dispatch({ type: "redo" })}
+                onSplit={() => dispatch({ type: "split_at_playhead" })}
+                onDelete={() => dispatch({ type: "delete_selected" })}
+                onZoom={(pixelsPerSecond) => dispatch({ type: "set_zoom", pixelsPerSecond })}
+              />
+              <EditorTimeline
+                project={state.project}
+                playhead={state.ui.playhead}
+                pixelsPerSecond={state.ui.pixelsPerSecond}
+                selectedClipId={state.ui.selectedClipId}
+                selectedJointKey={state.ui.selectedJointKey}
+                editorMode={state.ui.editorMode}
+                mediaById={mediaById}
+                onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
+                onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
+                onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
+                onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
+                onMoveClip={(clipId, startTime, trackId, live) =>
+                  dispatch({ type: "move_clip", clipId, startTime, trackId, live })
+                }
+                onTrimClip={(clipId, trimIn, trimOut, startTime, live) =>
+                  dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
+                }
+                onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
+                onApplyTrackLayout={(placements) =>
+                  dispatch({ type: "apply_track_layout", placements, live: false })
+                }
+                onRippleAddClip={(clip) =>
+                  dispatch({
+                    type: "ripple_add_clip",
+                    clip: {
+                      assetId: clip.assetId,
+                      trackId: clip.trackId,
+                      startTime: clip.startTime,
+                      trimIn: clip.trimIn,
+                      trimOut: clip.trimOut,
+                      sourceDuration: clip.sourceDuration,
+                      label: clip.label,
+                      kind: clip.kind,
+                    },
+                    centerTime: clip.centerTime,
+                  })
+                }
+              />
+            </Panel>
+          </PanelGroup>
+        </Panel>
+        <PanelResizeHandle className="studio-editor-resize cursor-resize" />
+        <Panel
+          defaultSize={28}
+          minSize={18}
+          maxSize={42}
+          collapsible
+          collapsedSize={0}
+          className="min-h-0 min-w-0"
+        >
+          <EditorInspector
             editorMode={state.ui.editorMode}
-            mediaById={mediaById}
-            onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
-            onSelectJoint={(jointKey) => dispatch({ type: "select_joint", jointKey })}
-            onSetPlayhead={(time) => dispatch({ type: "set_playhead", time })}
-            onAddClip={(clip) => dispatch({ type: "add_clip", clip })}
-            onMoveClip={(clipId, startTime, trackId, live) =>
-              dispatch({ type: "move_clip", clipId, startTime, trackId, live })
+            onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
+            exporting={exporting}
+            onExport={() => void handleExport()}
+            clip={selectedClip}
+            jointKey={selectedJoint?.key ?? null}
+            project={state.project}
+            playhead={state.ui.playhead}
+            onUpdateClip={(clipId, patch) => dispatch({ type: "update_clip", clipId, patch })}
+            onSetJointTransition={(jointKey, transition) =>
+              dispatch({ type: "set_joint_transition", jointKey, transition })
             }
-            onTrimClip={(clipId, trimIn, trimOut, startTime, live) =>
-              dispatch({ type: "trim_clip", clipId, trimIn, trimOut, startTime, live })
-            }
-            onToggleTrackMute={(trackId) => dispatch({ type: "toggle_track_mute", trackId })}
-            onApplyTrackLayout={(placements) =>
-              dispatch({ type: "apply_track_layout", placements, live: false })
-            }
-            onRippleAddClip={(clip) =>
-              dispatch({
-                type: "ripple_add_clip",
-                clip: {
-                  assetId: clip.assetId,
-                  trackId: clip.trackId,
-                  startTime: clip.startTime,
-                  trimIn: clip.trimIn,
-                  trimOut: clip.trimOut,
-                  sourceDuration: clip.sourceDuration,
-                  label: clip.label,
-                  kind: clip.kind,
-                },
-                centerTime: clip.centerTime,
-              })
-            }
+            onAddTextClip={() => {
+              dispatch({ type: "set_editor_mode", mode: "text" });
+              dispatch({ type: "add_text_clip" });
+            }}
+            onAddTrackLayer={(kind) => dispatch({ type: "add_track_layer", kind })}
           />
-        </div>
-        <EditorInspector
-          open={state.ui.inspectorOpen}
-          editorMode={state.ui.editorMode}
-          clip={selectedClip}
-          jointKey={selectedJoint?.key ?? null}
-          project={state.project}
-          playhead={state.ui.playhead}
-          onUpdateClip={(clipId, patch) => dispatch({ type: "update_clip", clipId, patch })}
-          onSetJointTransition={(jointKey, transition) =>
-            dispatch({ type: "set_joint_transition", jointKey, transition })
-          }
-          onAddTextClip={() => {
-            dispatch({ type: "set_editor_mode", mode: "text" });
-            dispatch({ type: "add_text_clip" });
-          }}
-          onAddTrackLayer={(kind) => dispatch({ type: "add_track_layer", kind })}
-        />
-      </div>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }
