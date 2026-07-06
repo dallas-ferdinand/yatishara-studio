@@ -218,13 +218,6 @@ function StudioSignIn() {
       .finally(() => setPending(false));
   };
 
-  const contactLabel =
-    step === "identify"
-      ? ""
-      : step.contact.kind === "email"
-        ? step.contact.email
-        : formatPhoneDisplay(step.contact.phone);
-
   return (
     <AuthFrame
       eyebrow="Yatishara Studio"
@@ -346,9 +339,6 @@ function StudioSignIn() {
       >
         {step === "identify" ? (
           <label className="block text-left">
-            <span className="mb-1.5 block text-xs font-medium text-white/48">
-              Email or WhatsApp
-            </span>
             <span className="studio-auth-field flex items-center gap-3 rounded-2xl border border-white/15 bg-transparent px-4 py-3.5 shadow-inner shadow-white/[0.03] backdrop-blur-xl transition">
               {contactInputIcon(identifierInput) === "email" ? (
                 <Mail className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
@@ -374,19 +364,12 @@ function StudioSignIn() {
                 required
               />
             </span>
-            <span className="mt-1.5 block text-xs text-white/38">
-              e.g. you@example.com or +1 (868) 000-0000
-            </span>
           </label>
         ) : null}
 
         {isPasswordStep ? (
           <>
-            <p className="text-sm text-white/55">{contactLabel}</p>
             <label className="block text-left">
-              <span className="mb-1.5 block text-xs font-medium text-white/48">
-                Password
-              </span>
               <span className="studio-auth-field flex items-center gap-3 rounded-2xl border border-white/15 bg-transparent px-4 py-3.5 shadow-inner shadow-white/[0.03] backdrop-blur-xl transition">
                 <Lock
                   className="studio-auth-accent-text h-5 w-5"
@@ -404,7 +387,7 @@ function StudioSignIn() {
               </span>
             </label>
             <button
-              className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
               disabled={pending}
               onClick={() => {
@@ -422,14 +405,13 @@ function StudioSignIn() {
                   .finally(() => setPending(false));
               }}
             >
-              {step.contact.kind === "email" ? "Get email code instead" : "Get WhatsApp code instead"}
+              {step.contact.kind === "email" ? "Get email code" : "Get WhatsApp code"}
             </button>
           </>
         ) : null}
 
         {isEmailCodeStep ? (
           <>
-            <p className="text-sm text-white/55">{step.contact.email}</p>
             <input name="email" value={step.contact.email} type="hidden" />
             <label className="block">
               <span className="sr-only">Code</span>
@@ -445,7 +427,7 @@ function StudioSignIn() {
             </label>
             {step.hasPassword ? (
               <button
-                className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none"
+                className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none"
                 type="button"
                 onClick={() => {
                   setError("");
@@ -453,7 +435,7 @@ function StudioSignIn() {
                   setStep({ contact: step.contact, phase: "password" });
                 }}
               >
-                Enter password instead
+                Enter password
               </button>
             ) : null}
           </>
@@ -461,11 +443,7 @@ function StudioSignIn() {
 
         {isWhatsAppCodeStep ? (
           <div className="space-y-2">
-            <p className="text-sm text-white/55">{formatPhoneDisplay(step.contact.phone)}</p>
             <div className="rounded-2xl border border-white/15 bg-transparent p-3 text-center shadow-inner shadow-white/[0.03] backdrop-blur-xl">
-              <p className="mb-1 text-[11px] leading-4 text-white/42">
-                Send code to {formatPhoneDisplay(step.whatsappNumber)}
-              </p>
               <div className="flex items-center justify-center gap-2">
                 <p className="text-2xl font-semibold tracking-[0.16em] text-white">
                   {formatAuthCode(step.code)}
@@ -519,7 +497,7 @@ function StudioSignIn() {
             </div>
             {step.hasPassword ? (
               <button
-                className="cursor-pointer bg-transparent text-xs text-white/42 underline-offset-4 transition hover:text-white/70 hover:underline focus:outline-none"
+                className="studio-auth-secondary w-full cursor-pointer rounded-2xl border border-white/15 bg-transparent px-5 py-3.5 text-base font-semibold text-white/75 shadow-inner shadow-white/[0.02] backdrop-blur-xl transition focus:outline-none"
                 type="button"
                 onClick={() => {
                   setError("");
@@ -527,7 +505,7 @@ function StudioSignIn() {
                   setStep({ contact: step.contact, phase: "password" });
                 }}
               >
-                Enter password instead
+                Enter password
               </button>
             ) : null}
           </div>
