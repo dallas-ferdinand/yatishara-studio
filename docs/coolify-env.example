@@ -26,6 +26,8 @@ BUNNY_PULL_ZONE_HOSTNAME=
 BUNNY_CDN_SIGNING_KEY=
 BUNNY_STREAM_LIBRARY_ID=
 BUNNY_STREAM_ACCESS_KEY=
+# Public Studio wallpapers on Bunny (unsigned). Rebuild after changing.
+NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallpapers/v1
 WEB_PUSH_VAPID_PUBLIC_KEY=
 WEB_PUSH_VAPID_PRIVATE_KEY=
 NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY=

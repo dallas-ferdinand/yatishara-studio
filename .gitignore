@@ -41,3 +41,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 packages/studio-mcp/node_modules/
+.tmp/
+public/archive/studio-wallpapers-local-leftovers/

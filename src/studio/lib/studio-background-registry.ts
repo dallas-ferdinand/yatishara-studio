@@ -75,7 +75,13 @@ export function normalizeStudioBackgroundFamily(
     : "animated";
 }
 
-export function studioBackgroundPath(
+/** Public Bunny (or other CDN) base for wallpapers. Empty = same-origin /public. */
+export function studioBackgroundCdnBase(): string {
+  const raw = process.env.NEXT_PUBLIC_STUDIO_BG_CDN?.trim() ?? "";
+  return raw.replace(/\/$/, "");
+}
+
+export function studioBackgroundFilename(
   family: StudioBackgroundFamily,
   themeId: string,
   appearance: "light" | "dark",
@@ -83,7 +89,17 @@ export function studioBackgroundPath(
   const slug = STUDIO_THEME_SLUGS[themeId as StudioThemeId] ?? STUDIO_THEME_SLUGS.agent;
   const prefix = FAMILY_FILE_PREFIX[family];
   const lightSuffix = appearance === "light" ? "-light" : "";
-  return `/${prefix}-${slug}${lightSuffix}-4k.webp`;
+  return `${prefix}-${slug}${lightSuffix}-4k.webp`;
+}
+
+export function studioBackgroundPath(
+  family: StudioBackgroundFamily,
+  themeId: string,
+  appearance: "light" | "dark",
+): string {
+  const file = studioBackgroundFilename(family, themeId, appearance);
+  const cdn = studioBackgroundCdnBase();
+  return cdn ? `${cdn}/${file}` : `/${file}`;
 }
 
 /** Resolve wallpaper path; falls back to animated when family assets are missing. */
@@ -149,15 +165,18 @@ export const STUDIO_SCENE_SLUG_TO_THEME_ID = STUDIO_THEME_SLUGS;
 export function getStudioBackgroundBootInlineFragment(): string {
   const prefixes = JSON.stringify(FAMILY_FILE_PREFIX);
   const slugs = JSON.stringify(STUDIO_THEME_SLUGS);
+  const cdn = JSON.stringify(studioBackgroundCdnBase());
   return (
     `var STUDIO_BG_PREFIX=${prefixes};`
     + `var STUDIO_THEME_SLUGS=${slugs};`
+    + `var STUDIO_BG_CDN=${cdn};`
     + "function studioBootWallpaper(family,theme,mode){"
     + "var slug=STUDIO_THEME_SLUGS[theme]||STUDIO_THEME_SLUGS.agent;"
     + "var suffix=(mode===\"light\"?\"-light\":\"\")+\"-4k.webp\";"
     + "var familyPrefix=STUDIO_BG_PREFIX[family];"
     + "var animatedPrefix=STUDIO_BG_PREFIX.animated;"
-    + "return \"/\"+(familyPrefix||animatedPrefix)+\"-\"+slug+suffix;"
+    + "var file=(familyPrefix||animatedPrefix)+\"-\"+slug+suffix;"
+    + "return STUDIO_BG_CDN?(STUDIO_BG_CDN+\"/\"+file):(\"/\"+file);"
     + "}"
     + "function studioBootWallpaperFallback(family,theme,mode){"
     + "var primary=studioBootWallpaper(family,theme,mode);"
@@ -171,6 +190,7 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + 'root.style.setProperty("--studio-loaded-bg",u);'
     + 'var pl=document.createElement("link");'
     + 'pl.rel="preload";pl.as="image";pl.type="image/webp";pl.href=wp;'
+    + "if(STUDIO_BG_CDN)pl.crossOrigin=\"anonymous\";"
     + "document.head.appendChild(pl);"
     + "}"
   );
