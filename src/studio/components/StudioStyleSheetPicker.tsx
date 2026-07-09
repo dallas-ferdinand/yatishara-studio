@@ -3,6 +3,35 @@
 import { useEffect } from "react";
 import { Palette, Plus, X } from "lucide-react";
 
+type StyleSheetRow = {
+  _id: string;
+  name?: string;
+  deletedAt?: number;
+  updatedAt?: number;
+  _creationTime?: number;
+  sheetAssetId?: string;
+  styleRules?: string;
+  renderMode?: string;
+};
+
+type AssetRow = {
+  _id: string;
+  studioId?: string;
+  previewUrl?: string;
+  mediaUrl?: string;
+};
+
+type PickerPanelProps = {
+  styleSheets?: StyleSheetRow[];
+  assets?: AssetRow[];
+  selectedMode: string;
+  activeStyleSheetId?: string | null;
+  onSelectDirect: () => void;
+  onSelectStyleSheet: (id: string) => void;
+  onClose: () => void;
+  onCreateStyleSheet: () => void;
+};
+
 export function StudioStyleSheetPickerPanel({
   styleSheets,
   assets = [],
@@ -12,9 +41,9 @@ export function StudioStyleSheetPickerPanel({
   onSelectStyleSheet,
   onClose,
   onCreateStyleSheet,
-}) {
+}: PickerPanelProps) {
   useEffect(() => {
-    const onKey = (event) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
@@ -107,6 +136,15 @@ export function StudioStyleSheetPickerPanel({
   );
 }
 
+type TriggerButtonProps = {
+  selectedMode: string;
+  activeSheet?: StyleSheetRow | null;
+  activeSheetAsset?: AssetRow | null;
+  open: boolean;
+  onClick: () => void;
+  panel?: boolean;
+};
+
 export function StudioStyleSheetTriggerButton({
   selectedMode,
   activeSheet,
@@ -114,7 +152,7 @@ export function StudioStyleSheetTriggerButton({
   open,
   onClick,
   panel = false,
-}) {
+}: TriggerButtonProps) {
   const label =
     selectedMode === "direct"
       ? "Direct"
