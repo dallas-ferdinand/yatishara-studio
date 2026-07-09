@@ -295,19 +295,32 @@ export function StudioShell() {
   const lastRootEntriesRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
-  const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
-  const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
-  const bankAccounts = useQuery(api.billing.listBankAccounts, hasCurrentUser ? {} : "skip");
-  const subscriptionPlans = useQuery(api.billing.listSubscriptionPlans, hasCurrentUser ? {} : "skip");
-  const payments = useQuery(api.billing.listMyPayments, hasCurrentUser ? {} : "skip");
-  const notifications = useQuery(api.notifications.listMine, hasCurrentUser ? {} : "skip");
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
-  const adminPayments = useQuery(api.billing.adminListPayments, isAdminUser ? {} : "skip");
-  const adminCustomers = useQuery(api.users.adminListCustomers, isAdminUser ? {} : "skip");
-  const topFolders = useQuery(
+  const activeAdminTab = activeTab.startsWith("admin:") ? activeTab.slice("admin:".length) : null;
+  const activeBillingTab = activeTab.startsWith("billing:") ? activeTab.slice("billing:".length) : null;
+  const needsBillingData =
+    hasCurrentUser &&
+    (activeBillingTab != null ||
+      activeAdminTab != null ||
+      (settingsOpen &&
+        ["billing", "top-up", "notifications", "account"].includes(settingsSection)));
+  const needsAdminData = hasCurrentUser && isAdminUser && activeAdminTab != null;
+  const needsFolderPeeks = hasCurrentUser && (!isMobile || mobileSection === "files");
+  const needsThreads = hasCurrentUser && (historyOpen || activeTab.startsWith("thread:"));
+  const billingAccount = useQuery(api.billing.currentAccount, needsBillingData ? {} : "skip");
+  const pricing = useQuery(api.billing.getPricing, needsBillingData ? {} : "skip");
+  const bankAccounts = useQuery(api.billing.listBankAccounts, needsBillingData ? {} : "skip");
+  const subscriptionPlans = useQuery(api.billing.listSubscriptionPlans, needsBillingData ? {} : "skip");
+  const payments = useQuery(api.billing.listMyPayments, needsBillingData ? {} : "skip");
+  const notifications = useQuery(api.notifications.listMine, needsBillingData ? {} : "skip");
+  const adminPayments = useQuery(api.billing.adminListPayments, needsAdminData ? {} : "skip");
+  const adminCustomers = useQuery(api.users.adminListCustomers, needsAdminData ? {} : "skip");
+  const topFoldersPlain = useQuery(api.folders.list, hasCurrentUser && !needsFolderPeeks ? {} : "skip");
+  const topFoldersWithPeeks = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+    hasCurrentUser && needsFolderPeeks ? { expiresUnix: assetUrlExpiresUnix } : "skip",
   );
+  const topFolders = needsFolderPeeks ? topFoldersWithPeeks : topFoldersPlain;
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
   const selectedFolder = useQuery(
     api.folders.get,
@@ -322,12 +335,19 @@ export function StudioShell() {
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
-  const childFolders = useQuery(
+  const childFoldersPlain = useQuery(
+    api.folders.list,
+    hasCurrentUser && activeFolder && !isTrashView && !needsFolderPeeks
+      ? { parentId: activeFolder._id }
+      : "skip",
+  );
+  const childFoldersWithPeeks = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && activeFolder && !isTrashView
+    hasCurrentUser && activeFolder && !isTrashView && needsFolderPeeks
       ? { parentId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
+  const childFolders = needsFolderPeeks ? childFoldersWithPeeks : childFoldersPlain;
   const trashedFolders = useQuery(api.folders.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
   const trashedAssets = useQuery(
     api.assets.listTrash,
@@ -358,7 +378,7 @@ export function StudioShell() {
   );
   const trashedVideoEdits = useQuery(api.videoEdits.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
   const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
-  const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
+  const threads = useQuery(api.generation.listThreads, needsThreads ? {} : "skip");
   const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
@@ -892,8 +912,6 @@ export function StudioShell() {
       }),
     [activeTab, threads, assetLookupPool, assetsWithPreviewUrls, assets, documents, videoEdits, elements, tabEntrySnapshots],
   );
-  const activeAdminTab = activeTab.startsWith("admin:") ? activeTab.slice("admin:".length) : null;
-  const activeBillingTab = activeTab.startsWith("billing:") ? activeTab.slice("billing:".length) : null;
 
   const pathToEntry = useMemo(() => {
     const map = new Map();
