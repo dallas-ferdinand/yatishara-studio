@@ -48,7 +48,9 @@ export function ThemeSettings() {
     setStudioBackgroundFamily(id);
   };
 
-  const activeFamily = STUDIO_BACKGROUND_FAMILIES[bgFamily] ?? STUDIO_BACKGROUND_FAMILIES.animated;
+  const activeFamily =
+    STUDIO_BACKGROUND_FAMILIES[bgFamily as keyof typeof STUDIO_BACKGROUND_FAMILIES]
+    ?? STUDIO_BACKGROUND_FAMILIES.animated;
 
   return (
     <section className="cursor-settings-section">
