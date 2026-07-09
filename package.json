@@ -17,7 +17,8 @@
     "check:launch-env": "node scripts/check-launch-env.mjs",
     "generate:studio-light-wallpapers": "node scripts/generate-studio-light-wallpapers.mjs",
     "generate:studio-light-wallpapers:procedural": "node scripts/generate-studio-light-wallpapers.mjs",
-    "process:studio-light-wallpapers": "node scripts/process-studio-light-wallpapers.mjs"
+    "process:studio-light-wallpapers": "node scripts/process-studio-light-wallpapers.mjs",
+    "bootstrap:wallpaper-families": "node scripts/bootstrap-wallpaper-families.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.11",

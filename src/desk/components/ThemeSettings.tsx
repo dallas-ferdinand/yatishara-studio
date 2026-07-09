@@ -4,29 +4,30 @@ import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
 import {
   SCHEMES,
-  STUDIO_BACKGROUND_PACKS,
+  STUDIO_BACKGROUND_FAMILIES,
   getAppearanceMode,
   getSchemeId,
-  getStudioBackgroundPack,
+  getStudioBackgroundFamily,
   setAppearanceMode,
   setColorScheme,
-  setStudioBackgroundPack,
+  setStudioBackgroundFamily,
 } from "@/mos-app/theme.js";
 
 export function ThemeSettings() {
   const [scheme, setScheme] = useState("gold");
   const [mode, setMode] = useState("dark");
-  const [bgPack, setBgPack] = useState("worlds");
+  const [bgFamily, setBgFamily] = useState("animated");
 
   useEffect(() => {
     setScheme(getSchemeId() ?? "gold");
     setMode(getAppearanceMode());
-    setBgPack(getStudioBackgroundPack() ?? "worlds");
+    setBgFamily(getStudioBackgroundFamily() ?? "animated");
     const onChange = (e: Event) => {
-      const detail = (e as CustomEvent<{ schemeId?: string; mode?: string; bgPack?: string }>).detail;
+      const detail = (e as CustomEvent<{ schemeId?: string; mode?: string; bgFamily?: string; bgPack?: string }>).detail;
       if (detail?.schemeId) setScheme(detail.schemeId);
       if (detail?.mode) setMode(detail.mode);
-      if (detail?.bgPack) setBgPack(detail.bgPack);
+      if (detail?.bgFamily) setBgFamily(detail.bgFamily);
+      else if (detail?.bgPack) setBgFamily(detail.bgPack === "worlds" ? "animated" : detail.bgPack);
     };
     window.addEventListener("mercuryos-theme-change", onChange);
     return () => window.removeEventListener("mercuryos-theme-change", onChange);
@@ -42,16 +43,18 @@ export function ThemeSettings() {
     setAppearanceMode(next);
   };
 
-  const pickBgPack = (id: string) => {
-    setBgPack(id);
-    setStudioBackgroundPack(id);
+  const pickBgFamily = (id: string) => {
+    setBgFamily(id);
+    setStudioBackgroundFamily(id);
   };
+
+  const activeFamily = STUDIO_BACKGROUND_FAMILIES[bgFamily] ?? STUDIO_BACKGROUND_FAMILIES.animated;
 
   return (
     <section className="cursor-settings-section">
       <h3>Appearance</h3>
       <p className="text-xs text-cursor-muted mb-3 leading-relaxed">
-        Theme changes the app tone and the Studio background. Scenes shows an illustrated cartoon wallpaper; Clean uses theme colors only.
+        Theme changes the app tone and Studio background. Pick a background style, then an accent theme.
       </p>
 
       <p className="text-xs text-cursor-muted mb-2">Mode</p>
@@ -65,13 +68,14 @@ export function ThemeSettings() {
       </div>
 
       <p className="text-xs text-cursor-muted mb-2">Background style</p>
-      <div className="cursor-seg mb-4">
-        {Object.entries(STUDIO_BACKGROUND_PACKS).map(([id, pack]) => (
-          <button key={id} type="button" className={bgPack === id ? "active" : ""} onClick={() => pickBgPack(id)}>
-            {pack.label}
+      <div className="cursor-seg cursor-seg-wrap mb-1">
+        {Object.entries(STUDIO_BACKGROUND_FAMILIES).map(([id, family]) => (
+          <button key={id} type="button" className={bgFamily === id ? "active" : ""} onClick={() => pickBgFamily(id)}>
+            {family.label}
           </button>
         ))}
       </div>
+      <p className="text-xs text-cursor-muted mb-4 leading-relaxed">{activeFamily.description}</p>
 
       <p className="text-xs text-cursor-muted mb-2">Theme</p>
       <div className="cursor-theme-grid" role="listbox" aria-label="Theme">

@@ -1,3 +1,6 @@
+import { applyStudioBackgroundNow } from "@/studio/lib/studio-background-apply";
+import { getStudioBackgroundBootInlineFragment } from "@/studio/lib/studio-background-registry";
+
 /** Appearance mode (light/dark) + accent color schemes — CSS variables on :root */
 const SCHEME_KEY = "mercuryos-theme-v1";
 const MODE_KEY = "mercuryos-appearance-v1";
@@ -118,14 +121,50 @@ export const SCHEMES = {
   },
 };
 
-export const STUDIO_BACKGROUND_PACKS = {
-  worlds: {
-    label: "Scenes",
+export const STUDIO_BACKGROUND_FAMILIES = {
+  animated: {
+    label: "Animated",
+    description: "Illustrated cartoon matte environments",
+  },
+  cinematic: {
+    label: "Cinematic",
+    description: "Photoreal film-set and studio moods",
+  },
+  spacey: {
+    label: "Spacey",
+    description: "Cosmic minimal voids and nebula accents",
+  },
+  scenic: {
+    label: "Scenic",
+    description: "Wide natural and architectural vistas",
   },
   clean: {
     label: "Clean",
+    description: "Theme colors only — no wallpaper",
   },
 };
+
+/** @deprecated use STUDIO_BACKGROUND_FAMILIES */
+export const STUDIO_BACKGROUND_PACKS = {
+  animated: { label: "Animated" },
+  worlds: { label: "Scenes" },
+  clean: { label: "Clean" },
+};
+
+const BG_FAMILY_MIGRATION = {
+  worlds: "animated",
+  space: "spacey",
+  animated: "animated",
+  cinematic: "cinematic",
+  spacey: "spacey",
+  scenic: "scenic",
+  clean: "clean",
+};
+
+function normalizeBgFamily(id) {
+  if (!id) return "animated";
+  return BG_FAMILY_MIGRATION[id] ?? (STUDIO_BACKGROUND_FAMILIES[id] ? id : "animated");
+}
 
 const LIGHT_BASE = {
   bg: "#efeff1",
@@ -360,21 +399,34 @@ export function getSchemeId() {
   return SCHEMES[id] ? id : "agent";
 }
 
-export function getStudioBackgroundPack() {
+export function getStudioBackgroundFamily() {
   const id = localStorage.getItem(STUDIO_BG_PACK_KEY);
-  if (id === "space") {
-    localStorage.setItem(STUDIO_BG_PACK_KEY, "worlds");
-    return "worlds";
+  const family = normalizeBgFamily(id);
+  if (id && family !== id) {
+    localStorage.setItem(STUDIO_BG_PACK_KEY, family);
   }
-  return STUDIO_BACKGROUND_PACKS[id] ? id : "worlds";
+  return family;
 }
 
+/** @deprecated use getStudioBackgroundFamily */
+export function getStudioBackgroundPack() {
+  return getStudioBackgroundFamily();
+}
+
+export function setStudioBackgroundFamily(id) {
+  const family = normalizeBgFamily(id);
+  document.documentElement.dataset.studioBgFamily = family;
+  document.documentElement.dataset.studioBgPack = family === "animated" ? "worlds" : family;
+  localStorage.setItem(STUDIO_BG_PACK_KEY, family);
+  window.dispatchEvent(
+    new CustomEvent("mercuryos-theme-change", { detail: { bgFamily: family, bgPack: family } }),
+  );
+  syncStudioBackgroundCss();
+}
+
+/** @deprecated use setStudioBackgroundFamily */
 export function setStudioBackgroundPack(id) {
-  const normalized = id === "space" ? "worlds" : id;
-  const pack = STUDIO_BACKGROUND_PACKS[normalized] ? normalized : "worlds";
-  document.documentElement.dataset.studioBgPack = pack;
-  localStorage.setItem(STUDIO_BG_PACK_KEY, pack);
-  window.dispatchEvent(new CustomEvent("mercuryos-theme-change", { detail: { bgPack: pack } }));
+  setStudioBackgroundFamily(id);
 }
 
 /** @deprecated use getSchemeId */
@@ -405,7 +457,9 @@ export function applyTheme(schemeId, mode) {
   const root = document.documentElement;
   root.dataset.appearance = appearance;
   root.dataset.theme = sid;
-  root.dataset.studioBgPack = getStudioBackgroundPack();
+  const bgFamily = getStudioBackgroundFamily();
+  root.dataset.studioBgFamily = bgFamily;
+  root.dataset.studioBgPack = bgFamily === "animated" ? "worlds" : bgFamily;
 
   applyDeskTokens(palette, isLight);
 
@@ -421,6 +475,12 @@ export function applyTheme(schemeId, mode) {
   syncAppearanceControls(appearance);
 
   window.dispatchEvent(new CustomEvent("mercuryos-theme-change", { detail: { schemeId: sid, mode: appearance } }));
+  syncStudioBackgroundCss();
+}
+
+function syncStudioBackgroundCss() {
+  if (typeof window === "undefined") return;
+  applyStudioBackgroundNow();
 }
 
 export function setAppearanceMode(mode) {
@@ -431,12 +491,21 @@ export function setColorScheme(id) {
   applyTheme(id, getAppearanceMode());
 }
 
-/** Pick a random accent theme and light/dark mode (empty-state logo easter egg). */
-export function randomizeTheme() {
+/** Shuffle background family, accent theme, and light/dark mode (logo easter egg). */
+export function randomizeStudioAppearance() {
+  const families = Object.keys(STUDIO_BACKGROUND_FAMILIES);
+  const nextFamily = families[Math.floor(Math.random() * families.length)] ?? "animated";
   const schemeIds = Object.keys(SCHEMES);
   const nextScheme = schemeIds[Math.floor(Math.random() * schemeIds.length)] ?? "agent";
   const nextMode = Math.random() < 0.5 ? "light" : "dark";
+  setStudioBackgroundFamily(nextFamily);
   applyTheme(nextScheme, nextMode);
+  return { family: nextFamily, schemeId: nextScheme, mode: nextMode };
+}
+
+/** @deprecated use randomizeStudioAppearance */
+export function randomizeTheme() {
+  randomizeStudioAppearance();
 }
 
 export function initTheme() {
@@ -486,5 +555,7 @@ export function wireAppearanceSettings() {
 /** Blocking inline script for layout — sets --mos-* before first paint (Tailwind reads these). */
 export function getThemeBootInlineScript() {
   const schemesJson = JSON.stringify(SCHEMES);
-  return `(function(){try{var SCHEMES=${schemesJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1",BK="mercuryos-studio-bg-pack-v1";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";var storedBgPack=localStorage.getItem(BK);var bgPack=storedBgPack==="clean"?"clean":"worlds";if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=SCHEMES[sid];var isLight=mode==="light";var LIGHT={bg:"#efeff1",surface:"#ffffff",raised:"#e3e3e8",text:"#1c1c1e",textMuted:"#636366",textFaint:"#8e8e93",hover:"#e8e8ec",active:"#dcdce2"};var palette=isLight?{bg:LIGHT.bg,sidebar:LIGHT.bg,panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.38),surface:mixHex(LIGHT.bg,LIGHT.surface,0.55),surfaceRaised:mixHex(LIGHT.raised,LIGHT.surface,0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}:{bg:scheme.bg,sidebar:darken(scheme.bg,0.04),panel:scheme.surface,composer:mixHex(scheme.bg,scheme.surface,0.28),surface:mixHex(scheme.bg,scheme.surface,0.34),surfaceRaised:mixHex(scheme.surface,scheme.bg,0.12),surfaceOverlay:mixHex(scheme.surface,scheme.bg,0.2),surfaceInput:darken(scheme.surface,0.04),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,scheme.bg,0.38),text:"#ffffff",textSoft:"#d4d4d8",muted:"#a1a1aa",faint:"#71717a",hover:mixHex(scheme.surface,scheme.bg,0.22),active:mixHex(scheme.surface,scheme.bg,0.32),accent:scheme.accent};var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.dataset.studioBgPack=bgPack;root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.025)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted)}catch(e){}})();`;
+  const bgMigrationJson = JSON.stringify(BG_FAMILY_MIGRATION);
+  const wallpaperBoot = getStudioBackgroundBootInlineFragment();
+  return `(function(){try{var SCHEMES=${schemesJson};var BG_MIG=${bgMigrationJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1",BK="mercuryos-studio-bg-pack-v1";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}function normBg(id){if(!id)return"animated";return BG_MIG[id]||id||"animated"}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";var storedBg=localStorage.getItem(BK);var bgFamily=normBg(storedBg);if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=SCHEMES[sid];var isLight=mode==="light";var LIGHT={bg:"#efeff1",surface:"#ffffff",raised:"#e3e3e8",text:"#1c1c1e",textMuted:"#636366",textFaint:"#8e8e93",hover:"#e8e8ec",active:"#dcdce2"};var palette=isLight?{bg:LIGHT.bg,sidebar:LIGHT.bg,panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.38),surface:mixHex(LIGHT.bg,LIGHT.surface,0.55),surfaceRaised:mixHex(LIGHT.raised,LIGHT.surface,0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}:{bg:scheme.bg,sidebar:darken(scheme.bg,0.04),panel:scheme.surface,composer:mixHex(scheme.bg,scheme.surface,0.28),surface:mixHex(scheme.bg,scheme.surface,0.34),surfaceRaised:mixHex(scheme.surface,scheme.bg,0.12),surfaceOverlay:mixHex(scheme.surface,scheme.bg,0.2),surfaceInput:darken(scheme.surface,0.04),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,scheme.bg,0.38),text:"#ffffff",textSoft:"#d4d4d8",muted:"#a1a1aa",faint:"#71717a",hover:mixHex(scheme.surface,scheme.bg,0.22),active:mixHex(scheme.surface,scheme.bg,0.32),accent:scheme.accent};var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.dataset.studioBgFamily=bgFamily;root.dataset.studioBgPack=bgFamily==="animated"?"worlds":bgFamily;root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.025)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted);${wallpaperBoot}}catch(e){}})();`;
 }

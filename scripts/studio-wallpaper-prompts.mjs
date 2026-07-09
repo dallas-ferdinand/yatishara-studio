@@ -389,3 +389,96 @@ export const STUDIO_SCENE_PROMPTS = {
 export const STUDIO_SCENE_PROMPT_LIST = Object.entries(STUDIO_SCENE_PROMPTS).map(
   ([id, spec]) => ({ id, ...spec }),
 );
+
+/** Photoreal cinematic backgrounds — film grain, lens bokeh, no cartoon stylization. */
+export const CINEMATIC_DARK_SUFFIX =
+  "Photorealistic cinematic environment still, shot on ARRI Alexa with anamorphic lens character, natural film grain, shallow depth of field, realistic materials and lighting, atmospheric haze. NO illustration, NO cartoon, NO cel shading, NO people, NO faces, NO text, NO logos. 16:9 widescreen establishing shot.";
+
+export const CINEMATIC_LIGHT_SUFFIX =
+  "Photorealistic bright high-key architectural interior or landscape, soft natural daylight, clean white volumes with realistic perspective depth, subtle theme accent as ambient colored light. Real materials and reflections, not illustration. NO cartoon, NO people, NO text, NO logos. 16:9 widescreen establishing still.";
+
+/** Cosmic minimal void backgrounds. */
+export const SPACEY_DARK_SUFFIX =
+  "Vast cosmic void with deep space nebula accents, minimal foreground, theme-colored star clusters and aurora bands, painterly but not cartoon — ethereal sci-fi matte. NO people, NO text, NO logos. 16:9 widescreen.";
+
+export const SPACEY_LIGHT_SUFFIX =
+  "Bright minimal cosmic void, soft white starfield with theme accent nebula glow, airy negative space, serene space observatory mood. NO people, NO text, NO logos. 16:9 widescreen high-key.";
+
+/** Wide scenic vista backgrounds. */
+export const SCENIC_DARK_SUFFIX =
+  "Wide cinematic landscape vista at golden hour or blue hour, photoreal natural environment, dramatic sky, deep perspective to horizon, environmental storytelling without people. NO cartoon, NO text, NO logos. 16:9 widescreen.";
+
+export const SCENIC_LIGHT_SUFFIX =
+  "Wide bright scenic vista, high-key natural landscape or architecture, clear horizon, soft atmospheric perspective, photoreal daylight. NO people, NO text, NO logos. 16:9 widescreen.";
+
+const FAMILY_CONFIG = {
+  cinematic: { prefix: "studio-cinematic", darkSuffix: CINEMATIC_DARK_SUFFIX, lightSuffix: CINEMATIC_LIGHT_SUFFIX },
+  spacey: { prefix: "studio-space", darkSuffix: SPACEY_DARK_SUFFIX, lightSuffix: SPACEY_LIGHT_SUFFIX },
+  scenic: { prefix: "studio-scenic", darkSuffix: SCENIC_DARK_SUFFIX, lightSuffix: SCENIC_LIGHT_SUFFIX },
+};
+
+/** Build prompt specs for non-animated families from animated scene subjects. */
+function buildFamilyPrompts(family) {
+  const config = FAMILY_CONFIG[family];
+  if (!config) return { dark: [], light: [] };
+  const dark = [];
+  const light = [];
+  for (const [id, spec] of Object.entries(STUDIO_SCENE_PROMPTS)) {
+    const slug = spec.file.replace("studio-scene-", "").replace("-4k.webp", "");
+    const subject = spec.prompt.replace(CARTOON_DARK_SUFFIX, "").trim();
+    const lightSubject =
+      STUDIO_LIGHT_SCENE_PROMPTS[id]?.prompt.replace(CARTOON_LIGHT_SUFFIX, "").trim() ?? subject;
+    dark.push({
+      id,
+      family,
+      variant: "dark",
+      file: `${config.prefix}-${slug}-4k.webp`,
+      png: `${config.prefix}-${slug}.png`,
+      prompt: `${subject} ${config.darkSuffix}`,
+    });
+    light.push({
+      id,
+      family,
+      variant: "light",
+      file: `${config.prefix}-${slug}-light-4k.webp`,
+      png: `${config.prefix}-${slug}-light.png`,
+      prompt: `${lightSubject} ${config.lightSuffix}`,
+    });
+  }
+  return { dark, light };
+}
+
+export const STUDIO_CINEMATIC_PROMPT_LIST = [
+  ...buildFamilyPrompts("cinematic").dark,
+  ...buildFamilyPrompts("cinematic").light,
+];
+export const STUDIO_SPACEY_PROMPT_LIST = [
+  ...buildFamilyPrompts("spacey").dark,
+  ...buildFamilyPrompts("spacey").light,
+];
+export const STUDIO_SCENIC_PROMPT_LIST = [
+  ...buildFamilyPrompts("scenic").dark,
+  ...buildFamilyPrompts("scenic").light,
+];
+
+export const STUDIO_BACKGROUND_PROMPTS_BY_FAMILY = {
+  animated: {
+    dark: STUDIO_SCENE_PROMPT_LIST.map((spec) => ({ ...spec, family: "animated", variant: "dark" })),
+    light: STUDIO_LIGHT_SCENE_PROMPT_LIST.map((spec) => ({ ...spec, family: "animated", variant: "light" })),
+  },
+  cinematic: buildFamilyPrompts("cinematic"),
+  spacey: buildFamilyPrompts("spacey"),
+  scenic: buildFamilyPrompts("scenic"),
+};
+
+export function studioWallpaperSpecsForFamily(family) {
+  if (family === "animated") {
+    return [
+      ...STUDIO_BACKGROUND_PROMPTS_BY_FAMILY.animated.dark,
+      ...STUDIO_BACKGROUND_PROMPTS_BY_FAMILY.animated.light,
+    ];
+  }
+  const pack = STUDIO_BACKGROUND_PROMPTS_BY_FAMILY[family];
+  if (!pack) return [];
+  return [...pack.dark, ...pack.light];
+}

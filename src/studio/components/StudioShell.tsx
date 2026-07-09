@@ -25,6 +25,7 @@ import {
   Maximize2,
   Mic,
   Package,
+  Palette,
   Plus,
   ArrowUp,
   Scissors,
@@ -54,13 +55,15 @@ import { ImageZoomViewer } from "@/desk/components/ImageZoomViewer";
 import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
-import { StudioVideoEditor } from "@/studio/editor/StudioVideoEditor";
+import { StudioStyleSheetPickerPanel, StudioStyleSheetTriggerButton } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import { EXPLORER_DND_TYPE, readExplorerDragData } from "@/desk/lib/explorer-dnd";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
-import { randomizeTheme } from "@/mos-app/theme.js";
+import { playUiSound } from "@/mos-app/sounds.js";
+import { randomizeStudioAppearance, SCHEMES, STUDIO_BACKGROUND_FAMILIES } from "@/mos-app/theme.js";
+import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { getDeviceId, loadSession } from "@/lib/session";
 import {
@@ -94,6 +97,8 @@ const CREATE_MENU_ITEMS = [
   { action: "new-element", label: "Add element", icon: Sparkles },
 ];
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
+const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
+const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_VOICE_NOT_CONNECTED =
   "Voice is not connected yet. Please try typing your request, or connect voice and try again.";
 function studioCursorUrl(accent, active = false) {
@@ -250,6 +255,14 @@ export function StudioShell() {
   const [skipPromptEnhancement, setSkipPromptEnhancement] = useState(false);
   const [elementType, setElementType] = useState("character");
   const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
+  const [composerStyleMode, setComposerStyleMode] = useState(() => {
+    if (typeof window === "undefined") return "direct";
+    return window.localStorage.getItem(COMPOSER_STYLE_MODE_KEY) === "styled" ? "styled" : "direct";
+  });
+  const [activeStyleSheetId, setActiveStyleSheetId] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(ACTIVE_STYLE_SHEET_KEY) || null;
+  });
   const [scriptType, setScriptType] = useState("production");
   const [referenceIntent, setReferenceIntent] = useState("auto");
   const [flowPending, setFlowPending] = useState(false);
@@ -266,7 +279,7 @@ export function StudioShell() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
-  const [studioBackground, setStudioBackground] = useState({ path: "", value: "", ready: false });
+  useStudioBackground();
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
   const composerUploadInputRef = useRef(null);
@@ -280,8 +293,6 @@ export function StudioShell() {
   const folderByIdRef = useRef(new Map());
   const currentEntriesCacheRef = useRef(new Map());
   const lastRootEntriesRef = useRef(null);
-  const studioBackgroundPathRef = useRef("");
-
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
   const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
@@ -477,6 +488,8 @@ export function StudioShell() {
         }
       : "skip",
   );
+  const styleSheets = useQuery(api.elements.listStyleSheets, hasCurrentUser ? {} : "skip");
+  const setActiveStyleSheetMutation = useMutation(api.users.setActiveStyleSheet);
   const scriptTypes = useQuery(api.composerCatalog.listScriptTypes, hasCurrentUser ? {} : "skip");
   const referenceIntents = useQuery(api.composerCatalog.listReferenceIntents, hasCurrentUser ? {} : "skip");
   const attachedScriptMarkdown = useMemo(
@@ -529,28 +542,39 @@ export function StudioShell() {
     );
     return { hasElementReference, hasRawImageReference };
   }, [attachments]);
-  const selectedStylePreset = useMemo(() => {
+  const directPreset = useMemo(() => {
     if (!presets?.length) return null;
-    if (selectedStylePresetId) {
-      const selected = presets.find((preset) => preset._id === selectedStylePresetId);
-      if (selected) return selected;
+    return presets.find((preset) => preset.slug === "unstyled") ?? presets[0];
+  }, [presets]);
+  const activeStyleSheet = useMemo(() => {
+    if (!activeStyleSheetId || !styleSheets?.length) return null;
+    return styleSheets.find((sheet) => sheet._id === activeStyleSheetId) ?? null;
+  }, [activeStyleSheetId, styleSheets]);
+  const selectedStylePreset = directPreset;
+  const handleSelectDirect = useCallback(() => {
+    if (directPreset) setSelectedStylePresetId(directPreset._id);
+    setComposerStyleMode("direct");
+    setSkipPromptEnhancement(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(COMPOSER_STYLE_MODE_KEY, "direct");
     }
-    return (
-      presets.find((preset) => preset.slug === "toon-prime") ??
-      presets.find((preset) => preset.slug === "unstyled") ??
-      presets[0]
-    );
-  }, [presets, selectedStylePresetId]);
-  const handleSelectStylePreset = useCallback(
-    (presetId) => {
-      setSelectedStylePresetId(presetId);
-      const preset = presets?.find((item) => item._id === presetId);
-      if (preset?.slug === "unstyled" || preset?.slug === "raw") {
-        setSkipPromptEnhancement(true);
-      }
-    },
-    [presets],
-  );
+  }, [directPreset]);
+  const handleSelectStyleSheet = useCallback((sheetId) => {
+    setActiveStyleSheetId(sheetId);
+    setComposerStyleMode("styled");
+    setSkipPromptEnhancement(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACTIVE_STYLE_SHEET_KEY, sheetId);
+      window.localStorage.setItem(COMPOSER_STYLE_MODE_KEY, "styled");
+    }
+    void setActiveStyleSheetMutation({ styleSheetElementId: sheetId });
+  }, [setActiveStyleSheetMutation]);
+  useEffect(() => {
+    if (directPreset && !selectedStylePresetId) {
+      setSelectedStylePresetId(directPreset._id);
+      if (composerStyleMode === "direct") setSkipPromptEnhancement(true);
+    }
+  }, [directPreset, selectedStylePresetId, composerStyleMode]);
   const hasNonVideoReferenceInput = generationReferences.some((reference) => reference.kind === "image" || reference.kind === "audio");
   const videoSupportsReferenceInput = mode === "video";
   const entitlement = useQuery(
@@ -693,77 +717,6 @@ export function StudioShell() {
       window.removeEventListener("mercuryos-theme-change", updateCursor);
       document.removeEventListener("pointerover", handlePointerOver, true);
       document.removeEventListener("pointerout", handlePointerOut, true);
-    };
-  }, []);
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-
-    let loadId = 0;
-    let rafId = 0;
-
-    const loadBackground = () => {
-      window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(() => {
-        const nextUrl = cssUrlToPath(getComputedStyle(shell).getPropertyValue("--studio-active-bg"));
-        const currentUrl = studioBackgroundPathRef.current;
-        if (!nextUrl) {
-          if (!currentUrl) return;
-          studioBackgroundPathRef.current = "";
-          setStudioBackground({ path: "", value: "", ready: false });
-          return;
-        }
-        if (!nextUrl || nextUrl === currentUrl) return;
-
-        const id = loadId + 1;
-        loadId = id;
-        studioBackgroundPathRef.current = "";
-        setStudioBackground({ path: "", value: "", ready: false });
-
-        const image = new Image();
-        image.decoding = "async";
-        image.src = nextUrl;
-
-        const showLoadedImage = () => {
-          if (id !== loadId) return;
-          studioBackgroundPathRef.current = nextUrl;
-          setStudioBackground({ path: nextUrl, value: `url("${nextUrl}")`, ready: true });
-        };
-
-        if (image.decode) {
-          void image.decode().then(showLoadedImage).catch(() => {
-            if (image.complete) showLoadedImage();
-            else image.onload = showLoadedImage;
-          });
-        } else {
-          image.onload = showLoadedImage;
-        }
-      });
-    };
-
-    const observer = new MutationObserver((mutations) => {
-      if (mutations.some((mutation) =>
-        mutation.attributeName === "data-theme"
-        || mutation.attributeName === "data-studio-bg-pack"
-        || mutation.attributeName === "data-appearance",
-      )) {
-        loadBackground();
-      }
-    });
-
-    loadBackground();
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme", "data-studio-bg-pack", "data-appearance"],
-    });
-    window.addEventListener("mercuryos-theme-change", loadBackground);
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      observer.disconnect();
-      window.removeEventListener("mercuryos-theme-change", loadBackground);
-      loadId += 1;
     };
   }, []);
 
@@ -1367,7 +1320,7 @@ export function StudioShell() {
       elementId: entry.studioId,
       referenceInputs,
       existingNotes,
-      stylePresetSlug: stylePresetSlug ?? selectedStylePreset?.slug ?? "toon-prime",
+      stylePresetSlug: stylePresetSlug ?? "unstyled",
     });
     setTabEntrySnapshots((snapshots) => ({
       ...snapshots,
@@ -1408,6 +1361,8 @@ export function StudioShell() {
       elementId: entry.studioId,
       name: values.name.trim(),
       description: values.description?.trim() || undefined,
+      styleRules: values.styleRules?.trim() || undefined,
+      renderMode: values.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
     });
     setTabEntrySnapshots((snapshots) => ({
@@ -1416,6 +1371,8 @@ export function StudioShell() {
         ...entry,
         name: `@${values.name.trim()}`,
         description: values.description?.trim() || undefined,
+        styleRules: values.styleRules?.trim() || undefined,
+        renderMode: values.renderMode ?? entry.renderMode,
         referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
         referenceAssets: values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets,
         sheetAsset: values.sheetAsset ?? entry.sheetAsset,
@@ -1678,7 +1635,7 @@ export function StudioShell() {
           sourceAssetIds: uploadedAssets.map((asset) => asset.assetId),
           uploadedAssets,
           generateSheet: true,
-          stylePresetSlug: selectedStylePreset?.slug ?? "toon-prime",
+          stylePresetSlug: values.stylePresetSlug ?? "unstyled",
         });
         setDraft("");
         setAttachments([]);
@@ -1686,16 +1643,25 @@ export function StudioShell() {
         return;
       }
       if (mode === "script") {
-        if (!selectedStylePreset) {
-          throw new Error("Creative presets are still loading. Try again in a moment.");
+        if (!directPreset) {
+          throw new Error("Style options are still loading. Try again in a moment.");
+        }
+        if (composerStyleMode === "styled") {
+          if (!activeStyleSheetId || !activeStyleSheet) {
+            throw new Error("Create and select a Style Sheet before styled script generation, or switch to Direct.");
+          }
+          if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
+            throw new Error("Build your Style Sheet before using it for script generation.");
+          }
         }
         const result = await generateScript({
           folderId: activeFolder._id,
-          stylePresetId: selectedStylePreset._id,
+          stylePresetId: directPreset._id,
+          styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
           userPrompt: buildPromptWithAttachments(draft, attachments),
           attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
           referenceInputs: generationReferences,
-          skipPromptEnhancement,
+          skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
           scriptType,
           referenceIntent,
           hasRawImageReference: composerReferenceFlags.hasRawImageReference,
@@ -1710,15 +1676,17 @@ export function StudioShell() {
       if (presets === undefined) {
         throw new Error("Style options are still loading. Try again in a moment.");
       }
-      const preset = selectedStylePreset;
+      const preset = directPreset;
       if (!preset) {
-        const canSeedPresets =
-          currentUser?.role === "admin" || currentUser?.role === "super_admin";
-        throw new Error(
-          canSeedPresets
-            ? "Style options are not ready yet. Open Admin > Setup and seed them first."
-            : "Style options are not ready yet. Ask an admin to seed them in Admin Setup.",
-        );
+        throw new Error("Direct generation preset is not ready yet.");
+      }
+      if (composerStyleMode === "styled") {
+        if (!activeStyleSheetId || !activeStyleSheet) {
+          throw new Error("Create and select a Style Sheet before styled generation, or switch to Direct.");
+        }
+        if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
+          throw new Error("Build your Style Sheet before using it for generation.");
+        }
       }
       if (entitlement && !entitlement.canGenerate) {
         openSettingsTab("top-up");
@@ -1741,6 +1709,7 @@ export function StudioShell() {
         mode,
         tier: mode === "video" ? "pro_video" : "image",
         stylePresetId: preset._id,
+        styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
         userPrompt: buildPromptWithAttachments(draft, attachments),
         attachedScriptMarkdown: attachedCreativeMarkdown.length ? attachedCreativeMarkdown : undefined,
         referenceSummaries: elementReferenceSummaries.length ? elementReferenceSummaries : undefined,
@@ -1755,7 +1724,7 @@ export function StudioShell() {
           : undefined,
         referenceInputs: mode === "video" ? generationReferences : undefined,
         startFrameUrl: mode === "video" ? videoStartFrameUrl : undefined,
-        skipPromptEnhancement,
+        skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
         hasElementReference: composerReferenceFlags.hasElementReference,
@@ -1781,8 +1750,7 @@ export function StudioShell() {
   return (
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish${isMobile ? ` is-studio-mobile is-mobile-${mobileSection}` : ""}${customCursorEnabled ? " is-custom-cursor" : ""}${studioBackground.ready ? " is-studio-bg-ready" : ""}`}
-      style={studioBackground.value ? { "--studio-loaded-bg": studioBackground.value } : undefined}
+      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? ` is-studio-mobile is-mobile-${mobileSection}` : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
         if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
@@ -1793,8 +1761,7 @@ export function StudioShell() {
       <div className="studio-backdrop" aria-hidden="true" />
       <style jsx global>{`
         .studio-polish {
-          --studio-scene-bg: url("/studio-scene-agent-genesis-4k.webp");
-          --studio-active-bg: var(--studio-scene-bg);
+          --studio-active-bg: none;
           --studio-glow-soft: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           --studio-glow-mid: color-mix(in srgb, var(--cursor-accent) 24%, transparent);
           --studio-surface-hover: color-mix(in srgb, var(--cursor-accent) 5%, var(--color-cursor-hover));
@@ -1802,12 +1769,12 @@ export function StudioShell() {
           --studio-shell-border: var(--color-cursor-border-soft);
           --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-card-border: color-mix(in srgb, var(--cursor-accent) 8%, var(--studio-shell-border));
-          --studio-motion-fast: 220ms;
-          --studio-motion-med: 360ms;
-          --studio-motion-ease: cubic-bezier(0.34, 1.38, 0.64, 1);
-          --studio-motion-spring: cubic-bezier(0.18, 1.42, 0.32, 1);
+          --studio-motion-fast: 100ms;
+          --studio-motion-med: 120ms;
+          --studio-motion-ease: cubic-bezier(0.2, 0, 0.2, 1);
+          --studio-motion-spring: cubic-bezier(0.2, 0, 0.2, 1);
           --studio-composer-focus-line-ease: cubic-bezier(0.16, 1, 0.3, 1);
-          --studio-hover-scale: 1.012;
+          --studio-hover-scale: 1;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 34%, transparent);
@@ -1853,7 +1820,7 @@ export function StudioShell() {
           --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text-bright) 4.2%, var(--mos-bg));
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
-          --studio-grid-tile-glow: 0 0 16px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          --studio-grid-tile-glow: none;
           --studio-gen-frame-bg: rgba(0, 0, 0, 0.9);
           --studio-gen-frame-text: var(--color-cursor-text-bright);
           --studio-gen-card-shadow: 0 28px 64px rgb(0 0 0 / 0.65);
@@ -1870,12 +1837,8 @@ export function StudioShell() {
           position: absolute;
           inset: 0;
           pointer-events: none;
-          opacity: 0;
-          background: var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
-          transition: opacity 180ms ease;
-        }
-        .studio-backdrop {
           opacity: 0.74;
+          background: var(--studio-loaded-bg, var(--studio-active-bg)) center / cover no-repeat;
         }
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
@@ -2177,14 +2140,12 @@ export function StudioShell() {
             height: 104px;
             opacity: 0.82;
           }
-          .studio-polish .studio-composer .cursor-composer-box:focus-within::before,
-          .studio-polish .studio-composer .cursor-composer-box:hover::before {
+          .studio-polish .studio-composer .cursor-composer-box:focus-within::before {
             width: min(100%, 520px);
             height: 240px;
             opacity: 1;
           }
-          .studio-polish .studio-composer .cursor-composer-box:focus-within::after,
-          .studio-polish .studio-composer .cursor-composer-box:hover::after {
+          .studio-polish .studio-composer .cursor-composer-box:focus-within::after {
             width: min(100%, 480px);
             height: 220px;
             opacity: 1;
@@ -2231,111 +2192,20 @@ export function StudioShell() {
             padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
           }
         }
+        [data-studio-bg-family="clean"] .studio-polish,
         [data-studio-bg-pack="clean"] .studio-polish {
           --studio-active-bg: none;
         }
+        [data-studio-bg-family="animated"] .studio-polish,
+        [data-studio-bg-family="cinematic"] .studio-polish,
+        [data-studio-bg-family="spacey"] .studio-polish,
+        [data-studio-bg-family="scenic"] .studio-polish,
         [data-studio-bg-pack="worlds"] .studio-polish {
           --studio-glow-soft: transparent;
           --studio-glow-mid: transparent;
           --studio-surface-hover: color-mix(in srgb, var(--mos-text-bright) 4%, var(--color-cursor-hover));
           --studio-card-border: var(--studio-shell-border);
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--mos-text-bright) 10%, transparent);
-        }
-        [data-theme="agent"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-agent-genesis-4k.webp");
-        }
-        [data-theme="gold"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-gold-archive-4k.webp");
-        }
-        [data-theme="ocean"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-ocean-depth-4k.webp");
-        }
-        [data-theme="ember"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-ember-forge-4k.webp");
-        }
-        [data-theme="mint"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-mint-meadow-4k.webp");
-        }
-        [data-theme="violet"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-violet-dusk-4k.webp");
-        }
-        [data-theme="rose"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-rose-bloom-4k.webp");
-        }
-        [data-theme="cobalt"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-cobalt-skyline-4k.webp");
-        }
-        [data-theme="coral"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-coral-reef-4k.webp");
-        }
-        [data-theme="sage"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-sage-grove-4k.webp");
-        }
-        [data-theme="cherry"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-cherry-pulse-4k.webp");
-        }
-        [data-theme="teal"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-teal-lagoon-4k.webp");
-        }
-        [data-theme="lime"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-lime-canopy-4k.webp");
-        }
-        [data-theme="fuchsia"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-fuchsia-neon-4k.webp");
-        }
-        [data-theme="copper"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-copper-foundry-4k.webp");
-        }
-        [data-theme="indigo"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-indigo-midnight-4k.webp");
-        }
-        [data-appearance="light"][data-theme="agent"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-agent-genesis-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="gold"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-gold-archive-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="ocean"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-ocean-depth-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="ember"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-ember-forge-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="mint"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-mint-meadow-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="violet"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-violet-dusk-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="rose"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-rose-bloom-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="cobalt"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-cobalt-skyline-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="coral"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-coral-reef-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="sage"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-sage-grove-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="cherry"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-cherry-pulse-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="teal"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-teal-lagoon-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="lime"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-lime-canopy-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="fuchsia"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-fuchsia-neon-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="copper"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-copper-foundry-light-4k.webp");
-        }
-        [data-appearance="light"][data-theme="indigo"] .studio-polish {
-          --studio-scene-bg: url("/studio-scene-indigo-midnight-light-4k.webp");
         }
         :root {
           --studio-cursor-transition: opacity 0.2s ease;
@@ -2499,16 +2369,29 @@ export function StudioShell() {
           from { transform: translate3d(0, 0, 0) scale(0.96); }
           to { transform: translate3d(-18px, 12px, 0) scale(1.05); }
         }
-        .studio-polish :where(button, [role="button"], .cursor-tab, .cursor-agent-chat-tab, .cursor-unified-tab, .cursor-tab-close, .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip, .theme-chip, .cursor-composer-box, .studio-credit-pill) {
+        .studio-polish :where(
+          button,
+          [role="button"],
+          .cursor-tab-close,
+          .cursor-tree-row,
+          .desk-file-list-row,
+          .desk-file-breadcrumbs-chip,
+          .theme-chip,
+          .studio-credit-pill,
+          .cursor-icon-btn,
+          .cursor-toolbar-icon,
+          .studio-pill-btn,
+          .studio-settings-pill
+        ) {
           transition:
-            background var(--studio-motion-fast) var(--studio-motion-ease),
             background-color var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            color var(--studio-motion-fast) var(--studio-motion-ease),
-            filter var(--studio-motion-fast) var(--studio-motion-ease),
-            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-ease),
-            opacity var(--studio-motion-fast) var(--studio-motion-ease);
+            color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab, .cursor-unified-tab) {
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip) {
           -webkit-tap-highlight-color: transparent;
@@ -2518,8 +2401,8 @@ export function StudioShell() {
           transform-origin: center center;
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):hover:not(:disabled) {
-          transform: scale(var(--studio-hover-scale));
-          box-shadow: 0 1px 4px color-mix(in srgb, #000 16%, transparent);
+          transform: none;
+          box-shadow: none;
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill):active:not(:disabled) {
           transform: scale(var(--studio-press-scale));
@@ -2688,32 +2571,11 @@ export function StudioShell() {
           position: relative;
           overflow: visible;
         }
-        .studio-polish :where(.cursor-tree-row)::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          opacity: 0;
-          background:
-            radial-gradient(
-              circle at var(--mos-pointer-x, 50%) var(--mos-pointer-y, 50%),
-              color-mix(in srgb, var(--cursor-accent) 13%, transparent),
-              transparent 46%
-            ),
-            linear-gradient(90deg, color-mix(in srgb, var(--mos-text-bright) 4%, transparent), transparent 58%);
-          transition: opacity var(--studio-motion-fast) var(--studio-motion-ease);
-        }
         .studio-polish .cursor-tree-row:hover {
           background: var(--studio-surface-hover);
           border-color: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-shell-border));
-          box-shadow:
-            0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent) inset,
-            0 10px 28px color-mix(in srgb, var(--cursor-accent) 10%, rgba(2, 6, 23, 0.24));
-          transform: scale(var(--studio-hover-scale));
-        }
-        .studio-polish :where(.cursor-tree-row):hover::after {
-          opacity: 1;
+          box-shadow: none;
+          transform: none;
         }
         .studio-polish .cursor-tree-row[aria-selected="true"],
         .studio-polish .cursor-tree-row.is-selected {
@@ -2827,13 +2689,11 @@ export function StudioShell() {
           content: "";
           position: absolute;
           inset: 0;
+          left: var(--tab-overlap-inset, 0);
           border-radius: inherit;
           pointer-events: none;
           opacity: 0;
-          transition:
-            opacity var(--studio-motion-med) var(--studio-motion-ease),
-            transform var(--studio-motion-med) var(--studio-motion-spring),
-            background-color var(--studio-motion-fast) var(--studio-motion-ease);
+          transition: none;
         }
         .studio-polish .cursor-unified-tab::before {
           z-index: 0;
@@ -2850,6 +2710,11 @@ export function StudioShell() {
         }
         .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new) {
           margin: 0 0 0 -12px;
+          z-index: var(--tab-stack, 1) !important;
+        }
+        /* Active tab on top; hover never lifts z-index so overlay stays under left neighbor. */
+        .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new).is-active {
+          z-index: calc(var(--tab-count, 8) + 5) !important;
         }
         .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
           padding-left: 18px !important;
@@ -2869,7 +2734,7 @@ export function StudioShell() {
           margin-left: 0;
           border-radius: 0 11px 11px 0;
         }
-        .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab, .cursor-unified-tab):hover {
+        .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover {
           border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent) !important;
           background:
             radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 46%),
@@ -2879,7 +2744,11 @@ export function StudioShell() {
               color-mix(in srgb, var(--mos-surface) 50%, var(--mos-bg))
             ) !important;
         }
-        .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active, .cursor-unified-tab.is-active) {
+        .studio-polish .cursor-unified-tab:hover {
+          border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent) !important;
+          background: transparent !important;
+        }
+        .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active) {
           border-color: color-mix(in srgb, var(--mos-text-bright) 4%, transparent) !important;
           background:
             linear-gradient(
@@ -2892,8 +2761,22 @@ export function StudioShell() {
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent),
             0 1px 0 color-mix(in srgb, #000 12%, transparent) !important;
         }
+        .studio-polish .cursor-unified-tab.is-active {
+          border-color: color-mix(in srgb, var(--mos-text-bright) 4%, transparent) !important;
+          background: transparent !important;
+          color: var(--color-cursor-text-bright) !important;
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent),
+            0 1px 0 color-mix(in srgb, #000 12%, transparent) !important;
+        }
         .studio-polish .cursor-unified-tab.is-active::before {
-          opacity: 0;
+          opacity: 1;
+          background:
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--mos-surface) 68%, var(--mos-bg)),
+              color-mix(in srgb, var(--mos-surface) 42%, var(--mos-bg))
+            );
         }
         .studio-polish .cursor-unified-tab.is-active::after {
           z-index: 2;
@@ -2936,17 +2819,6 @@ export function StudioShell() {
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent),
             0 1px 0 color-mix(in srgb, #000 12%, transparent) !important;
         }
-        .studio-polish .cursor-unified-tab:nth-child(1) { z-index: 40 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(2) { z-index: 39 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(3) { z-index: 38 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(4) { z-index: 37 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(5) { z-index: 36 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(6) { z-index: 35 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(7) { z-index: 34 !important; }
-        .studio-polish .cursor-unified-tab:nth-child(8) { z-index: 33 !important; }
-        .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new) {
-          z-index: var(--tab-stack, 1) !important;
-        }
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
           width: 30px !important;
           min-width: 30px !important;
@@ -2981,10 +2853,7 @@ export function StudioShell() {
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 24%, var(--mos-surface)), color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-surface))) !important;
           color: var(--color-cursor-text-bright);
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent) inset,
-            0 10px 22px color-mix(in srgb, #000 28%, transparent),
-            0 0 20px color-mix(in srgb, var(--cursor-accent) 20%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent) inset;
         }
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new svg {
           width: 12px;
@@ -3058,7 +2927,7 @@ export function StudioShell() {
           --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 3.4%, var(--mos-bg));
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 5.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 6%, var(--mos-bg));
-          --studio-grid-tile-glow: 0 0 12px color-mix(in srgb, var(--cursor-accent) 9%, transparent);
+          --studio-grid-tile-glow: none;
           --studio-gen-frame-bg: transparent;
           --studio-gen-frame-text: var(--color-cursor-text);
           --studio-gen-card-shadow: var(--studio-composer-glass-shadow);
@@ -3153,22 +3022,36 @@ export function StudioShell() {
         }
         [data-appearance="light"] .studio-polish :where(
           .cursor-tab,
-          .cursor-agent-chat-tab,
-          .cursor-unified-tab
+          .cursor-agent-chat-tab
         ):hover {
           background: var(--color-cursor-hover) !important;
           box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab:hover {
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab:hover::before {
+          opacity: 1;
+          background: var(--color-cursor-hover);
         }
         [data-appearance="light"] .studio-polish :where(
           .cursor-tab.active,
           .cursor-agent-chat-tab.active,
           .cursor-tab.is-active,
-          .cursor-agent-chat-tab.is-active,
-          .cursor-unified-tab.is-active
+          .cursor-agent-chat-tab.is-active
         ) {
           border-color: var(--color-cursor-border-soft) !important;
           background: var(--color-cursor-panel) !important;
           box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active {
+          background: transparent !important;
+          box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active::before {
+          opacity: 1;
+          background: var(--color-cursor-panel);
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-streaming.is-active,
@@ -3180,7 +3063,7 @@ export function StudioShell() {
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab::before {
-          display: none;
+          display: block;
         }
         [data-appearance="light"] .studio-polish .studio-settings-pill.is-active {
           box-shadow: none !important;
@@ -4276,7 +4159,7 @@ export function StudioShell() {
         }
         .studio-polish .cursor-settings-action:hover,
         .studio-polish .theme-chip:hover {
-          box-shadow: 0 0 18px var(--studio-glow-soft);
+          box-shadow: none;
         }
         .studio-polish .cursor-composer-box:focus-within {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, rgba(255, 255, 255, 0.12));
@@ -4369,7 +4252,7 @@ export function StudioShell() {
         .studio-polish .desk-file-list-row:hover {
           border-color: transparent !important;
           background: var(--studio-grid-tile-hover) !important;
-          box-shadow: var(--studio-grid-tile-glow);
+          box-shadow: none;
           transform: none;
         }
         .studio-polish .desk-file-list-row.is-parent-row {
@@ -4382,7 +4265,7 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-list-row.is-parent-row:hover {
           background: var(--studio-grid-tile-hover) !important;
-          box-shadow: var(--studio-grid-tile-glow);
+          box-shadow: none;
           transform: none;
         }
         .studio-polish .cursor-file-grid,
@@ -4424,9 +4307,7 @@ export function StudioShell() {
           background: var(--studio-grid-tile-bg) !important;
           box-shadow: none;
           overflow: hidden;
-          transition:
-            background var(--studio-motion-fast) var(--studio-motion-ease),
-            box-shadow var(--studio-motion-fast) var(--studio-motion-ease);
+          transition: background-color var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
@@ -4551,7 +4432,7 @@ export function StudioShell() {
         .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual {
           background: var(--studio-grid-tile-hover) !important;
-          box-shadow: var(--studio-grid-tile-glow) !important;
+          box-shadow: none !important;
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
@@ -4587,7 +4468,7 @@ export function StudioShell() {
         .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual,
         .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual {
-          box-shadow: var(--studio-grid-tile-glow) !important;
+          box-shadow: none !important;
         }
         .studio-polish .desk-file-list-row[aria-selected="true"],
         .studio-polish .desk-file-list-row.is-selected {
@@ -4597,7 +4478,7 @@ export function StudioShell() {
         }
         .studio-polish .desk-file-list-row[aria-selected="true"]:hover,
         .studio-polish .desk-file-list-row.is-selected:hover {
-          box-shadow: var(--studio-grid-tile-glow);
+          box-shadow: none;
         }
         .studio-polish .desk-file-grid-item.is-drag-over,
         .studio-polish .desk-file-preview-item.is-drag-over {
@@ -4610,7 +4491,7 @@ export function StudioShell() {
         .studio-polish .desk-file-grid-item.is-drag-over .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item.is-drag-over .desk-file-thumb-visual {
           background: var(--studio-grid-tile-hover) !important;
-          box-shadow: var(--studio-grid-tile-glow) !important;
+          box-shadow: none !important;
         }
         .studio-folder-pathbar {
           display: flex;
@@ -4798,8 +4679,7 @@ export function StudioShell() {
             opacity 2500ms var(--studio-composer-focus-line-ease);
           pointer-events: none;
         }
-        .studio-composer .cursor-composer-box:focus-within::before,
-        .studio-composer .cursor-composer-box:hover::before {
+        .studio-composer .cursor-composer-box:focus-within::before {
           width: 800px;
           height: 400px;
           border-top-color: var(--cursor-accent);
@@ -4833,8 +4713,7 @@ export function StudioShell() {
             opacity 2500ms var(--studio-composer-focus-line-ease);
           pointer-events: none;
         }
-        .studio-composer .cursor-composer-box:focus-within::after,
-        .studio-composer .cursor-composer-box:hover::after {
+        .studio-composer .cursor-composer-box:focus-within::after {
           width: 760px;
           height: 380px;
           border-right-color: var(--cursor-accent);
@@ -4902,7 +4781,7 @@ export function StudioShell() {
         }
         .studio-mode-row:hover {
           color: var(--color-cursor-text);
-          transform: scale(var(--studio-hover-scale));
+          transform: none;
         }
         .studio-mode-row.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
@@ -5045,6 +4924,40 @@ export function StudioShell() {
           overflow: hidden;
           border-radius: 10px;
           background: color-mix(in srgb, #000 42%, var(--studio-composer-glass-strong) 58%);
+        }
+        .studio-preset-grid-thumb.is-direct-clean {
+          background:
+            radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mos-text-bright) 8%, transparent), transparent 52%),
+            linear-gradient(
+              160deg,
+              color-mix(in srgb, var(--mos-bg) 92%, var(--mos-surface)),
+              color-mix(in srgb, var(--mos-surface) 78%, var(--mos-bg))
+            );
+          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 7%, transparent);
+          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+        }
+        .studio-preset-grid-thumb.is-create-sheet {
+          background: color-mix(in srgb, var(--mos-surface) 42%, transparent);
+          border: 1px dashed color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border-soft));
+        }
+        .studio-preset-grid-thumb.is-create-sheet .studio-preset-grid-thumb-fallback {
+          color: color-mix(in srgb, var(--cursor-accent) 78%, var(--color-cursor-text));
+        }
+        .studio-preset-grid-card--create:hover .studio-preset-grid-thumb.is-create-sheet {
+          border-color: color-mix(in srgb, var(--cursor-accent) 52%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-surface));
+        }
+        .studio-preset-trigger-direct {
+          width: 100%;
+          height: 100%;
+          border-radius: inherit;
+        }
+        .studio-preset-trigger-sheet-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+          border-radius: inherit;
         }
         .studio-preset-grid-thumb img {
           width: 100%;
@@ -6382,15 +6295,12 @@ export function StudioShell() {
           color: #ffffff;
         }
         .studio-generate-btn:hover:not(:disabled) {
-          transform: scale(var(--studio-hover-scale));
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 44%, transparent),
-            0 8px 20px color-mix(in srgb, var(--cursor-accent) 34%, transparent);
+          transform: none;
         }
         [data-appearance="light"] .studio-polish .studio-generate-btn:hover:not(:disabled) {
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.56),
-            0 10px 24px color-mix(in srgb, var(--cursor-accent) 46%, transparent);
+            0 8px 20px color-mix(in srgb, var(--cursor-accent) 40%, transparent);
         }
         .studio-generate-btn:active:not(:disabled) {
           transform: scale(var(--studio-press-scale));
@@ -6521,7 +6431,7 @@ export function StudioShell() {
           color: #ffffff;
         }
         .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled) {
-          transform: scale(var(--studio-hover-scale));
+          transform: none;
         }
         .studio-composer-circle-btn.studio-composer-send-btn:active:not(:disabled) {
           transform: scale(var(--studio-press-scale));
@@ -7234,9 +7144,9 @@ export function StudioShell() {
         .studio-price-card:hover,
         .studio-bank-card:hover,
         .studio-admin-card:hover {
-          transform: scale(var(--studio-hover-scale));
+          transform: none;
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
-          box-shadow: 0 0 22px var(--studio-glow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          box-shadow: none;
         }
         .studio-price-card.is-featured {
           border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
@@ -7745,15 +7655,24 @@ export function StudioShell() {
           margin: 0 auto;
         }
         .studio-empty-logo-btn {
+          position: relative;
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.35rem;
           pointer-events: auto;
           cursor: pointer;
           border: none;
           background: transparent;
           padding: 0;
           margin: 0 auto;
-          display: block;
           -webkit-tap-highlight-color: transparent;
           touch-action: manipulation;
+        }
+        .studio-empty-logo-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
         .studio-empty-logo-btn:focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 55%, transparent);
@@ -7995,15 +7914,31 @@ export function StudioShell() {
           font-size: 13px;
           line-height: 1.5;
         }
+        [data-studio-bg-family="animated"] .studio-polish .studio-empty-hero::before,
+        [data-studio-bg-family="animated"] .studio-polish .studio-empty-hero::after,
+        [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-hero::before,
+        [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-hero::after,
+        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-hero::before,
+        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-hero::after,
+        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-hero::before,
+        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-hero::after,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::before,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::after {
           display: none;
         }
+        [data-studio-bg-family="animated"] .studio-polish .studio-empty-copy,
+        [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-copy,
+        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-copy,
+        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-copy,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-copy {
           border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           background: color-mix(in srgb, #000 16%, transparent);
           box-shadow: none;
         }
+        [data-studio-bg-family="animated"] .studio-polish .studio-empty-chips span,
+        [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-chips span,
+        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-chips span,
+        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-chips span,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-chips span {
           border-color: color-mix(in srgb, var(--mos-text-bright) 10%, transparent);
           background: color-mix(in srgb, #000 10%, transparent);
@@ -8585,13 +8520,18 @@ export function StudioShell() {
           pointer-events: none;
         }
         .studio-dot-grid-wave-stage {
-          display: grid;
-          grid-template-columns: repeat(8, 1fr);
-          gap: 7px;
-          perspective: 520px;
-          transform-style: preserve-3d;
+          position: relative;
+          border-radius: 50%;
+        }
+        .studio-dot-grid-wave-dot-wrap {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(calc(-50% + var(--dot-x, 0px)), calc(-50% + var(--dot-y, 0px)));
+          pointer-events: none;
         }
         .studio-dot-grid-wave-dot {
+          display: block;
           width: 5px;
           height: 5px;
           border-radius: 999px;
@@ -8599,15 +8539,14 @@ export function StudioShell() {
           box-shadow: 0 0 10px color-mix(in srgb, var(--cursor-accent) 34%, transparent);
           animation: studio-dot-grid-wave 1.85s ease-in-out infinite;
           animation-delay: var(--dot-delay, 0s);
-          transform: translate3d(0, 0, 0);
         }
         @keyframes studio-dot-grid-wave {
           0%, 100% {
-            transform: translate3d(0, 0, 0) scale(0.72);
+            transform: scale(0.72);
             opacity: 0.28;
           }
           50% {
-            transform: translate3d(0, -7px, 18px) scale(1.08);
+            transform: scale(1.12);
             opacity: 1;
           }
         }
@@ -9054,8 +8993,17 @@ export function StudioShell() {
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
-            selectedStylePreset={selectedStylePreset}
-            onSelectStylePreset={handleSelectStylePreset}
+            styleSheets={styleSheets}
+            composerStyleMode={composerStyleMode}
+            activeStyleSheetId={activeStyleSheetId}
+            activeStyleSheet={activeStyleSheet}
+            styleSheetAssets={assetsWithPreviewUrls ?? []}
+            onSelectDirect={handleSelectDirect}
+            onSelectStyleSheet={handleSelectStyleSheet}
+            onCreateStyleSheet={() => {
+              setMode("element");
+              setElementType("style_sheet");
+            }}
             scriptTypes={scriptTypes}
             scriptType={scriptType}
             setScriptType={setScriptType}
@@ -9155,8 +9103,14 @@ function StudioComposer({
   elementType,
   setElementType,
   presets,
-  selectedStylePreset,
-  onSelectStylePreset,
+  styleSheets,
+  composerStyleMode,
+  activeStyleSheetId,
+  activeStyleSheet,
+  styleSheetAssets,
+  onSelectDirect,
+  onSelectStyleSheet,
+  onCreateStyleSheet,
   scriptTypes,
   scriptType,
   setScriptType,
@@ -9187,6 +9141,16 @@ function StudioComposer({
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const [composerOptionsOpen, setComposerOptionsOpen] = useState(false);
   const { isMobile } = useMobileLayout();
+  const activeStyleSheetAsset = useMemo(() => {
+    if (!activeStyleSheet?.sheetAssetId || !styleSheetAssets?.length) return null;
+    return (
+      styleSheetAssets.find(
+        (asset) =>
+          asset._id === activeStyleSheet.sheetAssetId
+          || asset.studioId === activeStyleSheet.sheetAssetId,
+      ) ?? null
+    );
+  }, [activeStyleSheet, styleSheetAssets]);
   const inputLineRef = useRef(null);
   const isElementMode = mode === "element";
   const elementReferenceCounts = useMemo(() => {
@@ -9319,7 +9283,9 @@ function StudioComposer({
       isElementMode={isElementMode}
       elementType={elementType}
       setElementType={setElementType}
-      selectedStylePreset={selectedStylePreset}
+      composerStyleMode={composerStyleMode}
+      activeStyleSheet={activeStyleSheet}
+      activeStyleSheetAsset={activeStyleSheetAsset}
       presetGridOpen={presetGridOpen}
       setPresetGridOpen={setPresetGridOpen}
       uploadInputRef={uploadInputRef}
@@ -9447,11 +9413,21 @@ function StudioComposer({
               </button>
             </div>
             {presetGridOpen ? (
-              <StudioPresetGridPanel
-                presets={presets}
-                selectedPresetId={selectedStylePreset?._id}
-                onSelect={(presetId) => {
-                  onSelectStylePreset(presetId);
+              <StudioStyleSheetPickerPanel
+                styleSheets={styleSheets}
+                assets={styleSheetAssets}
+                selectedMode={composerStyleMode}
+                activeStyleSheetId={activeStyleSheetId}
+                onSelectDirect={() => {
+                  onSelectDirect();
+                  setPresetGridOpen(false);
+                }}
+                onSelectStyleSheet={(sheetId) => {
+                  onSelectStyleSheet(sheetId);
+                  setPresetGridOpen(false);
+                }}
+                onCreateStyleSheet={() => {
+                  onCreateStyleSheet();
                   setPresetGridOpen(false);
                 }}
                 onClose={() => setPresetGridOpen(false)}
@@ -9465,11 +9441,21 @@ function StudioComposer({
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           <div className={`cursor-composer-box${presetGridOpen && !isMobile ? " is-preset-open" : ""} ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
       {presetGridOpen && !isMobile ? (
-        <StudioPresetGridPanel
-          presets={presets}
-          selectedPresetId={selectedStylePreset?._id}
-          onSelect={(presetId) => {
-            onSelectStylePreset(presetId);
+        <StudioStyleSheetPickerPanel
+          styleSheets={styleSheets}
+          assets={styleSheetAssets}
+          selectedMode={composerStyleMode}
+          activeStyleSheetId={activeStyleSheetId}
+          onSelectDirect={() => {
+            onSelectDirect();
+            setPresetGridOpen(false);
+          }}
+          onSelectStyleSheet={(sheetId) => {
+            onSelectStyleSheet(sheetId);
+            setPresetGridOpen(false);
+          }}
+          onCreateStyleSheet={() => {
+            onCreateStyleSheet();
             setPresetGridOpen(false);
           }}
           onClose={() => setPresetGridOpen(false)}
@@ -9624,7 +9610,9 @@ function StudioComposerControlStrip({
   isElementMode,
   elementType,
   setElementType,
-  selectedStylePreset,
+  composerStyleMode,
+  activeStyleSheet,
+  activeStyleSheetAsset,
   presetGridOpen,
   setPresetGridOpen,
   uploadInputRef,
@@ -9674,20 +9662,16 @@ function StudioComposerControlStrip({
             <StudioUploadButton inputRef={uploadInputRef} stacked />
             <div className="studio-composer-options-row">
               <StudioElementTypePicker elementType={elementType} setElementType={setElementType} panel />
-              <StudioPresetTriggerButton
-                preset={selectedStylePreset}
-                open={presetGridOpen}
-                onClick={() => setPresetGridOpen((open) => !open)}
-                panel
-              />
             </div>
           </>
         ) : (
           <>
             <StudioUploadButton inputRef={uploadInputRef} stacked />
             <div className="studio-composer-options-row">
-              <StudioPresetTriggerButton
-                preset={selectedStylePreset}
+              <StudioStyleSheetTriggerButton
+                selectedMode={composerStyleMode}
+                activeSheet={activeStyleSheet}
+                activeSheetAsset={activeStyleSheetAsset}
                 open={presetGridOpen}
                 onClick={() => setPresetGridOpen((open) => !open)}
                 panel
@@ -9744,17 +9728,14 @@ function StudioComposerControlStrip({
       {isElementMode ? (
         <>
           <StudioElementTypePicker elementType={elementType} setElementType={setElementType} showLabels={showLabels} />
-          <StudioPresetTriggerButton
-            preset={selectedStylePreset}
-            open={presetGridOpen}
-            onClick={() => setPresetGridOpen((open) => !open)}
-          />
           <StudioUploadButton inputRef={uploadInputRef} />
         </>
       ) : (
         <>
-          <StudioPresetTriggerButton
-            preset={selectedStylePreset}
+          <StudioStyleSheetTriggerButton
+            selectedMode={composerStyleMode}
+            activeSheet={activeStyleSheet}
+            activeSheetAsset={activeStyleSheetAsset}
             open={presetGridOpen}
             onClick={() => setPresetGridOpen((open) => !open)}
           />
@@ -10547,6 +10528,7 @@ function elementTypeLabel(type) {
   if (type === "character") return "Character";
   if (type === "prop") return "Prop";
   if (type === "location") return "Location";
+  if (type === "style_sheet") return "Style Sheet";
   if (type === "doc") return "Element notes";
   return "Element";
 }
@@ -10555,7 +10537,8 @@ function elementSheetLabel(type) {
   if (type === "character") return "character sheet";
   if (type === "prop") return "prop sheet";
   if (type === "location") return "location sheet";
-  if (type === "doc") return "style sheet";
+  if (type === "style_sheet") return "style board";
+  if (type === "doc") return "notes sheet";
   return "element sheet";
 }
 
@@ -10613,6 +10596,7 @@ const ELEMENT_TYPE_OPTIONS = [
   { value: "character", label: "Character", meta: "People, mascots, hands, faces", icon: UserRound },
   { value: "prop", label: "Prop", meta: "Products, packaging, objects", icon: Package },
   { value: "location", label: "Location", meta: "Sets, rooms, streets, backdrops", icon: MapPin },
+  { value: "style_sheet", label: "Style Sheet", meta: "Visual rules, palette, render mode", icon: Palette },
   { value: "doc", label: "Notes", meta: "Rules, style notes, references", icon: FileText },
 ];
 
@@ -11367,7 +11351,7 @@ function StudioEmptyLogoButton() {
   const [pressed, setPressed] = useState(false);
   const pressStartedRef = useRef(0);
   const releaseTimerRef = useRef(null);
-  const MIN_PRESS_MS = 240;
+  const MIN_PRESS_MS = 120;
 
   useEffect(() => {
     return () => {
@@ -11395,16 +11379,22 @@ function StudioEmptyLogoButton() {
   }
 
   function shuffleTheme() {
-    playStudioTapFeedback();
-    randomizeTheme();
+    playUiSound("shuffle");
+    try {
+      navigator.vibrate?.(12);
+    } catch {
+      /* best-effort */
+    }
+    randomizeStudioAppearance();
   }
 
   return (
+    <div className="studio-empty-logo-wrap">
     <button
       type="button"
       className={`studio-empty-logo-btn${pressed ? " is-pressed" : ""}`}
-      aria-label="Shuffle theme and appearance"
-      title="Shuffle theme"
+      aria-label="Shuffle background style, theme, and appearance"
+      title="Shuffle style"
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         beginPress();
@@ -11437,6 +11427,7 @@ function StudioEmptyLogoButton() {
         />
       </span>
     </button>
+    </div>
   );
 }
 
@@ -11559,28 +11550,29 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
       <div
         className={`studio-video-progress-frame studio-gen-status-frame${isProgress ? " has-dot-wave" : ""}`}
         aria-live="polite"
+        aria-label={isProgress ? "Generating" : undefined}
       >
         {isProgress ? <StudioDotGridWave /> : null}
-        <div className={`studio-video-progress-content studio-gen-status-content${isProgress ? " is-minimal" : ""}`}>
-          {!isProgress ? (
-            <span className="studio-gen-status-icon" aria-hidden="true">
-              {isCancelled ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M8 12h8" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 8v5" />
-                  <path d="M12 16h.01" />
-                </svg>
-              )}
-            </span>
-          ) : null}
+        {!isProgress ? (
+        <div className="studio-video-progress-content studio-gen-status-content">
+          <span className="studio-gen-status-icon" aria-hidden="true">
+            {isCancelled ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M8 12h8" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v5" />
+                <path d="M12 16h.01" />
+              </svg>
+            )}
+          </span>
           <strong>{title}</strong>
           {detail ? <p className="studio-gen-status-detail">{detail}</p> : null}
         </div>
+        ) : null}
       </div>
     </div>
   );
@@ -11836,9 +11828,11 @@ function elementAssetOpenable(asset) {
 function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, onBuildSheet, stylePresets, onUploadElementFiles, onOpenEntry, onTrash }) {
   const [name, setName] = useState(entry.name.replace(/^@/, ""));
   const [description, setDescription] = useState(entry.description ?? "");
+  const [styleRules, setStyleRules] = useState(entry.styleRules ?? "");
+  const [renderMode, setRenderMode] = useState(entry.renderMode ?? "mixed");
   const [sourceAssets, setSourceAssets] = useState(entry.referenceAssets ?? entry.sourceAssets ?? []);
   const [sheetPreview, setSheetPreview] = useState(entry.sheetAsset ?? null);
-  const [stylePresetSlug, setStylePresetSlug] = useState("toon-prime");
+  const [stylePresetSlug, setStylePresetSlug] = useState("unstyled");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [buildingSheet, setBuildingSheet] = useState(false);
@@ -11849,6 +11843,8 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   useEffect(() => {
     setName(entry.name.replace(/^@/, ""));
     setDescription(entry.description ?? "");
+    setStyleRules(entry.styleRules ?? "");
+    setRenderMode(entry.renderMode ?? "mixed");
     setSourceAssets(resolveElementReferenceAssets(entry, assets));
     setSheetPreview(entry.sheetAsset ?? resolveElementSheetAsset(entry, assets));
     setMessage("");
@@ -11862,6 +11858,8 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
       await onUpdate(entry, {
         name,
         description,
+        styleRules: entry.elementType === "style_sheet" ? styleRules : undefined,
+        renderMode: entry.elementType === "style_sheet" ? renderMode : undefined,
         referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
         referenceAssets: sourceAssets,
         sheetAsset: entry.sheetAsset,
@@ -11916,6 +11914,8 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
     ...entry,
     name: `@${name.trim() || entry.name.replace(/^@/, "")}`,
     description,
+    styleRules: entry.elementType === "style_sheet" ? styleRules : undefined,
+    renderMode: entry.elementType === "style_sheet" ? renderMode : undefined,
     referenceAssetIds: sourceAssets.map((asset) => asset.studioId).filter(Boolean),
     referenceAssets: sourceAssets,
     sheetAsset: sheetPreview ?? resolveElementSheetAsset(entry, assets),
@@ -11946,7 +11946,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
             <button
               type="button"
               className={STYLE.iconButton}
-              disabled={buildingSheet || (!sourceAssets.length && !description.trim())}
+              disabled={buildingSheet || (!sourceAssets.length && !description.trim() && !styleRules.trim())}
               onClick={() => void buildSheet()}
             >
               {buildingSheet ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
@@ -11998,20 +11998,36 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
           <section className="studio-element-detail-card">
             <p className="studio-admin-card-kicker">Details</p>
             <div className="studio-element-detail-fields">
-              <label className="studio-element-detail-field">
-                Cartoon style
-                <select
-                  className="studio-element-detail-input"
-                  value={stylePresetSlug}
-                  onChange={(event) => setStylePresetSlug(event.target.value)}
-                >
-                  {(stylePresets ?? []).map((preset) => (
-                    <option key={preset._id} value={preset.slug}>
-                      {preset.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {entry.elementType !== "style_sheet" ? (
+                <label className="studio-element-detail-field">
+                  Sheet style
+                  <select
+                    className="studio-element-detail-input"
+                    value={stylePresetSlug}
+                    onChange={(event) => setStylePresetSlug(event.target.value)}
+                  >
+                    {(stylePresets ?? []).map((preset) => (
+                      <option key={preset._id} value={preset.slug}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="studio-element-detail-field">
+                  Render mode
+                  <select
+                    className="studio-element-detail-input"
+                    value={renderMode}
+                    onChange={(event) => setRenderMode(event.target.value)}
+                  >
+                    <option value="photoreal">Photoreal</option>
+                    <option value="illustrated_2d">Illustrated 2D</option>
+                    <option value="illustrated_3d">Illustrated 3D</option>
+                    <option value="mixed">Mixed</option>
+                  </select>
+                </label>
+              )}
               <label className="studio-element-detail-field">
                 Name
                 <input
@@ -12020,13 +12036,28 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                   onChange={(event) => setName(event.target.value)}
                 />
               </label>
+              {entry.elementType === "style_sheet" ? (
+                <label className="studio-element-detail-field">
+                  Style rules
+                  <textarea
+                    className="studio-element-detail-textarea"
+                    value={styleRules}
+                    onChange={(event) => setStyleRules(event.target.value)}
+                    placeholder="Palette, line weight, forbidden drift, render notes…"
+                  />
+                </label>
+              ) : null}
               <label className="studio-element-detail-field">
                 {sheetLabel.charAt(0).toUpperCase() + sheetLabel.slice(1)}
                 <textarea
                   className="studio-element-detail-textarea"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
-                  placeholder={`Build a ${sheetLabel} from media, or write notes manually. Includes a ## Generation prompt section when auto-built.`}
+                  placeholder={
+                    entry.elementType === "style_sheet"
+                      ? "Optional notes — style rules above drive the visual board."
+                      : `Build a ${sheetLabel} from media, or write notes manually. Includes a ## Generation prompt section when auto-built.`
+                  }
                 />
               </label>
             </div>
