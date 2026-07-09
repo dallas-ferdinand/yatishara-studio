@@ -61,14 +61,27 @@ async function exists(filePath) {
 }
 
 const assetDir = path.join(ASSETS, "wallpapers", familyArg);
+
+async function resolveInput(spec) {
+  const candidates = [
+    path.join(assetDir, spec.png),
+    path.join(ASSETS, spec.png),
+    path.join(PUBLIC, spec.png),
+    path.join(PUBLIC, spec.file.replace("-4k.webp", "-4k.png")),
+    path.join(PUBLIC, spec.file.replace(".webp", ".png")),
+  ];
+  for (const candidate of candidates) {
+    if (await exists(candidate)) return candidate;
+  }
+  return null;
+}
+
 let processed = 0;
 for (const spec of pickSpecs()) {
-  const input = path.join(assetDir, spec.png);
-  const fallbackInput = path.join(ASSETS, spec.png);
-  const resolvedInput = (await exists(input)) ? input : fallbackInput;
+  const resolvedInput = await resolveInput(spec);
   const output = path.join(PUBLIC, spec.file);
-  if (!(await exists(resolvedInput))) {
-    console.warn(`skip (missing): ${resolvedInput}`);
+  if (!resolvedInput) {
+    console.warn(`skip (missing): ${spec.png}`);
     continue;
   }
   const processor = spec.variant === "light" ? PROCESS_LIGHT : PROCESS_DARK;

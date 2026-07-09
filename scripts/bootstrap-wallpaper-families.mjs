@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Stub cinematic / spacey / scenic wallpapers from animated scene WebPs.
- * Hardlink when possible (zero extra disk). Replace with family-specific art via:
+ * Copies only (never hardlink — shared inodes would corrupt all families on rewrite).
  *   node scripts/process-studio-wallpapers.mjs all --family=cinematic
  */
-import { access, copyFile, link, readdir } from "node:fs/promises";
+import { access, copyFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,13 +24,8 @@ async function exists(filePath) {
 
 async function linkOrCopy(src, dest) {
   if (await exists(dest)) return "skip";
-  try {
-    await link(src, dest);
-    return "link";
-  } catch {
-    await copyFile(src, dest);
-    return "copy";
-  }
+  await copyFile(src, dest);
+  return "copy";
 }
 
 const files = (await readdir(PUBLIC)).filter(
