@@ -56,7 +56,7 @@ export function ThemeSettings() {
     <section className="cursor-settings-section">
       <h3>Appearance</h3>
       <p className="text-xs text-cursor-muted mb-3 leading-relaxed">
-        Theme changes the app tone and Studio background. Pick a background style, then an accent theme.
+        Theme changes the app tone and Studio background. Pick Animated or Cinematic, then Dark/Light mode and an accent theme.
       </p>
 
       <p className="text-xs text-cursor-muted mb-2">Mode</p>

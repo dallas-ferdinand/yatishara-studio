@@ -124,23 +124,11 @@ export const SCHEMES = {
 export const STUDIO_BACKGROUND_FAMILIES = {
   animated: {
     label: "Animated",
-    description: "Illustrated cartoon matte environments",
+    description: "Illustrated cartoon matte environments (dark + light)",
   },
   cinematic: {
     label: "Cinematic",
-    description: "Photoreal film-set and studio moods",
-  },
-  spacey: {
-    label: "Spacey",
-    description: "Cosmic minimal voids and nebula accents",
-  },
-  scenic: {
-    label: "Scenic",
-    description: "Wide natural and architectural vistas",
-  },
-  clean: {
-    label: "Clean",
-    description: "Theme colors only — no wallpaper",
+    description: "Photoreal film-set moods (dark + light)",
   },
 };
 
@@ -153,12 +141,12 @@ export const STUDIO_BACKGROUND_PACKS = {
 
 const BG_FAMILY_MIGRATION = {
   worlds: "animated",
-  space: "spacey",
+  space: "animated",
   animated: "animated",
   cinematic: "cinematic",
-  spacey: "spacey",
-  scenic: "scenic",
-  clean: "clean",
+  spacey: "animated",
+  scenic: "animated",
+  clean: "animated",
 };
 
 function normalizeBgFamily(id) {

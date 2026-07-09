@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Stub cinematic / spacey / scenic wallpapers from animated scene WebPs.
- * Copies only (never hardlink — shared inodes would corrupt all families on rewrite).
+ * Stub cinematic wallpapers from animated scene WebPs when missing.
  *   node scripts/process-studio-wallpapers.mjs all --family=cinematic
  */
 import { access, copyFile, readdir } from "node:fs/promises";
@@ -11,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.resolve(__dirname, "..", "public");
 const SOURCE_PREFIX = "studio-scene-";
-const TARGET_PREFIXES = ["studio-cinematic-", "studio-space-", "studio-scenic-"];
+const TARGET_PREFIXES = ["studio-cinematic-"];
 
 async function exists(filePath) {
   try {

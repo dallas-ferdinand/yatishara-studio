@@ -24,9 +24,6 @@ export type StudioThemeId = (typeof STUDIO_THEME_IDS)[number];
 export const STUDIO_BACKGROUND_FAMILIES = [
   "animated",
   "cinematic",
-  "spacey",
-  "scenic",
-  "clean",
 ] as const;
 
 export type StudioBackgroundFamily = (typeof STUDIO_BACKGROUND_FAMILIES)[number];
@@ -51,22 +48,20 @@ export const STUDIO_THEME_SLUGS: Record<StudioThemeId, string> = {
   indigo: "indigo-midnight",
 };
 
-const FAMILY_FILE_PREFIX: Record<Exclude<StudioBackgroundFamily, "clean">, string> = {
+const FAMILY_FILE_PREFIX: Record<StudioBackgroundFamily, string> = {
   animated: "studio-scene",
   cinematic: "studio-cinematic",
-  spacey: "studio-space",
-  scenic: "studio-scenic",
 };
 
 /** Legacy localStorage / dataset values → current family id. */
 export const STUDIO_BG_FAMILY_MIGRATION: Record<string, StudioBackgroundFamily> = {
   worlds: "animated",
-  space: "spacey",
+  space: "animated",
   animated: "animated",
   cinematic: "cinematic",
-  spacey: "spacey",
-  scenic: "scenic",
-  clean: "clean",
+  spacey: "animated",
+  scenic: "animated",
+  clean: "animated",
 };
 
 export function normalizeStudioBackgroundFamily(
@@ -84,8 +79,7 @@ export function studioBackgroundPath(
   family: StudioBackgroundFamily,
   themeId: string,
   appearance: "light" | "dark",
-): string | null {
-  if (family === "clean") return null;
+): string {
   const slug = STUDIO_THEME_SLUGS[themeId as StudioThemeId] ?? STUDIO_THEME_SLUGS.agent;
   const prefix = FAMILY_FILE_PREFIX[family];
   const lightSuffix = appearance === "light" ? "-light" : "";
@@ -97,11 +91,11 @@ export function resolveStudioBackgroundPath(
   family: StudioBackgroundFamily,
   themeId: string,
   appearance: "light" | "dark",
-): string | null {
-  if (family === "clean") return null;
-  const animated = studioBackgroundPath("animated", themeId, appearance);
-  if (family === "animated") return animated;
-  return studioBackgroundPath(family, themeId, appearance) ?? animated;
+): string {
+  if (family === "animated") {
+    return studioBackgroundPath("animated", themeId, appearance);
+  }
+  return studioBackgroundPath(family, themeId, appearance);
 }
 
 export function studioBackgroundCssValue(path: string | null): string {
@@ -111,13 +105,10 @@ export function studioBackgroundCssValue(path: string | null): string {
 
 /** All paths for a family (auth carousel, preload). */
 export function studioBackgroundPathsForFamily(family: StudioBackgroundFamily): string[] {
-  if (family === "clean") return [];
   const paths: string[] = [];
   for (const themeId of STUDIO_THEME_IDS) {
-    const dark = studioBackgroundPath(family, themeId, "dark");
-    const light = studioBackgroundPath(family, themeId, "light");
-    if (dark) paths.push(dark);
-    if (light) paths.push(light);
+    paths.push(studioBackgroundPath(family, themeId, "dark"));
+    paths.push(studioBackgroundPath(family, themeId, "light"));
   }
   return paths;
 }
@@ -162,7 +153,6 @@ export function getStudioBackgroundBootInlineFragment(): string {
     `var STUDIO_BG_PREFIX=${prefixes};`
     + `var STUDIO_THEME_SLUGS=${slugs};`
     + "function studioBootWallpaper(family,theme,mode){"
-    + 'if(family==="clean")return null;'
     + "var slug=STUDIO_THEME_SLUGS[theme]||STUDIO_THEME_SLUGS.agent;"
     + "var suffix=(mode===\"light\"?\"-light\":\"\")+\"-4k.webp\";"
     + "var familyPrefix=STUDIO_BG_PREFIX[family];"
@@ -171,7 +161,7 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + "}"
     + "function studioBootWallpaperFallback(family,theme,mode){"
     + "var primary=studioBootWallpaper(family,theme,mode);"
-    + 'if(family==="animated"||family==="clean")return primary;'
+    + 'if(family==="animated")return primary;'
     + "return primary||studioBootWallpaper(\"animated\",theme,mode);"
     + "}"
     + "var wp=studioBootWallpaperFallback(bgFamily,sid,mode);"

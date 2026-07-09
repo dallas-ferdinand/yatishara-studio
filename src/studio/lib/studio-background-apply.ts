@@ -31,11 +31,6 @@ export function applyStudioBackgroundNow() {
   const themeId = root.dataset.theme ?? localStorage.getItem(SCHEME_KEY) ?? "agent";
   const appearance = root.dataset.appearance === "light" ? "light" : "dark";
 
-  if (family === "clean") {
-    paintWallpaper(null);
-    return;
-  }
-
   const primary = studioBackgroundPath(family, themeId, appearance);
   const animated = studioBackgroundPath("animated", themeId, appearance);
 

@@ -2192,14 +2192,8 @@ export function StudioShell() {
             padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
           }
         }
-        [data-studio-bg-family="clean"] .studio-polish,
-        [data-studio-bg-pack="clean"] .studio-polish {
-          --studio-active-bg: none;
-        }
         [data-studio-bg-family="animated"] .studio-polish,
         [data-studio-bg-family="cinematic"] .studio-polish,
-        [data-studio-bg-family="spacey"] .studio-polish,
-        [data-studio-bg-family="scenic"] .studio-polish,
         [data-studio-bg-pack="worlds"] .studio-polish {
           --studio-glow-soft: transparent;
           --studio-glow-mid: transparent;
@@ -7918,18 +7912,12 @@ export function StudioShell() {
         [data-studio-bg-family="animated"] .studio-polish .studio-empty-hero::after,
         [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-hero::before,
         [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-hero::after,
-        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-hero::before,
-        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-hero::after,
-        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-hero::before,
-        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-hero::after,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::before,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-hero::after {
           display: none;
         }
         [data-studio-bg-family="animated"] .studio-polish .studio-empty-copy,
         [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-copy,
-        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-copy,
-        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-copy,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-copy {
           border-color: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           background: color-mix(in srgb, #000 16%, transparent);
@@ -7937,8 +7925,6 @@ export function StudioShell() {
         }
         [data-studio-bg-family="animated"] .studio-polish .studio-empty-chips span,
         [data-studio-bg-family="cinematic"] .studio-polish .studio-empty-chips span,
-        [data-studio-bg-family="spacey"] .studio-polish .studio-empty-chips span,
-        [data-studio-bg-family="scenic"] .studio-polish .studio-empty-chips span,
         [data-studio-bg-pack="worlds"] .studio-polish .studio-empty-chips span {
           border-color: color-mix(in srgb, var(--mos-text-bright) 10%, transparent);
           background: color-mix(in srgb, #000 10%, transparent);
