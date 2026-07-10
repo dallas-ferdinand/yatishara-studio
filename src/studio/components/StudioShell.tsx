@@ -1712,7 +1712,7 @@ export function StudioShell() {
           openTab(`thread:${threadId}`);
         }
       }
-      await runFlow({
+      const flowArgs = {
         threadId,
         mode,
         tier: mode === "video" ? "pro_video" : "image",
@@ -1736,10 +1736,30 @@ export function StudioShell() {
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
         hasElementReference: composerReferenceFlags.hasElementReference,
-      });
+      };
+      // Free the composer immediately so more gens can queue in the same chat while this one runs.
       setDraft("");
       setAttachments([]);
       setStartFrameAttachmentId("");
+      if (editorRef.current) editorRef.current.replaceChildren();
+      const chatKey = `thread:${threadId}`;
+      composerContextsRef.current[chatKey] = {
+        ...(composerContextsRef.current[chatKey] ?? {}),
+        draft: "",
+        attachments: [],
+        editorHtml: "",
+      };
+      setFlowPending(false);
+      try {
+        await runFlow(flowArgs);
+      } catch (error) {
+        const raw = error instanceof Error ? error.message : "Studio action failed.";
+        const friendly = friendlyGenerationError(raw, mode);
+        const detail = friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message;
+        setStatus(
+          friendly.title !== "Something went wrong" ? `${friendly.title}. ${detail}` : detail,
+        );
+      }
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Studio action failed.";
       const friendly = friendlyGenerationError(
@@ -8963,7 +8983,7 @@ export function StudioShell() {
             activeEditTab={activeTab}
           />
         </section>
-        {activeTab.startsWith("composer:") ? (
+        {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
           <StudioComposer
             draft={draft}
             setDraft={setDraft}
@@ -13900,26 +13920,38 @@ function inferAttachmentKind(entry) {
   return "file";
 }
 
+function sanitizePromptRefMeta(value, maxLen = 160) {
+  if (value == null) return "";
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/\|/g, "/")
+    .trim()
+    .slice(0, maxLen);
+}
+
 function buildPromptWithAttachments(prompt, attachments) {
   if (!attachments.length) return prompt.trim();
   const refs = attachments
-    .map((item) =>
-      [
+    .map((item) => {
+      const notes = sanitizePromptRefMeta(item.description);
+      // Prefer canonical /Studio/assets|elements/{id} paths so chat chips can resolve previews.
+      const canonicalPath = item.path || item.displayPath || "";
+      return [
         `- @${item.label}`,
         item.kind ? `kind: ${item.kind}` : "",
-        item.elementType ? `element: ${elementTypeLabel(item.elementType)}` : "",
+        item.elementType ? `element: ${item.elementType}` : "",
         item.buildStatus ? `build: ${item.buildStatus}` : "",
-        item.description ? `notes: ${item.description}` : "",
-        item.sheetAsset?.name ? `sheet: ${item.sheetAsset.name}` : "",
-        item.displayPath ? `path: ${item.displayPath}` : item.path ? `path: ${displayWorkspacePath(item.path)}` : "",
+        notes ? `notes: ${notes}` : "",
+        canonicalPath ? `path: ${canonicalPath}` : "",
         item.filename ? `file: ${item.filename}` : "",
         item.studioId ? `studio: ${item.studioId}` : "",
         item.thumbnailUrl ? `thumb: ${item.thumbnailUrl}` : "",
         item.mediaUrl ? `media: ${item.mediaUrl}` : "",
       ]
         .filter(Boolean)
-        .join(" | "),
-    )
+        .join(" | ");
+    })
     .join("\n");
   return `${prompt.trim()}\n\nReferences:\n${refs}`;
 }

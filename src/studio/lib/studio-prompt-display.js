@@ -100,60 +100,75 @@ function findElementById(elements, id) {
   return (elements ?? []).find((element) => element._id === id || element.studioId === id) ?? null;
 }
 
+function previewFromAsset(asset, ref) {
+  if (!asset) return null;
+  return {
+    thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+    mediaUrl: asset.signedReadUrl,
+    kind: asset.kind ?? ref?.kind ?? "file",
+    elementType: ref?.elementType,
+  };
+}
+
+function previewFromElement(element, assets, ref) {
+  if (!element) return null;
+  const sheetId = element.sheetAssetId ?? element.sourceAssetIds?.[0];
+  const sheet = sheetId ? findAssetById(assets, sheetId) : null;
+  return {
+    thumbnailUrl: sheet?.signedThumbnailUrl ?? sheet?.signedReadUrl,
+    mediaUrl: sheet?.signedReadUrl,
+    kind: "image",
+    elementType: element.type ?? ref?.elementType,
+  };
+}
+
 /** Resolve thumbnail preview for a stored prompt reference line. */
 export function resolveStudioPromptRefPreview(ref, { assets = [], elements = [] } = {}) {
   const path = String(ref?.path ?? "");
   const assetMatch = path.match(/\/Studio\/assets\/([^/.]+)/);
   if (assetMatch) {
-    const asset = findAssetById(assets, assetMatch[1]);
-    if (asset) {
-      const kind = asset.kind ?? ref?.kind ?? "file";
-      return {
-        thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
-        mediaUrl: asset.signedReadUrl,
-        kind,
-        elementType: ref?.elementType,
-      };
-    }
+    const preview = previewFromAsset(findAssetById(assets, assetMatch[1]), ref);
+    if (preview) return preview;
   }
 
   const elementMatch = path.match(/\/Studio\/elements\/([^/.]+)/);
   if (elementMatch) {
-    const element = findElementById(elements, elementMatch[1]);
-    if (element) {
-      const sheetId = element.sheetAssetId ?? element.sourceAssetIds?.[0];
-      const sheet = sheetId ? findAssetById(assets, sheetId) : null;
-      return {
-        thumbnailUrl: sheet?.signedThumbnailUrl ?? sheet?.signedReadUrl,
-        mediaUrl: sheet?.signedReadUrl,
-        kind: "image",
-        elementType: element.type ?? ref?.elementType,
-      };
-    }
+    const preview = previewFromElement(findElementById(elements, elementMatch[1]), assets, ref);
+    if (preview) return preview;
   }
 
-  const label = String(ref?.label ?? "").trim().toLowerCase();
+  if (ref?.studioId) {
+    const assetPreview = previewFromAsset(findAssetById(assets, ref.studioId), ref);
+    if (assetPreview) return assetPreview;
+    const elementPreview = previewFromElement(findElementById(elements, ref.studioId), assets, ref);
+    if (elementPreview) return elementPreview;
+  }
+
+  const label = String(ref?.label ?? "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
   if (label) {
-    const element = (elements ?? []).find((item) => String(item.name ?? "").trim().toLowerCase() === label);
-    if (element) {
-      const sheetId = element.sheetAssetId ?? element.sourceAssetIds?.[0];
-      const sheet = sheetId ? findAssetById(assets, sheetId) : null;
-      return {
-        thumbnailUrl: sheet?.signedThumbnailUrl ?? sheet?.signedReadUrl,
-        mediaUrl: sheet?.signedReadUrl,
-        kind: "image",
-        elementType: element.type ?? ref?.elementType,
-      };
-    }
-    const asset = (assets ?? []).find((item) => String(item.name ?? "").trim().toLowerCase() === label);
-    if (asset) {
-      return {
-        thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
-        mediaUrl: asset.signedReadUrl,
-        kind: asset.kind ?? ref?.kind ?? "file",
-        elementType: ref?.elementType,
-      };
-    }
+    const element = (elements ?? []).find(
+      (item) => String(item.name ?? "").trim().replace(/^@/, "").toLowerCase() === label,
+    );
+    const elementPreview = previewFromElement(element, assets, ref);
+    if (elementPreview) return elementPreview;
+    const asset = (assets ?? []).find(
+      (item) => String(item.name ?? "").trim().toLowerCase() === label,
+    );
+    const assetPreview = previewFromAsset(asset, ref);
+    if (assetPreview) return assetPreview;
+  }
+
+  // Fall back to URLs baked into the stored reference line (works even if assets aren't in the folder query).
+  if (ref?.thumb || ref?.media) {
+    return {
+      thumbnailUrl: ref.thumb || ref.media,
+      mediaUrl: ref.media || ref.thumb,
+      kind: ref.kind || "image",
+      elementType: ref.elementType || undefined,
+    };
   }
 
   return null;
