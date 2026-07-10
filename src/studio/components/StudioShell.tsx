@@ -1861,10 +1861,11 @@ export function StudioShell() {
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          --studio-composer-shell-max: 860px;
+          --studio-composer-shell-max: 720px;
           --studio-composer-min-height: 96px;
-          --studio-mode-switcher-width: 120px;
-          --studio-generate-column-width: var(--studio-composer-min-height);
+          --studio-composer-side-width: 112px;
+          --studio-mode-switcher-width: var(--studio-composer-side-width);
+          --studio-generate-column-width: var(--studio-composer-side-width);
           --studio-composer-row-gap: 8px;
           --studio-mobile-nav-height: 44px;
           --studio-mobile-chrome-glass:
