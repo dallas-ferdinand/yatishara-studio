@@ -58,7 +58,12 @@ import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { StudioStyleSheetPickerPanel, StudioStyleSheetTriggerButton } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
-import { EXPLORER_DND_TYPE, readExplorerDragData } from "@/desk/lib/explorer-dnd";
+import {
+  EXPLORER_DND_TYPE,
+  clearActiveExplorerDrag,
+  readExplorerDragData,
+  writeExplorerDragData,
+} from "@/desk/lib/explorer-dnd";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { playUiSound } from "@/mos-app/sounds.js";
@@ -2225,6 +2230,9 @@ export function StudioShell() {
             justify-content: space-between;
             gap: 8px;
             padding: 4px 8px 8px;
+          }
+          .studio-polish .studio-composer-toolbar-scroll {
+            display: none !important;
           }
           .studio-polish .studio-composer-controls {
             display: none !important;
@@ -4867,30 +4875,34 @@ export function StudioShell() {
         }
         .studio-composer .cursor-composer-box .studio-preset-grid-panel {
           position: absolute;
-          left: 0;
-          right: 0;
+          left: 8px;
+          right: auto;
           bottom: calc(100% + 10px);
           z-index: 40;
-          width: 100%;
-          max-width: 100%;
+          width: min(360px, calc(100% - 16px));
+          max-width: min(360px, calc(100% - 16px));
         }
         .studio-preset-grid-panel {
           position: absolute;
-          left: 0;
-          right: 0;
+          left: 8px;
+          right: auto;
           bottom: calc(100% + 10px);
           z-index: 40;
           display: flex;
           flex-direction: column;
           gap: 8px;
           min-height: 0;
+          width: min(360px, calc(100% - 16px));
+          max-width: min(360px, calc(100% - 16px));
           max-height: min(72vh, 520px);
-          overflow: hidden;
+          overflow: visible;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
-          background: transparent;
+          background: color-mix(in srgb, var(--studio-composer-glass-strong) 88%, transparent);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           box-shadow: var(--studio-composer-glass-shadow);
-          padding: 10px;
+          padding: 12px;
           isolation: isolate;
           animation: studio-preset-grid-in 180ms var(--studio-motion-ease);
         }
@@ -4936,14 +4948,15 @@ export function StudioShell() {
         }
         .studio-preset-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 8px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
           flex: 1 1 auto;
           min-height: 0;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
-          padding: 2px;
+          margin: 0 -4px;
+          padding: 8px 4px 12px;
           scrollbar-width: thin;
         }
         .studio-preset-grid::-webkit-scrollbar {
@@ -4973,14 +4986,14 @@ export function StudioShell() {
           transform: translateY(-1px);
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 76%, var(--cursor-accent-dim) 24%);
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
         }
         .studio-preset-grid-card.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
           box-shadow:
             0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
-            0 12px 28px rgba(0, 0, 0, 0.34);
+            0 8px 18px rgba(0, 0, 0, 0.24);
         }
         .studio-preset-grid-thumb {
           position: relative;
@@ -4990,15 +5003,21 @@ export function StudioShell() {
           background: color-mix(in srgb, #000 42%, var(--studio-composer-glass-strong) 58%);
         }
         .studio-preset-grid-thumb.is-direct-clean {
+          display: flex;
+          align-items: center;
+          justify-content: center;
           background:
-            radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mos-text-bright) 8%, transparent), transparent 52%),
+            radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--cursor-accent) 22%, transparent), transparent 58%),
             linear-gradient(
-              160deg,
-              color-mix(in srgb, var(--mos-bg) 92%, var(--mos-surface)),
-              color-mix(in srgb, var(--mos-surface) 78%, var(--mos-bg))
+              155deg,
+              color-mix(in srgb, var(--mos-surface) 70%, var(--cursor-accent-dim)),
+              color-mix(in srgb, var(--mos-bg) 82%, var(--mos-surface))
             );
-          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 7%, transparent);
-          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+          box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+        }
+        .studio-preset-grid-thumb.is-direct-clean .studio-preset-direct-mark {
+          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-bright));
         }
         .studio-preset-grid-thumb.is-create-sheet {
           background: color-mix(in srgb, var(--mos-surface) 42%, transparent);
@@ -5458,36 +5477,42 @@ export function StudioShell() {
         .studio-composer-toolbar {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-start;
           flex-wrap: nowrap;
           gap: 6px;
           margin-top: auto;
           padding: 3px 8px 7px;
           min-width: 0;
         }
+        .studio-composer-toolbar-scroll {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          flex: 1 1 auto;
+          overflow-x: auto;
+          overflow-y: visible;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .studio-composer-toolbar-scroll::-webkit-scrollbar {
+          display: none;
+        }
         .studio-composer-controls {
           display: flex;
           align-items: center;
           gap: 5px;
           min-width: 0;
-          flex: 1 1 auto;
+          flex: 0 0 auto;
           overflow: visible;
-          scrollbar-width: none;
-        }
-        .studio-composer-controls::-webkit-scrollbar {
-          display: none;
         }
         .studio-composer-inline-settings {
           display: flex;
           align-items: center;
           gap: 6px;
           min-width: 0;
-          overflow-x: auto;
-          overflow-y: visible;
-          scrollbar-width: none;
-        }
-        .studio-composer-inline-settings::-webkit-scrollbar {
-          display: none;
+          flex: 0 0 auto;
+          overflow: visible;
         }
         .studio-inline-audio-setting {
           display: inline-flex;
@@ -5561,8 +5586,8 @@ export function StudioShell() {
           display: flex;
           align-items: center;
           gap: 6px;
-          flex-shrink: 0;
-          margin-left: auto;
+          flex: 0 0 auto;
+          margin-left: 0;
         }
         .studio-composer .studio-pill-btn {
           height: 30px;
@@ -6313,16 +6338,18 @@ export function StudioShell() {
         .studio-generate-btn {
           display: inline-flex;
           height: 100%;
-          width: auto;
+          width: 72px;
+          min-width: 64px;
+          max-width: 80px;
           min-height: 0;
           max-height: 100%;
-          aspect-ratio: 1 / 1;
+          aspect-ratio: auto;
           flex: 0 0 auto;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           gap: 3px;
-          padding: 6px;
+          padding: 8px 6px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 48%, #000 8%);
           border-radius: 14px;
           background:
@@ -6391,15 +6418,14 @@ export function StudioShell() {
           text-shadow: none;
         }
         .studio-generate-label {
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 700;
           line-height: 1.1;
           letter-spacing: -0.01em;
           max-width: 100%;
-          text-wrap: balance;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-          hyphens: auto;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
           color: inherit;
           text-shadow: 0 1px 2px color-mix(in srgb, #000 42%, transparent);
         }
@@ -6407,6 +6433,7 @@ export function StudioShell() {
           font-size: 10px;
           line-height: 1.08;
           letter-spacing: 0;
+          white-space: normal;
           text-wrap: pretty;
         }
         .studio-generate-cost {
@@ -8721,6 +8748,12 @@ export function StudioShell() {
           color: inherit;
           font: inherit;
         }
+        .studio-chat-result-card[draggable="true"] {
+          cursor: grab;
+        }
+        .studio-chat-result-card[draggable="true"]:active {
+          cursor: grabbing;
+        }
         .studio-chat-result-card.is-openable:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
         }
@@ -9399,9 +9432,6 @@ function StudioComposer({
       setDurationSeconds={setDurationSeconds}
       audioEnabled={audioEnabled}
       setAudioEnabled={setAudioEnabled}
-      attachments={attachments}
-      startFrameAttachmentId={startFrameAttachmentId}
-      setStartFrameAttachmentId={setStartFrameAttachmentId}
     />
   );
 
@@ -9613,40 +9643,56 @@ function StudioComposer({
         />
       </div>
       <div className="studio-composer-toolbar">
-        {!isMobile ? controlStrip : null}
-        {isMobile ? (
-          <button
-            type="button"
-            className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
-            title="Generation settings"
-            aria-label="Generation settings"
-            aria-expanded={composerOptionsOpen}
-            onClick={() => setComposerOptionsOpen((open) => !open)}
-          >
-            <SlidersHorizontal aria-hidden="true" />
-          </button>
-        ) : null}
-        <div className="studio-composer-actions">
-          <button
-            type="button"
-            className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}`}
-            title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
-            onClick={() => void toggleVoice()}
-            disabled={transcribing}
-          >
-            {transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Mic aria-hidden="true" />}
-          </button>
-          <button
-            type="button"
-            className="studio-composer-circle-btn studio-composer-send-btn"
-            title={generateTitle}
-            aria-label={generateTitle}
-            disabled={generateDisabled}
-            onClick={handleGenerateClick}
-          >
-            <ArrowUp aria-hidden="true" />
-          </button>
-        </div>
+        {!isMobile ? (
+          <div className="studio-composer-toolbar-scroll">
+            {controlStrip}
+            <div className="studio-composer-actions">
+              <button
+                type="button"
+                className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}`}
+                title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
+                onClick={() => void toggleVoice()}
+                disabled={transcribing}
+              >
+                {transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Mic aria-hidden="true" />}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
+              title="Generation settings"
+              aria-label="Generation settings"
+              aria-expanded={composerOptionsOpen}
+              onClick={() => setComposerOptionsOpen((open) => !open)}
+            >
+              <SlidersHorizontal aria-hidden="true" />
+            </button>
+            <div className="studio-composer-actions">
+              <button
+                type="button"
+                className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}`}
+                title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
+                onClick={() => void toggleVoice()}
+                disabled={transcribing}
+              >
+                {transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Mic aria-hidden="true" />}
+              </button>
+              <button
+                type="button"
+                className="studio-composer-circle-btn studio-composer-send-btn"
+                title={generateTitle}
+                aria-label={generateTitle}
+                disabled={generateDisabled}
+                onClick={handleGenerateClick}
+              >
+                <ArrowUp aria-hidden="true" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
       {status ? (
         <div className="studio-composer-notice" role="status" aria-live="polite">
@@ -9726,9 +9772,6 @@ function StudioComposerControlStrip({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
-  attachments,
-  startFrameAttachmentId,
-  setStartFrameAttachmentId,
 }) {
   const showLabels = layout === "panel";
   const className = layout === "panel" ? "studio-composer-options-body" : "studio-composer-controls";
@@ -9801,9 +9844,6 @@ function StudioComposerControlStrip({
                 setDurationSeconds={setDurationSeconds}
                 audioEnabled={audioEnabled}
                 setAudioEnabled={setAudioEnabled}
-                attachments={attachments}
-                startFrameAttachmentId={startFrameAttachmentId}
-                setStartFrameAttachmentId={setStartFrameAttachmentId}
                 panelLayout
               />
             ) : null}
@@ -9817,11 +9857,12 @@ function StudioComposerControlStrip({
     <div className={className}>
       {isElementMode ? (
         <>
-          <StudioElementTypePicker elementType={elementType} setElementType={setElementType} showLabels={showLabels} />
           <StudioUploadButton inputRef={uploadInputRef} />
+          <StudioElementTypePicker elementType={elementType} setElementType={setElementType} showLabels={showLabels} />
         </>
       ) : (
         <>
+          <StudioUploadButton inputRef={uploadInputRef} />
           <StudioStyleSheetTriggerButton
             selectedMode={composerStyleMode}
             activeSheet={activeStyleSheet}
@@ -9852,7 +9893,6 @@ function StudioComposerControlStrip({
             />
           ) : null}
           <StudioPromptEnhanceToggle enabled={!skipPromptEnhancement} onChange={(enabled) => setSkipPromptEnhancement(!enabled)} />
-          <StudioUploadButton inputRef={uploadInputRef} />
           {mode !== "script" ? (
             <StudioComposerInlineSettings
               mode={mode}
@@ -9866,9 +9906,6 @@ function StudioComposerControlStrip({
               setDurationSeconds={setDurationSeconds}
               audioEnabled={audioEnabled}
               setAudioEnabled={setAudioEnabled}
-              attachments={attachments}
-              startFrameAttachmentId={startFrameAttachmentId}
-              setStartFrameAttachmentId={setStartFrameAttachmentId}
               showLabels={showLabels}
             />
           ) : null}
@@ -10141,19 +10178,10 @@ function StudioComposerInlineSettings({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
-  attachments = [],
-  startFrameAttachmentId = "",
-  setStartFrameAttachmentId,
   showLabels = false,
   panelLayout = false,
 }) {
   const maxVideoDuration = 15;
-  const startFrameCandidates = attachments.filter(
-    (attachment) =>
-      attachment.studioKind === "asset" &&
-      attachment.kind === "image" &&
-      (attachment.mediaUrl || attachment.thumbnailUrl),
-  );
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
@@ -10301,40 +10329,6 @@ function StudioComposerInlineSettings({
                   onClick={() => commitDuration(seconds)}
                 >
                   <span>{seconds}s</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </StudioInlineSettingPopover>
-      ) : null}
-      {mode === "video" ? (
-        <StudioInlineSettingPopover
-          icon={ImageIcon}
-          label="Start frame"
-          valueLabel={startFrameAttachmentId ? "Set" : "None"}
-          menuLabel="Opening shot (required for people)"
-          hideLabel={!showLabels}
-        >
-          <div className="studio-inline-settings-range-panel">
-            <p className="studio-video-start-frame-copy">
-              Pick the still that opens the clip. Characters belong in this frame — not as face-sheet refs.
-            </p>
-            <div className="studio-settings-chip-grid" role="group" aria-label="Start frame image">
-              <button
-                type="button"
-                className={`studio-settings-chip${!startFrameAttachmentId ? " is-active" : ""}`}
-                onClick={() => setStartFrameAttachmentId?.("")}
-              >
-                <span>None</span>
-              </button>
-              {startFrameCandidates.map((attachment) => (
-                <button
-                  key={attachment.id}
-                  type="button"
-                  className={`studio-settings-chip${startFrameAttachmentId === attachment.id ? " is-active" : ""}`}
-                  onClick={() => setStartFrameAttachmentId?.(attachment.id)}
-                >
-                  <span>{attachment.label ?? attachment.filename ?? "Image"}</span>
                 </button>
               ))}
             </div>
@@ -10830,7 +10824,7 @@ function createComposerAttachmentToken(attachment) {
 
   const label = document.createElement("span");
   label.className = "studio-inline-tag-label";
-  label.textContent = attachment.label;
+  label.textContent = String(attachment.label ?? attachment.filename ?? "Reference");
 
   if (isElement && elementThumb) {
     // Element chip: sheet thumb only, type icon overlaid — same style as image/video chips.
@@ -11761,10 +11755,21 @@ function StudioChatResultCard({ entry, onOpen }) {
   const src = entry.mediaUrl ?? entry.thumbnailUrl;
   const poster = isVideoFileUrl(entry.thumbnailUrl) ? undefined : entry.thumbnailUrl;
   const canOpen = Boolean(onOpen && entry.studioId);
+  const canDrag = Boolean(entry?.path);
 
   function openEntry() {
     if (!canOpen) return;
     onOpen(entry);
+  }
+
+  function handleDragStart(event) {
+    if (!canDrag) return;
+    writeExplorerDragData(event.dataTransfer, entry);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove";
+  }
+
+  function handleDragEnd() {
+    clearActiveExplorerDrag();
   }
 
   if (isImage && src) {
@@ -11773,10 +11778,13 @@ function StudioChatResultCard({ entry, onOpen }) {
         type="button"
         className={`studio-chat-result-card${canOpen ? " is-openable" : ""}`}
         onClick={openEntry}
-        aria-label={entry.name ? `Open ${entry.name}` : "Open image"}
-        title={canOpen ? "Open in new tab" : undefined}
+        draggable={canDrag}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        aria-label={entry.name ? `Open ${safeEntryTitle(entry)}` : "Open image"}
+        title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
       >
-        <img src={src} alt="" loading="lazy" />
+        <img src={src} alt="" loading="lazy" draggable={false} />
       </button>
     );
   }
@@ -11786,6 +11794,9 @@ function StudioChatResultCard({ entry, onOpen }) {
       className={`studio-chat-result-card${canOpen && !isVideo ? " is-openable" : ""}`}
       role={canOpen && !isVideo ? "button" : undefined}
       tabIndex={canOpen && !isVideo ? 0 : undefined}
+      draggable={canDrag}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       onClick={canOpen && !isVideo ? openEntry : undefined}
       onKeyDown={
         canOpen && !isVideo
@@ -11797,6 +11808,7 @@ function StudioChatResultCard({ entry, onOpen }) {
             }
           : undefined
       }
+      title={canDrag ? "Drag into composer to attach" : undefined}
     >
       {isVideo && src ? (
         <>
@@ -13885,22 +13897,29 @@ function videoEditToEntry(project) {
 }
 
 function assetToEntry(asset) {
+  const assetId = asset._id ?? asset.studioId;
   const ext = asset.kind === "image" ? ".png" : asset.kind === "video" ? ".mp4" : asset.kind === "audio" ? ".mp3" : ".bin";
+  const name = safeEntryTitle({
+    name: asset.name,
+    path: `/Studio/assets/${assetId}${ext}`,
+    kind: asset.kind,
+    kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
+  });
   return {
     type: "file",
-    name: asset.name,
-    path: `/Studio/assets/${asset._id}${ext}`,
-    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(asset.name, ext)}`),
+    name,
+    path: `/Studio/assets/${assetId}${ext}`,
+    displayPath: displayWorkspacePath(`/Studio/${virtualFileName(name, ext)}`),
     modified: asset.updatedAt,
     mtimeMs: asset.updatedAt,
     ext,
     studioKind: "asset",
-    studioId: asset._id,
+    studioId: assetId,
     kind: asset.kind,
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
     description: asset.mimeType,
-    mediaUrl: asset.signedReadUrl,
-    thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl,
+    mediaUrl: asset.signedReadUrl ?? asset.mediaUrl,
+    thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl ?? asset.thumbnailUrl ?? asset.mediaUrl,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
   };
@@ -14038,14 +14057,16 @@ function tabDescriptor({ key, threads, assets, documents, videoEdits, elements, 
   const entry = findEntryByTab(key, { assets, documents, videoEdits, elements, snapshots });
   if (entry) {
     const previewUrl =
-      entry.thumbnailUrl ??
-      entry.sheetAsset?.thumbnailUrl ??
-      entry.sheetAsset?.mediaUrl ??
-      (entry.kind === "image" || entry.kind === "video" ? entry.mediaUrl : undefined);
+      (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
+      entry.sheetAsset?.thumbnailUrl ||
+      entry.sheetAsset?.mediaUrl ||
+      ((entry.kind === "image" || entry.kind === "video") && typeof entry.mediaUrl === "string"
+        ? entry.mediaUrl
+        : undefined);
     return {
       key,
       kind: "file",
-      title: entry.name,
+      title: safeEntryTitle(entry),
       path: entry.path,
       displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
       ext: entry.ext,
@@ -14079,8 +14100,11 @@ function createTabTitle(target) {
 
 function findEntryByTab(key, { assets, documents, videoEdits, elements, snapshots }) {
   if (key.startsWith("asset:")) {
-    const item = assets?.find((asset) => asset._id === key.slice("asset:".length));
-    return item ? assetToEntry(item) : snapshots?.[key] ?? null;
+    const id = key.slice("asset:".length);
+    const item = assets?.find((asset) => asset._id === id || asset.studioId === id);
+    const snapshot = snapshots?.[key] ?? null;
+    if (item) return mergeEntrySnapshot(assetToEntry(item), snapshot);
+    return snapshot;
   }
   if (key.startsWith("document:")) {
     const item = documents?.find((doc) => doc._id === key.slice("document:".length));
@@ -14097,21 +14121,60 @@ function findEntryByTab(key, { assets, documents, videoEdits, elements, snapshot
   return null;
 }
 
+function safeEntryTitle(entry) {
+  const raw = entry?.name ?? entry?.filename ?? entry?.title ?? entry?.label;
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/^@/, "").trim();
+    if (cleaned && cleaned !== "[object Object]") return cleaned;
+  }
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  const fromPath = String(entry?.displayPath ?? entry?.path ?? "")
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  if (fromPath && fromPath !== "undefined" && !fromPath.includes("[object")) return fromPath;
+  if (entry?.kind === "image") return "Image";
+  if (entry?.kind === "video") return "Video";
+  if (entry?.kind === "audio") return "Audio";
+  return entry?.kindLabel ?? "Untitled";
+}
+
+function mergeEntrySnapshot(entry, snapshot) {
+  if (!snapshot) return entry;
+  const title = safeEntryTitle(entry);
+  const snapshotTitle = safeEntryTitle(snapshot);
+  return {
+    ...entry,
+    name: title !== "Untitled" ? title : snapshotTitle,
+    thumbnailUrl:
+      (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
+      snapshot.thumbnailUrl ||
+      snapshot.mediaUrl ||
+      entry.mediaUrl,
+    mediaUrl:
+      (typeof entry.mediaUrl === "string" && entry.mediaUrl) ||
+      snapshot.mediaUrl ||
+      snapshot.thumbnailUrl ||
+      entry.thumbnailUrl,
+  };
+}
+
 function entryToAttachment(entry) {
   const studioKind = entry.studioKind ?? (entry.type === "dir" ? "folder" : undefined);
   const kind = studioKind === "asset" || !studioKind ? inferAttachmentKind(entry) : studioKind === "document" ? "file" : "context";
+  const label = safeEntryTitle(entry);
   return {
     id: studioKind && entry.studioId ? `${studioKind}:${entry.studioId}` : entry.path,
     kind,
-    label: entry.name.replace(/^@/, ""),
+    label,
     path: entry.path,
     displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
-    filename: entry.name,
+    filename: typeof entry.name === "string" ? entry.name : label,
     studioKind,
     studioId: entry.studioId,
     elementType: entry.elementType,
     buildStatus: entry.buildStatus,
-    description: entry.description,
+    description: typeof entry.description === "string" ? entry.description : undefined,
     referenceAssetIds: entry.referenceAssetIds ?? entry.sourceAssetIds,
     referenceAssets: entry.referenceAssets ?? entry.sourceAssets,
     sheetAssetId: entry.sheetAssetId,

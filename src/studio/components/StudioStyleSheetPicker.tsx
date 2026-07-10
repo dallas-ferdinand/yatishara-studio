@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Palette, Plus, X } from "lucide-react";
+import { Palette, Plus, X, Zap } from "lucide-react";
 
 type StyleSheetRow = {
   _id: string;
@@ -73,7 +73,11 @@ export function StudioStyleSheetPickerPanel({
             className={`studio-preset-grid-card${selectedMode === "direct" ? " is-active" : ""}`}
             onClick={onSelectDirect}
           >
-            <div className="studio-preset-grid-thumb is-direct-clean" aria-hidden="true" />
+            <div className="studio-preset-grid-thumb is-direct-clean" aria-hidden="true">
+              <span className="studio-preset-grid-thumb-fallback studio-preset-direct-mark">
+                <Zap className="h-5 w-5" aria-hidden="true" />
+              </span>
+            </div>
             <div className="studio-preset-grid-copy">
               <strong>Direct</strong>
               <span className="text-xs text-cursor-muted">Prompt goes straight to the model</span>
@@ -170,7 +174,11 @@ export function StudioStyleSheetTriggerButton({
     >
       <span className="studio-preset-trigger-thumb">
         {selectedMode === "direct" ? (
-          <span className="studio-preset-grid-thumb is-direct-clean studio-preset-trigger-direct" aria-hidden="true" />
+          <span className="studio-preset-grid-thumb is-direct-clean studio-preset-trigger-direct" aria-hidden="true">
+            <span className="studio-preset-grid-thumb-fallback studio-preset-direct-mark">
+              <Zap className="h-3 w-3" aria-hidden="true" />
+            </span>
+          </span>
         ) : sheetThumb ? (
           <img src={sheetThumb} alt="" className="studio-preset-trigger-sheet-img" />
         ) : (

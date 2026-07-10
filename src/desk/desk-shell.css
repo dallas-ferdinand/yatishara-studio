@@ -6777,13 +6777,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
   overflow: hidden;
   flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--color-cursor-border) 88%, transparent);
   background: color-mix(in srgb, var(--color-cursor-panel) 72%, transparent);
+}
+.cursor-unified-tab.has-preview .cursor-unified-tab-label {
+  max-width: 7.5rem;
 }
 .cursor-unified-tab-preview img,
 .cursor-unified-tab-preview video {

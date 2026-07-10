@@ -612,6 +612,8 @@ function UnifiedTabStripInner({
         )
       : null;
 
+  const tabCount = stripItems.filter((item) => item.kind === "tab").length;
+
   return (
     <>
     <div
@@ -619,6 +621,7 @@ function UnifiedTabStripInner({
       className={`cursor-unified-tabs${disableDrag ? " is-compact" : ""}${isDragging ? " is-dragging-strip" : ""}${isSettling ? " is-settling-strip" : ""}`}
       role="tablist"
       aria-label="Workspace tabs"
+      style={tabCount > 0 ? ({ "--tab-count": tabCount } as React.CSSProperties) : undefined}
       onPointerMove={disableDrag ? undefined : onTabPointerMove}
     >
       {stripItems.map((item, itemIndex) => {
@@ -662,7 +665,10 @@ function UnifiedTabStripInner({
             data-tab-signal={tab.kind === "chat" ? tab.tabSignal ?? "" : undefined}
             aria-selected={active}
             className={`cursor-unified-tab${active ? " is-active" : ""}${showPreview ? " has-preview" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${!disableDrag && enteringKey === tab.key ? " is-entering" : ""}`}
-            style={{ "--tab-stack": 100 - tabVisualIndex }}
+            style={{
+              "--tab-stack": tabCount - tabVisualIndex,
+              "--tab-overlap-inset": tabVisualIndex > 0 ? "12px" : "0px",
+            } as React.CSSProperties}
             title={
               tab.kind === "file"
                 ? displayEntryPath(tab)
@@ -708,7 +714,9 @@ function UnifiedTabStripInner({
             )}
             <span className="cursor-unified-tab-label pointer-events-none">
               {tab.kind === "file" && tab.dirty ? "• " : ""}
-              {tab.title}
+              {typeof tab.title === "string" || typeof tab.title === "number"
+                ? tab.title
+                : String(tab.title ?? "Untitled")}
             </span>
             {showLiveDot ? (
               <span
