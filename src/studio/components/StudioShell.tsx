@@ -266,6 +266,8 @@ export function StudioShell() {
   const [scriptType, setScriptType] = useState("production");
   const [referenceIntent, setReferenceIntent] = useState("auto");
   const [flowPending, setFlowPending] = useState(false);
+  /** Optimistic prompt + loader bubbles keyed by threadId until Convex events catch up. */
+  const [optimisticByThread, setOptimisticByThread] = useState({});
   const [status, setStatus] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
@@ -368,6 +370,26 @@ export function StudioShell() {
       ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
+  const chatEvents = useMemo(
+    () => mergeOptimisticThreadEvents(events ?? [], optimisticByThread[activeThreadId] ?? []),
+    [activeThreadId, events, optimisticByThread],
+  );
+
+  useEffect(() => {
+    if (!activeThreadId || !events?.length) return;
+    setOptimisticByThread((prev) => {
+      const current = prev[activeThreadId];
+      if (!current?.length) return prev;
+      const next = reconcileOptimisticThreadEvents(current, events);
+      if (next.length === current.length) return prev;
+      if (!next.length) {
+        const { [activeThreadId]: _drop, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [activeThreadId]: next };
+    });
+  }, [activeThreadId, events]);
+
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
     if (!hasCurrentUser) return queries;
@@ -1697,11 +1719,14 @@ export function StudioShell() {
         activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
           ? activeThreadId
           : null;
+      const userPrompt = buildPromptWithAttachments(draft, attachments);
+      const genMode = mode;
+
       let threadId = reuseThreadId;
       if (!threadId) {
         threadId = await createThread({
           folderId: activeFolder._id,
-          title: draft.trim().slice(0, 64),
+          title: userPrompt.trim().slice(0, 64),
         });
         const composerTab = activeTab;
         if (composerTab.startsWith("composer:")) {
@@ -1712,32 +1737,16 @@ export function StudioShell() {
           openTab(`thread:${threadId}`);
         }
       }
-      const flowArgs = {
-        threadId,
-        mode,
-        tier: mode === "video" ? "pro_video" : "image",
-        stylePresetId: preset._id,
-        styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
-        userPrompt: buildPromptWithAttachments(draft, attachments),
-        attachedScriptMarkdown: attachedCreativeMarkdown.length ? attachedCreativeMarkdown : undefined,
-        referenceSummaries: elementReferenceSummaries.length ? elementReferenceSummaries : undefined,
-        audioEnabled: mode === "video" ? audioEnabled : undefined,
-        aspectRatio,
-        resolution: mode === "image" ? normalizeImageResolution(imageResolution) : resolution,
-        durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
-        referenceUrls: mode === "image"
-          ? generationReferences
-            .filter((reference) => reference.kind === "image")
-            .map((reference) => reference.url)
-          : undefined,
-        referenceInputs: mode === "video" ? generationReferences : undefined,
-        startFrameUrl: mode === "video" ? videoStartFrameUrl : undefined,
-        skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
-        referenceIntent,
-        hasRawImageReference: composerReferenceFlags.hasRawImageReference,
-        hasElementReference: composerReferenceFlags.hasElementReference,
-      };
-      // Free the composer immediately so more gens can queue in the same chat while this one runs.
+
+      // Show sent prompt + loader immediately; Convex events replace these when they land.
+      const optimistic = createOptimisticGenerationEvents({
+        prompt: userPrompt,
+        mode: genMode,
+      });
+      setOptimisticByThread((prev) => ({
+        ...prev,
+        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
+      }));
       setDraft("");
       setAttachments([]);
       setStartFrameAttachmentId("");
@@ -1750,16 +1759,49 @@ export function StudioShell() {
         editorHtml: "",
       };
       setFlowPending(false);
-      try {
-        await runFlow(flowArgs);
-      } catch (error) {
+
+      const flowArgs = {
+        threadId,
+        mode: genMode,
+        tier: genMode === "video" ? "pro_video" : "image",
+        stylePresetId: preset._id,
+        styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
+        userPrompt,
+        attachedScriptMarkdown: attachedCreativeMarkdown.length ? attachedCreativeMarkdown : undefined,
+        referenceSummaries: elementReferenceSummaries.length ? elementReferenceSummaries : undefined,
+        audioEnabled: genMode === "video" ? audioEnabled : undefined,
+        aspectRatio,
+        resolution: genMode === "image" ? normalizeImageResolution(imageResolution) : resolution,
+        durationSeconds: genMode === "video" ? Number(durationSeconds) : undefined,
+        referenceUrls: genMode === "image"
+          ? generationReferences
+            .filter((reference) => reference.kind === "image")
+            .map((reference) => reference.url)
+          : undefined,
+        referenceInputs: genMode === "video" ? generationReferences : undefined,
+        startFrameUrl: genMode === "video" ? videoStartFrameUrl : undefined,
+        skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
+        referenceIntent,
+        hasRawImageReference: composerReferenceFlags.hasRawImageReference,
+        hasElementReference: composerReferenceFlags.hasElementReference,
+      };
+      void runFlow(flowArgs).catch((error) => {
+        setOptimisticByThread((prev) => {
+          const current = prev[threadId] ?? [];
+          const next = current.filter((event) => event.clientId !== optimistic.clientId);
+          if (!next.length) {
+            const { [threadId]: _drop, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [threadId]: next };
+        });
         const raw = error instanceof Error ? error.message : "Studio action failed.";
-        const friendly = friendlyGenerationError(raw, mode);
+        const friendly = friendlyGenerationError(raw, genMode);
         const detail = friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message;
         setStatus(
           friendly.title !== "Something went wrong" ? `${friendly.title}. ${detail}` : detail,
         );
-      }
+      });
     } catch (error) {
       const raw = error instanceof Error ? error.message : "Studio action failed.";
       const friendly = friendlyGenerationError(
@@ -8671,6 +8713,40 @@ export function StudioShell() {
             inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
             var(--studio-gen-card-shadow);
         }
+        .studio-chat-result-card.is-openable {
+          cursor: pointer;
+          padding: 0;
+          width: 100%;
+          text-align: left;
+          color: inherit;
+          font: inherit;
+        }
+        .studio-chat-result-card.is-openable:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+        }
+        .studio-chat-result-card.is-openable:focus-visible {
+          outline: none;
+          box-shadow:
+            0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
+            inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
+            var(--studio-gen-card-shadow);
+        }
+        .studio-chat-result-open {
+          display: block;
+          width: 100%;
+          border: 0;
+          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          color: var(--cursor-text);
+          font-size: 12px;
+          font-weight: 600;
+          padding: 8px 12px;
+          cursor: pointer;
+          text-align: center;
+        }
+        .studio-chat-result-open:hover {
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-surface));
+        }
         [data-appearance="light"] .studio-polish .studio-chat-result-card {
           background: var(--studio-gen-glass-fill);
           backdrop-filter: var(--studio-gen-glass-blur);
@@ -8939,7 +9015,7 @@ export function StudioShell() {
             activeEntry={activeEntry}
             assets={assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? [])}
             elements={elements ?? []}
-            events={events}
+            events={chatEvents}
             threads={threads ?? []}
             activeThreadId={activeThreadId}
             onAttach={attachEntry}
@@ -11293,6 +11369,79 @@ const GENERATION_STAGE_RANK = {
   cancelled: 10,
 };
 
+function createOptimisticGenerationEvents({ prompt, mode }) {
+  const clientId = `opt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  const now = Date.now();
+  return {
+    clientId,
+    events: [
+      {
+        _id: `${clientId}-prompt`,
+        kind: "prompt",
+        prompt,
+        optimistic: true,
+        clientId,
+        createdAt: now,
+        order: now,
+      },
+      {
+        _id: `${clientId}-stage`,
+        kind: "stage",
+        stage: "generating",
+        jobMode: mode === "video" ? "video" : "image",
+        generationJobId: `${clientId}-job`,
+        optimistic: true,
+        clientId,
+        createdAt: now + 1,
+        order: now + 1,
+      },
+    ],
+  };
+}
+
+function mergeOptimisticThreadEvents(realEvents = [], optimisticEvents = []) {
+  if (!optimisticEvents.length) return realEvents;
+  return [...realEvents, ...optimisticEvents];
+}
+
+function reconcileOptimisticThreadEvents(optimisticEvents = [], realEvents = []) {
+  if (!optimisticEvents.length) return [];
+  const byClient = new Map();
+  for (const event of optimisticEvents) {
+    const key = event.clientId ?? event._id;
+    if (!byClient.has(key)) byClient.set(key, []);
+    byClient.get(key).push(event);
+  }
+  const claimedPromptIds = new Set();
+  const keep = [];
+  for (const [, group] of byClient) {
+    const promptEvent = group.find((event) => event.kind === "prompt");
+    if (!promptEvent) continue;
+    const realPrompt = realEvents.find(
+      (event) =>
+        event.kind === "prompt" &&
+        event.prompt === promptEvent.prompt &&
+        !claimedPromptIds.has(event._id) &&
+        (event.createdAt ?? 0) >= (promptEvent.createdAt ?? 0) - 15_000,
+    );
+    if (!realPrompt) {
+      keep.push(...group);
+      continue;
+    }
+    claimedPromptIds.add(realPrompt._id);
+    const realCatchup = realEvents.some(
+      (event) =>
+        ((event.kind === "stage" && GENERATION_STATUS_STAGES.has(event.stage)) ||
+          event.kind === "result") &&
+        (event.createdAt ?? 0) >= (realPrompt.createdAt ?? 0),
+    );
+    if (realCatchup) continue;
+    // Prompt landed but loader stage/result not yet — keep optimistic loader only.
+    keep.push(...group.filter((event) => event.kind === "stage"));
+  }
+  return keep;
+}
+
 function compressThreadDisplayEvents(events = []) {
   const completedJobIds = new Set(
     events
@@ -11449,10 +11598,19 @@ function StudioThreadChat({
   events,
   assets = [],
   elements = [],
+  onOpenEntry,
 }) {
   const safeEvents = events ?? [];
   const hasEvents = safeEvents.length > 0;
   const displayEvents = compressThreadDisplayEvents(safeEvents);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    const root = streamRef.current;
+    if (!root || !displayEvents.length) return;
+    root.scrollTop = root.scrollHeight;
+  }, [displayEvents.length]);
+
   return (
     <div className="studio-chat-render-area">
       {!hasEvents ? (
@@ -11461,7 +11619,7 @@ function StudioThreadChat({
         </div>
       ) : null}
       {hasEvents ? (
-        <div className="studio-chat-stream">
+        <div className="studio-chat-stream" ref={streamRef}>
           <div className="studio-chat-composer-align">
             <div className="studio-chat-composer-gutter" aria-hidden="true" />
             <div className="studio-chat-stream-inner">
@@ -11471,6 +11629,7 @@ function StudioThreadChat({
                   event={event}
                   assets={assets}
                   elements={elements}
+                  onOpenEntry={onOpenEntry}
                 />
               ))}
             </div>
@@ -11482,7 +11641,7 @@ function StudioThreadChat({
   );
 }
 
-function StudioThreadEvent({ event, assets, elements = [] }) {
+function StudioThreadEvent({ event, assets, elements = [], onOpenEntry }) {
   if (event.kind === "prompt") {
     return (
       <article className="studio-chat-bubble is-user">
@@ -11518,7 +11677,11 @@ function StudioThreadEvent({ event, assets, elements = [] }) {
         {resultAssets.length ? (
           <div className="studio-chat-result-grid">
             {resultAssets.map((entry) => (
-              <StudioChatResultCard key={entry.studioId ?? entry.path} entry={entry} />
+              <StudioChatResultCard
+                key={entry.studioId ?? entry.path}
+                entry={entry}
+                onOpen={onOpenEntry}
+              />
             ))}
           </div>
         ) : (
@@ -11592,17 +11755,65 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
   );
 }
 
-function StudioChatResultCard({ entry }) {
+function StudioChatResultCard({ entry, onOpen }) {
   const isVideo = entry.kind === "video";
   const isImage = entry.kind === "image";
   const src = entry.mediaUrl ?? entry.thumbnailUrl;
   const poster = isVideoFileUrl(entry.thumbnailUrl) ? undefined : entry.thumbnailUrl;
-  return (
-    <div className="studio-chat-result-card">
-      {isVideo && src ? (
-        <video src={src} poster={poster} controls playsInline preload="metadata" />
-      ) : isImage && src ? (
+  const canOpen = Boolean(onOpen && entry.studioId);
+
+  function openEntry() {
+    if (!canOpen) return;
+    onOpen(entry);
+  }
+
+  if (isImage && src) {
+    return (
+      <button
+        type="button"
+        className={`studio-chat-result-card${canOpen ? " is-openable" : ""}`}
+        onClick={openEntry}
+        aria-label={entry.name ? `Open ${entry.name}` : "Open image"}
+        title={canOpen ? "Open in new tab" : undefined}
+      >
         <img src={src} alt="" loading="lazy" />
+      </button>
+    );
+  }
+
+  return (
+    <div
+      className={`studio-chat-result-card${canOpen && !isVideo ? " is-openable" : ""}`}
+      role={canOpen && !isVideo ? "button" : undefined}
+      tabIndex={canOpen && !isVideo ? 0 : undefined}
+      onClick={canOpen && !isVideo ? openEntry : undefined}
+      onKeyDown={
+        canOpen && !isVideo
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openEntry();
+              }
+            }
+          : undefined
+      }
+    >
+      {isVideo && src ? (
+        <>
+          <video src={src} poster={poster} controls playsInline preload="metadata" />
+          {canOpen ? (
+            <button
+              type="button"
+              className="studio-chat-result-open"
+              onClick={(event) => {
+                event.stopPropagation();
+                openEntry();
+              }}
+            >
+              Open in tab
+            </button>
+          ) : null}
+        </>
       ) : (
         <div className="studio-composer-preview-fallback">{entry.kindLabel ?? "Result"}</div>
       )}
@@ -11721,6 +11932,7 @@ function ActivePane({
         events={[]}
         assets={assets}
         elements={elements}
+        onOpenEntry={onOpenEntry}
       />
     );
   }
@@ -11741,6 +11953,7 @@ function ActivePane({
         events={events}
         assets={assets}
         elements={elements}
+        onOpenEntry={onOpenEntry}
       />
     );
   }
