@@ -1692,17 +1692,25 @@ export function StudioShell() {
         openSettingsTab("top-up");
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
-      const threadId = await createThread({
-        folderId: activeFolder._id,
-        title: draft.trim().slice(0, 64),
-      });
-      const composerTab = activeTab;
-      if (composerTab.startsWith("composer:")) {
-        delete composerContextsRef.current[composerTab];
-        setOpenTabs((tabs) => tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)));
-        setActiveTab(`thread:${threadId}`);
-      } else {
-        openTab(`thread:${threadId}`);
+      // Stay in the open chat when generating again; only mint a thread from a blank composer tab.
+      const reuseThreadId =
+        activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
+          ? activeThreadId
+          : null;
+      let threadId = reuseThreadId;
+      if (!threadId) {
+        threadId = await createThread({
+          folderId: activeFolder._id,
+          title: draft.trim().slice(0, 64),
+        });
+        const composerTab = activeTab;
+        if (composerTab.startsWith("composer:")) {
+          delete composerContextsRef.current[composerTab];
+          setOpenTabs((tabs) => tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)));
+          setActiveTab(`thread:${threadId}`);
+        } else {
+          openTab(`thread:${threadId}`);
+        }
       }
       await runFlow({
         threadId,
