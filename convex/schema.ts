@@ -20,6 +20,14 @@ export const elementType = v.union(
   v.literal("prop"),
   v.literal("location"),
   v.literal("doc"),
+  v.literal("style_sheet"),
+);
+
+export const elementRenderMode = v.union(
+  v.literal("photoreal"),
+  v.literal("illustrated_2d"),
+  v.literal("illustrated_3d"),
+  v.literal("mixed"),
 );
 
 export const generationMode = v.union(v.literal("image"), v.literal("video"));
@@ -96,6 +104,8 @@ export default defineSchema({
     phoneVerifiedAt: v.optional(v.number()),
     image: v.optional(v.string()),
     role: userRole,
+    /** Active Style Sheet for composer styled generation */
+    activeStyleSheetId: v.optional(v.id("elements")),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.optional(v.number()),
@@ -185,6 +195,10 @@ export default defineSchema({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     /** Built reference sheet image — used when element is attached to generation */
     sheetAssetId: v.optional(v.id("assets")),
+    /** Style Sheet only — markdown rules (palette, line weight, forbidden, etc.) */
+    styleRules: v.optional(v.string()),
+    /** Style Sheet only — render mode hint for generation */
+    renderMode: v.optional(elementRenderMode),
     builtAt: v.optional(v.number()),
     sourceDocumentId: v.optional(v.id("documents")),
     deletedAt: v.optional(v.number()),
@@ -252,6 +266,7 @@ export default defineSchema({
     tier: generationTier,
     resolvedModel: v.string(),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     enhancedPrompt: v.optional(v.string()),
     negativePrompt: v.optional(v.string()),

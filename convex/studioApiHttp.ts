@@ -592,6 +592,18 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       );
     }
 
+    if (request.method === "GET" && route === "style-sheets") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const elements = await ctx.runQuery(internal.studioApiInternal.listElementsForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        type: "style_sheet",
+        expiresUnix,
+      });
+      return finish(jsonResponse({ styleSheets: elements }));
+    }
+
     if (request.method === "GET" && route === "elements") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
@@ -600,6 +612,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         | "prop"
         | "location"
         | "doc"
+        | "style_sheet"
         | null;
       const folderIdRaw = url.searchParams.get("folderId");
       const folderId = parseOptionalId(folderIdRaw) as Id<"folders"> | undefined;
@@ -617,7 +630,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const auth = await authFor("write", "write");
       if (auth instanceof Response) return finish(auth);
       const body = await readJsonBody<{
-        type?: "character" | "prop" | "location" | "doc";
+        type?: "character" | "prop" | "location" | "doc" | "style_sheet";
         name?: string;
         description?: string;
         folderId?: Id<"folders">;
@@ -625,6 +638,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         sourceAssetIds?: Id<"assets">[];
         sourceDocumentId?: Id<"documents">;
         sourceMode?: "photographic" | "designed";
+        styleRules?: string;
+        renderMode?: "photoreal" | "illustrated_2d" | "illustrated_3d" | "mixed";
       }>(request);
       if (!body.type || !body.name?.trim()) {
         return finish(errorResponse("type and name are required"));
@@ -640,6 +655,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         sourceAssetIds: body.sourceAssetIds,
         sourceDocumentId: body.sourceDocumentId,
         sourceMode: body.sourceMode,
+        styleRules: body.styleRules,
+        renderMode: body.renderMode,
       });
       const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
         userId: auth.userId,
@@ -748,6 +765,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           referenceAssetIds?: Id<"assets">[];
           sourceAssetIds?: Id<"assets">[];
           sourceDocumentId?: Id<"documents">;
+          styleRules?: string;
+          renderMode?: "photoreal" | "illustrated_2d" | "illustrated_3d" | "mixed";
         }>(request);
         try {
           await ctx.runMutation(internal.studioApiInternal.updateElementForApi, {
@@ -760,6 +779,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             referenceAssetIds: body.referenceAssetIds ?? body.sourceAssetIds,
             sourceAssetIds: body.sourceAssetIds,
             sourceDocumentId: body.sourceDocumentId,
+            styleRules: body.styleRules,
+            renderMode: body.renderMode,
           });
           const element = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
             userId: auth.userId,
@@ -941,6 +962,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         prompt?: string;
         folderId?: Id<"folders">;
         stylePreset?: string;
+        styleSheetElementId?: Id<"elements">;
         aspectRatio?: string;
         resolution?: string;
         durationSeconds?: number;
@@ -965,13 +987,48 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
 
       const folderId = await resolveFolderId(ctx, auth, body.folderId);
-      const presetSlug = body.stylePreset ?? "toon-prime";
+      const LEGACY_CARTOON_PRESETS = new Set([
+        "toon-prime",
+        "toon-adult",
+        "toon-surreal",
+        "toon-family",
+        "toon-cgi",
+        "toon-neon-idol",
+        "story-ad",
+        "realism",
+        "cinematic",
+        "product-studio",
+        "social-hook",
+        "hypermotion",
+        "anime",
+        "3d-cgi",
+        "footage-vfx",
+      ]);
+      if (body.stylePreset && LEGACY_CARTOON_PRESETS.has(body.stylePreset)) {
+        return finish(
+          errorResponse(
+            `Style preset "${body.stylePreset}" is deprecated. Create a Style Sheet element and pass styleSheetElementId, or use unstyled with skipPromptEnhancement for Direct.`,
+            410,
+          ),
+        );
+      }
+      const skipPromptEnhancement = body.skipPromptEnhancement ?? true;
+      if (!skipPromptEnhancement && !body.styleSheetElementId) {
+        return finish(
+          errorResponse(
+            "style_sheet_required — pass styleSheetElementId for styled generation, or set skipPromptEnhancement true for Direct.",
+            400,
+          ),
+        );
+      }
+      const presetSlug = body.stylePreset ?? "unstyled";
       const preset = await ctx.runQuery(internal.studioApiInternal.resolveStylePresetBySlug, {
         slug: presetSlug,
       });
       if (!preset) {
         return finish(errorResponse(`Style preset not found: ${presetSlug}`, 404));
       }
+      const styleSheetElementId = body.styleSheetElementId;
 
       let userPrompt = body.prompt.trim();
       const creativePrompt = userPrompt;
@@ -1112,6 +1169,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           folderId,
           apiKeyId: auth.apiKeyId,
           stylePresetId: preset.id,
+          styleSheetElementId,
           userPrompt,
           referenceInputs,
           skipScriptEnhancement: body.skipPromptEnhancement,
@@ -1171,6 +1229,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             ? resolvedVideoModel!.gatewayModelId
             : (process.env.GATEWAY_IMAGE_MODEL_ID ?? "openai/gpt-image-2"),
         stylePresetId: preset.id,
+        styleSheetElementId,
         userPrompt,
         title: userPrompt.slice(0, 64) || "API generation",
         audioEnabled: body.audioEnabled,
@@ -1227,6 +1286,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         mode,
         tier,
         stylePresetId: preset.id,
+        styleSheetElementId,
         userPrompt,
         audioEnabled: body.audioEnabled,
         aspectRatio,

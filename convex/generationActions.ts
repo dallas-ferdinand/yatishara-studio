@@ -26,6 +26,7 @@ import {
 } from "./lib/videoGeneration";
 import { resolveVideoModel } from "./lib/videoModels";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
+import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
 
 function finalizeVideoPrompt(
   prompt: string,
@@ -59,6 +60,7 @@ const createQueuedJobRef = makeFunctionReference<
     tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolvedModel: string;
     stylePresetId: Id<"stylePresets">;
+    styleSheetElementId?: Id<"elements">;
     userPrompt: string;
     audioEnabled?: boolean;
     aspectRatio?: string;
@@ -236,6 +238,7 @@ const prepareApiGenerationRef = internalMutationRef<
     tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolvedModel: string;
     stylePresetId: Id<"stylePresets">;
+    styleSheetElementId?: Id<"elements">;
     userPrompt: string;
     title?: string;
     audioEnabled?: boolean;
@@ -262,6 +265,7 @@ export const generateScript = action({
   args: {
     folderId: v.id("folders"),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
@@ -282,6 +286,26 @@ export const generateScript = action({
     if (!preset) {
       throw new Error("Selected creative preset is not available.");
     }
+    let styleSheet;
+    if (args.styleSheetElementId) {
+      styleSheet = await ctx.runQuery(api.elements.get, {
+        elementId: args.styleSheetElementId,
+      });
+      if (!styleSheet || styleSheet.type !== "style_sheet") {
+        throw new Error("Style Sheet not found");
+      }
+      if (!styleSheet.styleRules?.trim() && !styleSheet.sheetAssetId) {
+        throw new Error("Build the Style Sheet before using it for generation");
+      }
+    }
+    const presetInstructions =
+      styleSheet && styleSheet.type === "style_sheet"
+        ? styleSheetSystemInstructions({
+            name: styleSheet.name,
+            styleRules: styleSheet.styleRules,
+            renderMode: styleSheet.renderMode,
+          })
+        : preset.systemInstructions;
     const transactionId = await ctx.runMutation(chargeTextGenerationRef, {
       folderId: args.folderId,
       imageReferenceCount: referenceInputs.filter((input) => input.kind === "image").length,
@@ -289,16 +313,18 @@ export const generateScript = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const skipEnhancement = shouldSkipPromptEnhancement({
-        skipPromptEnhancement: args.skipPromptEnhancement,
-        presetSlug: preset.slug,
-      });
+      const skipEnhancement = args.styleSheetElementId
+        ? args.skipPromptEnhancement === true
+        : shouldSkipPromptEnhancement({
+            skipPromptEnhancement: args.skipPromptEnhancement,
+            presetSlug: preset.slug,
+          });
       const contentMarkdown = skipEnhancement
         ? args.userPrompt.trim()
         : await generateScriptWithGateway({
             userPrompt: args.userPrompt,
-            presetName: preset.name,
-            presetInstructions: preset.systemInstructions,
+            presetName: styleSheet?.name ?? preset.name,
+            presetInstructions,
             scriptInstructions: preset.scriptInstructions,
             scriptType: normalizeScriptType(args.scriptType),
             presetSlug: preset.slug,
@@ -349,6 +375,7 @@ export const runFlow = action({
     startFrameUrl: v.optional(v.string()),
     videoModel: v.optional(v.string()),
     skipPromptEnhancement: v.optional(v.boolean()),
+    styleSheetElementId: v.optional(v.id("elements")),
     referenceIntent: v.optional(v.string()),
     hasRawImageReference: v.optional(v.boolean()),
     hasElementReference: v.optional(v.boolean()),
@@ -389,6 +416,7 @@ export const runFlow = action({
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
       skipPromptEnhancement: args.skipPromptEnhancement,
+      styleSheetElementId: args.styleSheetElementId,
     });
 
     try {
@@ -673,6 +701,7 @@ export const runGenerationForApi = action({
     mode: v.union(v.literal("image"), v.literal("video")),
     tier: generationTier,
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
@@ -703,6 +732,7 @@ export const runGenerationForApi = action({
       tier: args.tier,
       resolvedModel,
       stylePresetId: args.stylePresetId,
+      styleSheetElementId: args.styleSheetElementId,
       userPrompt: args.userPrompt,
       title: args.userPrompt.trim().slice(0, 64) || "API generation",
       audioEnabled: args.audioEnabled,
@@ -747,6 +777,7 @@ export const runScriptForApi = action({
     folderId: v.id("folders"),
     apiKeyId: v.optional(v.id("apiKeys")),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
     skipScriptEnhancement: v.optional(v.boolean()),
@@ -772,6 +803,26 @@ export const runScriptForApi = action({
     if (!preset) {
       throw new Error("Selected creative preset is not available.");
     }
+    let styleSheet;
+    if (args.styleSheetElementId) {
+      styleSheet = await ctx.runQuery(api.elements.get, {
+        elementId: args.styleSheetElementId,
+      });
+      if (!styleSheet || styleSheet.type !== "style_sheet") {
+        throw new Error("Style Sheet not found");
+      }
+      if (!styleSheet.styleRules?.trim() && !styleSheet.sheetAssetId) {
+        throw new Error("Build the Style Sheet before using it for generation");
+      }
+    }
+    const presetInstructions =
+      styleSheet && styleSheet.type === "style_sheet"
+        ? styleSheetSystemInstructions({
+            name: styleSheet.name,
+            styleRules: styleSheet.styleRules,
+            renderMode: styleSheet.renderMode,
+          })
+        : preset.systemInstructions;
     const charged = await ctx.runMutation(chargeTextForApiRef, {
       userId: args.userId,
       folderId: args.folderId,
@@ -780,16 +831,18 @@ export const runScriptForApi = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const skipScript = shouldSkipPromptEnhancement({
-        skipPromptEnhancement: args.skipScriptEnhancement,
-        presetSlug: preset.slug,
-      });
+      const skipScript = args.styleSheetElementId
+        ? args.skipScriptEnhancement === true
+        : shouldSkipPromptEnhancement({
+            skipPromptEnhancement: args.skipScriptEnhancement,
+            presetSlug: preset.slug,
+          });
       const contentMarkdown = skipScript
         ? args.userPrompt.trim()
         : await generateScriptWithGateway({
             userPrompt: args.userPrompt,
-            presetName: preset.name,
-            presetInstructions: preset.systemInstructions,
+            presetName: styleSheet?.name ?? preset.name,
+            presetInstructions,
             scriptInstructions: preset.scriptInstructions,
             scriptType: normalizeScriptType(args.scriptType),
             presetSlug: preset.slug,

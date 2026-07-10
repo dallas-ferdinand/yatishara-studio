@@ -778,17 +778,26 @@ export const estimateBatchProduction = internalQuery({
 });
 
 const DEPRECATED_PRESET_SLUGS: Record<string, string> = {
-  "story-ad": "toon-prime",
-  realism: "toon-prime",
-  cinematic: "toon-prime",
-  "product-studio": "toon-prime",
-  "social-hook": "toon-prime",
-  hypermotion: "toon-prime",
-  anime: "toon-prime",
-  "3d-cgi": "toon-cgi",
-  "footage-vfx": "toon-prime",
   raw: "unstyled",
 };
+
+const LEGACY_CARTOON_PRESET_SLUGS = new Set([
+  "toon-prime",
+  "toon-adult",
+  "toon-surreal",
+  "toon-family",
+  "toon-cgi",
+  "toon-neon-idol",
+  "story-ad",
+  "realism",
+  "cinematic",
+  "product-studio",
+  "social-hook",
+  "hypermotion",
+  "anime",
+  "3d-cgi",
+  "footage-vfx",
+]);
 
 export const resolveStylePresetBySlug = internalQuery({
   args: { slug: v.string() },
@@ -803,6 +812,9 @@ export const resolveStylePresetBySlug = internalQuery({
     v.null(),
   ),
   handler: async (ctx, args) => {
+    if (LEGACY_CARTOON_PRESET_SLUGS.has(args.slug)) {
+      return null;
+    }
     const resolvedSlug = DEPRECATED_PRESET_SLUGS[args.slug] ?? args.slug;
     const preset = await ctx.db
       .query("stylePresets")
@@ -1039,6 +1051,7 @@ export const listElementsForApi = internalQuery({
         v.literal("prop"),
         v.literal("location"),
         v.literal("doc"),
+        v.literal("style_sheet"),
       ),
     ),
     folderId: v.optional(v.id("folders")),
@@ -1228,6 +1241,7 @@ export const createElementForApi = internalMutation({
       v.literal("prop"),
       v.literal("location"),
       v.literal("doc"),
+      v.literal("style_sheet"),
     ),
     name: v.string(),
     description: v.optional(v.string()),
@@ -1236,6 +1250,15 @@ export const createElementForApi = internalMutation({
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
     sourceMode: v.optional(v.union(v.literal("photographic"), v.literal("designed"))),
+    styleRules: v.optional(v.string()),
+    renderMode: v.optional(
+      v.union(
+        v.literal("photoreal"),
+        v.literal("illustrated_2d"),
+        v.literal("illustrated_3d"),
+        v.literal("mixed"),
+      ),
+    ),
   },
   returns: v.id("elements"),
   handler: async (ctx, args) => {
@@ -1279,6 +1302,8 @@ export const createElementForApi = internalMutation({
       sourceAssetIds: referenceAssetIds,
       referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
+      styleRules: args.type === "style_sheet" ? args.styleRules?.trim() : undefined,
+      renderMode: args.type === "style_sheet" ? args.renderMode : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -1296,6 +1321,15 @@ export const updateElementForApi = internalMutation({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
+    styleRules: v.optional(v.string()),
+    renderMode: v.optional(
+      v.union(
+        v.literal("photoreal"),
+        v.literal("illustrated_2d"),
+        v.literal("illustrated_3d"),
+        v.literal("mixed"),
+      ),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -1357,6 +1391,8 @@ export const updateElementForApi = internalMutation({
       ...(args.sourceDocumentId !== undefined
         ? { sourceDocumentId: args.sourceDocumentId }
         : {}),
+      ...(args.styleRules !== undefined ? { styleRules: args.styleRules } : {}),
+      ...(args.renderMode !== undefined ? { renderMode: args.renderMode } : {}),
       updatedAt: Date.now(),
     });
     return null;
@@ -2018,6 +2054,8 @@ async function formatElement(
     /** @deprecated Use referenceAssets */
     sourceAssets: referenceAssets.filter(Boolean),
     sourceDocumentId: element.sourceDocumentId,
+    styleRules: element.styleRules,
+    renderMode: element.renderMode,
     createdAt: element.createdAt,
     updatedAt: element.updatedAt,
   };

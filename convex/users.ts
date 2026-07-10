@@ -83,6 +83,29 @@ export const updateAccountDetails = authedMutation({
   },
 });
 
+export const setActiveStyleSheet = authedMutation({
+  args: {
+    styleSheetElementId: v.union(v.id("elements"), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (args.styleSheetElementId) {
+      const element = await ctx.db.get("elements", args.styleSheetElementId);
+      if (!element || element.ownerId !== ctx.user._id || element.deletedAt) {
+        throw new Error("Style Sheet not found");
+      }
+      if (element.type !== "style_sheet") {
+        throw new Error("Element is not a Style Sheet");
+      }
+    }
+    await ctx.db.patch(ctx.user._id, {
+      activeStyleSheetId: args.styleSheetElementId ?? undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const ensureStudioDefaults = authedMutation({
   args: {},
   returns: v.object({

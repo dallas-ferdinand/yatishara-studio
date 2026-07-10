@@ -1,8 +1,9 @@
-import { GEN_PROMPT_HEADING } from "./creativeDirection";
+import { buildStyleSheetImagePrompt } from "./styleSheetGuides";
 import { sheetFidelityPromptSuffix } from "./elementSheetGuides";
+import { GEN_PROMPT_HEADING } from "./composerScriptTypes";
 import { DIRECT_PROMPT_PRESET_SLUGS } from "./skipPromptEnhancement";
 
-export type ElementSheetType = "character" | "prop" | "location" | "doc";
+export type ElementSheetType = "character" | "prop" | "location" | "doc" | "style_sheet";
 
 export type CartoonStyleFamily =
   | "toon-prime"
@@ -36,7 +37,9 @@ export function sheetTitleForType(type: ElementSheetType): string {
     case "location":
       return "Location sheet";
     case "doc":
-      return "Style sheet";
+      return "Style notes";
+    case "style_sheet":
+      return "Style Sheet";
   }
 }
 
@@ -117,6 +120,8 @@ function buildUnstyledElementSheetImagePrompt(args: {
         .join(" ");
     case "doc":
       return null;
+    case "style_sheet":
+      return null;
   }
 }
 
@@ -183,6 +188,8 @@ function buildCartoonElementSheetImagePrompt(args: {
         .join(" ");
     case "doc":
       return null;
+    case "style_sheet":
+      return null;
   }
 }
 
@@ -196,7 +203,18 @@ export function buildElementSheetImagePrompt(args: {
   description?: string;
   sourceMode?: "photographic" | "designed";
   stylePresetSlug?: string;
+  styleRules?: string;
+  renderMode?: "photoreal" | "illustrated_2d" | "illustrated_3d" | "mixed";
+  referenceCount?: number;
 }): string | null {
+  if (args.type === "style_sheet") {
+    return buildStyleSheetImagePrompt({
+      name: args.name,
+      styleRules: args.styleRules ?? args.description,
+      renderMode: args.renderMode,
+      referenceCount: args.referenceCount ?? 0,
+    });
+  }
   if (args.stylePresetSlug && DIRECT_PROMPT_PRESET_SLUGS.has(args.stylePresetSlug)) {
     return buildUnstyledElementSheetImagePrompt(args);
   }
@@ -252,6 +270,13 @@ export function buildElementSheetSystemPrompt(type: ElementSheetType): string {
       return locationSystemPrompt();
     case "doc":
       return docSystemPrompt();
+    case "style_sheet":
+      return [
+        "You write Style Sheet production bibles for AI image and video generation.",
+        "Extract palette, line weight, shading model, render mode, forbidden drift, and consistency locks.",
+        `End with "${GEN_PROMPT_HEADING}" — one model-ready paragraph capturing the visual direction.`,
+        BASE_RULES,
+      ].join(" ");
   }
 }
 

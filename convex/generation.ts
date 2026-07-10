@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -281,6 +282,7 @@ export const createQueuedJob = authedMutation({
     tier: generationTier,
     resolvedModel: v.string(),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
@@ -305,6 +307,15 @@ export const createQueuedJob = authedMutation({
     if (!preset || !preset.enabled) {
       throw new Error("Style preset not available");
     }
+    if (args.styleSheetElementId) {
+      const sheet = await ctx.db.get("elements", args.styleSheetElementId);
+      if (!sheet || sheet.ownerId !== ctx.user._id || sheet.deletedAt || sheet.type !== "style_sheet") {
+        throw new Error("Style Sheet not found");
+      }
+      if (!sheet.styleRules?.trim() && !sheet.sheetAssetId) {
+        throw new Error("Build the Style Sheet before using it for generation");
+      }
+    }
     const now = Date.now();
     const reservedCreditTransactionId = await reserveCreditsForJob(ctx, {
       tier: args.tier,
@@ -324,6 +335,7 @@ export const createQueuedJob = authedMutation({
       tier: args.tier,
       resolvedModel: args.resolvedModel,
       stylePresetId: args.stylePresetId,
+      styleSheetElementId: args.styleSheetElementId,
       userPrompt: args.userPrompt,
       stage: "queued",
       audioEnabled: args.audioEnabled,
@@ -390,6 +402,7 @@ export const internalCreateQueuedJob = internalMutation({
     tier: generationTier,
     resolvedModel: v.string(),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
@@ -479,6 +492,7 @@ export const prepareApiGeneration = internalMutation({
     tier: generationTier,
     resolvedModel: v.string(),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     title: v.optional(v.string()),
     audioEnabled: v.optional(v.boolean()),
@@ -516,6 +530,15 @@ export const prepareApiGeneration = internalMutation({
     if (!preset || !preset.enabled) {
       throw new Error("Style preset not available");
     }
+    if (args.styleSheetElementId) {
+      const sheet = await ctx.db.get("elements", args.styleSheetElementId);
+      if (!sheet || sheet.ownerId !== args.userId || sheet.deletedAt || sheet.type !== "style_sheet") {
+        throw new Error("Style Sheet not found");
+      }
+      if (!sheet.styleRules?.trim() && !sheet.sheetAssetId) {
+        throw new Error("Build the Style Sheet before using it for generation");
+      }
+    }
     const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
       tier: args.tier,
       resolution: args.resolution,
@@ -534,6 +557,7 @@ export const prepareApiGeneration = internalMutation({
       tier: args.tier,
       resolvedModel: args.resolvedModel,
       stylePresetId: args.stylePresetId,
+      styleSheetElementId: args.styleSheetElementId,
       userPrompt: args.userPrompt,
       stage: "queued",
       audioEnabled: args.audioEnabled,
@@ -597,6 +621,7 @@ export const getJobRunContext = internalQuery({
       reservedCreditTransactionId: v.optional(v.id("creditTransactions")),
       spentCreditTransactionId: v.optional(v.id("creditTransactions")),
       skipPromptEnhancement: v.optional(v.boolean()),
+      styleSheetElementId: v.optional(v.id("elements")),
       createdAt: v.number(),
       updatedAt: v.number(),
     }),
@@ -609,6 +634,15 @@ export const getJobRunContext = internalQuery({
       storytelling: v.optional(v.boolean()),
       negativePrompt: v.optional(v.string()),
     }),
+    styleSheet: v.optional(
+      v.object({
+        _id: v.id("elements"),
+        name: v.string(),
+        styleRules: v.optional(v.string()),
+        renderMode: v.optional(v.string()),
+        sheetAssetId: v.optional(v.id("assets")),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     const job = await ctx.db.get("generationJobs", args.jobId);
@@ -619,6 +653,17 @@ export const getJobRunContext = internalQuery({
     if (!preset) {
       throw new Error("Style preset not found");
     }
+    const styleSheet = job.styleSheetElementId
+      ? await ctx.db.get("elements", job.styleSheetElementId)
+      : null;
+    const presetInstructions =
+      styleSheet && styleSheet.type === "style_sheet"
+        ? styleSheetSystemInstructions({
+            name: styleSheet.name,
+            styleRules: styleSheet.styleRules,
+            renderMode: styleSheet.renderMode,
+          })
+        : preset.systemInstructions;
     return {
       job: {
         _id: job._id,
@@ -629,6 +674,7 @@ export const getJobRunContext = internalQuery({
         tier: job.tier,
         resolvedModel: job.resolvedModel,
         stylePresetId: job.stylePresetId,
+        styleSheetElementId: job.styleSheetElementId,
         userPrompt: job.userPrompt,
         enhancedPrompt: job.enhancedPrompt,
         negativePrompt: job.negativePrompt,
@@ -648,12 +694,21 @@ export const getJobRunContext = internalQuery({
       preset: {
         _id: preset._id,
         slug: preset.slug,
-        name: preset.name,
-        systemInstructions: preset.systemInstructions,
+        name: styleSheet?.name ?? preset.name,
+        systemInstructions: presetInstructions,
         scriptInstructions: preset.scriptInstructions,
         storytelling: preset.storytelling,
         negativePrompt: preset.negativePrompt,
       },
+      styleSheet: styleSheet
+        ? {
+            _id: styleSheet._id,
+            name: styleSheet.name,
+            styleRules: styleSheet.styleRules,
+            renderMode: styleSheet.renderMode,
+            sheetAssetId: styleSheet.sheetAssetId,
+          }
+        : undefined,
     };
   },
 });
@@ -668,6 +723,7 @@ export const adminGetJobDebug = adminQuery({
     tier: generationTier,
     resolvedModel: v.string(),
     stylePresetId: v.id("stylePresets"),
+    styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     enhancedPrompt: v.optional(v.string()),
     negativePrompt: v.optional(v.string()),

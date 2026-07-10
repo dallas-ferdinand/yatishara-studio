@@ -276,7 +276,7 @@ export const listEnabled = authedQuery({
   },
 });
 
-/** Composer UI presets — cartoon styles plus Direct (unstyled) for verbatim handoff. */
+/** Composer UI — Direct only; styled generation uses Style Sheet elements. */
 export const listComposerPresets = authedQuery({
   args: {
     kind: v.optional(presetKind),
@@ -289,26 +289,14 @@ export const listComposerPresets = authedQuery({
       .withIndex("by_enabled_and_sort", (q) => q.eq("enabled", true))
       .collect();
     const composerPresets = presets
-      .filter((preset) => preset.slug !== "raw")
-      .map((preset) =>
-        preset.slug === "unstyled"
-          ? {
-              ...preset,
-              name: "Direct",
-              tagline: preset.tagline ?? "No style rewrite — prompt goes straight to the model",
-            }
-          : preset,
-      );
-    const filtered = args.kind
-      ? composerPresets.filter((preset) => preset.kind === args.kind || preset.kind === "any")
-      : composerPresets;
-    filtered.sort((a, b) => {
-      if (a.slug === "unstyled") return -1;
-      if (b.slug === "unstyled") return 1;
-      return a.sortOrder - b.sortOrder;
-    });
+      .filter((preset) => preset.slug === "unstyled")
+      .map((preset) => ({
+        ...preset,
+        name: "Direct",
+        tagline: preset.tagline ?? "No style rewrite — prompt goes straight to the model",
+      }));
     return Promise.all(
-      filtered.map(async (preset) => ({
+      composerPresets.map(async (preset) => ({
         ...preset,
         previewImageUrl: await resolvePresetPreviewUrl(ctx, preset, args.expiresUnix),
       })),

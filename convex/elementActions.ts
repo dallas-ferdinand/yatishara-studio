@@ -157,6 +157,7 @@ async function generateElementTextSheetCore(
     imageRefCount,
     sourceMode,
     description: args.existingNotes ?? element.description,
+    styleRules: element.styleRules,
   });
   if (
     sourceMode === "photographic" &&
@@ -246,13 +247,17 @@ export const generateSheet = action({
         type: element.type,
         name: element.name,
         description: element.description,
+        styleRules: element.styleRules,
+        renderMode: element.renderMode,
         sourceMode: element.sourceMode,
         referenceAssetIds: resolved.referenceAssetIds,
       },
       referenceUrls: args.referenceInputs
         .filter((input) => input.kind === "image")
         .map((input) => input.url),
-      stylePresetSlug: args.stylePresetSlug ?? "toon-prime",
+      stylePresetSlug:
+        args.stylePresetSlug ??
+        (element.type === "style_sheet" ? "unstyled" : "unstyled"),
       ...callbacks,
     });
 
@@ -306,6 +311,7 @@ export const generateElementTextSheetForApi = action({
           imageRefCount,
         }),
       description: element.description,
+      styleRules: element.styleRules,
     });
 
     const refs = referenceAssetIds.length
@@ -437,6 +443,7 @@ export const generateElementSheetForApi = action({
       imageRefCount,
       sourceMode,
       description: element.description,
+      styleRules: element.styleRules,
     });
 
     const refs = referenceAssetIds.length
@@ -490,7 +497,9 @@ export const generateElementSheetForApi = action({
       },
       referenceUrls,
       resolution: args.resolution,
-      stylePresetSlug: args.stylePresetSlug ?? "toon-prime",
+      stylePresetSlug:
+        args.stylePresetSlug ??
+        (element.type === "style_sheet" ? "unstyled" : "unstyled"),
       ...callbacks,
     });
 

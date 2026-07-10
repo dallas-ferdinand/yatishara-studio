@@ -10,9 +10,11 @@ export const SHEET_IMAGE_ASPECT_RATIO = "16:9";
 export type ElementSheetTarget = {
   _id: Id<"elements">;
   folderId: Id<"folders">;
-  type: "character" | "prop" | "location" | "doc";
+  type: "character" | "prop" | "location" | "doc" | "style_sheet";
   name: string;
   description?: string;
+  styleRules?: string;
+  renderMode?: "photoreal" | "illustrated_2d" | "illustrated_3d" | "mixed";
   sourceMode?: "photographic" | "designed";
   referenceAssetIds: Id<"assets">[];
 };
@@ -68,8 +70,11 @@ export async function generateElementSheetImage(
     type: args.element.type,
     name: args.element.name,
     description: args.element.description,
+    styleRules: args.element.styleRules,
+    renderMode: args.element.renderMode,
     sourceMode,
     stylePresetSlug: args.stylePresetSlug,
+    referenceCount: args.referenceUrls.length,
   });
   if (!prompt) {
     throw new Error("Element type does not support sheet image generation.");

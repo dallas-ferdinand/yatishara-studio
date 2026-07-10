@@ -15,7 +15,7 @@ export type SheetReferencePolicy = {
 };
 
 export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
-  Exclude<ElementSheetType, "doc">,
+  Exclude<ElementSheetType, "doc" | "style_sheet">,
   SheetReferencePolicy
 > = {
   character: {
@@ -114,7 +114,7 @@ export const ELEMENT_SHEET_REFERENCE_POLICY: Record<
 export function sheetReferencePolicy(
   type: ElementSheetType,
 ): SheetReferencePolicy | null {
-  if (type === "doc") {
+  if (type === "doc" || type === "style_sheet") {
     return null;
   }
   return ELEMENT_SHEET_REFERENCE_POLICY[type];
@@ -139,7 +139,19 @@ export function assertSheetGenerationReady(args: {
   imageRefCount: number;
   sourceMode: ElementSourceMode;
   description?: string;
+  styleRules?: string;
 }): void {
+  if (args.type === "style_sheet") {
+    if (!args.styleRules?.trim() && args.imageRefCount === 0 && (args.description?.trim().length ?? 0) < 20) {
+      throw new Error(
+        "Style Sheet needs style rules (20+ chars), mood reference images, or detailed notes before building.",
+      );
+    }
+    return;
+  }
+  if (args.type === "doc") {
+    return;
+  }
   const policy = sheetReferencePolicy(args.type);
   if (!policy) {
     return;

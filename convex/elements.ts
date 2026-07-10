@@ -15,6 +15,14 @@ const elementType = v.union(
   v.literal("prop"),
   v.literal("location"),
   v.literal("doc"),
+  v.literal("style_sheet"),
+);
+
+const elementRenderMode = v.union(
+  v.literal("photoreal"),
+  v.literal("illustrated_2d"),
+  v.literal("illustrated_3d"),
+  v.literal("mixed"),
 );
 
 const elementSourceMode = v.union(v.literal("photographic"), v.literal("designed"));
@@ -31,6 +39,8 @@ const elementReturn = v.object({
   sourceAssetIds: v.array(v.id("assets")),
   referenceAssetIds: v.optional(v.array(v.id("assets"))),
   sheetAssetId: v.optional(v.id("assets")),
+  styleRules: v.optional(v.string()),
+  renderMode: v.optional(elementRenderMode),
   builtAt: v.optional(v.number()),
   sourceDocumentId: v.optional(v.id("documents")),
   deletedAt: v.optional(v.number()),
@@ -62,7 +72,7 @@ export const list = authedQuery({
 
 async function listByType(
   ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
-  type: "character" | "prop" | "location" | "doc",
+  type: "character" | "prop" | "location" | "doc" | "style_sheet",
 ) {
   return await ctx.db
     .query("elements")
@@ -84,6 +94,15 @@ export const get = authedQuery({
   },
 });
 
+export const listStyleSheets = authedQuery({
+  args: {},
+  returns: v.array(elementReturn),
+  handler: async (ctx) => {
+    const sheets = await listByType(ctx, "style_sheet");
+    return sheets.filter((sheet) => !sheet.deletedAt);
+  },
+});
+
 export const create = authedMutation({
   args: {
     type: elementType,
@@ -94,6 +113,8 @@ export const create = authedMutation({
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
     sourceMode: v.optional(elementSourceMode),
+    styleRules: v.optional(v.string()),
+    renderMode: v.optional(elementRenderMode),
   },
   returns: v.id("elements"),
   handler: async (ctx, args) => {
@@ -125,6 +146,8 @@ export const create = authedMutation({
       sourceAssetIds: referenceAssetIds,
       referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
+      styleRules: args.type === "style_sheet" ? args.styleRules : undefined,
+      renderMode: args.type === "style_sheet" ? args.renderMode : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -140,6 +163,8 @@ export const update = authedMutation({
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
+    styleRules: v.optional(v.string()),
+    renderMode: v.optional(elementRenderMode),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -180,6 +205,8 @@ export const update = authedMutation({
       ...(args.sourceDocumentId !== undefined
         ? { sourceDocumentId: args.sourceDocumentId }
         : {}),
+      ...(args.styleRules !== undefined ? { styleRules: args.styleRules } : {}),
+      ...(args.renderMode !== undefined ? { renderMode: args.renderMode } : {}),
       updatedAt: Date.now(),
     });
     return null;
