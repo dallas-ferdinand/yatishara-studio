@@ -188,9 +188,10 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + 'var u=\'url("\'+wp+\'")\';'
     + 'root.style.setProperty("--studio-active-bg",u);'
     + 'root.style.setProperty("--studio-loaded-bg",u);'
+    // CSS background-image uses no-cors; do not set crossOrigin or the
+    // preload is discarded (credentials mode mismatch).
     + 'var pl=document.createElement("link");'
     + 'pl.rel="preload";pl.as="image";pl.type="image/webp";pl.href=wp;'
-    + "if(STUDIO_BG_CDN)pl.crossOrigin=\"anonymous\";"
     + "document.head.appendChild(pl);"
     + "}"
   );
