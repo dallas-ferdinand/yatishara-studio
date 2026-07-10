@@ -8,26 +8,37 @@ Production is deployed from the dedicated GitHub repository through Coolify on t
 - Coolify app UUID: `y2po9nswpdem975f1zo47u19`
 - Source repository: `https://github.com/dallas-ferdinand/yatishara-studio`
 - Branch: `main`
-- Build pack: Dockerfile
+- Build pack: dockerimage (GHCR pull)
+- Image: `ghcr.io/dallas-ferdinand/yatishara-studio`
 - Runtime port: `3000`
 
 ## Production Flow
 
 1. Verify repo changes locally.
-2. Push `main` to the dedicated GitHub repository.
-3. Confirm Coolify env vars match `docs/coolify-env.example` and secrets are present.
-4. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.
-5. Watch build logs for `npm run build` and container start.
-6. Smoke `https://studio.yatishara.com`.
+2. Push `main` (or run **Docker publish** workflow). GitHub Actions builds the image on GitHub runners.
+3. Image publishes to `ghcr.io/dallas-ferdinand/yatishara-studio` (`:latest` + commit sha).
+4. Workflow patches Coolify’s image tag and triggers deploy — Coolify **pulls only** (no `npm`/`next` on the VPS).
+5. Smoke `https://studio.yatishara.com`.
+
+Manual Coolify pull deploy (after an image exists):
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $COOLIFY_ACCESS_TOKEN" \
+  "https://coolify.yatishara.com/api/v1/deploy?uuid=y2po9nswpdem975f1zo47u19&force=false"
+```
 
 Do not run production deploy commands from local development unless intentionally releasing.
 
 ## Coolify/VPS Notes
 
-- `Dockerfile` uses Node 22 Alpine, `npm ci`, `npm run build`, and Next standalone output.
+- Build pack: **dockerimage** (prebuilt GHCR image). Not dockerfile-on-VPS.
+- Image: `ghcr.io/dallas-ferdinand/yatishara-studio` (public package).
+- `Dockerfile` uses Node 22 Alpine, `npm ci`, `npm run build`, and Next standalone output — built in GitHub Actions.
+- `NEXT_PUBLIC_*` values are build-args in Actions (repo variables). Runtime secrets stay in Coolify.
 - `next.config.ts` sets `output: "standalone"` for the production image.
 - App secrets belong in Coolify or the Convex deployment, not in committed files.
 - Convex Auth server env must also be set on the Studio Convex deployment when used by Convex functions.
+- Keep `yatishara-studio-preview` **stopped** during deploys so the VPS is not CPU-starved.
 
 ## Production Env Groups
 

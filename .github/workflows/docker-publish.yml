@@ -1,0 +1,119 @@
+# Build Studio on GitHub runners → ghcr.io, then Coolify only pulls (no VPS npm/next build).
+#
+# Image: ghcr.io/dallas-ferdinand/yatishara-studio
+# Coolify app UUID: y2po9nswpdem975f1zo47u19 (dockerimage pack)
+#
+name: Docker publish
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "convex/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.*"
+      - "tsconfig.json"
+      - "Dockerfile"
+      - ".github/workflows/docker-publish.yml"
+      - "docs/coolify-env.example"
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: studio-docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/yatishara-studio
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      image_tag: ${{ steps.meta.outputs.sha_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image tags
+        id: meta
+        run: |
+          sha_short="${GITHUB_SHA:0:12}"
+          echo "sha_tag=${sha_short}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.sha_tag }}
+          build-args: |
+            NEXT_PUBLIC_CONVEX_URL=${{ vars.NEXT_PUBLIC_CONVEX_URL }}
+            NEXT_PUBLIC_CONVEX_SITE_URL=${{ vars.NEXT_PUBLIC_CONVEX_SITE_URL }}
+            NEXT_PUBLIC_STUDIO_BG_CDN=${{ vars.NEXT_PUBLIC_STUDIO_BG_CDN }}
+            NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY=${{ vars.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY }}
+            NEXT_PUBLIC_DESK_BUILD=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Make GHCR package public
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method PATCH "/user/packages/container/yatishara-studio" \
+            -f visibility=public \
+            || gh api --method PATCH "/orgs/${{ github.repository_owner }}/packages/container/yatishara-studio" \
+            -f visibility=public \
+            || echo "Package visibility update skipped (may already be public or first push)."
+
+  deploy-coolify:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Coolify pull-only deploy
+        env:
+          COOLIFY_ACCESS_TOKEN: ${{ secrets.COOLIFY_ACCESS_TOKEN }}
+          COOLIFY_API_URL: ${{ vars.COOLIFY_API_URL }}
+          COOLIFY_APP_UUID: ${{ vars.COOLIFY_APP_UUID }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${COOLIFY_ACCESS_TOKEN:-}" ]]; then
+            echo "COOLIFY_ACCESS_TOKEN secret missing — image pushed, deploy manually."
+            exit 0
+          fi
+          API="${COOLIFY_API_URL:-https://coolify.yatishara.com}"
+          UUID="${COOLIFY_APP_UUID:-y2po9nswpdem975f1zo47u19}"
+
+          # Point Coolify at this commit tag, then deploy (pull only for dockerimage pack).
+          curl -fsS -X PATCH \
+            -H "Authorization: Bearer ${COOLIFY_ACCESS_TOKEN}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json" \
+            -d "{\"docker_registry_image_tag\":\"${IMAGE_TAG}\"}" \
+            "${API}/api/v1/applications/${UUID}"
+
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${COOLIFY_ACCESS_TOKEN}" \
+            -H "Accept: application/json" \
+            "${API}/api/v1/deploy?uuid=${UUID}&force=false"
+          echo "Coolify deploy queued for ${UUID} tag=${IMAGE_TAG}"
