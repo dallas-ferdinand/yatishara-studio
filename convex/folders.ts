@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { resolveElementAssets } from "./lib/elementAssetModel";
-import { signBunnyCdnUrl } from "./lib/bunny";
+import { assetThumbnailPath, signBunnyCdnUrl } from "./lib/bunny";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -30,7 +30,13 @@ const folderPeekItem = v.object({
   thumbnailUrl: v.optional(v.string()),
   label: v.string(),
   elementType: v.optional(
-    v.union(v.literal("character"), v.literal("prop"), v.literal("location"), v.literal("doc")),
+    v.union(
+      v.literal("character"),
+      v.literal("prop"),
+      v.literal("location"),
+      v.literal("doc"),
+      v.literal("style_sheet"),
+    ),
   ),
   icon: v.optional(v.string()),
 });
@@ -49,8 +55,10 @@ type PeekCandidate = {
   priority: number;
   updatedAt: number;
   thumbnailUrl?: string;
+  /** Sign only after the candidate wins a peek slot. */
+  thumbnailAsset?: Doc<"assets">;
   label: string;
-  elementType?: "character" | "prop" | "location" | "doc";
+  elementType?: "character" | "prop" | "location" | "doc" | "style_sheet";
   icon?: string;
 };
 
@@ -66,9 +74,7 @@ async function signedAssetThumbnail(
   asset: Doc<"assets">,
   expiresUnix: number | undefined,
 ): Promise<string | undefined> {
-  const path =
-    asset.thumbnailPath ??
-    (asset.kind === "image" && asset.bunnyPath ? asset.bunnyPath : undefined);
+  const path = assetThumbnailPath(asset);
   if (!path || expiresUnix === undefined) {
     return undefined;
   }
@@ -120,7 +126,6 @@ async function collectDirectFolderPeekCandidates(
   ctx: QueryCtx,
   ownerId: Id<"users">,
   folderId: Id<"folders">,
-  expiresUnix: number | undefined,
 ): Promise<PeekCandidate[]> {
   const candidates: PeekCandidate[] = [];
 
@@ -131,27 +136,25 @@ async function collectDirectFolderPeekCandidates(
       .collect()
   ).filter((asset) => !asset.deletedAt);
 
-  const assetCandidates = await Promise.all(
-    assets.map(async (asset): Promise<PeekCandidate> => {
-      if (asset.kind === "image" || asset.kind === "video") {
-        return {
-          kind: asset.kind,
-          priority: asset.kind === "image" ? 100 : 90,
-          updatedAt: asset.updatedAt,
-          thumbnailUrl: await signedAssetThumbnail(asset, expiresUnix),
-          label: asset.name,
-        };
-      }
-      return {
-        kind: "file",
-        priority: asset.kind === "audio" ? 40 : 35,
+  for (const asset of assets) {
+    if (asset.kind === "image" || asset.kind === "video") {
+      candidates.push({
+        kind: asset.kind,
+        priority: asset.kind === "image" ? 100 : 90,
         updatedAt: asset.updatedAt,
+        thumbnailAsset: assetThumbnailPath(asset) ? asset : undefined,
         label: asset.name,
-        icon: asset.kind === "audio" ? "music" : "file",
-      };
-    }),
-  );
-  candidates.push(...assetCandidates);
+      });
+      continue;
+    }
+    candidates.push({
+      kind: "file",
+      priority: asset.kind === "audio" ? 40 : 35,
+      updatedAt: asset.updatedAt,
+      label: asset.name,
+      icon: asset.kind === "audio" ? "music" : "file",
+    });
+  }
 
   const documents = (
     await ctx.db
@@ -194,36 +197,46 @@ async function collectDirectFolderPeekCandidates(
       .collect()
   ).filter((element) => !element.deletedAt);
 
-  const elementCandidates = await Promise.all(
-    elements.map(async (element): Promise<PeekCandidate> => {
-      const resolved = await resolveElementAssets(ctx, element);
-      let thumbnailUrl: string | undefined;
-      if (resolved.sheetAssetId) {
-        const sheet = await ctx.db.get("assets", resolved.sheetAssetId);
-        if (sheet) {
-          thumbnailUrl = await signedAssetThumbnail(sheet, expiresUnix);
-        }
+  for (const element of elements) {
+    const resolved = await resolveElementAssets(ctx, element);
+    let thumbnailAsset: Doc<"assets"> | undefined;
+    if (resolved.sheetAssetId) {
+      const sheet = await ctx.db.get("assets", resolved.sheetAssetId);
+      if (sheet && assetThumbnailPath(sheet)) {
+        thumbnailAsset = sheet;
       }
-      return {
-        kind: "element",
-        priority: thumbnailUrl ? 85 : 55,
-        updatedAt: element.updatedAt,
-        thumbnailUrl,
-        label: element.name,
-        elementType: element.type,
-      };
-    }),
-  );
-  candidates.push(...elementCandidates);
+    }
+    candidates.push({
+      kind: "element",
+      priority: thumbnailAsset ? 85 : 55,
+      updatedAt: element.updatedAt,
+      thumbnailAsset,
+      label: element.name,
+      elementType: element.type,
+    });
+  }
 
   return candidates;
 }
 
-function peekCandidatesToItems(candidates: PeekCandidate[]): PeekItemOutput[] {
-  return candidates
+async function peekCandidatesToItems(
+  candidates: PeekCandidate[],
+  expiresUnix: number | undefined,
+): Promise<PeekItemOutput[]> {
+  const winners = [...candidates]
     .sort((a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt)
-    .slice(0, PEEK_LIMIT)
-    .map(candidateToPeekItem);
+    .slice(0, PEEK_LIMIT);
+
+  return await Promise.all(
+    winners.map(async (candidate) => {
+      const thumbnailUrl =
+        candidate.thumbnailUrl ??
+        (candidate.thumbnailAsset
+          ? await signedAssetThumbnail(candidate.thumbnailAsset, expiresUnix)
+          : undefined);
+      return candidateToPeekItem({ ...candidate, thumbnailUrl });
+    }),
+  );
 }
 
 /** Breadth-first peek: surfaces nested media even when direct children are subfolders only. */
@@ -242,12 +255,14 @@ async function collectFolderPeekItems(
     if (visited.has(currentId)) continue;
     visited.add(currentId);
 
-    candidates.push(
-      ...(await collectDirectFolderPeekCandidates(ctx, ownerId, currentId, expiresUnix)),
-    );
+    candidates.push(...(await collectDirectFolderPeekCandidates(ctx, ownerId, currentId)));
 
-    if (candidates.length >= PEEK_LIMIT) {
-      return peekCandidatesToItems(candidates);
+    // Enough high-priority media to fill peeks — stop walking.
+    const ranked = [...candidates].sort(
+      (a, b) => b.priority - a.priority || b.updatedAt - a.updatedAt,
+    );
+    if (ranked.filter((item) => item.priority >= 85).length >= PEEK_LIMIT) {
+      return await peekCandidatesToItems(candidates, expiresUnix);
     }
 
     for (const child of await listChildFolders(ctx, ownerId, currentId)) {
@@ -256,7 +271,7 @@ async function collectFolderPeekItems(
   }
 
   if (candidates.length > 0) {
-    return peekCandidatesToItems(candidates);
+    return await peekCandidatesToItems(candidates, expiresUnix);
   }
 
   const childFolders = await listChildFolders(ctx, ownerId, folderId);

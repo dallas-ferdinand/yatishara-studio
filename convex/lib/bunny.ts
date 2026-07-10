@@ -6,7 +6,10 @@ export type BunnyConfig = {
   cdnTokenKey: string;
 };
 
+let cachedConfig: BunnyConfig | null = null;
+
 export function getBunnyConfig(): BunnyConfig {
+  if (cachedConfig) return cachedConfig;
   const zone = process.env.BUNNY_STORAGE_ZONE;
   const accessKey = process.env.BUNNY_STORAGE_ACCESS_KEY;
   const region = process.env.BUNNY_STORAGE_REGION;
@@ -16,7 +19,8 @@ export function getBunnyConfig(): BunnyConfig {
     throw new Error("Bunny storage/CDN env not configured");
   }
   const storageHost = region ? `${region}.storage.bunnycdn.com` : "storage.bunnycdn.com";
-  return { zone, accessKey, storageHost, cdnHostname, cdnTokenKey };
+  cachedConfig = { zone, accessKey, storageHost, cdnHostname, cdnTokenKey };
+  return cachedConfig;
 }
 
 export function buildAssetPath(args: {
@@ -85,6 +89,17 @@ function copyUint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
+/** Thumbnail path used for grid/peek previews (not the full media URL). */
+export function assetThumbnailPath(asset: {
+  kind?: string;
+  bunnyPath?: string;
+  thumbnailPath?: string;
+}): string | undefined {
+  if (asset.thumbnailPath) return asset.thumbnailPath;
+  if (asset.kind === "image" && asset.bunnyPath) return asset.bunnyPath;
+  return undefined;
+}
+
 export async function signBunnyCdnUrl(
   path: string,
   expiresUnix: number,
@@ -99,6 +114,18 @@ export async function signBunnyCdnUrl(
   const token = base64UrlEncode(new Uint8Array(digest));
   const host = config.cdnHostname.replace(/\/$/, "");
   return `https://${host}${tokenPath}?token=${token}&expires=${expiresUnix}`;
+}
+
+/** Sign many paths once — list/peek queries must stay under Convex's 1s limit. */
+export async function signBunnyCdnUrls(
+  paths: Array<string | undefined | null>,
+  expiresUnix: number,
+): Promise<Map<string, string>> {
+  const unique = [...new Set(paths.filter((path): path is string => Boolean(path)))];
+  const entries = await Promise.all(
+    unique.map(async (path) => [path, await signBunnyCdnUrl(path, expiresUnix)] as const),
+  );
+  return new Map(entries);
 }
 
 function normalizeStoragePath(path: string): string {

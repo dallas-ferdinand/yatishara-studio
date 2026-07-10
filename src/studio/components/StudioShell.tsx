@@ -863,7 +863,7 @@ export function StudioShell() {
     () =>
       (displayCurrentEntries.entries ?? [])
         .filter((entry) => entry.type === "dir" && entry.studioId && entry.studioId !== activeFolder?._id)
-        .slice(0, 24)
+        .slice(0, 8)
         .map((entry) => entry.studioId),
     [activeFolder?._id, displayCurrentEntries.entries],
   );
@@ -875,9 +875,10 @@ export function StudioShell() {
         query: api.folders.list,
         args: { parentId: folderId },
       };
+      // Prefetch structure only — skip Bunny signing (active folder signs thumbs).
       queries[`assets:${folderId}`] = {
         query: api.assets.listByFolder,
-        args: { folderId, expiresUnix: assetUrlExpiresUnix },
+        args: { folderId },
       };
       queries[`documents:${folderId}`] = {
         query: api.documents.listByFolder,

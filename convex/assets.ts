@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { buildAssetPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
+import {
+  assetThumbnailPath,
+  buildAssetPath,
+  getStorageUploadCredentials,
+  signBunnyCdnUrl,
+  signBunnyCdnUrls,
+} from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const assetKind = v.union(
@@ -31,6 +37,25 @@ const assetReturn = v.object({
   signedThumbnailUrl: v.optional(v.string()),
 });
 
+/** List queries only sign thumbnails — full read URLs are lazy via signedReadUrl. */
+async function withSignedThumbnails(
+  assets: Doc<"assets">[],
+  expiresUnix: number | undefined,
+) {
+  if (expiresUnix === undefined) return assets;
+  const signed = await signBunnyCdnUrls(
+    assets.map((asset) => assetThumbnailPath(asset)),
+    expiresUnix,
+  );
+  return assets.map((asset) => {
+    const thumbPath = assetThumbnailPath(asset);
+    return {
+      ...asset,
+      signedThumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
+    };
+  });
+}
+
 export const listByFolder = authedQuery({
   args: {
     folderId: v.id("folders"),
@@ -45,23 +70,7 @@ export const listByFolder = authedQuery({
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
     const visibleAssets = args.includeDeleted ? assets : assets.filter((asset) => !asset.deletedAt);
-    if (args.expiresUnix === undefined) {
-      return visibleAssets;
-    }
-    const expiresUnix = args.expiresUnix;
-    return await Promise.all(
-      visibleAssets.map(async (asset) => ({
-        ...asset,
-        signedReadUrl: asset.bunnyPath
-          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-          : undefined,
-        signedThumbnailUrl: asset.thumbnailPath
-          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
-          : asset.bunnyPath && asset.kind === "image"
-            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-            : undefined,
-      })),
-    );
+    return await withSignedThumbnails(visibleAssets, args.expiresUnix);
   },
 });
 
@@ -143,30 +152,15 @@ export const listByIds = authedQuery({
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
     const uniqueIds = [...new Set(args.assetIds)];
-    const expiresUnix = args.expiresUnix;
-    const results = [];
+    const results: Doc<"assets">[] = [];
     for (const assetId of uniqueIds) {
       const asset = await ctx.db.get("assets", assetId);
       if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) {
         continue;
       }
-      if (expiresUnix === undefined) {
-        results.push(asset);
-        continue;
-      }
-      results.push({
-        ...asset,
-        signedReadUrl: asset.bunnyPath
-          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-          : undefined,
-        signedThumbnailUrl: asset.thumbnailPath
-          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
-          : asset.bunnyPath && asset.kind === "image"
-            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-            : undefined,
-      });
+      results.push(asset);
     }
-    return results;
+    return await withSignedThumbnails(results, args.expiresUnix);
   },
 });
 
@@ -257,23 +251,7 @@ export const listTrash = authedQuery({
       .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
       .collect();
     const visibleAssets = assets.filter((asset) => asset.deletedAt !== undefined);
-    if (args.expiresUnix === undefined) {
-      return visibleAssets;
-    }
-    const expiresUnix = args.expiresUnix;
-    return await Promise.all(
-      visibleAssets.map(async (asset) => ({
-        ...asset,
-        signedReadUrl: asset.bunnyPath
-          ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-          : undefined,
-        signedThumbnailUrl: asset.thumbnailPath
-          ? await signBunnyCdnUrl(asset.thumbnailPath, expiresUnix)
-          : asset.bunnyPath && asset.kind === "image"
-            ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix)
-            : undefined,
-      })),
-    );
+    return await withSignedThumbnails(visibleAssets, args.expiresUnix);
   },
 });
 
