@@ -6333,20 +6333,22 @@ export function StudioShell() {
           display: flex;
           align-self: stretch;
           align-items: stretch;
-          flex: 0 0 auto;
-          width: auto;
+          flex: 0 0 var(--studio-generate-column-width);
+          width: var(--studio-generate-column-width);
+          min-width: var(--studio-generate-column-width);
+          max-width: var(--studio-generate-column-width);
           min-height: 0;
         }
         .studio-generate-btn {
           display: inline-flex;
           height: 100%;
-          width: 72px;
-          min-width: 64px;
-          max-width: 80px;
+          width: 100%;
+          min-width: 0;
+          max-width: none;
           min-height: 0;
           max-height: 100%;
           aspect-ratio: auto;
-          flex: 0 0 auto;
+          flex: 1 1 auto;
           flex-direction: column;
           align-items: center;
           justify-content: center;
