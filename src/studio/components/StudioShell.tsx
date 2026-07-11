@@ -3725,16 +3725,16 @@ export function StudioShell() {
           background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
         }
         .studio-settings-payment-lead {
-          margin: 0 0 8px;
+          margin: 0;
           color: var(--color-cursor-muted);
           font-size: 12px;
+          line-height: 1.4;
         }
         .studio-settings-payment-head {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
-          margin-bottom: 10px;
         }
         .studio-settings-payment-head h4,
         .studio-settings-payment-head p {
@@ -3748,10 +3748,109 @@ export function StudioShell() {
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
+        .studio-settings-workspace .studio-settings-payment-card {
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
+            0 10px 28px color-mix(in srgb, #000 18%, transparent);
+          display: grid;
+          gap: 0;
+          padding: 0 !important;
+        }
+        .studio-settings-payment-hero {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent);
+          background:
+            radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 46%),
+            color-mix(in srgb, var(--mos-bg) 28%, transparent);
+          padding: 18px 18px 16px;
+        }
+        .studio-settings-payment-hero-copy {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-settings-payment-hero-copy span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-settings-payment-hero-copy strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 34px;
+          font-weight: 750;
+          line-height: 1.02;
+          letter-spacing: -0.02em;
+          font-variant-numeric: tabular-nums;
+        }
+        .studio-settings-payment-hero-copy small {
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 500;
+        }
+        .studio-settings-payment-back {
+          flex: 0 0 auto;
+          min-height: 28px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          padding: 0 12px;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 11px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+        .studio-settings-payment-back:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-settings-payment-body {
+          display: grid;
+          gap: 14px;
+          padding: 16px 18px 18px;
+        }
+        .studio-settings-payment-step {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-settings-payment-step-label {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--color-cursor-text-bright);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-settings-payment-step-num {
+          display: inline-grid;
+          place-items: center;
+          width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          color: var(--color-cursor-text-bright);
+          font-size: 10px;
+          font-weight: 800;
+        }
+        .studio-settings-payment-amount-note {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
         .studio-settings-bank-list,
         .studio-settings-feed {
           display: grid;
-          gap: 6px;
+          gap: 8px;
         }
         .studio-bank-card-button {
           width: 100%;
@@ -3769,24 +3868,52 @@ export function StudioShell() {
           margin: 0;
           color: var(--cursor-accent);
           font-size: 12px;
-          font-weight: 700;
+          font-weight: 650;
         }
-        .studio-settings-payment-card {
-          display: grid;
-          gap: 12px;
+        .studio-settings-payment-status.is-error {
+          color: #ff8f8f;
         }
         .studio-bank-card.is-selected {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-settings-payment-card .studio-bank-card {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-bg) 34%, transparent);
+          padding: 12px;
+          gap: 8px;
+        }
+        .studio-settings-payment-card .studio-bank-card-title {
+          margin: 0 0 2px;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .studio-settings-payment-card .studio-bank-row {
+          background: transparent;
+          border-radius: 0;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent);
+          padding: 8px 0;
+        }
+        .studio-settings-payment-card .studio-bank-row:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+        .studio-settings-payment-card .studio-bank-row strong {
+          color: var(--color-cursor-text-bright);
+          font-weight: 650;
         }
         .studio-settings-receipt-dropzone {
           display: grid;
           justify-items: center;
           gap: 6px;
           width: 100%;
-          min-height: 148px;
+          min-height: 132px;
           border: 1px dashed color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          border-radius: 16px;
+          border-radius: 14px;
           background:
             radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 10%, transparent), transparent 58%),
             color-mix(in srgb, var(--mos-bg) 36%, transparent);
@@ -3810,7 +3937,10 @@ export function StudioShell() {
         }
         .studio-settings-receipt-submit {
           width: 100%;
-          min-height: 40px;
+          min-height: 44px;
+          border-radius: 12px !important;
+          font-size: 13px !important;
+          font-weight: 700 !important;
         }
         .studio-settings-receipt-submit:disabled {
           opacity: 0.45;
@@ -13119,7 +13249,7 @@ function SettingsWorkspacePane({
         reference: isSubscription ? `Subscription: ${selectedSubscriptionPlan.name}` : `Top up: ${selectedPlan.name}`,
       });
       setPendingReceiptPaymentId(paymentId);
-      setPaymentStatus("Transfer the amount below, then upload your receipt.");
+      setPaymentStatus("");
     } catch (error) {
       setPaymentStatus(error instanceof Error ? error.message : "Payment request failed.");
     }
@@ -13127,7 +13257,7 @@ function SettingsWorkspacePane({
   async function handleReceiptUpload(file) {
     if (!pendingReceiptPaymentId || !file) return;
     setReceiptUploading(true);
-    setPaymentStatus("Uploading receipt...");
+    setPaymentStatus("Making payment...");
     try {
       const upload = await reserveReceiptUpload({
         paymentId: pendingReceiptPaymentId,
@@ -13401,70 +13531,97 @@ function SettingsWorkspacePane({
             ) : null}
             {isPaymentStep && !isThankYouStep ? (
               <section className="cursor-settings-section studio-settings-simple-card studio-settings-payment-card">
-                <div className="studio-settings-payment-head">
-                  <div>
-                    <h4>{creditMode === "subscription" ? selectedSubscriptionPlan?.name : selectedPlan?.name}</h4>
-                    <p>
+                <div className="studio-settings-payment-hero">
+                  <div className="studio-settings-payment-hero-copy">
+                    <span>Amount due</span>
+                    <strong>
                       {creditMode === "subscription"
-                        ? `${selectedSubscriptionPlan?.price}/mo · ${selectedSubscriptionPlan?.credits} credits/mo`
-                        : `${selectedPlan?.price} · ${selectedPlan?.credits} credits`}
-                    </p>
+                        ? selectedSubscriptionPlan?.price
+                        : selectedPlan?.price}
+                    </strong>
+                    <small>
+                      {creditMode === "subscription"
+                        ? `${selectedSubscriptionPlan?.name} · ${Number(selectedSubscriptionPlan?.credits ?? 0).toLocaleString()} credits/mo`
+                        : `${selectedPlan?.name} · ${Number(selectedPlan?.credits ?? 0).toLocaleString()} credits`}
+                    </small>
                   </div>
-                  <button type="button" className="studio-settings-plan-choice" onClick={resetPaymentDraft}>
+                  <button type="button" className="studio-settings-payment-back" onClick={resetPaymentDraft}>
                     Back
                   </button>
                 </div>
-                <p className="studio-settings-payment-lead">
-                  Send a bank transfer for the amount below, then upload your receipt to finish.
-                </p>
-                <div className="studio-settings-bank-list">
-                  {(bankAccounts ?? []).map((bank) => (
-                    <div
-                      key={bank._id}
-                      className={`studio-bank-card${selectedBankId === bank._id ? " is-selected" : ""}`}
-                    >
-                      <p className="studio-bank-card-title">{bank.label}</p>
-                      <BankLine label="Bank" value={bank.bankName} />
-                      <BankLine label="Name" value={bank.accountName} />
-                      <BankLine label="Number" value={bank.accountNumber} />
-                      <BankLine label="Type" value={bank.accountType} />
+                <div className="studio-settings-payment-body">
+                  <div className="studio-settings-payment-step">
+                    <div className="studio-settings-payment-step-label">
+                      <span className="studio-settings-payment-step-num">1</span>
+                      Transfer to this account
                     </div>
-                  ))}
-                  {!bankAccounts?.length ? (
-                    <p className="studio-settings-empty">Bank transfer is not configured yet. Contact support.</p>
+                    <p className="studio-settings-payment-amount-note">
+                      Send exactly the amount above, then upload your receipt.
+                    </p>
+                    <div className="studio-settings-bank-list">
+                      {(bankAccounts ?? []).map((bank) => (
+                        <div
+                          key={bank._id}
+                          className={`studio-bank-card${selectedBankId === bank._id ? " is-selected" : ""}`}
+                        >
+                          <p className="studio-bank-card-title">{bank.label}</p>
+                          <BankLine label="Bank" value={bank.bankName} />
+                          <BankLine label="Name" value={bank.accountName} />
+                          <BankLine label="Number" value={bank.accountNumber} />
+                          <BankLine label="Type" value={bank.accountType} />
+                        </div>
+                      ))}
+                      {!bankAccounts?.length ? (
+                        <p className="studio-settings-empty">Bank transfer is not configured yet. Contact support.</p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="studio-settings-payment-step">
+                    <div className="studio-settings-payment-step-label">
+                      <span className="studio-settings-payment-step-num">2</span>
+                      Upload your receipt
+                    </div>
+                    <input
+                      ref={receiptInputRef}
+                      className="hidden"
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={(event) => {
+                        const file = event.currentTarget.files?.[0] ?? null;
+                        event.currentTarget.value = "";
+                        setReceiptDraftFile(file);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={`studio-settings-receipt-dropzone${receiptDraftFile ? " has-file" : ""}`}
+                      onClick={() => receiptInputRef.current?.click()}
+                    >
+                      <Upload className="h-5 w-5" aria-hidden="true" />
+                      <strong>{receiptDraftFile ? receiptDraftFile.name : "Add payment receipt"}</strong>
+                      <span>{receiptDraftFile ? "Tap to replace" : "PNG, JPG, or PDF"}</span>
+                    </button>
+                  </div>
+                  {paymentStatus ? (
+                    <p
+                      className={`studio-settings-payment-status${
+                        /fail|error/i.test(paymentStatus) ? " is-error" : ""
+                      }`}
+                    >
+                      {paymentStatus}
+                    </p>
                   ) : null}
+                  <button
+                    type="button"
+                    className="studio-settings-receipt-submit cursor-settings-action"
+                    disabled={!receiptDraftFile || !pendingReceiptPaymentId || receiptUploading}
+                    onClick={() => {
+                      if (receiptDraftFile) void handleReceiptUpload(receiptDraftFile);
+                    }}
+                  >
+                    {receiptUploading ? "Making payment..." : "Make payment"}
+                  </button>
                 </div>
-                <input
-                  ref={receiptInputRef}
-                  className="hidden"
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0] ?? null;
-                    event.currentTarget.value = "";
-                    setReceiptDraftFile(file);
-                  }}
-                />
-                <button
-                  type="button"
-                  className={`studio-settings-receipt-dropzone${receiptDraftFile ? " has-file" : ""}`}
-                  onClick={() => receiptInputRef.current?.click()}
-                >
-                  <Upload className="h-5 w-5" aria-hidden="true" />
-                  <strong>{receiptDraftFile ? receiptDraftFile.name : "Upload payment receipt"}</strong>
-                  <span>{receiptDraftFile ? "Tap to replace receipt" : "PNG, JPG, or PDF after you transfer"}</span>
-                </button>
-                {paymentStatus ? <p className="studio-settings-payment-status">{paymentStatus}</p> : null}
-                <button
-                  type="button"
-                  className="studio-settings-receipt-submit cursor-settings-action"
-                  disabled={!receiptDraftFile || !pendingReceiptPaymentId || receiptUploading}
-                  onClick={() => {
-                    if (receiptDraftFile) void handleReceiptUpload(receiptDraftFile);
-                  }}
-                >
-                  {receiptUploading ? "Submitting receipt..." : "Submit receipt"}
-                </button>
               </section>
             ) : null}
           </div>
