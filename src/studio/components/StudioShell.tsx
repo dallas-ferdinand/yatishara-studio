@@ -4005,6 +4005,122 @@ export function StudioShell() {
           color: var(--color-cursor-text-bright);
           font-size: 13px;
         }
+        .studio-settings-workspace .studio-settings-activity-card {
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
+            0 10px 28px color-mix(in srgb, #000 18%, transparent);
+          padding: 0 !important;
+        }
+        .studio-settings-activity-head {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 12px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
+          padding: 14px 16px 12px;
+        }
+        .studio-settings-activity-head strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 750;
+        }
+        .studio-settings-activity-head span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 500;
+        }
+        .studio-settings-activity-list {
+          display: grid;
+          gap: 0;
+          padding: 4px 0;
+        }
+        .studio-settings-activity-row {
+          display: grid;
+          grid-template-columns: 10px minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+          padding: 12px 16px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 36%, transparent);
+        }
+        .studio-settings-activity-row:last-child {
+          border-bottom: 0;
+        }
+        .studio-settings-activity-tone {
+          width: 8px;
+          height: 8px;
+          margin-top: 5px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-muted) 55%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
+        }
+        .studio-settings-activity-row.is-success .studio-settings-activity-tone {
+          background: color-mix(in srgb, #5ddea8 88%, white);
+          box-shadow: 0 0 0 3px color-mix(in srgb, #5ddea8 16%, transparent);
+        }
+        .studio-settings-activity-row.is-danger .studio-settings-activity-tone {
+          background: color-mix(in srgb, #ff8f8f 88%, white);
+          box-shadow: 0 0 0 3px color-mix(in srgb, #ff8f8f 16%, transparent);
+        }
+        .studio-settings-activity-row.is-payment .studio-settings-activity-tone {
+          background: color-mix(in srgb, var(--cursor-accent) 82%, white);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-settings-activity-copy {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-settings-activity-title-row {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .studio-settings-activity-title-row strong {
+          overflow: hidden;
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+          line-height: 1.25;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-settings-activity-title-row time {
+          flex: 0 0 auto;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 500;
+          white-space: nowrap;
+        }
+        .studio-settings-activity-copy p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-settings-activity-count {
+          display: inline-flex;
+          align-items: center;
+          margin-left: 6px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          padding: 1px 7px;
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 700;
+          vertical-align: middle;
+        }
+        .studio-settings-activity-empty {
+          margin: 0;
+          padding: 28px 18px;
+          color: var(--color-cursor-muted);
+          font-size: 13px;
+          text-align: center;
+        }
         .studio-polish .cursor-settings-body > .studio-settings-menu {
           padding: 0;
           background: transparent;
@@ -13628,18 +13744,8 @@ function SettingsWorkspacePane({
           ) : null}
 
         {section === "activity" ? (
-          <section className="cursor-settings-section studio-settings-simple-card">
-            <div className="studio-settings-feed">
-              {(notifications ?? []).slice(0, 8).map((item) => (
-                <p key={item._id}><strong>{item.title}</strong><span>{item.body}</span></p>
-              ))}
-              {(payments ?? []).slice(0, 8).map((item) => (
-                <p key={item._id}><strong>Payment</strong><span>{humanizePaymentStatus(item.status)} · ${(item.amountCents / 100).toFixed(2)}</span></p>
-                ))}
-                {!notifications?.length && !payments?.length ? <p>No recent billing or notification activity.</p> : null}
-              </div>
-            </section>
-          ) : null}
+          <StudioActivityFeed notifications={notifications} payments={payments} />
+        ) : null}
 
         {section === "general" ? (
           <>
@@ -13982,6 +14088,105 @@ function composerCreditCost({
 function formatDate(value) {
   if (!value) return "Not scheduled";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function formatActivityTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  if (diffMs >= 0 && diffMs < dayMs) {
+    return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+  }
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+function activityToneForKind(kind, status) {
+  if (kind === "generation_completed" || status === "payment_completed" || status === "completed") return "success";
+  if (kind === "generation_failed" || status === "rejected" || status === "failed") return "danger";
+  if (kind === "payment_status" || kind === "payment") return "payment";
+  return "neutral";
+}
+
+function buildStudioActivityItems(notifications = [], payments = []) {
+  const items = [
+    ...(notifications ?? []).map((item) => ({
+      id: `n:${item._id}`,
+      kind: item.kind ?? "notification",
+      title: item.title,
+      body: item.body,
+      createdAt: item.createdAt ?? item._creationTime,
+      tone: activityToneForKind(item.kind),
+    })),
+    ...(payments ?? []).map((item) => ({
+      id: `p:${item._id}`,
+      kind: "payment",
+      title: "Payment",
+      body: `${humanizePaymentStatus(item.status)} · ${formatMoney(item.amountCents)}`,
+      createdAt: item.createdAt ?? item._creationTime,
+      tone: activityToneForKind("payment", item.status),
+      status: item.status,
+    })),
+  ]
+    .filter((item) => item.title)
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+  const collapsed = [];
+  for (const item of items) {
+    const prev = collapsed[collapsed.length - 1];
+    if (prev && prev.title === item.title && prev.body === item.body) {
+      prev.count = (prev.count || 1) + 1;
+      prev.createdAt = Math.max(prev.createdAt ?? 0, item.createdAt ?? 0);
+      continue;
+    }
+    collapsed.push({ ...item, count: 1 });
+  }
+  return collapsed.slice(0, 12);
+}
+
+function StudioActivityFeed({ notifications = [], payments = [] }) {
+  const items = useMemo(
+    () => buildStudioActivityItems(notifications, payments),
+    [notifications, payments],
+  );
+
+  return (
+    <section className="cursor-settings-section studio-settings-simple-card studio-settings-activity-card">
+      <div className="studio-settings-activity-head">
+        <strong>Recent activity</strong>
+        <span>{items.length ? `${items.length} update${items.length === 1 ? "" : "s"}` : "Nothing yet"}</span>
+      </div>
+      {items.length ? (
+        <div className="studio-settings-activity-list">
+          {items.map((item) => (
+            <article
+              key={item.id}
+              className={`studio-settings-activity-row is-${item.tone}`}
+            >
+              <span className="studio-settings-activity-tone" aria-hidden="true" />
+              <div className="studio-settings-activity-copy">
+                <div className="studio-settings-activity-title-row">
+                  <strong>
+                    {item.title}
+                    {item.count > 1 ? (
+                      <span className="studio-settings-activity-count">×{item.count}</span>
+                    ) : null}
+                  </strong>
+                  <time dateTime={item.createdAt ? new Date(item.createdAt).toISOString() : undefined}>
+                    {formatActivityTime(item.createdAt)}
+                  </time>
+                </div>
+                {item.body ? <p>{item.body}</p> : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="studio-settings-activity-empty">No recent billing or generation activity.</p>
+      )}
+    </section>
+  );
 }
 
 function humanizePaymentStatus(status) {
