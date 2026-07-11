@@ -4195,6 +4195,93 @@ export function StudioShell() {
           gap: 10px;
           padding: 10px !important;
         }
+        .studio-settings-workspace .studio-account-card,
+        .studio-settings-workspace .studio-settings-appearance-card {
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 18px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
+            0 10px 28px color-mix(in srgb, #000 18%, transparent);
+          padding: 16px 18px !important;
+        }
+        .studio-settings-appearance-card .cursor-settings-section {
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+        }
+        .studio-settings-appearance-card h3 {
+          margin: 0 0 4px;
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+          font-weight: 750;
+        }
+        .studio-settings-appearance-card .studio-settings-appearance-lead,
+        .studio-settings-appearance-card > .cursor-settings-section > p:first-of-type {
+          margin: 0 0 14px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-settings-appearance-group {
+          display: grid;
+          gap: 8px;
+          margin-bottom: 14px;
+        }
+        .studio-settings-appearance-group:last-child {
+          margin-bottom: 0;
+        }
+        .studio-settings-appearance-label {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-settings-appearance-hint {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.35;
+        }
+        .studio-settings-cursor-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+        }
+        .studio-settings-cursor-copy {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-settings-cursor-copy strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+          font-weight: 750;
+        }
+        .studio-settings-cursor-copy p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-account-card-title {
+          margin: 0 0 12px;
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+          font-weight: 750;
+        }
+        .studio-account-card-lead {
+          margin: -6px 0 12px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
         .studio-account-hero {
           display: flex;
           align-items: center;
@@ -13418,12 +13505,12 @@ function SettingsWorkspacePane({
     });
   }, [isPaymentStep, isThankYouStep, pendingReceiptPaymentId, bankAccounts]);
   const items = [
+    { id: "top-up", label: "Add credits" },
+    { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
     { id: "account", label: "Account details" },
-    { id: "api-keys", label: "API keys" },
-    { id: "billing", label: "Billing" },
-    { id: "top-up", label: "Add credits" },
     { id: "activity", label: "Activity" },
+    { id: "api-keys", label: "API keys" },
   ];
   return (
     <div className="studio-settings-workspace">
@@ -13748,10 +13835,14 @@ function SettingsWorkspacePane({
         ) : null}
 
         {section === "general" ? (
-          <>
-            <CustomCursorSettings enabled={customCursorEnabled} onChange={onCustomCursorChange} />
-            <ThemeSettings />
-          </>
+          <div className="studio-settings-stack">
+            <div className="studio-settings-appearance-card">
+              <ThemeSettings />
+            </div>
+            <div className="studio-settings-appearance-card">
+              <CustomCursorSettings enabled={customCursorEnabled} onChange={onCustomCursorChange} />
+            </div>
+          </div>
         ) : null}
         </div>
       </div>
@@ -13761,11 +13852,10 @@ function SettingsWorkspacePane({
 function CustomCursorSettings({ enabled, onChange }) {
   return (
     <section className="cursor-settings-section">
-      <div className="studio-section-head">
-        <div>
-          <p className="studio-section-kicker">Pointer</p>
-          <h3>Modern cursor</h3>
-          <p>Use the custom Studio mouse pointer.</p>
+      <div className="studio-settings-cursor-row">
+        <div className="studio-settings-cursor-copy">
+          <strong>Modern cursor</strong>
+          <p>Use the custom Studio pointer instead of the system cursor.</p>
         </div>
         <button
           type="button"
@@ -13799,119 +13889,127 @@ function AccountDetailsCard({ currentUser, onSave }) {
   }, [currentUser?.name, currentUser?.email, currentUser?.phone]);
   const canSetPassword = Boolean((email || phone).trim());
   return (
-    <section className="cursor-settings-section studio-account-card">
-      <div className="studio-account-fields">
-        <label>
-          <span>Name</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your creator name" />
-        </label>
-        <label>
-          <span>Email</span>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
-        </label>
-        <label>
-          <span>Phone / WhatsApp</span>
-          <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 868 337 7338" type="tel" />
-        </label>
-      </div>
-      <div className="studio-account-actions">
-        <button
-          type="button"
-          className="cursor-settings-action"
-          onClick={() => {
-            onSave?.({ name, email, phone });
-            setSaved("Saved");
-          }}
-        >
-          Save account
-        </button>
-        {saved ? <span className="studio-account-saved">{saved}</span> : null}
-      </div>
-      <div className="studio-account-fields" style={{ marginTop: "1.25rem" }}>
-        <p className="text-sm text-white/55">
+    <div className="studio-settings-stack">
+      <section className="cursor-settings-section studio-account-card">
+        <h3 className="studio-account-card-title">Profile</h3>
+        <p className="studio-account-card-lead">How you show up across Studio and billing.</p>
+        <div className="studio-account-fields">
+          <label>
+            <span>Name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your creator name" />
+          </label>
+          <label>
+            <span>Email</span>
+            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" type="email" />
+          </label>
+          <label>
+            <span>Phone / WhatsApp</span>
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 868 337 7338" type="tel" />
+          </label>
+        </div>
+        <div className="studio-account-actions">
+          <button
+            type="button"
+            className="cursor-settings-action"
+            onClick={() => {
+              onSave?.({ name, email, phone });
+              setSaved("Saved");
+            }}
+          >
+            Save account
+          </button>
+          {saved ? <span className="studio-account-saved">{saved}</span> : null}
+        </div>
+      </section>
+      <section className="cursor-settings-section studio-account-card">
+        <h3 className="studio-account-card-title">Password</h3>
+        <p className="studio-account-card-lead">
           {currentUser?.hasPassword
             ? "Change your sign-in password."
             : "Add a password so you can sign in without a code next time."}
         </p>
-        {currentUser?.hasPassword ? (
+        <div className="studio-account-fields">
+          {currentUser?.hasPassword ? (
+            <label>
+              <span>Current password</span>
+              <input
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                placeholder="Current password"
+                type="password"
+                autoComplete="current-password"
+              />
+            </label>
+          ) : null}
           <label>
-            <span>Current password</span>
+            <span>{currentUser?.hasPassword ? "New password" : "Password"}</span>
             <input
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-              placeholder="Current password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              placeholder="At least 8 characters"
               type="password"
-              autoComplete="current-password"
+              autoComplete="new-password"
+              disabled={!canSetPassword}
             />
           </label>
-        ) : null}
-        <label>
-          <span>{currentUser?.hasPassword ? "New password" : "Password"}</span>
-          <input
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            placeholder="At least 8 characters"
-            type="password"
-            autoComplete="new-password"
-            disabled={!canSetPassword}
-          />
-        </label>
-        <label>
-          <span>Confirm password</span>
-          <input
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            placeholder="Repeat password"
-            type="password"
-            autoComplete="new-password"
-            disabled={!canSetPassword}
-          />
-        </label>
-        {!canSetPassword ? (
-          <p className="text-xs text-white/45">Save an email or phone first, then add a password.</p>
-        ) : null}
-      </div>
-      <div className="studio-account-actions">
-        <button
-          type="button"
-          className="cursor-settings-action"
-          disabled={!canSetPassword || passwordBusy}
-          onClick={() => {
-            setPasswordError("");
-            setPasswordSaved("");
-            if (newPassword.length < 8) {
-              setPasswordError("Password must be at least 8 characters");
-              return;
-            }
-            if (newPassword !== confirmPassword) {
-              setPasswordError("Passwords do not match");
-              return;
-            }
-            setPasswordBusy(true);
-            void setPassword({
-              newPassword,
-              currentPassword: currentUser?.hasPassword ? currentPassword : undefined,
-            })
-              .then(() => {
-                setCurrentPassword("");
-                setNewPassword("");
-                setConfirmPassword("");
-                setPasswordSaved(currentUser?.hasPassword ? "Password updated" : "Password added");
+          <label>
+            <span>Confirm password</span>
+            <input
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Repeat password"
+              type="password"
+              autoComplete="new-password"
+              disabled={!canSetPassword}
+            />
+          </label>
+          {!canSetPassword ? (
+            <p className="studio-account-card-lead">Save an email or phone first, then add a password.</p>
+          ) : null}
+        </div>
+        <div className="studio-account-actions">
+          <button
+            type="button"
+            className="cursor-settings-action"
+            disabled={!canSetPassword || passwordBusy}
+            onClick={() => {
+              setPasswordError("");
+              setPasswordSaved("");
+              if (newPassword.length < 8) {
+                setPasswordError("Password must be at least 8 characters");
+                return;
+              }
+              if (newPassword !== confirmPassword) {
+                setPasswordError("Passwords do not match");
+                return;
+              }
+              setPasswordBusy(true);
+              void setPassword({
+                newPassword,
+                currentPassword: currentUser?.hasPassword ? currentPassword : undefined,
               })
-              .catch((err) => {
-                setPasswordError(err instanceof Error ? err.message : "Could not save password");
-              })
-              .finally(() => setPasswordBusy(false));
-          }}
-        >
-          {currentUser?.hasPassword ? "Update password" : "Add password"}
-        </button>
-        {passwordSaved ? <span className="studio-account-saved">{passwordSaved}</span> : null}
-        {passwordError ? <span className="text-sm text-red-300">{passwordError}</span> : null}
-      </div>
-    </section>
+                .then(() => {
+                  setCurrentPassword("");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                  setPasswordSaved(currentUser?.hasPassword ? "Password updated" : "Password added");
+                })
+                .catch((err) => {
+                  setPasswordError(err instanceof Error ? err.message : "Could not save password");
+                })
+                .finally(() => setPasswordBusy(false));
+            }}
+          >
+            {currentUser?.hasPassword ? "Update password" : "Add password"}
+          </button>
+          {passwordSaved ? <span className="studio-account-saved">{passwordSaved}</span> : null}
+          {passwordError ? <span className="text-sm text-red-300">{passwordError}</span> : null}
+        </div>
+      </section>
+    </div>
   );
 }
+
 
 function BankLine({ label, value }) {
   return (

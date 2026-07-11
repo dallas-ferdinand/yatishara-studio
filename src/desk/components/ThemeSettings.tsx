@@ -54,47 +54,53 @@ export function ThemeSettings() {
 
   return (
     <section className="cursor-settings-section">
-      <h3>Appearance</h3>
-      <p className="text-xs text-cursor-muted mb-3 leading-relaxed">
-        Theme changes the app tone and Studio background. Pick Animated or Cinematic, then Dark/Light mode and an accent theme.
+      <h3>Look and feel</h3>
+      <p className="studio-settings-appearance-lead">
+        Set mode, background style, and accent theme for Studio.
       </p>
 
-      <p className="text-xs text-cursor-muted mb-2">Mode</p>
-      <div className="cursor-seg mb-4">
-        <button type="button" className={mode === "dark" ? "active" : ""} onClick={() => pickMode("dark")}>
-          <Icon name="moon" size={12} /> Dark
-        </button>
-        <button type="button" className={mode === "light" ? "active" : ""} onClick={() => pickMode("light")}>
-          <Icon name="sun" size={12} /> Light
-        </button>
+      <div className="studio-settings-appearance-group">
+        <p className="studio-settings-appearance-label">Mode</p>
+        <div className="cursor-seg">
+          <button type="button" className={mode === "dark" ? "active" : ""} onClick={() => pickMode("dark")}>
+            <Icon name="moon" size={12} /> Dark
+          </button>
+          <button type="button" className={mode === "light" ? "active" : ""} onClick={() => pickMode("light")}>
+            <Icon name="sun" size={12} /> Light
+          </button>
+        </div>
       </div>
 
-      <p className="text-xs text-cursor-muted mb-2">Background style</p>
-      <div className="cursor-seg cursor-seg-wrap mb-1">
-        {Object.entries(STUDIO_BACKGROUND_FAMILIES).map(([id, family]) => (
-          <button key={id} type="button" className={bgFamily === id ? "active" : ""} onClick={() => pickBgFamily(id)}>
-            {family.label}
-          </button>
-        ))}
+      <div className="studio-settings-appearance-group">
+        <p className="studio-settings-appearance-label">Background</p>
+        <div className="cursor-seg cursor-seg-wrap">
+          {Object.entries(STUDIO_BACKGROUND_FAMILIES).map(([id, family]) => (
+            <button key={id} type="button" className={bgFamily === id ? "active" : ""} onClick={() => pickBgFamily(id)}>
+              {family.label}
+            </button>
+          ))}
+        </div>
+        <p className="studio-settings-appearance-hint">{activeFamily.description}</p>
       </div>
-      <p className="text-xs text-cursor-muted mb-4 leading-relaxed">{activeFamily.description}</p>
 
-      <p className="text-xs text-cursor-muted mb-2">Theme</p>
-      <div className="cursor-theme-grid" role="listbox" aria-label="Theme">
-        {Object.entries(SCHEMES).map(([id, t]) => (
-          <button
-            key={id}
-            type="button"
-            role="option"
-            aria-selected={scheme === id}
-            className={`theme-chip${scheme === id ? " active" : ""}`}
-            data-theme={id}
-            onClick={() => pickScheme(id)}
-          >
-            <span className="theme-chip-swatch" style={{ background: t.accent }} aria-hidden="true" />
-            <span className="theme-chip-label">{t.label}</span>
-          </button>
-        ))}
+      <div className="studio-settings-appearance-group">
+        <p className="studio-settings-appearance-label">Accent theme</p>
+        <div className="cursor-theme-grid" role="listbox" aria-label="Theme">
+          {Object.entries(SCHEMES).map(([id, t]) => (
+            <button
+              key={id}
+              type="button"
+              role="option"
+              aria-selected={scheme === id}
+              className={`theme-chip${scheme === id ? " active" : ""}`}
+              data-theme={id}
+              onClick={() => pickScheme(id)}
+            >
+              <span className="theme-chip-swatch" style={{ background: t.accent }} aria-hidden="true" />
+              <span className="theme-chip-label">{t.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
   );
