@@ -8357,6 +8357,7 @@ export function StudioShell() {
           min-height: 100%;
           flex-direction: column;
           justify-content: flex-end;
+          align-items: stretch;
           gap: 12px;
         }
         .studio-chat-stream-inner.is-empty {
@@ -8380,7 +8381,10 @@ export function StudioShell() {
         }
         .studio-chat-bubble {
           position: relative;
+          width: 100%;
           max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
           background: var(--studio-composer-glass);
@@ -8733,10 +8737,16 @@ export function StudioShell() {
         .studio-chat-result-grid {
           display: grid;
           gap: 10px;
+          width: calc(100% + 28px);
+          max-width: none;
+          min-width: 0;
           margin: -12px -14px;
+          box-sizing: border-box;
         }
         .studio-chat-result-card {
           overflow: hidden;
+          width: 100%;
+          min-width: 0;
           border-radius: 14px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
           background: var(--studio-gen-frame-bg);
@@ -8748,6 +8758,7 @@ export function StudioShell() {
           cursor: pointer;
           padding: 0;
           width: 100%;
+          min-width: 0;
           text-align: left;
           color: inherit;
           font: inherit;
@@ -8795,6 +8806,8 @@ export function StudioShell() {
         .studio-chat-result-card video {
           display: block;
           width: 100%;
+          max-width: 100%;
+          height: auto;
           object-fit: contain;
           background: var(--studio-gen-media-bg);
         }
