@@ -3359,13 +3359,15 @@ export function StudioShell() {
           background: transparent;
           padding: 0 !important;
         }
-        .studio-settings-billing-summary,
-        .studio-settings-invoices-card {
+        .studio-settings-workspace .studio-settings-billing-summary,
+        .studio-settings-workspace .studio-settings-invoices-card {
           overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 14px;
+          border-radius: 18px;
           background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
+            0 10px 28px color-mix(in srgb, #000 18%, transparent);
         }
         .studio-settings-billing-summary {
           display: grid;
@@ -3374,46 +3376,49 @@ export function StudioShell() {
         .studio-settings-balance-block {
           display: grid;
           align-content: center;
-          gap: 4px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          gap: 6px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent);
           background:
-            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 52%),
-            color-mix(in srgb, var(--mos-bg) 24%, transparent);
-          padding: 16px 16px 14px;
+            radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 46%),
+            radial-gradient(circle at 12% 100%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 42%),
+            color-mix(in srgb, var(--mos-bg) 28%, transparent);
+          padding: 18px 18px 16px;
         }
         .studio-settings-balance-block span,
         .studio-settings-balance-block small {
           color: var(--color-cursor-muted);
           font-size: 11px;
           font-weight: 650;
-          letter-spacing: 0.04em;
+          letter-spacing: 0.06em;
           text-transform: uppercase;
         }
         .studio-settings-balance-block strong {
           color: var(--color-cursor-text-bright);
-          font-size: 32px;
+          font-size: 34px;
           font-weight: 750;
-          line-height: 1.05;
+          line-height: 1.02;
+          letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
         }
         .studio-settings-balance-block small {
           text-transform: none;
           letter-spacing: 0;
           font-weight: 500;
+          font-size: 12px;
         }
         .studio-settings-stat-list {
           display: grid;
           margin: 0;
-          padding: 4px 0;
+          padding: 6px 0;
         }
         .studio-settings-stat-row {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
           gap: 12px;
-          min-height: 44px;
-          padding: 0 16px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
+          min-height: 46px;
+          padding: 0 18px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
         }
         .studio-settings-stat-row:last-child {
           border-bottom: 0;
@@ -3435,13 +3440,15 @@ export function StudioShell() {
           font-variant-numeric: tabular-nums;
         }
         .studio-settings-invoices-card {
-          padding: 14px 16px 8px;
+          padding: 16px 16px 12px;
         }
         .studio-settings-card-title {
-          margin: 0 0 10px;
+          margin: 0 0 4px;
+          padding: 0 2px 10px;
           color: var(--color-cursor-text-bright);
           font-size: 13px;
           font-weight: 750;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
         }
         .studio-settings-invoice-list {
           display: grid;
@@ -3451,61 +3458,75 @@ export function StudioShell() {
           display: grid;
           grid-template-columns: minmax(0, 1fr) auto;
           align-items: center;
-          gap: 12px;
-          min-height: 52px;
-          padding: 10px 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
+          gap: 14px;
+          min-height: 58px;
+          padding: 12px 2px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent);
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
         .studio-settings-invoice-row:last-child {
           border-bottom: 0;
-          padding-bottom: 4px;
+          padding-bottom: 2px;
         }
-        .studio-settings-invoice-row div {
+        .studio-settings-invoice-copy {
           display: grid;
-          gap: 3px;
+          gap: 4px;
           min-width: 0;
         }
-        .studio-settings-invoice-row strong {
+        .studio-settings-invoice-copy strong {
           overflow: hidden;
           color: var(--color-cursor-text-bright);
           font-size: 13px;
           font-weight: 650;
-          line-height: 1.2;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .studio-settings-invoice-row span {
-          overflow: hidden;
-          color: var(--color-cursor-muted);
-          font-size: 11px;
           line-height: 1.25;
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .studio-settings-invoice-row a,
-        .studio-settings-invoice-row > span:last-child {
+        .studio-settings-invoice-copy span {
+          overflow: hidden;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          line-height: 1.3;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-settings-invoice-meta {
+          display: grid;
+          justify-items: end;
+          align-content: center;
+          gap: 6px;
+          min-width: 76px;
+        }
+        .studio-settings-invoice-amount {
           color: var(--color-cursor-text-bright);
           font-size: 13px;
           font-weight: 700;
           font-variant-numeric: tabular-nums;
-          text-decoration: none;
+          line-height: 1.2;
           white-space: nowrap;
         }
-        .studio-settings-invoice-row a {
+        .studio-settings-invoice-meta a {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 24px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
           border-radius: 999px;
           background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
-          padding: 5px 10px;
+          padding: 0 10px;
+          color: var(--color-cursor-text-bright);
           font-size: 11px;
           font-weight: 650;
+          line-height: 1;
+          text-decoration: none;
+          white-space: nowrap;
         }
-        .studio-settings-invoice-row a:hover {
+        .studio-settings-invoice-meta a:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent-dim) 34%, var(--color-cursor-hover));
         }
-        .studio-settings-invoice-row a[aria-disabled="true"] {
+        .studio-settings-invoice-meta a[aria-disabled="true"] {
           pointer-events: none;
         }
         .studio-payment-review-actions {
@@ -13215,15 +13236,16 @@ function SettingsWorkspacePane({
                   const paymentUrl = payment.receiptUrl ?? (payment.externalPaymentId?.startsWith("http") ? payment.externalPaymentId : null);
                   return (
                     <div key={payment._id} className="studio-settings-invoice-row">
-                      <div>
+                      <div className="studio-settings-invoice-copy">
                         <strong>{payment.subscriptionPlanId ? "Subscription invoice" : "Credit invoice"}</strong>
                         <span>{formatDate(payment.createdAt)} · {humanizePaymentStatus(payment.status)}</span>
                       </div>
-                      {paymentUrl ? (
-                        <a href={paymentUrl} target="_blank" rel="noreferrer">Open</a>
-                      ) : (
-                        <span>{formatMoney(payment.amountCents)}</span>
-                      )}
+                      <div className="studio-settings-invoice-meta">
+                        <span className="studio-settings-invoice-amount">{formatMoney(payment.amountCents)}</span>
+                        {paymentUrl ? (
+                          <a href={paymentUrl} target="_blank" rel="noreferrer">Open</a>
+                        ) : null}
+                      </div>
                     </div>
                   );
                 })}
