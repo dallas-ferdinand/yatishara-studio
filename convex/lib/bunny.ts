@@ -100,32 +100,97 @@ export function assetThumbnailPath(asset: {
   return undefined;
 }
 
+/** Bunny Optimizer transforms for list/peek thumbs (not full media). */
+export type BunnyImageTransform = {
+  width?: number;
+  quality?: number;
+  format?: "webp" | "jpeg" | "png";
+  blur?: number;
+};
+
+/** Grid / asset list thumbs — small WebP, edge-cached after first hit. */
+export const THUMB_TRANSFORM: BunnyImageTransform = {
+  width: 420,
+  quality: 62,
+  format: "webp",
+};
+
+/** Folder peek cards — even smaller. */
+export const PEEK_TRANSFORM: BunnyImageTransform = {
+  width: 280,
+  quality: 58,
+  format: "webp",
+};
+
+/** Tiny blur placeholder for progressive fade-in. */
+export const LQIP_TRANSFORM: BunnyImageTransform = {
+  width: 48,
+  quality: 28,
+  format: "webp",
+  blur: 15,
+};
+
+function transformToQuery(transform?: BunnyImageTransform): Record<string, string> {
+  if (!transform) return {};
+  const query: Record<string, string> = {};
+  if (transform.width != null) query.width = String(transform.width);
+  if (transform.quality != null) query.quality = String(transform.quality);
+  if (transform.format) query.format = transform.format;
+  if (transform.blur != null) query.blur = String(transform.blur);
+  return query;
+}
+
+/**
+ * Sign a Bunny CDN URL. Optional Optimizer query params are included in the
+ * token hash (Bunny Token Auth V2) so width/quality cannot be stripped.
+ */
 export async function signBunnyCdnUrl(
   path: string,
   expiresUnix: number,
+  transform?: BunnyImageTransform,
 ): Promise<string> {
   const config = getBunnyConfig();
   const tokenPath = path.startsWith("/") ? path : `/${path}`;
-  const hashable = `${config.cdnTokenKey}${tokenPath}${expiresUnix}`;
+  const extra = transformToQuery(transform);
+  const parameterData = Object.keys(extra)
+    .sort()
+    .map((key) => `${key}=${extra[key]}`)
+    .join("&");
+  const hashable = `${config.cdnTokenKey}${tokenPath}${expiresUnix}${parameterData}`;
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(hashable),
   );
   const token = base64UrlEncode(new Uint8Array(digest));
   const host = config.cdnHostname.replace(/\/$/, "");
-  return `https://${host}${tokenPath}?token=${token}&expires=${expiresUnix}`;
+  const params = new URLSearchParams({
+    token,
+    expires: String(expiresUnix),
+    ...extra,
+  });
+  return `https://${host}${tokenPath}?${params.toString()}`;
 }
 
 /** Sign many paths once — list/peek queries must stay under Convex's 1s limit. */
 export async function signBunnyCdnUrls(
   paths: Array<string | undefined | null>,
   expiresUnix: number,
+  transform?: BunnyImageTransform,
 ): Promise<Map<string, string>> {
   const unique = [...new Set(paths.filter((path): path is string => Boolean(path)))];
   const entries = await Promise.all(
-    unique.map(async (path) => [path, await signBunnyCdnUrl(path, expiresUnix)] as const),
+    unique.map(async (path) => [path, await signBunnyCdnUrl(path, expiresUnix, transform)] as const),
   );
   return new Map(entries);
+}
+
+/** List/peek thumbnail URL (resized). Full media still uses signBunnyCdnUrl(path, expires). */
+export async function signBunnyThumbUrl(
+  path: string,
+  expiresUnix: number,
+  transform: BunnyImageTransform = THUMB_TRANSFORM,
+): Promise<string> {
+  return signBunnyCdnUrl(path, expiresUnix, transform);
 }
 
 function normalizeStoragePath(path: string): string {

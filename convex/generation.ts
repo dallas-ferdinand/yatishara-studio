@@ -4,7 +4,7 @@ import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, signBunnyCdnUrl } from "./lib/bunny";
+import { buildAssetPath, LQIP_TRANSFORM, signBunnyCdnUrl, THUMB_TRANSFORM } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
   creditCostForGeneration,
@@ -81,6 +81,7 @@ const eventReturn = v.object({
     byteSize: v.optional(v.number()),
     signedReadUrl: v.optional(v.string()),
     signedThumbnailUrl: v.optional(v.string()),
+    signedThumbnailLqipUrl: v.optional(v.string()),
   }))),
 });
 
@@ -137,21 +138,29 @@ export const listEvents = authedQuery({
             event.assetIds
               .map((assetId) => assetsById.get(assetId))
               .filter((asset): asset is Doc<"assets"> => asset !== undefined)
-              .map(async (asset) => ({
-                _id: asset._id,
-                name: asset.name,
-                kind: asset.kind,
-                mimeType: asset.mimeType,
-                byteSize: asset.byteSize,
-                signedReadUrl: asset.bunnyPath && args.expiresUnix
-                  ? await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix)
-                  : undefined,
-                signedThumbnailUrl: asset.thumbnailPath && args.expiresUnix
-                  ? await signBunnyCdnUrl(asset.thumbnailPath, args.expiresUnix)
-                  : asset.bunnyPath && asset.kind === "image" && args.expiresUnix
+              .map(async (asset) => {
+                const thumbPath =
+                  asset.thumbnailPath ||
+                  (asset.bunnyPath && asset.kind === "image" ? asset.bunnyPath : undefined);
+                const [signedThumbnailUrl, signedThumbnailLqipUrl] = thumbPath && args.expiresUnix
+                  ? await Promise.all([
+                      signBunnyCdnUrl(thumbPath, args.expiresUnix, THUMB_TRANSFORM),
+                      signBunnyCdnUrl(thumbPath, args.expiresUnix, LQIP_TRANSFORM),
+                    ])
+                  : [undefined, undefined];
+                return {
+                  _id: asset._id,
+                  name: asset.name,
+                  kind: asset.kind,
+                  mimeType: asset.mimeType,
+                  byteSize: asset.byteSize,
+                  signedReadUrl: asset.bunnyPath && args.expiresUnix
                     ? await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix)
                     : undefined,
-              })),
+                  signedThumbnailUrl,
+                  signedThumbnailLqipUrl,
+                };
+              }),
           )
         : undefined,
       };

@@ -5,8 +5,10 @@ import {
   assetThumbnailPath,
   buildAssetPath,
   getStorageUploadCredentials,
+  LQIP_TRANSFORM,
   signBunnyCdnUrl,
   signBunnyCdnUrls,
+  THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
@@ -35,6 +37,7 @@ const assetReturn = v.object({
   updatedAt: v.number(),
   signedReadUrl: v.optional(v.string()),
   signedThumbnailUrl: v.optional(v.string()),
+  signedThumbnailLqipUrl: v.optional(v.string()),
 });
 
 /** List queries only sign thumbnails — full read URLs are lazy via signedReadUrl. */
@@ -43,15 +46,17 @@ async function withSignedThumbnails(
   expiresUnix: number | undefined,
 ) {
   if (expiresUnix === undefined) return assets;
-  const signed = await signBunnyCdnUrls(
-    assets.map((asset) => assetThumbnailPath(asset)),
-    expiresUnix,
-  );
+  const paths = assets.map((asset) => assetThumbnailPath(asset));
+  const [signed, lqip] = await Promise.all([
+    signBunnyCdnUrls(paths, expiresUnix, THUMB_TRANSFORM),
+    signBunnyCdnUrls(paths, expiresUnix, LQIP_TRANSFORM),
+  ]);
   return assets.map((asset) => {
     const thumbPath = assetThumbnailPath(asset);
     return {
       ...asset,
       signedThumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
+      signedThumbnailLqipUrl: thumbPath ? lqip.get(thumbPath) : undefined,
     };
   });
 }

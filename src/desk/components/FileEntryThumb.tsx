@@ -11,6 +11,18 @@ import { externalPreviewUrl } from "@mos-app/preview.js";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
 
+/** Browser decode cache — warm URLs as soon as Convex returns them. */
+const warmedThumbUrls = new Set();
+
+export function warmThumbUrl(url) {
+  if (!url || typeof url !== "string" || warmedThumbUrls.has(url)) return;
+  if (typeof Image === "undefined") return;
+  warmedThumbUrls.add(url);
+  const img = new Image();
+  img.decoding = "async";
+  img.src = url;
+}
+
 function isVideoFileUrl(url) {
   return typeof url === "string" && /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
 }
@@ -46,18 +58,61 @@ function peekDisplayName(label) {
   return raw.length > 18 ? `${raw.slice(0, 17)}…` : raw;
 }
 
-function thumbImageProps(size) {
-  return {
-    loading: size === "preview" ? "lazy" : "eager",
-    decoding: "async",
-    fetchPriority: size === "preview" ? "auto" : "high",
-  };
+/**
+ * Instant-feel thumb: skeleton → tiny LQIP blur → sharp resized thumb fade-in.
+ * Mimics Next.js Image blur placeholder without the optimizer pipeline.
+ */
+function ProgressiveThumb({
+  src,
+  lqipSrc,
+  className = "",
+  eager = false,
+}) {
+  const [hiLoaded, setHiLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setHiLoaded(false);
+    setFailed(false);
+    warmThumbUrl(lqipSrc);
+    warmThumbUrl(src);
+  }, [src, lqipSrc]);
+
+  if (!src || failed) return null;
+
+  return (
+    <span className="desk-file-thumb-progressive">
+      {!hiLoaded ? <span className="desk-file-thumb-skeleton" aria-hidden /> : null}
+      {lqipSrc && !hiLoaded ? (
+        <img
+          src={lqipSrc}
+          alt=""
+          className={`desk-file-thumb-lqip ${className}`.trim()}
+          decoding="async"
+          loading={eager ? "eager" : "lazy"}
+          draggable={false}
+        />
+      ) : null}
+      <img
+        src={src}
+        alt=""
+        className={`desk-file-thumb-hi ${className}${hiLoaded ? " is-loaded" : ""}`.trim()}
+        decoding="async"
+        loading={eager ? "eager" : "lazy"}
+        fetchPriority={eager ? "high" : "auto"}
+        draggable={false}
+        onLoad={() => setHiLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </span>
+  );
 }
 
 function FolderPeekStack({ items, size = "grid" }) {
   const cards = (items ?? []).slice(0, 3);
   if (!cards.length) return null;
   const iconSize = size === "preview" ? 16 : 13;
+  const eager = size === "grid";
   return (
     <div className="desk-folder-peek-stack" data-count={cards.length} aria-hidden="true">
       {cards.map((item, index) => (
@@ -67,7 +122,11 @@ function FolderPeekStack({ items, size = "grid" }) {
         >
           <div className="desk-folder-peek-card-media">
             {item.thumbnailUrl ? (
-              <img src={item.thumbnailUrl} alt="" {...thumbImageProps(size)} />
+              <ProgressiveThumb
+                src={item.thumbnailUrl}
+                lqipSrc={item.thumbnailLqipUrl}
+                eager={eager && index === 0}
+              />
             ) : (
               <span className="desk-folder-peek-icon">
                 <Icon name={peekItemIcon(item)} size={iconSize} className="text-cursor-muted" />
@@ -168,10 +227,12 @@ export function FileEntryThumb({
     (entry?.path && (kind === "image" || kind === "video")
       ? workspaceFileThumbUrl(entry.path, workspaceId, size === "preview" ? 640 : 420)
       : null);
+  const lqipUrl = entry?.thumbnailLqipUrl ?? null;
   const previewUrl =
     entry?.path && (kind === "pdf" || kind === "html")
       ? externalPreviewUrl(entry.path, workspaceId)
       : mediaUrl;
+  const eagerFirst = size === "grid";
 
   const folderIconClass =
     pinned && (kind === "dir" || kind === "parent")
@@ -212,7 +273,12 @@ export function FileEntryThumb({
     const sheetUrl = thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : null;
     visual = sheetUrl ? (
       <div className="desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--element">
-        <img src={sheetUrl} alt="" className="desk-file-thumb-image" {...thumbImageProps(size)} />
+        <ProgressiveThumb
+          src={sheetUrl}
+          lqipSrc={lqipUrl}
+          className="desk-file-thumb-image"
+          eager={eagerFirst}
+        />
         <span className="desk-file-thumb-badge" aria-hidden>
           <Icon name={badge} size={14} />
         </span>
@@ -234,7 +300,12 @@ export function FileEntryThumb({
     if (isImage && thumbUrl) {
       visual = (
         <div className="desk-file-thumb-peek-wrap">
-          <img src={thumbUrl} alt="" className="desk-file-thumb-image" {...thumbImageProps(size)} />
+          <ProgressiveThumb
+            src={thumbUrl}
+            lqipSrc={lqipUrl}
+            className="desk-file-thumb-image"
+            eager={eagerFirst}
+          />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="image" size={14} />
           </span>
@@ -244,7 +315,12 @@ export function FileEntryThumb({
     } else if (isImage && mediaUrl) {
       visual = (
         <div className="desk-file-thumb-peek-wrap">
-          <img src={mediaUrl} alt="" className="desk-file-thumb-image" {...thumbImageProps(size)} />
+          <ProgressiveThumb
+            src={mediaUrl}
+            lqipSrc={lqipUrl}
+            className="desk-file-thumb-image"
+            eager={eagerFirst}
+          />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="image" size={14} />
           </span>
@@ -254,7 +330,12 @@ export function FileEntryThumb({
     } else if (isVideo && videoPosterUrl) {
       visual = (
         <div className="desk-file-thumb-peek-wrap">
-          <img src={videoPosterUrl} alt="" className="desk-file-thumb-video" {...thumbImageProps(size)} />
+          <ProgressiveThumb
+            src={videoPosterUrl}
+            lqipSrc={lqipUrl}
+            className="desk-file-thumb-video"
+            eager={eagerFirst}
+          />
           <span className="desk-file-thumb-badge" aria-hidden>
             <Icon name="film" size={14} />
           </span>

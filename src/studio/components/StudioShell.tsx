@@ -48,6 +48,7 @@ import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { createPortal } from "react-dom";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
+import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
@@ -860,6 +861,19 @@ export function StudioShell() {
     ? (lastRootEntriesRef.current ?? rootEntries)
     : rootEntries;
 
+  // Warm LQIP + thumbs as soon as Convex returns — browser cache before paint.
+  useEffect(() => {
+    const entries = displayCurrentEntries.entries ?? [];
+    for (const entry of entries) {
+      warmThumbUrl(entry.thumbnailLqipUrl);
+      warmThumbUrl(entry.thumbnailUrl);
+      for (const peek of entry.peekItems ?? []) {
+        warmThumbUrl(peek.thumbnailLqipUrl);
+        warmThumbUrl(peek.thumbnailUrl);
+      }
+    }
+  }, [displayCurrentEntries.entries]);
+
   const visibleFolderIds = useMemo(
     () =>
       (displayCurrentEntries.entries ?? [])
@@ -876,10 +890,14 @@ export function StudioShell() {
         query: api.folders.list,
         args: { parentId: folderId },
       };
-      // Prefetch structure only — skip Bunny signing (active folder signs thumbs).
+      // Prefetch signed thumbs so opening a folder feels instant.
       queries[`assets:${folderId}`] = {
         query: api.assets.listByFolder,
-        args: { folderId },
+        args: { folderId, expiresUnix: assetUrlExpiresUnix },
+      };
+      queries[`foldersPeek:${folderId}`] = {
+        query: api.folders.listWithPeeks,
+        args: { parentId: folderId, expiresUnix: assetUrlExpiresUnix },
       };
       queries[`documents:${folderId}`] = {
         query: api.documents.listByFolder,
@@ -891,7 +909,7 @@ export function StudioShell() {
       };
     }
     return queries;
-  }, [hasCurrentUser, visibleFolderIds]);
+  }, [assetUrlExpiresUnix, hasCurrentUser, visibleFolderIds]);
   useQueries(folderPrefetchQueries);
 
   const tabs = useMemo(() => {
@@ -14416,6 +14434,7 @@ function assetToEntry(asset) {
     description: asset.mimeType,
     mediaUrl: asset.signedReadUrl ?? asset.mediaUrl,
     thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl ?? asset.thumbnailUrl ?? asset.mediaUrl,
+    thumbnailLqipUrl: asset.signedThumbnailLqipUrl ?? asset.thumbnailLqipUrl,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
   };

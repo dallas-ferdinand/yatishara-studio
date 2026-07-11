@@ -3,7 +3,12 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { resolveElementAssets } from "./lib/elementAssetModel";
-import { assetThumbnailPath, signBunnyCdnUrl } from "./lib/bunny";
+import {
+  assetThumbnailPath,
+  LQIP_TRANSFORM,
+  PEEK_TRANSFORM,
+  signBunnyCdnUrl,
+} from "./lib/bunny";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -28,6 +33,7 @@ const folderPeekItem = v.object({
     v.literal("file"),
   ),
   thumbnailUrl: v.optional(v.string()),
+  thumbnailLqipUrl: v.optional(v.string()),
   label: v.string(),
   elementType: v.optional(
     v.union(
@@ -55,6 +61,7 @@ type PeekCandidate = {
   priority: number;
   updatedAt: number;
   thumbnailUrl?: string;
+  thumbnailLqipUrl?: string;
   /** Sign only after the candidate wins a peek slot. */
   thumbnailAsset?: Doc<"assets">;
   label: string;
@@ -65,6 +72,7 @@ type PeekCandidate = {
 type PeekItemOutput = {
   kind: PeekCandidate["kind"];
   thumbnailUrl?: string;
+  thumbnailLqipUrl?: string;
   label: string;
   elementType?: PeekCandidate["elementType"];
   icon?: string;
@@ -73,18 +81,23 @@ type PeekItemOutput = {
 async function signedAssetThumbnail(
   asset: Doc<"assets">,
   expiresUnix: number | undefined,
-): Promise<string | undefined> {
+): Promise<{ thumbnailUrl?: string; thumbnailLqipUrl?: string }> {
   const path = assetThumbnailPath(asset);
   if (!path || expiresUnix === undefined) {
-    return undefined;
+    return {};
   }
-  return await signBunnyCdnUrl(path, expiresUnix);
+  const [thumbnailUrl, thumbnailLqipUrl] = await Promise.all([
+    signBunnyCdnUrl(path, expiresUnix, PEEK_TRANSFORM),
+    signBunnyCdnUrl(path, expiresUnix, LQIP_TRANSFORM),
+  ]);
+  return { thumbnailUrl, thumbnailLqipUrl };
 }
 
 function candidateToPeekItem(candidate: PeekCandidate): PeekItemOutput {
   return {
     kind: candidate.kind,
     thumbnailUrl: candidate.thumbnailUrl,
+    thumbnailLqipUrl: candidate.thumbnailLqipUrl,
     label: candidate.label,
     elementType: candidate.elementType,
     icon: candidate.icon,
@@ -229,12 +242,15 @@ async function peekCandidatesToItems(
 
   return await Promise.all(
     winners.map(async (candidate) => {
-      const thumbnailUrl =
-        candidate.thumbnailUrl ??
-        (candidate.thumbnailAsset
-          ? await signedAssetThumbnail(candidate.thumbnailAsset, expiresUnix)
-          : undefined);
-      return candidateToPeekItem({ ...candidate, thumbnailUrl });
+      if (candidate.thumbnailUrl || !candidate.thumbnailAsset) {
+        return candidateToPeekItem(candidate);
+      }
+      const signed = await signedAssetThumbnail(candidate.thumbnailAsset, expiresUnix);
+      return candidateToPeekItem({
+        ...candidate,
+        thumbnailUrl: signed.thumbnailUrl,
+        thumbnailLqipUrl: signed.thumbnailLqipUrl,
+      });
     }),
   );
 }
