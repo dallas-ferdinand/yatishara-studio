@@ -8370,14 +8370,10 @@ export function StudioShell() {
           display: flex;
           align-items: center;
           justify-content: center;
-          padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
           pointer-events: none;
         }
         .studio-chat-empty-state .studio-empty-logo-btn {
           pointer-events: auto;
-        }
-        .studio-chat-empty-state .studio-empty-logo {
-          transform: translateY(16px);
         }
         .studio-chat-bubble {
           position: relative;
