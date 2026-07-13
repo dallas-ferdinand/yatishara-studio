@@ -1682,7 +1682,7 @@ export function StudioShell() {
           sourceAssetIds: uploadedAssets.map((asset) => asset.assetId),
           uploadedAssets,
           generateSheet: true,
-          stylePresetSlug: values.stylePresetSlug ?? "unstyled",
+          stylePresetSlug: selectedStylePreset?.slug ?? "unstyled",
         });
         setDraft("");
         setAttachments([]);
