@@ -32,7 +32,6 @@ import {
   Scissors,
   SlidersHorizontal,
   RectangleHorizontal,
-  Coins,
   Settings,
   Sparkles,
   Upload,
@@ -59,6 +58,21 @@ import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import { StudioStyleSheetPickerPanel, StudioStyleSheetTriggerButton } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
+import {
+  DEFAULT_CREDIT_PRICE_CENTS,
+  TOP_UP_TIER_CREDITS,
+  TOP_UP_TIER_LABELS,
+  creditsFromAmountCents,
+  formatTtdCents,
+  formatTtdFromCredits,
+  topUpMinAmountCents,
+} from "@/studio/lib/money";
+import {
+  downloadMediaUrl,
+  fullQualityUrl,
+  isBunnyOptimizedUrl,
+  thumbnailDisplayUrl,
+} from "@/studio/lib/mediaUrls";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
@@ -256,11 +270,14 @@ export function StudioShell() {
 
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [imageResolution, setImageResolution] = useState("2K");
+  const [imageQuality, setImageQuality] = useState("medium");
   const [resolution, setResolution] = useState("1280x720");
   const [durationSeconds, setDurationSeconds] = useState("4");
   const [audioEnabled, setAudioEnabled] = useState(false);
-  const [skipPromptEnhancement, setSkipPromptEnhancement] = useState(false);
   const [elementType, setElementType] = useState("character");
+  useEffect(() => {
+    if (elementType === "style_sheet") setElementType("character");
+  }, [elementType]);
   const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
   const [composerStyleMode, setComposerStyleMode] = useState(() => {
     if (typeof window === "undefined") return "direct";
@@ -271,6 +288,17 @@ export function StudioShell() {
     return window.localStorage.getItem(ACTIVE_STYLE_SHEET_KEY) || null;
   });
   const [scriptType, setScriptType] = useState("production");
+  useEffect(() => {
+    if (
+      scriptType === "style_guide" ||
+      scriptType === "element_brief" ||
+      scriptType === "reference_sheet_guide"
+    ) {
+      setScriptType("production");
+    }
+  }, [scriptType]);
+  /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
+  const skipPromptEnhancement = composerStyleMode === "direct";
   const [referenceIntent, setReferenceIntent] = useState("auto");
   const [flowPending, setFlowPending] = useState(false);
   /** Optimistic prompt + loader bubbles keyed by threadId until Convex events catch up. */
@@ -306,13 +334,29 @@ export function StudioShell() {
   const hasCurrentUser = currentUser !== undefined;
   const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
   const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
-  const bankAccounts = useQuery(api.billing.listBankAccounts, hasCurrentUser ? {} : "skip");
-  const subscriptionPlans = useQuery(api.billing.listSubscriptionPlans, hasCurrentUser ? {} : "skip");
-  const payments = useQuery(api.billing.listMyPayments, hasCurrentUser ? {} : "skip");
+  // Defer receipt/bank/plan lists until settings or admin — they stampeded boot and near-timeouted with listThreads.
+  const needsBillingDetails =
+    settingsOpen ||
+    activeTab.startsWith("admin:") ||
+    openTabs.some((tab) => tab.startsWith("admin:"));
+  const bankAccounts = useQuery(
+    api.billing.listBankAccounts,
+    hasCurrentUser && needsBillingDetails ? {} : "skip",
+  );
+  const payments = useQuery(
+    api.billing.listMyPayments,
+    hasCurrentUser && needsBillingDetails ? {} : "skip",
+  );
   const notifications = useQuery(api.notifications.listMine, hasCurrentUser ? {} : "skip");
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
-  const adminPayments = useQuery(api.billing.adminListPayments, isAdminUser ? {} : "skip");
-  const adminCustomers = useQuery(api.users.adminListCustomers, isAdminUser ? {} : "skip");
+  const adminPayments = useQuery(
+    api.billing.adminListPayments,
+    isAdminUser && needsBillingDetails ? {} : "skip",
+  );
+  const adminCustomers = useQuery(
+    api.users.adminListCustomers,
+    isAdminUser && needsBillingDetails ? {} : "skip",
+  );
   const topFolders = useQuery(
     api.folders.listWithPeeks,
     hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
@@ -450,21 +494,61 @@ export function StudioShell() {
   const assetsWithPreviewUrls = useMemo(
     () =>
       assets?.map((asset) => {
-        const previewUrl = assetPreviewUrls[`asset:${asset._id}`];
+        // Lazy signedReadUrl query returns full CDN URLs (no Optimizer). Never treat an
+        // existing optimized thumb as signedReadUrl.
+        const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
+        const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
+        const signedThumbnailUrl =
+          asset.signedThumbnailUrl ??
+          (asset.kind === "image" || asset.kind === "video"
+            ? thumbnailDisplayUrl(lazyFullUrl)
+            : undefined);
         return {
           ...asset,
-          signedReadUrl: asset.signedReadUrl ?? previewUrl,
-          signedThumbnailUrl:
-            asset.signedThumbnailUrl ??
-            (asset.kind === "image" || asset.kind === "video" ? previewUrl : undefined),
+          signedReadUrl,
+          signedThumbnailUrl,
         };
       }),
     [assetPreviewUrls, assets],
   );
+  const styleSheets = useQuery(api.elements.listStyleSheets, hasCurrentUser ? {} : "skip");
+  const styleSheetSheetAssetIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          (styleSheets ?? [])
+            .map((sheet) => sheet.sheetAssetId)
+            .filter((assetId): assetId is NonNullable<typeof assetId> => Boolean(assetId)),
+        ),
+      ],
+    [styleSheets],
+  );
+  const styleSheetPreviewAssets = useQuery(
+    api.assets.listByIds,
+    hasCurrentUser && styleSheetSheetAssetIds.length
+      ? {
+          assetIds: styleSheetSheetAssetIds,
+          expiresUnix: assetUrlExpiresUnix,
+          quality: "preview",
+        }
+      : "skip",
+  );
+  const styleSheetsForPicker = useMemo(() => {
+    if (styleSheets === undefined) return undefined;
+    const byId = new Map((styleSheetPreviewAssets ?? []).map((asset) => [asset._id, asset]));
+    return styleSheets.map((sheet) => {
+      const asset = sheet.sheetAssetId ? byId.get(sheet.sheetAssetId) : undefined;
+      const sheetPreviewUrl =
+        fullQualityUrl(asset?.signedReadUrl) ||
+        thumbnailDisplayUrl(asset?.signedThumbnailUrl) ||
+        undefined;
+      return sheetPreviewUrl ? { ...sheet, sheetPreviewUrl } : sheet;
+    });
+  }, [styleSheetPreviewAssets, styleSheets]);
   const elementLinkedAssetIds = useMemo(() => {
     const folderAssetIds = new Set((assets ?? []).map((asset) => asset._id));
     const linked = new Set();
-    for (const element of elements ?? []) {
+    for (const element of [...(elements ?? []), ...(styleSheets ?? [])]) {
       for (const assetId of element.referenceAssetIds ?? element.sourceAssetIds ?? []) {
         if (!folderAssetIds.has(assetId)) {
           linked.add(assetId);
@@ -475,7 +559,7 @@ export function StudioShell() {
       }
     }
     return [...linked];
-  }, [assets, elements]);
+  }, [assets, elements, styleSheets]);
   const linkedElementAssets = useQuery(
     api.assets.listByIds,
     hasCurrentUser && elementLinkedAssetIds.length
@@ -493,18 +577,32 @@ export function StudioShell() {
         byId.set(asset._id, asset);
       }
     }
+    for (const asset of styleSheetPreviewAssets ?? []) {
+      const full = fullQualityUrl(asset.signedReadUrl, asset.mediaUrl);
+      byId.set(asset._id, {
+        ...asset,
+        signedReadUrl: full,
+        signedThumbnailUrl: asset.signedThumbnailUrl,
+        previewUrl: thumbnailDisplayUrl(asset.signedThumbnailUrl, asset.previewUrl) ?? full,
+        // Never store Bunny thumbs as mediaUrl — full views fetch signedReadUrl when missing.
+        mediaUrl: full,
+      });
+    }
     return [...byId.values()];
-  }, [assetsWithPreviewUrls, linkedElementAssets]);
+  }, [assetsWithPreviewUrls, linkedElementAssets, styleSheetPreviewAssets]);
   const trashedAssetsWithPreviewUrls = useMemo(
     () =>
       trashedAssets?.map((asset) => {
-        const previewUrl = assetPreviewUrls[`asset:${asset._id}`];
+        const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
+        const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
         return {
           ...asset,
-          signedReadUrl: asset.signedReadUrl ?? previewUrl,
+          signedReadUrl,
           signedThumbnailUrl:
             asset.signedThumbnailUrl ??
-            (asset.kind === "image" || asset.kind === "video" ? previewUrl : undefined),
+            (asset.kind === "image" || asset.kind === "video"
+              ? thumbnailDisplayUrl(lazyFullUrl)
+              : undefined),
         };
       }),
     [assetPreviewUrls, trashedAssets],
@@ -517,7 +615,6 @@ export function StudioShell() {
         }
       : "skip",
   );
-  const styleSheets = useQuery(api.elements.listStyleSheets, hasCurrentUser ? {} : "skip");
   const setActiveStyleSheetMutation = useMutation(api.users.setActiveStyleSheet);
   const scriptTypes = useQuery(api.composerCatalog.listScriptTypes, hasCurrentUser ? {} : "skip");
   const referenceIntents = useQuery(api.composerCatalog.listReferenceIntents, hasCurrentUser ? {} : "skip");
@@ -576,14 +673,46 @@ export function StudioShell() {
     return presets.find((preset) => preset.slug === "unstyled") ?? presets[0];
   }, [presets]);
   const activeStyleSheet = useMemo(() => {
-    if (!activeStyleSheetId || !styleSheets?.length) return null;
-    return styleSheets.find((sheet) => sheet._id === activeStyleSheetId) ?? null;
-  }, [activeStyleSheetId, styleSheets]);
+    if (!activeStyleSheetId || !styleSheetsForPicker?.length) return null;
+    return styleSheetsForPicker.find((sheet) => sheet._id === activeStyleSheetId) ?? null;
+  }, [activeStyleSheetId, styleSheetsForPicker]);
+  const activeStyleSheetAssetUrl = useQuery(
+    api.assets.signedReadUrl,
+    hasCurrentUser &&
+      composerStyleMode === "styled" &&
+      activeStyleSheet?.sheetAssetId
+      ? {
+          assetId: activeStyleSheet.sheetAssetId,
+          expiresUnix: assetUrlExpiresUnix,
+        }
+      : "skip",
+  );
+  const activeStyleSheetReference = useMemo(() => {
+    if (
+      composerStyleMode !== "styled" ||
+      !activeStyleSheet?.sheetAssetId ||
+      !assetLookupPool?.length
+    ) {
+      return null;
+    }
+    const asset = assetLookupPool.find(
+      (item) =>
+        item._id === activeStyleSheet.sheetAssetId ||
+        item.studioId === activeStyleSheet.sheetAssetId,
+    );
+    const url =
+      activeStyleSheetAssetUrl ??
+      asset?.signedReadUrl ??
+      asset?.mediaUrl ??
+      asset?.previewUrl ??
+      asset?.signedThumbnailUrl;
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+    return { kind: "image", url, mimeType: asset?.mimeType ?? "image/png" };
+  }, [activeStyleSheet, activeStyleSheetAssetUrl, assetLookupPool, composerStyleMode]);
   const selectedStylePreset = directPreset;
   const handleSelectDirect = useCallback(() => {
     if (directPreset) setSelectedStylePresetId(directPreset._id);
     setComposerStyleMode("direct");
-    setSkipPromptEnhancement(true);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(COMPOSER_STYLE_MODE_KEY, "direct");
     }
@@ -591,7 +720,6 @@ export function StudioShell() {
   const handleSelectStyleSheet = useCallback((sheetId) => {
     setActiveStyleSheetId(sheetId);
     setComposerStyleMode("styled");
-    setSkipPromptEnhancement(false);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ACTIVE_STYLE_SHEET_KEY, sheetId);
       window.localStorage.setItem(COMPOSER_STYLE_MODE_KEY, "styled");
@@ -599,11 +727,15 @@ export function StudioShell() {
     void setActiveStyleSheetMutation({ styleSheetElementId: sheetId });
   }, [setActiveStyleSheetMutation]);
   useEffect(() => {
+    if (composerStyleMode !== "styled") return;
+    const ready = Boolean(activeStyleSheet?.sheetAssetId || activeStyleSheet?.styleRules?.trim());
+    if (!ready) handleSelectDirect();
+  }, [composerStyleMode, activeStyleSheet, handleSelectDirect]);
+  useEffect(() => {
     if (directPreset && !selectedStylePresetId) {
       setSelectedStylePresetId(directPreset._id);
-      if (composerStyleMode === "direct") setSkipPromptEnhancement(true);
     }
-  }, [directPreset, selectedStylePresetId, composerStyleMode]);
+  }, [directPreset, selectedStylePresetId]);
   const hasNonVideoReferenceInput = generationReferences.some((reference) => reference.kind === "image" || reference.kind === "audio");
   const videoSupportsReferenceInput = mode === "video";
   const entitlement = useQuery(
@@ -616,6 +748,8 @@ export function StudioShell() {
             mode === "video"
               ? resolution
               : normalizeImageResolution(imageResolution),
+          quality: mode === "image" ? imageQuality : undefined,
+          aspectRatio: mode === "image" ? aspectRatio : undefined,
           durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
           hasReferenceInput:
             mode === "video"
@@ -649,10 +783,10 @@ export function StudioShell() {
       mode,
       aspectRatio,
       imageResolution,
+      imageQuality,
       resolution,
       durationSeconds,
       audioEnabled,
-      skipPromptEnhancement,
       selectedStylePresetId,
       scriptType,
       referenceIntent,
@@ -664,10 +798,10 @@ export function StudioShell() {
     setMode(next?.mode ?? "image");
     setAspectRatio(next?.aspectRatio ?? "16:9");
     setImageResolution(next?.imageResolution ?? "2K");
+    setImageQuality(next?.imageQuality ?? "medium");
     setResolution(next?.resolution ?? "1280x720");
     setDurationSeconds(next?.durationSeconds ?? "4");
     setAudioEnabled(next?.audioEnabled ?? false);
-    setSkipPromptEnhancement(next?.skipPromptEnhancement ?? false);
     setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
     setScriptType(next?.scriptType ?? "production");
     setReferenceIntent(next?.referenceIntent ?? "auto");
@@ -1102,7 +1236,6 @@ export function StudioShell() {
     billingAccount,
     pricing,
     bankAccounts,
-    subscriptionPlans,
     onClose: () => {
       setSettingsOpen(false);
       if (isMobile) setMobileSection("composer");
@@ -1114,7 +1247,7 @@ export function StudioShell() {
 
   function openCreditsPane() {
     const balance = billingAccount?.creditBalance ?? entitlement?.creditBalance ?? 0;
-    openSettingsTab(balance > 0 ? "billing" : "top-up");
+    openSettingsTab("billing");
   }
 
   function openAdminTab(tab) {
@@ -1671,9 +1804,9 @@ export function StudioShell() {
           audioReferenceCount: mediaAttachments.filter((attachment) => attachment.kind === "audio").length,
         });
         if (entitlement && entitlement.creditBalance < sheetCost) {
-          openSettingsTab("top-up");
+          openSettingsTab("billing");
           throw new Error(
-            entitlement.reason ?? `You need ${sheetCost} credits to build this ${elementSheetLabel(elementType)}.`,
+            entitlement.reason ?? `You need ${formatTtdFromCredits(sheetCost, pricing?.creditPriceCents)} to build this ${elementSheetLabel(elementType)}.`,
           );
         }
         await createAndAttachElement({
@@ -1695,10 +1828,10 @@ export function StudioShell() {
         }
         if (composerStyleMode === "styled") {
           if (!activeStyleSheetId || !activeStyleSheet) {
-            throw new Error("Create and select a Style Sheet before styled script generation, or switch to Direct.");
+            throw new Error("Select a style before styled script generation, or switch to Direct.");
           }
           if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
-            throw new Error("Build your Style Sheet before using it for script generation.");
+            throw new Error("That style is not ready yet. Switch to Direct or pick another style.");
           }
         }
         const result = await generateScript({
@@ -1708,7 +1841,7 @@ export function StudioShell() {
           userPrompt: buildPromptWithAttachments(draft, attachments),
           attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
           referenceInputs: generationReferences,
-          skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
+          skipPromptEnhancement,
           scriptType,
           referenceIntent,
           hasRawImageReference: composerReferenceFlags.hasRawImageReference,
@@ -1729,14 +1862,14 @@ export function StudioShell() {
       }
       if (composerStyleMode === "styled") {
         if (!activeStyleSheetId || !activeStyleSheet) {
-          throw new Error("Create and select a Style Sheet before styled generation, or switch to Direct.");
+          throw new Error("Select a style before styled generation, or switch to Direct.");
         }
         if (!activeStyleSheet.sheetAssetId && !activeStyleSheet.styleRules?.trim()) {
-          throw new Error("Build your Style Sheet before using it for generation.");
+          throw new Error("That style is not ready yet. Switch to Direct or pick another style.");
         }
       }
       if (entitlement && !entitlement.canGenerate) {
-        openSettingsTab("top-up");
+        openSettingsTab("billing");
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
       // Stay in the open chat when generating again; only mint a thread from a blank composer tab.
@@ -1797,15 +1930,27 @@ export function StudioShell() {
         audioEnabled: genMode === "video" ? audioEnabled : undefined,
         aspectRatio,
         resolution: genMode === "image" ? normalizeImageResolution(imageResolution) : resolution,
+        quality: genMode === "image" ? imageQuality : undefined,
         durationSeconds: genMode === "video" ? Number(durationSeconds) : undefined,
         referenceUrls: genMode === "image"
-          ? generationReferences
-            .filter((reference) => reference.kind === "image")
-            .map((reference) => reference.url)
+          ? [
+              ...(activeStyleSheetReference ? [activeStyleSheetReference.url] : []),
+              ...generationReferences
+                .filter((reference) => reference.kind === "image")
+                .map((reference) => reference.url)
+                .filter((url) => url !== activeStyleSheetReference?.url),
+            ]
           : undefined,
-        referenceInputs: genMode === "video" ? generationReferences : undefined,
+        referenceInputs: genMode === "video"
+          ? [
+              ...(activeStyleSheetReference ? [activeStyleSheetReference] : []),
+              ...generationReferences.filter(
+                (reference) => reference.url !== activeStyleSheetReference?.url,
+              ),
+            ]
+          : undefined,
         startFrameUrl: genMode === "video" ? videoStartFrameUrl : undefined,
-        skipPromptEnhancement: composerStyleMode === "direct" ? true : skipPromptEnhancement,
+        skipPromptEnhancement,
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
         hasElementReference: composerReferenceFlags.hasElementReference,
@@ -1880,12 +2025,14 @@ export function StudioShell() {
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          --studio-composer-shell-max: 720px;
+          --studio-composer-shell-max: 100%;
           --studio-composer-min-height: 96px;
           --studio-composer-side-width: 112px;
           --studio-mode-switcher-width: var(--studio-composer-side-width);
           --studio-generate-column-width: var(--studio-composer-side-width);
           --studio-composer-row-gap: 8px;
+          /* Fallback clearance until the composer measures its overlap with the chat area */
+          --studio-chat-empty-clearance: calc(180px + env(safe-area-inset-bottom, 0px));
           --studio-mobile-nav-height: 44px;
           --studio-mobile-chrome-glass:
             radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
@@ -1939,66 +2086,84 @@ export function StudioShell() {
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav) {
           position: relative;
+        }
+        .studio-polish > .studio-mobile-bottom-nav {
+          position: absolute !important;
         }
         .studio-mobile-bottom-nav {
           display: none;
-          position: fixed;
+          position: absolute;
           top: auto !important;
           right: 0;
           bottom: 0;
           left: 0;
-          width: 100vw;
+          width: 100%;
           height: auto !important;
           min-height: 0 !important;
           max-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
           flex-shrink: 0;
           align-items: stretch;
           z-index: 60;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 0;
-          padding: 1px max(4px, env(safe-area-inset-right, 0px)) calc(1px + env(safe-area-inset-bottom, 0px))
-            max(4px, env(safe-area-inset-left, 0px));
-          border-top: 1px solid var(--studio-mobile-chrome-border);
+          gap: 4px;
+          padding: 1px max(6px, env(safe-area-inset-right, 0px)) calc(1px + env(safe-area-inset-bottom, 0px))
+            max(6px, env(safe-area-inset-left, 0px));
+          border: 0 !important;
+          border-top: 0 !important;
           background: var(--studio-mobile-chrome-glass-foot);
-          box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
+          backdrop-filter: var(--studio-mobile-chrome-blur);
+          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          box-shadow: none !important;
           contain: layout style;
         }
-        .studio-mobile-nav-indicator {
-          position: absolute;
-          top: 0;
-          left: 0;
-          height: 1px;
-          border-radius: 999px;
-          background: var(--studio-mobile-nav-sheen);
-          transition:
-            transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
-            width 220ms cubic-bezier(0.22, 1, 0.36, 1);
-          pointer-events: none;
-          will-change: transform, width;
+        .studio-mobile-nav-sections {
+          display: grid;
+          min-width: 0;
+          flex: 1 1 auto;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 0;
+          align-items: stretch;
+          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+          max-height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
         }
-        .studio-mobile-nav-indicator::after {
-          content: "";
-          position: absolute;
-          top: -9px;
-          left: 50%;
-          width: min(220px, 118%);
-          height: 10px;
-          transform: translateX(-50%);
-          background: radial-gradient(
-            ellipse 140% 100% at 50% 100%,
-            color-mix(in srgb, var(--cursor-accent) 14%, transparent),
-            transparent 78%
-          );
-          opacity: 0.38;
-          pointer-events: none;
+        .studio-mobile-nav-tools {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: stretch;
+          align-self: center;
+          gap: 4px;
+          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+        }
+        .studio-mobile-nav-tools .studio-credit-pill {
+          min-height: 100% !important;
+          height: 100% !important;
+          max-width: 120px;
+          padding-inline: 12px;
+          border-radius: 999px;
+          font-size: 12px;
+        }
+        .studio-mobile-nav-tools .studio-settings-pill {
+          min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          min-height: 100% !important;
+          width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          height: 100% !important;
+          border-radius: 999px;
+          padding: 0;
+          justify-content: center;
+        }
+        .studio-mobile-nav-tools .studio-settings-pill svg {
+          width: 16px;
+          height: 16px;
+        }
+        .studio-mobile-nav-indicator {
+          display: none;
         }
         .studio-mobile-nav-btn {
           display: flex;
           min-width: 0;
-          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
-          min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+          height: 100%;
+          min-height: 100%;
           flex-direction: column;
           align-items: center;
           justify-content: center;
@@ -2034,12 +2199,12 @@ export function StudioShell() {
             min-width: 0 !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-head {
-            backdrop-filter: none;
-            -webkit-backdrop-filter: none;
+            backdrop-filter: var(--studio-mobile-chrome-blur);
+            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
           }
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            backdrop-filter: none;
-            -webkit-backdrop-filter: none;
+            backdrop-filter: var(--studio-mobile-chrome-blur);
+            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
           }
           .studio-polish.is-studio-mobile .cursor-unified-tabs.is-dragging-strip,
           .studio-polish.is-studio-mobile .cursor-unified-tab.is-entering {
@@ -2049,6 +2214,7 @@ export function StudioShell() {
             transition: color 120ms ease, border-color 120ms ease !important;
           }
           .studio-polish.is-studio-mobile {
+            --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
           }
           .studio-polish.is-studio-mobile :where(
@@ -2061,6 +2227,10 @@ export function StudioShell() {
           ) {
             min-height: var(--studio-mobile-nav-height, 44px) !important;
             height: var(--studio-mobile-nav-height, 44px) !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-workspace-head {
+            min-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
           }
           .studio-polish.is-studio-mobile .studio-folder-pathbar .desk-file-breadcrumbs {
             min-height: 100% !important;
@@ -2123,8 +2293,9 @@ export function StudioShell() {
             gap: 4px;
             padding-left: 4px;
             padding-right: max(2px, env(safe-area-inset-right, 0px));
-            align-items: center;
+            align-items: stretch;
             align-self: stretch;
+            height: 100%;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill {
             min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
@@ -2133,6 +2304,7 @@ export function StudioShell() {
             height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             border-radius: 999px;
             padding: 0;
+            align-self: center;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill svg {
             width: 16px;
@@ -2145,6 +2317,7 @@ export function StudioShell() {
             padding-inline: 12px;
             border-radius: 999px;
             font-size: 12px;
+            align-self: center;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill svg {
             width: 14px;
@@ -2162,7 +2335,7 @@ export function StudioShell() {
             padding-right: 46px;
           }
           .studio-polish .cursor-unified-tab {
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: 100% !important;
             min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             min-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
@@ -2193,7 +2366,7 @@ export function StudioShell() {
             max-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
           }
           .studio-mobile-bottom-nav {
-            display: grid !important;
+            display: flex !important;
           }
           .studio-polish .studio-composer.cursor-composer-shell {
             bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
@@ -2436,7 +2609,7 @@ export function StudioShell() {
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -2458,8 +2631,13 @@ export function StudioShell() {
         .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover) :where(svg, .icon-inline) {
           color: var(--color-cursor-text-bright) !important;
         }
-        .studio-polish :where(aside, .cursor-panel-head, .cursor-workspace-head, .cursor-settings-panel, .border-cursor-border) {
+        .studio-polish :where(aside, .cursor-panel-head, .cursor-settings-panel, .border-cursor-border) {
           border-color: var(--studio-shell-border) !important;
+        }
+        .studio-polish .cursor-workspace-head,
+        .studio-polish .studio-mobile-bottom-nav {
+          border: 0 !important;
+          border-color: transparent !important;
         }
         .studio-polish aside,
         .studio-polish .studio-settings-sidebar {
@@ -2696,47 +2874,33 @@ export function StudioShell() {
           gap: 0;
           align-items: center;
           background: var(--color-cursor-bg) !important;
-          border-bottom: 1px solid var(--studio-chrome-divider) !important;
+          border: 0 !important;
+          border-bottom: 0 !important;
           box-shadow: none !important;
         }
+        .studio-polish .cursor-workspace-head::before,
         .studio-polish .cursor-workspace-head::after {
           content: none !important;
+          display: none !important;
         }
         @media (max-width: 899px) {
           .studio-polish .cursor-workspace-head {
             position: relative;
-            min-height: var(--studio-mobile-nav-height, 44px);
-            height: var(--studio-mobile-nav-height, 44px);
+            min-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
+            height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
             padding-top: env(safe-area-inset-top, 0px);
             background: var(--studio-mobile-chrome-glass) !important;
-            border-bottom: 1px solid var(--studio-mobile-chrome-border) !important;
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22) !important;
+            border: 0 !important;
+            border-bottom: 0 !important;
+            backdrop-filter: var(--studio-mobile-chrome-blur);
+            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+            box-shadow: none !important;
             overflow: visible;
           }
-          .studio-polish .cursor-workspace-head::before {
-            content: "";
-            position: absolute;
-            bottom: -20px;
-            left: 12%;
-            right: 12%;
-            height: 22px;
-            background: radial-gradient(
-              ellipse at 50% 0%,
-              color-mix(in srgb, var(--cursor-accent) 24%, transparent),
-              transparent 72%
-            );
-            opacity: 0.72;
-            pointer-events: none;
-          }
+          .studio-polish .cursor-workspace-head::before,
           .studio-polish .cursor-workspace-head::after {
-            content: "" !important;
-            position: absolute;
-            bottom: 0;
-            left: 8%;
-            right: 8%;
-            height: 1px;
-            background: var(--studio-mobile-chrome-sheen);
-            pointer-events: none;
+            content: none !important;
+            display: none !important;
           }
         }
         .studio-polish .cursor-unified-tabs {
@@ -2771,7 +2935,7 @@ export function StudioShell() {
             height: 100%;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab {
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: 100% !important;
             min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             align-self: stretch;
           }
@@ -2783,20 +2947,29 @@ export function StudioShell() {
             min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill,
-          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger {
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill {
             min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill svg,
-          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger svg {
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill svg,
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger svg,
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-trigger svg {
             width: 16px !important;
             height: 16px !important;
           }
-          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-pill {
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-pill,
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-credit-pill {
             min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          }
+          .studio-polish.is-studio-mobile .studio-settings-trigger {
+            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
           }
         }
         .studio-polish .cursor-unified-tab-preview {
@@ -3106,8 +3279,22 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish .studio-settings-sidebar .cursor-panel-head,
         [data-appearance="light"] .studio-polish main .cursor-workspace-head {
           background: #fff !important;
-          border-bottom: 1px solid var(--studio-chrome-divider) !important;
+          border-bottom: 0 !important;
           box-shadow: none !important;
+        }
+        @media (max-width: 899px) {
+          [data-appearance="light"] .studio-polish main .cursor-workspace-head {
+            background: var(--studio-mobile-chrome-glass) !important;
+            border: 0 !important;
+            border-bottom: 0 !important;
+            box-shadow: none !important;
+          }
+          [data-appearance="light"] .studio-mobile-bottom-nav {
+            background: var(--studio-mobile-chrome-glass-foot) !important;
+            border: 0 !important;
+            border-top: 0 !important;
+            box-shadow: none !important;
+          }
         }
         [data-appearance="light"] .studio-polish .cursor-sidebar-brand-logo-img {
           filter: none;
@@ -3423,7 +3610,8 @@ export function StudioShell() {
           padding: 0 !important;
         }
         .studio-settings-workspace .studio-settings-billing-summary,
-        .studio-settings-workspace .studio-settings-invoices-card {
+        .studio-settings-workspace .studio-settings-invoices-card,
+        .studio-settings-workspace .studio-settings-plans {
           overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
@@ -3440,7 +3628,6 @@ export function StudioShell() {
           display: grid;
           align-content: center;
           gap: 6px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent);
           background:
             radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 46%),
             radial-gradient(circle at 12% 100%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 42%),
@@ -3481,10 +3668,6 @@ export function StudioShell() {
           gap: 12px;
           min-height: 46px;
           padding: 0 18px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
-        }
-        .studio-settings-stat-row:last-child {
-          border-bottom: 0;
         }
         .studio-settings-stat-row dt,
         .studio-settings-stat-row span:first-child {
@@ -3502,16 +3685,16 @@ export function StudioShell() {
           text-align: right;
           font-variant-numeric: tabular-nums;
         }
-        .studio-settings-invoices-card {
-          padding: 16px 16px 12px;
+        .studio-settings-workspace .studio-settings-invoices-card,
+        .studio-settings-workspace .studio-settings-plans {
+          padding: 16px 18px 12px !important;
         }
         .studio-settings-card-title {
-          margin: 0 0 4px;
-          padding: 0 2px 10px;
+          margin: 0 0 10px;
+          padding: 0 2px;
           color: var(--color-cursor-text-bright);
           font-size: 13px;
           font-weight: 750;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
         }
         .studio-settings-invoice-list {
           display: grid;
@@ -3524,12 +3707,10 @@ export function StudioShell() {
           gap: 14px;
           min-height: 58px;
           padding: 12px 2px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent);
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
         .studio-settings-invoice-row:last-child {
-          border-bottom: 0;
           padding-bottom: 2px;
         }
         .studio-settings-invoice-copy {
@@ -3646,6 +3827,65 @@ export function StudioShell() {
           background: color-mix(in srgb, var(--cursor-accent) 11%, var(--mos-surface));
           color: var(--color-cursor-text-bright);
         }
+        .studio-settings-custom-amount {
+          display: grid;
+          gap: 10px;
+          padding: 12px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm);
+          background: color-mix(in srgb, var(--mos-surface) 54%, transparent);
+        }
+        .studio-settings-custom-amount .studio-settings-plan-copy h4 {
+          margin: 0;
+          font-size: 14px;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-settings-custom-amount .studio-settings-plan-copy p {
+          margin: 4px 0 0;
+          font-size: 12px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-settings-custom-amount-fields {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .studio-settings-custom-amount-input {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+          padding: 0 10px;
+          min-height: 34px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm);
+          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-settings-custom-amount-input input {
+          width: 100%;
+          min-width: 0;
+          border: 0;
+          outline: none;
+          background: transparent;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-weight: 700;
+        }
+        .studio-settings-custom-amount-hint,
+        .studio-settings-custom-amount-error {
+          margin: 0;
+          font-size: 12px;
+        }
+        .studio-settings-custom-amount-hint {
+          color: var(--color-cursor-muted);
+        }
+        .studio-settings-custom-amount-error {
+          color: #f87171;
+        }
         .studio-settings-rate-strip {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3667,7 +3907,6 @@ export function StudioShell() {
         .studio-settings-plans {
           display: grid;
           gap: 8px;
-          padding: 8px !important;
         }
         .studio-settings-plan-row {
           display: flex;
@@ -3828,7 +4067,6 @@ export function StudioShell() {
           align-items: flex-start;
           justify-content: space-between;
           gap: 12px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 58%, transparent);
           background:
             radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 46%),
             color-mix(in srgb, var(--mos-bg) 28%, transparent);
@@ -3958,11 +4196,9 @@ export function StudioShell() {
         .studio-settings-payment-card .studio-bank-row {
           background: transparent;
           border-radius: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 42%, transparent);
           padding: 8px 0;
         }
         .studio-settings-payment-card .studio-bank-row:last-child {
-          border-bottom: 0;
           padding-bottom: 0;
         }
         .studio-settings-payment-card .studio-bank-row strong {
@@ -4055,13 +4291,11 @@ export function StudioShell() {
           display: grid;
           gap: 3px;
           margin: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
           padding: 0 0 10px;
           color: var(--color-cursor-muted);
           font-size: 13px;
         }
         .studio-settings-feed p:last-child {
-          border-bottom: 0;
           padding-bottom: 0;
         }
         .studio-settings-feed strong {
@@ -4083,7 +4317,6 @@ export function StudioShell() {
           align-items: baseline;
           justify-content: space-between;
           gap: 12px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 48%, transparent);
           padding: 14px 16px 12px;
         }
         .studio-settings-activity-head strong {
@@ -4107,10 +4340,6 @@ export function StudioShell() {
           gap: 12px;
           align-items: start;
           padding: 12px 16px;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 36%, transparent);
-        }
-        .studio-settings-activity-row:last-child {
-          border-bottom: 0;
         }
         .studio-settings-activity-tone {
           width: 8px;
@@ -5112,11 +5341,11 @@ export function StudioShell() {
           flex-direction: column;
           align-items: stretch;
           width: 100%;
-          max-width: min(var(--studio-composer-shell-max), calc(100% - 24px));
-          margin: 0 auto;
+          max-width: none;
+          margin: 0;
           position: relative;
-          left: -5px;
-          padding: 2px 10px max(8px, env(safe-area-inset-bottom, 8px));
+          left: 0;
+          padding: 2px 12px max(8px, env(safe-area-inset-bottom, 8px));
           background: transparent !important;
         }
         .studio-composer-row {
@@ -5295,25 +5524,27 @@ export function StudioShell() {
         }
         .studio-composer .cursor-composer-box .studio-preset-grid-panel {
           position: absolute;
-          left: 8px;
-          right: auto;
+          left: 0;
+          right: 0;
           bottom: calc(100% + 10px);
           z-index: 40;
-          width: min(360px, calc(100% - 16px));
-          max-width: min(360px, calc(100% - 16px));
+          width: 100%;
+          max-width: none;
+          box-sizing: border-box;
         }
         .studio-preset-grid-panel {
           position: absolute;
-          left: 8px;
-          right: auto;
+          left: 0;
+          right: 0;
           bottom: calc(100% + 10px);
           z-index: 40;
           display: flex;
           flex-direction: column;
           gap: 8px;
           min-height: 0;
-          width: min(360px, calc(100% - 16px));
-          max-width: min(360px, calc(100% - 16px));
+          width: 100%;
+          max-width: none;
+          box-sizing: border-box;
           max-height: min(72vh, 520px);
           overflow: visible;
           border: 1px solid var(--studio-composer-glass-border);
@@ -5378,6 +5609,10 @@ export function StudioShell() {
           margin: 0 -4px;
           padding: 8px 4px 12px;
           scrollbar-width: thin;
+        }
+        .studio-polish.is-studio-mobile .studio-preset-grid,
+        .studio-composer-options-panel .studio-preset-grid {
+          grid-template-columns: minmax(0, 1fr);
         }
         .studio-preset-grid::-webkit-scrollbar {
           width: 6px;
@@ -5485,6 +5720,14 @@ export function StudioShell() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-preset-grid-copy .studio-preset-grid-blurb,
+        .studio-preset-grid-copy > span {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
+          line-height: 1.3;
         }
         .studio-composer .studio-pill-btn.studio-preset-trigger {
           height: 30px;
@@ -5881,9 +6124,10 @@ export function StudioShell() {
           filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.42));
         }
         .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock {
-          width: min(var(--studio-composer-shell-max), calc(100% - 24px));
-          margin-left: auto;
-          margin-right: auto;
+          width: calc(100% - 24px);
+          max-width: none;
+          margin-left: 12px;
+          margin-right: 12px;
           background: var(--studio-composer-glass) !important;
           backdrop-filter: var(--studio-composer-glass-blur) !important;
           -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
@@ -6007,7 +6251,7 @@ export function StudioShell() {
           align-items: center;
           gap: 6px;
           flex: 0 0 auto;
-          margin-left: 0;
+          margin-left: auto;
         }
         .studio-composer .studio-pill-btn {
           height: 30px;
@@ -6890,10 +7134,10 @@ export function StudioShell() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 40px;
-          min-width: 40px;
-          height: 40px;
-          min-height: 40px;
+          width: 30px;
+          min-width: 30px;
+          height: 30px;
+          min-height: 30px;
           padding: 0;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 999px;
@@ -6909,8 +7153,8 @@ export function StudioShell() {
             background var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-composer-circle-btn svg {
-          width: 18px;
-          height: 18px;
+          width: 14px;
+          height: 14px;
           stroke-width: 2.25;
           flex: 0 0 auto;
         }
@@ -6930,6 +7174,13 @@ export function StudioShell() {
         }
         .studio-composer-circle-btn.studio-composer-send-btn {
           display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          width: auto;
+          min-width: 30px;
+          padding: 0 10px 0 8px;
+          border-radius: 999px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 48%, #000 8%);
           background:
             radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 24%, transparent), transparent 44%),
@@ -6942,6 +7193,17 @@ export function StudioShell() {
             inset 0 1px 0 color-mix(in srgb, #fff 36%, transparent),
             0 4px 14px color-mix(in srgb, var(--cursor-accent) 24%, transparent);
           color: #ffffff;
+        }
+        .studio-composer-send-cost {
+          display: inline-flex;
+          align-items: center;
+          font-size: 10px;
+          font-weight: 700;
+          line-height: 1;
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+          color: color-mix(in srgb, #ffffff 96%, transparent);
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 28%, transparent);
         }
         .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled) {
           transform: none;
@@ -6956,6 +7218,10 @@ export function StudioShell() {
           box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
           color: var(--color-cursor-muted);
         }
+        .studio-composer-circle-btn.studio-composer-send-btn:disabled .studio-composer-send-cost {
+          color: inherit;
+          text-shadow: none;
+        }
         .studio-composer-options-panel {
           display: flex;
           flex-direction: column;
@@ -6963,7 +7229,7 @@ export function StudioShell() {
           width: 100%;
           flex: 0 0 auto;
           order: -1;
-          max-height: min(48vh, 340px);
+          max-height: min(62vh, 460px);
           margin-bottom: 8px;
           overflow: hidden;
           border: 1px solid var(--studio-composer-glass-border);
@@ -7002,6 +7268,223 @@ export function StudioShell() {
           padding: 8px 12px 12px;
           overflow: auto;
         }
+        .studio-composer-upload-dropzone {
+          display: flex;
+          width: 100%;
+          min-height: 88px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 16px 14px;
+          border: 1.5px dashed color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+          border-radius: 16px;
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 55%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 82%, transparent);
+          color: var(--color-cursor-text);
+          cursor: pointer;
+          text-align: center;
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-composer-upload-dropzone:hover,
+        .studio-composer-upload-dropzone:focus-visible {
+          border-color: color-mix(in srgb, var(--cursor-accent) 54%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 55%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 70%, var(--cursor-accent-dim) 18%);
+          outline: none;
+        }
+        .studio-composer-upload-dropzone-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          color: var(--cursor-accent);
+        }
+        .studio-composer-upload-dropzone strong {
+          font-size: 13px;
+          font-weight: 700;
+          color: var(--color-cursor-text-bright);
+          line-height: 1.2;
+        }
+        .studio-composer-upload-dropzone span {
+          max-width: 22rem;
+          font-size: 11px;
+          font-weight: 500;
+          line-height: 1.35;
+          color: var(--color-cursor-muted);
+        }
+        .studio-composer-options-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          width: 100%;
+          align-items: stretch;
+        }
+        .studio-composer-options-grid > .studio-composer-inline-settings.is-panel {
+          display: contents;
+        }
+        .studio-composer-options-grid > .studio-composer-setting-card,
+        .studio-composer-options-grid > .studio-inline-setting.is-panel,
+        .studio-composer-options-grid > .studio-inline-audio-setting.is-panel,
+        .studio-composer-options-grid .studio-composer-inline-settings.is-panel > .studio-inline-setting.is-panel,
+        .studio-composer-options-grid .studio-composer-inline-settings.is-panel > .studio-inline-audio-setting.is-panel {
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+          align-self: stretch;
+          box-sizing: border-box;
+        }
+        .studio-composer-options-grid .studio-inline-setting.is-panel {
+          display: flex;
+          flex: none;
+        }
+        .studio-composer-options-grid .studio-inline-setting.is-panel > .studio-composer-setting-card {
+          flex: 1 1 auto;
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+        }
+        .studio-composer-options-grid .studio-composer-setting-card,
+        .studio-composer-options-grid .studio-composer-setting-card.studio-preset-trigger {
+          display: flex;
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+          height: auto;
+          min-height: 96px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 12px 10px;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: 14px;
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 50%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 88%, transparent);
+          box-sizing: border-box;
+        }
+        .studio-composer-setting-card {
+          display: flex;
+          min-width: 0;
+          width: 100%;
+          max-width: none;
+          min-height: 96px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 12px 10px;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: 14px;
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 50%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 88%, transparent);
+          color: var(--color-cursor-text);
+          text-align: center;
+          cursor: pointer;
+          box-sizing: border-box;
+          transition:
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            box-shadow var(--studio-motion-med) var(--studio-motion-ease);
+        }
+        .studio-composer-setting-card:hover,
+        .studio-composer-setting-card.is-open,
+        .studio-composer-setting-card[aria-expanded="true"] {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 50%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 72%, var(--cursor-accent-dim) 16%);
+          box-shadow: 0 8px 18px color-mix(in srgb, #000 18%, transparent);
+        }
+        .studio-composer-setting-card-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          flex: 0 0 auto;
+          border-radius: 11px;
+          background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          color: var(--cursor-accent);
+          overflow: hidden;
+        }
+        .studio-composer-setting-card-icon svg {
+          width: 16px;
+          height: 16px;
+        }
+        .studio-composer-setting-card-icon .studio-preset-trigger-thumb {
+          width: 100%;
+          height: 100%;
+        }
+        .studio-composer-setting-card-icon .studio-preset-trigger-direct,
+        .studio-composer-setting-card-icon .studio-preset-grid-thumb {
+          width: 100%;
+          height: 100%;
+          border-radius: 11px;
+        }
+        .studio-composer-setting-card-icon .studio-preset-trigger-sheet-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border-radius: 11px;
+        }
+        .studio-composer-setting-card-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--color-cursor-muted);
+          line-height: 1;
+        }
+        .studio-composer-setting-card-value {
+          max-width: 100%;
+          overflow: hidden;
+          color: var(--color-cursor-text-bright);
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1.2;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-composer-options-audio-card,
+        .studio-composer-options-body .studio-inline-audio-setting.is-panel,
+        .studio-composer-options-grid .studio-composer-options-audio-card {
+          display: flex;
+          grid-column: auto;
+          width: 100%;
+          max-width: none;
+          min-width: 0;
+          min-height: 96px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          padding: 12px 10px;
+          border: 1px solid var(--studio-composer-glass-border);
+          border-radius: 14px;
+          background:
+            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 50%),
+            color-mix(in srgb, var(--studio-composer-glass-muted) 88%, transparent);
+          box-sizing: border-box;
+        }
+        .studio-composer-options-audio-card .studio-inline-audio-label,
+        .studio-composer-options-body .studio-inline-audio-setting.is-panel .studio-inline-audio-label {
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: var(--color-cursor-muted);
+          line-height: 1;
+        }
         .studio-composer-options-row {
           display: grid;
           grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -7026,120 +7509,15 @@ export function StudioShell() {
           text-transform: uppercase;
           color: var(--color-cursor-muted);
         }
-        .studio-composer-options-body .studio-composer-options-row > .studio-pill-btn,
-        .studio-composer-options-body .studio-composer-options-row > .studio-inline-audio-setting,
-        .studio-composer-options-body .studio-composer-options-row > .studio-composer-options-field,
-        .studio-composer-options-body .studio-composer-options-row .studio-inline-setting.is-panel {
-          width: 100%;
-          max-width: 100%;
-          min-width: 0;
-        }
-        .studio-composer-options-body .studio-pill-btn.studio-preset-trigger.is-panel,
-        .studio-composer-options-body .studio-inline-audio-setting.is-panel,
-        .studio-composer-options-body .studio-inline-setting-trigger.is-panel,
-        .studio-composer-options-body .studio-upload-stacked {
-          width: 100%;
-          max-width: none;
-        }
-        .studio-composer-options-body .studio-pill-btn.studio-preset-trigger.is-panel {
-          display: flex;
-          justify-content: flex-start;
-          max-width: none;
-        }
-        .studio-composer-options-body .studio-pill-btn.studio-preset-trigger.is-panel .studio-preset-trigger-copy {
-          max-width: none;
-          flex: 1 1 auto;
-        }
-        .studio-composer-options-body .studio-inline-audio-setting.is-panel {
-          justify-content: space-between;
-          width: 100%;
-          height: 36px;
-          min-height: 36px;
-        }
         .studio-composer-options-body .studio-inline-setting.is-panel {
-          display: block;
+          display: flex;
           width: 100%;
           min-width: 0;
-          flex: 1 1 0;
-        }
-        .studio-composer-options-body .studio-inline-setting-trigger.is-panel {
-          width: 100%;
           max-width: none;
-          height: 36px;
-          min-height: 36px;
-          justify-content: flex-start;
-          gap: 6px;
-        }
-        .studio-composer-options-body .studio-inline-setting-trigger.is-panel span {
-          color: var(--color-cursor-muted);
-          font-size: 11px;
-          font-weight: 650;
-        }
-        .studio-composer-options-body .studio-inline-setting-trigger.is-panel strong {
-          max-width: none;
-          margin-left: auto;
-          text-align: right;
-        }
-        .studio-composer-options-body .studio-upload-stacked {
-          display: inline-flex;
-          width: 100%;
-          height: 36px;
-          min-height: 36px;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 8px;
-          padding-inline: 12px;
-        }
-        .studio-composer-options-body .studio-upload-stacked span {
-          overflow: hidden;
-          color: var(--color-cursor-text);
-          font-size: 11px;
-          font-weight: 650;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          flex: none;
         }
         .studio-composer-options-body .studio-composer-inline-settings.is-panel {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          width: 100%;
-          overflow: visible;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel .studio-composer-options-row {
-          width: 100%;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel .studio-inline-setting-trigger,
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel .studio-inline-audio-setting {
-          width: 100%;
-          max-width: 100%;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel > .studio-inline-setting {
-          width: 100%;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel > .studio-inline-setting .studio-inline-setting-trigger {
-          width: 100%;
-          max-width: 100%;
-          height: 36px;
-          min-height: 36px;
-          justify-content: space-between;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings.is-panel > .studio-inline-audio-setting {
-          width: 100%;
-          height: 36px;
-          min-height: 36px;
-          justify-content: space-between;
-        }
-        .studio-composer-options-body .studio-pill-btn,
-        .studio-composer-options-body .studio-inline-setting-trigger,
-        .studio-composer-options-body .studio-inline-audio-setting,
-        .studio-composer-options-body .studio-composer-inline-settings:not(.is-panel) {
-          width: 100%;
-          max-width: 100%;
-        }
-        .studio-composer-options-body .studio-composer-inline-settings:not(.is-panel) {
-          flex-direction: column;
-          align-items: stretch;
-          overflow: visible;
+          display: contents;
         }
         .studio-composer-options-panel .studio-preset-grid-panel {
           position: relative;
@@ -8759,11 +9137,12 @@ export function StudioShell() {
             var(--studio-generate-column-width);
           gap: var(--studio-composer-row-gap);
           width: 100%;
-          max-width: min(var(--studio-composer-shell-max), calc(100% - 24px));
+          max-width: none;
           min-height: 100%;
-          margin: 0 auto;
+          margin: 0;
           position: relative;
-          left: -5px;
+          left: 0;
+          padding-inline: 12px;
           box-sizing: border-box;
         }
         .studio-chat-composer-gutter {
@@ -8783,12 +9162,16 @@ export function StudioShell() {
         }
         .studio-chat-empty-state {
           position: absolute;
-          inset: 0;
+          top: 0;
+          right: 0;
+          left: 0;
+          bottom: var(--studio-chat-empty-clearance, 0px);
           z-index: 0;
           display: flex;
           align-items: center;
           justify-content: center;
           pointer-events: none;
+          box-sizing: border-box;
         }
         .studio-chat-empty-state .studio-empty-logo-btn {
           pointer-events: auto;
@@ -9451,27 +9834,37 @@ export function StudioShell() {
             onNewChat={openNewComposerTab}
             disableDrag={isMobile}
           />
+          {(!isMobile || isAdminUser) ? (
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            <CreditPill entitlement={entitlement} onClick={openCreditsPane} />
-            {isAdminUser ? (
-              <AdminQuickLinks onOpenAdminTab={openAdminTab} />
-            ) : null}
-            <button
-              className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-              onClick={() => setHistoryOpen((open) => !open)}
-              aria-label="Generation history"
-              title="Generation history"
-              aria-pressed={historyOpen}
-            >
-              <History className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
             {!isMobile ? (
-              <StudioSettingsLauncher
-                isActive={settingsOpen}
-                onOpenSettingsTab={openSettingsTab}
-              />
-            ) : null}
+              <>
+                <CreditPill
+                  entitlement={entitlement}
+                  creditPriceCents={pricing?.creditPriceCents}
+                  onClick={openCreditsPane}
+                />
+                {isAdminUser ? (
+                  <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+                ) : null}
+                <button
+                  className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                  onClick={() => setHistoryOpen((open) => !open)}
+                  aria-label="Generation history"
+                  title="Generation history"
+                  aria-pressed={historyOpen}
+                >
+                  <History className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <StudioSettingsLauncher
+                  isActive={settingsOpen}
+                  onOpenSettingsTab={openSettingsTab}
+                />
+              </>
+            ) : (
+              <AdminQuickLinks onOpenAdminTab={openAdminTab} />
+            )}
           </div>
+          ) : null}
         </header>
         <section className="min-h-0 flex-1">
           <ActivePane
@@ -9536,28 +9929,24 @@ export function StudioShell() {
             setAspectRatio={setAspectRatio}
             imageResolution={imageResolution}
             setImageResolution={setImageResolution}
+            imageQuality={imageQuality}
+            setImageQuality={setImageQuality}
             resolution={resolution}
             setResolution={setResolution}
             durationSeconds={durationSeconds}
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
-            skipPromptEnhancement={skipPromptEnhancement}
-            setSkipPromptEnhancement={setSkipPromptEnhancement}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
-            styleSheets={styleSheets}
+            styleSheets={styleSheetsForPicker}
             composerStyleMode={composerStyleMode}
             activeStyleSheetId={activeStyleSheetId}
             activeStyleSheet={activeStyleSheet}
-            styleSheetAssets={assetsWithPreviewUrls ?? []}
+            styleSheetAssets={assetLookupPool ?? []}
             onSelectDirect={handleSelectDirect}
             onSelectStyleSheet={handleSelectStyleSheet}
-            onCreateStyleSheet={() => {
-              setMode("element");
-              setElementType("style_sheet");
-            }}
             scriptTypes={scriptTypes}
             scriptType={scriptType}
             setScriptType={setScriptType}
@@ -9573,7 +9962,6 @@ export function StudioShell() {
             status={status}
             entitlement={entitlement}
             onOpenCredits={openCreditsPane}
-            attachments={attachments}
             startFrameAttachmentId={startFrameAttachmentId}
             setStartFrameAttachmentId={setStartFrameAttachmentId}
             onSubmit={handleSubmit}
@@ -9588,7 +9976,31 @@ export function StudioShell() {
         ) : null}
       </PanelGroup>
 
-      {isMobile ? <StudioMobileBottomNav section={mobileSection} onSelect={openMobileSection} /> : null}
+      {isMobile ? (
+        <StudioMobileBottomNav
+          section={mobileSection}
+          onSelect={openMobileSection}
+          tools={
+            <>
+              <CreditPill
+                entitlement={entitlement}
+                creditPriceCents={pricing?.creditPriceCents}
+                onClick={openCreditsPane}
+              />
+              <button
+                type="button"
+                className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                onClick={() => setHistoryOpen((open) => !open)}
+                aria-label="Generation history"
+                title="Generation history"
+                aria-pressed={historyOpen}
+              >
+                <History className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </>
+          }
+        />
+      ) : null}
 
       {historyOpen ? (
         <StudioHistoryPanel
@@ -9624,7 +10036,7 @@ export function StudioShell() {
             if (action === "attach") attachEntry(entry);
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
-            if (action === "download") handleEntryOpen(entry);
+            if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
           }}
         />
       ) : null}
@@ -9646,14 +10058,14 @@ function StudioComposer({
   setAspectRatio,
   imageResolution,
   setImageResolution,
+  imageQuality,
+  setImageQuality,
   resolution,
   setResolution,
   durationSeconds,
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
-  skipPromptEnhancement,
-  setSkipPromptEnhancement,
   elementType,
   setElementType,
   presets,
@@ -9664,7 +10076,6 @@ function StudioComposer({
   styleSheetAssets,
   onSelectDirect,
   onSelectStyleSheet,
-  onCreateStyleSheet,
   scriptTypes,
   scriptType,
   setScriptType,
@@ -9695,17 +10106,36 @@ function StudioComposer({
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const [composerOptionsOpen, setComposerOptionsOpen] = useState(false);
   const { isMobile } = useMobileLayout();
+  const styleSheetAssetsWithThumbs = useMemo(
+    () =>
+      (styleSheetAssets ?? []).map((asset) => {
+        const full = fullQualityUrl(asset.signedReadUrl, asset.mediaUrl);
+        const thumb = thumbnailDisplayUrl(
+          asset.signedThumbnailUrl,
+          asset.previewUrl,
+          asset.mediaUrl,
+        );
+        return {
+          ...asset,
+          signedReadUrl: full,
+          previewUrl: thumb ?? full,
+          mediaUrl: full,
+        };
+      }),
+    [styleSheetAssets],
+  );
   const activeStyleSheetAsset = useMemo(() => {
-    if (!activeStyleSheet?.sheetAssetId || !styleSheetAssets?.length) return null;
+    if (!activeStyleSheet?.sheetAssetId || !styleSheetAssetsWithThumbs.length) return null;
     return (
-      styleSheetAssets.find(
+      styleSheetAssetsWithThumbs.find(
         (asset) =>
           asset._id === activeStyleSheet.sheetAssetId
           || asset.studioId === activeStyleSheet.sheetAssetId,
       ) ?? null
     );
-  }, [activeStyleSheet, styleSheetAssets]);
+  }, [activeStyleSheet, styleSheetAssetsWithThumbs]);
   const inputLineRef = useRef(null);
+  const composerShellRef = useRef(null);
   const isElementMode = mode === "element";
   const elementReferenceCounts = useMemo(() => {
     const media = attachments.filter(
@@ -9734,10 +10164,48 @@ function StudioComposer({
     }
   }, [isMobile]);
 
+  useEffect(() => {
+    const composer = composerShellRef.current;
+    if (!composer) return;
+    const root = composer.closest(".studio-polish");
+    const main = composer.closest("main");
+    if (!root) return;
+
+    const syncClearance = () => {
+      const chat = root.querySelector(".studio-chat-render-area");
+      if (!chat) {
+        root.style.removeProperty("--studio-chat-empty-clearance");
+        return;
+      }
+      const chatBox = chat.getBoundingClientRect();
+      const composerBox = composer.getBoundingClientRect();
+      const clearance = Math.max(0, Math.round(chatBox.bottom - composerBox.top));
+      root.style.setProperty("--studio-chat-empty-clearance", `${clearance}px`);
+    };
+
+    const observer = new ResizeObserver(syncClearance);
+    observer.observe(composer);
+    if (main) observer.observe(main);
+    window.addEventListener("resize", syncClearance);
+    window.visualViewport?.addEventListener("resize", syncClearance);
+    syncClearance();
+    const raf = window.requestAnimationFrame(syncClearance);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      observer.disconnect();
+      window.removeEventListener("resize", syncClearance);
+      window.visualViewport?.removeEventListener("resize", syncClearance);
+      root.style.removeProperty("--studio-chat-empty-clearance");
+    };
+  }, [isMobile]);
+
   const cost = composerCreditCost({
     mode,
     resolution,
     imageResolution,
+    imageQuality,
+    aspectRatio,
     durationSeconds,
     hasReferenceInput: hasComposerReferences,
     hasVideoReferenceInput,
@@ -9843,8 +10311,6 @@ function StudioComposer({
       presetGridOpen={presetGridOpen}
       setPresetGridOpen={setPresetGridOpen}
       uploadInputRef={uploadInputRef}
-      skipPromptEnhancement={skipPromptEnhancement}
-      setSkipPromptEnhancement={setSkipPromptEnhancement}
       mode={mode}
       scriptTypes={scriptTypes}
       scriptType={scriptType}
@@ -9857,6 +10323,8 @@ function StudioComposer({
       setAspectRatio={setAspectRatio}
       imageResolution={imageResolution}
       setImageResolution={setImageResolution}
+      imageQuality={imageQuality}
+      setImageQuality={setImageQuality}
       resolution={resolution}
       setResolution={setResolution}
       durationSeconds={durationSeconds}
@@ -9906,6 +10374,7 @@ function StudioComposer({
 
   return (
     <div
+      ref={composerShellRef}
       className="cursor-composer-shell studio-composer"
       data-drop-target="composer"
       onDragEnter={() => setDragOver(true)}
@@ -9966,7 +10435,7 @@ function StudioComposer({
             {presetGridOpen ? (
               <StudioStyleSheetPickerPanel
                 styleSheets={styleSheets}
-                assets={styleSheetAssets}
+                assets={styleSheetAssetsWithThumbs}
                 selectedMode={composerStyleMode}
                 activeStyleSheetId={activeStyleSheetId}
                 onSelectDirect={() => {
@@ -9975,10 +10444,6 @@ function StudioComposer({
                 }}
                 onSelectStyleSheet={(sheetId) => {
                   onSelectStyleSheet(sheetId);
-                  setPresetGridOpen(false);
-                }}
-                onCreateStyleSheet={() => {
-                  onCreateStyleSheet();
                   setPresetGridOpen(false);
                 }}
                 onClose={() => setPresetGridOpen(false)}
@@ -9994,7 +10459,7 @@ function StudioComposer({
       {presetGridOpen && !isMobile ? (
         <StudioStyleSheetPickerPanel
           styleSheets={styleSheets}
-          assets={styleSheetAssets}
+          assets={styleSheetAssetsWithThumbs}
           selectedMode={composerStyleMode}
           activeStyleSheetId={activeStyleSheetId}
           onSelectDirect={() => {
@@ -10003,10 +10468,6 @@ function StudioComposer({
           }}
           onSelectStyleSheet={(sheetId) => {
             onSelectStyleSheet(sheetId);
-            setPresetGridOpen(false);
-          }}
-          onCreateStyleSheet={() => {
-            onCreateStyleSheet();
             setPresetGridOpen(false);
           }}
           onClose={() => setPresetGridOpen(false)}
@@ -10075,8 +10536,10 @@ function StudioComposer({
       </div>
       <div className="studio-composer-toolbar">
         {!isMobile ? (
-          <div className="studio-composer-toolbar-scroll">
-            {controlStrip}
+          <>
+            <div className="studio-composer-toolbar-scroll">
+              {controlStrip}
+            </div>
             <div className="studio-composer-actions">
               <button
                 type="button"
@@ -10088,7 +10551,7 @@ function StudioComposer({
                 {transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Mic aria-hidden="true" />}
               </button>
             </div>
-          </div>
+          </>
         ) : (
           <>
             <button
@@ -10120,6 +10583,9 @@ function StudioComposer({
                 onClick={handleGenerateClick}
               >
                 <ArrowUp aria-hidden="true" />
+                <span className="studio-composer-send-cost">
+                  {formatTtdFromCredits(cost, pricing?.creditPriceCents)}
+                </span>
               </button>
             </div>
           </>
@@ -10149,8 +10615,7 @@ function StudioComposer({
               </span>
               {!isMobile ? (
                 <span className="studio-generate-cost">
-                  <Coins className="studio-generate-mark" aria-hidden="true" />
-                  {formatCreditBalance(cost)}
+                  {formatTtdFromCredits(cost, pricing?.creditPriceCents)}
                 </span>
               ) : null}
             </button>
@@ -10183,8 +10648,6 @@ function StudioComposerControlStrip({
   presetGridOpen,
   setPresetGridOpen,
   uploadInputRef,
-  skipPromptEnhancement,
-  setSkipPromptEnhancement,
   mode,
   scriptTypes,
   scriptType,
@@ -10197,6 +10660,8 @@ function StudioComposerControlStrip({
   setAspectRatio,
   imageResolution,
   setImageResolution,
+  imageQuality,
+  setImageQuality,
   resolution,
   setResolution,
   durationSeconds,
@@ -10221,17 +10686,12 @@ function StudioComposerControlStrip({
   if (layout === "panel") {
     return (
       <div className={className}>
-        {isElementMode ? (
-          <>
-            <StudioUploadButton inputRef={uploadInputRef} stacked />
-            <div className="studio-composer-options-row">
-              <StudioElementTypePicker elementType={elementType} setElementType={setElementType} panel />
-            </div>
-          </>
-        ) : (
-          <>
-            <StudioUploadButton inputRef={uploadInputRef} stacked />
-            <div className="studio-composer-options-row">
+        <StudioUploadButton inputRef={uploadInputRef} dropzone />
+        <div className="studio-composer-options-grid">
+          {isElementMode ? (
+            <StudioElementTypePicker elementType={elementType} setElementType={setElementType} panel />
+          ) : (
+            <>
               <StudioStyleSheetTriggerButton
                 selectedMode={composerStyleMode}
                 activeSheet={activeStyleSheet}
@@ -10240,46 +10700,47 @@ function StudioComposerControlStrip({
                 onClick={() => setPresetGridOpen((open) => !open)}
                 panel
               />
-              <StudioPromptEnhanceToggle enabled={!skipPromptEnhancement} onChange={(enabled) => setSkipPromptEnhancement(!enabled)} panel />
-            </div>
-            {mode === "script" && scriptTypeItems.length ? (
-              <StudioInlineSettingSelect
-                icon={FileText}
-                label="Script type"
-                value={scriptType}
-                items={scriptTypeItems}
-                onChange={setScriptType}
-                panel
-              />
-            ) : null}
-            {showReferenceIntent && referenceIntentItems.length ? (
-              <StudioInlineSettingSelect
-                icon={ImageIcon}
-                label="Reference use"
-                value={referenceIntent}
-                items={referenceIntentItems}
-                onChange={setReferenceIntent}
-                panel
-              />
-            ) : null}
-            {mode !== "script" ? (
-              <StudioComposerInlineSettings
-                mode={mode}
-                aspectRatio={aspectRatio}
-                setAspectRatio={setAspectRatio}
-                imageResolution={imageResolution}
-                setImageResolution={setImageResolution}
-                resolution={resolution}
-                setResolution={setResolution}
-                durationSeconds={durationSeconds}
-                setDurationSeconds={setDurationSeconds}
-                audioEnabled={audioEnabled}
-                setAudioEnabled={setAudioEnabled}
-                panelLayout
-              />
-            ) : null}
-          </>
-        )}
+              {mode === "script" && scriptTypeItems.length ? (
+                <StudioInlineSettingSelect
+                  icon={FileText}
+                  label="Script type"
+                  value={scriptType}
+                  items={scriptTypeItems}
+                  onChange={setScriptType}
+                  panel
+                />
+              ) : null}
+              {showReferenceIntent && referenceIntentItems.length ? (
+                <StudioInlineSettingSelect
+                  icon={ImageIcon}
+                  label="Refs"
+                  value={referenceIntent}
+                  items={referenceIntentItems}
+                  onChange={setReferenceIntent}
+                  panel
+                />
+              ) : null}
+              {mode !== "script" ? (
+                <StudioComposerInlineSettings
+                  mode={mode}
+                  aspectRatio={aspectRatio}
+                  setAspectRatio={setAspectRatio}
+                  imageResolution={imageResolution}
+                  setImageResolution={setImageResolution}
+                  imageQuality={imageQuality}
+                  setImageQuality={setImageQuality}
+                  resolution={resolution}
+                  setResolution={setResolution}
+                  durationSeconds={durationSeconds}
+                  setDurationSeconds={setDurationSeconds}
+                  audioEnabled={audioEnabled}
+                  setAudioEnabled={setAudioEnabled}
+                  panelLayout
+                />
+              ) : null}
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -10323,7 +10784,6 @@ function StudioComposerControlStrip({
               hideChevron
             />
           ) : null}
-          <StudioPromptEnhanceToggle enabled={!skipPromptEnhancement} onChange={(enabled) => setSkipPromptEnhancement(!enabled)} />
           {mode !== "script" ? (
             <StudioComposerInlineSettings
               mode={mode}
@@ -10331,6 +10791,8 @@ function StudioComposerControlStrip({
               setAspectRatio={setAspectRatio}
               imageResolution={imageResolution}
               setImageResolution={setImageResolution}
+              imageQuality={imageQuality}
+              setImageQuality={setImageQuality}
               resolution={resolution}
               setResolution={setResolution}
               durationSeconds={durationSeconds}
@@ -10568,7 +11030,24 @@ function StudioAddMenu({ open, setOpen, onAction }) {
   );
 }
 
-function StudioUploadButton({ inputRef, stacked = false }) {
+function StudioUploadButton({ inputRef, stacked = false, dropzone = false }) {
+  if (dropzone) {
+    return (
+      <button
+        type="button"
+        className="studio-composer-upload-dropzone"
+        title="Add photos, videos, or notes"
+        aria-label="Add photos, videos, or notes"
+        onClick={() => inputRef.current?.click()}
+      >
+        <span className="studio-composer-upload-dropzone-icon" aria-hidden="true">
+          <Upload className="h-4 w-4" />
+        </span>
+        <strong>Drop files here or tap to browse</strong>
+        <span>Photos, videos, audio, or notes</span>
+      </button>
+    );
+  }
   if (stacked) {
     return (
       <button
@@ -10603,6 +11082,8 @@ function StudioComposerInlineSettings({
   setAspectRatio,
   imageResolution,
   setImageResolution,
+  imageQuality,
+  setImageQuality,
   resolution,
   setResolution,
   durationSeconds,
@@ -10630,9 +11111,14 @@ function StudioComposerInlineSettings({
     { value: "21:9", label: "21:9", meta: "Cinematic wide" },
   ];
   const imageResolutionItems = [
-    { value: "1K", label: "1K", meta: "GPT Image 2 draft" },
-    { value: "2K", label: "2K", meta: "GPT Image 2 default" },
-    { value: "4K", label: "4K", meta: "GPT Image 2 max" },
+    { value: "1K", label: "1K", meta: "Smaller canvas" },
+    { value: "2K", label: "2K", meta: "Default canvas" },
+    { value: "4K", label: "4K", meta: "Max canvas" },
+  ];
+  const imageQualityItems = [
+    { value: "low", label: "Low", meta: "Fast draft" },
+    { value: "medium", label: "Medium", meta: "Balanced" },
+    { value: "high", label: "High", meta: "Best detail" },
   ];
   const resolutionItems = [
     { value: "854x480", label: "480p", meta: "Draft" },
@@ -10648,6 +11134,9 @@ function StudioComposerInlineSettings({
   const activeImageResolution = imageResolutionItems.some((item) => item.value === imageResolution)
     ? imageResolution
     : imageResolutionItems[0].value;
+  const activeImageQuality = imageQualityItems.some((item) => item.value === imageQuality)
+    ? imageQuality
+    : imageQualityItems[1].value;
 
   const ratioControl = (
     <StudioInlineSettingSelect
@@ -10672,134 +11161,144 @@ function StudioComposerInlineSettings({
     ) : (
       <StudioInlineSettingSelect
         icon={Gauge}
-        label="Quality"
+        label="Resolution"
         value={resolution}
         items={resolutionItems}
         onChange={setResolution}
         panel
       />
     );
+  const imageQualityControl =
+    mode === "image" ? (
+      <StudioInlineSettingSelect
+        icon={Sparkles}
+        label="Quality"
+        value={activeImageQuality}
+        items={imageQualityItems}
+        onChange={setImageQuality}
+        panel
+      />
+    ) : null;
+
+  const durationControl =
+    mode === "video" ? (
+      <StudioInlineSettingPopover
+        icon={Clock3}
+        label="Duration"
+        valueLabel={`${durationSeconds}s`}
+        menuLabel="Video duration"
+        hideLabel={!showLabels}
+        panel={panelLayout}
+      >
+        <div className="studio-inline-settings-range-panel">
+          <div className="studio-duration-readout">
+            <strong>{localDurationSeconds}s</strong>
+            <span>4-15s</span>
+          </div>
+          <input
+            className="studio-settings-range"
+            type="range"
+            min="4"
+            max={maxVideoDuration}
+            step="1"
+            value={localDurationSeconds}
+            onChange={(event) => setLocalDurationSeconds(event.currentTarget.value)}
+            onPointerUp={(event) => commitDuration(event.currentTarget.value)}
+            onKeyUp={(event) => commitDuration(event.currentTarget.value)}
+            onBlur={(event) => commitDuration(event.currentTarget.value)}
+            style={{ "--range-progress": durationProgress }}
+            aria-label="Video duration"
+          />
+          <div className="studio-duration-ticks" aria-hidden="true">
+            <span>4s</span>
+            <span>8s</span>
+            <span>15s</span>
+          </div>
+          <div className="studio-settings-chip-grid studio-duration-presets" role="group" aria-label="Video duration presets">
+            {["4", "8", "12", "15"].map((seconds) => (
+              <button
+                key={seconds}
+                type="button"
+                className={`studio-settings-chip${String(localDurationSeconds) === seconds ? " is-active" : ""}`}
+                aria-pressed={String(localDurationSeconds) === seconds}
+                onClick={() => commitDuration(seconds)}
+              >
+                <span>{seconds}s</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </StudioInlineSettingPopover>
+    ) : null;
+
+  const audioControl =
+    mode === "video" ? (
+      <div className={`studio-inline-audio-setting${panelLayout ? " is-panel studio-composer-options-audio-card" : ""}`}>
+        <span className="studio-inline-audio-label">Audio</span>
+        <button
+          type="button"
+          className={`studio-audio-switch${audioEnabled ? " is-on" : ""}`}
+          role="switch"
+          aria-checked={audioEnabled}
+          aria-label="Generate synchronized audio with video"
+          onClick={() => setAudioEnabled(!audioEnabled)}
+        />
+      </div>
+    ) : null;
+
+  if (panelLayout) {
+    return (
+      <div className="studio-composer-inline-settings is-panel" aria-label="Composer settings">
+        {ratioControl}
+        {resolutionControl}
+        {imageQualityControl}
+        {durationControl}
+        {audioControl}
+      </div>
+    );
+  }
 
   return (
-    <div className={`studio-composer-inline-settings${panelLayout ? " is-panel" : ""}`} aria-label="Composer settings">
-      {panelLayout ? (
-        <div className="studio-composer-options-row">
-          {ratioControl}
-          {resolutionControl}
-        </div>
-      ) : (
+    <div className="studio-composer-inline-settings" aria-label="Composer settings">
+      <StudioInlineSettingSelect
+        icon={RectangleHorizontal}
+        label="Aspect ratio"
+        value={aspectRatio}
+        items={aspectItems}
+        onChange={setAspectRatio}
+        hideLabel={!showLabels}
+      />
+      {mode === "image" ? (
         <>
           <StudioInlineSettingSelect
-            icon={RectangleHorizontal}
-            label="Aspect ratio"
-            value={aspectRatio}
-            items={aspectItems}
-            onChange={setAspectRatio}
+            icon={Maximize2}
+            label="Resolution"
+            value={activeImageResolution}
+            items={imageResolutionItems}
+            onChange={setImageResolution}
             hideLabel={!showLabels}
           />
-          {mode === "image" ? (
-            <StudioInlineSettingSelect
-              icon={Maximize2}
-              label="Resolution"
-              value={activeImageResolution}
-              items={imageResolutionItems}
-              onChange={setImageResolution}
-              hideLabel={!showLabels}
-            />
-          ) : (
-            <StudioInlineSettingSelect
-              icon={Gauge}
-              label="Quality"
-              value={resolution}
-              items={resolutionItems}
-              onChange={setResolution}
-              hideLabel={!showLabels}
-            />
-          )}
-        </>
-      )}
-      {mode === "video" ? (
-        <StudioInlineSettingPopover
-          icon={Clock3}
-          label="Duration"
-          valueLabel={`${durationSeconds}s`}
-          menuLabel="Video duration"
-          hideLabel={!showLabels}
-        >
-          <div className="studio-inline-settings-range-panel">
-            <div className="studio-duration-readout">
-              <strong>{localDurationSeconds}s</strong>
-              <span>4-15s</span>
-            </div>
-            <input
-              className="studio-settings-range"
-              type="range"
-              min="4"
-              max={maxVideoDuration}
-              step="1"
-              value={localDurationSeconds}
-              onChange={(event) => setLocalDurationSeconds(event.currentTarget.value)}
-              onPointerUp={(event) => commitDuration(event.currentTarget.value)}
-              onKeyUp={(event) => commitDuration(event.currentTarget.value)}
-              onBlur={(event) => commitDuration(event.currentTarget.value)}
-              style={{ "--range-progress": durationProgress }}
-              aria-label="Video duration"
-            />
-            <div className="studio-duration-ticks" aria-hidden="true">
-              <span>4s</span>
-              <span>8s</span>
-              <span>15s</span>
-            </div>
-            <div className="studio-settings-chip-grid studio-duration-presets" role="group" aria-label="Video duration presets">
-              {["4", "8", "12", "15"].map((seconds) => (
-                <button
-                  key={seconds}
-                  type="button"
-                  className={`studio-settings-chip${String(localDurationSeconds) === seconds ? " is-active" : ""}`}
-                  aria-pressed={String(localDurationSeconds) === seconds}
-                  onClick={() => commitDuration(seconds)}
-                >
-                  <span>{seconds}s</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </StudioInlineSettingPopover>
-      ) : null}
-      {mode === "video" ? (
-        <div className="studio-inline-audio-setting">
-          <span className="studio-inline-audio-label">Audio</span>
-          <button
-            type="button"
-            className={`studio-audio-switch${audioEnabled ? " is-on" : ""}`}
-            role="switch"
-            aria-checked={audioEnabled}
-            aria-label="Generate synchronized audio with video"
-            onClick={() => setAudioEnabled(!audioEnabled)}
+          <StudioInlineSettingSelect
+            icon={Sparkles}
+            label="Quality"
+            value={activeImageQuality}
+            items={imageQualityItems}
+            onChange={setImageQuality}
+            hideLabel={!showLabels}
           />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function StudioPromptEnhanceToggle({ enabled, onChange, panel = false }) {
-  return (
-    <div className={`studio-inline-audio-setting${panel ? " is-panel" : ""}`}>
-      <span className="studio-inline-audio-label">Enhance</span>
-      <button
-        type="button"
-        className={`studio-audio-switch${enabled ? " is-on" : ""}`}
-        role="switch"
-        aria-checked={enabled}
-        aria-label="Rewrite prompt with style preset before generation"
-        title={
-          enabled
-            ? "GPT rewrites your prompt using the style preset (on)"
-            : "Send your prompt directly to the model (off)"
-        }
-        onClick={() => onChange(!enabled)}
-      />
+        </>
+      ) : (
+        <StudioInlineSettingSelect
+          icon={Gauge}
+          label="Resolution"
+          value={resolution}
+          items={resolutionItems}
+          onChange={setResolution}
+          hideLabel={!showLabels}
+        />
+      )}
+      {durationControl}
+      {audioControl}
     </div>
   );
 }
@@ -10886,15 +11385,31 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
     <div className={`studio-inline-setting${panel ? " is-panel" : ""}`} ref={wrapRef}>
       <button
         type="button"
-        className={`studio-inline-setting-trigger${panel ? " is-panel" : ""}`}
+        className={
+          panel
+            ? `studio-composer-setting-card${open ? " is-open" : ""}`
+            : "studio-inline-setting-trigger"
+        }
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((state) => !state)}
       >
-        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-        {hideLabel ? null : <span>{label}</span>}
-        {hideValue ? null : <strong>{valueLabel}</strong>}
-        {hideChevron ? null : <ChevronDown className="h-3 w-3" aria-hidden="true" />}
+        {panel ? (
+          <>
+            <span className="studio-composer-setting-card-icon" aria-hidden="true">
+              <Icon />
+            </span>
+            {hideLabel ? null : <span className="studio-composer-setting-card-label">{label}</span>}
+            {hideValue ? null : <strong className="studio-composer-setting-card-value">{valueLabel}</strong>}
+          </>
+        ) : (
+          <>
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            {hideLabel ? null : <span>{label}</span>}
+            {hideValue ? null : <strong>{valueLabel}</strong>}
+            {hideChevron ? null : <ChevronDown className="h-3 w-3" aria-hidden="true" />}
+          </>
+        )}
       </button>
       {open && menuStyle
         ? createPortal(
@@ -10910,7 +11425,7 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
             document.body,
           )
         : null}
-              </div>
+    </div>
   );
 }
 
@@ -11111,7 +11626,6 @@ const ELEMENT_TYPE_OPTIONS = [
   { value: "character", label: "Character", meta: "People, mascots, hands, faces", icon: UserRound },
   { value: "prop", label: "Prop", meta: "Products, packaging, objects", icon: Package },
   { value: "location", label: "Location", meta: "Sets, rooms, streets, backdrops", icon: MapPin },
-  { value: "style_sheet", label: "Style Sheet", meta: "Visual rules, palette, render mode", icon: Palette },
   { value: "doc", label: "Notes", meta: "Rules, style notes, references", icon: FileText },
 ];
 
@@ -12140,7 +12654,7 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
   const detail = isFailed
     ? (friendly
         ? (friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message)
-        : (error?.trim() || "Credits were refunded automatically."))
+        : (error?.trim() || "Your balance was refunded automatically."))
     : isCancelled
       ? "This render was stopped before it finished."
       : null;
@@ -12183,7 +12697,10 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
 function StudioChatResultCard({ entry, onOpen }) {
   const isVideo = entry.kind === "video";
   const isImage = entry.kind === "image";
-  const src = entry.mediaUrl ?? entry.thumbnailUrl;
+  const thumbSrc =
+    thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl, entry.mediaUrl) ??
+    entry.thumbnailUrl ??
+    entry.mediaUrl;
   const poster = isVideoFileUrl(entry.thumbnailUrl) ? undefined : entry.thumbnailUrl;
   const canOpen = Boolean(onOpen && entry.studioId);
   const canDrag = Boolean(entry?.path);
@@ -12203,7 +12720,7 @@ function StudioChatResultCard({ entry, onOpen }) {
     clearActiveExplorerDrag();
   }
 
-  if (isImage && src) {
+  if (isImage && thumbSrc) {
     return (
       <button
         type="button"
@@ -12215,7 +12732,7 @@ function StudioChatResultCard({ entry, onOpen }) {
         aria-label={entry.name ? `Open ${safeEntryTitle(entry)}` : "Open image"}
         title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
       >
-        <img src={src} alt="" loading="lazy" draggable={false} />
+        <img src={thumbSrc} alt="" loading="lazy" draggable={false} />
       </button>
     );
   }
@@ -12241,9 +12758,15 @@ function StudioChatResultCard({ entry, onOpen }) {
       }
       title={canDrag ? "Drag into composer to attach" : undefined}
     >
-      {isVideo && src ? (
+      {isVideo && (entry.mediaUrl || thumbSrc) ? (
         <>
-          <video src={src} poster={poster} controls playsInline preload="metadata" />
+          <video
+            src={entry.mediaUrl ?? thumbSrc}
+            poster={poster}
+            controls
+            playsInline
+            preload="metadata"
+          />
           {canOpen ? (
             <button
               type="button"
@@ -12646,7 +13169,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                     onClick={() => openAssetEntry(sheetAsset)}
                   >
                     <img
-                      src={sheetAsset.thumbnailUrl ?? sheetAsset.mediaUrl}
+                      src={sheetAsset.mediaUrl ?? sheetAsset.thumbnailUrl}
                       alt={`${entry.name} sheet`}
                       className="studio-element-detail-media-img"
                     />
@@ -12655,7 +13178,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
                 ) : (
                   <div className="studio-element-detail-media-stage">
                     <img
-                      src={sheetAsset.thumbnailUrl ?? sheetAsset.mediaUrl}
+                      src={sheetAsset.mediaUrl ?? sheetAsset.thumbnailUrl}
                       alt={`${entry.name} sheet`}
                       className="studio-element-detail-media-img"
                     />
@@ -12826,23 +13349,25 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
 function StudioAssetPreview({ entry, folderId, onEditVideo }) {
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+  const needsFullSignedRead =
+    Boolean(entry.studioId) &&
+    (!entry.mediaUrl || isBunnyOptimizedUrl(entry.mediaUrl));
   const signedMediaUrl = useQuery(
     api.assets.signedReadUrl,
-    entry.studioId && !entry.mediaUrl ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix } : "skip",
+    needsFullSignedRead
+      ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix }
+      : "skip",
   );
-  const mediaUrl = entry.mediaUrl ?? signedMediaUrl;
-  const thumbUrl = entry.thumbnailUrl ?? mediaUrl;
+  const mediaUrl =
+    fullQualityUrl(signedMediaUrl, entry.mediaUrl) ??
+    signedMediaUrl ??
+    entry.mediaUrl;
+  const thumbUrl =
+    thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl) ?? mediaUrl;
   const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
   const downloadAsset = () => {
     if (!mediaUrl) return;
-    const anchor = document.createElement("a");
-    anchor.href = mediaUrl;
-    anchor.download = entry.name ?? "download";
-    anchor.rel = "noopener noreferrer";
-    anchor.target = "_blank";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+    void downloadMediaUrl(mediaUrl, entry.name ?? "download");
   };
   return (
     <div className="studio-asset-preview">
@@ -12888,66 +13413,56 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
   );
 }
 
-function BillingWorkspacePane({ tab, billingAccount, pricing, bankAccounts, payments }) {
+function BillingWorkspacePane({ tab: _tab, billingAccount, pricing, bankAccounts, payments }) {
   const plans = pricingPlans(pricing);
   return (
     <div className="h-full overflow-auto p-6">
       <div className="studio-admin-workspace">
         <section className="studio-admin-hero-card">
           <div>
-            <p className="studio-section-kicker">{tab === "top-up" ? "Add credits" : "Billing"}</p>
-            <h2>{tab === "top-up" ? "Choose a content pack" : "Plan and balance"}</h2>
-            <p>{billingAccount?.creditBalance ?? 0} credits available, {billingAccount?.reservedCredits ?? 0} set aside for content in progress.</p>
+            <p className="studio-section-kicker">Billing</p>
+            <h2>Balance & top up</h2>
+            <p>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)} available, {formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} set aside for content in progress.</p>
           </div>
-          <span className="studio-admin-chip">{billingAccount?.subscription?.planName ?? "No active plan"}</span>
+          <span className="studio-admin-chip">Pay as you go</span>
         </section>
-        {tab === "top-up" ? (
-          <>
-            <section className="studio-admin-grid-large">
-              {plans.map((plan) => (
-                <article key={plan.name} className={`studio-plan-card studio-plan-card-large${plan.featured ? " is-featured" : ""}`}>
-                  <span className="studio-plan-badge">{plan.badge}</span>
-                  <h4>{plan.name}</h4>
-                  <p className="studio-plan-price">{plan.price}</p>
-                  <p className="studio-plan-sub">{plan.credits} credits</p>
-                  <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-                </article>
-              ))}
-            </section>
-            <section className="studio-admin-card">
-              <p className="studio-admin-card-kicker">Bank transfer</p>
-              <div className="space-y-2">
-                {(bankAccounts ?? []).map((bank) => (
-                  <div key={bank._id} className="studio-bank-card">
-                    <p className="studio-bank-card-title">{bank.label}</p>
-                    <BankLine label="Bank" value={bank.bankName} />
-                    <BankLine label="Name" value={bank.accountName} />
-                    <BankLine label="Number" value={bank.accountNumber} />
-                    <BankLine label="Type" value={bank.accountType} />
-                  </div>
-                ))}
+        <section className="studio-admin-grid-large">
+          <article className="studio-admin-card">
+            <p className="studio-admin-card-kicker">Balance</p>
+            <h3>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)}</h3>
+            <p>{formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} set aside for content in progress.</p>
+          </article>
+          <article className="studio-admin-card">
+            <p className="studio-admin-card-kicker">Recent payments</p>
+            <h3>{payments?.length ?? 0}</h3>
+            <p>{(payments ?? [])[0] ? `Latest payment: ${humanizePaymentStatus((payments ?? [])[0].status)}` : "No payments yet."}</p>
+          </article>
+        </section>
+        <section className="studio-admin-grid-large">
+          {plans.map((plan) => (
+            <article key={plan.name} className={`studio-plan-card studio-plan-card-large${plan.featured ? " is-featured" : ""}`}>
+              <span className="studio-plan-badge">{plan.badge}</span>
+              <h4>{plan.name}</h4>
+              <p className="studio-plan-price">{plan.price}</p>
+              <p className="studio-plan-sub">Bank transfer</p>
+              <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
+            </article>
+          ))}
+        </section>
+        <section className="studio-admin-card">
+          <p className="studio-admin-card-kicker">Bank transfer</p>
+          <div className="space-y-2">
+            {(bankAccounts ?? []).map((bank) => (
+              <div key={bank._id} className="studio-bank-card">
+                <p className="studio-bank-card-title">{bank.label}</p>
+                <BankLine label="Bank" value={bank.bankName} />
+                <BankLine label="Name" value={bank.accountName} />
+                <BankLine label="Number" value={bank.accountNumber} />
+                <BankLine label="Type" value={bank.accountType} />
               </div>
-            </section>
-          </>
-        ) : (
-          <section className="studio-admin-grid-large">
-            <article className="studio-admin-card">
-              <p className="studio-admin-card-kicker">Subscription</p>
-              <h3>{billingAccount?.subscription?.planName ?? "None"}</h3>
-              <p>{billingAccount?.subscription ? `Renews ${formatDate(billingAccount.subscription.currentPeriodEnd)}` : "Add credits or choose a plan."}</p>
-            </article>
-            <article className="studio-admin-card">
-              <p className="studio-admin-card-kicker">Balance</p>
-              <h3>{billingAccount?.creditBalance ?? 0}</h3>
-              <p>{billingAccount?.reservedCredits ?? 0} set aside for content in progress.</p>
-            </article>
-            <article className="studio-admin-card">
-              <p className="studio-admin-card-kicker">Recent payments</p>
-              <h3>{payments?.length ?? 0}</h3>
-              <p>{(payments ?? [])[0] ? `Latest payment: ${humanizePaymentStatus((payments ?? [])[0].status)}` : "No payments yet."}</p>
-            </article>
-          </section>
-        )}
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -12975,7 +13490,6 @@ function AdminWorkspacePane({
   const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
   const seedLaunchPricing = useMutation(api.billing.adminSeedLaunchPricing);
   const seedBankAccount = useMutation(api.billing.adminSeedBankAccountFromEnv);
-  const seedSubscriptionPlans = useMutation(api.billing.adminSeedSubscriptionPlans);
   const [reviewStatus, setReviewStatus] = useState("");
   const visiblePayments = safePayments
     .filter((payment) => {
@@ -13063,7 +13577,7 @@ function AdminWorkspacePane({
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
               <AdminMetricCard label="Pending review" value={pendingPayments.length} body="Awaiting receipt review or approval." />
-              <AdminMetricCard label="Approved" value={completedPayments.length} body="Completed payments and credit grants." />
+              <AdminMetricCard label="Approved" value={completedPayments.length} body="Completed payments and balance grants." />
               <AdminMetricCard label="Rejected" value={rejectedPayments.length} body="Rejected or unverifiable receipts." />
             </section>
             <section className="studio-admin-card studio-admin-table-card">
@@ -13114,7 +13628,7 @@ function AdminWorkspacePane({
                           <strong>{paymentCustomerName(payment)}</strong>
                           <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
                         </td>
-                        <td>{payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")}</td>
+                        <td>{payment.subscriptionPlanId ? "Legacy subscription" : "Top up"}</td>
                         <td>{formatMoney(payment.amountCents)}</td>
                         <td><PaymentStatusPill status={payment.status} /></td>
                         <td>{formatDate(payment.createdAt)}</td>
@@ -13148,8 +13662,7 @@ function AdminWorkspacePane({
                   <tr>
                     <th>Customer</th>
                     <th>Role</th>
-                    <th>Credits</th>
-                    <th>Subscription</th>
+                    <th>Balance</th>
                     <th>Payments</th>
                     <th>Last seen</th>
                   </tr>
@@ -13162,11 +13675,7 @@ function AdminWorkspacePane({
                         <span>{customer.email ?? customer.phone ?? customer._id}</span>
                       </td>
                       <td>{customer.role}</td>
-                      <td>{customer.creditBalance} <span>{customer.reservedCredits} reserved</span></td>
-                      <td>
-                        <strong>{customer.activeSubscription?.planName ?? "None"}</strong>
-                        <span>{customer.activeSubscription ? `${customer.activeSubscription.status} until ${formatDate(customer.activeSubscription.currentPeriodEnd)}` : "No active subscription"}</span>
-                      </td>
+                      <td>{formatTtdFromCredits(customer.creditBalance)} <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span></td>
                       <td>
                         <strong>{customer.paymentCount}</strong>
                         <span>{customer.latestPaymentStatus ? humanizePaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
@@ -13210,7 +13719,7 @@ function AdminWorkspacePane({
               />
               <AdminSetupAction
                 title="Launch pricing"
-                body="Creates or refreshes default content credit costs."
+                body="Creates or refreshes default generation prices."
                 actionLabel="Seed pricing"
                 onRun={() => runSetup("Seeding pricing", seedLaunchPricing)}
               />
@@ -13219,12 +13728,6 @@ function AdminWorkspacePane({
                 body="Creates or refreshes the configured bank-transfer receiving account."
                 actionLabel="Seed bank account"
                 onRun={() => runSetup("Seeding bank account", seedBankAccount)}
-              />
-              <AdminSetupAction
-                title="Subscriptions"
-                body="Creates or refreshes monthly subscription plans."
-                actionLabel="Seed plans"
-                onRun={() => runSetup("Seeding subscription plans", seedSubscriptionPlans)}
               />
             </div>
             {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
@@ -13237,7 +13740,7 @@ function AdminWorkspacePane({
                   <span className="studio-plan-badge">{plan.badge}</span>
                   <h4>{plan.name}</h4>
                   <p className="studio-plan-price">{plan.price}</p>
-                  <p className="studio-plan-sub">{plan.credits} credits</p>
+                  <p className="studio-plan-sub">Bank transfer</p>
                   <ul>
                     {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
                   </ul>
@@ -13247,13 +13750,14 @@ function AdminWorkspacePane({
             <section className="studio-admin-card">
                 <p className="studio-admin-card-kicker">Content costs</p>
               <div className="studio-credit-costs">
-                <div className="studio-credit-cost"><span>Image 1K</span><strong>{pricing?.imageCredits1K ?? 5} credits</strong><em>incl. platform</em></div>
-                <div className="studio-credit-cost"><span>Image 2K</span><strong>{pricing?.imageCredits2K ?? 19} credits</strong><em>GPT Image 2 default</em></div>
-                <div className="studio-credit-cost"><span>Image 4K</span><strong>{pricing?.imageCredits4K ?? 36} credits</strong><em>GPT Image 2 max</em></div>
-                <div className="studio-credit-cost"><span>Video 480p</span><strong>from {pricing?.videoCredits480p ?? 36} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
-                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {pricing?.videoCredits720p ?? 61} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
-                <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {pricing?.videoCredits1080p ?? 133} credits / 5s</strong><em>+{pricing?.platformOverheadCreditsMedia ?? 2} platform / gen</em></div>
-                <div className="studio-credit-cost"><span>Script</span><strong>from {pricing?.textCredits ?? 3} credits</strong><em>incl. platform</em></div>
+                <div className="studio-credit-cost"><span>Image 1K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits1K ?? 2, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
+                <div className="studio-credit-cost"><span>Image 2K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits2K ?? 2, pricing?.creditPriceCents)}</strong><em>default</em></div>
+                <div className="studio-credit-cost"><span>Image 4K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits4K ?? 5, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
+                <div className="studio-credit-cost"><span>Image high</span><strong>prices scale with quality</strong><em>low / medium / high</em></div>
+                <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 14, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
+                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>Seedance</em></div>
+                <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits1080p ?? 69, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
+                <div className="studio-credit-cost"><span>Script</span><strong>from {formatTtdFromCredits(pricing?.textCredits ?? 3, pricing?.creditPriceCents)}</strong><em>incl. platform</em></div>
               </div>
             </section>
             <section className="studio-admin-card">
@@ -13305,8 +13809,8 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange }) {
         <div className="studio-admin-detail-list">
           <BankLine label="Customer" value={paymentCustomerName(payment)} />
           <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
-          <BankLine label="Type" value={payment.subscriptionPlanName ?? (payment.subscriptionPlanId ? "Subscription" : "Top up")} />
-          <BankLine label="Credits" value={payment.creditsGranted ?? "Subscription grant"} />
+          <BankLine label="Type" value={payment.subscriptionPlanId ? "Legacy subscription" : "Top up"} />
+          <BankLine label="Balance added" value={payment.creditsGranted != null ? formatTtdFromCredits(payment.creditsGranted) : payment.subscriptionPlanId ? "Legacy grant" : "—"} />
           <BankLine label="Bank" value={payment.bankAccountLabel ?? "Unassigned"} />
           <BankLine label="Created" value={formatDate(payment.createdAt)} />
           <BankLine label="Reviewed" value={payment.reviewedAt ? formatDate(payment.reviewedAt) : "Not reviewed"} />
@@ -13402,7 +13906,6 @@ function SettingsSidePanel({
   billingAccount,
   pricing,
   bankAccounts,
-  subscriptionPlans,
   onClose,
   onSaveAccount,
   customCursorEnabled,
@@ -13424,7 +13927,6 @@ function SettingsSidePanel({
         billingAccount={billingAccount}
         pricing={pricing}
         bankAccounts={bankAccounts}
-        subscriptionPlans={subscriptionPlans}
         onSaveAccount={onSaveAccount}
         customCursorEnabled={customCursorEnabled}
         onCustomCursorChange={onCustomCursorChange}
@@ -13441,15 +13943,14 @@ function SettingsWorkspacePane({
   billingAccount,
   pricing,
   bankAccounts,
-  subscriptionPlans,
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
 }) {
-  const [section, setSection] = useState(tab || "general");
-  const [creditMode, setCreditMode] = useState("top-up");
-  const [selectedPlanName, setSelectedPlanName] = useState("Studio");
-  const [selectedSubscriptionPlanName, setSelectedSubscriptionPlanName] = useState("Studio");
+  const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
+  const [selectedPlanKey, setSelectedPlanKey] = useState("tier-0");
+  const [customAmountInput, setCustomAmountInput] = useState("");
+  const [customAmountError, setCustomAmountError] = useState("");
   const [isPaymentStep, setIsPaymentStep] = useState(false);
   const [isThankYouStep, setIsThankYouStep] = useState(false);
   const [thankYouSummary, setThankYouSummary] = useState(null);
@@ -13465,18 +13966,32 @@ function SettingsWorkspacePane({
   const submitBankPayment = useMutation(api.billing.submitBankPayment);
   const reserveReceiptUpload = useMutation(api.billing.reserveReceiptUpload);
   const completeReceiptUpload = useMutation(api.billing.completeReceiptUpload);
+  const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const plans = pricingPlans(pricing);
-  const subscriptionOptions = useMemo(() => subscriptionPlanOptions(subscriptionPlans), [subscriptionPlans]);
-  const selectedPlan = plans.find((plan) => plan.name === selectedPlanName) ?? plans[0];
-  const selectedSubscriptionPlan = subscriptionOptions.find((plan) => plan.name === selectedSubscriptionPlanName) ?? subscriptionOptions[0];
+  const minAmountCents = topUpMinAmountCents(creditPriceCents);
+  const minAmountLabel = formatTtdCents(minAmountCents);
+  const customAmountCents = Math.round(Number.parseFloat(customAmountInput || "0") * 100);
+  const customCredits = creditsFromAmountCents(customAmountCents, creditPriceCents);
+  const customPlan =
+    selectedPlanKey === "custom" && customCredits > 0 && customAmountCents >= minAmountCents
+      ? {
+          key: "custom",
+          name: "Custom",
+          badge: "Custom",
+          credits: customCredits,
+          price: formatTtdCents(customAmountCents),
+          amountCents: customAmountCents,
+          features: ["Custom top up", "Bank transfer available"],
+        }
+      : null;
+  const selectedPlan =
+    selectedPlanKey === "custom"
+      ? customPlan
+      : plans.find((plan) => plan.key === selectedPlanKey) ?? plans[0];
   useEffect(() => {
-    setSection(tab || "general");
+    const next = tab === "top-up" ? "billing" : tab || "general";
+    setSection(next);
   }, [tab]);
-  useEffect(() => {
-    if (subscriptionOptions.length && !subscriptionOptions.some((plan) => plan.name === selectedSubscriptionPlanName)) {
-      setSelectedSubscriptionPlanName(subscriptionOptions[0].name);
-    }
-  }, [selectedSubscriptionPlanName, subscriptionOptions]);
   function resetPaymentDraft() {
     setIsPaymentStep(false);
     setIsThankYouStep(false);
@@ -13486,33 +14001,41 @@ function SettingsWorkspacePane({
     setReceiptUploading(false);
     setSelectedBankId(null);
     setPaymentStatus("");
+    setCustomAmountError("");
     paymentInitRef.current = false;
   }
-  function selectTopUpPlan(planName, proceedToPayment = false) {
-    setSelectedPlanName(planName);
+  function selectTopUpPlan(planKey, proceedToPayment = false) {
+    setSelectedPlanKey(planKey);
+    setCustomAmountError("");
     setPendingReceiptPaymentId(null);
     setPaymentStatus("");
     setIsPaymentStep(proceedToPayment);
   }
-  function selectSubscriptionPlan(planName, proceedToPayment = false) {
-    setSelectedSubscriptionPlanName(planName);
+  function startCustomTopUp() {
+    if (!Number.isFinite(customAmountCents) || customAmountCents < minAmountCents) {
+      setCustomAmountError(`Enter an amount of at least ${minAmountLabel}.`);
+      return;
+    }
+    if (customCredits <= 0) {
+      setCustomAmountError("Amount is too low to add balance.");
+      return;
+    }
+    setCustomAmountError("");
+    setSelectedPlanKey("custom");
     setPendingReceiptPaymentId(null);
     setPaymentStatus("");
-    setIsPaymentStep(proceedToPayment);
+    setIsPaymentStep(true);
   }
   async function handleBankPayment(bankAccountId) {
-    if (creditMode === "top-up" && !selectedPlan) return;
-    if (creditMode === "subscription" && !selectedSubscriptionPlan) return;
-    const isSubscription = creditMode === "subscription";
+    if (!selectedPlan) return;
     setSelectedBankId(bankAccountId);
     setPaymentStatus("Preparing payment...");
     try {
       const paymentId = await submitBankPayment({
         bankAccountId,
-        amountCents: isSubscription ? selectedSubscriptionPlan.amountCents : selectedPlan.amountCents,
-        creditsRequested: isSubscription ? undefined : selectedPlan.credits,
-        subscriptionPlanId: isSubscription ? selectedSubscriptionPlan._id : undefined,
-        reference: isSubscription ? `Subscription: ${selectedSubscriptionPlan.name}` : `Top up: ${selectedPlan.name}`,
+        amountCents: selectedPlan.amountCents,
+        creditsRequested: selectedPlan.credits,
+        reference: `Top up: ${selectedPlan.name}`,
       });
       setPendingReceiptPaymentId(paymentId);
       setPaymentStatus("");
@@ -13521,7 +14044,7 @@ function SettingsWorkspacePane({
     }
   }
   async function handleReceiptUpload(file) {
-    if (!pendingReceiptPaymentId || !file) return;
+    if (!pendingReceiptPaymentId || !file || !selectedPlan) return;
     setReceiptUploading(true);
     setPaymentStatus("Making payment...");
     try {
@@ -13540,12 +14063,11 @@ function SettingsWorkspacePane({
       });
       if (!res.ok) throw new Error("Receipt upload failed");
       await completeReceiptUpload({ paymentId: pendingReceiptPaymentId, byteSize: file.size });
-      const isSubscription = creditMode === "subscription";
       setThankYouSummary({
-        title: isSubscription ? selectedSubscriptionPlan.name : selectedPlan.name,
-        amountCents: isSubscription ? selectedSubscriptionPlan.amountCents : selectedPlan.amountCents,
-        credits: isSubscription ? selectedSubscriptionPlan.credits : selectedPlan.credits,
-        kind: isSubscription ? "subscription" : "top-up",
+        title: selectedPlan.name,
+        amountCents: selectedPlan.amountCents,
+        credits: selectedPlan.credits,
+        kind: "top-up",
       });
       setIsThankYouStep(true);
       setIsPaymentStep(false);
@@ -13568,13 +14090,13 @@ function SettingsWorkspacePane({
     });
   }, [isPaymentStep, isThankYouStep, pendingReceiptPaymentId, bankAccounts]);
   const items = [
-    { id: "top-up", label: "Add credits" },
     { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
     { id: "account", label: "Account details" },
     { id: "activity", label: "Activity" },
     { id: "api-keys", label: "API keys" },
   ];
+  const settingsSectionId = section === "top-up" ? "billing" : section;
   return (
     <div className="studio-settings-workspace">
       <header className="studio-settings-workspace-head">
@@ -13583,7 +14105,7 @@ function SettingsWorkspacePane({
             <button
               key={item.id}
               type="button"
-              className={section === item.id ? "is-active" : ""}
+              className={settingsSectionId === item.id ? "is-active" : ""}
               onClick={() => setSection(item.id)}
             >
               {item.label}
@@ -13592,74 +14114,27 @@ function SettingsWorkspacePane({
         </nav>
       </header>
       <div className="studio-settings-workspace-body">
-        {section === "account" ? (
+        {settingsSectionId === "account" ? (
           <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} />
           ) : null}
 
-        {section === "api-keys" ? <StudioApiKeysSettings /> : null}
+        {settingsSectionId === "api-keys" ? <StudioApiKeysSettings /> : null}
 
-        {section === "billing" ? (
+        {settingsSectionId === "billing" ? (
           <div className="studio-settings-stack">
             <section className="cursor-settings-section studio-settings-billing-summary">
               <div className="studio-settings-balance-block">
-                <span>Available credits</span>
-                <strong>{(billingAccount?.creditBalance ?? 0).toLocaleString()}</strong>
-                <small>{(billingAccount?.reservedCredits ?? 0).toLocaleString()} reserved</small>
-              </div>
-              <dl className="studio-settings-stat-list">
-                <div className="studio-settings-stat-row">
-                  <dt>Plan</dt>
-                  <dd>{billingAccount?.subscription?.planName ?? "None"}</dd>
-                </div>
-                <div className="studio-settings-stat-row">
-                  <dt>Renewal</dt>
-                  <dd>{billingAccount?.subscription ? formatDate(billingAccount.subscription.currentPeriodEnd) : "None"}</dd>
-                </div>
-                <div className="studio-settings-stat-row">
-                  <dt>Latest payment</dt>
-                  <dd>
-                    {(payments ?? [])[0]
-                      ? `${humanizePaymentStatus((payments ?? [])[0].status)} · ${formatMoney((payments ?? [])[0].amountCents)}`
-                      : "None"}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-            <section className="cursor-settings-section studio-settings-invoices-card">
-              <div className="studio-settings-card-title">Invoices</div>
-              <div className="studio-settings-invoice-list">
-                {(payments ?? []).slice(0, 6).map((payment) => {
-                  const paymentUrl = payment.receiptUrl ?? (payment.externalPaymentId?.startsWith("http") ? payment.externalPaymentId : null);
-                  return (
-                    <div key={payment._id} className="studio-settings-invoice-row">
-                      <div className="studio-settings-invoice-copy">
-                        <strong>{payment.subscriptionPlanId ? "Subscription invoice" : "Credit invoice"}</strong>
-                        <span>{formatDate(payment.createdAt)} · {humanizePaymentStatus(payment.status)}</span>
-                      </div>
-                      <div className="studio-settings-invoice-meta">
-                        <span className="studio-settings-invoice-amount">{formatMoney(payment.amountCents)}</span>
-                        {paymentUrl ? (
-                          <a href={paymentUrl} target="_blank" rel="noreferrer">Open</a>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-                {!payments?.length ? <p className="studio-settings-empty">No invoices yet.</p> : null}
+                <span>Available balance</span>
+                <strong>{formatTtdFromCredits(billingAccount?.creditBalance ?? 0, pricing?.creditPriceCents)}</strong>
+                <small>{formatTtdFromCredits(billingAccount?.reservedCredits ?? 0, pricing?.creditPriceCents)} reserved</small>
               </div>
             </section>
-          </div>
-        ) : null}
-
-        {section === "top-up" ? (
-          <div className="studio-settings-stack">
             {isThankYouStep && thankYouSummary ? (
               <section className="cursor-settings-section studio-settings-thankyou">
                 <p className="studio-settings-thankyou-kicker">Thank you</p>
                 <h3>We received your payment details</h3>
                 <p className="studio-settings-thankyou-lead">
-                  We will review your receipt and activate your{" "}
-                  {thankYouSummary.kind === "subscription" ? "subscription" : "credits"} once payment is confirmed.
+                  We will review your receipt and activate your balance once payment is confirmed.
                 </p>
                 <div className="studio-settings-thankyou-summary">
                   <dl className="studio-settings-stat-list">
@@ -13672,144 +14147,104 @@ function SettingsWorkspacePane({
                       <dd>{formatMoney(thankYouSummary.amountCents)}</dd>
                     </div>
                     <div className="studio-settings-stat-row">
-                      <dt>{thankYouSummary.kind === "subscription" ? "Monthly credits" : "Credits"}</dt>
-                      <dd>
-                        {thankYouSummary.credits.toLocaleString()}
-                        {thankYouSummary.kind === "subscription" ? "/mo" : ""}
-                      </dd>
+                      <dt>Balance</dt>
+                      <dd>{formatTtdFromCredits(thankYouSummary.credits, pricing?.creditPriceCents)}</dd>
                     </div>
                   </dl>
                 </div>
                 <button type="button" className="cursor-settings-action" onClick={resetPaymentDraft}>
-                  Back to plans
+                  Back to packs
                 </button>
               </section>
             ) : null}
             {!isPaymentStep && !isThankYouStep ? (
-              <>
-            <section className="cursor-settings-section studio-settings-credit-switch">
-              <button
-                type="button"
-                className={creditMode === "top-up" ? "is-active" : ""}
-                onClick={() => {
-                  setCreditMode("top-up");
-                  resetPaymentDraft();
-                }}
-              >
-                Top up
-              </button>
-              <button
-                type="button"
-                className={creditMode === "subscription" ? "is-active" : ""}
-                onClick={() => {
-                  setCreditMode("subscription");
-                  resetPaymentDraft();
-                }}
-              >
-                Subscribe
-              </button>
-            </section>
-            <section className="cursor-settings-section studio-settings-plans">
-              {creditMode === "top-up"
-                ? plans.map((plan) => (
-                    <div
-                      key={plan.name}
-                      className={`studio-settings-plan-row${selectedPlan?.name === plan.name ? " is-featured" : ""}${plan.discountPercent ? " is-discounted" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => selectTopUpPlan(plan.name, true)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          selectTopUpPlan(plan.name, true);
-                        }
-                      }}
-                      aria-pressed={selectedPlan?.name === plan.name}
-                    >
-                      <div className="studio-settings-plan-copy">
-                        {plan.discountPercent ? <span className="studio-settings-discount">{plan.discountPercent}% off</span> : null}
-                        <h4>{plan.name}</h4>
-                        <p>One-time bank transfer</p>
+              <section className="cursor-settings-section studio-settings-plans">
+                <div className="studio-settings-card-title">Top up</div>
+                {plans.map((plan) => (
+                  <div
+                    key={plan.key}
+                    className={`studio-settings-plan-row${selectedPlan?.key === plan.key ? " is-featured" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => selectTopUpPlan(plan.key, true)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        selectTopUpPlan(plan.key, true);
+                      }
+                    }}
+                    aria-pressed={selectedPlan?.key === plan.key}
+                  >
+                    <div className="studio-settings-plan-copy">
+                      <h4>{plan.badge}</h4>
+                      <p>One-time bank transfer</p>
+                    </div>
+                    <div className="studio-settings-plan-price">
+                      <div className="studio-settings-price-line">
+                        <strong>{plan.price}</strong>
                       </div>
-                      <div className="studio-settings-plan-price">
-                        <div className="studio-settings-price-line">
-                          {plan.originalPrice ? <s>{plan.originalPrice}</s> : null}
-                          <strong>{plan.price}</strong>
-                        </div>
-                        <span>{plan.credits} credits</span>
-                        <button
-                          type="button"
-                          className="studio-settings-plan-choice"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            selectTopUpPlan(plan.name, true);
-                          }}
-                        >
-                          Choose
-                        </button>
+                      <span>Added to balance</span>
+                      <button
+                        type="button"
+                        className="studio-settings-plan-choice"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectTopUpPlan(plan.key, true);
+                        }}
+                      >
+                        Choose
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="studio-settings-custom-amount">
+                  <div className="studio-settings-plan-copy">
+                    <h4>Custom amount</h4>
+                    <p>Any amount from {minAmountLabel} and up</p>
+                  </div>
+                  <div className="studio-settings-custom-amount-fields">
+                    <label className="studio-settings-custom-amount-input">
+                      <span>$</span>
+                      <input
+                        type="number"
+                        min={minAmountCents / 100}
+                        step="0.01"
+                        inputMode="decimal"
+                        placeholder={(minAmountCents / 100).toFixed(0)}
+                        value={customAmountInput}
+                        onChange={(event) => {
+                          setCustomAmountInput(event.target.value);
+                          setCustomAmountError("");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            startCustomTopUp();
+                          }
+                        }}
+                      />
+                      <span>TTD</span>
+                    </label>
+                    <button type="button" className="studio-settings-plan-choice" onClick={startCustomTopUp}>
+                      Continue
+                    </button>
+                  </div>
+                  {customAmountInput && customCredits > 0 && customAmountCents >= minAmountCents ? (
+                    <p className="studio-settings-custom-amount-hint">
+                      Adds {formatTtdFromCredits(customCredits, creditPriceCents)} to your balance
+                    </p>
+                  ) : null}
+                  {customAmountError ? <p className="studio-settings-custom-amount-error">{customAmountError}</p> : null}
                 </div>
-                    </div>
-                  ))
-                : subscriptionOptions.map((plan) => (
-                    <div
-                      key={plan.name}
-                      className={`studio-settings-plan-row${selectedSubscriptionPlan?.name === plan.name ? " is-featured" : ""}${plan.discountPercent ? " is-discounted" : ""}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => selectSubscriptionPlan(plan.name, true)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          selectSubscriptionPlan(plan.name, true);
-                        }
-                      }}
-                      aria-pressed={selectedSubscriptionPlan?.name === plan.name}
-                    >
-                      <div className="studio-settings-plan-copy">
-                        {plan.discountPercent ? <span className="studio-settings-discount">{plan.discountPercent}% off</span> : null}
-                        <h4>{plan.name}</h4>
-                        <p>Monthly studio plan</p>
-                      </div>
-                      <div className="studio-settings-plan-price">
-                        <div className="studio-settings-price-line">
-                          {plan.originalPrice ? <s>{plan.originalPrice}/mo</s> : null}
-                          <strong>{plan.price}/mo</strong>
-                        </div>
-                        <span>{plan.credits} credits/mo</span>
-                        <button
-                          type="button"
-                          className="studio-settings-plan-choice"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            selectSubscriptionPlan(plan.name, true);
-                          }}
-                        >
-                          Choose
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              {creditMode === "subscription" && !subscriptionOptions.length ? (
-                <p className="studio-settings-empty">No subscription plans are enabled yet.</p>
-              ) : null}
               </section>
-              </>
             ) : null}
             {isPaymentStep && !isThankYouStep ? (
               <section className="cursor-settings-section studio-settings-simple-card studio-settings-payment-card">
                 <div className="studio-settings-payment-hero">
                   <div className="studio-settings-payment-hero-copy">
                     <span>Amount due</span>
-                    <strong>
-                      {creditMode === "subscription"
-                        ? selectedSubscriptionPlan?.price
-                        : selectedPlan?.price}
-                    </strong>
-                    <small>
-                      {creditMode === "subscription"
-                        ? `${selectedSubscriptionPlan?.name} · ${Number(selectedSubscriptionPlan?.credits ?? 0).toLocaleString()} credits/mo`
-                        : `${selectedPlan?.name} · ${Number(selectedPlan?.credits ?? 0).toLocaleString()} credits`}
-                    </small>
+                    <strong>{selectedPlan?.price}</strong>
+                    <small>{selectedPlan?.badge ?? selectedPlan?.name} · {selectedPlan?.price}</small>
                   </div>
                   <button type="button" className="studio-settings-payment-back" onClick={resetPaymentDraft}>
                     Back
@@ -13890,14 +14325,39 @@ function SettingsWorkspacePane({
                 </div>
               </section>
             ) : null}
+            {!isPaymentStep ? (
+              <section className="cursor-settings-section studio-settings-invoices-card">
+                <div className="studio-settings-card-title">Invoices</div>
+                <div className="studio-settings-invoice-list">
+                  {(payments ?? []).slice(0, 6).map((payment) => {
+                    const paymentUrl = payment.receiptUrl ?? (payment.externalPaymentId?.startsWith("http") ? payment.externalPaymentId : null);
+                    return (
+                      <div key={payment._id} className="studio-settings-invoice-row">
+                        <div className="studio-settings-invoice-copy">
+                          <strong>{payment.subscriptionPlanId ? "Legacy subscription" : "Top-up invoice"}</strong>
+                          <span>{formatDate(payment.createdAt)} · {humanizePaymentStatus(payment.status)}</span>
+                        </div>
+                        <div className="studio-settings-invoice-meta">
+                          <span className="studio-settings-invoice-amount">{formatMoney(payment.amountCents)}</span>
+                          {paymentUrl ? (
+                            <a href={paymentUrl} target="_blank" rel="noreferrer">Open</a>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!payments?.length ? <p className="studio-settings-empty">No invoices yet.</p> : null}
+                </div>
+              </section>
+            ) : null}
           </div>
-          ) : null}
+        ) : null}
 
-        {section === "activity" ? (
+        {settingsSectionId === "activity" ? (
           <StudioActivityFeed notifications={notifications} payments={payments} />
         ) : null}
 
-        {section === "general" ? (
+        {settingsSectionId === "general" ? (
           <div className="studio-settings-stack">
             <div className="studio-settings-appearance-card">
               <ThemeSettings />
@@ -14084,105 +14544,30 @@ function BankLine({ label, value }) {
 }
 
 function pricingPlans(pricing) {
-  const pricePerCredit = (pricing?.creditPriceCents ?? 50) / 100;
-  const makePrice = (credits) => `$${Math.round(credits * pricePerCredit).toLocaleString()}`;
-  const makeAmountCents = (credits) => Math.round(credits * (pricing?.creditPriceCents ?? 50));
-  const makeDiscountedTopUp = (credits, discountPercent) => {
-    const originalAmountCents = makeAmountCents(credits);
-    const amountCents = Math.round(originalAmountCents * (100 - discountPercent) / 100);
-    return {
-      price: formatMoney(amountCents),
-      amountCents,
-      originalPrice: formatMoney(originalAmountCents),
-      discountPercent,
-    };
-  };
-  return [
-    {
-      name: "50 credits",
-      badge: "Try",
-      credits: 50,
-      price: makePrice(50),
-      amountCents: makeAmountCents(50),
-      features: ["Quick top up", "Bank transfer available"],
-    },
-    {
-      name: "250 credits",
-      badge: "Popular",
-      credits: 250,
-      price: makePrice(250),
-      amountCents: makeAmountCents(250),
-      featured: true,
-      features: ["Creator balance", "Bank transfer available"],
-    },
-    {
-      name: "500 credits",
-      badge: "Scale",
-      credits: 500,
-      price: makePrice(500),
-      amountCents: makeAmountCents(500),
-      features: ["Studio balance", "Bank transfer available"],
-    },
-    {
-      name: "1000 credits",
-      badge: "Pro",
-      credits: 1000,
-      price: makePrice(1000),
-      amountCents: makeAmountCents(1000),
-      features: ["Production balance", "Bank transfer available"],
-    },
-    {
-      name: "2000 credits",
-      badge: "Scale",
-      credits: 2000,
-      ...makeDiscountedTopUp(2000, 2),
-      features: ["Team-ready balance", "Bank transfer available"],
-    },
-    {
-      name: "4000 credits",
-      badge: "Growth",
-      credits: 4000,
-      ...makeDiscountedTopUp(4000, 4),
-      features: ["High-volume balance", "Bank transfer available"],
-    },
-    {
-      name: "8000 credits",
-      badge: "Enterprise",
-      credits: 8000,
-      ...makeDiscountedTopUp(8000, 6),
-      features: ["Campaign balance", "Bank transfer available"],
-    },
+  const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
+  const featuresByTier = [
+    ["Quick top up", "Bank transfer available"],
+    ["Creator balance", "Bank transfer available"],
+    ["Production balance", "Bank transfer available"],
   ];
-}
-
-function subscriptionPlanOptions(subscriptionPlans) {
-  return (subscriptionPlans ?? []).map((plan, index) => ({
-    _id: plan._id,
-    name: plan.name,
-    badge: index === 0 ? "Monthly" : index === 1 ? "Popular" : "Scale",
-    credits: plan.includedMonthlyCredits,
-    price: formatMoney(plan.monthlyPriceCents),
-    originalPrice:
-      plan.discountPercent && plan.originalMonthlyPriceCents && plan.originalMonthlyPriceCents > plan.monthlyPriceCents
-        ? formatMoney(plan.originalMonthlyPriceCents)
-        : null,
-    discountPercent: plan.discountPercent,
-    amountCents: plan.monthlyPriceCents,
-    featured: index === 1,
-    features: [
-      `${plan.includedMonthlyCredits} credits monthly`,
-      `${formatMoney(plan.topUpCreditPriceCents)} per extra credit`,
-      "Bank transfer activation",
-    ],
-  }));
+  return TOP_UP_TIER_CREDITS.map((credits, index) => {
+    const amountCents = Math.round(credits * creditPriceCents);
+    const price = formatTtdCents(amountCents);
+    return {
+      key: `tier-${index}`,
+      name: price,
+      badge: TOP_UP_TIER_LABELS[index],
+      credits,
+      price,
+      amountCents,
+      features: featuresByTier[index],
+      featured: index === 1,
+    };
+  });
 }
 
 function formatMoney(amountCents) {
-  const amount = Number(amountCents ?? 0) / 100;
-  return `$${amount.toLocaleString(undefined, {
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  })}`;
+  return formatTtdCents(amountCents);
 }
 
 function elementSheetCreditCost({
@@ -14211,6 +14596,8 @@ function composerCreditCost({
   mode,
   resolution,
   imageResolution,
+  imageQuality,
+  aspectRatio,
   durationSeconds,
   hasReferenceInput,
   hasVideoReferenceInput,
@@ -14238,6 +14625,8 @@ function composerCreditCost({
   return creditCostForGeneration({
     tier: mode === "video" ? "pro_video" : "image",
     resolution: mode === "video" ? resolution : normalizeImageResolution(imageResolution),
+    quality: mode === "image" ? imageQuality : undefined,
+    aspectRatio: mode === "image" ? aspectRatio : undefined,
     durationSeconds,
     hasReferenceInput,
     hasVideoReferenceInput,
@@ -14357,19 +14746,9 @@ function humanizePaymentStatus(status) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending";
 }
 
-function formatCreditBalance(value) {
-  if (value == null || Number.isNaN(Number(value))) return "—";
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Number(value));
-}
-
-function CreditPill({ entitlement, onClick }) {
-  const label = formatCreditBalance(entitlement?.creditBalance);
-  const content = (
-    <>
-      <Coins className="h-3 w-3 shrink-0" aria-hidden="true" />
-      <span>{label}</span>
-    </>
-  );
+function CreditPill({ entitlement, creditPriceCents, onClick }) {
+  const label = formatTtdFromCredits(entitlement?.creditBalance, creditPriceCents);
+  const content = <span>{label}</span>;
   if (!onClick) {
     return (
       <span className="studio-credit-pill inline-flex h-6 items-center gap-1.5 rounded-full border border-cursor-border bg-cursor-panel px-2.5 text-[11px] font-semibold leading-none text-cursor-muted tabular-nums">
@@ -14382,11 +14761,11 @@ function CreditPill({ entitlement, onClick }) {
       type="button"
       className="studio-credit-pill inline-flex h-6 items-center gap-1.5 rounded-full border border-cursor-border bg-cursor-panel px-2.5 text-[11px] font-semibold leading-none text-cursor-muted tabular-nums"
       onClick={onClick}
-      title={entitlement?.creditBalance != null ? "View balance and billing" : "Add credits"}
+      title={entitlement?.creditBalance != null ? "View balance and billing" : "Top up"}
       aria-label={
         entitlement?.creditBalance != null
-          ? `${label} tokens — view balance and billing`
-          : "Add credits"
+          ? `${label} — view balance and billing`
+          : "Top up balance"
       }
     >
       {content}
@@ -14464,6 +14843,15 @@ function assetToEntry(asset) {
     kind: asset.kind,
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
   });
+  const mediaUrl = fullQualityUrl(asset.signedReadUrl, asset.mediaUrl);
+  const thumbnailUrl = thumbnailDisplayUrl(
+    asset.signedThumbnailUrl,
+    asset.thumbnailUrl,
+    asset.previewUrl,
+    mediaUrl,
+    asset.signedReadUrl,
+    asset.mediaUrl,
+  );
   return {
     type: "file",
     name,
@@ -14477,12 +14865,54 @@ function assetToEntry(asset) {
     kind: asset.kind,
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
     description: asset.mimeType,
-    mediaUrl: asset.signedReadUrl ?? asset.mediaUrl,
-    thumbnailUrl: asset.signedThumbnailUrl ?? asset.signedReadUrl ?? asset.thumbnailUrl ?? asset.mediaUrl,
+    mediaUrl,
+    thumbnailUrl,
     thumbnailLqipUrl: asset.signedThumbnailLqipUrl ?? asset.thumbnailLqipUrl,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
   };
+}
+
+async function downloadStudioEntry(entry, convex, expiresUnix) {
+  if (!entry) return;
+  if (entry.studioKind === "document") {
+    const text = entry.description ?? "";
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    await downloadMediaUrl(objectUrl, entry.name ?? "note.md");
+    URL.revokeObjectURL(objectUrl);
+    return;
+  }
+  if (entry.studioKind !== "asset" && entry.studioKind !== "element") {
+    const existing = fullQualityUrl(entry.mediaUrl) ?? entry.mediaUrl;
+    if (existing) await downloadMediaUrl(existing, entry.name ?? "download");
+    return;
+  }
+  let url = fullQualityUrl(entry.mediaUrl);
+  if (!url && entry.studioId && convex) {
+    try {
+      const assetId =
+        entry.studioKind === "element"
+          ? entry.sheetAsset?.studioId
+          : entry.studioId;
+      if (assetId) {
+        url = await convex.query(api.assets.signedReadUrl, {
+          assetId,
+          expiresUnix: expiresUnix ?? Math.floor(Date.now() / 1000) + 60 * 60,
+        });
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  if (!url) {
+    url =
+      fullQualityUrl(entry.sheetAsset?.mediaUrl) ??
+      thumbnailDisplayUrl(entry.thumbnailUrl, entry.sheetAsset?.thumbnailUrl) ??
+      entry.mediaUrl ??
+      entry.thumbnailUrl;
+  }
+  if (url) await downloadMediaUrl(url, entry.name ?? "download");
 }
 
 function isVideoFileUrl(url) {
@@ -14535,8 +14965,8 @@ function elementToEntry(element, assets = []) {
     referenceAssets,
     sheetAssetId,
     sheetAsset,
-    thumbnailUrl: sheetAsset?.thumbnailUrl ?? sheetAsset?.mediaUrl,
-    mediaUrl: sheetAsset?.mediaUrl ?? sheetAsset?.thumbnailUrl,
+    thumbnailUrl: thumbnailDisplayUrl(sheetAsset?.thumbnailUrl, sheetAsset?.mediaUrl),
+    mediaUrl: fullQualityUrl(sheetAsset?.mediaUrl),
     mimeType: sheetAsset?.mimeType,
     sourceAssetIds: referenceAssetIds,
     sourceAssets: referenceAssets,
@@ -14706,16 +15136,13 @@ function mergeEntrySnapshot(entry, snapshot) {
   return {
     ...entry,
     name: title !== "Untitled" ? title : snapshotTitle,
-    thumbnailUrl:
-      (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
-      snapshot.thumbnailUrl ||
-      snapshot.mediaUrl ||
-      entry.mediaUrl,
-    mediaUrl:
-      (typeof entry.mediaUrl === "string" && entry.mediaUrl) ||
-      snapshot.mediaUrl ||
-      snapshot.thumbnailUrl ||
+    thumbnailUrl: thumbnailDisplayUrl(
       entry.thumbnailUrl,
+      snapshot.thumbnailUrl,
+      entry.mediaUrl,
+      snapshot.mediaUrl,
+    ),
+    mediaUrl: fullQualityUrl(entry.mediaUrl, snapshot.mediaUrl),
   };
 }
 
@@ -14742,8 +15169,13 @@ function entryToAttachment(entry) {
     sourceAssetIds: entry.referenceAssetIds ?? entry.sourceAssetIds,
     sourceAssets: entry.referenceAssets ?? entry.sourceAssets,
     mimeType: entry.mimeType ?? entry.sheetAsset?.mimeType,
-    thumbnailUrl: entry.sheetAsset?.thumbnailUrl ?? entry.sheetAsset?.mediaUrl ?? entry.thumbnailUrl,
-    mediaUrl: entry.sheetAsset?.mediaUrl ?? entry.mediaUrl,
+    thumbnailUrl: thumbnailDisplayUrl(
+      entry.sheetAsset?.thumbnailUrl,
+      entry.thumbnailUrl,
+      entry.sheetAsset?.mediaUrl,
+      entry.mediaUrl,
+    ),
+    mediaUrl: fullQualityUrl(entry.sheetAsset?.mediaUrl, entry.mediaUrl),
   };
 }
 
