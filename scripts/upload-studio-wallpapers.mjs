@@ -22,8 +22,8 @@ const PUBLIC = join(ROOT, "public");
 const OUT_DIR = join(ROOT, ".tmp", "studio-wallpapers-v1");
 const VERSION = "v1";
 const STORAGE_PREFIX = `studio/wallpapers/${VERSION}`;
-const MAX_WIDTH = 2560;
-const QUALITY = 75;
+const MAX_WIDTH = 3840;
+const QUALITY = 90;
 
 const THEMES = [
   "agent-genesis",

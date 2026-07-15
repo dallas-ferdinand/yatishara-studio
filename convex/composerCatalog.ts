@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { authedQuery } from "./lib/customFunctions";
 import {
-  COMPOSER_SCRIPT_TYPES,
   COMPOSER_SCRIPT_TYPE_SLUGS,
+  UI_COMPOSER_SCRIPT_TYPES,
 } from "./lib/composerScriptTypes";
 import { REFERENCE_INTENT_SLUGS } from "./lib/referenceIntent";
 
@@ -26,19 +26,19 @@ const REFERENCE_INTENT_LABELS: Record<
 > = {
   auto: {
     label: "Auto",
-    description: "Infer from preset and attachments — stylize for cartoon presets, match for Direct.",
+    description: "Infer from style and attachments — stylize for premade styles, match for Direct.",
   },
   stylize: {
     label: "Stylize to preset",
-    description: "Use uploads for identity cues; render in the active cartoon look.",
+    description: "Use uploads for identity cues; render in the active style.",
   },
   match_reference: {
     label: "Match reference",
-    description: "Preserve photographic fidelity from uploads — no cartoon restyle.",
+    description: "Preserve photographic fidelity from uploads — no restyle.",
   },
   element_lock: {
     label: "Element lock",
-    description: "Built element sheets and bibles are canonical; stylize per preset without drift.",
+    description: "Built element sheets and bibles are canonical; honor them without drift.",
   },
 };
 
@@ -46,7 +46,7 @@ export const listScriptTypes = authedQuery({
   args: {},
   returns: v.array(scriptTypeReturn),
   handler: async () =>
-    COMPOSER_SCRIPT_TYPES.map((item) => ({
+    UI_COMPOSER_SCRIPT_TYPES.map((item) => ({
       slug: item.slug,
       label: item.label,
       description: item.description,

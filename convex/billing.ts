@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { buildReceiptPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
 import { adminMutation, adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
@@ -9,9 +9,9 @@ import {
   IMAGE_REFERENCE_SURCHARGE,
   PLATFORM_OVERHEAD_CREDITS_MEDIA,
   PLATFORM_OVERHEAD_CREDITS_TEXT,
-  TEXT_GENERATION_BASE_CREDITS,
-  VIDEO_BASE_CREDITS_PER_BLOCK,
-  KLING_VIDEO_BASE_CREDITS_PER_BLOCK,
+  imageCreditCost,
+  textCreditCost,
+  videoCreditCost,
 } from "./lib/generationPricing";
 
 const paymentStatus = v.union(
@@ -49,6 +49,8 @@ const pricingReturn = v.object({
 });
 
 const creditPriceCents = 50;
+/** Must match `TOP_UP_TIER_CREDITS[0]` in src/studio/lib/money.ts (Starter TT$50). */
+const TOP_UP_MIN_CREDITS = 100;
 
 const bankAccountReturn = v.object({
   _id: v.id("bankAccounts"),
@@ -90,18 +92,40 @@ export const getPricing = authedQuery({
       .unique();
     return {
       creditPriceCents: settings?.creditPriceCents ?? creditPriceCents,
-      imageCredits1K: IMAGE_CREDITS_BY_RESOLUTION["1K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
-      imageCredits2K: IMAGE_CREDITS_BY_RESOLUTION["2K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
-      imageCredits4K: IMAGE_CREDITS_BY_RESOLUTION["4K"] + PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      imageCredits1K: imageCreditCost({ resolution: "1K", quality: "medium" }),
+      imageCredits2K: imageCreditCost({ resolution: "2K", quality: "medium" }),
+      imageCredits4K: imageCreditCost({ resolution: "4K", quality: "medium" }),
       imageReferenceSurcharge: IMAGE_REFERENCE_SURCHARGE,
-      videoCredits480p: VIDEO_BASE_CREDITS_PER_BLOCK["854x480"],
-      videoCredits720p: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
-      videoCredits1080p: VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
-      klingVideoCredits720p: KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
-      klingVideoCredits1080p: KLING_VIDEO_BASE_CREDITS_PER_BLOCK["1920x1080"],
+      videoCredits480p: videoCreditCost({
+        resolution: "854x480",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      videoCredits720p: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      videoCredits1080p: videoCreditCost({
+        resolution: "1920x1080",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      klingVideoCredits720p: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "kling-3.0-i2v",
+        audioEnabled: false,
+      }),
+      klingVideoCredits1080p: videoCreditCost({
+        resolution: "1920x1080",
+        durationSeconds: 5,
+        videoModel: "kling-3.0-i2v",
+        audioEnabled: false,
+      }),
       platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,
       platformOverheadCreditsText: PLATFORM_OVERHEAD_CREDITS_TEXT,
-      textCredits: TEXT_GENERATION_BASE_CREDITS + PLATFORM_OVERHEAD_CREDITS_TEXT,
+      textCredits: textCreditCost({}),
     };
   },
 });
@@ -184,7 +208,8 @@ export const listMyPayments = authedQuery({
     const payments = await ctx.db
       .query("payments")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
-      .collect();
+      .order("desc")
+      .take(50);
     return await withReceiptUrls(ctx, payments);
   },
 });
@@ -216,6 +241,7 @@ export const submitBankPayment = authedMutation({
     bankAccountId: v.id("bankAccounts"),
     amountCents: v.number(),
     creditsRequested: v.optional(v.number()),
+    /** Accepted for backwards-compatible clients; new subscription purchases are rejected. */
     subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
     reference: v.optional(v.string()),
   },
@@ -225,25 +251,37 @@ export const submitBankPayment = authedMutation({
     if (!bankAccount || !bankAccount.enabled) {
       throw new Error("Bank account not available");
     }
-    let subscriptionPlan: Doc<"subscriptionPlans"> | null = null;
     if (args.subscriptionPlanId !== undefined) {
-      const plan = await ctx.db.get("subscriptionPlans", args.subscriptionPlanId);
-      if (!plan || !plan.enabled) {
-        throw new Error("Subscription plan not available");
-      }
-      if (args.amountCents !== plan.monthlyPriceCents) {
-        throw new Error("Subscription payment amount does not match the selected plan");
-      }
-      subscriptionPlan = plan;
+      throw new Error("Subscriptions are no longer available. Please top up instead.");
+    }
+    const pricing = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const unitPriceCents = pricing?.creditPriceCents ?? creditPriceCents;
+    const minAmountCents = TOP_UP_MIN_CREDITS * unitPriceCents;
+    if (!Number.isFinite(args.amountCents) || args.amountCents < minAmountCents) {
+      throw new Error(`Top-up amount must be at least ${Math.round(minAmountCents / 100)} TTD`);
+    }
+    const creditsFromAmount = Math.floor(args.amountCents / unitPriceCents);
+    if (creditsFromAmount < TOP_UP_MIN_CREDITS) {
+      throw new Error(`Top-up amount must be at least ${Math.round(minAmountCents / 100)} TTD`);
+    }
+    const creditsGranted =
+      args.creditsRequested !== undefined ? Math.floor(args.creditsRequested) : creditsFromAmount;
+    if (!Number.isFinite(creditsGranted) || creditsGranted <= 0) {
+      throw new Error("Invalid credit amount");
+    }
+    if (creditsGranted > creditsFromAmount) {
+      throw new Error("Requested credits exceed the amount paid");
     }
     const now = Date.now();
     return await ctx.db.insert("payments", {
       userId: ctx.user._id,
       method: "bank",
       status: "receipt_uploaded",
-      amountCents: subscriptionPlan ? subscriptionPlan.monthlyPriceCents : args.amountCents,
-      creditsGranted: subscriptionPlan ? undefined : args.creditsRequested,
-      subscriptionPlanId: args.subscriptionPlanId,
+      amountCents: Math.round(args.amountCents),
+      creditsGranted,
       bankAccountId: args.bankAccountId,
       reference: args.reference,
       createdAt: now,
@@ -375,7 +413,11 @@ export const adminSetPricing = adminMutation({
       key: "default",
       creditPriceCents: args.creditPriceCents,
       imageCredits: IMAGE_CREDITS_BY_RESOLUTION["2K"],
-      videoCredits: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
+      videoCredits: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
       updatedBy: ctx.user._id,
       updatedAt: now,
     };
@@ -467,7 +509,11 @@ export const adminSeedLaunchPricing = adminMutation({
       key: "default",
       creditPriceCents,
       imageCredits: IMAGE_CREDITS_BY_RESOLUTION["2K"],
-      videoCredits: VIDEO_BASE_CREDITS_PER_BLOCK["1280x720"],
+      videoCredits: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
       updatedBy: ctx.user._id,
       updatedAt: now,
     };
@@ -630,7 +676,7 @@ export const adminReviewPayment = adminMutation({
       title: "Payment status updated",
       body:
         args.status === "payment_completed"
-          ? "Your payment was approved and credits were added."
+          ? "Your payment was approved and your balance was topped up."
           : args.status === "rejected"
             ? args.rejectionReason ?? "Your payment was rejected."
             : "Your receipt was received and is being reviewed.",
@@ -660,6 +706,132 @@ export const adminAdjustCredits = adminMutation({
     });
     await audit(ctx, "credits_adjusted", args.userId);
     return null;
+  },
+});
+
+/**
+ * One-shot/internal admin wipe: clears payments, receipts, credit ledger,
+ * payment notifications, and related audit rows for a single phone user,
+ * then zeros credit + reserved balances. Does not touch other users.
+ */
+export const internalWipeUserBillingByPhone = internalMutation({
+  args: {
+    phone: v.string(),
+    confirm: v.literal("WIPE_BILLING"),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    phone: v.string(),
+    deletedPayments: v.number(),
+    deletedReceipts: v.number(),
+    deletedCreditTransactions: v.number(),
+    deletedPaymentNotifications: v.number(),
+    deletedAuditEvents: v.number(),
+    deletedSubscriptions: v.number(),
+    previousCreditBalance: v.number(),
+    previousReservedCredits: v.number(),
+    creditBalance: v.number(),
+    reservedCredits: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const phone = args.phone.replace(/\D/g, "");
+    if (phone.length < 8 || phone.length > 15) {
+      throw new Error("Invalid phone");
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    if (!user) {
+      throw new Error(`No user found for phone ${phone}`);
+    }
+
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    const previousCreditBalance = account?.creditBalance ?? 0;
+    const previousReservedCredits = account?.reservedCredits ?? 0;
+
+    const payments = await ctx.db
+      .query("payments")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const receipts = await ctx.db
+      .query("paymentReceipts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const txs = await ctx.db
+      .query("creditTransactions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const subscriptions = await ctx.db
+      .query("subscriptions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const notifications = await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const paymentNotifications = notifications.filter(
+      (n) => n.kind === "payment_status" || n.paymentId !== undefined,
+    );
+    const audits = await ctx.db
+      .query("adminAuditEvents")
+      .withIndex("by_target_user", (q) => q.eq("targetUserId", user._id))
+      .collect();
+
+    for (const row of receipts) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of txs) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of payments) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of paymentNotifications) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of audits) {
+      await ctx.db.delete(row._id);
+    }
+    for (const row of subscriptions) {
+      await ctx.db.delete(row._id);
+    }
+
+    const now = Date.now();
+    if (account) {
+      await ctx.db.patch(account._id, {
+        creditBalance: 0,
+        reservedCredits: 0,
+        activeSubscriptionId: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("billingAccounts", {
+        userId: user._id,
+        creditBalance: 0,
+        reservedCredits: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      userId: user._id,
+      phone,
+      deletedPayments: payments.length,
+      deletedReceipts: receipts.length,
+      deletedCreditTransactions: txs.length,
+      deletedPaymentNotifications: paymentNotifications.length,
+      deletedAuditEvents: audits.length,
+      deletedSubscriptions: subscriptions.length,
+      previousCreditBalance,
+      previousReservedCredits,
+      creditBalance: 0,
+      reservedCredits: 0,
+    };
   },
 });
 

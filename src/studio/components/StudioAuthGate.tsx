@@ -641,7 +641,7 @@ function AuthFrame({
       style={authThemeStyle}
     >
       <div
-        className="absolute inset-0 scale-[1.03] bg-cover bg-center transition-[background-image,opacity,transform] duration-1000 ease-out"
+        className="absolute inset-0 scale-[1.03] bg-cover bg-center"
         style={{ backgroundImage: `url("${activeBackground}")` }}
         aria-hidden="true"
       />

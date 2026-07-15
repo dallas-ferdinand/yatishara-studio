@@ -10,9 +10,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "esbuild \"src/**/*.ts\" --outdir=dist --platform=node --format=esm --log-level=warning",
+    "build:tsc": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc --watch",
+    "dev": "esbuild \"src/**/*.ts\" --outdir=dist --platform=node --format=esm --watch",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.9.3"
   },
   "engines": {

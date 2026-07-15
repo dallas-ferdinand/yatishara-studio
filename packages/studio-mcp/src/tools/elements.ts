@@ -2,7 +2,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { jsonResult, studioFetch } from "../client.js";
 
-const elementType = z.enum(["character", "prop", "location", "doc"]);
+const elementType = z.enum(["character", "prop", "location", "doc", "style_sheet"]);
+
+const STYLE_SHEET_CREATE_GUIDE =
+  "Create a Style Sheet element (unbuilt). Add styleRules + optional mood referenceAssetIds, then studio_build_style_sheet. Required before styled generation (skipPromptEnhancement false).";
+
+const STYLE_SHEET_BUILD_GUIDE =
+  "Build the visual style board image for a Style Sheet element. Requires styleRules and/or mood refs on the element.";
 
 const CREATE_ELEMENT_GUIDE =
   "Creates the element record ONLY (buildStatus=unbuilt) — does not build a sheet image. " +
@@ -23,7 +29,7 @@ const GENERATE_TEXT_SHEET_GUIDE =
   "Parity with Studio UI Build sheet text step.";
 
 const stylePresetSheetFieldDesc =
-  "Style slug: unstyled|raw (photoreal reference sheet, no cartoon stylization), or toon-prime (default cartoon), toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol";
+  "Element sheet style: unstyled|raw (photoreal) for character/prop/location sheets. Style Sheet elements ignore cartoon presets.";
 
 const UPDATE_ELEMENT_GUIDE =
   "Update referenceAssetIds (upload photos only — never include sheetAssetId). " +
@@ -109,8 +115,32 @@ export function registerElementTools(server: McpServer) {
         .describe(
           "photographic = real subject with upload refs. designed = fictional asset from description only (no throwaway plates).",
         ),
+      sheetAssetId: z
+        .string()
+        .optional()
+        .describe("Existing uploaded image to use as the built sheet (for externally generated sheets)"),
+      styleRules: z
+        .string()
+        .optional()
+        .describe("Style Sheet only — markdown palette / line rules / forbidden drift"),
+      renderMode: z
+        .enum(["photoreal", "illustrated_2d", "illustrated_3d", "mixed"])
+        .optional()
+        .describe("Style Sheet only"),
     },
-    async ({ type, name, description, folderId, referenceAssetIds, sourceAssetIds, sourceDocumentId, sourceMode }) =>
+    async ({
+      type,
+      name,
+      description,
+      folderId,
+      referenceAssetIds,
+      sourceAssetIds,
+      sourceDocumentId,
+      sourceMode,
+      sheetAssetId,
+      styleRules,
+      renderMode,
+    }) =>
       jsonResult(
         await studioFetch("/elements", {
           method: "POST",
@@ -122,6 +152,9 @@ export function registerElementTools(server: McpServer) {
             referenceAssetIds: referenceAssetIds ?? sourceAssetIds,
             sourceDocumentId,
             sourceMode,
+            sheetAssetId,
+            styleRules,
+            renderMode,
           }),
         }),
       ),
@@ -138,8 +171,23 @@ export function registerElementTools(server: McpServer) {
       referenceAssetIds: z.array(z.string()).optional(),
       sourceAssetIds: z.array(z.string()).optional(),
       sourceDocumentId: z.string().optional(),
+      styleRules: z.string().optional().describe("Style Sheet markdown rules"),
+      renderMode: z
+        .enum(["photoreal", "illustrated_2d", "illustrated_3d", "mixed"])
+        .optional()
+        .describe("Style Sheet render mode"),
     },
-    async ({ elementId, name, description, folderId, referenceAssetIds, sourceAssetIds, sourceDocumentId }) =>
+    async ({
+      elementId,
+      name,
+      description,
+      folderId,
+      referenceAssetIds,
+      sourceAssetIds,
+      sourceDocumentId,
+      styleRules,
+      renderMode,
+    }) =>
       jsonResult(
         await studioFetch(`/elements/${encodeURIComponent(elementId)}`, {
           method: "PATCH",
@@ -149,6 +197,8 @@ export function registerElementTools(server: McpServer) {
             folderId,
             referenceAssetIds: referenceAssetIds ?? sourceAssetIds,
             sourceDocumentId,
+            styleRules,
+            renderMode,
           }),
         }),
       ),
@@ -209,5 +259,77 @@ export function registerElementTools(server: McpServer) {
           }),
         }),
       ),
+  );
+
+  server.tool(
+    "studio_create_style_sheet",
+    STYLE_SHEET_CREATE_GUIDE,
+    {
+      name: z.string(),
+      styleRules: z.string().optional().describe("Markdown: palette, line weight, forbidden drift, render notes"),
+      renderMode: z
+        .enum(["photoreal", "illustrated_2d", "illustrated_3d", "mixed"])
+        .optional(),
+      folderId: z.string().optional(),
+      referenceAssetIds: z.array(z.string()).optional().describe("Mood reference images"),
+      sheetAssetId: z
+        .string()
+        .optional()
+        .describe("Existing uploaded Cursor-generated image to use as the visual style sheet"),
+      description: z.string().optional(),
+    },
+    async ({
+      name,
+      styleRules,
+      renderMode,
+      folderId,
+      referenceAssetIds,
+      sheetAssetId,
+      description,
+    }) =>
+      jsonResult(
+        await studioFetch("/elements", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "style_sheet",
+            name,
+            styleRules,
+            renderMode,
+            folderId,
+            referenceAssetIds,
+            sheetAssetId,
+            description,
+          }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_build_style_sheet",
+    STYLE_SHEET_BUILD_GUIDE,
+    {
+      elementId: z.string(),
+      referenceAssetIds: z.array(z.string()).optional(),
+      resolution: z.enum(["1K", "2K"]).optional(),
+    },
+    async ({ elementId, referenceAssetIds, resolution }) =>
+      jsonResult(
+        await studioFetch(`/elements/${encodeURIComponent(elementId)}/generate-sheet`, {
+          method: "POST",
+          body: JSON.stringify({ referenceAssetIds, resolution, stylePresetSlug: "unstyled" }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_set_active_style_sheet",
+    "MCP/API has no session store — pass styleSheetElementId on each studio_generate_image|video|script call for styled work (enhancement sticks style + context). Omit for Direct verbatim handoff.",
+    { styleSheetElementId: z.string().optional() },
+    async ({ styleSheetElementId }) =>
+      jsonResult({
+        ok: true,
+        note: "Pass styleSheetElementId on generate calls. UI users pick active sheet in Studio composer.",
+        styleSheetElementId: styleSheetElementId ?? null,
+      }),
   );
 }

@@ -93,6 +93,11 @@
   box-sizing: border-box;
 }
 
+.studio-polish .cursor-workspace-head.cursor-panel-head {
+  border: 0 !important;
+  border-bottom: 0 !important;
+}
+
 .cursor-panel-head-tools {
   display: flex;
   align-items: center;

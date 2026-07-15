@@ -638,6 +638,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         sourceAssetIds?: Id<"assets">[];
         sourceDocumentId?: Id<"documents">;
         sourceMode?: "photographic" | "designed";
+        sheetAssetId?: Id<"assets">;
         styleRules?: string;
         renderMode?: "photoreal" | "illustrated_2d" | "illustrated_3d" | "mixed";
       }>(request);
@@ -655,6 +656,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         sourceAssetIds: body.sourceAssetIds,
         sourceDocumentId: body.sourceDocumentId,
         sourceMode: body.sourceMode,
+        sheetAssetId: body.sheetAssetId,
         styleRules: body.styleRules,
         renderMode: body.renderMode,
       });
@@ -965,6 +967,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         styleSheetElementId?: Id<"elements">;
         aspectRatio?: string;
         resolution?: string;
+        quality?: string;
         durationSeconds?: number;
         audioEnabled?: boolean;
         referenceAssetIds?: Id<"assets">[];
@@ -1012,7 +1015,8 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           ),
         );
       }
-      const skipPromptEnhancement = body.skipPromptEnhancement ?? true;
+      const skipPromptEnhancement =
+        body.skipPromptEnhancement ?? (body.styleSheetElementId ? false : true);
       if (!skipPromptEnhancement && !body.styleSheetElementId) {
         return finish(
           errorResponse(
@@ -1034,6 +1038,36 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const creativePrompt = userPrompt;
       let mergedReferenceAssetIds = [...(body.referenceAssetIds ?? [])];
       let referenceImageLabels: Array<{ tag: string; label: string }> = [];
+      let hasStyleSheetVisual = false;
+
+      if (styleSheetElementId) {
+        try {
+          const styleSheet = await ctx.runQuery(internal.studioApiInternal.getElementForApi, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            elementId: styleSheetElementId,
+            expiresUnix,
+          });
+          if (styleSheet.type !== "style_sheet") {
+            return finish(errorResponse("styleSheetElementId must reference a Style Sheet"));
+          }
+          if (styleSheet.sheetAssetId) {
+            hasStyleSheetVisual = true;
+            mergedReferenceAssetIds = [
+              styleSheet.sheetAssetId,
+              ...mergedReferenceAssetIds.filter(
+                (assetId) => assetId !== styleSheet.sheetAssetId,
+              ),
+            ];
+            referenceImageLabels = [
+              { tag: "[Image 1]", label: `active Style Sheet "${styleSheet.name}" (style only)` },
+            ];
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Style Sheet not found";
+          return finish(errorResponse(message, message.includes("not found") ? 404 : 400));
+        }
+      }
 
       let resolvedVideoModel;
       if (mode === "video") {
@@ -1057,11 +1091,15 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             generationMode: mode === "video" ? "video" : mode === "image" ? "image" : undefined,
             promptAppendStyle: klingVideo ? "gateway_kling" : "full",
             hasStartFrame: Boolean(body.startFrameAssetId),
+            referenceImageStartIndex: hasStyleSheetVisual ? 1 : 0,
           });
           mergedReferenceAssetIds = [
             ...new Set([...mergedReferenceAssetIds, ...resolved.referenceAssetIds]),
           ];
-          referenceImageLabels = resolved.referenceImageLabels;
+          referenceImageLabels = [
+            ...referenceImageLabels,
+            ...resolved.referenceImageLabels,
+          ];
           if (resolved.promptLines.length) {
             userPrompt = `${userPrompt}\n\nElement references:\n${resolved.promptLines.join("\n\n")}`;
           }
@@ -1088,8 +1126,9 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         }
         startFrameUrl = startRef.url;
         const directPrompt = isDirectPromptMode({
-          skipPromptEnhancement: body.skipPromptEnhancement,
+          skipPromptEnhancement,
           presetSlug: preset.slug,
+          styleSheetElementId: body.styleSheetElementId,
         });
         userPrompt = directPrompt
           ? appendVideoReferenceTags(userPrompt, referenceImageLabels)
@@ -1172,7 +1211,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           styleSheetElementId,
           userPrompt,
           referenceInputs,
-          skipScriptEnhancement: body.skipPromptEnhancement,
+          skipScriptEnhancement: skipPromptEnhancement,
           scriptType: body.scriptType,
           referenceIntent: body.referenceIntent,
           hasRawImageReference,
@@ -1217,6 +1256,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const resolution =
         body.resolution ?? (mode === "image" ? "2K" : "1280x720");
       const aspectRatio = body.aspectRatio ?? "16:9";
+      const quality = mode === "image" ? (body.quality ?? "medium") : undefined;
       const referenceInputsList = referenceInputs ?? [];
       const generationArgs = {
         userId: auth.userId,
@@ -1235,6 +1275,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         audioEnabled: body.audioEnabled,
         aspectRatio,
         resolution,
+        quality,
         durationSeconds: body.durationSeconds,
         hasReferenceInput:
           mode === "video"
@@ -1245,7 +1286,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         hasNonVideoReferenceInput:
           mode === "video" &&
           referenceInputsList.some((input) => input.kind === "image" || input.kind === "audio"),
-        skipPromptEnhancement: body.skipPromptEnhancement,
+        skipPromptEnhancement,
       };
 
       if (body.wait === false) {
@@ -1255,6 +1296,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           mode,
           aspectRatio,
           resolution,
+          quality,
           durationSeconds: body.durationSeconds,
           audioEnabled: body.audioEnabled,
           referenceUrls,
@@ -1291,11 +1333,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         audioEnabled: body.audioEnabled,
         aspectRatio,
         resolution,
+        quality,
         durationSeconds: body.durationSeconds,
         referenceUrls,
         referenceInputs,
         startFrameUrl,
-        skipPromptEnhancement: body.skipPromptEnhancement,
+        skipPromptEnhancement,
         videoModel: resolvedVideoModel?.slug,
         referenceIntent: body.referenceIntent,
         hasRawImageReference,

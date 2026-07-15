@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; background: #020617; }
+  .container {
+    position: relative;
+    overflow: hidden;
+    width: 800px;
+    height: 600px;
+    background: #020617 !important;
+  }
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    opacity: 0.74;
+    /* Strong contrasting colors for visible blur */
+    background: linear-gradient(135deg, #ff0000 0%, #ffff00 25%, #00ff00 50%, #00ffff 75%, #0000ff 100%);
+  }
+  .container > :not(.backdrop) {
+    position: relative;
+  }
+  .blur-target {
+    background: transparent !important;
+    -webkit-backdrop-filter: blur(40px) saturate(1.5);
+    backdrop-filter: blur(40px) saturate(1.5);
+    width: 300px;
+    height: 250px;
+    margin: 175px 100px;
+    border: 2px solid white;
+  }
+  .no-blur {
+    background: transparent !important;
+    width: 300px;
+    height: 250px;
+    margin: -254px 100px 0 400px;
+    border: 2px solid yellow;
+  }
+</style>
+</head>
+<body>
+<div class="container" id="container">
+  <div class="backdrop"></div>
+  <div class="blur-target" id="blurTarget"></div>
+  <div class="no-blur" id="noBlur"></div>
+</div>
+</body>
+</html>

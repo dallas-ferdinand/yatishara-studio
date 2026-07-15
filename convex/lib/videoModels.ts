@@ -1,8 +1,12 @@
-export type VideoModelSlug = "seedance-2.0" | "kling-3.0-i2v";
+export type VideoModelSlug =
+  | "seedance-2.0"
+  | "google-omni-flash"
+  | "kling-3.0-i2v";
 
 /** MCP/API explicit picks — hidden from Studio UI composer and public catalog. */
 export const MCP_EXPLICIT_VIDEO_MODEL_SLUGS: VideoModelSlug[] = [
   "kling-3.0-i2v",
+  "google-omni-flash",
 ];
 
 export type VideoModelDef = {
@@ -12,6 +16,8 @@ export type VideoModelDef = {
   description: string;
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
+  /** Max output seconds supported by the provider. */
+  maxDurationSeconds?: number;
   /** When false, model stays API/MCP-wired but hidden from Studio composer UI. */
   uiVisible?: boolean;
 };
@@ -19,22 +25,32 @@ export type VideoModelDef = {
 export const VIDEO_MODELS: VideoModelDef[] = [
   {
     slug: "seedance-2.0",
-    label: "Seedance 2.0",
+    label: "Seedance",
     gatewayModelId: "bytedance/seedance-2.0",
-    description:
-      "Default — physics, multimodal refs, multi-shot. Strict filter on photoreal faces in input images.",
+    description: "Seedance",
     requiresStartFrame: false,
     supportsMultimodalRefs: true,
+    maxDurationSeconds: 15,
     uiVisible: true,
   },
   {
+    slug: "google-omni-flash",
+    label: "Omni Flash",
+    gatewayModelId: "google/gemini-omni-flash-preview",
+    description: "Omni Flash",
+    requiresStartFrame: false,
+    supportsMultimodalRefs: true,
+    maxDurationSeconds: 10,
+    uiVisible: false,
+  },
+  {
     slug: "kling-3.0-i2v",
-    label: "Kling 3.0 I2V",
+    label: "Kling",
     gatewayModelId: "klingai/kling-v3.0-i2v",
-    description:
-      "MCP only — cinematic faces and start-frame I2V. Easier on human likeness; prop refs via prompt.",
+    description: "Kling",
     requiresStartFrame: true,
     supportsMultimodalRefs: false,
+    maxDurationSeconds: 15,
     uiVisible: false,
   },
 ];
@@ -53,7 +69,7 @@ export function resolveVideoModel(slug?: string | null): VideoModelDef {
     );
     if (found) return found;
     throw new Error(
-      `Unknown video model: ${normalized}. Use seedance-2.0 or kling-3.0-i2v.`,
+      `Unknown video model: ${normalized}. Use seedance-2.0, google-omni-flash, or kling-3.0-i2v.`,
     );
   }
   return (
@@ -73,7 +89,7 @@ export function resolvePublicVideoModel(slug?: string | null): VideoModelDef {
   const model = resolveVideoModel(slug);
   if (model.uiVisible === false) {
     throw new Error(
-      `${model.label} is not available. Video generation uses Seedance 2.0.`,
+      `${model.label} is not available. Video generation uses Seedance.`,
     );
   }
   return model;
@@ -87,9 +103,20 @@ export function isKlingGatewayModel(modelId: string): boolean {
   return modelId.includes("kling");
 }
 
+export function isOmniFlashGatewayModel(modelId: string): boolean {
+  return (
+    modelId.includes("gemini-omni-flash") ||
+    modelId.includes("google-omni-flash") ||
+    modelId === "google/gemini-omni-flash-preview"
+  );
+}
+
 export function videoPricingModelFromGatewayId(gatewayModelId: string): VideoModelSlug {
   if (gatewayModelId.includes("kling")) {
     return "kling-3.0-i2v";
+  }
+  if (isOmniFlashGatewayModel(gatewayModelId)) {
+    return "google-omni-flash";
   }
   return "seedance-2.0";
 }
@@ -126,6 +153,7 @@ export function listVideoModelsPublic(options?: { uiOnly?: boolean }): Array<{
   requiresStartFrame: boolean;
   supportsMultimodalRefs: boolean;
   isDefault: boolean;
+  maxDurationSeconds?: number;
 }> {
   const defaultSlug = defaultVideoModelSlug();
   const models = options?.uiOnly
@@ -138,5 +166,6 @@ export function listVideoModelsPublic(options?: { uiOnly?: boolean }): Array<{
     requiresStartFrame: model.requiresStartFrame,
     supportsMultimodalRefs: model.supportsMultimodalRefs,
     isDefault: model.slug === defaultSlug,
+    maxDurationSeconds: model.maxDurationSeconds,
   }));
 }

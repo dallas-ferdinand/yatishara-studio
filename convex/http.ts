@@ -16,6 +16,7 @@ const exactGetPost = [
   "/api/v1/assets/upload-inline",
   "/api/v1/documents",
   "/api/v1/elements",
+  "/api/v1/style-sheets",
   "/api/v1/style-presets",
   "/api/v1/video-models",
   "/api/v1/generations/estimate",

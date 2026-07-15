@@ -4,9 +4,10 @@ import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, LQIP_TRANSFORM, signBunnyCdnUrl, THUMB_TRANSFORM } from "./lib/bunny";
+import { buildAssetPath, LQIP_TRANSFORM, signBunnyCdnUrl, signBunnyFullUrl, THUMB_TRANSFORM } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
+  CREDIT_PRICE_TTD,
   creditCostForGeneration,
   imageCreditCost,
   textCreditCost,
@@ -85,16 +86,21 @@ const eventReturn = v.object({
   }))),
 });
 
+/** Cap history queries — unbounded collect() exceeds Convex's 1s query limit. */
+const LIST_THREADS_LIMIT = 100;
+
 export const listThreads = authedQuery({
   args: {},
   returns: v.array(threadReturn),
   handler: async (ctx) => {
+    // Newest first within non-archived (archivedAt is unused today but keep the filter).
     return await ctx.db
       .query("generationThreads")
       .withIndex("by_owner_and_archived", (q) =>
         q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
       )
-      .collect();
+      .order("desc")
+      .take(LIST_THREADS_LIMIT);
   },
 });
 
@@ -155,7 +161,7 @@ export const listEvents = authedQuery({
                   mimeType: asset.mimeType,
                   byteSize: asset.byteSize,
                   signedReadUrl: asset.bunnyPath && args.expiresUnix
-                    ? await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix)
+                    ? await signBunnyFullUrl(asset.bunnyPath, args.expiresUnix, asset.kind)
                     : undefined,
                   signedThumbnailUrl,
                   signedThumbnailLqipUrl,
@@ -220,6 +226,8 @@ export const canGenerate = authedQuery({
     tier: generationTier,
     now: v.number(),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
+    aspectRatio: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
@@ -260,6 +268,8 @@ export const canGenerate = authedQuery({
     const cost = generationCreditCost({
       tier: args.tier,
       resolution: args.resolution,
+      quality: args.quality,
+      aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -296,6 +306,7 @@ export const createQueuedJob = authedMutation({
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
@@ -329,6 +340,8 @@ export const createQueuedJob = authedMutation({
     const reservedCreditTransactionId = await reserveCreditsForJob(ctx, {
       tier: args.tier,
       resolution: args.resolution,
+      quality: args.quality,
+      aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -350,6 +363,7 @@ export const createQueuedJob = authedMutation({
       audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -507,6 +521,7 @@ export const prepareApiGeneration = internalMutation({
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
@@ -551,6 +566,8 @@ export const prepareApiGeneration = internalMutation({
     const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
       tier: args.tier,
       resolution: args.resolution,
+      quality: args.quality,
+      aspectRatio: args.aspectRatio,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -572,6 +589,7 @@ export const prepareApiGeneration = internalMutation({
       audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       durationSeconds: args.durationSeconds,
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -624,6 +642,7 @@ export const getJobRunContext = internalQuery({
       audioEnabled: v.optional(v.boolean()),
       aspectRatio: v.optional(v.string()),
       resolution: v.optional(v.string()),
+      quality: v.optional(v.string()),
       durationSeconds: v.optional(v.number()),
       externalTaskId: v.optional(v.string()),
       error: v.optional(v.string()),
@@ -671,6 +690,7 @@ export const getJobRunContext = internalQuery({
             name: styleSheet.name,
             styleRules: styleSheet.styleRules,
             renderMode: styleSheet.renderMode,
+            hasVisualReference: Boolean(styleSheet.sheetAssetId),
           })
         : preset.systemInstructions;
     return {
@@ -691,6 +711,7 @@ export const getJobRunContext = internalQuery({
         audioEnabled: job.audioEnabled,
         aspectRatio: job.aspectRatio,
         resolution: job.resolution,
+        quality: job.quality,
         durationSeconds: job.durationSeconds,
         externalTaskId: job.externalTaskId,
         error: job.error,
@@ -985,18 +1006,26 @@ async function requireJob(ctx: QueryCtx | MutationCtx, jobId: Id<"generationJobs
 }
 
 function insufficientCreditsMessage(cost: number): string {
-  return `You need ${cost} credits to generate this. Top up to continue.`;
+  const amount = cost * CREDIT_PRICE_TTD;
+  const formatted = Number.isInteger(amount)
+    ? String(amount)
+    : amount.toFixed(2).replace(/\.?0+$/, "");
+  return `You need $${formatted} TTD to generate this. Top up to continue.`;
 }
 
 function resolveVideoPricingModel(args: {
   tier: "image" | "pro_video" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
-}): "seedance-2.0" | "kling-3.0-i2v" | undefined {
+}): "seedance-2.0" | "google-omni-flash" | "kling-3.0-i2v" | undefined {
   if (args.tier !== "pro_video") {
     return undefined;
   }
-  if (args.videoModel === "seedance-2.0" || args.videoModel === "kling-3.0-i2v") {
+  if (
+    args.videoModel === "seedance-2.0" ||
+    args.videoModel === "google-omni-flash" ||
+    args.videoModel === "kling-3.0-i2v"
+  ) {
     return args.videoModel;
   }
   if (args.resolvedModel) {
@@ -1008,6 +1037,8 @@ function resolveVideoPricingModel(args: {
 function generationCreditCost(args: {
   tier: "image" | "pro_video" | "low" | "medium" | "high";
   resolution?: string;
+  quality?: string;
+  aspectRatio?: string;
   durationSeconds?: number;
   hasReferenceInput?: boolean;
   hasVideoReferenceInput?: boolean;
@@ -1019,6 +1050,8 @@ function generationCreditCost(args: {
   return creditCostForGeneration({
     tier: args.tier,
     resolution: args.resolution,
+    quality: args.quality,
+    aspectRatio: args.aspectRatio,
     durationSeconds: args.durationSeconds,
     hasReferenceInput: args.hasReferenceInput,
     hasVideoReferenceInput: args.hasVideoReferenceInput,
@@ -1033,6 +1066,8 @@ async function reserveCreditsForJob(
   args: {
     tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolution?: string;
+    quality?: string;
+    aspectRatio?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
@@ -1051,6 +1086,8 @@ async function reserveCreditsForUser(
   args: {
     tier: "image" | "pro_video" | "low" | "medium" | "high";
     resolution?: string;
+    quality?: string;
+    aspectRatio?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;

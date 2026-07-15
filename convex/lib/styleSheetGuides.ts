@@ -52,13 +52,20 @@ export function styleSheetSystemInstructions(args: {
   name: string;
   styleRules?: string;
   renderMode?: StyleSheetRenderMode;
+  hasVisualReference?: boolean;
 }): string {
   const mode = args.renderMode ?? "mixed";
   const rules = args.styleRules?.trim();
   const parts = [
     `Apply the "${args.name}" Style Sheet consistently across the generation.`,
     `Render mode: ${mode.replace(/_/g, " ")}.`,
+    "FULL-SCENE STYLE LOCK: restyle the entire output frame as one coherent world — people, wardrobe, props, architecture, ground, foliage, vehicles, sky, weather, atmosphere, reflections, and lighting. Never leave photographic or mismatched backgrounds behind stylized subjects. Never collage stylized characters onto live-action environments.",
   ];
+  if (args.hasVisualReference) {
+    parts.push(
+      "The first attached image is the active Style Sheet visual. Match its rendering language, materials, line treatment, lighting logic, palette behavior, contrast, and finish across every surface in the new scene. Do not copy its specific people, identities, wardrobe, poses, location layout, or camera composition unless the user prompt independently requests them.",
+    );
+  }
   if (rules) {
     parts.push(`Style rules:\n${rules}`);
   }

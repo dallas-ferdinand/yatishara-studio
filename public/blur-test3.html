@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; background: #020617; }
+  .container {
+    position: relative;
+    overflow: hidden;
+    width: 800px;
+    height: 600px;
+    background: #020617 !important;
+  }
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    opacity: 0.74;
+    background: linear-gradient(135deg, #ff0000, #00ff00, #0000ff);
+  }
+  .container > :not(.backdrop) {
+    position: relative;
+  }
+  .blur-target {
+    background: transparent !important;
+    -webkit-backdrop-filter: blur(40px) saturate(1.2);
+    backdrop-filter: blur(40px) saturate(1.2);
+    width: 300px;
+    height: 200px;
+    margin: 50px;
+    border: 2px solid white;
+  }
+  .no-blur {
+    background: transparent !important;
+    width: 300px;
+    height: 200px;
+    margin: 50px 50px 50px 400px;
+    border: 2px solid yellow;
+  }
+  #result {
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: black;
+    color: lime;
+    font-family: monospace;
+    font-size: 16px;
+    padding: 20px;
+    z-index: 9999;
+    white-space: pre;
+    min-width: 600px;
+  }
+</style>
+</head>
+<body>
+<div class="container" id="container">
+  <div class="backdrop"></div>
+  <div class="blur-target" id="blurTarget"></div>
+  <div class="no-blur" id="noBlur"></div>
+</div>
+<div id="result"></div>
+<script>
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    // Use a canvas to capture the rendered page
+    // We can compare colors inside vs outside the blur target
+    const blur = document.getElementById('blurTarget');
+    const noBlur = document.getElementById('noBlur');
+    const blurRect = blur.getBoundingClientRect();
+    const noBlurRect = noBlur.getBoundingClientRect();
+    
+    // Create canvas to get pixel data
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 600;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the gradient (simulating backdrop)
+    const grad = ctx.createLinearGradient(0, 0, 800, 600);
+    grad.addColorStop(0, '#ff0000');
+    grad.addColorStop(0.5, '#00ff00');
+    grad.addColorStop(1, '#0000ff');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 800, 600);
+    
+    // Get the gradient color at specific points (simulating what backdrop-filter would blur)
+    function getColor(x, y) {
+      const data = ctx.getImageData(x, y, 1, 1).data;
+      return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+    }
+    
+    let result = '';
+    result += '=== DOM Info ===\n';
+    result += `blur element at: (${blurRect.left}, ${blurRect.top}) size: ${blurRect.width}x${blurRect.height}\n`;
+    result += `noBlur element at: (${noBlurRect.left}, ${noBlurRect.top}) size: ${noBlurRect.width}x${noBlurRect.height}\n`;
+    result += '\n=== Computed backdrop-filter ===\n';
+    result += `blur: ${getComputedStyle(blur).backdropFilter}\n`;
+    result += `noBlur: ${getComputedStyle(noBlur).backdropFilter}\n`;
+    result += '\n=== Analyzing screenshot ===\n';
+    result += 'Cannot capture screenshots via JS due to security.\n';
+    result += 'Use --screenshot and analyze pixels manually.\n';
+    
+    document.getElementById('result').textContent = result;
+  }, 500);
+});
+</script>
+</body>
+</html>

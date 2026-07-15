@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; background: #020617; }
+  .container {
+    position: relative;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    background: #020617 !important;
+  }
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    opacity: 0.74;
+    background: linear-gradient(135deg, #ff0000, #00ff00, #0000ff);
+  }
+  .container > :not(.backdrop) {
+    position: relative;
+  }
+  /* Test 1: backdrop-filter on element inside container with backdrop */
+  .blur-target {
+    background: transparent !important;
+    -webkit-backdrop-filter: blur(28px) saturate(1.2);
+    backdrop-filter: blur(28px) saturate(1.2);
+    width: 300px;
+    height: 100px;
+    margin: 50px;
+    border: 2px solid white;
+  }
+  /* Test 2: no backdrop-filter (control) */
+  .no-blur {
+    background: transparent !important;
+    width: 300px;
+    height: 100px;
+    margin: 50px;
+    border: 2px solid yellow;
+  }
+  #result {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: black;
+    color: lime;
+    font-family: monospace;
+    font-size: 14px;
+    padding: 10px;
+    z-index: 9999;
+    white-space: pre;
+  }
+</style>
+</head>
+<body>
+<div class="container" id="container">
+  <div class="backdrop"></div>
+  <div class="blur-target" id="blurTarget">BLUR TEST</div>
+  <div class="no-blur" id="noBlur">CONTROL (no blur)</div>
+</div>
+<div id="result"></div>
+<script>
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const blur = document.getElementById('blurTarget');
+    const noBlur = document.getElementById('noBlur');
+    const computedBlur = window.getComputedStyle(blur);
+    const computedNoBlur = window.getComputedStyle(noBlur);
+    
+    // Get pixel colors from the center of each element
+    const canvas = document.createElement('canvas');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d');
+    
+    let result = '';
+    result += '=== Computed Styles ===\n';
+    result += `blur backdrop-filter: ${computedBlur.backdropFilter}\n`;
+    result += `blur -webkit-backdrop-filter: ${computedBlur.webkitBackdropFilter}\n`;
+    result += `blur background: ${computedBlur.background}\n`;
+    result += `noBlur backdrop-filter: ${computedNoBlur.backdropFilter}\n`;
+    result += `noBlur background: ${computedNoBlur.background}\n`;
+    result += '\n=== Computed backdrops ===\n';
+    result += `container background: ${window.getComputedStyle(document.getElementById('container')).background}\n`;
+    result += `backdrop opacity: ${window.getComputedStyle(document.querySelector('.backdrop')).opacity}\n`;
+    
+    document.getElementById('result').textContent = result;
+    
+    // Print to console for headless capture
+    console.log('RESULT_START');
+    console.log(result);
+    console.log('RESULT_END');
+  }, 500);
+});
+</script>
+</body>
+</html>

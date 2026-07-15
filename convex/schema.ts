@@ -274,6 +274,8 @@ export default defineSchema({
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    /** Image quality for GPT Image 2: low | medium | high */
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),

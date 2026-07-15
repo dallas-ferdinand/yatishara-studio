@@ -12,6 +12,8 @@ export type ReferenceIntentSlug = (typeof REFERENCE_INTENT_SLUGS)[number];
 export type ReferenceContext = {
   intent?: string | null;
   presetSlug?: string;
+  /** When set, generation is styled — do not treat unstyled preset as Direct. */
+  styleSheetElementId?: string | null;
   hasRawImageRef?: boolean;
   hasElementAttachment?: boolean;
   hasBuiltElementRef?: boolean;
@@ -32,7 +34,10 @@ export function resolveReferenceIntent(context: ReferenceContext): ReferenceInte
     return requested;
   }
 
-  if (context.presetSlug && DIRECT_PROMPT_PRESET_SLUGS.has(context.presetSlug)) {
+  const isDirect =
+    !context.styleSheetElementId &&
+    Boolean(context.presetSlug && DIRECT_PROMPT_PRESET_SLUGS.has(context.presetSlug));
+  if (isDirect) {
     return context.hasRawImageRef ? "match_reference" : "element_lock";
   }
 

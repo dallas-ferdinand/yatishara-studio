@@ -4,10 +4,12 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   assetThumbnailPath,
   buildAssetPath,
+  FULL_QUALITY_TRANSFORM,
   getStorageUploadCredentials,
   LQIP_TRANSFORM,
-  signBunnyCdnUrl,
+  PREVIEW_TRANSFORM,
   signBunnyCdnUrls,
+  signBunnyFullUrl,
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
@@ -44,17 +46,29 @@ const assetReturn = v.object({
 async function withSignedThumbnails(
   assets: Doc<"assets">[],
   expiresUnix: number | undefined,
+  quality: "thumb" | "preview" = "thumb",
 ) {
   if (expiresUnix === undefined) return assets;
   const paths = assets.map((asset) => assetThumbnailPath(asset));
-  const [signed, lqip] = await Promise.all([
-    signBunnyCdnUrls(paths, expiresUnix, THUMB_TRANSFORM),
+  const thumbTransform = quality === "preview" ? PREVIEW_TRANSFORM : THUMB_TRANSFORM;
+  const signFullReads = quality === "preview";
+  const [signed, lqip, fullReads] = await Promise.all([
+    signBunnyCdnUrls(paths, expiresUnix, thumbTransform),
     signBunnyCdnUrls(paths, expiresUnix, LQIP_TRANSFORM),
+    signFullReads
+      ? signBunnyCdnUrls(
+          assets.map((asset) => (asset.kind === "image" ? asset.bunnyPath : undefined)),
+          expiresUnix,
+          FULL_QUALITY_TRANSFORM,
+        )
+      : Promise.resolve(new Map<string, string>()),
   ]);
   return assets.map((asset) => {
     const thumbPath = assetThumbnailPath(asset);
     return {
       ...asset,
+      signedReadUrl:
+        (asset.bunnyPath ? fullReads.get(asset.bunnyPath) : undefined) ?? undefined,
       signedThumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
       signedThumbnailLqipUrl: thumbPath ? lqip.get(thumbPath) : undefined,
     };
@@ -144,7 +158,7 @@ export const signedReadUrl = authedQuery({
     if (!asset.bunnyPath) {
       throw new Error("Asset has no Bunny path");
     }
-    return await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix);
+    return await signBunnyFullUrl(asset.bunnyPath, args.expiresUnix, asset.kind);
   },
 });
 
@@ -153,6 +167,7 @@ export const listByIds = authedQuery({
   args: {
     assetIds: v.array(v.id("assets")),
     expiresUnix: v.optional(v.number()),
+    quality: v.optional(v.union(v.literal("thumb"), v.literal("preview"))),
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
@@ -165,7 +180,7 @@ export const listByIds = authedQuery({
       }
       results.push(asset);
     }
-    return await withSignedThumbnails(results, args.expiresUnix);
+    return await withSignedThumbnails(results, args.expiresUnix, args.quality ?? "thumb");
   },
 });
 
