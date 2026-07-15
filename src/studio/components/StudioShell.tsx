@@ -1954,12 +1954,12 @@ export function StudioShell() {
           min-height: 0 !important;
           max-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
           flex-shrink: 0;
-          align-items: center;
+          align-items: stretch;
           z-index: 60;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 2px;
-          padding: 4px max(8px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px))
-            max(8px, env(safe-area-inset-left, 0px));
+          gap: 0;
+          padding: 1px max(4px, env(safe-area-inset-right, 0px)) calc(1px + env(safe-area-inset-bottom, 0px))
+            max(4px, env(safe-area-inset-left, 0px));
           border-top: 1px solid var(--studio-mobile-chrome-border);
           background: var(--studio-mobile-chrome-glass-foot);
           box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.28);
@@ -1997,23 +1997,24 @@ export function StudioShell() {
         .studio-mobile-nav-btn {
           display: flex;
           min-width: 0;
-          min-height: 34px;
+          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+          min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 2px;
+          gap: 1px;
           border: 0;
           border-radius: 0;
           background: transparent;
           color: var(--color-cursor-muted);
-          font-size: 9px;
+          font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.01em;
           -webkit-tap-highlight-color: transparent;
         }
         .studio-mobile-nav-btn svg {
-          width: 15px;
-          height: 15px;
+          width: 18px;
+          height: 18px;
         }
         .studio-mobile-nav-btn.is-active,
         .studio-mobile-nav-btn.is-active svg {
@@ -2119,34 +2120,41 @@ export function StudioShell() {
             padding-right: max(10px, env(safe-area-inset-right, 0px));
           }
           .studio-polish .cursor-workspace-tools {
-            gap: 8px;
-            padding-left: 6px;
-            padding-right: max(4px, env(safe-area-inset-right, 0px));
+            gap: 4px;
+            padding-left: 4px;
+            padding-right: max(2px, env(safe-area-inset-right, 0px));
+            align-items: center;
+            align-self: stretch;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill {
-            min-width: 28px;
-            min-height: 28px;
+            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             border-radius: 999px;
             padding: 0;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill svg {
-            width: 12px;
-            height: 12px;
+            width: 16px;
+            height: 16px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill {
-            min-height: 28px;
-            height: 28px;
-            max-width: 132px;
-            padding-inline: 10px;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            max-width: 140px;
+            padding-inline: 12px;
             border-radius: 999px;
-            font-size: 11px;
+            font-size: 12px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill svg {
-            width: 12px;
-            height: 12px;
+            width: 14px;
+            height: 14px;
           }
           .studio-polish .cursor-unified-tabs {
             padding-left: 0;
+            align-items: stretch;
+            align-self: stretch;
+            height: 100%;
           }
           .studio-polish .cursor-unified-tabs {
             position: relative;
@@ -2154,11 +2162,13 @@ export function StudioShell() {
             padding-right: 46px;
           }
           .studio-polish .cursor-unified-tab {
-            height: 36px !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             min-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             max-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             padding-left: 8px !important;
+            align-self: stretch;
           }
           .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
             padding-left: 14px !important;
@@ -2169,11 +2179,11 @@ export function StudioShell() {
             top: 50%;
             transform: translateY(-50%);
             z-index: 6;
-            width: 34px !important;
-            min-width: 34px !important;
-            max-width: 34px !important;
-            height: 34px !important;
-            min-height: 34px !important;
+            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            max-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
             margin: 0 !important;
             padding-left: 0 !important;
           }
@@ -2753,6 +2763,41 @@ export function StudioShell() {
             inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 5%, transparent),
             0 1px 0 color-mix(in srgb, #000 12%, transparent) !important;
           overflow: hidden;
+        }
+        @media (max-width: 899px) {
+          .studio-polish.is-studio-mobile .cursor-unified-tabs {
+            align-items: stretch;
+            align-self: stretch;
+            height: 100%;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab {
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            align-self: stretch;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab.cursor-unified-tab-new {
+            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            max-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill,
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger {
+            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill svg,
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger svg {
+            width: 16px !important;
+            height: 16px !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-pill {
+            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          }
         }
         .studio-polish .cursor-unified-tab-preview {
           width: 18px;
