@@ -2033,7 +2033,7 @@ export function StudioShell() {
           --studio-composer-row-gap: 8px;
           /* Fallback clearance until the composer measures its overlap with the chat area */
           --studio-chat-empty-clearance: calc(180px + env(safe-area-inset-bottom, 0px));
-          --studio-mobile-nav-height: 44px;
+          --studio-mobile-nav-height: 40px;
           --studio-mobile-chrome-glass:
             radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
             color-mix(in srgb, var(--mos-bg) 82%, transparent);
@@ -2102,12 +2102,12 @@ export function StudioShell() {
           width: 100%;
           height: auto !important;
           min-height: 0 !important;
-          max-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
+          max-height: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-bottom, 0px));
           flex-shrink: 0;
           align-items: stretch;
           z-index: 60;
           gap: 4px;
-          padding: 1px max(6px, env(safe-area-inset-right, 0px)) calc(1px + env(safe-area-inset-bottom, 0px))
+          padding: 2px max(6px, env(safe-area-inset-right, 0px)) calc(2px + env(safe-area-inset-bottom, 0px))
             max(6px, env(safe-area-inset-left, 0px));
           border: 0 !important;
           border-top: 0 !important;
@@ -2124,8 +2124,8 @@ export function StudioShell() {
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 0;
           align-items: stretch;
-          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
-          max-height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+          height: calc(var(--studio-mobile-nav-height, 40px) - 4px);
+          max-height: calc(var(--studio-mobile-nav-height, 40px) - 4px);
         }
         .studio-mobile-nav-tools {
           display: inline-flex;
@@ -2133,7 +2133,7 @@ export function StudioShell() {
           align-items: stretch;
           align-self: center;
           gap: 4px;
-          height: calc(var(--studio-mobile-nav-height, 44px) - 2px);
+          height: calc(var(--studio-mobile-nav-height, 40px) - 4px);
         }
         .studio-mobile-nav-tools .studio-credit-pill {
           min-height: 100% !important;
@@ -2144,9 +2144,9 @@ export function StudioShell() {
           font-size: 12px;
         }
         .studio-mobile-nav-tools .studio-settings-pill {
-          min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           min-height: 100% !important;
-          width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+          width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           height: 100% !important;
           border-radius: 999px;
           padding: 0;
@@ -2178,8 +2178,8 @@ export function StudioShell() {
           -webkit-tap-highlight-color: transparent;
         }
         .studio-mobile-nav-btn svg {
-          width: 18px;
-          height: 18px;
+          width: 16px;
+          height: 16px;
         }
         .studio-mobile-nav-btn.is-active,
         .studio-mobile-nav-btn.is-active svg {
@@ -2190,7 +2190,7 @@ export function StudioShell() {
             display: none !important;
           }
           .studio-polish .studio-main-panels {
-            padding-bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
+            padding-bottom: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-bottom, 0px));
             contain: layout style;
           }
           .studio-polish.is-studio-mobile .studio-main-panels > [data-panel] {
@@ -2215,7 +2215,7 @@ export function StudioShell() {
           }
           .studio-polish.is-studio-mobile {
             --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
-            --cursor-head-h: var(--studio-mobile-nav-height, 44px);
+            --cursor-head-h: var(--studio-mobile-nav-height, 40px);
           }
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
@@ -2225,12 +2225,12 @@ export function StudioShell() {
             .studio-folder-pathbar,
             .desk-file-breadcrumbs
           ) {
-            min-height: var(--studio-mobile-nav-height, 44px) !important;
-            height: var(--studio-mobile-nav-height, 44px) !important;
+            min-height: var(--studio-mobile-nav-height, 40px) !important;
+            height: var(--studio-mobile-nav-height, 40px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-head {
-            min-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-top, 0px)) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-top, 0px)) !important;
           }
           .studio-polish.is-studio-mobile .studio-folder-pathbar .desk-file-breadcrumbs {
             min-height: 100% !important;
@@ -2238,7 +2238,7 @@ export function StudioShell() {
             border-bottom: none;
           }
           .studio-polish.is-studio-mobile .desk-file-breadcrumbs-track {
-            min-height: var(--studio-mobile-nav-height, 44px);
+            min-height: var(--studio-mobile-nav-height, 40px);
             padding: 0 10px;
             gap: 6px;
             align-items: center;
@@ -2298,10 +2298,10 @@ export function StudioShell() {
             height: 100%;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill {
-            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
             border-radius: 999px;
             padding: 0;
             align-self: center;
@@ -2311,8 +2311,8 @@ export function StudioShell() {
             height: 16px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill {
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
             max-width: 140px;
             padding-inline: 12px;
             border-radius: 999px;
@@ -2336,7 +2336,7 @@ export function StudioShell() {
           }
           .studio-polish .cursor-unified-tab {
             height: 100% !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
             width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             min-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             max-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
@@ -2352,11 +2352,11 @@ export function StudioShell() {
             top: 50%;
             transform: translateY(-50%);
             z-index: 6;
-            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            max-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            max-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
             margin: 0 !important;
             padding-left: 0 !important;
           }
@@ -2369,7 +2369,7 @@ export function StudioShell() {
             display: flex !important;
           }
           .studio-polish .studio-composer.cursor-composer-shell {
-            bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
+            bottom: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-bottom, 0px));
           }
           .studio-polish .studio-composer .cursor-composer {
             max-width: 100%;
@@ -2886,8 +2886,8 @@ export function StudioShell() {
         @media (max-width: 899px) {
           .studio-polish .cursor-workspace-head {
             position: relative;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
-            height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
+            min-height: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-top, 0px));
+            height: calc(var(--studio-mobile-nav-height, 40px) + env(safe-area-inset-top, 0px));
             padding-top: env(safe-area-inset-top, 0px);
             background: var(--studio-mobile-chrome-glass) !important;
             border: 0 !important;
@@ -2936,22 +2936,22 @@ export function StudioShell() {
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab {
             height: 100% !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
             align-self: stretch;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab.cursor-unified-tab-new {
-            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            max-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            max-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill {
-            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill svg,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill svg,
@@ -2962,14 +2962,14 @@ export function StudioShell() {
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-pill,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-credit-pill {
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           }
           .studio-polish.is-studio-mobile .studio-settings-trigger {
-            width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-width: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-nav-height, 44px) - 2px) !important;
+            width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-width: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
+            min-height: calc(var(--studio-mobile-nav-height, 40px) - 4px) !important;
           }
         }
         .studio-polish .cursor-unified-tab-preview {
@@ -5278,12 +5278,12 @@ export function StudioShell() {
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-panel-search {
-            min-height: var(--studio-mobile-nav-height, 44px) !important;
-            height: var(--studio-mobile-nav-height, 44px) !important;
+            min-height: var(--studio-mobile-nav-height, 40px) !important;
+            height: var(--studio-mobile-nav-height, 40px) !important;
           }
           .studio-polish.is-studio-mobile .desk-file-breadcrumbs {
-            min-height: var(--studio-mobile-nav-height, 44px) !important;
-            height: var(--studio-mobile-nav-height, 44px) !important;
+            min-height: var(--studio-mobile-nav-height, 40px) !important;
+            height: var(--studio-mobile-nav-height, 40px) !important;
           }
         }
         .studio-polish .desk-file-search-divider {
