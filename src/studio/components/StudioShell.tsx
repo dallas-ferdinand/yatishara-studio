@@ -2021,7 +2021,7 @@ export function StudioShell() {
           --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 48%, transparent);
           --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 26%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.11);
-          --studio-composer-glass-blur: saturate(150%) blur(5px);
+          --studio-composer-glass-blur: saturate(160%) blur(12px);
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -2307,21 +2307,21 @@ export function StudioShell() {
             align-self: center;
           }
           .studio-polish .cursor-workspace-tools .studio-settings-pill svg {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill {
             min-height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
             height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
-            max-width: 140px;
-            padding-inline: 12px;
+            max-width: 128px;
+            padding-inline: 10px;
             border-radius: 999px;
-            font-size: 12px;
+            font-size: 11px;
             align-self: center;
           }
           .studio-polish .cursor-workspace-tools .studio-credit-pill svg {
-            width: 14px;
-            height: 14px;
+            width: 12px;
+            height: 12px;
           }
           .studio-polish .cursor-unified-tabs {
             padding-left: 0;
@@ -2342,9 +2342,11 @@ export function StudioShell() {
             max-width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
             padding-left: 8px !important;
             align-self: stretch;
+            border-radius: 12px !important;
+            border-left-width: 1px !important;
           }
           .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
-            padding-left: 14px !important;
+            padding-left: 8px !important;
           }
           .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
             position: absolute;
@@ -2359,6 +2361,7 @@ export function StudioShell() {
             min-height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
             margin: 0 !important;
             padding-left: 0 !important;
+            border-radius: 12px !important;
           }
           .studio-polish .cursor-unified-tab-placeholder {
             width: min(92px, var(--cursor-unified-tab-width, 104px)) !important;
@@ -2938,6 +2941,8 @@ export function StudioShell() {
             height: 100% !important;
             min-height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
             align-self: stretch;
+            border-radius: 12px !important;
+            border-left-width: 1px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab.cursor-unified-tab-new {
             width: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
@@ -2945,6 +2950,7 @@ export function StudioShell() {
             max-width: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
             height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
             min-height: calc(var(--studio-mobile-nav-height, 36px) - 6px) !important;
+            border-radius: 12px !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill {
@@ -2957,8 +2963,8 @@ export function StudioShell() {
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill svg,
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-trigger svg,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-trigger svg {
-            width: 16px !important;
-            height: 16px !important;
+            width: 14px !important;
+            height: 14px !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-credit-pill,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-credit-pill {
@@ -5549,9 +5555,9 @@ export function StudioShell() {
           overflow: visible;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 18px;
-          background: color-mix(in srgb, var(--studio-composer-glass-strong) 88%, transparent);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          background: color-mix(in srgb, var(--studio-composer-glass-strong) 78%, transparent);
+          backdrop-filter: saturate(160%) blur(16px);
+          -webkit-backdrop-filter: saturate(160%) blur(16px);
           box-shadow: var(--studio-composer-glass-shadow);
           padding: 12px;
           isolation: isolate;
@@ -5628,7 +5634,9 @@ export function StudioShell() {
           min-width: 0;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 12px;
-          background: transparent;
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 82%, transparent);
+          backdrop-filter: saturate(150%) blur(10px);
+          -webkit-backdrop-filter: saturate(150%) blur(10px);
           padding: 6px;
           text-align: left;
           cursor: pointer;
@@ -7234,9 +7242,9 @@ export function StudioShell() {
           overflow: hidden;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 16px;
-          background: var(--studio-composer-glass-strong);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          background: color-mix(in srgb, var(--studio-composer-glass-strong) 76%, transparent);
+          backdrop-filter: saturate(160%) blur(16px);
+          -webkit-backdrop-filter: saturate(160%) blur(16px);
           box-shadow: var(--studio-composer-glass-shadow);
           animation: studio-preset-grid-in 180ms var(--studio-motion-ease);
         }
@@ -7386,7 +7394,9 @@ export function StudioShell() {
           border-radius: 14px;
           background:
             radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent), transparent 50%),
-            color-mix(in srgb, var(--studio-composer-glass-muted) 88%, transparent);
+            color-mix(in srgb, var(--studio-composer-glass-muted) 78%, transparent);
+          backdrop-filter: saturate(150%) blur(12px);
+          -webkit-backdrop-filter: saturate(150%) blur(12px);
           color: var(--color-cursor-text);
           text-align: center;
           cursor: pointer;
