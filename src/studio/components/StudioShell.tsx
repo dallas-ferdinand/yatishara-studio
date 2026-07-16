@@ -26,21 +26,26 @@ import { api } from "../../../convex/_generated/api";
 import {
   ChevronDown,
   Clock3,
+  CreditCard,
   FileText,
+  Folder,
   Gauge,
   History,
   Image as ImageIcon,
   CircleDot,
+  KeyRound,
   LayoutGrid,
   List,
   Loader2,
   Lock,
+  LogOut,
   MapPin,
   Maximize2,
   Menu,
   Mic,
   Package,
   Palette,
+  Pencil,
   Plus,
   ArrowUp,
   Scissors,
@@ -3790,38 +3795,88 @@ export function StudioShell({
           width: 10px !important;
           height: 10px !important;
         }
-        .studio-mobile-app-menu-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 120;
-          background: color-mix(in srgb, #050608 46%, transparent);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
-        }
         .studio-mobile-app-menu-sheet {
           position: fixed;
+          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
           left: 8px;
           right: 8px;
           bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px) + 8px);
           z-index: 121;
-          max-height: min(72dvh, 560px);
-          overflow: auto;
-          border-radius: 18px;
-          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
-          background: color-mix(in srgb, #10151f 88%, transparent);
-          backdrop-filter: saturate(150%) blur(18px);
-          -webkit-backdrop-filter: saturate(150%) blur(18px);
-          box-shadow: 0 18px 48px color-mix(in srgb, #000 42%, transparent);
-          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+          border-radius: 20px;
+          border: 1px solid color-mix(in srgb, #fff 14%, transparent);
+          background: color-mix(in srgb, #0b1220 52%, transparent);
+          backdrop-filter: saturate(160%) blur(28px);
+          -webkit-backdrop-filter: saturate(160%) blur(28px);
+          box-shadow:
+            0 20px 48px color-mix(in srgb, #000 36%, transparent),
+            inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
         }
-        .studio-mobile-app-menu-sheet button {
+        .studio-mobile-app-menu-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex: 0 0 auto;
+          padding: 14px 14px 10px;
+        }
+        .studio-mobile-app-menu-title {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 16px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+        }
+        .studio-mobile-app-menu-close {
+          display: inline-grid;
+          place-items: center;
+          width: 32px;
+          height: 32px;
+          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, #fff 6%, transparent);
+          color: var(--color-cursor-text-bright);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-mobile-app-menu-close svg {
+          width: 16px;
+          height: 16px;
+        }
+        .studio-mobile-app-menu-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+          padding: 4px 10px 14px;
+          -webkit-overflow-scrolling: touch;
+        }
+        .studio-mobile-app-menu-section + .studio-mobile-app-menu-section {
+          margin-top: 10px;
+        }
+        .studio-mobile-app-menu-label {
+          margin: 0 8px 6px;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 52%, transparent);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+        .studio-mobile-app-menu-list {
+          display: grid;
+          gap: 2px;
+        }
+        .studio-mobile-app-menu-item {
           display: flex;
           width: 100%;
           align-items: center;
-          min-height: 44px;
-          padding: 0 14px;
+          gap: 12px;
+          min-height: 46px;
+          padding: 0 12px;
           border: 0;
-          border-radius: 12px;
+          border-radius: 14px;
           background: transparent;
           color: var(--color-cursor-text-bright);
           font: inherit;
@@ -3830,17 +3885,33 @@ export function StudioShell({
           text-align: left;
           cursor: pointer;
         }
-        .studio-mobile-app-menu-sheet button:hover,
-        .studio-mobile-app-menu-sheet button:active {
-          background: color-mix(in srgb, #fff 7%, transparent);
+        .studio-mobile-app-menu-item:hover,
+        .studio-mobile-app-menu-item:active {
+          background: color-mix(in srgb, #fff 8%, transparent);
         }
-        .studio-mobile-app-menu-sheet button.is-danger {
+        .studio-mobile-app-menu-item.is-danger {
           color: #ff8a9a;
         }
-        .studio-mobile-app-menu-sep {
-          height: 1px;
-          margin: 6px 8px;
-          background: color-mix(in srgb, #fff 10%, transparent);
+        .studio-mobile-app-menu-item-icon {
+          display: inline-grid;
+          place-items: center;
+          width: 32px;
+          height: 32px;
+          flex: 0 0 auto;
+          border-radius: 10px;
+          background: color-mix(in srgb, #fff 8%, transparent);
+          color: inherit;
+        }
+        .studio-mobile-app-menu-item.is-danger .studio-mobile-app-menu-item-icon {
+          background: color-mix(in srgb, #ff8a9a 14%, transparent);
+        }
+        .studio-mobile-app-menu-item-icon svg {
+          width: 16px;
+          height: 16px;
+        }
+        .studio-mobile-app-menu-item-label {
+          min-width: 0;
+          flex: 1 1 auto;
         }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
@@ -12075,12 +12146,16 @@ export function StudioShell({
               <button
                 type="button"
                 className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
-                onClick={() => setMobileAppMenuOpen(true)}
-                aria-label="Open menu"
+                onClick={() => setMobileAppMenuOpen((open) => !open)}
+                aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
                 title="Menu"
                 aria-expanded={mobileAppMenuOpen}
               >
-                <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                {mobileAppMenuOpen ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
               </button>
             </>
           }
@@ -13871,52 +13946,81 @@ function StudioMobileAppMenu({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const items = [
-    { label: "View profile", onClick: onViewProfile },
-    { label: "Edit profile", onClick: onEditProfile },
-    { sep: true },
-    { label: "Files", onClick: () => onOpenSection?.("files") },
-    { label: "Create", onClick: () => onOpenSection?.("composer") },
-    { label: "Settings", onClick: () => onOpenSection?.("settings") },
-    { sep: true },
-    { label: "Appearance", onClick: () => onOpenSettings?.("general") },
-    { label: "Account details", onClick: () => onOpenSettings?.("account") },
-    { label: "Billing", onClick: () => onOpenSettings?.("billing") },
-    { label: "Activity", onClick: () => onOpenSettings?.("activity") },
-    { label: "API keys", onClick: () => onOpenSettings?.("api-keys") },
-    { label: "Credits", onClick: onOpenCredits },
-    { label: "History", onClick: onOpenHistory },
-    ...(isAdminUser ? [{ label: "Admin", onClick: onOpenAdmin }] : []),
-    { sep: true },
-    { label: "Sign out", onClick: onSignOut, danger: true },
+  const sections = [
+    {
+      label: "Profile",
+      items: [
+        { label: "View profile", Icon: UserRound, onClick: onViewProfile },
+        { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
+      ],
+    },
+    {
+      label: "Navigate",
+      items: [
+        { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
+        { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
+        { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
+        { label: "History", Icon: History, onClick: onOpenHistory },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
+        { label: "Account details", Icon: UserRound, onClick: () => onOpenSettings?.("account") },
+        { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
+        { label: "Credits", Icon: Zap, onClick: onOpenCredits },
+        { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
+        { label: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
+        ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
+      ],
+    },
+    {
+      label: "Session",
+      items: [{ label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true }],
+    },
   ];
 
   return createPortal(
-    <>
-      <button
-        type="button"
-        className="studio-mobile-app-menu-overlay"
-        aria-label="Close menu"
-        onClick={onClose}
-      />
-      <div className="studio-mobile-app-menu-sheet" role="menu" aria-label="Studio menu">
-        {items.map((item, index) =>
-          item.sep ? (
-            <div key={`sep-${index}`} className="studio-mobile-app-menu-sep" role="separator" />
-          ) : (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={item.danger ? "is-danger" : undefined}
-              onClick={item.onClick}
-            >
-              {item.label}
-            </button>
-          ),
-        )}
+    <div className="studio-mobile-app-menu-sheet" role="dialog" aria-modal="true" aria-label="Studio menu">
+      <div className="studio-mobile-app-menu-head">
+        <h2 className="studio-mobile-app-menu-title">Menu</h2>
+        <button
+          type="button"
+          className="studio-mobile-app-menu-close"
+          aria-label="Close menu"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
       </div>
-    </>,
+      <div className="studio-mobile-app-menu-body">
+        {sections.map((section) => (
+          <section key={section.label} className="studio-mobile-app-menu-section">
+            <p className="studio-mobile-app-menu-label">{section.label}</p>
+            <div className="studio-mobile-app-menu-list" role="menu">
+              {section.items.map((item) => {
+                const Icon = item.Icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    role="menuitem"
+                    className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
+                    onClick={item.onClick}
+                  >
+                    <span className="studio-mobile-app-menu-item-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span className="studio-mobile-app-menu-item-label">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>,
     document.body,
   );
 }
