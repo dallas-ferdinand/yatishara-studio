@@ -11,7 +11,12 @@ import {
   Phone,
   UserRound,
 } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import {
+  Component,
+  type CSSProperties,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
@@ -32,6 +37,53 @@ type StudioShellBootProps = {
   initialProfileUsername?: string;
   onReady?: () => void;
 };
+
+class StudioShellErrorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    const payload = {
+      message: error.message,
+      stack: error.stack ?? "",
+      componentStack: info.componentStack ?? "",
+      route: window.location.href,
+      userAgent: navigator.userAgent,
+    };
+    console.error("[studio-shell-error]", payload);
+    void fetch("/api/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <StudioBootLoader
+        recovery={
+          <button
+            type="button"
+            className="mt-6 rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
+            onClick={() => {
+              window.location.href = "/?resetStudio=1&clearStudioCache=1";
+            }}
+          >
+            Reset Studio
+          </button>
+        }
+      />
+    );
+  }
+}
 
 /** Shell chunk loads under the single white boot overlay; signals ready only after mount. */
 const StudioShell = dynamic<StudioShellBootProps>(
@@ -168,10 +220,12 @@ export function StudioAuthGate({
       {showSignInScreen ? <StudioSignIn /> : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
       {showShell ? (
-        <StudioShell
-          initialProfileUsername={initialProfileUsername}
-          onReady={markShellReady}
-        />
+        <StudioShellErrorBoundary>
+          <StudioShell
+            initialProfileUsername={initialProfileUsername}
+            onReady={markShellReady}
+          />
+        </StudioShellErrorBoundary>
       ) : null}
     </>
   );
