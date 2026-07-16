@@ -1,8 +1,8 @@
 {
-  "versionName": "0.2.2",
-  "versionCode": 202,
-  "deskBuildId": "boot-v3-20260716",
-  "studioBuildId": "boot-v3-20260716",
-  "builtAt": "2026-07-16T17:30:00.000Z",
+  "versionName": "0.2.3",
+  "versionCode": 203,
+  "deskBuildId": "boot-v4-20260716",
+  "studioBuildId": "boot-v4-20260716",
+  "builtAt": "2026-07-16T17:55:00.000Z",
   "channel": "web"
 }

@@ -55,8 +55,15 @@ class StudioShellErrorBoundary extends Component<
       componentStack: info.componentStack ?? "",
       route: window.location.href,
       userAgent: navigator.userAgent,
+      build: process.env.NEXT_PUBLIC_DESK_BUILD ?? "",
     };
     console.error("[studio-shell-error]", payload);
+    try {
+      (window as Window & { __STUDIO_LAST_ERROR__?: typeof payload }).__STUDIO_LAST_ERROR__ =
+        payload;
+    } catch {
+      /* ignore */
+    }
     void fetch("/api/client-error", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -213,7 +220,7 @@ export function StudioAuthGate({
   return (
     <>
       {showBoot ? (
-        <div className="ys-boot-v3-overlay">
+        <div className="ys-boot-v4-overlay">
           <StudioBootLoader />
         </div>
       ) : null}

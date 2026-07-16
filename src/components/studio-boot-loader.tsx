@@ -13,35 +13,35 @@ const BOOT_LOGO_SIZE = 48;
 const BOOT_LOGO = mercuryLogoAssets(BOOT_LOGO_SIZE, "light");
 
 /**
- * Fixed white boot screen — class prefix ys-boot-v3 orphans any stale v2 CSS
- * (translateY / 12vh padding) still hanging in SW or browser cache.
+ * Fixed white boot screen — class prefix ys-boot-v4 uses flexbox true-center
+ * (no absolute + safe-area math that shoved the mark toward the top on Android).
  */
 export function StudioBootLoader({ recovery }: Props) {
   return (
-    <main className="ys-boot-v3" data-ys-boot="3" aria-busy="true" aria-label="Loading Yatishara Studio">
-      <div className="ys-boot-v3-logo" aria-hidden="true">
-        <picture>
-          <source type="image/webp" srcSet={BOOT_LOGO.srcSet} sizes={BOOT_LOGO.sizes} />
-          <source
-            type="image/png"
-            srcSet={`${BOOT_LOGO.fallback} 1x, ${BOOT_LOGO.fallback2x} 2x`}
-          />
-          <img
-            src={BOOT_LOGO.src}
-            alt=""
-            width={BOOT_LOGO_SIZE}
-            height={BOOT_LOGO_SIZE}
-            decoding="sync"
-            loading="eager"
-            fetchPriority="high"
-            draggable={false}
-          />
-        </picture>
-      </div>
-      <div className="ys-boot-v3-details">
-        <p className="ys-boot-v3-wordmark">Yatishara Studio</p>
-        <div className="ys-boot-v3-track" aria-hidden="true">
-          <div className="ys-boot-v3-bar" />
+    <main className="ys-boot-v4" data-ys-boot="4" aria-busy="true" aria-label="Loading Yatishara Studio">
+      <div className="ys-boot-v4-stack">
+        <div className="ys-boot-v4-logo" aria-hidden="true">
+          <picture>
+            <source type="image/webp" srcSet={BOOT_LOGO.srcSet} sizes={BOOT_LOGO.sizes} />
+            <source
+              type="image/png"
+              srcSet={`${BOOT_LOGO.fallback} 1x, ${BOOT_LOGO.fallback2x} 2x`}
+            />
+            <img
+              src={BOOT_LOGO.src}
+              alt=""
+              width={BOOT_LOGO_SIZE}
+              height={BOOT_LOGO_SIZE}
+              decoding="sync"
+              loading="eager"
+              fetchPriority="high"
+              draggable={false}
+            />
+          </picture>
+        </div>
+        <p className="ys-boot-v4-wordmark">Yatishara Studio</p>
+        <div className="ys-boot-v4-track" aria-hidden="true">
+          <div className="ys-boot-v4-bar" />
         </div>
         {recovery}
       </div>

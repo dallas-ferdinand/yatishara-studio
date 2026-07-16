@@ -527,8 +527,18 @@ export function StudioShell({
     (sizes) => {
       if (isMobile || !Array.isArray(sizes) || sizes.length !== 2) return;
       const next = normalizeStudioMainPanelSizes(sizes);
-      setMainPanelSizes(next);
-      writeStudioMainPanelSizes(next);
+      setMainPanelSizes((prev) => {
+        if (
+          Array.isArray(prev) &&
+          prev.length === 2 &&
+          Math.abs(prev[0] - next[0]) < 0.05 &&
+          Math.abs(prev[1] - next[1]) < 0.05
+        ) {
+          return prev;
+        }
+        writeStudioMainPanelSizes(next);
+        return next;
+      });
     },
     [isMobile]
   );
@@ -1396,11 +1406,11 @@ export function StudioShell({
       setDurationSeconds(String(production.durationSeconds));
     }
     const audio = activeGuidedBrief.payload?.audio;
-    setAudioEnabled(
+    const nextAudioEnabled =
       audio?.voiceover === "include" ||
-        audio?.sfx === "include" ||
-        audio?.music === "include",
-    );
+      audio?.sfx === "include" ||
+      audio?.music === "include";
+    setAudioEnabled((current) => (current === nextAudioEnabled ? current : nextAudioEnabled));
     if (
       activeGuidedBrief.stylePresetId &&
       activeGuidedBrief.stylePresetId !== selectedStylePresetId
@@ -12664,7 +12674,11 @@ export function StudioShell({
         .studio-chat-stream {
           min-height: 0;
           flex: 1;
+          overflow-x: hidden;
           overflow-y: auto;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+          -webkit-overflow-scrolling: touch;
           scrollbar-gutter: auto;
           padding: 18px 10px calc(180px + env(safe-area-inset-bottom, 0px));
           scroll-padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
@@ -12675,7 +12689,7 @@ export function StudioShell({
           gap: var(--studio-composer-row-gap);
           width: 100%;
           max-width: var(--studio-composer-shell-max, min(600px, 94vw));
-          min-height: 100%;
+          min-height: min-content;
           margin: 0 auto;
           position: relative;
           left: 0;
@@ -12688,28 +12702,23 @@ export function StudioShell({
         .studio-chat-stream-inner {
           display: flex;
           min-width: 0;
-          min-height: 100%;
           flex-direction: column;
           justify-content: flex-start;
           align-items: stretch;
           gap: 12px;
-        }
-        .studio-chat-stream-inner > :first-child {
-          margin-top: auto;
         }
         .studio-chat-stream-inner.is-empty {
           justify-content: center;
         }
         .studio-chat-empty-state {
           position: absolute;
-          top: 0;
-          right: 0;
-          left: 0;
-          bottom: var(--studio-chat-empty-clearance, 0px);
+          inset: 0;
           z-index: 0;
           display: flex;
           align-items: center;
           justify-content: center;
+          /* Cap clearance so a bad measure can't shove the mark into the top third. */
+          padding-bottom: min(42%, var(--studio-chat-empty-clearance, 180px));
           pointer-events: none;
           box-sizing: border-box;
         }
@@ -13322,7 +13331,7 @@ export function StudioShell({
         direction="horizontal"
         autoSaveId={isMobile ? "studio-main-h-mobile" : "studio-main-h"}
         className="studio-main-panels min-w-0 flex-1"
-        onLayout={handleMainPanelLayout}
+        onLayout={isMobile ? undefined : handleMainPanelLayout}
       >
         {!isMobile ? (
         <Panel
@@ -15018,7 +15027,7 @@ function StudioComposerInlineSettings({
   const [localDurationSeconds, setLocalDurationSeconds] = useState(String(durationSeconds));
   useEffect(() => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(durationSeconds) || 4)));
-    setLocalDurationSeconds(next);
+    setLocalDurationSeconds((current) => (current === next ? current : next));
     if (mode === "video" && String(durationSeconds) !== next) {
       setDurationSeconds(next);
     }
@@ -17368,8 +17377,19 @@ function ActivePane({
     [openTabs],
   );
   const isSocialActive = Boolean(feedPostId || profilePostMatch || profileUsername);
+  // Defer feed/profile keepalive until after first paint so authenticated boot
+  // doesn't instantiate ProfilePostViewer during the shell's critical path.
+  const [socialMounted, setSocialMounted] = useState(false);
+  useEffect(() => {
+    if (isSocialActive) {
+      setSocialMounted(true);
+      return;
+    }
+    const id = window.requestAnimationFrame(() => setSocialMounted(true));
+    return () => window.cancelAnimationFrame(id);
+  }, [isSocialActive]);
 
-  const socialKeepalive = (
+  const socialKeepalive = !socialMounted ? null : (
     <div className="studio-social-keepalive" aria-hidden={!isSocialActive}>
       {keptFeedTabs.map((tabKey) => {
         let postId = "home";
