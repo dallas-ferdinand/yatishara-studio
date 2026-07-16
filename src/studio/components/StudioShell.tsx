@@ -11762,6 +11762,7 @@ export function StudioShell({
                 <StudioProfileMenu
                   currentUser={currentUser}
                   profile={myPublicProfile}
+                  username={myPublicProfile?.username || sharedProfileAssets?.username}
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                   onEditProfile={() => openSettingsTab("profile")}
@@ -11947,6 +11948,7 @@ export function StudioShell({
               <StudioProfileMenu
                 currentUser={currentUser}
                 profile={myPublicProfile}
+                username={myPublicProfile?.username || sharedProfileAssets?.username}
                 isProfileTabActive={activeTab.startsWith("profile:")}
                 onViewProfile={openOwnProfile}
                 onEditProfile={() => openSettingsTab("profile")}
@@ -13581,6 +13583,7 @@ function StudioSidebarBrand() {
 function StudioProfileMenu({
   currentUser,
   profile,
+  username,
   isProfileTabActive,
   onViewProfile,
   onEditProfile,
@@ -13589,16 +13592,16 @@ function StudioProfileMenu({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const avatarUrl = profile?.avatarUrl;
+  const handle = String(username || profile?.username || "").trim().replace(/^@/, "");
   const initials = profileInitials({
-    firstName: currentUser?.firstName,
-    lastName: currentUser?.lastName,
-    name: currentUser?.name,
-    displayName: profile?.displayName,
-    username: profile?.username,
+    username: handle,
+    // Only fall back to account name when no username is claimed yet.
+    firstName: handle ? undefined : currentUser?.firstName,
+    lastName: handle ? undefined : currentUser?.lastName,
+    name: handle ? undefined : currentUser?.name,
+    displayName: handle ? undefined : profile?.displayName,
   });
-  const label = profile?.username
-    ? `@${profile.username}`
-    : currentUser?.name || "Profile";
+  const label = handle ? `@${handle}` : currentUser?.name || "Profile";
 
   useEffect(() => {
     if (!open) return;
@@ -17647,12 +17650,15 @@ function tabDescriptor({
       username ||
       "Profile";
     const avatarUrl = meta?.avatarUrl || (isMine ? myProfile?.avatarUrl : undefined);
+    const handle = String(username || (isMine ? myProfile?.username : "") || "").trim();
     const initials = profileInitials({
-      firstName: isMine ? currentUser?.firstName : undefined,
-      lastName: isMine ? currentUser?.lastName : undefined,
-      name: isMine ? currentUser?.name : undefined,
-      displayName: meta?.displayName || (isMine ? myProfile?.displayName : undefined),
-      username,
+      username: handle,
+      firstName: handle ? undefined : isMine ? currentUser?.firstName : undefined,
+      lastName: handle ? undefined : isMine ? currentUser?.lastName : undefined,
+      name: handle ? undefined : isMine ? currentUser?.name : undefined,
+      displayName: handle
+        ? undefined
+        : meta?.displayName || (isMine ? myProfile?.displayName : undefined),
     });
     return {
       key,
