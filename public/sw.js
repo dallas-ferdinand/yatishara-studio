@@ -42,8 +42,8 @@ self.addEventListener("push", (e) => {
     self.registration.showNotification(payload.title, {
       body: payload.body,
       data: payload.data,
-      icon: "./branding/yatishara-logo-light-192.png",
-      badge: "./branding/yatishara-maskable-light-192.png",
+      icon: "./branding/yatishara-appicon-192.png",
+      badge: "./branding/yatishara-appicon-maskable-192.png",
     }),
   );
 });

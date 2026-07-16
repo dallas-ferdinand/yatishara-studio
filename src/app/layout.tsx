@@ -41,9 +41,10 @@ export const metadata: Metadata = {
     icon: [
       { url: "/branding/favicon.ico", sizes: "any" },
       { url: "/branding/yatishara-logo-light-32.png", type: "image/png", sizes: "32x32" },
-      { url: "/branding/yatishara-logo-light-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/branding/yatishara-appicon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/branding/yatishara-appicon-512.png", type: "image/png", sizes: "512x512" },
     ],
-    apple: [{ url: "/branding/yatishara-logo-light-180.png", sizes: "180x180" }],
+    apple: [{ url: "/branding/yatishara-appicon-180.png", sizes: "180x180" }],
   },
 };
 
@@ -82,7 +83,7 @@ export default function RootLayout({
         ))}
         <link rel="icon" href="/branding/yatishara-logo-dark-32.png" media="(prefers-color-scheme: light)" />
         <link rel="icon" href="/branding/yatishara-logo-light-32.png" media="(prefers-color-scheme: dark)" />
-        <link rel="apple-touch-icon" href="/branding/yatishara-logo-light-180.png" />
+        <link rel="apple-touch-icon" href="/branding/yatishara-appicon-180.png" />
         <link
           rel="apple-touch-startup-image"
           href="/branding/yatishara-splash-light-iphone-1170x2532.png"

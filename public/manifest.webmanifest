@@ -12,34 +12,28 @@
   "categories": ["productivity", "graphics", "utilities"],
   "icons": [
     {
-      "src": "/branding/yatishara-logo-light-192.png",
+      "src": "/branding/yatishara-appicon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/branding/yatishara-logo-light-512.png",
+      "src": "/branding/yatishara-appicon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/branding/yatishara-maskable-light-192.png",
+      "src": "/branding/yatishara-appicon-maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/branding/yatishara-maskable-light-512.png",
+      "src": "/branding/yatishara-appicon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/branding/yatishara-logo-dark-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "monochrome"
     }
   ],
   "screenshots": [
