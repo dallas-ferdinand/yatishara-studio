@@ -13,19 +13,13 @@ const BOOT_LOGO_SIZE = 48;
 const BOOT_LOGO = mercuryLogoAssets(BOOT_LOGO_SIZE, "light");
 
 /**
- * Fixed white boot screen. Stable `ys-boot` class names (no vN churn) so
- * SSR/HMR/SW never hydrate a mismatched class prefix.
+ * White boot screen. Intended for client-only mounts (auth gate / error recovery).
+ * First paint uses the static `#ys-paint-boot` node in `layout.tsx` instead of SSR.
  */
 export function StudioBootLoader({ recovery }: Props) {
   return (
-    <main
-      className="ys-boot"
-      data-ys-boot="boot"
-      aria-busy="true"
-      aria-label="Loading Yatishara Studio"
-      suppressHydrationWarning
-    >
-      <div className="ys-boot-stack" suppressHydrationWarning>
+    <main className="ys-boot" data-ys-boot="boot" aria-busy="true" aria-label="Loading Yatishara Studio">
+      <div className="ys-boot-stack">
         <div className="ys-boot-logo" aria-hidden="true">
           <picture>
             <source type="image/webp" srcSet={BOOT_LOGO.srcSet} sizes={BOOT_LOGO.sizes} />

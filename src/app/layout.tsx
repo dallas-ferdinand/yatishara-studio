@@ -1,12 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, JetBrains_Mono, Onest } from "next/font/google";
-import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
+import { MERCURY_LOGO_PRELOAD, mercuryLogoAssets } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
 import { getDeskBuildGuardInlineScript } from "@/mos-app/desk-build-guard.js";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
 import { PerformanceReporter } from "@/components/performance-reporter";
 import { StudioToaster } from "@/components/studio-toaster";
 import "./globals.css";
+
+const PAINT_BOOT_LOGO = mercuryLogoAssets(48, "light");
 
 const onest = Onest({
   variable: "--font-onest",
@@ -131,6 +133,27 @@ export default function RootLayout({
         />
       </head>
       <body className="h-full overflow-hidden" suppressHydrationWarning>
+        {/* Outside the React tree — first paint only. AuthGate removes this on mount. */}
+        <div id="ys-paint-boot" className="ys-boot-overlay" aria-busy="true" aria-label="Loading Yatishara Studio">
+          <main className="ys-boot" data-ys-boot="boot">
+            <div className="ys-boot-stack">
+              <div className="ys-boot-logo" aria-hidden="true">
+                <img
+                  src={PAINT_BOOT_LOGO.src}
+                  alt=""
+                  width={48}
+                  height={48}
+                  decoding="sync"
+                  fetchPriority="high"
+                />
+              </div>
+              <p className="ys-boot-wordmark">Yatishara Studio</p>
+              <div className="ys-boot-track" aria-hidden="true">
+                <div className="ys-boot-bar" />
+              </div>
+            </div>
+          </main>
+        </div>
         <MosTooltipLayer />
         <PerformanceReporter surface="root" />
         <StudioToaster />

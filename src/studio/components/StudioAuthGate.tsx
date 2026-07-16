@@ -166,12 +166,20 @@ export function StudioAuthGate({
   const currentUser = useQuery(api.users.current, auth?.isAuthenticated ? {} : "skip");
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
   const [shellReady, setShellReady] = useState(false);
+  // Boot overlay is client-only — never SSR it (avoids HMR/SW class-prefix hydration fights).
+  const [bootMountReady, setBootMountReady] = useState(false);
   const shellReadyRef = useRef(false);
 
   const markShellReady = useCallback(() => {
     if (shellReadyRef.current) return;
     shellReadyRef.current = true;
     setShellReady(true);
+  }, []);
+
+  useEffect(() => {
+    // Hand off from the static first-paint boot in layout.tsx.
+    document.getElementById("ys-paint-boot")?.remove();
+    setBootMountReady(true);
   }, []);
 
   useEffect(() => {
@@ -213,6 +221,7 @@ export function StudioAuthGate({
 
   // One continuous white boot overlay across auth → user → shell-chunk gates.
   const showBoot =
+    bootMountReady &&
     !showSignInScreen &&
     !showCompleteAccount &&
     (authPending || userPending || (showShell && !shellReady));
@@ -220,7 +229,7 @@ export function StudioAuthGate({
   return (
     <>
       {showBoot ? (
-        <div className="ys-boot-overlay" suppressHydrationWarning>
+        <div className="ys-boot-overlay">
           <StudioBootLoader />
         </div>
       ) : null}
