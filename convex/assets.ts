@@ -239,10 +239,25 @@ export const moveToTrash = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
+    const now = Date.now();
     await ctx.db.patch(asset._id, {
-      deletedAt: Date.now(),
-      updatedAt: Date.now(),
+      deletedAt: now,
+      updatedAt: now,
     });
+    const post = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_asset", (q) => q.eq("assetId", asset._id))
+      .unique();
+    if (post && !post.unpublishedAt && post.ownerId === ctx.user._id) {
+      await ctx.db.patch(post._id, { unpublishedAt: now });
+      const profile = await ctx.db.get("profiles", post.profileId);
+      if (profile) {
+        await ctx.db.patch(profile._id, {
+          postCount: Math.max(0, profile.postCount - 1),
+          updatedAt: now,
+        });
+      }
+    }
     return null;
   },
 });
