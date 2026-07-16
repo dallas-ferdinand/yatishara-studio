@@ -563,8 +563,17 @@ function StudioSignIn() {
                 name="identifier"
                 placeholder="Enter email or number"
                 type="text"
-                inputMode={inputMode === "email" ? "email" : "tel"}
-                autoComplete="username"
+                inputMode={
+                  inputMode === "email"
+                    ? "email"
+                    : inputMode === "phone"
+                      ? "tel"
+                      : "text"
+                }
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
                 value={identifierInput}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -591,9 +600,20 @@ function StudioSignIn() {
                   name="password"
                   placeholder="Your password"
                   type="password"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  data-1p-ignore="true"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   autoFocus
+                  // Android WebView autofill often steals focus; unlock on first focus.
+                  readOnly
+                  onFocus={(event) => {
+                    event.currentTarget.removeAttribute("readonly");
+                  }}
                 />
               </span>
             </label>
@@ -783,9 +803,9 @@ function StudioSignIn() {
   );
 }
 
-function detectInputMode(value: string): "email" | "phone" {
+function detectInputMode(value: string): "email" | "phone" | "mixed" {
   const trimmed = value.trim();
-  if (!trimmed) return "phone";
+  if (!trimmed) return "mixed";
   if (trimmed.includes("@") || /[a-zA-Z]/.test(trimmed)) return "email";
   return "phone";
 }
@@ -793,7 +813,8 @@ function detectInputMode(value: string): "email" | "phone" {
 function contactInputIcon(value: string): "profile" | "email" | "phone" {
   const trimmed = value.trim();
   if (!trimmed) return "profile";
-  return detectInputMode(value);
+  const mode = detectInputMode(value);
+  return mode === "mixed" ? "profile" : mode;
 }
 
 function parseContactInput(value: string): IdentifyContact | null {
