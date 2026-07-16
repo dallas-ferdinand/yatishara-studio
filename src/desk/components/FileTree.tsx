@@ -587,6 +587,7 @@ function FileEntryButton({
       type="button"
       className={`${className}${dragOver ? " is-drag-over" : ""}`}
       data-entry-path={entry.path}
+      data-long-press-managed={enableLongPress && onLongPress ? "true" : undefined}
       data-drop-target={isDir && onDropEntry ? "folder" : undefined}
       title={entry.path ? displayEntryPath(entry) : label}
       onClick={() => {

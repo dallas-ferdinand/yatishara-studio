@@ -9,6 +9,7 @@ import {
   Pause,
   Play,
   Rewind,
+  Share2,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -37,6 +38,7 @@ export function DeskMediaPlayer({
   src,
   name,
   onDownload,
+  onShare,
   poster,
   fileSize = null,
   prefetch = true,
@@ -266,6 +268,11 @@ export function DeskMediaPlayer({
             {name}
           </span>
           {volumeControls}
+          {onShare ? (
+            <button type="button" className="cursor-icon-btn" title="Share" onClick={onShare}>
+              <Share2 {...mediaIcon(14)} />
+            </button>
+          ) : null}
           {onDownload ? (
             <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
               <Download {...mediaIcon(14)} />
@@ -349,6 +356,11 @@ export function DeskMediaPlayer({
           </div>
           <div className="desk-image-viewer-toolbar-center" />
           <div className="desk-image-viewer-toolbar-right">
+            {onShare ? (
+              <button type="button" className="cursor-icon-btn" title="Share" onClick={onShare}>
+                <Share2 {...mediaIcon(14)} />
+              </button>
+            ) : null}
             {onDownload ? (
               <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
                 <Download {...mediaIcon(14)} />

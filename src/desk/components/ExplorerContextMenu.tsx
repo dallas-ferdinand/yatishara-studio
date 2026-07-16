@@ -75,6 +75,7 @@ function buildMenuItems(entry, {
     }
     items.push({ id: "copy-path", label: "Copy item link" });
     if (isDir && !isParent) items.push({ id: "download-zip", label: "Download folder" });
+    if (isFile) items.push({ id: "share", label: "Share…" });
     if (isFile) items.push({ id: "download", label: "Download" });
     if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });
     items.push({ id: "sep-1", sep: true });

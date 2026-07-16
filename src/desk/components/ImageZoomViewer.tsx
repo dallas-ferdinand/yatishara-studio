@@ -11,7 +11,7 @@ function clampScale(value) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, +(value).toFixed(2)));
 }
 
-export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
+export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload, onShare }) {
   const [displayUrl, setDisplayUrl] = useState(thumbUrl || fullUrl);
   const [fullLoaded, setFullLoaded] = useState(false);
   const [scale, setScale] = useState(1);
@@ -233,6 +233,11 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
           </button>
         </div>
         <div className="desk-image-viewer-toolbar-right">
+          {onShare ? (
+            <button type="button" className="cursor-icon-btn" title="Share" onClick={onShare}>
+              <Icon name="share" size={14} />
+            </button>
+          ) : null}
           {onDownload ? (
             <button type="button" className="cursor-icon-btn" title="Download" onClick={onDownload}>
               <Icon name="download" size={14} />

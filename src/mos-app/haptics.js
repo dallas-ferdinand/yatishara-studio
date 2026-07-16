@@ -6,15 +6,24 @@ function enabled() {
 }
 
 function plugin() {
-  return window.Capacitor?.Plugins?.MercuryHaptics ?? null;
+  return window.Capacitor?.Plugins?.Haptics ??
+    window.Capacitor?.Plugins?.MercuryHaptics ??
+    null;
 }
 
 function runNative(pattern) {
   const p = plugin();
-  if (!p?.vibrate) return false;
   const arr = Array.isArray(pattern) ? pattern : [pattern];
-  p.vibrate({ pattern: arr }).catch(() => {});
-  return true;
+  if (p?.vibrate) {
+    p.vibrate({ pattern: arr }).catch(() => {});
+    return true;
+  }
+  if (p?.impact) {
+    const peak = Math.max(...arr.filter((value) => Number.isFinite(value)));
+    p.impact({ style: peak >= 65 ? "HEAVY" : peak >= 35 ? "MEDIUM" : "LIGHT" }).catch(() => {});
+    return true;
+  }
+  return false;
 }
 
 function runWeb(pattern) {

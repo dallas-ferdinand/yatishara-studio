@@ -265,3 +265,41 @@ body {
   object-fit: contain;
   display: block;
 }
+
+.studio-connectivity-banner,
+.studio-native-toast {
+  position: fixed;
+  left: 50%;
+  z-index: 2147483000;
+  max-width: min(92vw, 34rem);
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, white 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #09090b 88%, transparent);
+  color: #fafafa;
+  box-shadow: 0 12px 38px rgb(0 0 0 / 0.38);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+  padding: 0.62rem 1rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+}
+
+.studio-connectivity-banner {
+  top: max(0.75rem, env(safe-area-inset-top));
+  border-color: color-mix(in srgb, #f59e0b 38%, transparent);
+}
+
+.studio-native-toast {
+  top: max(3.7rem, calc(env(safe-area-inset-top) + 3rem));
+}
+
+.studio-native-toast.is-success {
+  border-color: color-mix(in srgb, #22c55e 42%, transparent);
+}
+
+.studio-native-toast.is-error {
+  border-color: color-mix(in srgb, #ef4444 52%, transparent);
+}
