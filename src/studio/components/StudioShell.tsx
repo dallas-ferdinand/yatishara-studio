@@ -498,7 +498,7 @@ function cssUrlToPath(value) {
 const STYLE = {
   shell: "flex h-dvh min-h-0 text-cursor-text",
   sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border-soft",
-  main: "flex min-w-0 flex-1 flex-col",
+  main: "flex h-full min-h-0 min-w-0 flex-1 flex-col",
   panelHead: "cursor-panel-head cursor-sidebar-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
@@ -12289,7 +12289,9 @@ export function StudioShell({
           display: flex;
           height: 100%;
           min-height: 0;
+          flex: 1 1 auto;
           flex-direction: column;
+          overflow: hidden;
         }
         .studio-history-floating-panel {
           width: 100%;
@@ -12673,7 +12675,8 @@ export function StudioShell({
         }
         .studio-chat-stream {
           min-height: 0;
-          flex: 1;
+          flex: 1 1 auto;
+          height: 100%;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -12689,7 +12692,7 @@ export function StudioShell({
           gap: var(--studio-composer-row-gap);
           width: 100%;
           max-width: var(--studio-composer-shell-max, min(600px, 94vw));
-          min-height: min-content;
+          min-height: 100%;
           margin: 0 auto;
           position: relative;
           left: 0;
@@ -12702,23 +12705,29 @@ export function StudioShell({
         .studio-chat-stream-inner {
           display: flex;
           min-width: 0;
+          min-height: 100%;
           flex-direction: column;
           justify-content: flex-start;
           align-items: stretch;
           gap: 12px;
+        }
+        /* Pin short threads to the bottom without blocking overflow scroll when tall. */
+        .studio-chat-stream-inner > :first-child {
+          margin-top: auto;
         }
         .studio-chat-stream-inner.is-empty {
           justify-content: center;
         }
         .studio-chat-empty-state {
           position: absolute;
-          inset: 0;
+          top: 0;
+          right: 0;
+          left: 0;
+          bottom: min(42%, var(--studio-chat-empty-clearance, 180px));
           z-index: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          /* Cap clearance so a bad measure can't shove the mark into the top third. */
-          padding-bottom: min(42%, var(--studio-chat-empty-clearance, 180px));
           pointer-events: none;
           box-sizing: border-box;
         }
@@ -13496,7 +13505,7 @@ export function StudioShell({
             ) : null}
           </div>
         </header>
-        <section className="min-h-0 flex-1">
+        <section className="min-h-0 flex-1 overflow-hidden">
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
@@ -16799,11 +16808,11 @@ function StudioThreadChat({
       if (stickToBottomRef.current) scrollToBottom();
     });
 
-    // Content growth (images, review cards) only follows if user stayed pinned.
+    // Only observe inner content growth — observing the scrollport itself can
+    // fire on scrollbar appearance and fight user scroll.
     const observer = new ResizeObserver(() => {
       if (stickToBottomRef.current) scrollToBottom();
     });
-    observer.observe(root);
     const inner = root.querySelector(".studio-chat-stream-inner");
     if (inner) observer.observe(inner);
     return () => {
