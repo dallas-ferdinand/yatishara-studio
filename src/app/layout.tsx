@@ -121,6 +121,10 @@ export default function RootLayout({
           media="(prefers-color-scheme: light) and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)"
         />
         <script
+          id="ys-build-guard"
+          dangerouslySetInnerHTML={{ __html: getDeskBuildGuardInlineScript() }}
+        />
+        <script
           id="mos-theme-boot"
           dangerouslySetInnerHTML={{ __html: getThemeBootInlineScript() }}
         />
