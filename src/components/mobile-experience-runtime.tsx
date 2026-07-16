@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   capacitorPlugin,
   navigateToStudioPath,
-  stopGenerationNotification,
   triggerHaptic,
 } from "@/studio/lib/capacitorBridge";
 
@@ -57,22 +56,6 @@ export function MobileExperienceRuntime() {
         const launch = result as { url?: string } | undefined;
         navigateToStudioPath(launch?.url);
       }).catch(() => {});
-    }
-
-    const push = capacitorPlugin("PushNotifications");
-    if (push?.addListener) {
-      void push.addListener("pushNotificationReceived", (event) => {
-        const data = event.data as Record<string, unknown> | undefined;
-        const jobId = String(data?.generationJobId ?? "");
-        if (jobId) void stopGenerationNotification(jobId);
-      }).then((handle) => removers.push(() => handle.remove()));
-      void push.addListener("pushNotificationActionPerformed", (event) => {
-        const notification = event.notification as Record<string, unknown> | undefined;
-        const data = notification?.data as Record<string, unknown> | undefined;
-        const jobId = String(data?.generationJobId ?? "");
-        if (jobId) void stopGenerationNotification(jobId);
-        navigateToStudioPath(notificationUrl(event));
-      }).then((handle) => removers.push(() => handle.remove()));
     }
 
     const local = capacitorPlugin("LocalNotifications");

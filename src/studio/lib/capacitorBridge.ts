@@ -115,58 +115,6 @@ export function navigateToStudioPath(rawUrl: string | undefined | null) {
   return true;
 }
 
-function notificationId(seed: string) {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (Math.imul(31, hash) + seed.charCodeAt(index)) | 0;
-  }
-  return 10_000 + (Math.abs(hash) % 2_000_000_000);
-}
-
-export async function startGenerationNotification(options: {
-  jobId: string;
-  title?: string;
-  body?: string;
-  url?: string;
-}) {
-  if (!isNativeAndroid()) return false;
-  const plugin = capacitorPlugin("LocalNotifications");
-  if (!plugin?.schedule) return false;
-  try {
-    await plugin.schedule({
-      notifications: [
-        {
-          id: notificationId(options.jobId),
-          title: options.title ?? "Studio is generating",
-          body: options.body ?? "Your generation is running in the background.",
-          channelId: "studio_generation",
-          ongoing: true,
-          autoCancel: false,
-          smallIcon: "ic_stat_studio",
-          extra: {
-            url: options.url ?? `/?job=${encodeURIComponent(options.jobId)}`,
-            jobId: options.jobId,
-          },
-        },
-      ],
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function stopGenerationNotification(jobId: string) {
-  const plugin = capacitorPlugin("LocalNotifications");
-  if (!plugin?.cancel) return false;
-  try {
-    await plugin.cancel({ notifications: [{ id: notificationId(jobId) }] });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function setNativeBadge(count: number) {
   const plugin = capacitorPlugin("Badge");
   if (!plugin) return;

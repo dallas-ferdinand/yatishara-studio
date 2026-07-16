@@ -92,11 +92,7 @@ import {
   shareMediaUrl,
   thumbnailDisplayUrl,
 } from "@/studio/lib/mediaUrls";
-import {
-  shareTextOrUrl,
-  startGenerationNotification,
-  stopGenerationNotification,
-} from "@/studio/lib/capacitorBridge";
+import { shareTextOrUrl } from "@/studio/lib/capacitorBridge";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
@@ -419,7 +415,6 @@ export function StudioShell() {
   const currentEntriesCacheRef = useRef(new Map());
   const lastRootEntriesRef = useRef(null);
   const syncedBriefAttachmentsRevisionRef = useRef(null);
-  const nativeProgressJobsRef = useRef(new Set<string>());
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
   const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
@@ -507,39 +502,6 @@ export function StudioShell() {
       ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
-  useEffect(() => {
-    if (!events) return;
-    const latestStage = new Map<string, { stage?: string; mode?: string }>();
-    for (const event of events) {
-      if (event.kind !== "stage" || !event.generationJobId) continue;
-      latestStage.set(String(event.generationJobId), {
-        stage: event.stage,
-        mode: event.jobMode,
-      });
-    }
-    const active = new Set<string>();
-    for (const [jobId, state] of latestStage) {
-      if (state.stage === "queued" || state.stage === "generating" || state.stage === "saving") {
-        active.add(jobId);
-        void startGenerationNotification({
-          jobId,
-          title: state.stage === "saving" ? "Saving your generation" : "Studio is generating",
-          body: state.mode === "video"
-            ? "Your video is still processing. We’ll notify you when it’s ready."
-            : "Your image is still processing. We’ll notify you when it’s ready.",
-          url: activeThreadId
-            ? `/?thread=${encodeURIComponent(activeThreadId)}&job=${encodeURIComponent(jobId)}`
-            : `/?job=${encodeURIComponent(jobId)}`,
-        });
-      } else {
-        void stopGenerationNotification(jobId);
-      }
-    }
-    for (const priorJobId of nativeProgressJobsRef.current) {
-      if (!active.has(priorJobId)) void stopGenerationNotification(priorJobId);
-    }
-    nativeProgressJobsRef.current = active;
-  }, [activeThreadId, events]);
   const assistanceApprovals = useQuery(
     api.assistanceApprovals.listForThread,
     hasCurrentUser && activeThreadId

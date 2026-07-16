@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import {
   capacitorPlugin,
   emitStudioToast,
@@ -12,8 +13,6 @@ import {
 } from "@/studio/lib/capacitorBridge";
 import { registerDeskServiceWorker } from "@/desk/lib/register-sw.js";
 
-const PROMPTED_KEY = "yatishara-studio-push-prompt-v1";
-
 function urlBase64ToUint8Array(value: string) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -21,12 +20,72 @@ function urlBase64ToUint8Array(value: string) {
   return Uint8Array.from(raw, (character) => character.charCodeAt(0));
 }
 
+function notificationId(seed: string) {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = (Math.imul(31, hash) + seed.charCodeAt(index)) | 0;
+  }
+  return 20_000 + (Math.abs(hash) % 2_000_000_000);
+}
+
+async function ensureLocalNotificationPermission() {
+  const local = capacitorPlugin("LocalNotifications");
+  if (!local?.checkPermissions || !local.requestPermissions) return false;
+  const current = await local.checkPermissions() as
+    | { display?: "granted" | "denied" | "prompt" | "prompt-with-rationale" }
+    | undefined;
+  let display = current?.display;
+  if (display !== "granted") {
+    const requested = await local.requestPermissions() as
+      | { display?: "granted" | "denied" }
+      | undefined;
+    display = requested?.display;
+  }
+  return display === "granted";
+}
+
+async function showLocalStudioNotification(options: {
+  id: string;
+  title: string;
+  body: string;
+  url: string;
+}) {
+  if (!isNativeAndroid()) return false;
+  const local = capacitorPlugin("LocalNotifications");
+  if (!local?.schedule) return false;
+  const allowed = await ensureLocalNotificationPermission();
+  if (!allowed) return false;
+  await local.schedule({
+    notifications: [
+      {
+        id: notificationId(options.id),
+        title: options.title,
+        body: options.body,
+        channelId: options.title.toLowerCase().includes("fail")
+          ? "studio_generation"
+          : options.title.toLowerCase().includes("payment")
+            ? "studio_billing"
+            : "studio_default",
+        autoCancel: true,
+        smallIcon: "ic_stat_studio",
+        extra: { url: options.url },
+      },
+    ],
+  });
+  return true;
+}
+
+/**
+ * Browser: real Web Push via VAPID.
+ * Capacitor APK (no FCM): when Studio is open, Convex realtime updates become
+ * local OS notifications. Cold-start push while killed is not available without FCM.
+ */
 export function StudioNotificationRuntime() {
-  const saveFcmToken = useMutation(api.notifications.saveFcmToken);
   const savePushSubscription = useMutation(api.notifications.savePushSubscription);
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
   const notifications = useQuery(api.notifications.listMine);
+  const seenIdsRef = useRef<Set<string> | null>(null);
   const unreadCount = useMemo(
     () => notifications?.filter((notification) => !notification.readAt).length ?? 0,
     [notifications],
@@ -64,11 +123,11 @@ export function StudioNotificationRuntime() {
   useEffect(() => {
     if (!notifications) return;
     const params = new URLSearchParams(window.location.search);
-    const notificationId = params.get("notification");
-    if (!notificationId) return;
-    const notification = notifications.find((item) => item._id === notificationId);
+    const notificationIdParam = params.get("notification");
+    if (!notificationIdParam) return;
+    const notification = notifications.find((item) => item._id === notificationIdParam);
     if (!notification || notification.readAt) return;
-    void markRead({ notificationId: notification._id }).then(() => {
+    void markRead({ notificationId: notification._id as Id<"notifications"> }).then(() => {
       params.delete("notification");
       const query = params.toString();
       window.history.replaceState(
@@ -79,59 +138,44 @@ export function StudioNotificationRuntime() {
     }).catch(() => {});
   }, [markRead, notifications]);
 
+  // Native APK: surface new Convex notifications locally while the app is alive.
   useEffect(() => {
-    let cancelled = false;
-    const removers: Array<() => void | Promise<void>> = [];
-    const push = capacitorPlugin("PushNotifications");
-
-    if (isNativeAndroid() && push?.addListener) {
-      void push.addListener("registration", (event) => {
-        const token = String(event.value ?? "");
-        if (!token || cancelled) return;
-        void saveFcmToken({
-          token,
-          deviceName: navigator.userAgent.slice(0, 240),
-        }).catch((error) => {
-          console.warn("Could not save Android push token", error);
-        });
-      }).then((handle) => removers.push(() => handle.remove()));
-
-      void push.addListener("registrationError", (event) => {
-        console.warn("Android push registration failed", event);
-      }).then((handle) => removers.push(() => handle.remove()));
-
-      void push.addListener("pushNotificationReceived", (event) => {
-        const notification = event as {
-          title?: string;
-          body?: string;
-        };
-        emitStudioToast(
-          notification.body || notification.title || "New Studio update",
-          "info",
-        );
-        void triggerHaptic("warning");
-      }).then((handle) => removers.push(() => handle.remove()));
+    if (!notifications || !isNativeAndroid()) return;
+    const ids = new Set(notifications.map((item) => item._id));
+    if (!seenIdsRef.current) {
+      seenIdsRef.current = ids;
+      return;
     }
+    const fresh = notifications.filter((item) => !seenIdsRef.current?.has(item._id));
+    seenIdsRef.current = ids;
+    for (const item of fresh) {
+      if (document.visibilityState === "visible") {
+        emitStudioToast(
+          item.body || item.title,
+          item.kind === "generation_failed" ? "error" : "info",
+        );
+        void triggerHaptic(item.kind === "generation_failed" ? "error" : "warning");
+        continue;
+      }
+      const params = new URLSearchParams({
+        notification: String(item._id),
+        ...(item.generationJobId ? { job: String(item.generationJobId) } : {}),
+      });
+      void showLocalStudioNotification({
+        id: item._id,
+        title: item.title,
+        body: item.body,
+        url: `/?${params.toString()}`,
+      });
+    }
+  }, [notifications]);
 
-    const registerNative = async () => {
-      if (!push || localStorage.getItem(PROMPTED_KEY) === "denied") return;
-      const current = await push.checkPermissions?.() as
-        | { receive?: "prompt" | "prompt-with-rationale" | "granted" | "denied" }
-        | undefined;
-      let receive = current?.receive;
-      if (receive !== "granted") {
-        localStorage.setItem(PROMPTED_KEY, "asked");
-        const requested = await push.requestPermissions?.() as
-          | { receive?: "granted" | "denied" }
-          | undefined;
-        receive = requested?.receive;
-      }
-      if (receive === "granted") {
-        await push.register?.();
-      } else if (receive === "denied") {
-        localStorage.setItem(PROMPTED_KEY, "denied");
-      }
-    };
+  useEffect(() => {
+    if (isNativeAndroid()) {
+      // Request local-notification permission once; no FCM registration.
+      void ensureLocalNotificationPermission().catch(() => {});
+      return;
+    }
 
     const registerBrowser = async () => {
       if (
@@ -166,8 +210,8 @@ export function StudioNotificationRuntime() {
     const onFirstInteraction = () => {
       window.removeEventListener("pointerup", onFirstInteraction, true);
       window.removeEventListener("keydown", onFirstInteraction, true);
-      void (isNativeAndroid() ? registerNative() : registerBrowser()).catch((error) => {
-        console.warn("Notification registration failed", error);
+      void registerBrowser().catch((error) => {
+        console.warn("Web Push registration failed", error);
       });
     };
     window.addEventListener("pointerup", onFirstInteraction, {
@@ -178,18 +222,13 @@ export function StudioNotificationRuntime() {
       capture: true,
       once: true,
     });
-
-    // Register the SW immediately; the permission prompt still waits for a
-    // user gesture. This also enables browser notification click routing.
-    if (!isNativeAndroid()) void registerDeskServiceWorker();
+    void registerDeskServiceWorker();
 
     return () => {
-      cancelled = true;
       window.removeEventListener("pointerup", onFirstInteraction, true);
       window.removeEventListener("keydown", onFirstInteraction, true);
-      for (const remove of removers) void remove();
     };
-  }, [saveFcmToken, savePushSubscription]);
+  }, [savePushSubscription]);
 
   return null;
 }

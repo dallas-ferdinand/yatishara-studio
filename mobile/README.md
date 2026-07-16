@@ -6,40 +6,27 @@ APK only when native plugins, permissions, icons, or Android code changes.
 
 ## Native mobile features
 
-- FCM push notifications for generation and billing updates
+- Browser / PWA Web Push (VAPID) for Chrome installs and desktop
+- Capacitor APK local notifications while Studio is open / process alive
+  (no Firebase / FCM)
 - Notification taps and Android App Links into the relevant Studio thread
-- Ongoing local generation-progress notifications (no long-running phone work)
 - Android share sheet for original media files and links
 - MediaStore saves to Pictures, Movies, Music, or Downloads
 - Native haptics, connectivity status, and best-effort launcher badges
 - Long-press support for the same context menus available by right-click
 
-Generation remains server-side. The app does not hold an Android foreground
-service open just to poll jobs; Android restricts that pattern and Google Play
-may reject it. Convex finishes work and FCM delivers completion/failure.
+## Push without Firebase
 
-## Firebase setup (required for killed-app push)
+| Surface | Delivery |
+|--------|----------|
+| Chrome / PWA / desktop browser | Real Web Push via VAPID |
+| Capacitor APK, app open or backgrounded but alive | Local notification from Convex realtime |
+| Capacitor APK, fully killed | No silent wake without FCM or a long-running service |
 
-The server and notification UX are ours, but stock Android uses a system push
-transport to wake a killed app. On Google-enabled phones that transport is
-Firebase Cloud Messaging. A self-hosted permanent socket would be throttled by
-Doze and would waste battery.
+Generation still finishes on Convex. Keep the APK open (or leave it in
+recents) if you want Android shade alerts without Firebase.
 
-1. Create/select a Firebase project.
-2. Add Android app package `com.yatishara.studio`.
-3. Download `google-services.json` to
-   `mobile/android/app/google-services.json` (gitignored).
-4. Create a Firebase service account with FCM send access.
-5. Put its JSON in the Convex environment as raw or base64:
-
-   ```bash
-   npx convex env set FIREBASE_SERVICE_ACCOUNT_JSON \
-     "$(base64 -w0 /secure/firebase-service-account.json)"
-   ```
-
-Never put the service-account JSON in the APK or a `NEXT_PUBLIC_*` variable.
-
-Browser installs continue to use the existing VAPID Web Push variables:
+Browser Web Push env vars:
 
 ```text
 WEB_PUSH_VAPID_PUBLIC_KEY

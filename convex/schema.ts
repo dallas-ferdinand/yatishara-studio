@@ -711,18 +711,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_endpoint", ["endpoint"]),
 
-  fcmTokens: defineTable({
-    userId: v.id("users"),
-    token: v.string(),
-    platform: v.literal("android"),
-    deviceName: v.optional(v.string()),
-    appVersion: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_token", ["token"]),
-
   whatsappAuthRequests: defineTable({
     phone: v.string(),
     code: v.string(),

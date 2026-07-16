@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const notificationKind = v.union(
@@ -99,62 +99,6 @@ export const savePushSubscription = authedMutation({
   },
 });
 
-export const saveFcmToken = authedMutation({
-  args: {
-    token: v.string(),
-    deviceName: v.optional(v.string()),
-    appVersion: v.optional(v.string()),
-  },
-  returns: v.id("fcmTokens"),
-  handler: async (ctx, args) => {
-    const token = args.token.trim();
-    if (token.length < 32 || token.length > 4096) {
-      throw new Error("Invalid Android push token");
-    }
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("fcmTokens")
-      .withIndex("by_token", (q) => q.eq("token", token))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        userId: ctx.user._id,
-        deviceName: args.deviceName,
-        appVersion: args.appVersion,
-        updatedAt: now,
-      });
-      return existing._id;
-    }
-    return await ctx.db.insert("fcmTokens", {
-      userId: ctx.user._id,
-      token,
-      platform: "android",
-      deviceName: args.deviceName,
-      appVersion: args.appVersion,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
-export const removeInvalidFcmTokens = internalMutation({
-  args: { tokens: v.array(v.string()) },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    let removed = 0;
-    for (const token of new Set(args.tokens)) {
-      const row = await ctx.db
-        .query("fcmTokens")
-        .withIndex("by_token", (q) => q.eq("token", token))
-        .unique();
-      if (!row) continue;
-      await ctx.db.delete(row._id);
-      removed += 1;
-    }
-    return removed;
-  },
-});
-
 export const getPushDelivery = internalQuery({
   args: { notificationId: v.id("notifications") },
   returns: v.object({
@@ -168,7 +112,6 @@ export const getPushDelivery = internalQuery({
         auth: v.string(),
       }),
     ),
-    fcmTokens: v.array(v.string()),
   }),
   handler: async (ctx, args) => {
     const notification = await ctx.db.get(args.notificationId);
@@ -177,10 +120,6 @@ export const getPushDelivery = internalQuery({
     }
     const subscriptions = await ctx.db
       .query("pushSubscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", notification.userId))
-      .collect();
-    const fcmTokens = await ctx.db
-      .query("fcmTokens")
       .withIndex("by_user", (q) => q.eq("userId", notification.userId))
       .collect();
     const unread = await ctx.db
@@ -211,7 +150,6 @@ export const getPushDelivery = internalQuery({
         p256dh: subscription.p256dh,
         auth: subscription.auth,
       })),
-      fcmTokens: fcmTokens.map((row) => row.token),
     };
   },
 });
