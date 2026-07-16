@@ -37,6 +37,7 @@ import {
   Lock,
   MapPin,
   Maximize2,
+  Menu,
   Mic,
   Package,
   Palette,
@@ -77,6 +78,7 @@ import {
 import { StudioVideoEditor } from "@/studio/editor/StudioVideoEditor";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -404,6 +406,7 @@ export function StudioShell({
   });
   const [contextMenu, setContextMenu] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   useStudioBackground();
@@ -449,10 +452,14 @@ export function StudioShell({
   );
   const openProfileUsernames = useMemo(
     () =>
-      openTabs
-        .filter((key) => key.startsWith("profile:"))
-        .map((key) => key.slice("profile:".length))
-        .filter(Boolean),
+      [
+        ...new Set(
+          openTabs
+            .filter((key) => key.startsWith("profile:"))
+            .map((key) => key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase())
+            .filter(Boolean),
+        ),
+      ],
     [openTabs],
   );
   const profileTabMetaQueries = useMemo(() => {
@@ -473,6 +480,7 @@ export function StudioShell({
       const result = profileTabMetaResults[`profileMeta:${username}`];
       if (result === undefined || result === null) continue;
       map.set(username, result);
+      if (result.username) map.set(String(result.username).toLowerCase(), result);
     }
     return map;
   }, [openProfileUsernames, profileTabMetaResults]);
@@ -3471,8 +3479,8 @@ export function StudioShell({
           font-size: 11px;
           font-weight: 750;
           letter-spacing: 0.02em;
-          color: var(--color-cursor-text-bright);
-          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          color: #fff;
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
         }
         .studio-profile-menu-popover {
           position: absolute;
@@ -3720,23 +3728,110 @@ export function StudioShell({
           }
         }
         .studio-polish .cursor-unified-tab-preview {
-          width: 18px;
-          height: 18px;
+          width: 22px;
+          height: 22px;
           flex-shrink: 0;
           border-radius: 999px;
           overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border: 1px solid color-mix(in srgb, #fff 16%, transparent);
           background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
         }
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
           place-items: center;
-          font-size: 7px;
-          font-weight: 700;
-          letter-spacing: 0;
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.01em;
           line-height: 1;
+          color: #fff;
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
+        }
+        @media (max-width: 899px) {
+          .studio-polish.is-studio-mobile .cursor-unified-tab-preview {
+            width: 24px;
+            height: 24px;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab-preview.is-initials {
+            font-size: 10px;
+          }
+        }
+        .studio-new-tab-cluster {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+        }
+        .studio-history-on-plus {
+          position: absolute;
+          top: -5px;
+          right: -5px;
+          z-index: 2;
+          width: 16px !important;
+          min-width: 16px !important;
+          height: 16px !important;
+          min-height: 16px !important;
+          padding: 0 !important;
+          border-radius: 999px !important;
+          border: 1px solid var(--studio-mobile-chrome-border, color-mix(in srgb, #fff 14%, transparent)) !important;
+          background: var(--studio-mobile-chrome-glass-foot, color-mix(in srgb, #0b1220 72%, transparent)) !important;
+          box-shadow: 0 2px 8px color-mix(in srgb, #000 28%, transparent) !important;
+        }
+        .studio-history-on-plus svg {
+          width: 10px !important;
+          height: 10px !important;
+        }
+        .studio-mobile-app-menu-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 120;
+          background: color-mix(in srgb, #050608 46%, transparent);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+        }
+        .studio-mobile-app-menu-sheet {
+          position: fixed;
+          left: 8px;
+          right: 8px;
+          bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px) + 8px);
+          z-index: 121;
+          max-height: min(72dvh, 560px);
+          overflow: auto;
+          border-radius: 18px;
+          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          background: color-mix(in srgb, #10151f 88%, transparent);
+          backdrop-filter: saturate(150%) blur(18px);
+          -webkit-backdrop-filter: saturate(150%) blur(18px);
+          box-shadow: 0 18px 48px color-mix(in srgb, #000 42%, transparent);
+          padding: 10px;
+        }
+        .studio-mobile-app-menu-sheet button {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          min-height: 44px;
+          padding: 0 14px;
+          border: 0;
+          border-radius: 12px;
+          background: transparent;
           color: var(--color-cursor-text-bright);
-          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          font: inherit;
+          font-size: 14px;
+          font-weight: 650;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-mobile-app-menu-sheet button:hover,
+        .studio-mobile-app-menu-sheet button:active {
+          background: color-mix(in srgb, #fff 7%, transparent);
+        }
+        .studio-mobile-app-menu-sheet button.is-danger {
+          color: #ff8a9a;
+        }
+        .studio-mobile-app-menu-sep {
+          height: 1px;
+          margin: 6px 8px;
+          background: color-mix(in srgb, #fff 10%, transparent);
         }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
@@ -11740,15 +11835,29 @@ export function StudioShell({
             disableDrag={isMobile}
           />
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            <button
-              type="button"
-              className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
-              onClick={openNewComposerTab}
-              aria-label="New chat"
-              title="New chat"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <div className="studio-new-tab-cluster">
+              <button
+                type="button"
+                className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
+                onClick={openNewComposerTab}
+                aria-label="New chat"
+                title="New chat"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              {isMobile ? (
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger studio-history-on-plus${historyOpen ? " is-active" : ""}`}
+                  onClick={() => setHistoryOpen((open) => !open)}
+                  aria-label="Generation history"
+                  title="Generation history"
+                  aria-pressed={historyOpen}
+                >
+                  <History aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
             {!isMobile ? (
               <>
                 <CreditPill
@@ -11865,7 +11974,6 @@ export function StudioShell({
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
-            onEditOwnProfile={() => openSettingsTab("profile")}
           />
         </section>
         {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
@@ -11950,22 +12058,62 @@ export function StudioShell({
                 profile={myPublicProfile}
                 username={myPublicProfile?.username || sharedProfileAssets?.username}
                 isProfileTabActive={activeTab.startsWith("profile:")}
+                mode="direct"
                 onViewProfile={openOwnProfile}
                 onEditProfile={() => openSettingsTab("profile")}
                 onSignOut={() => void signOut()}
               />
               <button
                 type="button"
-                className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                onClick={() => setHistoryOpen((open) => !open)}
-                aria-label="Generation history"
-                title="Generation history"
-                aria-pressed={historyOpen}
+                className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                onClick={() => setMobileAppMenuOpen(true)}
+                aria-label="Open menu"
+                title="Menu"
+                aria-expanded={mobileAppMenuOpen}
               >
-                <History className="h-3.5 w-3.5" aria-hidden="true" />
+                <Menu className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </>
           }
+        />
+      ) : null}
+
+      {isMobile && mobileAppMenuOpen ? (
+        <StudioMobileAppMenu
+          isAdminUser={isAdminUser}
+          onClose={() => setMobileAppMenuOpen(false)}
+          onViewProfile={() => {
+            setMobileAppMenuOpen(false);
+            openOwnProfile();
+          }}
+          onEditProfile={() => {
+            setMobileAppMenuOpen(false);
+            openSettingsTab("profile");
+          }}
+          onOpenSection={(section) => {
+            setMobileAppMenuOpen(false);
+            openMobileSection(section);
+          }}
+          onOpenSettings={(section) => {
+            setMobileAppMenuOpen(false);
+            openSettingsTab(section);
+          }}
+          onOpenCredits={() => {
+            setMobileAppMenuOpen(false);
+            openCreditsPane();
+          }}
+          onOpenHistory={() => {
+            setMobileAppMenuOpen(false);
+            setHistoryOpen(true);
+          }}
+          onOpenAdmin={() => {
+            setMobileAppMenuOpen(false);
+            openAdminTab("payments");
+          }}
+          onSignOut={() => {
+            setMobileAppMenuOpen(false);
+            void signOut();
+          }}
         />
       ) : null}
 
@@ -13585,6 +13733,7 @@ function StudioProfileMenu({
   profile,
   username,
   isProfileTabActive,
+  mode = "dropdown",
   onViewProfile,
   onEditProfile,
   onSignOut,
@@ -13596,19 +13745,18 @@ function StudioProfileMenu({
     .trim()
     .replace(/^@/, "")
     .toLowerCase();
-  // Username initial only — never account first/last name when a handle exists.
-  const initials = handle
-    ? handle[0].toUpperCase()
-    : profileInitials({
-        firstName: currentUser?.firstName,
-        lastName: currentUser?.lastName,
-        name: currentUser?.name,
-        displayName: profile?.displayName,
-      });
+  const initials = profileNameInitials({
+    firstName: currentUser?.firstName,
+    lastName: currentUser?.lastName,
+    name: currentUser?.name,
+    displayName: profile?.displayName,
+  });
+  const avatarStyle = avatarUrl ? undefined : profileAvatarStyle(initials);
   const label = handle ? `@${handle}` : currentUser?.name || "Profile";
+  const direct = mode === "direct";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || direct) return;
     const onDoc = (event) => {
       if (wrapRef.current?.contains(event.target)) return;
       setOpen(false);
@@ -13622,7 +13770,7 @@ function StudioProfileMenu({
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [direct, open]);
 
   return (
     <div ref={wrapRef} className="studio-profile-menu-wrap">
@@ -13631,20 +13779,28 @@ function StudioProfileMenu({
         className={`studio-settings-pill studio-settings-trigger studio-profile-menu-trigger${
           open || isProfileTabActive ? " is-active" : ""
         }`}
-        aria-label="Profile menu"
-        aria-expanded={open}
-        aria-haspopup="menu"
+        aria-label={direct ? "View profile" : "Profile menu"}
+        aria-expanded={direct ? undefined : open}
+        aria-haspopup={direct ? undefined : "menu"}
         title={label}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (direct) {
+            onViewProfile?.();
+            return;
+          }
+          setOpen((value) => !value);
+        }}
       >
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={avatarUrl} alt="" className="studio-profile-menu-avatar" />
         ) : (
-          <span className="studio-profile-menu-initials">{initials}</span>
+          <span className="studio-profile-menu-initials" style={avatarStyle}>
+            {initials}
+          </span>
         )}
       </button>
-      {open ? (
+      {!direct && open ? (
         <div className="cursor-tab-context-menu studio-profile-menu-popover" role="menu">
           <button
             type="button"
@@ -13683,6 +13839,76 @@ function StudioProfileMenu({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function StudioMobileAppMenu({
+  isAdminUser,
+  onClose,
+  onViewProfile,
+  onEditProfile,
+  onOpenSection,
+  onOpenSettings,
+  onOpenCredits,
+  onOpenHistory,
+  onOpenAdmin,
+  onSignOut,
+}) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const items = [
+    { label: "View profile", onClick: onViewProfile },
+    { label: "Edit profile", onClick: onEditProfile },
+    { sep: true },
+    { label: "Files", onClick: () => onOpenSection?.("files") },
+    { label: "Create", onClick: () => onOpenSection?.("composer") },
+    { label: "Settings", onClick: () => onOpenSection?.("settings") },
+    { sep: true },
+    { label: "Appearance", onClick: () => onOpenSettings?.("general") },
+    { label: "Account details", onClick: () => onOpenSettings?.("account") },
+    { label: "Billing", onClick: () => onOpenSettings?.("billing") },
+    { label: "Activity", onClick: () => onOpenSettings?.("activity") },
+    { label: "API keys", onClick: () => onOpenSettings?.("api-keys") },
+    { label: "Credits", onClick: onOpenCredits },
+    { label: "History", onClick: onOpenHistory },
+    ...(isAdminUser ? [{ label: "Admin", onClick: onOpenAdmin }] : []),
+    { sep: true },
+    { label: "Sign out", onClick: onSignOut, danger: true },
+  ];
+
+  return createPortal(
+    <>
+      <button
+        type="button"
+        className="studio-mobile-app-menu-overlay"
+        aria-label="Close menu"
+        onClick={onClose}
+      />
+      <div className="studio-mobile-app-menu-sheet" role="menu" aria-label="Studio menu">
+        {items.map((item, index) =>
+          item.sep ? (
+            <div key={`sep-${index}`} className="studio-mobile-app-menu-sep" role="separator" />
+          ) : (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className={item.danger ? "is-danger" : undefined}
+              onClick={item.onClick}
+            >
+              {item.label}
+            </button>
+          ),
+        )}
+      </div>
+    </>,
+    document.body,
   );
 }
 
@@ -15286,7 +15512,6 @@ function ActivePane({
   onVideoEditProjectSaved,
   activeEditTab,
   onOpenPublicProfile,
-  onEditOwnProfile,
 }) {
   const profileUsername = activeTab.startsWith("profile:")
     ? activeTab.slice("profile:".length)
@@ -15371,7 +15596,7 @@ function ActivePane({
       <PublicProfileView
         username={profileUsername}
         embedded
-        onEditProfile={onEditOwnProfile}
+        ownerName={currentUser}
       />
     );
   }
@@ -17607,25 +17832,6 @@ function virtualFileName(name, ext) {
   return cleanName.toLowerCase().endsWith(ext.toLowerCase()) ? cleanName : `${cleanName}${ext}`;
 }
 
-function profileInitials({ firstName, lastName, name, displayName, username }) {
-  const handle = String(username ?? "").trim().replace(/^@/, "");
-  if (handle) return handle[0].toUpperCase();
-  const first = String(firstName ?? "").trim();
-  const last = String(lastName ?? "").trim();
-  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
-  if (first) return first[0].toUpperCase();
-  if (last) return last[0].toUpperCase();
-  const display = String(displayName || name || "").trim();
-  if (display) {
-    const parts = display.split(/\s+/).filter(Boolean);
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    }
-    return display[0].toUpperCase();
-  }
-  return "?";
-}
-
 function tabDescriptor({
   key,
   threads,
@@ -17642,23 +17848,34 @@ function tabDescriptor({
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
   }
   if (key.startsWith("profile:")) {
-    const username = key.slice("profile:".length).trim().replace(/^@/, "");
-    const meta =
-      profileMetaByUsername?.get?.(username) ||
-      profileMetaByUsername?.get?.(username.toLowerCase());
-    const isMine =
-      myProfile?.username &&
-      username &&
-      myProfile.username.toLowerCase() === username.toLowerCase();
+    const username = key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase();
+    const meta = profileMetaByUsername?.get?.(username);
+    const mineHandle = String(myProfile?.username ?? "")
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    const isMine = Boolean(mineHandle && username && mineHandle === username);
+    // Prefer the canonical handle from the profile record when available.
+    const handle = String(meta?.username || (isMine ? myProfile?.username : "") || username)
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
     const title =
       meta?.displayName?.trim() ||
       (isMine ? myProfile?.displayName?.trim() : "") ||
-      username ||
+      handle ||
       "Profile";
     const avatarUrl = meta?.avatarUrl || (isMine ? myProfile?.avatarUrl : undefined);
-    // Always take the initial from the profile handle in the tab key.
-    const handle = (username || (isMine ? myProfile?.username : "") || "").trim();
-    const initials = handle ? handle[0].toUpperCase() : "?";
+    const initials = profileNameInitials({
+      firstName: isMine ? currentUser?.firstName : undefined,
+      lastName: isMine ? currentUser?.lastName : undefined,
+      name: isMine ? currentUser?.name : undefined,
+      displayName:
+        meta?.displayName ||
+        (isMine ? myProfile?.displayName : undefined) ||
+        title,
+    });
+    const previewAvatarStyle = avatarUrl ? undefined : profileAvatarStyle(initials);
     return {
       key,
       kind: "file",
@@ -17668,6 +17885,7 @@ function tabDescriptor({
       previewUrl: avatarUrl,
       previewKind: avatarUrl ? "image" : undefined,
       previewInitials: avatarUrl ? undefined : initials,
+      previewAvatarStyle,
     };
   }
   if (key.startsWith("admin:")) {

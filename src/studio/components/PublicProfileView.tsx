@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import "./public-profile.css";
 
 type PublicPost = {
@@ -48,11 +49,15 @@ function formatCount(value: number): string {
 export function PublicProfileView({
   username,
   embedded = false,
-  onEditProfile,
+  ownerName,
 }: {
   username: string;
   embedded?: boolean;
-  onEditProfile?: () => void;
+  ownerName?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    name?: string | null;
+  } | null;
 }) {
   const expiresUnix = useMemo(() => Math.floor(Date.now() / 1000) + 60 * 60, []);
   const auth = useConvexAuth();
@@ -135,6 +140,7 @@ export function PublicProfileView({
   if (profile === undefined) {
     return (
       <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
+        <div className="public-profile-blur" aria-hidden="true" />
         <div className="public-profile-loading">
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           <span>Loading profile…</span>
@@ -146,6 +152,7 @@ export function PublicProfileView({
   if (profile === null) {
     return (
       <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
+        <div className="public-profile-blur" aria-hidden="true" />
         <div className="public-profile-empty">
           <UserRound className="h-8 w-8" aria-hidden="true" />
           <h1>Profile not found</h1>
@@ -156,25 +163,29 @@ export function PublicProfileView({
   }
 
   const title = profile.displayName || `@${profile.username}`;
+  const initials = profileNameInitials(
+    profile.isOwner && ownerName
+      ? {
+          firstName: ownerName.firstName,
+          lastName: ownerName.lastName,
+          name: ownerName.name,
+          displayName: profile.displayName,
+        }
+      : { displayName: profile.displayName },
+  );
+  const avatarStyle = profileAvatarStyle(initials);
 
   return (
     <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
+      <div className="public-profile-blur" aria-hidden="true" />
       <main className="public-profile-main">
         <section className="public-profile-hero">
-          {profile.isOwner && onEditProfile ? (
-            <div className="public-profile-owner-bar">
-              <button type="button" className="public-profile-edit-link" onClick={onEditProfile}>
-                Edit profile
-              </button>
-            </div>
-          ) : null}
-
-          <div className="public-profile-avatar">
+          <div className="public-profile-avatar" style={avatarStyle}>
             {profile.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.avatarUrl} alt="" />
             ) : (
-              <span>{title.slice(0, 1).toUpperCase()}</span>
+              <span>{initials}</span>
             )}
           </div>
           <h1 className="public-profile-name">{title}</h1>

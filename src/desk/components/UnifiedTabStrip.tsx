@@ -36,6 +36,8 @@ function stripTabsEqual(prev, next) {
       a[i].tabSignal !== b[i].tabSignal ||
       a[i].previewUrl !== b[i].previewUrl ||
       a[i].previewInitials !== b[i].previewInitials ||
+      a[i].previewAvatarStyle?.background !== b[i].previewAvatarStyle?.background ||
+      a[i].previewAvatarStyle?.color !== b[i].previewAvatarStyle?.color ||
       Boolean(a[i].dirty) !== Boolean(b[i].dirty) ||
       Boolean(a[i].loading) !== Boolean(b[i].loading)
     ) {
@@ -731,6 +733,7 @@ function UnifiedTabStripInner({
               <span
                 className="cursor-unified-tab-preview is-initials shrink-0 pointer-events-none"
                 aria-hidden="true"
+                style={tab.previewAvatarStyle || undefined}
               >
                 {tab.previewInitials}
               </span>
