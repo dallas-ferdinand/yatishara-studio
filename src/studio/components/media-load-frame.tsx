@@ -54,8 +54,11 @@ export function MediaLoadFrame({
 
   function markLoaded() {
     if (src) loadedSrcRef.current = src;
-    setLoaded(true);
-    setFailed(false);
+    // Defer so cached <img onLoad> during commit never schedules a render-phase update (#301).
+    queueMicrotask(() => {
+      setLoaded((prev) => (prev ? prev : true));
+      setFailed((prev) => (prev ? false : prev));
+    });
   }
 
   return (
@@ -93,9 +96,11 @@ export function MediaLoadFrame({
             markLoaded();
           },
           onError: () => {
-            setFailed(true);
-            setLoaded(false);
-            loadedSrcRef.current = "";
+            queueMicrotask(() => {
+              setFailed(true);
+              setLoaded(false);
+              loadedSrcRef.current = "";
+            });
           },
         })
       )}
