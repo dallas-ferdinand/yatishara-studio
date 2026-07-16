@@ -1,6 +1,6 @@
 /** Register desk2 service worker + precache shell assets. */
 export async function registerDeskServiceWorker() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null;
 
   try {
     if ("caches" in window) {
@@ -24,7 +24,9 @@ export async function registerDeskServiceWorker() {
         }
       });
     });
+    return reg;
   } catch (err) {
     console.warn("[desk2] SW register failed:", err?.message ?? err);
+    return null;
   }
 }

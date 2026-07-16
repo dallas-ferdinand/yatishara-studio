@@ -89,8 +89,10 @@ import {
   downloadMediaUrl,
   fullQualityUrl,
   isBunnyOptimizedUrl,
+  shareMediaUrl,
   thumbnailDisplayUrl,
 } from "@/studio/lib/mediaUrls";
+import { shareTextOrUrl } from "@/studio/lib/capacitorBridge";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
@@ -1465,6 +1467,27 @@ export function StudioShell() {
     if (isMobile) setMobileSection("settings");
     setSettingsOpen(true);
   }
+
+  const deepLinkedThreadRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!threads?.length || typeof window === "undefined") return;
+    const threadId = new URLSearchParams(window.location.search).get("thread");
+    if (
+      !threadId ||
+      deepLinkedThreadRef.current === threadId ||
+      !threads.some((thread) => thread._id === threadId)
+    ) {
+      return;
+    }
+    deepLinkedThreadRef.current = threadId;
+    setOpenTabs((tabs) => {
+      const key = `thread:${threadId}`;
+      return tabs.includes(key) ? tabs : [...tabs, key];
+    });
+    setActiveTab(`thread:${threadId}`);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }, [isMobile, threads]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -11652,6 +11675,7 @@ export function StudioShell() {
             if (action === "attach") attachEntry(entry);
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
+            if (action === "share") void shareStudioEntry(entry, convex, assetUrlExpiresUnix);
             if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
           }}
         />
@@ -13990,11 +14014,6 @@ function playStudioTapFeedback() {
   if (now - studioTapLast < 55) return;
   studioTapLast = now;
   try {
-    navigator.vibrate?.(8);
-  } catch {
-    // best-effort tactile feedback
-  }
-  try {
     studioTapAudioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
     const ctx = studioTapAudioCtx;
     const osc = ctx.createOscillator();
@@ -15384,6 +15403,10 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
     if (!mediaUrl) return;
     void downloadMediaUrl(mediaUrl, entry.name ?? "download");
   };
+  const shareAsset = () => {
+    if (!mediaUrl) return;
+    void shareMediaUrl(mediaUrl, entry.name ?? "download");
+  };
   return (
     <div className="studio-asset-preview">
       {kind === "video" && onEditVideo ? (
@@ -15396,7 +15419,13 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
       ) : null}
       <div className="studio-asset-lightbox">
         {kind === "image" && mediaUrl ? (
-          <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} />
+          <ImageZoomViewer
+            thumbUrl={thumbUrl}
+            fullUrl={mediaUrl}
+            name={entry.name}
+            onDownload={downloadAsset}
+            onShare={shareAsset}
+          />
         ) : kind === "video" && mediaUrl ? (
           <DeskMediaPlayer
             kind="video"
@@ -15406,6 +15435,7 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
             poster={videoPosterUrl}
             fileSize={entry.byteSize ?? null}
             onDownload={downloadAsset}
+            onShare={shareAsset}
           />
         ) : kind === "audio" && mediaUrl ? (
           <DeskMediaPlayer
@@ -15415,6 +15445,7 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
             name={entry.name}
             fileSize={entry.byteSize ?? null}
             onDownload={downloadAsset}
+            onShare={shareAsset}
           />
         ) : (
           <div className="studio-asset-empty">
@@ -17047,6 +17078,45 @@ async function downloadStudioEntry(entry, convex, expiresUnix) {
       entry.thumbnailUrl;
   }
   if (url) await downloadMediaUrl(url, entry.name ?? "download");
+}
+
+async function shareStudioEntry(entry, convex, expiresUnix) {
+  if (!entry) return;
+  if (entry.studioKind === "document") {
+    await shareTextOrUrl({
+      title: entry.name ?? "Studio note",
+      text: entry.description ?? "",
+    });
+    return;
+  }
+  let url = fullQualityUrl(entry.mediaUrl);
+  if (
+    !url &&
+    (entry.studioKind === "asset" || entry.studioKind === "element") &&
+    entry.studioId &&
+    convex
+  ) {
+    try {
+      const assetId =
+        entry.studioKind === "element"
+          ? entry.sheetAsset?.studioId
+          : entry.studioId;
+      if (assetId) {
+        url = await convex.query(api.assets.signedReadUrl, {
+          assetId,
+          expiresUnix: expiresUnix ?? Math.floor(Date.now() / 1000) + 60 * 60,
+        });
+      }
+    } catch {
+      // Fall back to an already-resolved URL below.
+    }
+  }
+  url ??=
+    fullQualityUrl(entry.sheetAsset?.mediaUrl) ??
+    entry.mediaUrl ??
+    entry.sheetAsset?.mediaUrl ??
+    entry.thumbnailUrl;
+  if (url) await shareMediaUrl(url, entry.name ?? "Studio media");
 }
 
 function isVideoFileUrl(url) {

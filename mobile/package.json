@@ -1,0 +1,31 @@
+{
+  "name": "@yatishara/studio-android",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capacitor Android shell for Yatishara Studio (loads the live site)",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "apk:debug": "cd android && ./gradlew assembleDebug",
+    "apk:release": "cd android && ./gradlew assembleRelease",
+    "build:apk": "bash scripts/build-apk.sh"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.1.0",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/filesystem": "^7.1.8",
+    "@capacitor/haptics": "^7.0.5",
+    "@capacitor/local-notifications": "^7.0.7",
+    "@capacitor/network": "^7.0.4",
+    "@capacitor/share": "^7.0.4",
+    "@capacitor/splash-screen": "^7.0.3",
+    "@capacitor/status-bar": "^7.0.3",
+    "@capawesome/capacitor-badge": "^7.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "typescript": "^5.9.2"
+  }
+}

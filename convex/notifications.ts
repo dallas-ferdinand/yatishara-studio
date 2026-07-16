@@ -45,6 +45,24 @@ export const markRead = authedMutation({
   },
 });
 
+export const markAllRead = authedMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const unread = await ctx.db
+      .query("notifications")
+      .withIndex("by_user_and_read", (q) =>
+        q.eq("userId", ctx.user._id).eq("readAt", undefined),
+      )
+      .collect();
+    const now = Date.now();
+    await Promise.all(unread.map((notification) =>
+      ctx.db.patch(notification._id, { readAt: now }),
+    ));
+    return unread.length;
+  },
+});
+
 export const savePushSubscription = authedMutation({
   args: {
     endpoint: v.string(),
@@ -85,6 +103,8 @@ export const getPushDelivery = internalQuery({
   args: { notificationId: v.id("notifications") },
   returns: v.object({
     notification: notificationReturn,
+    targetPath: v.string(),
+    unreadCount: v.number(),
     subscriptions: v.array(
       v.object({
         endpoint: v.string(),
@@ -102,8 +122,29 @@ export const getPushDelivery = internalQuery({
       .query("pushSubscriptions")
       .withIndex("by_user", (q) => q.eq("userId", notification.userId))
       .collect();
+    const unread = await ctx.db
+      .query("notifications")
+      .withIndex("by_user_and_read", (q) =>
+        q.eq("userId", notification.userId).eq("readAt", undefined),
+      )
+      .collect();
+    const job = notification.generationJobId
+      ? await ctx.db.get(notification.generationJobId)
+      : null;
+    const query = new URLSearchParams({
+      notification: String(notification._id),
+      ...(job?.threadId ? { thread: String(job.threadId) } : {}),
+      ...(notification.generationJobId
+        ? { job: String(notification.generationJobId) }
+        : {}),
+      ...(notification.paymentId
+        ? { payment: "notification", paymentId: String(notification.paymentId) }
+        : {}),
+    });
     return {
       notification,
+      targetPath: `/?${query.toString()}`,
+      unreadCount: unread.length,
       subscriptions: subscriptions.map((subscription) => ({
         endpoint: subscription.endpoint,
         p256dh: subscription.p256dh,

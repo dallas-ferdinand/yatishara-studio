@@ -50,6 +50,14 @@ self.addEventListener("push", (e) => {
 
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  const requestedUrl = e.notification.data?.url;
+  const targetUrl = new URL(
+    typeof requestedUrl === "string" ? requestedUrl : "/",
+    self.location.origin,
+  );
+  if (targetUrl.origin !== self.location.origin) {
+    targetUrl.href = `${self.location.origin}/`;
+  }
   e.waitUntil(
     (async () => {
       const clientsList = await self.clients.matchAll({
@@ -58,10 +66,11 @@ self.addEventListener("notificationclick", (e) => {
       });
       const existing = clientsList.find((client) => "focus" in client);
       if (existing) {
+        if ("navigate" in existing) await existing.navigate(targetUrl.href);
         await existing.focus();
         return;
       }
-      await self.clients.openWindow("./");
+      await self.clients.openWindow(targetUrl.href);
     })(),
   );
 });

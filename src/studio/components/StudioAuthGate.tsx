@@ -25,6 +25,7 @@ import {
 import { SCHEMES } from "@/mos-app/theme.js";
 import { useAppearanceMode } from "@/lib/use-appearance-mode";
 import type { AppearanceMode } from "@/lib/brand-assets";
+import { StudioNotificationRuntime } from "./StudioNotificationRuntime";
 
 const AUTH_BACKGROUND_IMAGES = [...STUDIO_AUTH_BACKGROUND_PATHS];
 
@@ -105,7 +106,12 @@ export function StudioAuthGate() {
   if (!currentUser.accountComplete) {
     return <StudioCompleteAccount currentUser={currentUser} />;
   }
-  return <StudioShell />;
+  return (
+    <>
+      <StudioNotificationRuntime />
+      <StudioShell />
+    </>
+  );
 }
 
 function StudioCompleteAccount({

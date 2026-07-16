@@ -1,3 +1,10 @@
+import {
+  isNativeAndroid,
+  saveMediaNative,
+  shareMediaNative,
+  shareTextOrUrl,
+} from "@/studio/lib/capacitorBridge";
+
 /** Bunny Optimizer query params — present only on thumbnail/preview transforms. */
 const THUMB_MAX_WIDTH = 1280;
 
@@ -50,6 +57,13 @@ export function thumbnailDisplayUrl(
 export async function downloadMediaUrl(url: string, filename = "download") {
   if (!url) return false;
   const safeName = filename.replace(/[/\\?%*:|"<>]/g, "_").trim() || "download";
+  if (isNativeAndroid()) {
+    try {
+      return await saveMediaNative({ url, filename: safeName });
+    } catch (error) {
+      console.warn("Native media save failed; falling back to web download", error);
+    }
+  }
   try {
     const response = await fetch(url, { mode: "cors", credentials: "omit" });
     if (!response.ok) throw new Error(`Download failed (${response.status})`);
@@ -73,6 +87,45 @@ export async function downloadMediaUrl(url: string, filename = "download") {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
+    return false;
+  }
+}
+
+/** Share the original file in the APK, and use Web Share where supported. */
+export async function shareMediaUrl(url: string, filename = "download") {
+  if (!url) return false;
+  const safeName = filename.replace(/[/\\?%*:|"<>]/g, "_").trim() || "download";
+  if (isNativeAndroid()) {
+    try {
+      return await shareMediaNative({
+        url,
+        filename: safeName,
+        title: safeName,
+      });
+    } catch (error) {
+      console.warn("Native file share failed", error);
+      return false;
+    }
+  }
+
+  try {
+    const response = await fetch(url, { mode: "cors", credentials: "omit" });
+    if (response.ok) {
+      const blob = await response.blob();
+      const file = new File([blob], safeName, {
+        type: blob.type || "application/octet-stream",
+      });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: safeName, files: [file] });
+        return true;
+      }
+    }
+  } catch {
+    // URL sharing below is still useful when CORS/file sharing is unavailable.
+  }
+  try {
+    return await shareTextOrUrl({ title: safeName, url });
+  } catch {
     return false;
   }
 }

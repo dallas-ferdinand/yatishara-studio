@@ -4,6 +4,7 @@ import { Bricolage_Grotesque, JetBrains_Mono, Onest } from "next/font/google";
 import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
+import { MobileExperienceRuntime } from "@/components/mobile-experience-runtime";
 import "./globals.css";
 
 const onest = Onest({
@@ -120,6 +121,7 @@ export default function RootLayout({
       </head>
       <body className="h-full overflow-hidden" suppressHydrationWarning>
         <MosTooltipLayer />
+        <MobileExperienceRuntime />
         {children}
       </body>
     </html>

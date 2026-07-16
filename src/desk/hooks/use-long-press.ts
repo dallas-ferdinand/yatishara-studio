@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
+import { triggerHaptic } from "@/studio/lib/capacitorBridge";
 
 const DEFAULT_DELAY = 450;
 const MOVE_THRESHOLD = 12;
@@ -28,6 +29,7 @@ export function useLongPress(
       clear();
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
+        void triggerHaptic("heavy");
         onLongPress({ x: startRef.current.x, y: startRef.current.y });
       }, delay);
     },

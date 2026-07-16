@@ -5,6 +5,10 @@ import webpush from "web-push";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
+/**
+ * Browser / PWA Web Push only. The Capacitor APK intentionally does not use
+ * FCM; while the app is open it surfaces Convex updates via local notifications.
+ */
 export const sendPushForNotification = internalAction({
   args: { notificationId: v.id("notifications") },
   returns: v.number(),
@@ -16,6 +20,7 @@ export const sendPushForNotification = internalAction({
       console.warn("Web push VAPID env not configured");
       return 0;
     }
+
     webpush.setVapidDetails(subject, publicKey, privateKey);
     const delivery = await ctx.runQuery(internal.notifications.getPushDelivery, {
       notificationId: args.notificationId,
@@ -26,8 +31,10 @@ export const sendPushForNotification = internalAction({
       data: {
         notificationId: args.notificationId,
         kind: delivery.notification.kind,
+        url: delivery.targetPath,
       },
     });
+
     let sent = 0;
     for (const subscription of delivery.subscriptions) {
       try {
