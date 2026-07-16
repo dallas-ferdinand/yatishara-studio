@@ -15,6 +15,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "export": "next build",
+    "check:perf-budgets": "node scripts/check-perf-budgets.mjs",
     "check:launch-env": "node scripts/check-launch-env.mjs",
     "check:launch-env:convex": "node scripts/check-launch-env.mjs --convex",
     "generate:studio-light-wallpapers": "node scripts/generate-studio-light-wallpapers.mjs",

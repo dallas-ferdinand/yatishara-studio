@@ -54,7 +54,9 @@ const folderWithPeeksReturn = v.object({
 
 const PEEK_LIMIT = 3;
 /** Max folders visited per peek (BFS) — finds nested media without deep recursion. */
-const MAX_PEEK_FOLDER_VISITS = 24;
+const MAX_PEEK_FOLDER_VISITS = 8;
+/** Cap signed peeks per listWithPeeks call — more folders get empty peeks to stay under 1s. */
+const MAX_SIGNED_PEEK_FOLDERS = 10;
 
 type PeekCandidate = {
   kind: "image" | "video" | "document" | "element" | "file";
@@ -141,12 +143,13 @@ async function collectDirectFolderPeekCandidates(
   folderId: Id<"folders">,
 ): Promise<PeekCandidate[]> {
   const candidates: PeekCandidate[] = [];
+  const PEEK_COLLECT_CAP = 40;
 
   const assets = (
     await ctx.db
       .query("assets")
       .withIndex("by_folder", (q) => q.eq("folderId", folderId))
-      .collect()
+      .take(PEEK_COLLECT_CAP)
   ).filter((asset) => !asset.deletedAt);
 
   for (const asset of assets) {
@@ -173,7 +176,7 @@ async function collectDirectFolderPeekCandidates(
     await ctx.db
       .query("documents")
       .withIndex("by_folder", (q) => q.eq("folderId", folderId))
-      .collect()
+      .take(PEEK_COLLECT_CAP)
   ).filter((doc) => !doc.deletedAt);
 
   for (const doc of documents) {
@@ -190,7 +193,7 @@ async function collectDirectFolderPeekCandidates(
     await ctx.db
       .query("videoEditProjects")
       .withIndex("by_folder", (q) => q.eq("folderId", folderId))
-      .collect()
+      .take(PEEK_COLLECT_CAP)
   ).filter((project) => !project.deletedAt);
 
   for (const project of videoEdits) {
@@ -207,7 +210,7 @@ async function collectDirectFolderPeekCandidates(
     await ctx.db
       .query("elements")
       .withIndex("by_folder", (q) => q.eq("folderId", folderId))
-      .collect()
+      .take(PEEK_COLLECT_CAP)
   ).filter((element) => !element.deletedAt);
 
   for (const element of elements) {
@@ -336,15 +339,19 @@ export const listWithPeeks = authedQuery({
     const visibleFolders = args.includeDeleted
       ? folders
       : folders.filter((folder) => !folder.deletedAt);
+
+    // Sign peeks for a bounded prefix only — signing every folder BFS blew the 1s budget.
+    const signedCount = args.expiresUnix
+      ? Math.min(visibleFolders.length, MAX_SIGNED_PEEK_FOLDERS)
+      : 0;
+
     return await Promise.all(
-      visibleFolders.map(async (folder) => ({
+      visibleFolders.map(async (folder, index) => ({
         ...folder,
-        peekItems: await collectFolderPeekItems(
-          ctx,
-          ctx.user._id,
-          folder._id,
-          args.expiresUnix,
-        ),
+        peekItems:
+          index < signedCount
+            ? await collectFolderPeekItems(ctx, ctx.user._id, folder._id, args.expiresUnix)
+            : [],
       })),
     );
   },

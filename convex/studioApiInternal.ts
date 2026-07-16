@@ -1821,20 +1821,18 @@ export const countActiveApiGenerations = internalQuery({
   args: { apiKeyId: v.id("apiKeys") },
   returns: v.number(),
   handler: async (ctx, args) => {
-    const jobs = await ctx.db
-      .query("generationJobs")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("apiKeyId"), args.apiKeyId),
-          q.or(
-            q.eq(q.field("stage"), "queued"),
-            q.eq(q.field("stage"), "generating"),
-            q.eq(q.field("stage"), "saving"),
-          ),
-        ),
-      )
-      .collect();
-    return jobs.length;
+    const stages = ["queued", "generating", "saving"] as const;
+    let total = 0;
+    for (const stage of stages) {
+      const rows = await ctx.db
+        .query("generationJobs")
+        .withIndex("by_api_key_and_stage", (q) =>
+          q.eq("apiKeyId", args.apiKeyId).eq("stage", stage),
+        )
+        .take(100);
+      total += rows.length;
+    }
+    return total;
   },
 });
 

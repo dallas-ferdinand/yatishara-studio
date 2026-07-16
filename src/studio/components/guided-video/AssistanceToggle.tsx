@@ -15,7 +15,7 @@ export function AssistanceToggle({ enabled, onChange, disabled }: Props) {
       type="button"
       role="switch"
       className={`studio-composer-circle-btn studio-assist-circle-btn${enabled ? " is-on" : ""}`}
-      title={enabled ? "Assistance on — guides your brief before generate" : "Assistance off"}
+      title={enabled ? "Assistance on. Guides your brief before you generate." : "Assistance off"}
       aria-label="Assistance"
       aria-checked={enabled}
       disabled={disabled}

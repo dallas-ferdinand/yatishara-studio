@@ -48,6 +48,13 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Lint, typecheck, and unit tests
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+      - name: Performance asset budgets
+        run: npm run check:perf-budgets
       - name: Deploy Convex functions
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}

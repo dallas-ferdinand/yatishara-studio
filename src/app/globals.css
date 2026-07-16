@@ -3,7 +3,7 @@
 @import "../mos-css/chat-typography.css";
 @import "../mos-css/chat-ui.css";
 @import "../mos-css/mos-markdown.css";
-@import "katex/dist/katex.min.css";
+/* KaTeX CSS loads on demand with math blocks — see mos-markdown.js */
 @import "../mos-css/chat-motion.css";
 @import "../mos-css/mos-tooltip.css";
 @import "../desk/desk-shell.css";
@@ -264,4 +264,89 @@ body {
   height: 16px;
   object-fit: contain;
   display: block;
+}
+
+/* Boot v2 — white, optically raised, new class names kill stale cached loaders. */
+.ys-boot-v2-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: #ffffff;
+}
+.ys-boot-v2 {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  min-height: 100vh;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  /* Lift stack: bar weight + browser chrome make true center read low */
+  padding: 0 0 12vh;
+  overflow: hidden;
+  margin: 0;
+  background: #ffffff;
+  color: #0f172a;
+}
+.ys-boot-v2-overlay .ys-boot-v2 {
+  min-height: 100%;
+  height: 100%;
+}
+.ys-boot-v2-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  transform: translateY(-10px);
+}
+.ys-boot-v2-logo {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+}
+.ys-boot-v2-logo img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  opacity: 1;
+}
+.ys-boot-v2-wordmark {
+  margin: 14px 0 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  color: rgb(15 23 42 / 0.62);
+  white-space: nowrap;
+}
+.ys-boot-v2-track {
+  margin-top: 22px;
+  width: 112px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.12);
+}
+.ys-boot-v2-bar {
+  height: 100%;
+  width: 38%;
+  border-radius: 999px;
+  background: rgb(15 23 42 / 0.5);
+  animation: ys-boot-v2-bar 1.15s ease-in-out infinite;
+}
+@keyframes ys-boot-v2-bar {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ys-boot-v2-bar {
+    animation: none;
+    width: 40%;
+    margin-inline: auto;
+    opacity: 0.7;
+  }
 }

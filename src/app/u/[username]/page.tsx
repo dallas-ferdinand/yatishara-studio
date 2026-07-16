@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { StudioClientPage } from "@/components/studio-client-page";
+import { PublicProfileClient } from "@/components/public-profile-client";
 
 type PageProps = {
   params: Promise<{ username: string }>;
@@ -20,5 +20,5 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PublicProfilePage({ params }: PageProps) {
   const { username } = await params;
-  return <StudioClientPage initialProfileUsername={username} />;
+  return <PublicProfileClient username={username} />;
 }

@@ -303,7 +303,8 @@ export const adminListCustomers = adminQuery({
     }),
   ),
   handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
+    // Cap admin customer enrichment — full historical N+1 was unbounded.
+    const users = await ctx.db.query("users").order("desc").take(100);
     const rows = await Promise.all(
       users.map(async (user) => {
         const account = await ctx.db
@@ -314,11 +315,12 @@ export const adminListCustomers = adminQuery({
           ? await ctx.db.get(account.activeSubscriptionId)
           : null;
         const plan = subscription ? await ctx.db.get(subscription.planId) : null;
-        const payments = await ctx.db
+        const recentPayments = await ctx.db
           .query("payments")
           .withIndex("by_user", (q) => q.eq("userId", user._id))
-          .collect();
-        const latestPayment = payments.sort((a, b) => b.createdAt - a.createdAt)[0];
+          .order("desc")
+          .take(50);
+        const latestPayment = [...recentPayments].sort((a, b) => b.createdAt - a.createdAt)[0];
         return {
           _id: user._id,
           _creationTime: user._creationTime,
@@ -338,7 +340,7 @@ export const adminListCustomers = adminQuery({
                 currentPeriodEnd: subscription.currentPeriodEnd,
               }
             : undefined,
-          paymentCount: payments.length,
+          paymentCount: recentPayments.length,
           latestPaymentStatus: latestPayment?.status,
         };
       }),

@@ -35,5 +35,9 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: [
+    "/((?!.*\\..*|_next|api/health).*)",
+    "/",
+    "/(api|trpc)((?!/health).*)",
+  ],
 };

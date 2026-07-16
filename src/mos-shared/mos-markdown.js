@@ -490,8 +490,11 @@ async function ensureMermaid() {
 
 async function ensureKatex() {
   if (katexReady) return katexReady;
-  katexReady = import("katex")
-    .then((mod) => mod.default ?? mod)
+  katexReady = Promise.all([
+    import("katex"),
+    import("katex/dist/katex.min.css"),
+  ])
+    .then(([mod]) => mod.default ?? mod)
     .catch(() => null);
   return katexReady;
 }

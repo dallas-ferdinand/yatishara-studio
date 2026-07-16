@@ -760,24 +760,25 @@ function UnifiedTabStripInner({
               <span className="chat-spin shrink-0 pointer-events-none">
                 <Icon name="loader" size={12} />
               </span>
-            ) : (
-              <button
-                type="button"
-                className="cursor-tab-close shrink-0"
-                tabIndex={-1}
-                title="Close tab"
-                aria-label="Close tab"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => onCloseTab(tab, e)}
-                onAuxClick={(e) => {
-                  e.stopPropagation();
-                  onMiddleClose(tab, e);
-                }}
-              >
-                <Icon name="x" size={12} className="pointer-events-none" />
-              </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              className="cursor-tab-close shrink-0"
+              tabIndex={0}
+              title="Close tab"
+              aria-label="Close tab"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={(e) => onCloseTab(tab, e)}
+              onAuxClick={(e) => {
+                e.stopPropagation();
+                onMiddleClose(tab, e);
+              }}
+            >
+              <Icon name="x" size={12} className="pointer-events-none" />
+            </button>
           </div>
         );
       })}

@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BootBackdrop } from "./boot-backdrop";
-import { BrandMark } from "./brand-mark";
+import { StudioBootLoader } from "./studio-boot-loader";
 
 type Props = {
   message?: string;
 };
 
-export function AppLoadingScreen({ message = "Starting…" }: Props) {
+export function AppLoadingScreen({ message: _message }: Props) {
   const [showRecovery, setShowRecovery] = useState(false);
 
   useEffect(() => {
@@ -22,34 +21,22 @@ export function AppLoadingScreen({ message = "Starting…" }: Props) {
       : `${window.location.origin}${window.location.pathname}?resetStudio=1&clearStudioCache=1`;
 
   return (
-    <div className="relative flex h-full flex-col bg-mos-bg">
-      <BootBackdrop />
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-        <BrandMark size={52} />
-        <p
-          className="mt-3 text-[13px] font-semibold tracking-[0.06em] text-mos-text-soft"
-          style={{ fontFamily: "var(--font-bricolage)" }}
-        >
-          Yatishara Studio
-        </p>
-        <div className="mos-slim-progress-track mt-5 h-1 w-32 overflow-hidden rounded-full bg-mos-border">
-          <div className="mos-slim-progress h-full w-2/5 rounded-full bg-mos-accent" />
-        </div>
-        <p className="mt-4 text-[11px] text-mos-muted">{message}</p>
-        {showRecovery ? (
-          <div className="mt-5 flex max-w-[280px] flex-col items-center gap-2 text-center">
-            <p className="text-[11px] leading-5 text-mos-muted">
+    <StudioBootLoader
+      recovery={
+        showRecovery ? (
+          <div className="mt-6 flex max-w-[280px] flex-col items-center gap-2 text-center">
+            <p className="text-[11px] leading-5 opacity-60">
               Still here? Your browser may be holding an old Studio bundle.
             </p>
             <a
-              className="rounded-xl border border-mos-border bg-mos-panel px-4 py-2 text-[12px] font-semibold text-mos-text transition hover:border-mos-accent/50"
+              className="rounded-xl border border-current/15 px-4 py-2 text-[12px] font-semibold opacity-80 transition hover:opacity-100"
               href={resetHref}
             >
               Reset Studio cache
             </a>
           </div>
-        ) : null}
-      </div>
-    </div>
+        ) : null
+      }
+    />
   );
 }

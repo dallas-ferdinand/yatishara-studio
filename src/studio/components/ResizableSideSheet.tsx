@@ -37,23 +37,29 @@ export function ResizableSideSheet({
   panelClassName = "",
   children,
 }) {
-  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1440;
-  const defaultWidth = Math.round(viewportWidth * (defaultSize / 100));
-  const [width, setWidth] = useState(defaultWidth);
+  const defaultWidthRef = useRef(null);
+  if (defaultWidthRef.current == null) {
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1440;
+    defaultWidthRef.current = Math.round(viewportWidth * (defaultSize / 100));
+  }
+  const defaultWidth = defaultWidthRef.current;
+  const [width, setWidth] = useState(() =>
+    typeof window !== "undefined" ? readStoredWidth(autoSaveId, defaultWidth) : defaultWidth,
+  );
   const widthRef = useRef(width);
   const dragRef = useRef(null);
+  const rafRef = useRef(0);
+  const pendingWidthRef = useRef(null);
 
   useEffect(() => {
     widthRef.current = width;
   }, [width]);
 
   useEffect(() => {
-    setWidth(readStoredWidth(autoSaveId, defaultWidth));
-  }, [autoSaveId, defaultWidth]);
-
-  useEffect(() => {
-    writeStoredWidth(autoSaveId, width);
-  }, [autoSaveId, width]);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const getBounds = useCallback(() => {
     const viewport = typeof window !== "undefined" ? window.innerWidth : 1440;
@@ -62,6 +68,16 @@ export function ResizableSideSheet({
       maxPx: Math.round(viewport * (maxSize / 100)),
     };
   }, [maxSize, minSize]);
+
+  const scheduleWidth = useCallback((next) => {
+    pendingWidthRef.current = next;
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      const value = pendingWidthRef.current;
+      if (value != null) setWidth(value);
+    });
+  }, []);
 
   const startResize = useCallback(
     (event) => {
@@ -84,8 +100,8 @@ export function ResizableSideSheet({
       const onMove = (moveEvent) => {
         const drag = dragRef.current;
         if (!drag || moveEvent.pointerId !== drag.pointerId) return;
-        const next = drag.startWidth + (drag.startX - moveEvent.clientX);
-        setWidth(Math.min(drag.maxPx, Math.max(drag.minPx, next)));
+        const next = Math.min(drag.maxPx, Math.max(drag.minPx, drag.startWidth + (drag.startX - moveEvent.clientX)));
+        scheduleWidth(next);
       };
 
       const onUp = (upEvent) => {
@@ -102,6 +118,8 @@ export function ResizableSideSheet({
         handle.removeEventListener("pointermove", onMove);
         handle.removeEventListener("pointerup", onUp);
         handle.removeEventListener("pointercancel", onUp);
+        // Persist once on commit — not every pointer move.
+        writeStoredWidth(autoSaveId, widthRef.current);
       };
 
       document.body.classList.add("is-grabbing-cursor");
@@ -109,14 +127,12 @@ export function ResizableSideSheet({
       handle.addEventListener("pointerup", onUp);
       handle.addEventListener("pointercancel", onUp);
     },
-    [getBounds],
+    [autoSaveId, getBounds, scheduleWidth],
   );
 
   const viewport = typeof window !== "undefined" ? window.innerWidth : 1440;
-  const { minPx, maxPx } = {
-    minPx: Math.round(viewport * (minSize / 100)),
-    maxPx: Math.round(viewport * (maxSize / 100)),
-  };
+  const minPx = Math.round(viewport * (minSize / 100));
+  const maxPx = Math.round(viewport * (maxSize / 100));
   const panelWidth = Math.min(maxPx, Math.max(minPx, width));
 
   return (
@@ -129,7 +145,13 @@ export function ResizableSideSheet({
           aria-orientation="vertical"
           aria-label="Resize panel"
           onPointerDown={startResize}
-        />
+        >
+          <span className="studio-side-sheet-resize-grip" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+        </div>
         <aside className={`studio-settings-floating-panel ${panelClassName}`.trim()}>{children}</aside>
       </div>
     </div>

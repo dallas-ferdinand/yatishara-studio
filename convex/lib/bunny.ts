@@ -66,20 +66,27 @@ export async function putObject(args: {
     args.body instanceof Uint8Array
       ? copyUint8ArrayToArrayBuffer(args.body)
       : args.body;
-  const response = await fetch(
-    `https://${config.storageHost}/${config.zone}/${normalizeStoragePath(args.path)}`,
-    {
-      method: "PUT",
-      headers: {
-        AccessKey: config.accessKey,
-        "Content-Type": args.contentType,
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await fetch(
+      `https://${config.storageHost}/${config.zone}/${normalizeStoragePath(args.path)}`,
+      {
+        method: "PUT",
+        headers: {
+          AccessKey: config.accessKey,
+          "Content-Type": args.contentType,
+        },
+        body,
+        signal: controller.signal,
       },
-      body,
-    },
-  );
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Bunny PUT failed (${response.status}): ${text.slice(0, 300)}`);
+    );
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Bunny PUT failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

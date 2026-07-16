@@ -12,11 +12,12 @@ import {
   UserRound,
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { StudioBootLoader } from "@/components/studio-boot-loader";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { StudioShell } from "./StudioShell";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import {
   STUDIO_AUTH_BACKGROUND_PATHS,
@@ -25,6 +26,30 @@ import {
 import { SCHEMES } from "@/mos-app/theme.js";
 import { useAppearanceMode } from "@/lib/use-appearance-mode";
 import type { AppearanceMode } from "@/lib/brand-assets";
+import { markPerfMilestone } from "@/lib/performance";
+
+type StudioShellBootProps = {
+  initialProfileUsername?: string;
+  onReady?: () => void;
+};
+
+/** Shell chunk loads under the single white boot overlay; signals ready only after mount. */
+const StudioShell = dynamic<StudioShellBootProps>(
+  () =>
+    import("./StudioShell").then((m) => {
+      const Inner = m.StudioShell;
+      return function StudioShellBootGate({ onReady, initialProfileUsername }: StudioShellBootProps) {
+        useEffect(() => {
+          onReady?.();
+        }, [onReady]);
+        return <Inner initialProfileUsername={initialProfileUsername} />;
+      };
+    }),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
 
 const AUTH_BACKGROUND_IMAGES = [...STUDIO_AUTH_BACKGROUND_PATHS];
 
@@ -81,6 +106,20 @@ export function StudioAuthGate({
   const auth = useConvexAuth();
   const currentUser = useQuery(api.users.current, auth?.isAuthenticated ? {} : "skip");
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
+  const [shellReady, setShellReady] = useState(false);
+  const shellReadyRef = useRef(false);
+
+  const markShellReady = useCallback(() => {
+    if (shellReadyRef.current) return;
+    shellReadyRef.current = true;
+    setShellReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!auth?.isLoading && auth?.isAuthenticated) {
+      markPerfMilestone("auth-ready");
+    }
+  }, [auth?.isAuthenticated, auth?.isLoading]);
 
   useEffect(() => {
     if (!auth?.isLoading) {
@@ -91,25 +130,49 @@ export function StudioAuthGate({
     return () => window.clearTimeout(timer);
   }, [auth?.isLoading]);
 
-  if (!auth) {
-    return <StudioPageLoader />;
-  }
-  if (auth.isLoading) {
-    if (authLoadTimedOut) {
-      return <StudioSignIn />;
+  useEffect(() => {
+    if (!auth?.isAuthenticated || currentUser == null) {
+      shellReadyRef.current = false;
+      setShellReady(false);
     }
-    return <StudioPageLoader />;
-  }
-  if (!auth.isAuthenticated) {
-    return <StudioSignIn />;
-  }
-  if (currentUser === undefined) {
-    return <StudioPageLoader />;
-  }
-  if (!currentUser.accountComplete) {
-    return <StudioCompleteAccount currentUser={currentUser} />;
-  }
-  return <StudioShell initialProfileUsername={initialProfileUsername} />;
+  }, [auth?.isAuthenticated, currentUser]);
+
+  const authPending = !auth || auth.isLoading;
+  const userPending = Boolean(auth?.isAuthenticated) && currentUser === undefined;
+  const showSignInScreen =
+    Boolean(auth) && !auth.isAuthenticated && (!auth.isLoading || authLoadTimedOut);
+  const showCompleteAccount =
+    Boolean(auth?.isAuthenticated) &&
+    currentUser != null &&
+    !currentUser.accountComplete;
+  const showShell =
+    Boolean(auth?.isAuthenticated) &&
+    currentUser != null &&
+    Boolean(currentUser.accountComplete);
+
+  // One continuous white boot overlay across auth → user → shell-chunk gates.
+  const showBoot =
+    !showSignInScreen &&
+    !showCompleteAccount &&
+    (authPending || userPending || (showShell && !shellReady));
+
+  return (
+    <>
+      {showBoot ? (
+        <div className="ys-boot-v2-overlay">
+          <StudioBootLoader />
+        </div>
+      ) : null}
+      {showSignInScreen ? <StudioSignIn /> : null}
+      {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
+      {showShell ? (
+        <StudioShell
+          initialProfileUsername={initialProfileUsername}
+          onReady={markShellReady}
+        />
+      ) : null}
+    </>
+  );
 }
 
 function StudioCompleteAccount({
@@ -260,101 +323,6 @@ function splitDisplayNameParts(name: string | undefined): { firstName: string; l
     firstName: parts[0] ?? "",
     lastName: parts.slice(1).join(" "),
   };
-}
-
-function StudioPageLoader() {
-  const appearance = useAppearanceMode();
-  const isLight = appearance === "light";
-
-  return (
-    <main
-      className={`studio-page-loader relative flex min-h-dvh items-center justify-center overflow-hidden${
-        isLight ? " is-light" : " is-dark"
-      }`}
-      aria-busy="true"
-      aria-label="Loading Yatishara Studio"
-    >
-      <style jsx global>{`
-        .studio-page-loader.is-dark {
-          background: #05070c;
-          color: #ffffff;
-        }
-        .studio-page-loader.is-light {
-          background: #eef1f7;
-          color: #0f172a;
-        }
-        @keyframes studio-page-loader-in {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes studio-page-loader-bar {
-          0% { transform: translateX(-120%); }
-          100% { transform: translateX(320%); }
-        }
-        .studio-page-loader-stack {
-          animation: studio-page-loader-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .studio-page-loader-bar {
-          animation: studio-page-loader-bar 1.15s ease-in-out infinite;
-        }
-        .studio-page-loader.is-dark .studio-page-loader-glow {
-          background:
-            radial-gradient(ellipse 58% 42% at 50% 44%, rgba(255,255,255,0.07), transparent 62%),
-            radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.55) 100%);
-        }
-        .studio-page-loader.is-light .studio-page-loader-glow {
-          background:
-            radial-gradient(ellipse 58% 42% at 50% 44%, rgba(255,255,255,0.7), transparent 62%),
-            radial-gradient(ellipse at center, transparent 48%, rgba(15,23,42,0.08) 100%);
-        }
-        .studio-page-loader.is-dark .studio-page-loader-wordmark {
-          color: rgb(255 255 255 / 0.72);
-        }
-        .studio-page-loader.is-light .studio-page-loader-wordmark {
-          color: rgb(15 23 42 / 0.62);
-        }
-        .studio-page-loader.is-dark .studio-page-loader-track {
-          background: rgb(255 255 255 / 0.1);
-        }
-        .studio-page-loader.is-light .studio-page-loader-track {
-          background: rgb(15 23 42 / 0.1);
-        }
-        .studio-page-loader.is-dark .studio-page-loader-bar {
-          background: rgb(255 255 255 / 0.65);
-          box-shadow: 0 0 12px rgba(255,255,255,0.22);
-        }
-        .studio-page-loader.is-light .studio-page-loader-bar {
-          background: rgb(15 23 42 / 0.45);
-          box-shadow: 0 0 12px rgba(15,23,42,0.12);
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .studio-page-loader-stack,
-          .studio-page-loader-bar {
-            animation: none;
-          }
-          .studio-page-loader-bar {
-            transform: none;
-            width: 40%;
-            margin-inline: auto;
-            opacity: 0.7;
-          }
-        }
-      `}</style>
-      <div className="studio-page-loader-glow pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="studio-page-loader-stack relative z-10 flex flex-col items-center px-6">
-        <BrandMark size={56} appearance={appearance} />
-        <p
-          className="studio-page-loader-wordmark mt-4 text-[13px] font-semibold tracking-[0.16em]"
-          style={{ fontFamily: "var(--font-bricolage, ui-sans-serif, system-ui)" }}
-        >
-          Yatishara Studio
-        </p>
-        <div className="studio-page-loader-track mt-6 h-[2px] w-28 overflow-hidden rounded-full">
-          <div className="studio-page-loader-bar h-full w-[38%] rounded-full" />
-        </div>
-      </div>
-    </main>
-  );
 }
 
 type IdentifyContact =

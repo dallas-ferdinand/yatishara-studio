@@ -25,7 +25,12 @@ export const listByFolder = authedQuery({
       .query("documents")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
-    return args.includeDeleted ? docs : docs.filter((doc) => !doc.deletedAt);
+    const visible = args.includeDeleted ? docs : docs.filter((doc) => !doc.deletedAt);
+    // List rows omit body — open/edit loads full markdown via documents.get.
+    return visible.map((doc) => ({
+      ...doc,
+      contentMarkdown: "",
+    }));
   },
 });
 

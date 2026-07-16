@@ -4,7 +4,8 @@ const BASE = "/branding";
 
 /** Light-colored logo for dark backgrounds (default chrome). */
 export const MERCURY_LOGO_SIDEBAR = `${BASE}/yatishara-logo-light-32.webp`;
-export const MERCURY_LOGO_BOOT = `${BASE}/yatishara-logo-light-192.webp`;
+/** Dark-ink logo for the always-light white boot screen. */
+export const MERCURY_LOGO_BOOT = `${BASE}/yatishara-logo-dark-192.webp`;
 
 export type LogoInk = "light" | "dark";
 export type AppearanceMode = "light" | "dark";
@@ -42,7 +43,7 @@ export function mercuryLogoAssets(cssPx: number, appearance?: string | null) {
   };
 }
 
-/** Preload boot/loading logo only (default dark UI → light ink). Don't preload both inks — unused preload warns in Chrome. */
+/** Preload boot logo (dark ink for white loader). */
 export const MERCURY_LOGO_PRELOAD = [
   { href: MERCURY_LOGO_BOOT, type: "image/webp" },
 ] as const;

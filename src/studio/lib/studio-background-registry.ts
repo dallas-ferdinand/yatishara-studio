@@ -81,6 +81,22 @@ export function studioBackgroundCdnBase(): string {
   return raw.replace(/\/$/, "");
 }
 
+/** Viewport/DPR-aware wallpaper transform — keeps visual fidelity without shipping 8K to phones. */
+export function studioBackgroundTransformParams(
+  options?: { width?: number; quality?: number; dpr?: number },
+): string {
+  const dpr =
+    options?.dpr ??
+    (typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 3) : 2);
+  const cssWidth =
+    options?.width ??
+    (typeof window !== "undefined" ? Math.max(window.innerWidth || 1280, 390) : 1920);
+  // Cap source decode size: 2× CSS width up to 2560 logical, never 8192.
+  const width = Math.min(2560, Math.round(cssWidth * Math.max(1, dpr)));
+  const quality = options?.quality ?? (width >= 1920 ? 82 : 78);
+  return `width=${width}&quality=${quality}`;
+}
+
 export function studioBackgroundFilename(
   family: StudioBackgroundFamily,
   themeId: string,
@@ -96,12 +112,12 @@ export function studioBackgroundPath(
   family: StudioBackgroundFamily,
   themeId: string,
   appearance: "light" | "dark",
+  options?: { width?: number; quality?: number; dpr?: number },
 ): string {
   const file = studioBackgroundFilename(family, themeId, appearance);
   const cdn = studioBackgroundCdnBase();
   if (!cdn) return `/${file}`;
-  // Bunny Optimizer Autopilot otherwise downscales ~1600px; pin full fidelity.
-  return `${cdn}/${file}?width=8192&quality=100`;
+  return `${cdn}/${file}?${studioBackgroundTransformParams(options)}`;
 }
 
 /** Resolve wallpaper path; falls back to animated when family assets are missing. */
@@ -121,6 +137,33 @@ export function studioBackgroundCssValue(path: string | null): string {
   return `url("${path}")`;
 }
 
+export type StudioWallpaperPreset = {
+  family: StudioBackgroundFamily;
+  themeId: StudioThemeId;
+  label: string;
+  pathDark: string;
+  pathLight: string;
+};
+
+/** Flat preset catalog for the wallpaper picker (one tile per family×theme). */
+export function listStudioWallpaperPresets(
+  labels: Record<string, string>,
+): StudioWallpaperPreset[] {
+  const presets: StudioWallpaperPreset[] = [];
+  for (const family of STUDIO_BACKGROUND_FAMILIES) {
+    for (const themeId of STUDIO_THEME_IDS) {
+      presets.push({
+        family,
+        themeId,
+        label: labels[themeId] ?? themeId,
+        pathDark: studioBackgroundPath(family, themeId, "dark"),
+        pathLight: studioBackgroundPath(family, themeId, "light"),
+      });
+    }
+  }
+  return presets;
+}
+
 /** All paths for a family (auth carousel, preload). */
 export function studioBackgroundPathsForFamily(family: StudioBackgroundFamily): string[] {
   const paths: string[] = [];
@@ -131,9 +174,9 @@ export function studioBackgroundPathsForFamily(family: StudioBackgroundFamily): 
   return paths;
 }
 
-/** Sign-in carousel — mix of all image families. */
+/** Sign-in carousel — one appearance per family×theme (not both light+dark). */
 export const STUDIO_AUTH_BACKGROUND_PATHS = STUDIO_BACKGROUND_FAMILIES.flatMap((family) =>
-  studioBackgroundPathsForFamily(family),
+  STUDIO_THEME_IDS.map((themeId) => studioBackgroundPath(family, themeId, "dark")),
 );
 
 export function studioThemeIdFromPath(path: string): StudioThemeId {
@@ -178,14 +221,19 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + "var familyPrefix=STUDIO_BG_PREFIX[family];"
     + "var animatedPrefix=STUDIO_BG_PREFIX.animated;"
     + "var file=(familyPrefix||animatedPrefix)+\"-\"+slug+suffix;"
-    + "return STUDIO_BG_CDN?(STUDIO_BG_CDN+\"/\"+file+\"?width=8192&quality=100\"):(\"/\"+file);"
+    + "if(!STUDIO_BG_CDN)return \"/\"+file;"
+    + "var dpr=Math.min((window.devicePixelRatio||1),3);"
+    + "var cssW=Math.max(window.innerWidth||1280,390);"
+    + "var w=Math.min(2560,Math.round(cssW*Math.max(1,dpr)));"
+    + "var q=w>=1920?82:78;"
+    + "return STUDIO_BG_CDN+\"/\"+file+\"?width=\"+w+\"&quality=\"+q;"
     + "}"
     + "function studioBootWallpaperFallback(family,theme,mode){"
     + "var primary=studioBootWallpaper(family,theme,mode);"
     + 'if(family==="animated")return primary;'
     + "return primary||studioBootWallpaper(\"animated\",theme,mode);"
     + "}"
-    + "var wp=studioBootWallpaperFallback(bgFamily,sid,mode);"
+    + "var wp=typeof wpOverride===\"string\"&&wpOverride?wpOverride:studioBootWallpaperFallback(bgFamily,sid,mode);"
     + "if(wp){"
     + 'var u=\'url("\'+wp+\'")\';'
     + 'root.style.setProperty("--studio-active-bg",u);'

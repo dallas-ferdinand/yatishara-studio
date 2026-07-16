@@ -80,6 +80,14 @@ function buildMenuItems(entry, {
     if (
       isFile &&
       entry.studioKind === "asset" &&
+      entry.kind === "image" &&
+      entry.studioId
+    ) {
+      items.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+    }
+    if (
+      isFile &&
+      entry.studioKind === "asset" &&
       (entry.kind === "image" || entry.kind === "video") &&
       entry.studioId
     ) {

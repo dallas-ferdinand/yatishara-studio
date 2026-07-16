@@ -52,12 +52,33 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Content-hashed Next assets — immutable.
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        // Versioned branding / wallpaper files under public/.
+        source: "/branding/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
     ];
   },
   env: {
     NEXT_PUBLIC_DESK_BUILD: DESK_BUILD_ID,
   },
-  // Static export has no /_next/image optimizer — serve public assets directly.
+  // Standalone Docker deploy: CDN (Bunny) handles image transforms for media.
+  // Keep unoptimized so we do not ship duplicate sharp/libvips in the runtime image.
   images: {
     unoptimized: true,
   },

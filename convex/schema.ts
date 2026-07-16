@@ -295,6 +295,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_archived", ["ownerId", "archivedAt"])
+    .index("by_owner_archived_updated", ["ownerId", "archivedAt", "updatedAt"])
     .index("by_folder", ["linkedFolderId"]),
 
   generationEvents: defineTable({
@@ -512,6 +513,10 @@ export default defineSchema({
     skipPromptEnhancement: v.optional(v.boolean()),
     /** Atomic execution claim so duplicate schedules cannot run the provider twice. */
     executionAttemptId: v.optional(v.string()),
+    /** Soft lease deadline for the current execution attempt (watchdog reclaim). */
+    executionLeaseUntil: v.optional(v.number()),
+    /** How many times this job has been claimed for execution. */
+    executionAttemptCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -519,7 +524,8 @@ export default defineSchema({
     .index("by_thread", ["threadId"])
     .index("by_stage", ["stage"])
     .index("by_external_task", ["externalTaskId"])
-    .index("by_owner_and_created", ["ownerId", "createdAt"]),
+    .index("by_owner_and_created", ["ownerId", "createdAt"])
+    .index("by_api_key_and_stage", ["apiKeyId", "stage"]),
 
   generationInputs: defineTable({
     jobId: v.id("generationJobs"),
