@@ -16736,25 +16736,40 @@ function StudioThreadChat({
   const hasEvents = safeEvents.length > 0;
   const displayEvents = compressThreadDisplayEvents(safeEvents);
   const streamRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const userInitials = initialsFromUser(currentUser);
 
   useLayoutEffect(() => {
     const root = streamRef.current;
     if (!root || !displayEvents.length) return undefined;
+
+    const NEAR_BOTTOM_PX = 140;
+    const distanceFromBottom = () =>
+      root.scrollHeight - root.scrollTop - root.clientHeight;
     const scrollToBottom = () => {
       root.scrollTop = root.scrollHeight;
     };
+
+    // New/changed thread tail → pin to bottom once.
+    stickToBottomRef.current = true;
     scrollToBottom();
-    const raf = window.requestAnimationFrame(() => {
-      scrollToBottom();
-      window.requestAnimationFrame(scrollToBottom);
+    const raf = window.requestAnimationFrame(scrollToBottom);
+
+    const onScroll = () => {
+      stickToBottomRef.current = distanceFromBottom() <= NEAR_BOTTOM_PX;
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
+
+    // Content growth (images, review cards) only follows if user stayed pinned.
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) scrollToBottom();
     });
-    const observer = new ResizeObserver(scrollToBottom);
     observer.observe(root);
     const inner = root.querySelector(".studio-chat-stream-inner");
     if (inner) observer.observe(inner);
     return () => {
       window.cancelAnimationFrame(raf);
+      root.removeEventListener("scroll", onScroll);
       observer.disconnect();
     };
   }, [displayEvents.length, assistBusy, displayEvents.at(-1)?._id]);

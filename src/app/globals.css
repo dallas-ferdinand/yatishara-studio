@@ -411,7 +411,7 @@ body {
   display: block;
 }
 
-/* Boot v2 — white, optically raised, new class names kill stale cached loaders. */
+/* Boot v2 — true viewport center (no optical offsets that drift on mobile). */
 .ys-boot-v2-overlay {
   position: fixed;
   inset: 0;
@@ -427,8 +427,7 @@ body {
   width: 100%;
   align-items: center;
   justify-content: center;
-  /* Lift stack: bar weight + browser chrome make true center read low */
-  padding: 0 0 12vh;
+  padding: 0;
   overflow: hidden;
   margin: 0;
   background: #ffffff;
@@ -444,7 +443,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0 24px;
-  transform: translateY(-10px);
+  transform: none;
 }
 .ys-boot-v2-logo {
   width: 48px;

@@ -1,12 +1,8 @@
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { applyStudioBackgroundNow } from "@/studio/lib/studio-background-apply";
 
 export function useStudioBackground() {
-  if (typeof window !== "undefined") {
-    applyStudioBackgroundNow();
-  }
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyStudioBackgroundNow();
 
     const onChange = () => applyStudioBackgroundNow();

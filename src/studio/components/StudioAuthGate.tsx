@@ -131,7 +131,9 @@ export function StudioAuthGate({
   }, [auth?.isLoading]);
 
   useEffect(() => {
-    if (!auth?.isAuthenticated || currentUser == null) {
+    // Only reset on sign-out / missing user — not while currentUser is still loading
+    // (undefined), or the boot overlay can thrash as the shell mounts.
+    if (!auth?.isAuthenticated || currentUser === null) {
       shellReadyRef.current = false;
       setShellReady(false);
     }
@@ -355,7 +357,7 @@ function StudioSignIn() {
     !isWhatsAppCodeStep
       ? 0
       : (step.clientExpiresAt ??
-        Math.min(step.expiresAt, nowMs + WHATSAPP_CODE_TTL_MS));
+        Math.min(step.expiresAt, Date.now() + WHATSAPP_CODE_TTL_MS));
   const whatsAppTimeLeftMs = Math.max(0, whatsAppExpiry - nowMs);
   const whatsAppTimeLeftSeconds = Math.ceil(whatsAppTimeLeftMs / 1000);
   const whatsAppExpired = isWhatsAppCodeStep && whatsAppTimeLeftSeconds <= 0;
@@ -382,17 +384,24 @@ function StudioSignIn() {
     setNowMs(Date.now());
   };
 
+  // Tick once per second while the WhatsApp code is showing.
+  // Do NOT depend on whatsAppExpiry — when clientExpiresAt is missing it was
+  // derived from nowMs, so setNowMs retriggered this effect forever (React #301).
   useEffect(() => {
     if (!isWhatsAppCodeStep) return;
     setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [isWhatsAppCodeStep, whatsAppExpiry]);
+  }, [isWhatsAppCodeStep]);
 
   useEffect(() => {
-    if (step === "identify" || !isWhatsAppCodeStep || step.clientExpiresAt) return;
-    setStep({ ...step, ...withWhatsAppClientExpiry(step) });
-  }, [isWhatsAppCodeStep, step]);
+    if (!isWhatsAppCodeStep) return;
+    setStep((current) => {
+      if (current === "identify" || current.phase !== "whatsapp-code") return current;
+      if (current.clientExpiresAt != null) return current;
+      return { ...current, ...withWhatsAppClientExpiry(current) };
+    });
+  }, [isWhatsAppCodeStep]);
 
   useEffect(() => {
     if (!notice) return;
@@ -1106,9 +1115,10 @@ function formatPhoneInput(value: string) {
   const prefix = digits.slice(3, 6);
   const line = digits.slice(6, 10);
 
-  if (!area) return "";
-  if (area.length < 3) return `+1 (${area}`;
-  if (!prefix) return `+1 (${area})`;
-  if (prefix.length < 3) return `+1 (${area}) ${prefix}`;
-  return `+1 (${area}) ${prefix}${line ? `-${line}` : ""}`;
+  // Progressive formatting: do not force `)` / spaces the user just deleted.
+  // Closing paren appears only once a 4th digit is typed.
+  if (!digits) return "";
+  if (digits.length <= 3) return `+1 (${area}`;
+  if (digits.length <= 6) return `+1 (${area}) ${prefix}`;
+  return `+1 (${area}) ${prefix}-${line}`;
 }
