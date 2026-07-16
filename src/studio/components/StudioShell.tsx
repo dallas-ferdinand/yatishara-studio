@@ -3460,11 +3460,14 @@ export function StudioShell({
           position: relative;
           flex: 0 0 auto;
         }
-        .studio-profile-menu-trigger {
+        .studio-profile-menu-trigger,
+        .studio-mobile-nav-tools .studio-profile-menu-trigger,
+        .cursor-workspace-tools .studio-profile-menu-trigger {
           padding: 0 !important;
           overflow: hidden;
           border: 0 !important;
           box-shadow: none !important;
+          background: transparent !important;
         }
         .studio-profile-menu-avatar,
         .studio-profile-menu-initials {
