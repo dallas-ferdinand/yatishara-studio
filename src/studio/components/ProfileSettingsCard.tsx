@@ -3,6 +3,9 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
   Globe,
   ImagePlus,
   Link2,
@@ -11,9 +14,9 @@ import {
   Phone,
   Plus,
   Trash2,
-  Upload,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -34,6 +37,10 @@ const LINK_TYPES: Array<{ id: ContactLinkType; label: string }> = [
   { id: "other", label: "Other" },
 ];
 
+function linkTypeLabel(type: ContactLinkType) {
+  return LINK_TYPES.find((option) => option.id === type)?.label ?? "Link";
+}
+
 function newLinkDraft(partial?: Partial<ContactLinkDraft>): ContactLinkDraft {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -48,6 +55,102 @@ function LinkTypeIcon({ type }: { type: ContactLinkType }) {
   if (type === "email") return <Mail className="h-3.5 w-3.5" aria-hidden="true" />;
   if (type === "other") return <Link2 className="h-3.5 w-3.5" aria-hidden="true" />;
   return <Globe className="h-3.5 w-3.5" aria-hidden="true" />;
+}
+
+function ProfileLinkTypeMenu({
+  value,
+  onChange,
+}: {
+  value: ContactLinkType;
+  onChange: (type: ContactLinkType) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+  const active = LINK_TYPES.find((option) => option.id === value) ?? LINK_TYPES[0];
+
+  useEffect(() => {
+    if (!open) {
+      setMenuStyle(null);
+      return;
+    }
+    const place = () => {
+      const rect = wrapRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(148, rect.width);
+      let left = rect.left;
+      let top = rect.bottom + 4;
+      if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+      if (top + 180 > window.innerHeight - 8) top = Math.max(8, rect.top - 184);
+      setMenuStyle({ position: "fixed", top, left, width, zIndex: 90 });
+    };
+    place();
+    const onDoc = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="studio-profile-type-menu" ref={wrapRef}>
+      <button
+        type="button"
+        className={`studio-profile-type-trigger${open ? " is-open" : ""}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Link type"
+        onClick={() => setOpen((state) => !state)}
+      >
+        <LinkTypeIcon type={value} />
+        <span>{active.label}</span>
+        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+      </button>
+      {open && menuStyle
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="cursor-tab-context-menu studio-profile-type-popover"
+              style={menuStyle}
+              role="listbox"
+              aria-label="Link type"
+            >
+              {LINK_TYPES.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="option"
+                  aria-selected={option.id === value}
+                  className={`cursor-tab-context-item${option.id === value ? " is-active" : ""}`}
+                  onClick={() => {
+                    onChange(option.id);
+                    setOpen(false);
+                  }}
+                >
+                  <LinkTypeIcon type={option.id} />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
 }
 
 export function ProfileSettingsCard({
@@ -149,7 +252,7 @@ export function ProfileSettingsCard({
           setAvatarBusy(false);
         }
       }
-      setStatus(`Claimed @${result.username}`);
+      setStatus(`@${result.username} claimed`);
     } catch (err) {
       setError(friendlyConvexError(err, "Could not claim username"));
     } finally {
@@ -168,9 +271,15 @@ export function ProfileSettingsCard({
         displayName,
         bio,
         isPublic,
-        contactLinks: links.map(({ type, label, value }) => ({ type, label, value })),
+        contactLinks: links
+          .filter((link) => link.value.trim())
+          .map(({ type, label, value }) => ({
+            type,
+            label: label.trim() || linkTypeLabel(type),
+            value: value.trim(),
+          })),
       });
-      setStatus("Profile saved");
+      setStatus("Saved");
     } catch (err) {
       setError(friendlyConvexError(err, "Could not save profile"));
     } finally {
@@ -190,7 +299,6 @@ export function ProfileSettingsCard({
     setAvatarPreview(URL.createObjectURL(file));
     if (!profile) {
       setPendingAvatarFile(file);
-      setStatus("Photo ready — claim your username to save it");
       return;
     }
     setAvatarBusy(true);
@@ -198,10 +306,10 @@ export function ProfileSettingsCard({
     void uploadAvatarFile(file)
       .then(() => {
         setPendingAvatarFile(null);
-        setStatus("Avatar updated");
+        setStatus("Photo updated");
       })
       .catch((err) => {
-        setError(friendlyConvexError(err, "Could not update avatar"));
+        setError(friendlyConvexError(err, "Could not update photo"));
       })
       .finally(() => setAvatarBusy(false));
   }
@@ -217,9 +325,9 @@ export function ProfileSettingsCard({
     try {
       await updateMine({ avatarAssetId: null });
       setAvatarPreview(undefined);
-      setStatus("Avatar removed");
+      setStatus("Photo removed");
     } catch (err) {
-      setError(friendlyConvexError(err, "Could not remove avatar"));
+      setError(friendlyConvexError(err, "Could not remove photo"));
     } finally {
       setAvatarBusy(false);
     }
@@ -229,302 +337,267 @@ export function ProfileSettingsCard({
     if (!publicUrl) return;
     try {
       await navigator.clipboard?.writeText(publicUrl);
-      setStatus("Profile link copied");
+      setStatus("Link copied");
     } catch {
       setError("Could not copy link");
     }
   }
 
-  const avatarBlock = (
-    <section className="cursor-settings-section studio-account-card studio-profile-card">
-      <div className="studio-profile-photo-block">
-        <div className="studio-profile-photo-copy">
-          <strong>Profile photo</strong>
-          <p>Shown at the top center of your public profile</p>
-        </div>
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      hidden
+      onChange={handleAvatarPick}
+    />
+  );
+
+  const avatarButton = (
+    <div className="studio-profile-photo">
+      <button
+        type="button"
+        className="studio-profile-photo-drop"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={avatarBusy || (!!profile && !rootFolderId)}
+        aria-label={avatarPreview ? "Change photo" : "Add photo"}
+      >
+        {avatarPreview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarPreview} alt="" className="studio-profile-avatar-img" />
+        ) : (
+          <span className="studio-profile-photo-empty">
+            {avatarBusy ? (
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+            ) : (
+              <ImagePlus className="h-5 w-5" aria-hidden="true" />
+            )}
+          </span>
+        )}
+        {avatarPreview && avatarBusy ? (
+          <span className="studio-profile-avatar-overlay is-busy">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </span>
+        ) : null}
+      </button>
+      {avatarPreview ? (
         <button
           type="button"
-          className="studio-profile-photo-drop"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={avatarBusy || (!!profile && !rootFolderId)}
-          aria-label="Upload profile photo"
+          className="studio-profile-photo-clear"
+          aria-label="Remove photo"
+          onClick={() => void clearAvatar()}
+          disabled={avatarBusy}
         >
-          {avatarPreview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatarPreview} alt="" className="studio-profile-avatar-img" />
-          ) : (
-            <span className="studio-profile-photo-empty">
-              <ImagePlus className="h-5 w-5" aria-hidden="true" />
-              <em>Add photo</em>
-            </span>
-          )}
-          <span className="studio-profile-avatar-overlay">
-            {avatarBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          </span>
+          <Trash2 className="h-3 w-3" aria-hidden="true" />
         </button>
-        <div className="studio-profile-avatar-actions">
-          <button
-            type="button"
-            className="cursor-settings-action"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={avatarBusy || (!!profile && !rootFolderId)}
-          >
-            {avatarPreview ? "Change photo" : "Upload photo"}
-          </button>
-          {avatarPreview ? (
-            <button
-              type="button"
-              className="cursor-settings-action"
-              onClick={() => void clearAvatar()}
-              disabled={avatarBusy}
-            >
-              Remove
-            </button>
-          ) : null}
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={handleAvatarPick}
-        />
-      </div>
-    </section>
+      ) : null}
+    </div>
   );
 
   if (profile === undefined) {
     return (
-      <section className="cursor-settings-section studio-account-card studio-profile-card">
-        <p className="studio-settings-empty">Loading profile…</p>
+      <section className="cursor-settings-section studio-account-card studio-profile-editor">
+        <p className="studio-settings-empty">Loading…</p>
       </section>
     );
   }
 
   if (profile === null) {
     return (
-      <div className="studio-settings-stack studio-profile-stack">
-        {avatarBlock}
-        <section className="cursor-settings-section studio-account-card studio-profile-card">
-          <div className="studio-profile-intro">
-            <h3>Claim your public profile</h3>
-            <p>
-              Pick a username. People open <code>/u/yourname</code> as a Studio tab.
-            </p>
-          </div>
-          <form className="studio-account-fields" onSubmit={(event) => void handleClaim(event)}>
-            <label>
-              <span>Username</span>
-              <div className="studio-profile-username-field">
-                <span className="studio-profile-username-prefix">@</span>
+      <section className="cursor-settings-section studio-account-card studio-profile-editor">
+        {fileInput}
+        <form className="studio-profile-form" onSubmit={(event) => void handleClaim(event)}>
+          <div className="studio-profile-identity">
+            {avatarButton}
+            <div className="studio-profile-identity-fields">
+              <label>
+                <span>Username</span>
+                <div className="studio-profile-username-field">
+                  <span className="studio-profile-username-prefix">@</span>
+                  <input
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value.toLowerCase())}
+                    placeholder="yourname"
+                    autoComplete="off"
+                    spellCheck={false}
+                    required
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Display name</span>
                 <input
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value.toLowerCase())}
-                  placeholder="yourname"
-                  autoComplete="off"
-                  spellCheck={false}
-                  required
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  placeholder={displayNameHint || "Your name"}
                 />
-              </div>
-            </label>
+              </label>
+            </div>
+          </div>
+          {error ? <p className="studio-profile-status is-error">{error}</p> : null}
+          {status ? <p className="studio-profile-status">{status}</p> : null}
+          <div className="studio-profile-footer">
+            <button type="submit" className="studio-account-save" disabled={busy || !username.trim()}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+              Claim username
+            </button>
+          </div>
+        </form>
+      </section>
+    );
+  }
+
+  return (
+    <section className="cursor-settings-section studio-account-card studio-profile-editor">
+      {fileInput}
+      <form className="studio-profile-form" onSubmit={(event) => void handleSave(event)}>
+        <div className="studio-profile-identity">
+          {avatarButton}
+          <div className="studio-profile-identity-fields">
             <label>
               <span>Display name</span>
               <input
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder={displayNameHint || "How your name appears"}
+                maxLength={48}
+                placeholder="Your name"
               />
             </label>
-            {error ? <p className="studio-profile-status is-error">{error}</p> : null}
-            {status ? <p className="studio-profile-status">{status}</p> : null}
-            <div className="studio-account-actions">
-              <button type="submit" className="studio-account-save" disabled={busy || !username.trim()}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-                Claim username
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
-    );
-  }
-
-  return (
-    <div className="studio-settings-stack studio-profile-stack">
-      {avatarBlock}
-
-      <section className="cursor-settings-section studio-account-card studio-profile-card">
-        <form className="studio-account-fields" onSubmit={(event) => void handleSave(event)}>
-          <label>
-            <span>Username</span>
-            <div className="studio-profile-username-field">
-              <span className="studio-profile-username-prefix">@</span>
-              <input value={profile.username} readOnly />
-            </div>
-          </label>
-          <label>
-            <span>Display name</span>
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              maxLength={48}
-            />
-          </label>
-          <label>
-            <span>Bio</span>
-            <textarea
-              value={bio}
-              onChange={(event) => setBio(event.target.value)}
-              maxLength={160}
-              rows={3}
-              placeholder="A short line about your work"
-            />
-            <em className="studio-profile-char-count">{bio.length}/160</em>
-          </label>
-
-          <div className="studio-profile-public-row">
-            <div>
-              <strong>Public profile</strong>
-              <p>When on, anyone with your link can view posts you share</p>
-            </div>
-            <button
-              type="button"
-              className={`studio-audio-switch ${isPublic ? "is-on" : ""}`}
-              role="switch"
-              aria-checked={isPublic}
-              aria-label="Toggle public profile"
-              onClick={() => setIsPublic((value) => !value)}
-            />
-          </div>
-
-          <div className="studio-profile-links-block">
-            <div className="studio-profile-links-head">
-              <strong>Contact & links</strong>
+            <div className="studio-profile-handle-row">
+              <div className="studio-profile-username-field is-readonly">
+                <span className="studio-profile-username-prefix">@</span>
+                <input value={profile.username} readOnly tabIndex={-1} />
+              </div>
               <button
                 type="button"
-                className="cursor-settings-action"
-                onClick={() => setLinks((current) => [...current, newLinkDraft()])}
-                disabled={links.length >= 8}
+                className="studio-profile-icon-btn"
+                aria-label="Copy profile link"
+                title="Copy link"
+                onClick={() => void copyPublicUrl()}
               >
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                Add
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="studio-profile-icon-btn"
+                aria-label="Open profile"
+                title="Open profile"
+                onClick={() => onOpenPublicProfile?.(profile.username)}
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
-            {links.length === 0 ? (
-              <p className="studio-settings-empty">Optional websites, phone, email, or other links.</p>
-            ) : (
-              <div className="studio-profile-links-list">
-                {links.map((link, index) => (
-                  <div key={link.id} className="studio-profile-link-row">
-                    <label className="studio-profile-link-type">
-                      <span>Type</span>
-                      <div className="studio-profile-link-type-control">
-                        <LinkTypeIcon type={link.type} />
-                        <select
-                          value={link.type}
-                          onChange={(event) => {
-                            const type = event.target.value as ContactLinkType;
-                            setLinks((current) =>
-                              current.map((item, i) => (i === index ? { ...item, type } : item)),
-                            );
-                          }}
-                        >
-                          {LINK_TYPES.map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </label>
-                    <label>
-                      <span>Label</span>
-                      <input
-                        value={link.label}
-                        onChange={(event) => {
-                          const label = event.target.value;
-                          setLinks((current) =>
-                            current.map((item, i) => (i === index ? { ...item, label } : item)),
-                          );
-                        }}
-                        placeholder="Portfolio"
-                      />
-                    </label>
-                    <label>
-                      <span>Value</span>
-                      <input
-                        value={link.value}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          setLinks((current) =>
-                            current.map((item, i) => (i === index ? { ...item, value } : item)),
-                          );
-                        }}
-                        placeholder={
-                          link.type === "phone"
-                            ? "+1 868 …"
-                            : link.type === "email"
-                              ? "you@studio.com"
-                              : "https://"
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="studio-profile-link-remove"
-                      aria-label="Remove link"
-                      onClick={() =>
-                        setLinks((current) => current.filter((_, i) => i !== index))
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {error ? <p className="studio-profile-status is-error">{error}</p> : null}
-          {status ? (
-            <p className="studio-profile-status">
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-              {status}
-            </p>
-          ) : null}
-
-          <div className="studio-account-actions">
-            <button type="submit" className="studio-account-save" disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              Save profile
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="cursor-settings-section studio-account-card studio-profile-card">
-        <div className="studio-profile-share-row">
-          <div>
-            <strong>Your public link</strong>
-            <p>{publicUrl || profile.publicUrlPath}</p>
-          </div>
-          <div className="studio-profile-share-actions">
-            <button type="button" className="cursor-settings-action" onClick={() => void copyPublicUrl()}>
-              Copy link
-            </button>
-            <button
-              type="button"
-              className="cursor-settings-action"
-              onClick={() => onOpenPublicProfile?.(profile.username)}
-            >
-              Open tab
-            </button>
           </div>
         </div>
-        <p className="studio-profile-hint">
-          Right-click or long-press any image or video in the explorer → Share to profile.
-        </p>
-      </section>
-    </div>
+
+        <label>
+          <span>Bio</span>
+          <textarea
+            value={bio}
+            onChange={(event) => setBio(event.target.value)}
+            maxLength={160}
+            rows={2}
+            placeholder="A short bio"
+          />
+        </label>
+
+        <div className="studio-profile-public-row">
+          <span>Public profile</span>
+          <button
+            type="button"
+            className={`studio-audio-switch ${isPublic ? "is-on" : ""}`}
+            role="switch"
+            aria-checked={isPublic}
+            aria-label="Public profile"
+            onClick={() => setIsPublic((value) => !value)}
+          />
+        </div>
+
+        <div className="studio-profile-links-block">
+          <div className="studio-profile-links-head">
+            <span>Links</span>
+            <button
+              type="button"
+              className="studio-profile-text-btn"
+              disabled={links.length >= 8}
+              onClick={() => setLinks((current) => [...current, newLinkDraft()])}
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add
+            </button>
+          </div>
+          {links.length > 0 ? (
+            <div className="studio-profile-links-list">
+              {links.map((link, index) => (
+                <div key={link.id} className="studio-profile-link-row">
+                  <ProfileLinkTypeMenu
+                    value={link.type}
+                    onChange={(type) => {
+                      setLinks((current) =>
+                        current.map((item, i) =>
+                          i === index
+                            ? {
+                                ...item,
+                                type,
+                                label:
+                                  !item.label.trim() || item.label === linkTypeLabel(item.type)
+                                    ? linkTypeLabel(type)
+                                    : item.label,
+                              }
+                            : item,
+                        ),
+                      );
+                    }}
+                  />
+                  <input
+                    className="studio-profile-link-value"
+                    value={link.value}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setLinks((current) =>
+                        current.map((item, i) => (i === index ? { ...item, value } : item)),
+                      );
+                    }}
+                    placeholder={
+                      link.type === "phone"
+                        ? "Phone number"
+                        : link.type === "email"
+                          ? "Email"
+                          : "https://"
+                    }
+                    aria-label="Link value"
+                  />
+                  <button
+                    type="button"
+                    className="studio-profile-icon-btn"
+                    aria-label="Remove link"
+                    onClick={() =>
+                      setLinks((current) => current.filter((_, i) => i !== index))
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        {error ? <p className="studio-profile-status is-error">{error}</p> : null}
+        {status ? (
+          <p className="studio-profile-status">
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            {status}
+          </p>
+        ) : null}
+
+        <div className="studio-profile-footer">
+          <button type="submit" className="studio-account-save" disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            Save
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }

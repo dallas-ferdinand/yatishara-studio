@@ -106,7 +106,7 @@
   flex-shrink: 0;
   position: relative;
   z-index: 260;
-  isolation: isolate;
+  isolation: auto;
   pointer-events: auto;
 }
 
@@ -175,7 +175,18 @@
   height: 36px;
   min-width: 36px;
   min-height: 36px;
-  border-radius: 999px;
+  border-radius: 999px !important;
+}
+.studio-panel-close:hover,
+.studio-panel-close:active,
+.studio-panel-close:focus-visible,
+.cursor-icon-btn.studio-panel-close:hover,
+.cursor-icon-btn.studio-panel-close:active,
+.cursor-icon-btn.studio-panel-close:focus-visible,
+.cursor-icon-btn-sm.studio-panel-close:hover,
+.cursor-icon-btn-sm.studio-panel-close:active,
+.cursor-icon-btn-sm.studio-panel-close:focus-visible {
+  border-radius: 999px !important;
 }
 .studio-panel-close svg,
 .cursor-icon-btn.studio-panel-close svg,
@@ -845,6 +856,46 @@
   background: color-mix(in srgb, var(--mos-text-bright, #fff) 6%, transparent);
   /* Soft breathe instead of fast shimmer — less “blinking grid” */
   animation: desk-thumb-breathe 1.8s ease-in-out infinite;
+}
+
+.desk-file-thumb-skeleton--spinner {
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, transparent);
+}
+
+.desk-file-thumb-skeleton--spinner::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--mos-text-bright, #fff) 18%, transparent);
+  border-top-color: color-mix(in srgb, var(--mos-text-bright, #fff) 72%, transparent);
+  animation: desk-thumb-spin 0.85s linear infinite;
+}
+
+.desk-file-thumb-video-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.desk-file-thumb-video-wrap video {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.desk-file-thumb-video-wrap.is-ready video {
+  opacity: 1;
+}
+
+@keyframes desk-thumb-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes desk-thumb-breathe {
@@ -1823,7 +1874,7 @@
   margin: 0 -2px;
   padding: 0;
   border: none;
-  border-radius: var(--cursor-radius-xs);
+  border-radius: 999px;
   background: transparent;
   opacity: 1;
   color: var(--color-cursor-muted);
@@ -6989,7 +7040,8 @@
   gap: 0;
   position: relative;
   z-index: 240;
-  isolation: isolate;
+  /* isolation:isolate creates a containing group and blanks backdrop-filter glass */
+  isolation: auto;
 }
 .cursor-workspace-tools {
   position: relative;
@@ -7174,6 +7226,7 @@
   margin: 0;
   width: 22px;
   height: 22px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -8369,24 +8422,55 @@
    Do NOT add backdrop-filter in StudioShell.tsx styled-jsx.
    ═══════════════════════════════════════════════════════════ */
 
-/* --- mobile bottom nav --- */
+/* --- mobile bottom nav — dark/white overlay (never fully transparent) --- */
 .studio-mobile-bottom-nav {
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
+  background: var(
+    --studio-mobile-chrome-glass-foot,
+    color-mix(in srgb, #05080f 88%, transparent)
+  ) !important;
+  -webkit-backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  transform: none !important;
+  filter: none !important;
+  isolation: auto !important;
+  contain: none !important;
 }
 
-/* --- panel heads --- */
-.studio-polish .cursor-panel-head {
-  background: transparent !important;
-  -webkit-backdrop-filter: blur(28px) saturate(1.2);
-  backdrop-filter: blur(28px) saturate(1.2);
+/* --- panel heads / workspace header — same overlay on every tab --- */
+.studio-polish .cursor-panel-head,
+.studio-polish .cursor-workspace-head {
+  background: var(
+    --studio-mobile-chrome-glass,
+    color-mix(in srgb, #05080f 88%, transparent)
+  ) !important;
+  -webkit-backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  transform: none !important;
+  filter: none !important;
+  isolation: auto !important;
+  contain: none !important;
+}
+
+[data-appearance="light"] .studio-mobile-bottom-nav {
+  background: var(
+    --studio-mobile-chrome-glass-foot,
+    color-mix(in srgb, #ffffff 84%, transparent)
+  ) !important;
+}
+
+[data-appearance="light"] .studio-polish .cursor-panel-head,
+[data-appearance="light"] .studio-polish .cursor-workspace-head {
+  background: var(
+    --studio-mobile-chrome-glass,
+    color-mix(in srgb, #ffffff 84%, transparent)
+  ) !important;
 }
 
 /* --- explorer panels, tree rows, pills, icon buttons --- */
-.studio-polish :where(.cursor-panel-head, .cursor-explorer-panel, .cursor-icon-btn) {
+.studio-polish :where(.cursor-explorer-panel, .cursor-icon-btn) {
   background: transparent !important;
-  -webkit-backdrop-filter: blur(22px) saturate(1.16);
-  backdrop-filter: blur(22px) saturate(1.16);
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
 }
 
 .studio-polish .studio-credit-pill:hover:not(:disabled) {
@@ -8928,81 +9012,62 @@
 
 .studio-assist-review-title {
   margin: 0;
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
 }
 
-.studio-assist-ref-grid {
+.studio-assist-review-mode-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex: 0 0 auto;
+  margin-top: 0.05rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.studio-assist-review-mode-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.studio-assist-ref-circles {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.studio-assist-ref-tile {
-  display: flex;
-  align-items: center;
   gap: 0.4rem;
-  min-width: 0;
-  max-width: min(13rem, 100%);
-  padding: 0.3rem 0.45rem 0.3rem 0.3rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.7rem;
-  background: rgba(255, 255, 255, 0.04);
 }
 
-.studio-assist-ref-media {
-  position: relative;
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: 0 0 2.5rem;
-  border-radius: 0.55rem;
+.studio-assist-ref-circle {
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: 0 0 2.35rem;
+  border-radius: 999px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.studio-assist-ref-media img {
+.studio-assist-ref-circle img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.studio-assist-ref-fallback {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  font-size: 1.1rem;
-  font-weight: 700;
-  opacity: 0.55;
-}
-
-.studio-assist-ref-meta {
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.studio-assist-ref-role {
-  font-size: 0.65rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.65;
-}
-
-.studio-assist-ref-name {
-  font-size: 0.78rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.92;
 }
 
 .studio-assist-style-pill,
@@ -9020,13 +9085,48 @@
 
 .studio-assist-setting-chip {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.35rem;
   padding: 0.28rem 0.55rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.05);
   font-size: 0.78rem;
+}
+
+.studio-assist-setting-chip.is-select {
+  padding-right: 0.35rem;
+}
+
+.studio-assist-setting-chip.is-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background-color: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  padding: 0 0.85rem 0 0;
+  margin: 0;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 0.35rem) 0.45rem,
+    calc(100% - 0.1rem) 0.45rem;
+  background-size: 0.28rem 0.28rem, 0.28rem 0.28rem;
+  background-repeat: no-repeat;
+  opacity: 0.92;
+}
+
+.studio-assist-setting-chip.is-select select:focus-visible {
+  outline: none;
+}
+
+.studio-assist-setting-chip.is-disabled,
+.studio-assist-setting-chip.is-select select:disabled {
+  opacity: 0.72;
+  cursor: default;
 }
 
 .studio-assist-setting-chip em {

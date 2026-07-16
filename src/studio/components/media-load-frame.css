@@ -1,0 +1,102 @@
+.media-load-frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.media-load-frame.ratio-fill {
+  width: 100%;
+  height: 100%;
+}
+
+.media-load-frame.ratio-square:not(.is-ready),
+.media-load-frame.ratio-image:not(.is-ready) {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+}
+
+.media-load-frame.ratio-video:not(.is-ready) {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+.media-load-frame.ratio-video-portrait:not(.is-ready) {
+  aspect-ratio: 9 / 16;
+  width: min(100%, 420px);
+  max-height: 100%;
+}
+
+.media-load-frame.is-ready.ratio-square,
+.media-load-frame.is-ready.ratio-image,
+.media-load-frame.is-ready.ratio-video,
+.media-load-frame.is-ready.ratio-video-portrait {
+  aspect-ratio: auto;
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  background: transparent;
+}
+
+.media-load-frame.ratio-fill.is-ready {
+  width: 100%;
+  height: 100%;
+}
+
+.media-load-frame-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: color-mix(in srgb, #000 22%, transparent);
+}
+
+.media-load-frame-spinner {
+  width: 22px;
+  height: 22px;
+  color: color-mix(in srgb, #fff 62%, transparent);
+  animation: media-load-frame-spin 0.85s linear infinite;
+}
+
+.media-load-frame img,
+.media-load-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+/* Cached media: if browser already decoded, avoid blank flash after ready */
+.media-load-frame.is-ready img,
+.media-load-frame.is-ready video {
+  opacity: 1;
+}
+
+/* Intrinsic media (chat / viewer) after decode */
+.media-load-frame.is-ready:not(.ratio-fill) img,
+.media-load-frame.is-ready:not(.ratio-fill) video {
+  height: auto;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+@keyframes media-load-frame-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-load-frame-spinner {
+    animation: none;
+  }
+
+  .media-load-frame img,
+  .media-load-frame video {
+    transition: none;
+  }
+}

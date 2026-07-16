@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FileText, ImageIcon, Sparkles, Video } from "lucide-react";
 import { ChatAssistAvatar, ChatMessageRow } from "./ChatMessageAvatars";
 
 type BriefPayload = {
@@ -52,10 +53,18 @@ export type ReviewReference = {
   kind?: string;
 };
 
+export type ProductionPatch = {
+  aspectRatio?: string;
+  resolution?: string;
+  quality?: string;
+  durationSeconds?: number;
+};
+
 type Props = {
   mode?: "image" | "video" | "script" | "element";
   videoType?: string;
   status?: string;
+  expired?: boolean;
   message?: string;
   payload: BriefPayload;
   warnings?: string[];
@@ -68,6 +77,7 @@ type Props = {
   readOnly?: boolean;
   busy?: boolean;
   onApprove?: () => Promise<void> | void;
+  onPatchProduction?: (patch: ProductionPatch) => Promise<void> | void;
 };
 
 function displayValue(value: unknown) {
@@ -88,10 +98,56 @@ function roleLabel(role: string) {
   return map[role] ?? role.replace(/_/g, " ");
 }
 
+const ASPECT_OPTIONS = ["16:9", "9:16", "1:1", "4:5", "4:3", "3:4", "21:9"];
+const IMAGE_RESOLUTION_OPTIONS = ["1K", "2K", "4K"];
+const IMAGE_QUALITY_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+const VIDEO_RESOLUTION_OPTIONS = [
+  { value: "854x480", label: "480p" },
+  { value: "1280x720", label: "720p" },
+  { value: "1920x1080", label: "1080p" },
+];
+
+function SettingSelect({
+  label,
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <label className={`studio-assist-setting-chip is-select${disabled ? " is-disabled" : ""}`}>
+      <em>{label}</em>
+      <select
+        value={value}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function AssistanceReviewCard({
   mode = "video",
   videoType,
   status,
+  expired = false,
   payload,
   warnings = [],
   estimatedCredits,
@@ -103,8 +159,10 @@ export function AssistanceReviewCard({
   readOnly,
   busy,
   onApprove,
+  onPatchProduction,
 }: Props) {
   const [error, setError] = useState("");
+  const [patchBusy, setPatchBusy] = useState(false);
 
   async function approve() {
     if (!onApprove) return;
@@ -116,28 +174,24 @@ export function AssistanceReviewCard({
     }
   }
 
-  const productionRows = (
-    mode === "video"
-      ? [
-          [
-            "Duration",
-            payload.production?.durationSeconds
-              ? `${payload.production.durationSeconds}s`
-              : undefined,
-          ],
-          ["Format", payload.production?.aspectRatio],
-          ["Resolution", payload.production?.resolution],
-        ]
-      : mode === "image"
-        ? [
-            ["Format", payload.production?.aspectRatio],
-            ["Resolution", payload.production?.resolution],
-            ["Quality", payload.production?.quality],
-          ]
-        : mode === "script"
-          ? [["Script type", payload.production?.scriptType]]
-          : [["Element type", payload.production?.elementType]]
-  ).filter(([, value]) => value != null && value !== "");
+  async function patchProduction(next: ProductionPatch) {
+    if (!onPatchProduction || readOnly || patchBusy) return;
+    setError("");
+    setPatchBusy(true);
+    try {
+      await onPatchProduction(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update settings.");
+    } finally {
+      setPatchBusy(false);
+    }
+  }
+
+  const canEditSettings = Boolean(onPatchProduction) && !readOnly && !expired;
+  const aspectRatio = payload.production?.aspectRatio || "1:1";
+  const resolution = payload.production?.resolution || (mode === "image" ? "2K" : "1280x720");
+  const quality = payload.production?.quality || "medium";
+  const durationSeconds = payload.production?.durationSeconds ?? 8;
 
   const summaryRows = [
     ["Offer", payload.offer || payload.brand?.offerText],
@@ -155,8 +209,10 @@ export function AssistanceReviewCard({
   );
   const hasStyleSheet = Boolean(styleSheetLabel && styleSheetLabel !== "None");
   const visualRefs = references.filter(
-    (ref) => ref.thumbnailUrl || ref.mediaUrl || ref.label,
+    (ref) => ref.thumbnailUrl || ref.mediaUrl,
   );
+  const ModeIcon =
+    mode === "image" ? ImageIcon : mode === "video" ? Video : mode === "script" ? FileText : Sparkles;
   const modeTitle =
     mode === "image"
       ? "Image"
@@ -171,56 +227,42 @@ export function AssistanceReviewCard({
     payload.subject?.trim() ||
     payload.offer?.trim() ||
     payload.keyMessage?.trim() ||
-    `Ready to create your ${modeTitle.toLowerCase()}`;
+    modeTitle;
 
   return (
     <ChatMessageRow role="assistant" avatar={<ChatAssistAvatar />}>
     <article className="studio-assist-card studio-assist-review-card" aria-live="polite">
       <header className="studio-assist-review-hero">
-        <p className="studio-chat-kicker">Ready to create</p>
-        <h3 className="studio-assist-review-title">{headline}</h3>
+        <h3 className="studio-assist-review-title">
+          <span className="studio-assist-review-mode-icon" aria-hidden="true">
+            <ModeIcon size={20} strokeWidth={2.25} />
+          </span>
+          <span>{headline}</span>
+        </h3>
       </header>
 
-      {visualRefs.length || hasStyleSheet ? (
+      {visualRefs.length || hasStyleSheet || referenceSummary.length ? (
         <section className="studio-assist-review-section studio-assist-review-visuals">
-          <p className="studio-assist-section-label">
-            {visualRefs.length
-              ? `${visualRefs.length} visual ${visualRefs.length === 1 ? "reference" : "references"}`
-              : "Style"}
-          </p>
           {visualRefs.length ? (
-            <ul className="studio-assist-ref-grid">
+            <ul className="studio-assist-ref-circles" aria-label="References">
               {visualRefs.map((ref, index) => {
                 const thumb = ref.thumbnailUrl || ref.mediaUrl;
                 const key = `${ref.role}-${ref.label}-${index}`;
                 return (
-                  <li key={key} className="studio-assist-ref-tile">
-                    <div className="studio-assist-ref-media">
-                      {thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt="" loading="lazy" />
-                      ) : (
-                        <span className="studio-assist-ref-fallback" aria-hidden="true">
-                          {roleLabel(ref.role).slice(0, 1)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="studio-assist-ref-meta">
-                      <span className="studio-assist-ref-role">{roleLabel(ref.role)}</span>
-                      <span className="studio-assist-ref-name" title={ref.label}>
-                        {ref.label}
-                      </span>
-                    </div>
+                  <li key={key} className="studio-assist-ref-circle" title={`${roleLabel(ref.role)}${ref.label ? `: ${ref.label}` : ""}`}>
+                    {thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumb} alt="" loading="lazy" />
+                    ) : (
+                      <span aria-hidden="true">{roleLabel(ref.role).slice(0, 1)}</span>
+                    )}
                   </li>
                 );
               })}
             </ul>
           ) : null}
           {hasStyleSheet ? (
-            <p className="studio-assist-style-pill">Style sheet · {styleSheetLabel}</p>
-          ) : null}
-          {!visualRefs.length && referenceSummary.length ? (
-            <p className="studio-assist-ref-fallback-text">{referenceSummary.join(" · ")}</p>
+            <p className="studio-assist-style-pill">Style · {styleSheetLabel}</p>
           ) : null}
         </section>
       ) : null}
@@ -238,16 +280,83 @@ export function AssistanceReviewCard({
         </section>
       ) : null}
 
-      {productionRows.length ? (
+      {mode === "image" || mode === "video" || mode === "script" || mode === "element" ? (
         <section className="studio-assist-review-section">
-          <p className="studio-assist-section-label">Settings</p>
           <div className="studio-assist-settings-chips">
-            {productionRows.map(([label, value]) => (
-              <span key={String(label)} className="studio-assist-setting-chip">
-                <em>{label}</em>
-                {displayValue(value)}
+            {mode === "image" || mode === "video" ? (
+              <SettingSelect
+                label="Format"
+                value={ASPECT_OPTIONS.includes(aspectRatio) ? aspectRatio : ASPECT_OPTIONS[0]}
+                options={ASPECT_OPTIONS.map((value) => ({ value, label: value }))}
+                disabled={!canEditSettings || patchBusy}
+                onChange={(next) => void patchProduction({ aspectRatio: next })}
+              />
+            ) : null}
+            {mode === "image" ? (
+              <>
+                <SettingSelect
+                  label="Resolution"
+                  value={
+                    IMAGE_RESOLUTION_OPTIONS.includes(resolution)
+                      ? resolution
+                      : IMAGE_RESOLUTION_OPTIONS[1]
+                  }
+                  options={IMAGE_RESOLUTION_OPTIONS.map((value) => ({ value, label: value }))}
+                  disabled={!canEditSettings || patchBusy}
+                  onChange={(next) => void patchProduction({ resolution: next })}
+                />
+                <SettingSelect
+                  label="Quality"
+                  value={
+                    IMAGE_QUALITY_OPTIONS.some((item) => item.value === quality)
+                      ? quality
+                      : "medium"
+                  }
+                  options={IMAGE_QUALITY_OPTIONS}
+                  disabled={!canEditSettings || patchBusy}
+                  onChange={(next) => void patchProduction({ quality: next })}
+                />
+              </>
+            ) : null}
+            {mode === "video" ? (
+              <>
+                <SettingSelect
+                  label="Resolution"
+                  value={
+                    VIDEO_RESOLUTION_OPTIONS.some((item) => item.value === resolution)
+                      ? resolution
+                      : "1280x720"
+                  }
+                  options={VIDEO_RESOLUTION_OPTIONS}
+                  disabled={!canEditSettings || patchBusy}
+                  onChange={(next) => void patchProduction({ resolution: next })}
+                />
+                <SettingSelect
+                  label="Duration"
+                  value={String(Math.max(4, Math.min(15, Number(durationSeconds) || 8)))}
+                  options={Array.from({ length: 12 }, (_, index) => {
+                    const seconds = index + 4;
+                    return { value: String(seconds), label: `${seconds}s` };
+                  })}
+                  disabled={!canEditSettings || patchBusy}
+                  onChange={(next) =>
+                    void patchProduction({ durationSeconds: Number(next) })
+                  }
+                />
+              </>
+            ) : null}
+            {mode === "script" && payload.production?.scriptType ? (
+              <span className="studio-assist-setting-chip">
+                <em>Script</em>
+                {displayValue(payload.production.scriptType)}
               </span>
-            ))}
+            ) : null}
+            {mode === "element" && payload.production?.elementType ? (
+              <span className="studio-assist-setting-chip">
+                <em>Element</em>
+                {displayValue(payload.production.elementType)}
+              </span>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -275,7 +384,7 @@ export function AssistanceReviewCard({
             <button
               type="button"
               className="studio-generate-btn studio-assist-primary-btn studio-assist-generate-btn"
-              disabled={busy || !onApprove}
+              disabled={busy || patchBusy || !onApprove}
               onClick={() => void approve()}
             >
               <span className="studio-assist-generate-label">
@@ -289,19 +398,21 @@ export function AssistanceReviewCard({
           </div>
         ) : (
           <p className="studio-assist-locked-note">
-            {status === "done"
-              ? mode === "script"
-                ? "Script ready — opened in Studio."
-                : mode === "element"
-                  ? "Element ready — opened in Studio."
-                  : "Generation complete."
-              : status === "failed"
-                ? "Generation failed. Review the error above."
-                : status === "generating"
-                  ? `${modeTitle} generation is in progress.`
-                  : status === "approved"
-                    ? `${modeTitle} generation is approved and starting.`
-                    : "Earlier review — the latest confirmation appears below."}
+            {expired
+              ? "Expired"
+              : status === "done"
+                ? mode === "script"
+                  ? "Script ready — opened in Studio."
+                  : mode === "element"
+                    ? "Element ready — opened in Studio."
+                    : "Generation complete."
+                : status === "failed"
+                  ? "Generation failed. Review the error above."
+                  : status === "generating"
+                    ? `${modeTitle} generation is in progress.`
+                    : status === "approved"
+                      ? `${modeTitle} generation is approved and starting.`
+                      : "Earlier review — the latest confirmation appears below."}
           </p>
         )}
       </footer>

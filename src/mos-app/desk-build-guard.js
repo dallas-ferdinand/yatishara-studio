@@ -1,23 +1,26 @@
-/** Explicit cache reset only — never auto-reloads on build mismatch (that caused _ysFresh loops). */
+/**
+ * Cache policy: prefer fresh loads over sticky shells.
+ * Preview always nukes SW + Cache Storage. Explicit reset query params also purge.
+ */
 export function getDeskBuildGuardInlineScript() {
   return `
 (() => {
   try {
+    const host = String(location.hostname || "");
     const params = new URLSearchParams(location.search);
-    const dirty =
-      params.has("_ysFresh") ||
-      params.has("_mosFresh") ||
-      params.has("resetStudio") ||
-      params.has("clearStudioCache") ||
-      params.has("resetDesk") ||
-      params.has("clearDeskCache");
-    if (!dirty) return;
-
+    const isPreview =
+      host.includes("preview.") ||
+      host === "localhost" ||
+      host === "127.0.0.1";
     const wantsReset =
       params.has("resetStudio") ||
       params.has("clearStudioCache") ||
       params.has("resetDesk") ||
       params.has("clearDeskCache");
+    const dirty =
+      wantsReset ||
+      params.has("_ysFresh") ||
+      params.has("_mosFresh");
 
     const cleanUrl = () => {
       const url = new URL(location.href);
@@ -35,41 +38,48 @@ export function getDeskBuildGuardInlineScript() {
       }
     };
 
+    const purge = () => {
+      try {
+        localStorage.removeItem("yatishara-studio-build");
+        localStorage.removeItem("mercuryos-desk-build");
+        localStorage.removeItem("mos-desk-build-id");
+        sessionStorage.removeItem("yatishara-studio-reloaded-build");
+        sessionStorage.removeItem("mercuryos-desk-reloaded-build");
+        sessionStorage.removeItem("mos-desk-purged-build");
+      } catch {}
+      const jobs = [];
+      if ("serviceWorker" in navigator) {
+        jobs.push(
+          navigator.serviceWorker.getRegistrations?.().then((regs) =>
+            Promise.allSettled(regs.map((r) => r.unregister?.())),
+          ),
+        );
+      }
+      if ("caches" in window) {
+        jobs.push(
+          caches.keys?.().then((keys) =>
+            Promise.allSettled(keys.map((k) => caches.delete(k))),
+          ),
+        );
+      }
+      return Promise.allSettled(jobs);
+    };
+
+    // Preview / local: always drop SW + Cache Storage so hot updates are never sticky.
+    if (isPreview) {
+      void purge().finally(() => {
+        if (dirty) cleanUrl();
+      });
+      return;
+    }
+
+    if (!dirty) return;
     if (!wantsReset) {
       cleanUrl();
       return;
     }
 
-    const jobs = [];
-    try {
-      localStorage.removeItem("yatishara-studio-build");
-      localStorage.removeItem("mercuryos-desk-build");
-      sessionStorage.removeItem("yatishara-studio-reloaded-build");
-      sessionStorage.removeItem("mercuryos-desk-reloaded-build");
-    } catch {}
-    if ("serviceWorker" in navigator) {
-      jobs.push(
-        navigator.serviceWorker.getRegistrations?.().then((regs) =>
-          Promise.allSettled(regs.map((r) => r.unregister?.())),
-        ),
-      );
-    }
-    if ("caches" in window) {
-      jobs.push(
-        caches.keys?.().then((keys) =>
-          Promise.allSettled(
-            keys
-              .filter(
-                (k) =>
-                  k.startsWith("mercuryos-desk-") ||
-                  k.startsWith("yatishara-studio-"),
-              )
-              .map((k) => caches.delete(k)),
-          ),
-        ),
-      );
-    }
-    Promise.allSettled(jobs).finally(() => {
+    void purge().finally(() => {
       cleanUrl();
       location.reload();
     });

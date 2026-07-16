@@ -253,19 +253,21 @@ export function StudioStyleSheetTriggerButton({
   const detailLabel = hasStyle ? (activeSheet?.name ?? label) : "None";
   const sheetThumb = styleSheetThumbUrl(activeSheetAsset, activeSheet?.sheetPreviewUrl);
   const iconSize = panel ? 16 : 14;
+  const icon = <Paintbrush size={iconSize} strokeWidth={2.25} aria-hidden="true" />;
   const lead =
     hasStyle && sheetThumb ? (
-      <span className="studio-preset-trigger-thumb">
+      <span className="studio-preset-trigger-media">
         <img src={sheetThumb} alt="" className="studio-preset-trigger-sheet-img" />
+        <span className="studio-preset-trigger-icon-overlay">{icon}</span>
       </span>
     ) : (
-      <Paintbrush size={iconSize} strokeWidth={2.25} aria-hidden="true" />
+      icon
     );
   if (panel) {
     return (
       <button
         type="button"
-        className={`studio-composer-setting-card studio-preset-trigger is-panel${open ? " is-open" : ""}`}
+        className={`studio-composer-setting-card studio-preset-trigger is-panel${open ? " is-open" : ""}${hasStyle && sheetThumb ? " has-thumb" : ""}`}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={hasStyle ? `Style: ${label}` : "Choose style"}
@@ -283,7 +285,7 @@ export function StudioStyleSheetTriggerButton({
   return (
     <button
       type="button"
-      className={`studio-pill-btn studio-preset-trigger${open ? " is-open" : ""}`}
+      className={`studio-pill-btn studio-preset-trigger${open ? " is-open" : ""}${hasStyle && sheetThumb ? " has-thumb" : ""}`}
       aria-expanded={open}
       aria-haspopup="listbox"
       aria-label={hasStyle ? `Style: ${label}` : "Choose style"}

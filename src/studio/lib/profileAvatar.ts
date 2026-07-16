@@ -37,7 +37,7 @@ export function letterColor(letter: string): string {
   return LETTER_COLORS[ch.charCodeAt(0) - 65] ?? "#7A8494";
 }
 
-/** First + last name initials only — never username. */
+/** Display-name initials first; otherwise first + last name. Never username. */
 export function profileNameInitials({
   firstName,
   lastName,
@@ -49,18 +49,26 @@ export function profileNameInitials({
   name?: string | null;
   displayName?: string | null;
 } = {}): string {
-  const first = String(firstName ?? "").trim();
-  const last = String(lastName ?? "").trim();
-  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
-  if (first) return first[0].toUpperCase();
-  if (last) return last[0].toUpperCase();
-  const display = String(displayName || name || "").trim();
+  const display = String(displayName ?? "").trim();
   if (display) {
     const parts = display.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
     }
     return display[0].toUpperCase();
+  }
+  const first = String(firstName ?? "").trim();
+  const last = String(lastName ?? "").trim();
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  if (first) return first[0].toUpperCase();
+  if (last) return last[0].toUpperCase();
+  const fallback = String(name ?? "").trim();
+  if (fallback) {
+    const parts = fallback.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return fallback[0].toUpperCase();
   }
   return "?";
 }
@@ -70,7 +78,7 @@ export function profileAvatarGradient(initials: string): string {
   const a = letterColor(text[0] ?? "?");
   const b = letterColor(text[1] ?? text[0] ?? "?");
   if (text.length < 2 || a === b) {
-    return `linear-gradient(145deg, ${a} 0%, color-mix(in srgb, ${a} 55%, #1a1f2a) 100%)`;
+    return `linear-gradient(145deg, color-mix(in srgb, ${a} 62%, #ffffff) 0%, ${a} 48%, color-mix(in srgb, ${a} 52%, #111827) 100%)`;
   }
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 }

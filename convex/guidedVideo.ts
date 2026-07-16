@@ -952,6 +952,90 @@ export const editBrief = authedMutation({
   },
 });
 
+/** UI-only production tweaks (format / resolution / quality) — no new chat event. */
+export const patchBriefProduction = authedMutation({
+  args: {
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    production: v.object({
+      aspectRatio: v.optional(v.string()),
+      resolution: v.optional(v.string()),
+      quality: v.optional(v.string()),
+      durationSeconds: v.optional(v.number()),
+    }),
+  },
+  returns: briefReturn,
+  handler: async (ctx, args) => {
+    const brief = await requireBriefOwner(ctx, args.briefId);
+    if (brief.revision !== args.expectedRevision) {
+      throw new Error("Brief was updated elsewhere. Refresh and try again.");
+    }
+    if (["approved", "generating", "done"].includes(brief.status)) {
+      throw new Error("This brief is already approved.");
+    }
+    const payload = parsePayload(brief.payload);
+    if (!payload.production || typeof payload.production !== "object") {
+      payload.production = emptyBriefPayload().production;
+    }
+    const locked = new Set(brief.lockedFields);
+    if (args.production.aspectRatio !== undefined) {
+      payload.production.aspectRatio = args.production.aspectRatio;
+      locked.add("production.aspectRatio");
+    }
+    if (args.production.resolution !== undefined) {
+      payload.production.resolution = args.production.resolution;
+      locked.add("production.resolution");
+    }
+    if (args.production.quality !== undefined) {
+      payload.production.quality = args.production.quality;
+      locked.add("production.quality");
+    }
+    if (args.production.durationSeconds !== undefined) {
+      payload.production.durationSeconds = args.production.durationSeconds;
+      locked.add("production.durationSeconds");
+    }
+    const attachments = await ctx.db
+      .query("guidedBriefAttachments")
+      .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
+      .collect();
+    const presence = attachmentPresenceFromRoles(
+      attachments.map((a) => a.role as AttachmentRole),
+    );
+    const mode = normalizeAssistedMode(brief.mode);
+    const policy = evaluateBrief({
+      mode,
+      videoType: brief.videoType,
+      payload,
+      attachments: presence,
+      offeredOptionalIds: brief.offeredOptionalIds,
+      skippedOptionalIds: brief.skippedOptionalIds,
+      lockedFields: [...locked],
+    });
+    const compiled = policy.complete
+      ? compileBriefPrompt(mode, brief.videoType, payload, presence)
+      : undefined;
+    const plan =
+      policy.complete && compiled
+        ? await buildPlanForBrief(ctx, brief, payload, compiled, brief.warnings)
+        : undefined;
+    const now = Date.now();
+    await ctx.db.patch(brief._id, {
+      payload,
+      lockedFields: [...locked],
+      status: policy.complete ? "review_ready" : "awaiting_input",
+      pendingQuestionsJson: serializeQuestions(policy.questions),
+      compiledPrompt: compiled,
+      generationPlanJson: plan ? JSON.stringify(plan) : undefined,
+      generationPlanFingerprint: plan?.fingerprint,
+      estimatedCredits: plan?.estimate.credits,
+      updatedAt: now,
+    });
+    const updated = await ctx.db.get("guidedBriefs", brief._id);
+    if (!updated) throw new Error("Brief missing after update");
+    return toBriefReturn(updated, attachments);
+  },
+});
+
 /** Internal helpers used by guidedVideoActions. */
 export const getBriefInternal = internalQuery({
   args: { briefId: v.id("guidedBriefs") },

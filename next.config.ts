@@ -15,15 +15,24 @@ function deskBuildStamp() {
 
 const DESK_BUILD_ID = process.env.NEXT_PUBLIC_DESK_BUILD ?? deskBuildStamp();
 
+/** Real performance comes from smaller work, not sticky shells. */
+const NO_STORE = "no-store, no-cache, must-revalidate, max-age=0";
+
 const nextConfig: NextConfig = {
   output: "standalone",
   trailingSlash: true,
   allowedDevOrigins: ["preview.studio.yatishara.com"],
   async headers() {
+    // Order matters: first matching source wins in Next.js.
     return [
       {
-        source: "/:path*",
+        source: "/_next/static/:path*",
         headers: [
+          {
+            key: "Cache-Control",
+            // Hashed filenames — revalidate every load so deploys never stick.
+            value: "public, max-age=0, must-revalidate",
+          },
           {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains; preload",
@@ -39,36 +48,66 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Cache-Control",
-            value: "no-store, max-age=0",
+            value: NO_STORE,
           },
-        ],
-      },
-      {
-        source: "/",
-        headers: [
           {
-            key: "Cache-Control",
-            value: "no-store, max-age=0",
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
           },
-        ],
-      },
-      {
-        // Content-hashed Next assets — immutable.
-        source: "/_next/static/:path*",
-        headers: [
           {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
+            key: "X-Content-Type-Options",
+            value: "nosniff",
           },
         ],
       },
       {
-        // Versioned branding / wallpaper files under public/.
         source: "/branding/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: "public, max-age=86400, stale-while-revalidate=604800",
+            value: NO_STORE,
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+        ],
+      },
+      {
+        source: "/version.json",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: NO_STORE,
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+        ],
+      },
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Cache-Control",
+            value: NO_STORE,
           },
         ],
       },
@@ -86,7 +125,7 @@ const nextConfig: NextConfig = {
     config.plugins.push(
       new webpack.DefinePlugin({
         __DESK_BUILD__: JSON.stringify(DESK_BUILD_ID),
-      })
+      }),
     );
     config.resolve.alias = {
       ...config.resolve.alias,

@@ -60,9 +60,14 @@ function cleanHistoryTitle(thread) {
   return "Untitled";
 }
 
+function isVideoThumbUrl(url) {
+  return typeof url === "string" && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
+}
+
 function HistoryChip({ chip }) {
   const kind = String(chip?.kind ?? "file").toLowerCase();
   const thumb = chip?.thumbnailUrl;
+  const isVideoThumb = kind === "video" || isVideoThumbUrl(thumb);
   const isImagey = Boolean(thumb) && (kind === "image" || kind === "video" || Boolean(chip?.elementType));
   const Icon =
     kind === "video"
@@ -78,7 +83,17 @@ function HistoryChip({ chip }) {
   if (isImagey) {
     return (
       <span className="studio-history-chip studio-history-chip--image" title={chip.label}>
-        <img src={thumb} alt="" className="studio-history-chip-media" loading="lazy" decoding="async" />
+        {isVideoThumb ? (
+          <video
+            src={thumb}
+            className="studio-history-chip-media"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img src={thumb} alt="" className="studio-history-chip-media" loading="lazy" decoding="async" />
+        )}
       </span>
     );
   }
@@ -86,7 +101,17 @@ function HistoryChip({ chip }) {
   return (
     <span className="studio-history-chip" title={chip.label}>
       {thumb ? (
-        <img src={thumb} alt="" className="studio-history-chip-media is-inline" loading="lazy" decoding="async" />
+        isVideoThumbUrl(thumb) ? (
+          <video
+            src={thumb}
+            className="studio-history-chip-media is-inline"
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img src={thumb} alt="" className="studio-history-chip-media is-inline" loading="lazy" decoding="async" />
+        )
       ) : (
         <Icon className="studio-history-chip-icon" aria-hidden="true" />
       )}
@@ -117,13 +142,23 @@ function HistoryThreadCard({ thread, active, onSelect }) {
           <span className="studio-history-item-chips">
             {thumbs.map((thumb) => (
               <span key={thumb._id} className="studio-history-chip studio-history-chip--image" title="Result">
-                <img
-                  src={thumb.thumbnailUrl}
-                  alt=""
-                  className="studio-history-chip-media"
-                  loading="lazy"
-                  decoding="async"
-                />
+                {thumb.kind === "video" || isVideoThumbUrl(thumb.thumbnailUrl) ? (
+                  <video
+                    src={thumb.thumbnailUrl}
+                    className="studio-history-chip-media"
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  <img
+                    src={thumb.thumbnailUrl}
+                    alt=""
+                    className="studio-history-chip-media"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
               </span>
             ))}
             {chips.map((chip, index) => (

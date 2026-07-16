@@ -7,7 +7,10 @@ import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioDotGridWave } from "./StudioDotGridWave";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
-import { VideoTypePicker } from "./guided-video/VideoTypePicker";
+import {
+  VideoTypePickerPanel,
+  VideoTypeTriggerButton,
+} from "./guided-video/VideoTypePicker";
 import { AssistanceThinkingIndicator } from "./guided-video/AssistanceThinkingIndicator";
 import {
   ChatMessageRow,
@@ -19,6 +22,7 @@ import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/
 import { api } from "../../../convex/_generated/api";
 import {
   ChevronDown,
+  Clapperboard,
   Clock3,
   CreditCard,
   FileText,
@@ -42,6 +46,7 @@ import {
   Pencil,
   Plus,
   ArrowUp,
+  Cloud,
   Scissors,
   Search,
   SlidersHorizontal,
@@ -57,12 +62,15 @@ import {
   Zap,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
+import { MediaLoadFrame } from "./media-load-frame";
+import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
@@ -140,6 +148,10 @@ const PublicProfileView = dynamic(
   () => import("./PublicProfileView").then((m) => m.PublicProfileView),
   { ssr: false },
 );
+const ProfilePostViewer = dynamic(
+  () => import("./ProfilePostViewer").then((m) => m.ProfilePostViewer),
+  { ssr: false },
+);
 const ThemeSettings = dynamic(
   () => import("@/desk/components/ThemeSettings").then((m) => m.ThemeSettings),
   { ssr: false },
@@ -183,18 +195,188 @@ const TRASH_FOLDER_ENTRY = {
   studioKind: "trash",
   studioId: TRASH_FOLDER_ID,
 };
-const CREATE_MENU_ITEMS = [
+const CREATE_MENU_ITEMS_BASE = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
   { action: "new-file", label: "Ad copy", icon: FileText },
-  { action: "new-video-edit", label: "Video edit", icon: Scissors },
+  { action: "new-video-edit", label: "Video edit", icon: Scissors, previewOnly: true },
   { sep: true },
   { action: "new-element", label: "Add element", icon: Sparkles },
 ];
+
+function getCreateMenuItems() {
+  const allowVideoEdit = isVideoEditorPreviewEnabled();
+  return CREATE_MENU_ITEMS_BASE.filter((item) => !item.previewOnly || allowVideoEdit);
+}
+
+/** Bottom nav highlight — Create only when a create/chat tab is active. */
+function resolveMobileBottomNavSection(activeTab, mobileSection) {
+  const tab = String(activeTab ?? "");
+  if (tab.startsWith("feed:")) return "feed";
+  if (tab.startsWith("profile:") || tab.startsWith("profilePost:")) return null;
+  if (
+    tab.startsWith("composer:") ||
+    tab.startsWith("thread:") ||
+    tab.startsWith("create:")
+  ) {
+    return "composer";
+  }
+  if (mobileSection === "files") return "files";
+  if (mobileSection === "feed") return "feed";
+  if (mobileSection === "composer") return "composer";
+  return mobileSection || null;
+}
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
 const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
+const STUDIO_OPEN_TABS_KEY = "yatishara-studio-open-tabs-v1";
+
+const PERSISTABLE_TAB_PREFIXES = [
+  "composer:",
+  "thread:",
+  "feed:",
+  "profile:",
+  "profilePost:",
+  "asset:",
+  "document:",
+  "element:",
+  "admin:",
+  "billing:",
+  "create:",
+  "videoEdit:",
+  "edit:",
+];
+
+function isPersistableTabKey(tab) {
+  if (typeof tab !== "string" || !tab) return false;
+  return PERSISTABLE_TAB_PREFIXES.some((prefix) => tab.startsWith(prefix));
+}
+
+function isVideoEditTabKey(tab) {
+  return (
+    typeof tab === "string" &&
+    (tab.startsWith("videoEdit:") ||
+      tab.startsWith("edit:project:") ||
+      tab.startsWith("edit:asset:"))
+  );
+}
+
+function sanitizePersistedOpenTabs(tabs) {
+  const list = Array.isArray(tabs) ? tabs : [];
+  const cleaned = [];
+  let feedSlot = -1;
+  let lastFeed = null;
+  for (const tab of list) {
+    if (!isPersistableTabKey(tab)) continue;
+    if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(tab)) continue;
+    if (tab.startsWith("feed:")) {
+      lastFeed = tab;
+      if (feedSlot < 0) feedSlot = cleaned.length;
+      continue;
+    }
+    if (!cleaned.includes(tab)) cleaned.push(tab);
+  }
+  if (lastFeed) {
+    const at = feedSlot >= 0 ? Math.min(feedSlot, cleaned.length) : cleaned.length;
+    cleaned.splice(at, 0, lastFeed);
+  }
+  return cleaned.length ? cleaned : [COMPOSER_TAB];
+}
+
+function slimTabEntrySnapshots(snapshots) {
+  if (!snapshots || typeof snapshots !== "object") return {};
+  const slim = {};
+  for (const [key, entry] of Object.entries(snapshots)) {
+    if (!isPersistableTabKey(key) || !entry || typeof entry !== "object") continue;
+    slim[key] = {
+      name: typeof entry.name === "string" ? entry.name : undefined,
+      title: typeof entry.title === "string" ? entry.title : undefined,
+      studioKind: typeof entry.studioKind === "string" ? entry.studioKind : undefined,
+      kind: typeof entry.kind === "string" ? entry.kind : undefined,
+      status: typeof entry.status === "string" ? entry.status : undefined,
+    };
+  }
+  return slim;
+}
+
+let cachedInitialTabSession = null;
+function readPersistedTabSession() {
+  if (cachedInitialTabSession) return cachedInitialTabSession;
+  const fallback = {
+    openTabs: [COMPOSER_TAB],
+    activeTab: COMPOSER_TAB,
+    activeFolderId: null,
+    navTrail: [],
+    snapshots: {},
+  };
+  if (typeof window === "undefined") {
+    cachedInitialTabSession = fallback;
+    return fallback;
+  }
+  try {
+    const raw = window.localStorage.getItem(STUDIO_OPEN_TABS_KEY);
+    if (!raw) {
+      cachedInitialTabSession = fallback;
+      return fallback;
+    }
+    const parsed = JSON.parse(raw);
+    const openTabs = sanitizePersistedOpenTabs(parsed?.openTabs);
+    let activeTab =
+      typeof parsed?.activeTab === "string" && openTabs.includes(parsed.activeTab)
+        ? parsed.activeTab
+        : openTabs[openTabs.length - 1] || COMPOSER_TAB;
+    if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(activeTab)) {
+      activeTab = COMPOSER_TAB;
+    }
+    const navTrail = Array.isArray(parsed?.navTrail)
+      ? parsed.navTrail
+          .filter((item) => item && typeof item.id === "string" && typeof item.name === "string")
+          .map((item) => ({ id: item.id, name: item.name }))
+      : [];
+    const activeFolderId =
+      typeof parsed?.activeFolderId === "string" ? parsed.activeFolderId : null;
+    cachedInitialTabSession = {
+      openTabs,
+      activeTab,
+      activeFolderId,
+      navTrail,
+      snapshots: slimTabEntrySnapshots(parsed?.snapshots),
+    };
+    return cachedInitialTabSession;
+  } catch {
+    cachedInitialTabSession = fallback;
+    return fallback;
+  }
+}
+
+function writePersistedTabSession(session) {
+  if (typeof window === "undefined") return;
+  try {
+    const openTabs = sanitizePersistedOpenTabs(session?.openTabs);
+    const activeTab =
+      typeof session?.activeTab === "string" && openTabs.includes(session.activeTab)
+        ? session.activeTab
+        : openTabs[openTabs.length - 1] || COMPOSER_TAB;
+    window.localStorage.setItem(
+      STUDIO_OPEN_TABS_KEY,
+      JSON.stringify({
+        openTabs,
+        activeTab,
+        activeFolderId:
+          typeof session?.activeFolderId === "string" ? session.activeFolderId : null,
+        navTrail: Array.isArray(session?.navTrail)
+          ? session.navTrail
+              .filter((item) => item && typeof item.id === "string" && typeof item.name === "string")
+              .map((item) => ({ id: item.id, name: item.name }))
+          : [],
+        snapshots: slimTabEntrySnapshots(session?.snapshots),
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
 const STUDIO_MAIN_SIDEBAR_DEFAULT = 24;
 const STUDIO_MAIN_MAIN_DEFAULT = 76;
 const STUDIO_MAIN_SIDEBAR_MIN = 16;
@@ -385,17 +567,22 @@ export function StudioShell({
   const generateElementSheet = useAction(api.elementActions.generateSheet);
   const submitAssistedTurn = useAction(api.guidedVideoActions.submitAssistedTurn);
   const approveAndGenerate = useAction(api.guidedVideoActions.approveAndGenerate);
+  const patchBriefProduction = useMutation(api.guidedVideo.patchBriefProduction);
   const setThreadAssistance = useMutation(api.generation.setThreadAssistance);
   const decideAssistanceApproval = useMutation(api.assistanceApprovals.decide);
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
 
-  const [activeFolderId, setActiveFolderId] = useState(null);
-  const [openTabs, setOpenTabs] = useState([COMPOSER_TAB]);
-  const [tabEntrySnapshots, setTabEntrySnapshots] = useState({});
-  const [activeTab, setActiveTab] = useState(COMPOSER_TAB);
-  const [navTrail, setNavTrail] = useState([]);
+  const [activeFolderId, setActiveFolderId] = useState(
+    () => readPersistedTabSession().activeFolderId,
+  );
+  const [openTabs, setOpenTabs] = useState(() => readPersistedTabSession().openTabs);
+  const [tabEntrySnapshots, setTabEntrySnapshots] = useState(
+    () => readPersistedTabSession().snapshots,
+  );
+  const [activeTab, setActiveTab] = useState(() => readPersistedTabSession().activeTab);
+  const [navTrail, setNavTrail] = useState(() => readPersistedTabSession().navTrail);
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -406,12 +593,39 @@ export function StudioShell({
   const [videoType, setVideoType] = useState("hypermotion_ad");
   const [assistanceEnabled, setAssistanceEnabled] = useState(true);
   const [assistBusy, setAssistBusy] = useState(false);
+  const [assistApproveBusy, setAssistApproveBusy] = useState(false);
 
   useEffect(() => {
     if (mode === "image" || mode === "video" || mode === "script") {
       lastGenerationModeRef.current = mode;
     }
   }, [mode]);
+
+  useEffect(() => {
+    if (isVideoEditorPreviewEnabled()) return;
+    setOpenTabs((tabs) => {
+      const next = tabs.filter((tab) => !isVideoEditTabKey(tab));
+      return next.length === tabs.length ? tabs : next.length ? next : [COMPOSER_TAB];
+    });
+    setActiveTab((tab) => (isVideoEditTabKey(tab) ? COMPOSER_TAB : tab));
+    setTabEntrySnapshots((snapshots) => {
+      const keys = Object.keys(snapshots).filter(isVideoEditTabKey);
+      if (!keys.length) return snapshots;
+      const next = { ...snapshots };
+      for (const key of keys) delete next[key];
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    writePersistedTabSession({
+      openTabs,
+      activeTab,
+      activeFolderId,
+      navTrail,
+      snapshots: tabEntrySnapshots,
+    });
+  }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
 
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [imageResolution, setImageResolution] = useState("2K");
@@ -450,7 +664,6 @@ export function StudioShell({
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
-  const [profileShareToast, setProfileShareToast] = useState("");
   const [mobileSection, setMobileSection] = useState("composer");
   const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
@@ -472,7 +685,12 @@ export function StudioShell({
   const composerKeyRef = useRef(COMPOSER_TAB);
   const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
-  const lastChatTabRef = useRef(COMPOSER_TAB);
+  const lastChatTabRef = useRef(
+    (() => {
+      const tab = readPersistedTabSession().activeTab;
+      return tab.startsWith("composer:") || tab.startsWith("thread:") ? tab : COMPOSER_TAB;
+    })(),
+  );
   const composerContextsRef = useRef({});
   const folderByIdRef = useRef(new Map());
   const currentEntriesCacheRef = useRef(new Map());
@@ -511,10 +729,10 @@ export function StudioShell({
     settingsOpen ||
     activeTab.startsWith("admin:") ||
     openTabs.some((tab) => tab.startsWith("admin:"));
-  const needsProfileData =
+  const needsProfileShares =
     settingsOpen ||
     settingsSection === "profile" ||
-    openTabs.some((tab) => tab.startsWith("profile:")) ||
+    openTabs.some((tab) => tab.startsWith("profile:") || tab.startsWith("profilePost:") || tab.startsWith("feed:")) ||
     Boolean(initialProfileUsername);
   const payments = useQuery(
     api.billing.listMyPayments,
@@ -524,13 +742,14 @@ export function StudioShell({
     api.notifications.listMine,
     hasCurrentUser && (settingsOpen || historyOpen) ? {} : "skip",
   );
-  const sharedProfileAssets = useQuery(
-    api.profiles.listMySharedAssetIds,
-    hasCurrentUser && needsProfileData ? {} : "skip",
-  );
+  // Always load own profile handle so View profile can open the tab (not settings).
   const myPublicProfile = useQuery(
     api.profiles.getMine,
-    hasCurrentUser && needsProfileData ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+  );
+  const sharedProfileAssets = useQuery(
+    api.profiles.listMySharedAssetIds,
+    hasCurrentUser && needsProfileShares ? {} : "skip",
   );
   const sharedAssetIds = useMemo(
     () => new Set(sharedProfileAssets?.assetIds ?? []),
@@ -541,8 +760,14 @@ export function StudioShell({
       [
         ...new Set(
           openTabs
-            .filter((key) => key.startsWith("profile:"))
-            .map((key) => key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase())
+            .flatMap((key) => {
+              if (key.startsWith("profile:")) {
+                return [key.slice("profile:".length)];
+              }
+              const match = key.match(/^profilePost:([^:]+):/);
+              return match ? [match[1]] : [];
+            })
+            .map((value) => value.trim().replace(/^@/, "").toLowerCase())
             .filter(Boolean),
         ),
       ],
@@ -739,11 +964,19 @@ export function StudioShell({
     api.documents.listByFolder,
     hasCurrentUser && activeFolder && !isTrashView ? { folderId: activeFolder._id } : "skip",
   );
-  const videoEdits = useQuery(
+  const videoEditorEnabled = isVideoEditorPreviewEnabled();
+  const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
-    hasCurrentUser && activeFolder && !isTrashView ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder && !isTrashView && videoEditorEnabled
+      ? { folderId: activeFolder._id }
+      : "skip",
   );
-  const trashedVideoEdits = useQuery(api.videoEdits.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
+  const trashedVideoEditsRaw = useQuery(
+    api.videoEdits.listTrash,
+    hasCurrentUser && isTrashView && videoEditorEnabled ? {} : "skip",
+  );
+  const videoEdits = videoEditorEnabled ? videoEditsRaw : [];
+  const trashedVideoEdits = videoEditorEnabled ? trashedVideoEditsRaw : [];
   const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
   const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
   const activeThreadId = activeTab.startsWith("thread:")
@@ -1631,6 +1864,7 @@ export function StudioShell({
   }
 
   function openEditTab({ assetId, folderId, projectId, assetName }) {
+    if (!isVideoEditorPreviewEnabled()) return;
     if (projectId) {
       openTab(`videoEdit:${projectId}`);
       return;
@@ -1639,6 +1873,7 @@ export function StudioShell({
   }
 
   async function createNewVideoEdit() {
+    if (!isVideoEditorPreviewEnabled()) return;
     if (!activeFolder || isTrashView) return;
     const result = await createVideoEdit({
       folderId: activeFolder._id,
@@ -1674,7 +1909,28 @@ export function StudioShell({
   }
 
   function openTab(key) {
+    if (typeof key === "string" && key.startsWith("feed:")) {
+      openFeedTab(key.slice("feed:".length));
+      return;
+    }
     setOpenTabs((tabs) => (tabs.includes(key) ? tabs : [...tabs, key]));
+    setActiveTab(key);
+  }
+
+  /** At most one feed tab — opening another replaces the current feed. */
+  function openFeedTab(seed = "home") {
+    const id = String(seed ?? "home").trim() || "home";
+    const key = `feed:${id}`;
+    setOpenTabs((tabs) => {
+      const existingIdx = tabs.findIndex((tab) => tab.startsWith("feed:"));
+      if (existingIdx >= 0) {
+        if (tabs[existingIdx] === key) return tabs;
+        const next = [...tabs];
+        next[existingIdx] = key;
+        return next.filter((tab, index) => !tab.startsWith("feed:") || index === existingIdx);
+      }
+      return [...tabs.filter((tab) => !tab.startsWith("feed:")), key];
+    });
     setActiveTab(key);
   }
 
@@ -1690,9 +1946,27 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
   }
 
+  function openProfilePost(username, postId) {
+    const id = String(postId ?? "").trim();
+    if (!id) return;
+    openFeedTab(id);
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
+  function openFeed() {
+    openFeedTab("home");
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
   function openOwnProfile() {
     const username = myPublicProfile?.username || sharedProfileAssets?.username;
     if (!username) {
+      toast.message("Claim a username in Edit profile first");
       openSettingsTab("profile");
       return;
     }
@@ -1731,7 +2005,10 @@ export function StudioShell({
     }
     if (action === "new-folder") openCreateTab("folder");
     if (action === "new-file") openCreateTab("script");
-    if (action === "new-video-edit") void createNewVideoEdit();
+    if (action === "new-video-edit") {
+      if (isVideoEditorPreviewEnabled()) void createNewVideoEdit();
+      return;
+    }
     if (action === "new-element") openElementCreateInComposer();
   }
 
@@ -1783,6 +2060,29 @@ export function StudioShell({
     if (typeof window === "undefined") return;
     const fromPath = window.location.pathname.match(/^\/u\/([^/?#]+)\/?$/i)?.[1];
     const fromQuery = new URLSearchParams(window.location.search).get("profile");
+    const fromPost = new URLSearchParams(window.location.search).get("profilePost");
+    const fromFeed = new URLSearchParams(window.location.search).get("feed");
+    if (fromFeed) {
+      openedInitialProfileRef.current = true;
+      openProfilePost("", fromFeed);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("feed");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+      return;
+    }
+    if (fromPost) {
+      const [user, postId] = fromPost.split(":");
+      if (postId) {
+        openedInitialProfileRef.current = true;
+        openProfilePost(user, postId);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("profilePost");
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, "", next || "/");
+        return;
+      }
+    }
     const username = initialProfileUsername || fromPath || fromQuery;
     if (!username) return;
     openedInitialProfileRef.current = true;
@@ -1795,12 +2095,6 @@ export function StudioShell({
       window.history.replaceState({}, "", next || "/");
     }
   }, [initialProfileUsername, isMobile]);
-
-  useEffect(() => {
-    if (!profileShareToast) return;
-    const timer = window.setTimeout(() => setProfileShareToast(""), 3200);
-    return () => window.clearTimeout(timer);
-  }, [profileShareToast]);
 
   const rootFolderId = navTrail[0]?.id ?? null;
 
@@ -1856,6 +2150,10 @@ export function StudioShell({
         setSettingsOpen(true);
         return;
       }
+      if (section === "feed") {
+        openFeed();
+        return;
+      }
       setMobileSection(section);
       if (section === "composer") {
         setSettingsOpen(false);
@@ -1893,6 +2191,7 @@ export function StudioShell({
   }
 
   function handleEntryOpen(entry) {
+    if (entry.studioKind === "videoEdit" && !isVideoEditorPreviewEnabled()) return;
     if (entry.studioKind === "trash") {
       setActiveFolderId(TRASH_FOLDER_ID);
       setNavTrail((trail) => {
@@ -2793,7 +3092,7 @@ export function StudioShell({
   return (
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? ` is-studio-mobile is-mobile-${mobileSection}` : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
+      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
         if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
@@ -2836,19 +3135,15 @@ export function StudioShell({
           --studio-composer-row-gap: 8px;
           /* Fallback clearance until the composer measures its overlap with the chat area */
           --studio-chat-empty-clearance: calc(180px + env(safe-area-inset-bottom, 0px));
-          --studio-mobile-nav-height: 44px;
+          --studio-mobile-nav-height: 38px;
+          /* Gap between composer dock and mobile bottom nav */
+          --studio-mobile-composer-gap: 8px;
           /* Fixed control size so chrome bars can grow without scaling buttons/tabs/pills */
           --studio-mobile-chrome-control: 30px;
-          --studio-mobile-chrome-glass: var(
-            --studio-composer-glass,
-            color-mix(in srgb, var(--color-mos-composer, #07111f) 42%, transparent)
-          );
-          --studio-mobile-chrome-glass-foot: var(
-            --studio-composer-glass,
-            color-mix(in srgb, var(--color-mos-composer, #07111f) 42%, transparent)
-          );
-          /* Same recipe as composer — not a mushy 22px “frost slab” */
-          --studio-mobile-chrome-blur: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+          /* Opaque frosted overlays — never fully transparent */
+          --studio-mobile-chrome-glass: color-mix(in srgb, #05080f 86%, transparent);
+          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #05080f 86%, transparent);
+          --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           --studio-mobile-chrome-border: rgba(255, 255, 255, 0.14);
           /* Active / muted chrome: right-corner → left fade border stroke */
           --studio-chrome-glow-border: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
@@ -2871,6 +3166,23 @@ export function StudioShell({
             in srgb,
             var(--cursor-accent) 14%,
             var(--studio-mobile-chrome-glass)
+          );
+          /* Tab fill: solid on the right, fades to full transparency on the left */
+          --studio-chrome-glow-bg-fade: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 10%,
+            color-mix(in srgb, var(--studio-chrome-glow-bg-active) 42%, transparent) 38%,
+            var(--studio-chrome-glow-bg-active) 68%,
+            var(--studio-chrome-glow-bg-active) 100%
+          );
+          --studio-chrome-glow-bg-fade-hover: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 8%,
+            color-mix(in srgb, var(--cursor-accent) 8%, transparent) 36%,
+            color-mix(in srgb, var(--cursor-accent) 12%, var(--studio-mobile-chrome-glass)) 70%,
+            color-mix(in srgb, var(--cursor-accent) 12%, var(--studio-mobile-chrome-glass)) 100%
           );
           --studio-mobile-chrome-sheen: linear-gradient(
             90deg,
@@ -2916,7 +3228,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -3027,6 +3339,14 @@ export function StudioShell({
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
         }
+        .studio-mobile-nav-btn.is-icon-only {
+          flex: 0 0 auto;
+          width: var(--studio-mobile-chrome-control, 30px);
+          min-width: var(--studio-mobile-chrome-control, 30px);
+          max-width: var(--studio-mobile-chrome-control, 30px);
+          padding: 0;
+          gap: 0;
+        }
         .studio-mobile-nav-btn span {
           min-width: 0;
           overflow: hidden;
@@ -3038,6 +3358,10 @@ export function StudioShell({
           height: 14px;
           flex: 0 0 auto;
           color: inherit;
+        }
+        .studio-mobile-nav-btn.is-icon-only svg {
+          width: 15px;
+          height: 15px;
         }
         .studio-mobile-nav-btn.is-active svg {
           color: var(--cursor-accent-hover);
@@ -3093,23 +3417,16 @@ export function StudioShell({
           .studio-polish.is-studio-mobile {
             --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
-            /* Match desktop frost exactly; weaker mobile tint made the header look washed out. */
-            --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent);
-            --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 62%, transparent);
-            --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 40%, transparent);
-            --studio-composer-glass-blur: saturate(160%) blur(12px);
-            --studio-mobile-chrome-glass: var(--studio-composer-glass);
-            --studio-mobile-chrome-glass-foot: var(--studio-composer-glass);
-            --studio-mobile-chrome-blur: var(--studio-composer-glass-blur);
+            /* Dark overlay chrome — readable bars, still slightly frosted */
+            --studio-mobile-chrome-glass: color-mix(in srgb, #05080f 88%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, #05080f 88%, transparent);
+            --studio-mobile-chrome-blur: saturate(160%) blur(18px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
-            --studio-composer-glass: color-mix(in srgb, #ffffff 40%, transparent);
-            --studio-composer-glass-strong: color-mix(in srgb, #ffffff 52%, transparent);
-            --studio-composer-glass-muted: color-mix(in srgb, #ffffff 32%, transparent);
-            --studio-composer-glass-blur: saturate(160%) blur(12px);
-            --studio-mobile-chrome-glass: var(--studio-composer-glass);
-            --studio-mobile-chrome-glass-foot: var(--studio-composer-glass);
-            --studio-mobile-chrome-blur: var(--studio-composer-glass-blur);
+            --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 84%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 84%, transparent);
+            --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
+            --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           }
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
@@ -3249,8 +3566,8 @@ export function StudioShell({
             );
           }
           .studio-polish .cursor-unified-tab {
-            height: calc(var(--cursor-head-h) - 8px) !important;
-            min-height: calc(var(--cursor-head-h) - 8px) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
             width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
@@ -3283,22 +3600,32 @@ export function StudioShell({
             width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
           }
           .studio-mobile-bottom-nav {
             display: flex !important;
           }
           .studio-polish .studio-composer.cursor-composer-shell {
-            bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px) + 12px);
+            /* Main panels already pad for the nav — only leave a hairline gap. */
+            bottom: var(--studio-mobile-composer-gap, 8px);
+            height: auto;
+            max-height: none;
           }
           .studio-polish .studio-composer .cursor-composer {
             max-width: 100%;
             left: 0;
+            height: auto;
+            flex: 0 0 auto;
             padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(10px, env(safe-area-inset-right, 0px));
-            /* Keep a little air above the bottom nav without re-adding safe-area */
-            padding-bottom: 4px;
+            /* Shell clears the nav + safe-area; don't stack another inset on the box. */
+            padding-top: 2px;
+            padding-bottom: 0;
           }
           .studio-polish .studio-composer-row {
             flex-direction: column;
+            flex: 0 0 auto;
+            height: auto;
             gap: 8px;
           }
           .studio-polish .studio-mode-switcher {
@@ -3362,8 +3689,16 @@ export function StudioShell({
           }
           .studio-polish .studio-composer .cursor-composer-box {
             width: 100%;
-            min-height: 96px;
-            align-self: auto;
+            /* Content-sized — flex:1 was stretching the glass box on full-height app/PWA. */
+            flex: 0 0 auto !important;
+            align-self: stretch;
+            height: auto !important;
+            min-height: 88px;
+            max-height: none;
+          }
+          .studio-polish .studio-composer-inputline {
+            flex: 0 1 auto !important;
+            min-height: 0;
           }
           .studio-polish .studio-composer .cursor-composer-box::before {
             width: 220px;
@@ -3588,7 +3923,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -3631,6 +3966,36 @@ export function StudioShell({
         @keyframes studio-ambient-drift {
           from { transform: translate3d(0, 0, 0) scale(0.96); }
           to { transform: translate3d(-18px, 12px, 0) scale(1.05); }
+        }
+        .studio-polish :where(
+          .studio-composer-options-close,
+          .studio-preset-grid-close,
+          .studio-mobile-app-menu-close,
+          .studio-panel-close,
+          .cursor-icon-btn.studio-panel-close,
+          .cursor-icon-btn-sm.studio-panel-close,
+          .desk-explorer-dialog-close,
+          .profile-comments-close,
+          .profile-comments-lightbox-close,
+          .public-profile-lightbox-close,
+          .cursor-tab-close,
+          .mos-ui-lightbox-close
+        ),
+        .studio-polish :where(
+          .studio-composer-options-close,
+          .studio-preset-grid-close,
+          .studio-mobile-app-menu-close,
+          .studio-panel-close,
+          .cursor-icon-btn.studio-panel-close,
+          .cursor-icon-btn-sm.studio-panel-close,
+          .desk-explorer-dialog-close,
+          .profile-comments-close,
+          .profile-comments-lightbox-close,
+          .public-profile-lightbox-close,
+          .cursor-tab-close,
+          .mos-ui-lightbox-close
+        ):is(:hover, :active, :focus-visible) {
+          border-radius: 999px !important;
         }
         .studio-polish :where(
           button,
@@ -3706,7 +4071,7 @@ export function StudioShell({
           flex: 1 1 auto;
           flex-direction: column;
         }
-        .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body, .cursor-workspace-head) {
+        .studio-polish :where(.studio-main-panels, [data-panel], aside, main, .cursor-explorer-panel, .cursor-settings-sheet, .cursor-settings-body) {
           background: transparent !important;
         }
         .studio-polish :where(.cursor-panel-head, .cursor-explorer-panel, .cursor-tree-row, .studio-credit-pill, .cursor-icon-btn, .studio-pill-btn) {
@@ -3890,11 +4255,15 @@ export function StudioShell({
           gap: 0;
           align-items: center;
           background: var(--studio-mobile-chrome-glass) !important;
-          backdrop-filter: var(--studio-mobile-chrome-blur);
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
           border: 0 !important;
           border-bottom: 0 !important;
           box-shadow: none !important;
+          transform: none !important;
+          filter: none !important;
+          isolation: auto !important;
+          contain: none !important;
         }
         .studio-polish .cursor-workspace-head::before,
         .studio-polish .cursor-workspace-head::after {
@@ -3963,10 +4332,10 @@ export function StudioShell({
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
-          /* Former active fill — used for every tab; only the border fade changes when active */
-          background: var(--studio-chrome-glow-bg-active) !important;
-          backdrop-filter: var(--studio-mobile-chrome-blur);
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          /* Fill fades left → transparent; border stroke still fades via ::before */
+          background: var(--studio-chrome-glow-bg-fade) !important;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
           padding: 0 10px !important;
           margin: 0 !important;
           box-shadow: none !important;
@@ -3992,12 +4361,16 @@ export function StudioShell({
             justify-content: flex-start;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab {
-            height: calc(var(--cursor-head-h) - 2px) !important;
-            min-height: calc(var(--cursor-head-h) - 2px) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab-placeholder {
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
             padding-left: 10px !important;
@@ -4571,7 +4944,7 @@ export function StudioShell({
         .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover,
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--studio-mobile-chrome-glass)) !important;
+          background: var(--studio-chrome-glow-bg-fade-hover) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
@@ -4589,7 +4962,7 @@ export function StudioShell({
         .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active),
         .studio-polish .cursor-unified-tab.is-active {
           border: 1px solid transparent !important;
-          background: var(--studio-chrome-glow-bg-active) !important;
+          background: var(--studio-chrome-glow-bg-fade) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
@@ -4727,10 +5100,10 @@ export function StudioShell({
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish {
-          --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 46%, transparent);
-          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 46%, transparent);
+          --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 84%, transparent);
+          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 84%, transparent);
           --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
-          --studio-mobile-chrome-blur: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           --studio-chrome-muted-border-fade: linear-gradient(
             225deg,
             rgba(15, 23, 42, 0.18),
@@ -4874,9 +5247,11 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab {
           border-color: transparent !important;
-          background: var(--studio-mobile-chrome-glass) !important;
+          background: var(--studio-chrome-glow-bg-fade) !important;
           color: color-mix(in srgb, var(--color-cursor-text) 72%, transparent) !important;
           box-shadow: none !important;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
         }
         [data-appearance="light"] .studio-polish :where(
           .cursor-tab,
@@ -4884,7 +5259,7 @@ export function StudioShell({
         ):hover,
         [data-appearance="light"] .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: color-mix(in srgb, var(--cursor-accent) 8%, #ffffff) !important;
+          background: var(--studio-chrome-glow-bg-fade-hover) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
@@ -4912,7 +5287,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-plan.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-error.is-active {
           border: 1px solid transparent !important;
-          background: color-mix(in srgb, var(--cursor-accent) 12%, #ffffff) !important;
+          background: var(--studio-chrome-glow-bg-fade) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
@@ -7222,6 +7597,13 @@ export function StudioShell({
           background: transparent !important;
           pointer-events: none;
         }
+        /* Must follow the base bottom:0 above. Panels already clear the nav. */
+        @media (max-width: 899px) {
+          .studio-polish.is-studio-mobile .studio-composer.cursor-composer-shell,
+          .studio-polish .studio-composer.cursor-composer-shell {
+            bottom: var(--studio-mobile-composer-gap, 8px);
+          }
+        }
         .studio-polish .studio-composer.cursor-composer-shell > * {
           pointer-events: auto;
         }
@@ -8009,10 +8391,8 @@ export function StudioShell({
         }
         .studio-preset-grid-card.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
-            0 8px 18px rgba(0, 0, 0, 0.24);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 82%, transparent);
+          box-shadow: none;
         }
         .studio-preset-grid-thumb {
           position: relative;
@@ -8113,6 +8493,7 @@ export function StudioShell({
           display: none;
         }
         .studio-composer .studio-pill-btn.studio-preset-trigger {
+          position: relative;
           width: 30px;
           min-width: 30px;
           height: 30px;
@@ -8121,6 +8502,10 @@ export function StudioShell({
           padding: 0;
           gap: 0;
           justify-content: center;
+          overflow: hidden;
+        }
+        .studio-composer .studio-pill-btn.studio-preset-trigger.has-thumb {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--studio-composer-glass-border));
         }
         .studio-composer .studio-pill-btn.studio-preset-trigger .studio-preset-trigger-copy {
           display: none;
@@ -8147,22 +8532,69 @@ export function StudioShell({
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 64%, var(--cursor-accent-dim) 36%);
         }
+        .studio-preset-trigger-media {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          border-radius: inherit;
+          overflow: hidden;
+        }
+        .studio-preset-trigger-media::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          pointer-events: none;
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, #000 18%, transparent),
+            color-mix(in srgb, #000 42%, transparent)
+          );
+        }
+        .studio-preset-trigger-media .studio-preset-trigger-sheet-img,
+        .studio-preset-trigger-media img {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center;
+          display: block;
+          border-radius: inherit;
+        }
+        .studio-preset-trigger-icon-overlay {
+          position: relative;
+          z-index: 2;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #fff;
+          filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.55));
+        }
+        .studio-preset-trigger-icon-overlay svg {
+          width: 14px;
+          height: 14px;
+          flex: 0 0 auto;
+        }
+        /* Legacy inset thumb (panel cards / older markup) */
         .studio-preset-trigger-thumb {
           flex: 0 0 auto;
-          width: 22px;
-          height: 22px;
+          width: 100%;
+          height: 100%;
           overflow: hidden;
-          border-radius: 999px;
+          border-radius: inherit;
           margin-left: 0;
           background: color-mix(in srgb, #000 36%, var(--studio-composer-glass-strong) 64%);
         }
         .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger > svg {
-          margin-left: 2px;
+          margin-left: 0;
         }
         .studio-preset-trigger-thumb img {
           width: 100%;
           height: 100%;
           object-fit: cover;
+          object-position: center;
         }
         .studio-preset-trigger-copy {
           min-width: 0;
@@ -8848,9 +9280,18 @@ export function StudioShell({
           min-height: 14px;
           stroke-width: 2.25 !important;
         }
-        .studio-composer-toolbar .studio-preset-trigger-thumb {
-          width: 22px;
-          height: 22px;
+        .studio-composer-toolbar .studio-preset-trigger-thumb,
+        .studio-composer-toolbar .studio-preset-trigger-media {
+          width: 100%;
+          height: 100%;
+        }
+        .studio-composer-toolbar .studio-preset-trigger-icon-overlay svg,
+        .studio-composer-toolbar .studio-preset-trigger-media svg {
+          width: 14px !important;
+          height: 14px !important;
+          min-width: 14px;
+          min-height: 14px;
+          stroke-width: 2.25 !important;
         }
         .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger,
         .studio-composer-toolbar .studio-composer-circle-btn {
@@ -8906,9 +9347,18 @@ export function StudioShell({
           min-height: 15px;
           stroke-width: 2.2 !important;
         }
-        .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-thumb {
-          width: 22px;
-          height: 22px;
+        .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-thumb,
+        .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-media {
+          width: 100%;
+          height: 100%;
+        }
+        .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-icon-overlay svg,
+        .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-media svg {
+          width: 15px !important;
+          height: 15px !important;
+          min-width: 15px;
+          min-height: 15px;
+          stroke-width: 2.2 !important;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger {
           width: 32px;
@@ -10040,7 +10490,7 @@ export function StudioShell({
         }
         .studio-composer-options-head {
           display: grid;
-          grid-template-columns: 72px minmax(0, 1fr) 32px;
+          grid-template-columns: minmax(0, 1fr) 36px;
           align-items: center;
           gap: 8px;
           padding: 10px 12px 8px;
@@ -10048,15 +10498,21 @@ export function StudioShell({
           border-bottom: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
         }
         .studio-composer-options-title {
-          text-align: center;
+          display: inline-flex;
+          align-items: center;
+          justify-self: start;
+          gap: 7px;
+          min-width: 0;
+          text-align: left;
           font-size: 13px;
           font-weight: 700;
           line-height: 1.2;
         }
-        .studio-composer-options-head-spacer {
-          display: block;
-          width: 72px;
-          height: 28px;
+        .studio-composer-options-title svg {
+          width: 17px;
+          height: 17px;
+          flex: 0 0 auto;
+          color: var(--color-cursor-text-bright);
         }
         .studio-composer-options-back {
           display: inline-flex;
@@ -10274,9 +10730,11 @@ export function StudioShell({
           width: 16px;
           height: 16px;
         }
-        .studio-composer-setting-card-icon .studio-preset-trigger-thumb {
+        .studio-composer-setting-card-icon .studio-preset-trigger-thumb,
+        .studio-composer-setting-card-icon .studio-preset-trigger-media {
           width: 100%;
           height: 100%;
+          border-radius: 11px;
         }
         .studio-composer-setting-card-icon .studio-preset-trigger-direct,
         .studio-composer-setting-card-icon .studio-preset-grid-thumb {
@@ -10288,7 +10746,11 @@ export function StudioShell({
           width: 100%;
           height: 100%;
           object-fit: cover;
+          object-position: center;
           border-radius: 11px;
+        }
+        .studio-composer-setting-card-icon .studio-preset-trigger-icon-overlay {
+          color: #fff;
         }
         .studio-composer-setting-card-label {
           font-size: 10px;
@@ -10405,6 +10867,14 @@ export function StudioShell({
         .studio-composer-options-panel.is-style .studio-preset-grid {
           flex: 1 1 auto;
           height: 100%;
+        }
+        .studio-composer-options-panel.is-video-type .studio-preset-grid-panel {
+          flex: 0 1 auto;
+          height: auto;
+        }
+        .studio-composer-options-panel.is-video-type .studio-preset-grid {
+          flex: 0 1 auto;
+          height: auto;
         }
         .studio-pricing-grid,
         .studio-admin-grid {
@@ -12588,6 +13058,21 @@ export function StudioShell({
         .studio-gen-status-card.is-cancelled .studio-gen-status-content {
           color: var(--color-cursor-text);
         }
+        .studio-gen-status-card.is-expired .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 12%, transparent), transparent 58%),
+            var(--studio-gen-frame-bg);
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-expired .studio-gen-status-frame {
+          background:
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 10%, transparent), transparent 62%),
+            var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+        }
+        .studio-gen-status-card.is-expired .studio-gen-status-content {
+          color: var(--color-cursor-muted);
+        }
         .studio-gen-status-card.is-progress .studio-gen-status-frame::before,
         .studio-gen-status-card.is-progress .studio-gen-status-frame::after {
           display: block;
@@ -12675,6 +13160,15 @@ export function StudioShell({
           height: auto;
           object-fit: contain;
           background: var(--studio-gen-media-bg);
+        }
+        .studio-chat-result-media.media-load-frame {
+          background: var(--studio-gen-frame-bg);
+        }
+        .studio-chat-result-media.media-load-frame.is-ready {
+          background: transparent;
+        }
+        .studio-chat-result-media.media-load-frame video {
+          pointer-events: auto;
         }
         .studio-chat-result-actions {
           display: flex;
@@ -12880,7 +13374,7 @@ export function StudioShell({
           {...(isMobile ? { maxSize: 100 } : {})}
         >
       <StudioWorkspaceColumn settingsOpen={settingsOpen} isMobile={isMobile} settingsPanelProps={settingsPanelProps}>
-      <main className={`${STYLE.main}${activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? " studio-composer-bg" : ""}`}>
+      <main className={`${STYLE.main} studio-composer-bg`}>
         <header className="cursor-panel-head cursor-workspace-head shrink-0">
           <UnifiedTabStrip
             tabs={tabs}
@@ -12920,6 +13414,16 @@ export function StudioShell({
             </div>
             {!isMobile ? (
               <>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${activeTab.startsWith("feed:") ? " is-active" : ""}`}
+                  onClick={openFeed}
+                  aria-label="Open feed"
+                  title="Feed"
+                  aria-pressed={activeTab.startsWith("feed:")}
+                >
+                  <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
@@ -12980,7 +13484,7 @@ export function StudioShell({
             }
             onApproveGuidedBrief={async () => {
               if (!activeGuidedBrief || !activeFolder) return;
-              setAssistBusy(true);
+              setAssistApproveBusy(true);
               try {
                 const result = await approveAndGenerate({
                   briefId: activeGuidedBrief._id,
@@ -12995,11 +13499,20 @@ export function StudioShell({
                 console.error("Approval failed", error);
                 throw new Error(friendlyConvexError(error, "Could not start generation."));
               } finally {
-                setAssistBusy(false);
+                setAssistApproveBusy(false);
               }
+            }}
+            onPatchGuidedProduction={async (production) => {
+              if (!activeGuidedBrief) return;
+              await patchBriefProduction({
+                briefId: activeGuidedBrief._id,
+                expectedRevision: activeGuidedBrief.revision,
+                production,
+              });
             }}
             creditPriceCents={pricing?.creditPriceCents}
             assistBusy={assistBusy}
+            assistApproveBusy={assistApproveBusy}
             onAttach={attachEntry}
             onDuplicate={duplicateEntry}
             onRename={renameEntry}
@@ -13033,11 +13546,13 @@ export function StudioShell({
             onOpenEntry={handleEntryOpen}
             onCloseTab={closeTab}
             activeFolderId={activeFolder?._id}
-            onOpenEditTab={openEditTab}
+            onOpenEditTab={isVideoEditorPreviewEnabled() ? openEditTab : undefined}
             onOpenAssetTab={(assetId) => openTab(`asset:${assetId}`)}
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
+            onOpenProfilePost={openProfilePost}
+            openTabs={openTabs}
           />
         </section>
         {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
@@ -13137,7 +13652,7 @@ export function StudioShell({
 
       {isMobile ? (
         <StudioMobileBottomNav
-          section={mobileSection}
+          section={resolveMobileBottomNavSection(activeTab, mobileSection)}
           onSelect={openMobileSection}
           tools={
             <>
@@ -13240,7 +13755,7 @@ export function StudioShell({
           canCreateFile={!isTrashView}
           canCreateFolder={!isTrashView}
           inTrashView={isTrashView}
-          createItems={CREATE_MENU_ITEMS}
+          createItems={getCreateMenuItems()}
           sharedAssetIds={sharedAssetIds}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
@@ -13269,35 +13784,35 @@ export function StudioShell({
                     expiresUnix: assetUrlExpiresUnix,
                   });
                   await applyAssetAsWallpaper(entry.studioId, url);
-                  setProfileShareToast("Wallpaper updated");
+                  toast.success("Wallpaper updated");
                 } catch (error) {
-                  setProfileShareToast(friendlyConvexError(error, "Could not set wallpaper"));
+                  toast.error(friendlyConvexError(error, "Could not set wallpaper"));
                 }
               })();
             }
             if (action === "share-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
               if (!sharedProfileAssets?.hasProfile) {
-                setProfileShareToast("Claim a username in Settings → Profile first");
+                toast.message("Claim a username in Settings → Profile first");
                 openSettingsTab("profile");
                 return;
               }
               void shareAssetToProfile({ assetId: entry.studioId })
                 .then((result) => {
                   const handle = result.publicUrlPath.replace(/^\/u\//, "");
-                  setProfileShareToast(`Shared to @${handle}`);
+                  toast.success(`Shared to @${handle}`);
                   if (handle) openPublicProfile(handle);
                 })
                 .catch((error) => {
-                  setProfileShareToast(friendlyConvexError(error, "Could not share to profile"));
+                  toast.error(friendlyConvexError(error, "Could not share to profile"));
                 });
             }
             if (action === "unshare-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
               void unshareAssetFromProfile({ assetId: entry.studioId })
-                .then(() => setProfileShareToast("Removed from profile"))
+                .then(() => toast.success("Removed from profile"))
                 .catch((error) => {
-                  setProfileShareToast(friendlyConvexError(error, "Could not update profile"));
+                  toast.error(friendlyConvexError(error, "Could not update profile"));
                 });
             }
           }}
@@ -13309,11 +13824,6 @@ export function StudioShell({
         onClose={() => setRenameTarget(null)}
         onRename={confirmRenameEntry}
       />
-      {profileShareToast ? (
-        <div className="studio-voice-toast studio-profile-share-toast" role="status" aria-live="polite">
-          {profileShareToast}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -13379,15 +13889,14 @@ function StudioComposer({
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [voiceToast, setVoiceToast] = useState("");
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
-  const voiceToastTimerRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
+  const [videoTypeGridOpen, setVideoTypeGridOpen] = useState(false);
   const [composerOptionsOpen, setComposerOptionsOpen] = useState(false);
   const [overlayPanelBox, setOverlayPanelBox] = useState(null);
   const { isMobile } = useMobileLayout();
@@ -13445,6 +13954,7 @@ function StudioComposer({
 
   useEffect(() => {
     setPresetGridOpen(false);
+    setVideoTypeGridOpen(false);
     setComposerOptionsOpen(false);
   }, [mode]);
 
@@ -13528,7 +14038,7 @@ function StudioComposer({
       root.style.removeProperty("--studio-composer-stack-height");
       setOverlayPanelBox(null);
     };
-  }, [isMobile, presetGridOpen, composerOptionsOpen]);
+  }, [isMobile, presetGridOpen, videoTypeGridOpen, composerOptionsOpen]);
 
   const generationCost = composerCreditCost({
     mode,
@@ -13673,12 +14183,7 @@ function StudioComposer({
   function showVoiceToast(message) {
     const text = String(message ?? "").trim();
     if (!text) return;
-    setVoiceToast(text);
-    if (voiceToastTimerRef.current) window.clearTimeout(voiceToastTimerRef.current);
-    voiceToastTimerRef.current = window.setTimeout(() => {
-      setVoiceToast("");
-      voiceToastTimerRef.current = null;
-    }, 3200);
+    toast.error(text);
   }
 
   async function toggleVoice() {
@@ -13737,7 +14242,6 @@ function StudioComposer({
 
   useEffect(() => {
     return () => {
-      if (voiceToastTimerRef.current) window.clearTimeout(voiceToastTimerRef.current);
       void import("@/desk/lib/voice-desk")
         .then((voice) => voice.cancelRecording())
         .catch(() => {});
@@ -13808,8 +14312,10 @@ function StudioComposer({
             }
           >
             <div className="studio-composer-options-head">
-              <span className="studio-composer-options-head-spacer" aria-hidden="true" />
-              <strong className="studio-composer-options-title">Style</strong>
+              <strong className="studio-composer-options-title">
+                <Palette aria-hidden="true" />
+                <span>Style</span>
+              </strong>
               <button
                 type="button"
                 className="studio-composer-options-close"
@@ -13836,6 +14342,45 @@ function StudioComposer({
             />
           </div>
         ) : null}
+        {videoTypeGridOpen ? (
+          <div
+            className="studio-composer-options-panel is-overlay is-style is-video-type"
+            role="region"
+            aria-label="Video type"
+            style={
+              overlayPanelBox
+                ? {
+                    bottom: overlayPanelBox.bottom,
+                    maxHeight: `calc(100dvh - ${overlayPanelBox.top + overlayPanelBox.bottom}px)`,
+                    left: overlayPanelBox.left,
+                    width: overlayPanelBox.width,
+                  }
+                : undefined
+            }
+          >
+            <div className="studio-composer-options-head">
+              <strong className="studio-composer-options-title">
+                <Clapperboard aria-hidden="true" />
+                <span>Video type</span>
+              </strong>
+              <button
+                type="button"
+                className="studio-composer-options-close"
+                aria-label="Close video type picker"
+                onClick={() => setVideoTypeGridOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <VideoTypePickerPanel
+              value={videoType}
+              options={guidedVideoTypes}
+              onChange={(slug) => setVideoType?.(slug)}
+              onClose={() => setVideoTypeGridOpen(false)}
+              disabled={disabled || assistBusy}
+            />
+          </div>
+        ) : null}
         {composerOptionsOpen ? (
           <div
             className="studio-composer-options-panel is-overlay is-settings"
@@ -13853,8 +14398,10 @@ function StudioComposer({
             }
           >
             <div className="studio-composer-options-head">
-              <span className="studio-composer-options-head-spacer" aria-hidden="true" />
-              <strong className="studio-composer-options-title">Settings</strong>
+              <strong className="studio-composer-options-title">
+                <SlidersHorizontal aria-hidden="true" />
+                <span>Settings</span>
+              </strong>
               <button
                 type="button"
                 className="studio-composer-options-close"
@@ -13955,6 +14502,7 @@ function StudioComposer({
             aria-expanded={composerOptionsOpen}
             onClick={() => {
               setPresetGridOpen(false);
+              setVideoTypeGridOpen(false);
               setComposerOptionsOpen((open) => !open);
             }}
           >
@@ -13968,16 +14516,22 @@ function StudioComposer({
               open={presetGridOpen}
               onClick={() => {
                 setComposerOptionsOpen(false);
+                setVideoTypeGridOpen(false);
                 setPresetGridOpen((open) => !open);
               }}
             />
           ) : null}
           {assistanceOn && mode === "video" && guidedVideoTypes.length ? (
-            <VideoTypePicker
+            <VideoTypeTriggerButton
               value={videoType}
               options={guidedVideoTypes}
-              onChange={setVideoType}
+              open={videoTypeGridOpen}
               disabled={disabled || assistBusy}
+              onClick={() => {
+                setComposerOptionsOpen(false);
+                setPresetGridOpen(false);
+                setVideoTypeGridOpen((open) => !open);
+              }}
             />
           ) : null}
         </div>
@@ -14029,14 +14583,6 @@ function StudioComposer({
         }}
       />
       </div>
-      {voiceToast && typeof document !== "undefined"
-        ? createPortal(
-            <div className="studio-voice-toast" role="status" aria-live="polite">
-              {voiceToast}
-            </div>,
-            document.body,
-          )
-        : null}
     </div>
   );
 }
@@ -14356,7 +14902,7 @@ function StudioAddMenu({ open, setOpen, onAction }) {
               className="cursor-tab-context-menu studio-add-menu is-fixed"
               style={menuStyle}
             >
-              {CREATE_MENU_ITEMS.map((item, index) => {
+              {getCreateMenuItems().map((item, index) => {
                 if (item.sep) return <div key={`sep-${index}`} className="cursor-tab-context-sep" role="separator" />;
                 const Icon = item.icon;
                 return (
@@ -15006,6 +15552,7 @@ function StudioMobileAppMenu({
       label: "Navigate",
       items: [
         { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
+        { label: "Feed", Icon: Cloud, onClick: () => onOpenSection?.("feed") },
         { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
         { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
         { label: "History", Icon: History, onClick: onOpenHistory },
@@ -16179,8 +16726,10 @@ function StudioThreadChat({
   onOpenEntry,
   guidedBrief,
   onApproveGuidedBrief,
+  onPatchGuidedProduction,
   creditPriceCents,
   assistBusy,
+  assistApproveBusy = false,
   currentUser,
 }) {
   const safeEvents = events ?? [];
@@ -16189,10 +16738,25 @@ function StudioThreadChat({
   const streamRef = useRef(null);
   const userInitials = initialsFromUser(currentUser);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = streamRef.current;
-    if (!root || !displayEvents.length) return;
-    root.scrollTop = root.scrollHeight;
+    if (!root || !displayEvents.length) return undefined;
+    const scrollToBottom = () => {
+      root.scrollTop = root.scrollHeight;
+    };
+    scrollToBottom();
+    const raf = window.requestAnimationFrame(() => {
+      scrollToBottom();
+      window.requestAnimationFrame(scrollToBottom);
+    });
+    const observer = new ResizeObserver(scrollToBottom);
+    observer.observe(root);
+    const inner = root.querySelector(".studio-chat-stream-inner");
+    if (inner) observer.observe(inner);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
   }, [displayEvents.length, assistBusy, displayEvents.at(-1)?._id]);
 
   return (
@@ -16211,6 +16775,7 @@ function StudioThreadChat({
                 <StudioThreadEvent
                   key={event._id}
                   event={event}
+                  displayEvents={displayEvents}
                   assistanceApprovals={assistanceApprovals}
                   onDecideAssistanceApproval={onDecideAssistanceApproval}
                   assets={assets}
@@ -16218,8 +16783,9 @@ function StudioThreadChat({
                   onOpenEntry={onOpenEntry}
                   guidedBrief={guidedBrief}
                   onApproveGuidedBrief={onApproveGuidedBrief}
+                  onPatchGuidedProduction={onPatchGuidedProduction}
                   creditPriceCents={creditPriceCents}
-                  assistBusy={assistBusy}
+                  assistApproveBusy={assistApproveBusy}
                   userInitials={userInitials}
                 />
               ))}
@@ -16234,6 +16800,7 @@ function StudioThreadChat({
 
 function StudioThreadEvent({
   event,
+  displayEvents = [],
   assistanceApprovals = [],
   onDecideAssistanceApproval,
   assets,
@@ -16241,8 +16808,9 @@ function StudioThreadEvent({
   onOpenEntry,
   guidedBrief,
   onApproveGuidedBrief,
+  onPatchGuidedProduction,
   creditPriceCents,
-  assistBusy,
+  assistApproveBusy = false,
   userInitials = "?",
 }) {
   if (event.kind === "prompt") {
@@ -16268,9 +16836,20 @@ function StudioThreadEvent({
       (item) => item._id === event.approvalId,
     );
     if (!approval) return null;
+    const superseded = displayEvents.some(
+      (item) =>
+        item.kind === "prompt" &&
+        (item.createdAt ?? 0) > (event.createdAt ?? 0),
+    );
+    const expiredApproval =
+      superseded &&
+      (approval.status === "pending" ||
+        approval.status === "approved" ||
+        approval.status === "executing");
     return (
       <AssistanceApprovalCard
         approval={approval}
+        expired={expiredApproval}
         costLabel={
           approval.estimatedCredits != null
             ? formatTtdFromCredits(
@@ -16279,7 +16858,7 @@ function StudioThreadEvent({
               )
             : undefined
         }
-        onDecision={onDecideAssistanceApproval}
+        onDecision={expiredApproval ? undefined : onDecideAssistanceApproval}
       />
     );
   }
@@ -16377,9 +16956,19 @@ function StudioThreadEvent({
           }),
         }
       : reviewSnapshot;
+    const status = reviewData?.status;
     const readOnly =
       !isLatest ||
       ["approved", "generating", "done"].includes(guidedBrief?.status);
+    const superseded =
+      !isLatest ||
+      displayEvents.some(
+        (item) =>
+          item.kind === "prompt" &&
+          (item.createdAt ?? 0) > (event.createdAt ?? 0),
+      );
+    const expired =
+      superseded && status !== "done" && status !== "failed";
     const styleSheet = reviewData?.styleSheetElementId
       ? elements.find(
           (element) =>
@@ -16391,7 +16980,8 @@ function StudioThreadEvent({
       <AssistanceReviewCard
         mode={reviewData?.mode}
         videoType={reviewData?.videoType}
-        status={reviewData?.status}
+        status={status}
+        expired={expired}
         message={event.message}
         payload={reviewData?.payload ?? {}}
         assumptions={reviewData?.assumptions}
@@ -16418,17 +17008,27 @@ function StudioThreadEvent({
             ? formatTtdFromCredits(reviewData.estimatedCredits, creditPriceCents)
             : undefined
         }
-        readOnly={readOnly}
-        busy={assistBusy}
-        onApprove={isLatest && !readOnly ? onApproveGuidedBrief : undefined}
+        readOnly={readOnly || expired}
+        busy={Boolean(assistApproveBusy && isLatest && !readOnly && !expired)}
+        onApprove={isLatest && !readOnly && !expired ? onApproveGuidedBrief : undefined}
+        onPatchProduction={
+          isLatest && !readOnly && !expired ? onPatchGuidedProduction : undefined
+        }
       />
     );
   }
   if (event.kind === "stage") {
     if (GENERATION_STATUS_STAGES.has(event.stage)) {
+      const superseded = displayEvents.some(
+        (item) =>
+          item.kind === "prompt" &&
+          (item.createdAt ?? 0) > (event.createdAt ?? 0),
+      );
+      const expired =
+        superseded && GENERATION_PROGRESS_STAGES.has(event.stage);
       return (
         <StudioGenerationStatusCard
-          stage={event.stage}
+          stage={expired ? "expired" : event.stage}
           error={event.error}
           mode={event.jobMode ?? "video"}
         />
@@ -16476,17 +17076,20 @@ function StudioThreadEvent({
 function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
   const isFailed = stage === "failed";
   const isCancelled = stage === "cancelled";
+  const isExpired = stage === "expired";
   const isProgress = GENERATION_PROGRESS_STAGES.has(stage);
   const friendly = isFailed ? friendlyGenerationError(error, mode) : null;
-  const title = isCancelled
-    ? "Generation cancelled"
-    : isFailed
-      ? (friendly?.title ?? "Something went wrong")
-      : stage === "saving"
-        ? "Saving your render into Studio..."
-        : stage === "queued"
-          ? "Queued for render..."
-          : "Rendering...";
+  const title = isExpired
+    ? "Expired"
+    : isCancelled
+      ? "Generation cancelled"
+      : isFailed
+        ? (friendly?.title ?? "Something went wrong")
+        : stage === "saving"
+          ? "Saving your render into Studio..."
+          : stage === "queued"
+            ? "Queued for render..."
+            : "Rendering...";
   const detail = isFailed
     ? (friendly
         ? (friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message)
@@ -16497,7 +17100,7 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
 
   return (
     <div
-      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}`}
+      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}${isExpired ? " is-expired" : ""}`}
     >
       <div
         className={`studio-video-progress-frame studio-gen-status-frame${isProgress ? " has-dot-wave" : ""}`}
@@ -16508,7 +17111,7 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
         {!isProgress ? (
         <div className="studio-video-progress-content studio-gen-status-content">
           <span className="studio-gen-status-icon" aria-hidden="true">
-            {isCancelled ? (
+            {isCancelled || isExpired ? (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M8 12h8" />
@@ -16573,7 +17176,11 @@ function StudioChatResultCard({ entry, onOpen }) {
         aria-label={entry.name ? `Open ${safeEntryTitle(entry)}` : "Open image"}
         title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
       >
-        <img src={thumbSrc} alt="" loading="lazy" draggable={false} />
+        <MediaLoadFrame kind="image" src={thumbSrc} ratio="image" className="studio-chat-result-media">
+          {({ onLoad, onError }) => (
+            <img src={thumbSrc} alt="" loading="lazy" draggable={false} onLoad={onLoad} onError={onError} />
+          )}
+        </MediaLoadFrame>
       </button>
     );
   }
@@ -16601,13 +17208,24 @@ function StudioChatResultCard({ entry, onOpen }) {
     >
       {isVideo && (entry.mediaUrl || thumbSrc) ? (
         <>
-          <video
+          <MediaLoadFrame
+            kind="video"
             src={entry.mediaUrl ?? thumbSrc}
-            poster={poster}
-            controls
-            playsInline
-            preload="metadata"
-          />
+            ratio="video"
+            className="studio-chat-result-media"
+          >
+            {({ onLoad, onError }) => (
+              <video
+                src={entry.mediaUrl ?? thumbSrc}
+                poster={poster}
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedData={onLoad}
+                onError={onError}
+              />
+            )}
+          </MediaLoadFrame>
           {canOpen ? (
             <button
               type="button"
@@ -16640,8 +17258,10 @@ function ActivePane({
   onDecideAssistanceApproval,
   guidedBrief,
   onApproveGuidedBrief,
+  onPatchGuidedProduction,
   creditPriceCents,
   assistBusy,
+  assistApproveBusy = false,
   onAttach,
   onDuplicate,
   onRename,
@@ -16675,10 +17295,101 @@ function ActivePane({
   onVideoEditProjectSaved,
   activeEditTab,
   onOpenPublicProfile,
+  onOpenProfilePost,
+  openTabs = [],
 }) {
+  const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
+  const feedPostId = activeTab.startsWith("feed:")
+    ? activeTab.slice("feed:".length)
+    : null;
   const profileUsername = activeTab.startsWith("profile:")
     ? activeTab.slice("profile:".length)
     : null;
+
+  const keptFeedTabs = useMemo(
+    () =>
+      (Array.isArray(openTabs) ? openTabs : []).filter(
+        (tab) =>
+          typeof tab === "string" &&
+          (tab.startsWith("feed:") || tab.startsWith("profilePost:")),
+      ),
+    [openTabs],
+  );
+  const keptProfileTabs = useMemo(
+    () =>
+      (Array.isArray(openTabs) ? openTabs : []).filter(
+        (tab) => typeof tab === "string" && tab.startsWith("profile:") && !tab.startsWith("profilePost:"),
+      ),
+    [openTabs],
+  );
+  const isSocialActive = Boolean(feedPostId || profilePostMatch || profileUsername);
+
+  const socialKeepalive = (
+    <div className="studio-social-keepalive" aria-hidden={!isSocialActive}>
+      {keptFeedTabs.map((tabKey) => {
+        let postId = "home";
+        let username;
+        if (tabKey.startsWith("feed:")) {
+          postId = tabKey.slice("feed:".length) || "home";
+        } else {
+          const match = tabKey.match(/^profilePost:([^:]+):(.+)$/);
+          username = match?.[1];
+          postId = match?.[2] || "home";
+        }
+        const isActive = activeTab === tabKey;
+        return (
+          <div
+            key={tabKey}
+            className={`studio-social-keepalive-slot${isActive ? " is-active" : ""}`}
+            data-tab={tabKey}
+          >
+            <div className="profile-post-viewer-host">
+              <ProfilePostViewer
+                postId={postId}
+                username={username}
+                tabActive={isActive}
+                onOpenProfile={onOpenPublicProfile}
+              />
+            </div>
+          </div>
+        );
+      })}
+      {keptProfileTabs.map((tabKey) => {
+        const username = tabKey.slice("profile:".length);
+        const isActive = activeTab === tabKey;
+        return (
+          <div
+            key={tabKey}
+            className={`studio-social-keepalive-slot${isActive ? " is-active" : ""}`}
+            data-tab={tabKey}
+          >
+            <PublicProfileView
+              username={username}
+              embedded
+              ownerName={currentUser}
+              onOpenPost={(post) => onOpenProfilePost?.(username, post._id)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  function wrapPane(content) {
+    return (
+      <div className="studio-active-pane">
+        {socialKeepalive}
+        {content ? (
+          <div
+            className={`studio-pane-foreground${isSocialActive ? " is-covered" : ""}`}
+            aria-hidden={isSocialActive || undefined}
+          >
+            {content}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!activeTab.startsWith("create:")) return;
@@ -16712,23 +17423,32 @@ function ActivePane({
 
   if (activeTab.startsWith("create:")) {
     const createTarget = parseCreateTab(activeTab);
-    if (createTarget.kind === "element") return null;
-    return (
+    if (createTarget.kind === "element") return wrapPane(null);
+    return wrapPane(
       <CreateStudioTab
         target={createTarget}
         onCancel={() => onCloseTab(activeTab)}
         onCreate={(values) => {
           void onCreateItem(values).then(() => onCloseTab(activeTab));
         }}
-      />
+      />,
     );
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
+    if (!isVideoEditorPreviewEnabled()) {
+      return wrapPane(
+        <div className="p-6 text-sm text-cursor-muted">
+          Video editor is available on preview only.
+        </div>,
+      );
+    }
     const folderId = videoEditContext.folderId ?? activeFolderId;
     if (!folderId) {
-      return <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>;
+      return wrapPane(
+        <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>,
+      );
     }
-    return (
+    return wrapPane(
       <StudioVideoEditor
         folderId={folderId}
         projectId={videoEditContext.projectId}
@@ -16740,31 +17460,26 @@ function ActivePane({
         onProjectSaved={(projectId, name) =>
           onVideoEditProjectSaved?.(videoEditContext.tabKey ?? activeTab, projectId, name)
         }
-      />
+      />,
     );
   }
   if (activeTab.startsWith("composer:")) {
-    return (
+    return wrapPane(
       <StudioThreadChat
         events={[]}
         assets={assets}
         elements={elements}
         onOpenEntry={onOpenEntry}
         currentUser={currentUser}
-      />
+      />,
     );
   }
-  if (profileUsername) {
-    return (
-      <PublicProfileView
-        username={profileUsername}
-        embedded
-        ownerName={currentUser}
-      />
-    );
+  if (feedPostId || profilePostMatch || profileUsername) {
+    // Feed / profile stay mounted in socialKeepalive — no remount on tab switch.
+    return wrapPane(null);
   }
   if (activeEntry?.studioKind === "document") {
-    return (
+    return wrapPane(
       <div className="studio-asset-preview studio-document-preview">
         <MarkdownDocEditor
           name={activeEntry.name}
@@ -16772,11 +17487,11 @@ function ActivePane({
           onChange={(contentMarkdown) => onDocumentChange(activeEntry, contentMarkdown)}
           onSave={() => {}}
         />
-      </div>
+      </div>,
     );
   }
   if (activeTab.startsWith("thread:")) {
-    return (
+    return wrapPane(
       <StudioThreadChat
         events={events}
         assistanceApprovals={assistanceApprovals}
@@ -16786,14 +17501,16 @@ function ActivePane({
         onOpenEntry={onOpenEntry}
         guidedBrief={guidedBrief}
         onApproveGuidedBrief={onApproveGuidedBrief}
+        onPatchGuidedProduction={onPatchGuidedProduction}
         creditPriceCents={creditPriceCents}
         assistBusy={assistBusy}
+        assistApproveBusy={assistApproveBusy}
         currentUser={currentUser}
-      />
+      />,
     );
   }
   if (adminTab) {
-    return (
+    return wrapPane(
       <AdminWorkspacePane
         tab={adminTab}
         currentUser={currentUser}
@@ -16804,24 +17521,26 @@ function ActivePane({
         onOpenAdminTab={onOpenAdminTab}
         onSeedStylePresets={onSeedStylePresets}
         onGeneratePresetThumbnails={onGeneratePresetThumbnails}
-      />
+      />,
     );
   }
   if (billingTab) {
-    return (
+    return wrapPane(
       <BillingWorkspacePane
         tab={billingTab}
         billingAccount={billingAccount}
         pricing={pricing}
         payments={payments}
-      />
+      />,
     );
   }
   if (!activeEntry) {
-    return <div className="p-6 text-sm text-cursor-muted">Choose a video, image, or note from the left.</div>;
+    return wrapPane(
+      <div className="p-6 text-sm text-cursor-muted">Choose a video, image, or note from the left.</div>,
+    );
   }
   if (activeEntry.studioKind === "asset") {
-    return (
+    return wrapPane(
       <StudioAssetPreview
         entry={activeEntry}
         folderId={activeFolderId}
@@ -16835,14 +17554,14 @@ function ActivePane({
                 })
             : undefined
         }
-      />
+      />,
     );
   }
   if (activeEntry.studioKind === "videoEdit") {
-    return null;
+    return wrapPane(null);
   }
   if (activeEntry.studioKind === "element") {
-    return (
+    return wrapPane(
       <StudioElementDetailPane
         entry={activeEntry}
         assets={assets}
@@ -16854,10 +17573,10 @@ function ActivePane({
         onUploadElementFiles={onUploadElementFiles}
         onOpenEntry={onOpenEntry}
         onTrash={onTrash}
-      />
+      />,
     );
   }
-  return (
+  return wrapPane(
     <div className="h-full overflow-auto p-6">
       <div className="rounded-2xl border border-cursor-border bg-cursor-panel p-5">
         <p className="text-xs uppercase tracking-wide text-cursor-muted">{activeEntry.kindLabel}</p>
@@ -16875,7 +17594,7 @@ function ActivePane({
           <button className={STYLE.iconButton} onClick={() => onTrash(activeEntry)}>Remove</button>
         </div>
       </div>
-    </div>
+    </div>,
   );
 }
 
@@ -19299,6 +20018,37 @@ function tabDescriptor({
       previewKind: avatarUrl ? "image" : undefined,
       previewInitials: avatarUrl ? undefined : initials,
       previewAvatarStyle,
+    };
+  }
+  if (key.startsWith("profilePost:")) {
+    const rest = key.slice("profilePost:".length);
+    const colon = rest.indexOf(":");
+    const username = (colon >= 0 ? rest.slice(0, colon) : rest)
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    const meta = profileMetaByUsername?.get?.(username);
+    const handle = String(meta?.username || username)
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    return {
+      key,
+      kind: "file",
+      title: handle ? `@${handle}` : "Post",
+      status: "ready",
+      studioKind: "profilePost",
+      previewUrl: meta?.avatarUrl,
+      previewKind: meta?.avatarUrl ? "image" : undefined,
+    };
+  }
+  if (key.startsWith("feed:")) {
+    return {
+      key,
+      kind: "file",
+      title: "Feed",
+      status: "ready",
+      studioKind: "feed",
     };
   }
   if (key.startsWith("admin:")) {

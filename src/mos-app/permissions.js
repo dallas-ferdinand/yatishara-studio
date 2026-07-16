@@ -29,11 +29,33 @@ export async function requestAllPermissions(onStatus) {
   localStorage.setItem(KEY, "done");
 }
 
+function isPreviewHost() {
+  const host = String(location.hostname || "");
+  return host.includes("preview.") || host === "localhost" || host === "127.0.0.1";
+}
+
 async function registerSw() {
   if (!("serviceWorker" in navigator)) return;
   if (!location.protocol.startsWith("http")) return;
+  // Preview/local must stay uncached so HMR and source edits are never sticky.
+  if (isPreviewHost()) {
+    try {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   try {
-    const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+    const reg = await navigator.serviceWorker.register("./sw.js", {
+      scope: "./",
+      updateViaCache: "none",
+    });
     if (reg.waiting) {
       reg.waiting.postMessage({ type: "skip-waiting" });
     }
@@ -53,6 +75,10 @@ async function registerSw() {
 /** PWA install prompt (Chrome / Edge). */
 export function initPwaInstall() {
   if (!("serviceWorker" in navigator)) return;
+  if (isPreviewHost()) {
+    void registerSw();
+    return;
+  }
   void registerSw();
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();

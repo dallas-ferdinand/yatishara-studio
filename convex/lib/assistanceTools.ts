@@ -1467,7 +1467,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     set_production_settings: tool({
       description:
-        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). Use canonical ratios like 9:16.",
+        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 854x480, 1280x720, or 1920x1080. Image quality must be low, medium, or high. Use canonical ratios like 9:16.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1494,21 +1494,39 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           session.mode === "image"
             ? new Set(["1K", "2K", "4K"])
             : new Set(["854x480", "1280x720", "1920x1080"]);
-        if (
-          typeof raw.resolution === "string" &&
-          !allowedResolutions.has(raw.resolution.trim())
-        ) {
-          return recordTool(session, "set_production_settings", input, {
-            ok: false,
-            error: "unsupported_resolution",
-            allowed: [...allowedResolutions],
-          });
+        const normalizeResolution = (value: string): string | null => {
+          const compact = value.trim().toUpperCase().replace(/\s+/g, "");
+          if (session.mode === "image") {
+            if (allowedResolutions.has(compact)) return compact;
+            if (compact === "1" || compact === "1024" || compact === "1024X1024") return "1K";
+            if (compact === "2" || compact === "2048" || compact === "2048X2048") return "2K";
+            if (compact === "4" || compact === "4096" || compact === "4096X4096") return "4K";
+            return null;
+          }
+          const lower = value.trim().toLowerCase();
+          if (lower === "480p" || lower === "480") return "854x480";
+          if (lower === "720p" || lower === "720" || lower === "hd") return "1280x720";
+          if (lower === "1080p" || lower === "1080" || lower === "fhd") return "1920x1080";
+          if (allowedResolutions.has(value.trim())) return value.trim();
+          return null;
+        };
+        let normalizedResolution: string | undefined;
+        if (typeof raw.resolution === "string" && raw.resolution.trim()) {
+          const next = normalizeResolution(raw.resolution);
+          if (!next) {
+            return recordTool(session, "set_production_settings", input, {
+              ok: false,
+              error: "unsupported_resolution",
+              allowed: [...allowedResolutions],
+            });
+          }
+          normalizedResolution = next;
         }
         if (
           raw.quality !== undefined &&
           (session.mode !== "image" ||
             typeof raw.quality !== "string" ||
-            !["low", "medium", "high"].includes(raw.quality.trim()))
+            !["low", "medium", "high"].includes(raw.quality.trim().toLowerCase()))
         ) {
           return recordTool(session, "set_production_settings", input, {
             ok: false,
@@ -1554,12 +1572,8 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             lockPath(session, "production.aspectRatio", inferred);
           }
         }
-        if (
-          canSet("production.resolution") &&
-          typeof raw.resolution === "string" &&
-          raw.resolution.trim()
-        ) {
-          production.resolution = raw.resolution.trim();
+        if (canSet("production.resolution") && normalizedResolution) {
+          production.resolution = normalizedResolution;
           lockPath(session, "production.resolution", inferred);
         }
         if (
@@ -1567,7 +1581,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           typeof raw.quality === "string" &&
           raw.quality.trim()
         ) {
-          production.quality = raw.quality.trim();
+          production.quality = raw.quality.trim().toLowerCase();
           lockPath(session, "production.quality", inferred);
         }
         if (canSet("production.durationSeconds") && typeof raw.durationSeconds === "number") {

@@ -206,9 +206,13 @@ async function enrichHistoryThread(
       const thumbPath =
         asset.thumbnailPath ||
         (asset.bunnyPath && asset.kind === "image" ? asset.bunnyPath : undefined);
-      const thumbnailUrl = thumbPath
+      let thumbnailUrl = thumbPath
         ? await signBunnyCdnUrl(thumbPath, expiresUnix, THUMB_TRANSFORM)
         : undefined;
+      // History chips: videos without a poster still need a preview frame source.
+      if (!thumbnailUrl && asset.kind === "video" && asset.bunnyPath) {
+        thumbnailUrl = await signBunnyCdnUrl(asset.bunnyPath, expiresUnix);
+      }
       resultThumbs = [
         {
           _id: asset._id,

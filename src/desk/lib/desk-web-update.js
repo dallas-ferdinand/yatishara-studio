@@ -78,11 +78,7 @@ export async function applyDesk2Update() {
     }
     if ("caches" in window) {
       const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter((k) => k.startsWith("mos-desk") || k.startsWith("mercuryos-desk"))
-          .map((k) => caches.delete(k)),
-      );
+      await Promise.all(keys.map((k) => caches.delete(k)));
     }
     try {
       sessionStorage.removeItem("mos-desk-purged-build");

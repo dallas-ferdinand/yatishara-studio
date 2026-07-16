@@ -5,6 +5,7 @@ import { getThemeBootInlineScript } from "@/mos-app/theme.js";
 import { getDeskBuildGuardInlineScript } from "@/mos-app/desk-build-guard.js";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
 import { PerformanceReporter } from "@/components/performance-reporter";
+import { StudioToaster } from "@/components/studio-toaster";
 import "./globals.css";
 
 const onest = Onest({
@@ -132,6 +133,7 @@ export default function RootLayout({
       <body className="h-full overflow-hidden" suppressHydrationWarning>
         <MosTooltipLayer />
         <PerformanceReporter surface="root" />
+        <StudioToaster />
         {children}
       </body>
     </html>

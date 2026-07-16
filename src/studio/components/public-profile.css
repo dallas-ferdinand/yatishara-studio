@@ -1,21 +1,44 @@
+/* Public profile — centered hero, studio frost glass */
+
 .public-profile-shell {
-  --pp-bg0: #0b0d10;
-  --pp-bg1: #141820;
-  --pp-ink: #f4f1ea;
-  --pp-muted: color-mix(in srgb, #f4f1ea 62%, transparent);
-  --pp-line: color-mix(in srgb, #f4f1ea 14%, transparent);
-  --pp-accent: #d8ff3e;
+  --pp-ink: var(--color-cursor-text-bright, #f4f1ea);
+  --pp-muted: var(--color-cursor-muted, color-mix(in srgb, #f4f1ea 62%, transparent));
+  --pp-line: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+  --pp-accent: var(--cursor-accent, #d8ff3e);
   --pp-accent-ink: #10140a;
-  --pp-surface: color-mix(in srgb, #1c222c 88%, transparent);
+  --pp-glass: var(
+    --studio-composer-glass,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 42%, transparent)
+  );
+  --pp-glass-muted: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--color-mos-composer, #07111f) 30%, transparent)
+  );
+  --pp-glass-blur: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  --pp-glass-shadow: var(
+    --studio-composer-glass-shadow,
+    0 16px 36px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06)
+  );
   position: relative;
   min-height: 100dvh;
   color: var(--pp-ink);
   background: transparent;
   font-family: var(--font-onest), system-ui, sans-serif;
   overflow: hidden;
+  transform: none;
+  filter: none;
+  isolation: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-/* Decorative wash sits under the frosted layer (standalone pages only). */
+.public-profile-shell::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .public-profile-shell:not(.is-embedded)::before {
   content: "";
   position: absolute;
@@ -23,90 +46,119 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1200px 520px at 50% -10%, color-mix(in srgb, #3d4a63 38%, transparent), transparent 70%),
-    linear-gradient(180deg, var(--pp-bg1), var(--pp-bg0) 48%, #08090c);
+    radial-gradient(1100px 480px at 50% -10%, color-mix(in srgb, #3d4a63 34%, transparent), transparent 70%),
+    radial-gradient(900px 420px at 80% 8%, color-mix(in srgb, var(--pp-accent) 8%, transparent), transparent 60%),
+    linear-gradient(180deg, #141820, #0b0d10 52%, #08090c);
 }
 
-/* Dark frosted glass — blur the scene behind, then tint. */
 .public-profile-blur {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, #050608 28%, transparent),
-      color-mix(in srgb, #050608 44%, transparent) 55%,
-      color-mix(in srgb, #050608 52%, transparent)
-    );
-  backdrop-filter: blur(36px) saturate(140%);
-  -webkit-backdrop-filter: blur(36px) saturate(140%);
+  transform: none;
+  filter: none;
+  isolation: auto;
+  background: color-mix(in srgb, #050608 46%, transparent);
+  -webkit-backdrop-filter: saturate(150%) blur(20px);
+  backdrop-filter: saturate(150%) blur(20px);
 }
 
-/* Inside Studio tabs — let the studio wallpaper show through the frost. */
 .public-profile-shell.is-embedded {
   min-height: 100%;
   height: 100%;
-  --pp-ink: var(--color-cursor-text-bright, #f4f1ea);
-  --pp-muted: var(--color-cursor-muted, color-mix(in srgb, #f4f1ea 62%, transparent));
-  --pp-line: color-mix(in srgb, var(--color-cursor-border-soft, #fff) 55%, transparent);
-  --pp-accent: var(--cursor-accent, #d8ff3e);
-  --pp-accent-ink: #10140a;
-  --pp-surface: color-mix(in srgb, var(--mos-surface, #1c222c) 88%, transparent);
   background: transparent;
 }
 
 .public-profile-shell.is-embedded .public-profile-blur {
+  background: color-mix(in srgb, var(--mos-bg, #050608) 42%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(22px);
+  backdrop-filter: saturate(160%) blur(22px);
+}
+
+[data-appearance="light"] .public-profile-shell {
+  --pp-accent-ink: #10140a;
+  --pp-glass: color-mix(in srgb, #ffffff 46%, transparent);
+  --pp-glass-muted: color-mix(in srgb, #ffffff 34%, transparent);
+}
+
+[data-appearance="light"] .public-profile-shell:not(.is-embedded)::before {
   background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, #050608 32%, transparent),
-      color-mix(in srgb, #050608 48%, transparent) 58%,
-      color-mix(in srgb, #050608 56%, transparent)
-    );
-  backdrop-filter: blur(40px) saturate(150%);
-  -webkit-backdrop-filter: blur(40px) saturate(150%);
+    radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--pp-accent) 10%, transparent), transparent 65%),
+    linear-gradient(180deg, #eef1f5, #e4e8ee 55%, #d8dee6);
+}
+
+[data-appearance="light"] .public-profile-blur {
+  background: color-mix(in srgb, #ffffff 52%, transparent);
+}
+
+[data-appearance="light"] .public-profile-shell.is-embedded .public-profile-blur {
+  background: color-mix(in srgb, #ffffff 48%, transparent);
 }
 
 .public-profile-main {
+  /* Desktop: page padding for hero; posts side inset = gap between tiles */
+  --pp-pad-x: 24px;
+  --pp-pad-top: 28px;
+  --pp-posts-gap: 10px;
+  --pp-posts-pad-x: var(--pp-posts-gap);
   position: relative;
   z-index: 1;
-  max-width: 960px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   max-height: 100%;
-  overflow: auto;
-  padding: 18px 14px 40px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--pp-pad-top) var(--pp-pad-x) 40px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.public-profile-main::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .public-profile-shell.is-embedded .public-profile-main {
+  --pp-pad-x: 20px;
+  --pp-pad-top: 20px;
+  --pp-posts-pad-x: var(--pp-posts-gap);
   height: 100%;
+  padding: var(--pp-pad-top) var(--pp-pad-x) 32px;
 }
 
+/* Centered hero — same on desktop + mobile */
 .public-profile-hero {
   display: grid;
   justify-items: center;
   text-align: center;
-  gap: 8px;
-  padding: 4px 4px 18px;
+  gap: 6px;
+  padding: 4px 4px 8px;
 }
 
 .public-profile-avatar {
-  width: 104px;
-  height: 104px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: var(--pp-surface);
-  border: 0;
-  box-shadow: 0 18px 48px color-mix(in srgb, #000 36%, transparent);
+  background: var(--pp-glass);
+  border: 1px solid var(--pp-line);
+  box-shadow: var(--pp-glass-shadow);
   font-family: var(--font-bricolage), sans-serif;
-  font-size: 34px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #fff;
-  animation: public-profile-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
 .public-profile-avatar img {
@@ -115,84 +167,113 @@
   object-fit: cover;
 }
 
-.public-profile-name {
-  margin: 6px 0 0;
-  font-family: var(--font-bricolage), sans-serif;
-  font-size: clamp(26px, 4.6vw, 36px);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  animation: public-profile-rise 620ms 40ms cubic-bezier(0.22, 1, 0.36, 1) both;
+.public-profile-identity {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
-.public-profile-handle,
-.public-profile-bio {
+.public-profile-title-row {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.public-profile-titles {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.public-profile-name {
   margin: 0;
-  color: var(--pp-muted);
-  max-width: 34rem;
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: clamp(22px, 3.8vw, 28px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
 }
 
 .public-profile-handle {
-  font-size: 14px;
+  margin: 0;
+  color: var(--pp-muted);
+  font-size: 13px;
   font-weight: 650;
 }
 
 .public-profile-bio {
-  font-size: 15px;
-  line-height: 1.45;
-  margin-top: 4px;
-  animation: public-profile-rise 700ms 70ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  margin: 0;
+  color: var(--pp-ink);
+  max-width: 34rem;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .public-profile-stats {
   display: flex;
-  gap: 22px;
-  margin-top: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 0;
 }
 
 .public-profile-stats div {
   display: grid;
-  gap: 2px;
+  gap: 0;
+  justify-items: center;
 }
 
 .public-profile-stats strong {
-  font-size: 16px;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .public-profile-stats span {
   color: var(--pp-muted);
-  font-size: 12px;
-  text-transform: lowercase;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .public-profile-follow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-width: 132px;
-  min-height: 40px;
-  margin-top: 6px;
+  gap: 6px;
+  min-width: 112px;
+  min-height: 34px;
+  margin-top: 0;
   border: 0;
   border-radius: 999px;
   background: var(--pp-accent);
   color: var(--pp-accent-ink);
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 750;
   cursor: pointer;
-  transition: transform 0.15s ease, filter 0.15s ease, background 0.15s ease;
+  padding: 0 14px;
 }
 
 .public-profile-follow:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
+  filter: brightness(1.04);
 }
 
 .public-profile-follow.is-following {
-  background: transparent;
+  background: var(--pp-glass);
   color: var(--pp-ink);
   border: 1px solid var(--pp-line);
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
 .public-profile-follow:disabled {
@@ -205,119 +286,282 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 8px;
-  margin: 10px 0 0;
+  gap: 6px;
+  margin: 0;
   padding: 0;
 }
 
 .public-profile-links a {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 11px;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid var(--pp-line);
-  background: color-mix(in srgb, var(--pp-surface) 80%, transparent);
+  background: var(--pp-glass);
   color: var(--pp-ink);
   text-decoration: none;
   font-size: 12px;
   font-weight: 650;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
+}
+
+.public-profile-links a span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .public-profile-links a:hover {
-  border-color: color-mix(in srgb, var(--pp-accent) 40%, var(--pp-line));
+  border-color: color-mix(in srgb, var(--pp-accent) 42%, var(--pp-line));
 }
 
 .public-profile-error {
-  margin: 4px 0 0;
+  margin: 0;
   color: #ffb4b4;
   font-size: 13px;
 }
 
+.public-profile-posts-rule {
+  width: calc(100% + (2 * var(--pp-pad-x)));
+  height: 1px;
+  margin: var(--pp-posts-gap) calc(-1 * var(--pp-pad-x));
+  background: color-mix(in srgb, var(--pp-line) 85%, transparent);
+  border: 0;
+}
+
+.public-profile-tabs-wrap {
+  display: grid;
+  gap: 0;
+}
+
+.public-profile-tabs-wrap .public-profile-posts-rule {
+  margin-block: 0;
+}
+
+.public-profile-tabs-wrap .public-profile-posts-rule:first-child {
+  margin-top: var(--pp-posts-gap);
+}
+
+.public-profile-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-inline: calc(-1 * var(--pp-pad-x));
+  padding: 10px var(--pp-pad-x);
+}
+
+.public-profile-tab {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 28px;
+  height: 28px;
+  border: 1px solid var(--pp-line);
+  border-radius: 999px;
+  background: var(--pp-glass-muted);
+  color: color-mix(in srgb, var(--pp-ink) 76%, transparent);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-transform: none;
+  cursor: pointer;
+  padding: 0 6px;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background 0.16s ease;
+}
+
+.public-profile-tab > * {
+  position: relative;
+  z-index: 1;
+}
+
+.public-profile-tab svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.public-profile-tab:hover {
+  color: var(--pp-ink);
+  background: var(--pp-glass);
+}
+
+.public-profile-tab.is-active {
+  border-color: transparent;
+  background: var(
+    --studio-chrome-glow-bg-active,
+    color-mix(in srgb, var(--pp-accent) 14%, transparent)
+  );
+  color: var(--pp-ink);
+  box-shadow: none;
+}
+
+.public-profile-tab.is-active::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: var(
+    --studio-chrome-glow-border-fade,
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--pp-accent) 70%, transparent) 50%,
+      transparent 100%
+    )
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  box-shadow: none;
+}
+
 .public-profile-grid-section {
-  margin-top: 6px;
+  margin-top: 0;
+  margin-inline: calc(var(--pp-posts-pad-x) - var(--pp-pad-x));
+  width: calc(100% + 2 * (var(--pp-pad-x) - var(--pp-posts-pad-x)));
+}
+
+.public-profile-tabs-wrap + .public-profile-grid-section {
+  margin-top: var(--pp-posts-gap);
 }
 
 .public-profile-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2px;
-  animation: public-profile-rise 760ms 90ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@media (max-width: 640px) {
-  .public-profile-main {
-    padding: 12px 10px 28px;
-  }
-
-  .public-profile-hero {
-    padding-bottom: 14px;
-  }
-
-  .public-profile-avatar {
-    width: 92px;
-    height: 92px;
-    font-size: 30px;
-  }
-
-  .public-profile-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 2px;
-  }
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--pp-posts-gap);
+  width: 100%;
 }
 
 .public-profile-tile {
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--pp-line) 70%, transparent);
+  border-radius: 12px;
   padding: 0;
-  background: color-mix(in srgb, #fff 4%, transparent);
+  background: var(--pp-glass-muted);
   cursor: pointer;
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 18%, transparent);
 }
 
 .public-profile-tile img,
+.public-profile-tile video,
 .public-profile-lightbox-media img,
 .public-profile-lightbox-media video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.public-profile-tile .media-load-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.public-profile-tile .media-load-frame-placeholder {
+  background: color-mix(in srgb, #000 24%, transparent);
+}
+
+.public-profile-tile .media-load-frame-spinner {
+  width: 18px;
+  height: 18px;
+}
+
+.public-profile-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background 0.16s ease;
+  pointer-events: none;
+}
+
+.public-profile-tile:hover::after,
+.public-profile-tile:focus-visible::after {
+  background: color-mix(in srgb, #000 26%, transparent);
+}
+
+.public-profile-tile-kind {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  pointer-events: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.45));
+}
+
+.public-profile-tile-kind-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.public-profile-tile-kind-icon.is-play {
+  width: 13px;
+  height: 13px;
+  margin-left: 1px;
 }
 
 .public-profile-tile-meta {
   position: absolute;
   inset: auto 0 0 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 18px 10px 8px;
-  background: linear-gradient(transparent, color-mix(in srgb, #000 72%, transparent));
+  padding: 20px 28px 8px 10px;
+  background: linear-gradient(transparent, color-mix(in srgb, #000 70%, transparent));
   color: #fff;
   font-size: 12px;
   font-weight: 700;
-  opacity: 0;
-  transition: opacity 0.16s ease;
-}
-
-.public-profile-tile:hover .public-profile-tile-meta,
-.public-profile-tile:focus-visible .public-profile-tile-meta {
   opacity: 1;
+  pointer-events: none;
 }
 
 .public-profile-tile-meta .is-liked,
 .public-profile-like.is-liked {
   color: #ff6b81;
   fill: currentColor;
-}
-
-.public-profile-tile-kind {
-  margin-left: auto;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.85;
 }
 
 .public-profile-tile-fallback,
@@ -374,9 +618,18 @@
 }
 
 .public-profile-empty-posts {
-  padding: 48px 12px;
+  min-height: 120px;
+  padding: 28px 12px;
   border: 1px dashed var(--pp-line);
-  border-radius: 18px;
+  border-radius: 12px;
+  background: var(--pp-glass);
+  font-size: 13px;
+  font-weight: 650;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
 .public-profile-lightbox {
@@ -386,8 +639,7 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: color-mix(in srgb, #050608 82%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, #050608 72%, transparent);
 }
 
 .public-profile-lightbox-close {
@@ -396,31 +648,38 @@
   right: 16px;
   width: 40px;
   height: 40px;
-  border: 0;
+  border: 1px solid var(--pp-line);
   border-radius: 999px;
-  background: color-mix(in srgb, #fff 10%, transparent);
+  background: var(--pp-glass);
   color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
 .public-profile-lightbox-body {
-  width: min(920px, 100%);
+  width: min(1100px, 100%);
   display: grid;
   gap: 12px;
 }
 
 .public-profile-lightbox-media {
-  max-height: min(72dvh, 820px);
-  border-radius: 18px;
+  max-height: min(70dvh, 800px);
+  border-radius: 16px;
   overflow: hidden;
+  border: 1px solid var(--pp-line);
   background: #000;
+  box-shadow: var(--pp-glass-shadow);
 }
 
 .public-profile-lightbox-media img,
 .public-profile-lightbox-media video {
-  max-height: min(72dvh, 820px);
+  max-height: min(70dvh, 800px);
   object-fit: contain;
   background: #000;
 }
@@ -430,58 +689,133 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-glass);
   color: #fff;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
-.public-profile-lightbox-footer p {
+.public-profile-lightbox-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.public-profile-lightbox-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.public-profile-lightbox-copy p {
   margin: 0;
   color: color-mix(in srgb, #fff 78%, transparent);
   font-size: 14px;
+  line-height: 1.4;
 }
 
 .public-profile-like {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 34px;
+  flex: 0 0 auto;
+  padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, #fff 18%, transparent);
-  background: color-mix(in srgb, #fff 8%, transparent);
+  border: 1px solid var(--pp-line);
+  background: var(--pp-glass-muted);
   color: #fff;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+  transform: none;
+  filter: none;
+  isolation: auto;
 }
 
-@keyframes public-profile-rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
+@media (max-width: 720px) {
+  .public-profile-main {
+    --pp-pad-x: 12px;
+    --pp-pad-top: 14px;
+    --pp-posts-gap: 6px;
+    /* Side inset for posts = gap between posts */
+    --pp-posts-pad-x: var(--pp-posts-gap);
+    padding: var(--pp-pad-top) var(--pp-pad-x) 28px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .public-profile-avatar,
-  .public-profile-name,
-  .public-profile-bio,
-  .public-profile-stats,
-  .public-profile-grid,
+  .public-profile-shell.is-embedded .public-profile-main {
+    --pp-pad-x: 12px;
+    --pp-pad-top: 14px;
+    --pp-posts-pad-x: var(--pp-posts-gap);
+    padding: var(--pp-pad-top) var(--pp-pad-x) 28px;
+  }
+
+  .public-profile-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 20px;
+  }
+
+  .public-profile-hero {
+    padding-bottom: 8px;
+    gap: 6px;
+  }
+
+  .public-profile-identity {
+    gap: 7px;
+  }
+
+  .public-profile-stats {
+    gap: 12px;
+  }
+
+  .public-profile-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .public-profile-tile {
-    animation: none !important;
+    border-radius: 10px;
+  }
+
+  .public-profile-tile-meta {
+    opacity: 1;
+    padding: 16px 8px 7px;
+    font-size: 11px;
+  }
+
+  .public-profile-lightbox {
+    padding: 12px;
+    align-items: end;
+  }
+
+  .public-profile-lightbox-media {
+    border-radius: 14px 14px 0 0;
+    max-height: min(66dvh, 720px);
+  }
+
+  .public-profile-lightbox-media img,
+  .public-profile-lightbox-media video {
+    max-height: min(66dvh, 720px);
+  }
+
+  .public-profile-lightbox-footer {
+    border-radius: 0 0 14px 14px;
   }
 }
 
 .public-profile-route,
 .public-profile-boot {
   min-height: 100%;
-  background: var(--mos-bg, #020617);
-  color: var(--mos-text, #fff);
+  background: #0c0f14;
+  color: #f4f1ea;
 }
 
 .public-profile-boot {

@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { query, mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { getOptionalUser } from "./lib/auth";
 import {
   assetThumbnailPath,
@@ -83,10 +83,148 @@ const publicPostReturn = v.object({
   name: v.string(),
   caption: v.optional(v.string()),
   likeCount: v.number(),
+  viewCount: v.number(),
+  commentCount: v.number(),
+  saveCount: v.number(),
+  shareCount: v.number(),
   publishedAt: v.number(),
   thumbnailUrl: v.optional(v.string()),
   mediaUrl: v.optional(v.string()),
   likedByViewer: v.boolean(),
+  savedByViewer: v.boolean(),
+});
+
+const feedPostReturn = v.object({
+  _id: v.id("profilePosts"),
+  assetId: v.id("assets"),
+  kind: v.union(v.literal("image"), v.literal("video")),
+  name: v.string(),
+  caption: v.optional(v.string()),
+  likeCount: v.number(),
+  viewCount: v.number(),
+  commentCount: v.number(),
+  saveCount: v.number(),
+  shareCount: v.number(),
+  publishedAt: v.number(),
+  thumbnailUrl: v.optional(v.string()),
+  mediaUrl: v.optional(v.string()),
+  likedByViewer: v.boolean(),
+  savedByViewer: v.boolean(),
+  username: v.string(),
+  displayName: v.optional(v.string()),
+  firstName: v.optional(v.string()),
+  lastName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  fromFollowing: v.boolean(),
+  score: v.number(),
+});
+
+type HydratedPublicPost = {
+  _id: Id<"profilePosts">;
+  assetId: Id<"assets">;
+  kind: "image" | "video";
+  name: string;
+  caption?: string;
+  likeCount: number;
+  viewCount: number;
+  commentCount: number;
+  saveCount: number;
+  shareCount: number;
+  publishedAt: number;
+  thumbnailUrl?: string;
+  mediaUrl?: string;
+  likedByViewer: boolean;
+  savedByViewer: boolean;
+};
+
+async function hydratePublicPosts(
+  ctx: QueryCtx,
+  posts: Doc<"profilePosts">[],
+  expiresUnix: number,
+  viewerId: Id<"users"> | null,
+): Promise<HydratedPublicPost[]> {
+  if (posts.length === 0) return [];
+  const assets = await Promise.all(posts.map((post) => ctx.db.get("assets", post.assetId)));
+  const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
+  /** Videos without a poster image still need a signed URL for grid <video> thumbs. */
+  const videoPreviewPaths = assets.map((asset) => {
+    if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
+      return undefined;
+    }
+    if (assetThumbnailPath(asset)) return undefined;
+    return asset.bunnyPath;
+  });
+  const likedFlags = viewerId
+    ? await Promise.all(
+        posts.map(async (post) => {
+          const like = await ctx.db
+            .query("profileLikes")
+            .withIndex("by_user_and_post", (q) =>
+              q.eq("userId", viewerId).eq("postId", post._id),
+            )
+            .unique();
+          return Boolean(like);
+        }),
+      )
+    : posts.map(() => false);
+  const savedFlags = viewerId
+    ? await Promise.all(
+        posts.map(async (post) => {
+          const save = await ctx.db
+            .query("profileSaves")
+            .withIndex("by_user_and_post", (q) =>
+              q.eq("userId", viewerId).eq("postId", post._id),
+            )
+            .unique();
+          return Boolean(save);
+        }),
+      )
+    : posts.map(() => false);
+  const [thumbs, videoUrls] = await Promise.all([
+    signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM),
+    signBunnyCdnUrls(videoPreviewPaths, expiresUnix),
+  ]);
+  const results: HydratedPublicPost[] = [];
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i]!;
+    const asset = assets[i];
+    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
+      continue;
+    }
+    const thumbPath = thumbPaths[i];
+    const videoPath = videoPreviewPaths[i];
+    results.push({
+      _id: post._id,
+      assetId: post.assetId,
+      kind: asset.kind,
+      name: asset.name,
+      caption: post.caption,
+      likeCount: post.likeCount,
+      viewCount: post.viewCount ?? 0,
+      commentCount: post.commentCount ?? 0,
+      saveCount: post.saveCount ?? 0,
+      shareCount: post.shareCount ?? 0,
+      publishedAt: post.publishedAt,
+      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+      mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
+      likedByViewer: likedFlags[i] ?? false,
+      savedByViewer: savedFlags[i] ?? false,
+    });
+  }
+  return results;
+}
+
+const profileCommentReturn = v.object({
+  _id: v.id("profileComments"),
+  postId: v.id("profilePosts"),
+  body: v.string(),
+  createdAt: v.number(),
+  userId: v.id("users"),
+  username: v.optional(v.string()),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  isOwner: v.boolean(),
+  isMine: v.boolean(),
 });
 
 const PUBLIC_URL_TTL_SECONDS = 60 * 60; // 1 hour signed CDN URLs
@@ -444,6 +582,10 @@ export const shareAsset = authedMutation({
       assetId: args.assetId,
       caption,
       likeCount: 0,
+      viewCount: 0,
+      commentCount: 0,
+      saveCount: 0,
+      shareCount: 0,
       publishedAt: now,
     });
     await adjustProfileCounts(ctx, profile._id, {
@@ -574,24 +716,242 @@ export const listPublicPosts = query({
     const viewerId = await getAuthUserId(ctx);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    return await hydratePublicPosts(ctx, active, expiresUnix, viewerId);
+  },
+});
 
-    const assets = await Promise.all(active.map((post) => ctx.db.get("assets", post.assetId)));
+/**
+ * Owner-only collections on your public profile tab bar:
+ * saved / liked / shared posts (any public author).
+ */
+export const listMyCollection = authedQuery({
+  args: {
+    kind: v.union(v.literal("saved"), v.literal("liked"), v.literal("shared")),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicPostReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 36, 1), 48);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const scan = Math.min(limit + 24, 72);
+
+    let postIds: Id<"profilePosts">[] = [];
+    if (args.kind === "liked") {
+      const rows = await ctx.db
+        .query("profileLikes")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    } else if (args.kind === "saved") {
+      const rows = await ctx.db
+        .query("profileSaves")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    } else {
+      const rows = await ctx.db
+        .query("profileShares")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", ctx.user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    }
+
+    const posts: Doc<"profilePosts">[] = [];
+    const seen = new Set<string>();
+    for (const postId of postIds) {
+      if (seen.has(postId)) continue;
+      seen.add(postId);
+      const post = await ctx.db.get("profilePosts", postId);
+      if (!post || post.unpublishedAt) continue;
+      const profile = await ctx.db.get("profiles", post.profileId);
+      if (!profile || !profile.isPublic) continue;
+      posts.push(post);
+      if (posts.length >= limit) break;
+    }
+    return await hydratePublicPosts(ctx, posts, expiresUnix, ctx.user._id);
+  },
+});
+
+/**
+ * Simple TikTok-style ranked feed.
+ * Score boosts: followed authors >> engagement >> recency.
+ * Optional seedPostId is pinned first so opening a grid tile lands on that post.
+ */
+export const listFeed = query({
+  args: {
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    seedPostId: v.optional(v.id("profilePosts")),
+  },
+  returns: v.array(feedPostReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 24, 1), 40);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const viewerId = await getAuthUserId(ctx);
+    const now = Date.now();
+
+    const followingIds = new Set<Id<"profiles">>();
+    if (viewerId) {
+      const follows = await ctx.db
+        .query("profileFollows")
+        .withIndex("by_follower", (q) => q.eq("followerUserId", viewerId))
+        .take(80);
+      for (const follow of follows) followingIds.add(follow.followingProfileId);
+    }
+
+    const recent = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_published")
+      .order("desc")
+      .take(120);
+
+    const candidates: Doc<"profilePosts">[] = [];
+    const seen = new Set<string>();
+
+    // Prefer a few posts from followed profiles first.
+    for (const profileId of followingIds) {
+      const theirs = await ctx.db
+        .query("profilePosts")
+        .withIndex("by_profile_and_published", (q) => q.eq("profileId", profileId))
+        .order("desc")
+        .take(6);
+      for (const post of theirs) {
+        if (post.unpublishedAt || seen.has(post._id)) continue;
+        seen.add(post._id);
+        candidates.push(post);
+      }
+    }
+
+    for (const post of recent) {
+      if (post.unpublishedAt || seen.has(post._id)) continue;
+      seen.add(post._id);
+      candidates.push(post);
+      if (candidates.length >= 90) break;
+    }
+
+    if (args.seedPostId) {
+      const seed = await ctx.db.get("profilePosts", args.seedPostId);
+      if (seed && !seed.unpublishedAt && !seen.has(seed._id)) {
+        candidates.unshift(seed);
+        seen.add(seed._id);
+      }
+    }
+
+    const profileCache = new Map<Id<"profiles">, Doc<"profiles"> | null>();
+    async function profileOf(id: Id<"profiles">) {
+      if (profileCache.has(id)) return profileCache.get(id) ?? null;
+      const profile = await ctx.db.get("profiles", id);
+      profileCache.set(id, profile);
+      return profile;
+    }
+
+    type Scored = {
+      post: Doc<"profilePosts">;
+      profile: Doc<"profiles">;
+      fromFollowing: boolean;
+      score: number;
+    };
+    const scored: Scored[] = [];
+    for (const post of candidates) {
+      const profile = await profileOf(post.profileId);
+      if (!profile || !profile.isPublic) continue;
+      const fromFollowing = followingIds.has(profile._id);
+      const ageHours = Math.max(0, (now - post.publishedAt) / (1000 * 60 * 60));
+      const recency = Math.max(0, 72 - ageHours) * 4;
+      const engagement = post.likeCount * 8 + (post.viewCount ?? 0) * 1.2;
+      const followBoost = fromFollowing ? 1400 : 0;
+      const seedBoost = args.seedPostId && post._id === args.seedPostId ? 100000 : 0;
+      scored.push({
+        post,
+        profile,
+        fromFollowing,
+        score: seedBoost + followBoost + engagement + recency,
+      });
+    }
+
+    scored.sort((a, b) => b.score - a.score || b.post.publishedAt - a.post.publishedAt);
+
+    // Keep seed first if present, then uniqueness by author streak soft-shuffle:
+    // avoid more than 2 consecutive posts from same author in the feed axis.
+    const ordered: Scored[] = [];
+    const leftover = [...scored];
+    while (leftover.length && ordered.length < limit) {
+      let pickIdx = 0;
+      const lastTwo = ordered.slice(-2).map((item) => item.profile._id);
+      if (
+        lastTwo.length === 2 &&
+        lastTwo[0] === lastTwo[1]
+      ) {
+        const alt = leftover.findIndex((item) => item.profile._id !== lastTwo[0]);
+        if (alt >= 0) pickIdx = alt;
+      }
+      ordered.push(leftover.splice(pickIdx, 1)[0]!);
+    }
+
+    if (ordered.length === 0) return [];
+
+    const assets = await Promise.all(
+      ordered.map((item) => ctx.db.get("assets", item.post.assetId)),
+    );
     const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
+    const videoPreviewPaths = assets.map((asset) => {
+      if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
+        return undefined;
+      }
+      if (assetThumbnailPath(asset)) return undefined;
+      return asset.bunnyPath;
+    });
+    const avatarAssets = await Promise.all(
+      ordered.map(async (item) =>
+        item.profile.avatarAssetId
+          ? ctx.db.get("assets", item.profile.avatarAssetId)
+          : null,
+      ),
+    );
+    const avatarPaths = avatarAssets.map((asset) =>
+      asset ? assetThumbnailPath(asset) : undefined,
+    );
     const likedFlags = viewerId
       ? await Promise.all(
-          active.map(async (post) => {
+          ordered.map(async (item) => {
             const like = await ctx.db
               .query("profileLikes")
               .withIndex("by_user_and_post", (q) =>
-                q.eq("userId", viewerId).eq("postId", post._id),
+                q.eq("userId", viewerId).eq("postId", item.post._id),
               )
               .unique();
             return Boolean(like);
           }),
         )
-      : active.map(() => false);
+      : ordered.map(() => false);
+    const savedFlags = viewerId
+      ? await Promise.all(
+          ordered.map(async (item) => {
+            const save = await ctx.db
+              .query("profileSaves")
+              .withIndex("by_user_and_post", (q) =>
+                q.eq("userId", viewerId).eq("postId", item.post._id),
+              )
+              .unique();
+            return Boolean(save);
+          }),
+        )
+      : ordered.map(() => false);
 
-    const thumbs = await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM);
+    const [signed, videoUrls] = await Promise.all([
+      signBunnyCdnUrls([...thumbPaths, ...avatarPaths], expiresUnix, THUMB_TRANSFORM),
+      signBunnyCdnUrls(videoPreviewPaths, expiresUnix),
+    ]);
+
+    const ownerUsers = await Promise.all(
+      ordered.map((item) => ctx.db.get("users", item.profile.userId)),
+    );
 
     const results: Array<{
       _id: Id<"profilePosts">;
@@ -600,34 +960,71 @@ export const listPublicPosts = query({
       name: string;
       caption?: string;
       likeCount: number;
+      viewCount: number;
+      commentCount: number;
+      saveCount: number;
+      shareCount: number;
       publishedAt: number;
       thumbnailUrl?: string;
       mediaUrl?: string;
       likedByViewer: boolean;
+      savedByViewer: boolean;
+      username: string;
+      displayName?: string;
+      firstName?: string;
+      lastName?: string;
+      avatarUrl?: string;
+      fromFollowing: boolean;
+      score: number;
     }> = [];
 
-    for (let i = 0; i < active.length; i++) {
-      const post = active[i]!;
+    for (let i = 0; i < ordered.length; i++) {
+      const item = ordered[i]!;
       const asset = assets[i];
       if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
         continue;
       }
       const thumbPath = thumbPaths[i];
-      const thumbnailUrl = thumbPath ? thumbs.get(thumbPath) : undefined;
+      const videoPath = videoPreviewPaths[i];
+      const avatarPath = avatarPaths[i];
+      const owner = ownerUsers[i];
+      const firstName = owner?.firstName?.trim() || undefined;
+      const lastName = owner?.lastName?.trim() || undefined;
       results.push({
-        _id: post._id,
-        assetId: post.assetId,
+        _id: item.post._id,
+        assetId: item.post.assetId,
         kind: asset.kind,
         name: asset.name,
-        caption: post.caption,
-        likeCount: post.likeCount,
-        publishedAt: post.publishedAt,
-        thumbnailUrl,
-        // Grid uses thumbnails; lightbox loads full media via getPublicPostMedia.
-        mediaUrl: undefined,
+        caption: item.post.caption,
+        likeCount: item.post.likeCount,
+        viewCount: item.post.viewCount ?? 0,
+        commentCount: item.post.commentCount ?? 0,
+        saveCount: item.post.saveCount ?? 0,
+        shareCount: item.post.shareCount ?? 0,
+        publishedAt: item.post.publishedAt,
+        thumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
+        mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
         likedByViewer: likedFlags[i] ?? false,
+        savedByViewer: savedFlags[i] ?? false,
+        username: item.profile.username,
+        displayName: item.profile.displayName?.trim() || undefined,
+        firstName,
+        lastName,
+        avatarUrl: avatarPath ? signed.get(avatarPath) : undefined,
+        fromFollowing: item.fromFollowing,
+        score: item.score,
       });
     }
+
+    // If seed was filtered out somehow, try to append it first by reordering.
+    if (args.seedPostId) {
+      const seedIdx = results.findIndex((post) => post._id === args.seedPostId);
+      if (seedIdx > 0) {
+        const [seed] = results.splice(seedIdx, 1);
+        if (seed) results.unshift(seed);
+      }
+    }
+
     return results;
   },
 });
@@ -795,5 +1192,442 @@ export const toggleLike = authedMutation({
     const likeCount = post.likeCount + 1;
     await ctx.db.patch(post._id, { likeCount });
     return { liked: true, likeCount };
+  },
+});
+
+export const toggleSave = authedMutation({
+  args: { postId: v.id("profilePosts") },
+  returns: v.object({
+    saved: v.boolean(),
+    saveCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await requirePublicPost(ctx, args.postId);
+    const existing = await ctx.db
+      .query("profileSaves")
+      .withIndex("by_user_and_post", (q) =>
+        q.eq("userId", ctx.user._id).eq("postId", post._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const saveCount = Math.max(0, (post.saveCount ?? 1) - 1);
+      await ctx.db.patch(post._id, { saveCount });
+      return { saved: false, saveCount };
+    }
+    await ctx.db.insert("profileSaves", {
+      userId: ctx.user._id,
+      postId: post._id,
+      createdAt: Date.now(),
+    });
+    const saveCount = (post.saveCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { saveCount });
+    return { saved: true, saveCount };
+  },
+});
+
+/** Record a share for the viewer (once per user+post) and bump shareCount. */
+export const recordShare = authedMutation({
+  args: { postId: v.id("profilePosts") },
+  returns: v.object({
+    shared: v.boolean(),
+    shareCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await requirePublicPost(ctx, args.postId);
+    const existing = await ctx.db
+      .query("profileShares")
+      .withIndex("by_user_and_post", (q) =>
+        q.eq("userId", ctx.user._id).eq("postId", post._id),
+      )
+      .unique();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { createdAt: now });
+    } else {
+      await ctx.db.insert("profileShares", {
+        userId: ctx.user._id,
+        postId: post._id,
+        createdAt: now,
+      });
+    }
+    const shareCount = (post.shareCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { shareCount });
+    return { shared: true, shareCount };
+  },
+});
+
+/** Increment public view count when a post is opened in the viewer. */
+export const recordPostView = mutation({
+  args: { postId: v.id("profilePosts") },
+  returns: v.object({ viewCount: v.number() }),
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      return { viewCount: 0 };
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      return { viewCount: post.viewCount ?? 0 };
+    }
+    const viewCount = (post.viewCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { viewCount });
+    return { viewCount };
+  },
+});
+
+const MAX_COMMENT_LEN = 500;
+
+function sanitizeCommentBody(raw: string, { allowEmpty }: { allowEmpty: boolean }): string {
+  const body = raw.replace(/\s+/g, " ").trim();
+  if (!body) {
+    if (allowEmpty) return "";
+    throw new Error("Comment cannot be empty");
+  }
+  if (body.length > MAX_COMMENT_LEN) {
+    throw new Error(`Comment must be ${MAX_COMMENT_LEN} characters or fewer`);
+  }
+  return body;
+}
+
+async function requirePublicPost(
+  ctx: QueryCtx | MutationCtx,
+  postId: Id<"profilePosts">,
+): Promise<Doc<"profilePosts">> {
+  const post = await ctx.db.get("profilePosts", postId);
+  if (!post || post.unpublishedAt) throw new Error("Post not found");
+  const profile = await ctx.db.get("profiles", post.profileId);
+  if (!profile || !profile.isPublic) throw new Error("Post not found");
+  return post;
+}
+
+const commentReturnValidator = v.object({
+  _id: v.id("profileComments"),
+  body: v.string(),
+  createdAt: v.number(),
+  userId: v.id("users"),
+  displayName: v.string(),
+  username: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  isOwner: v.boolean(),
+  isMine: v.boolean(),
+  parentId: v.optional(v.id("profileComments")),
+  likeCount: v.number(),
+  replyCount: v.number(),
+  likedByMe: v.boolean(),
+  imageUrl: v.optional(v.string()),
+});
+
+type CommentReturn = {
+  _id: Id<"profileComments">;
+  body: string;
+  createdAt: number;
+  userId: Id<"users">;
+  displayName: string;
+  username?: string;
+  avatarUrl?: string;
+  isOwner: boolean;
+  isMine: boolean;
+  parentId?: Id<"profileComments">;
+  likeCount: number;
+  replyCount: number;
+  likedByMe: boolean;
+  imageUrl?: string;
+};
+
+async function hydrateComments(
+  ctx: QueryCtx,
+  rows: Doc<"profileComments">[],
+  postOwnerId: Id<"users"> | undefined,
+  expiresUnix: number,
+): Promise<CommentReturn[]> {
+  const viewerId = await getAuthUserId(ctx);
+  const prepared: Array<{
+    _id: Id<"profileComments">;
+    body: string;
+    createdAt: number;
+    userId: Id<"users">;
+    displayName: string;
+    username?: string;
+    isOwner: boolean;
+    isMine: boolean;
+    parentId?: Id<"profileComments">;
+    likeCount: number;
+    replyCount: number;
+    likedByMe: boolean;
+    avatarAssetId?: Id<"assets">;
+    imageAssetId?: Id<"assets">;
+  }> = [];
+
+  for (const row of rows) {
+    if (row.deletedAt) continue;
+    const user = await ctx.db.get("users", row.userId);
+    if (!user) continue;
+    const authorProfile = await getProfileByUser(ctx, row.userId);
+    const displayName =
+      authorProfile?.displayName?.trim() ||
+      user.name?.trim() ||
+      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+      authorProfile?.username ||
+      "User";
+    let likedByMe = false;
+    if (viewerId) {
+      const like = await ctx.db
+        .query("profileCommentLikes")
+        .withIndex("by_user_and_comment", (q) =>
+          q.eq("userId", viewerId).eq("commentId", row._id),
+        )
+        .unique();
+      likedByMe = Boolean(like);
+    }
+    prepared.push({
+      _id: row._id,
+      body: row.body,
+      createdAt: row.createdAt,
+      userId: row.userId,
+      displayName,
+      username: authorProfile?.username,
+      isOwner: postOwnerId ? row.userId === postOwnerId : false,
+      isMine: viewerId === row.userId,
+      parentId: row.parentId,
+      likeCount: row.likeCount ?? 0,
+      replyCount: row.replyCount ?? 0,
+      likedByMe,
+      avatarAssetId: authorProfile?.avatarAssetId,
+      imageAssetId: row.imageAssetId,
+    });
+  }
+
+  const avatarAssets = await Promise.all(
+    prepared.map((comment) =>
+      comment.avatarAssetId ? ctx.db.get("assets", comment.avatarAssetId) : null,
+    ),
+  );
+  const avatarUrls = await Promise.all(
+    avatarAssets.map((asset) => signAvatarUrl(asset, expiresUnix)),
+  );
+  const imageAssets = await Promise.all(
+    prepared.map((comment) =>
+      comment.imageAssetId ? ctx.db.get("assets", comment.imageAssetId) : null,
+    ),
+  );
+  const imageUrls = await Promise.all(
+    imageAssets.map(async (asset) => {
+      if (!asset || asset.deletedAt || !asset.bunnyPath || asset.kind !== "image") {
+        return undefined;
+      }
+      return signBunnyFullUrl(asset.bunnyPath, expiresUnix);
+    }),
+  );
+
+  return prepared.map((comment, index) => ({
+    _id: comment._id,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    userId: comment.userId,
+    displayName: comment.displayName,
+    username: comment.username,
+    avatarUrl: avatarUrls[index],
+    isOwner: comment.isOwner,
+    isMine: comment.isMine,
+    parentId: comment.parentId,
+    likeCount: comment.likeCount,
+    replyCount: comment.replyCount,
+    likedByMe: comment.likedByMe,
+    imageUrl: imageUrls[index],
+  }));
+}
+
+/** Top-level comments for a post (no parent). */
+export const listComments = query({
+  args: {
+    postId: v.id("profilePosts"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(commentReturnValidator),
+  handler: async (ctx, args) => {
+    try {
+      await requirePublicPost(ctx, args.postId);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const rows = await ctx.db
+      .query("profileComments")
+      .withIndex("by_post_and_created", (q) => q.eq("postId", args.postId))
+      .order("desc")
+      .take(limit * 3 + 40);
+
+    const post = await ctx.db.get("profilePosts", args.postId);
+    const topLevel: Doc<"profileComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt || row.parentId) continue;
+      topLevel.push(row);
+      if (topLevel.length >= limit) break;
+    }
+    topLevel.reverse();
+    return hydrateComments(ctx, topLevel, post?.ownerId, expiresUnix);
+  },
+});
+
+/** Direct replies under a parent comment. */
+export const listCommentReplies = query({
+  args: {
+    parentId: v.id("profileComments"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(commentReturnValidator),
+  handler: async (ctx, args) => {
+    const parent = await ctx.db.get("profileComments", args.parentId);
+    if (!parent || parent.deletedAt) return [];
+    try {
+      await requirePublicPost(ctx, parent.postId);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const rows = await ctx.db
+      .query("profileComments")
+      .withIndex("by_parent_and_created", (q) => q.eq("parentId", args.parentId))
+      .order("asc")
+      .take(limit + 20);
+
+    const post = await ctx.db.get("profilePosts", parent.postId);
+    const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
+    return hydrateComments(ctx, alive, post?.ownerId, expiresUnix);
+  },
+});
+
+export const addComment = authedMutation({
+  args: {
+    postId: v.id("profilePosts"),
+    body: v.string(),
+    parentId: v.optional(v.id("profileComments")),
+    imageAssetId: v.optional(v.id("assets")),
+  },
+  returns: v.object({
+    commentId: v.id("profileComments"),
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await requirePublicPost(ctx, args.postId);
+    const body = sanitizeCommentBody(args.body, {
+      allowEmpty: Boolean(args.imageAssetId),
+    });
+    let imageAssetId: Id<"assets"> | undefined;
+    if (args.imageAssetId) {
+      const asset = await ctx.db.get("assets", args.imageAssetId);
+      if (
+        !asset ||
+        asset.ownerId !== ctx.user._id ||
+        asset.deletedAt ||
+        asset.kind !== "image" ||
+        !asset.bunnyPath
+      ) {
+        throw new Error("Image not found");
+      }
+      imageAssetId = asset._id;
+    }
+    if (!body && !imageAssetId) {
+      throw new Error("Comment cannot be empty");
+    }
+    let parent: Doc<"profileComments"> | null = null;
+    if (args.parentId) {
+      parent = await ctx.db.get("profileComments", args.parentId);
+      if (!parent || parent.deletedAt || parent.postId !== args.postId) {
+        throw new Error("Comment not found");
+      }
+    }
+    const commentId = await ctx.db.insert("profileComments", {
+      postId: args.postId,
+      userId: ctx.user._id,
+      body,
+      createdAt: Date.now(),
+      parentId: parent?._id,
+      likeCount: 0,
+      replyCount: 0,
+      imageAssetId,
+    });
+    if (parent) {
+      await ctx.db.patch(parent._id, {
+        replyCount: (parent.replyCount ?? 0) + 1,
+      });
+    }
+    const commentCount = (post.commentCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { commentCount });
+    return { commentId, commentCount };
+  },
+});
+
+export const toggleCommentLike = authedMutation({
+  args: { commentId: v.id("profileComments") },
+  returns: v.object({
+    liked: v.boolean(),
+    likeCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get("profileComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      throw new Error("Comment not found");
+    }
+    await requirePublicPost(ctx, comment.postId);
+    const existing = await ctx.db
+      .query("profileCommentLikes")
+      .withIndex("by_user_and_comment", (q) =>
+        q.eq("userId", ctx.user._id).eq("commentId", comment._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const likeCount = Math.max(0, (comment.likeCount ?? 1) - 1);
+      await ctx.db.patch(comment._id, { likeCount });
+      return { liked: false, likeCount };
+    }
+    await ctx.db.insert("profileCommentLikes", {
+      userId: ctx.user._id,
+      commentId: comment._id,
+      createdAt: Date.now(),
+    });
+    const likeCount = (comment.likeCount ?? 0) + 1;
+    await ctx.db.patch(comment._id, { likeCount });
+    return { liked: true, likeCount };
+  },
+});
+
+export const deleteComment = authedMutation({
+  args: { commentId: v.id("profileComments") },
+  returns: v.object({
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get("profileComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      return { commentCount: 0 };
+    }
+    const post = await ctx.db.get("profilePosts", comment.postId);
+    const isAuthor = comment.userId === ctx.user._id;
+    const isPostOwner = post?.ownerId === ctx.user._id;
+    if (!isAuthor && !isPostOwner) {
+      throw new Error("You cannot delete this comment");
+    }
+    await ctx.db.patch(comment._id, { deletedAt: Date.now() });
+    if (comment.parentId) {
+      const parent = await ctx.db.get("profileComments", comment.parentId);
+      if (parent && !parent.deletedAt) {
+        await ctx.db.patch(parent._id, {
+          replyCount: Math.max(0, (parent.replyCount ?? 1) - 1),
+        });
+      }
+    }
+    if (!post) return { commentCount: 0 };
+    const commentCount = Math.max(0, (post.commentCount ?? 1) - 1);
+    await ctx.db.patch(post._id, { commentCount });
+    return { commentCount };
   },
 });

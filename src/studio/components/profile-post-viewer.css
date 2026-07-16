@@ -1,0 +1,1681 @@
+/* TikTok-style discrete feed viewer with slide transitions */
+
+.studio-active-pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-social-keepalive {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  min-height: 0;
+}
+
+.studio-social-keepalive-slot {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  /* Keep media warm — avoid display:none / visibility:hidden. */
+}
+
+.studio-social-keepalive-slot.is-active {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.studio-pane-foreground {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.studio-pane-foreground.is-covered {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-post-viewer-host {
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  background: transparent;
+}
+
+.profile-post-viewer-layout {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.profile-post-viewer-layout .profile-post-viewer {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.profile-post-viewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: #f4f1ea;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  isolation: auto;
+}
+
+.profile-post-viewer-blur {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, #050608 72%, transparent);
+  -webkit-backdrop-filter: saturate(140%) blur(22px);
+  backdrop-filter: saturate(140%) blur(22px);
+}
+
+[data-appearance="light"] .profile-post-viewer-blur {
+  background: color-mix(in srgb, #0b1220 38%, transparent);
+}
+
+.profile-post-viewer.is-loading,
+.profile-post-viewer.is-empty {
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+  color: color-mix(in srgb, #f4f1ea 62%, transparent);
+  touch-action: auto;
+}
+
+.profile-post-viewer.is-loading > *:not(.profile-post-viewer-blur),
+.profile-post-viewer.is-empty > *:not(.profile-post-viewer-blur) {
+  position: relative;
+  z-index: 1;
+}
+
+.profile-post-viewer.is-empty button {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: color-mix(in srgb, #07111f 50%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.profile-post-track {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  will-change: transform;
+}
+
+.profile-post-like-burst {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: #ff3b5c;
+  animation: profile-post-like-burst 700ms ease-out forwards;
+}
+
+.profile-post-like-burst svg {
+  width: 88px;
+  height: 88px;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.35));
+}
+
+@keyframes profile-post-like-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+.profile-post-slide {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.profile-post-slide::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  border: 0 solid color-mix(in srgb, #fff 18%, transparent);
+  box-shadow: none;
+}
+
+.profile-post-slide.is-y.is-prev::after {
+  border-bottom-width: 1px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #000 18%, transparent);
+}
+
+.profile-post-slide.is-y.is-next::after {
+  border-top-width: 1px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #000 18%, transparent);
+}
+
+[data-appearance="light"] .profile-post-slide::after {
+  border-color: color-mix(in srgb, #0f172a 16%, transparent);
+}
+
+[data-appearance="light"] .profile-post-slide.is-y.is-prev::after {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #fff 38%, transparent);
+}
+
+[data-appearance="light"] .profile-post-slide.is-y.is-next::after {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 38%, transparent);
+}
+
+.profile-post-slide.is-y.is-prev {
+  transform: translate3d(0, -100%, 0);
+}
+
+.profile-post-slide.is-y.is-next {
+  transform: translate3d(0, 100%, 0);
+}
+
+.profile-post-slide.is-x.is-prev {
+  transform: translate3d(-100%, 0, 0);
+}
+
+.profile-post-slide.is-x.is-next {
+  transform: translate3d(100%, 0, 0);
+}
+
+.profile-post-slide.is-idle {
+  /* Keep in the render/load tree so neighbor media can preload.
+     visibility:hidden often defers video/image fetch on mobile browsers. */
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  z-index: 0;
+}
+
+.profile-post-slide-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, #050608 72%, transparent);
+  -webkit-backdrop-filter: saturate(140%) blur(22px);
+  backdrop-filter: saturate(140%) blur(22px);
+}
+
+[data-appearance="light"] .profile-post-slide-glass {
+  background: color-mix(in srgb, #0b1220 38%, transparent);
+}
+
+.profile-post-slide-media {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background: transparent;
+}
+
+.profile-post-slide-media img,
+.profile-post-slide-media video {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: transparent;
+  pointer-events: none;
+}
+
+.profile-post-slide-frame {
+  max-width: 100%;
+  max-height: 100%;
+  background: color-mix(in srgb, #000 32%, transparent);
+  border-radius: 0;
+}
+
+.profile-post-slide-frame.media-load-frame.is-ready {
+  background: transparent;
+}
+
+.profile-post-slide-frame.media-load-frame img,
+.profile-post-slide-frame.media-load-frame video {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(100%, 100dvh);
+  object-fit: contain;
+}
+
+.profile-post-slide-loading {
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, #fff 55%, transparent);
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.profile-post-slide-loading.is-ratio-image {
+  aspect-ratio: 1 / 1;
+  width: min(72vw, 420px);
+  max-height: 80%;
+}
+
+.profile-post-slide-loading.is-ratio-video {
+  aspect-ratio: 9 / 16;
+  width: min(72vw, 360px);
+  max-height: 80%;
+}
+
+.profile-post-video-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, #000 58%, transparent) 0%,
+    transparent 42%,
+    transparent 58%,
+    color-mix(in srgb, #000 18%, transparent) 100%
+  );
+}
+
+.profile-post-video-chrome.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.profile-post-video-play {
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55)) drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
+  transform: scale(0.94);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.profile-post-video-chrome.is-visible .profile-post-video-play {
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.profile-post-video-play:hover {
+  background: transparent;
+  transform: scale(1.06);
+}
+
+.profile-post-video-play:focus-visible {
+  outline: 2px solid color-mix(in srgb, #fff 55%, transparent);
+  outline-offset: 6px;
+  border-radius: 8px;
+}
+
+.profile-post-video-play svg {
+  width: 56px;
+  height: 56px;
+  margin-left: 3px;
+}
+
+.profile-post-video-play:has(svg.lucide-pause) svg,
+.profile-post-video-play[aria-label="Pause"] svg {
+  margin-left: 0;
+}
+
+.profile-post-video-bar {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: auto;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px max(18px, calc(12px + env(safe-area-inset-bottom, 0px)));
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.profile-post-video-chrome.is-visible .profile-post-video-bar {
+  pointer-events: auto;
+}
+
+.profile-post-video-time {
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  white-space: nowrap;
+  min-width: 2.4em;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75)) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}
+
+.profile-post-video-time:last-child {
+  text-align: right;
+}
+
+.profile-post-video-scrub {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+
+.profile-post-video-scrub::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 28%, transparent);
+}
+
+.profile-post-video-scrub::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: var(--pp-video-progress, 0%);
+  height: 3px;
+  border-radius: 999px;
+  background: #fff;
+  pointer-events: none;
+}
+
+.profile-post-video-scrub-input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+  height: 18px;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.profile-post-video-scrub-input::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+
+.profile-post-video-scrub-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 1px 6px color-mix(in srgb, #000 40%, transparent);
+}
+
+.profile-post-video-scrub-input::-moz-range-track {
+  height: 3px;
+  background: transparent;
+  border: 0;
+}
+
+.profile-post-video-scrub-input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow: 0 1px 6px color-mix(in srgb, #000 40%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-post-video-chrome,
+  .profile-post-video-play {
+    transition: none;
+  }
+}
+
+/* TikTok right rail — compact filled controls */
+.profile-post-rail {
+  position: absolute;
+  right: max(8px, env(safe-area-inset-right, 0px));
+  top: 50%;
+  z-index: 4;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.profile-post-rail-avatar,
+.profile-post-rail-btn {
+  pointer-events: auto;
+}
+
+.profile-post-rail-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #fff 14%, transparent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 4px 12px rgba(0, 0, 0, 0.4);
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
+}
+
+.profile-post-rail-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-post-rail-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.65),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.profile-post-rail-btn svg,
+.profile-post-rail-spin {
+  width: 22px;
+  height: 22px;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+
+.profile-post-rail-btn .profile-post-rail-share {
+  width: 22px;
+  height: 22px;
+}
+
+.profile-post-rail-spin {
+  animation: profile-post-rail-spin 0.7s linear infinite;
+}
+
+@keyframes profile-post-rail-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.profile-post-rail-btn.is-liked {
+  color: #fff;
+}
+
+.profile-post-rail-btn.is-liked svg {
+  color: #ff3b5c;
+  filter:
+    drop-shadow(0 1px 0 #a01028)
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+}
+
+.profile-post-rail-btn.is-saved {
+  color: #fff;
+}
+
+.profile-post-rail-btn.is-saved svg {
+  color: #ffc53d;
+  filter:
+    drop-shadow(0 1px 0 #a87400)
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.5));
+}
+
+.profile-post-rail-btn span {
+  color: #fff;
+}
+
+@media (min-width: 900px) {
+  .profile-post-rail {
+    right: 14px;
+  }
+}
+
+/* Desktop — real right column (shrinks feed, does not overlay) */
+.profile-comments-dock {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .profile-comments-dock {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 min(340px, 34%);
+    width: min(340px, 34%);
+    min-width: 280px;
+    max-width: 400px;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    pointer-events: auto;
+    color: #f4f1ea;
+    border: 0;
+    border-left: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+    border-radius: 0;
+    /* Glass on ::before — same pattern as mobile menu / comments sheet */
+    background: transparent;
+    transform: none;
+    filter: none;
+    isolation: auto;
+    contain: none;
+    overflow: hidden;
+    box-shadow: var(
+      --studio-composer-glass-shadow,
+      inset 1px 0 0 rgba(255, 255, 255, 0.08)
+    );
+  }
+
+  .profile-comments-dock::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--color-mos-composer, #07111f) 68%, transparent);
+    -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+    backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+  }
+
+  .profile-comments-dock > *:not(.profile-comments-lightbox) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .profile-comments-dock .profile-comments-head {
+    flex: 0 0 auto;
+  }
+
+  .profile-comments-dock .profile-comments-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-top: 0;
+  }
+
+  .profile-comments-dock .profile-comments-list.is-empty,
+  .profile-comments-dock .profile-comments-list.is-loading {
+    flex: 1 1 auto;
+    padding-top: 16px;
+  }
+
+  .profile-comments-dock .profile-comment-row:first-child {
+    padding-top: 16px;
+  }
+
+  .profile-comments-dock .profile-comments-composer {
+    flex: 0 0 auto;
+    background: transparent;
+    border-top-color: color-mix(in srgb, #fff 10%, transparent);
+    padding-bottom: 12px;
+  }
+}
+
+/* Mobile comments — glass sheet (like app menu): blur on the panel, no dim overlay */
+.profile-comments-sheet {
+  position: absolute !important;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: grid;
+  align-items: end;
+  pointer-events: auto;
+}
+
+.profile-comments-dismiss {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-comments-panel {
+  pointer-events: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  color: #f4f1ea;
+  border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+  background: transparent;
+  transform: none;
+  filter: none;
+  isolation: auto;
+  box-shadow: var(
+    --studio-composer-glass-shadow,
+    0 20px 48px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08)
+  );
+}
+
+.profile-comments-panel.is-sheet {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-height: min(78dvh, 720px);
+  border-radius: 18px 18px 0 0;
+  border-bottom: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  /* Glass on ::before — backdrop-filter on overflow:hidden shell breaks blur (same as menu). */
+}
+
+.profile-comments-panel.is-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 68%, transparent);
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+}
+
+.profile-comments-panel.is-sheet > *:not(.profile-comments-lightbox) {
+  position: relative;
+  z-index: 1;
+}
+
+.profile-comments-panel.is-sheet .profile-comments-composer {
+  padding: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-comments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-comments-head > div:not(.profile-comments-thread-head) {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.profile-comments-head strong {
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.profile-comments-head span {
+  color: color-mix(in srgb, #fff 62%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.profile-comments-close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: inherit;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-comments-post-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.profile-comments-post-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-comments-post-action svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profile-comments-post-action.is-liked {
+  color: inherit;
+}
+
+.profile-comments-post-action.is-liked svg {
+  color: #ff3b5c;
+}
+
+.profile-comments-post-action.is-saved {
+  color: inherit;
+}
+
+.profile-comments-post-action.is-saved svg {
+  color: #ffc53d;
+}
+
+.profile-comments-post-action span {
+  color: #fff;
+}
+
+.profile-comments-post-action:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.profile-comments-head.is-thread .profile-comments-post-actions {
+  margin-left: 0;
+}
+
+.profile-comments-head.is-thread {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.profile-comments-thread-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-comments-back {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: inherit;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-comments-thread-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 750;
+  background: color-mix(in srgb, #fff 10%, transparent);
+}
+
+.profile-comments-thread-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-comments-thread-preview {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.profile-comments-thread-preview strong {
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-comments-thread-preview time {
+  color: color-mix(in srgb, #fff 58%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.profile-comments-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-content: start;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.profile-comments-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.profile-comments-list.is-empty,
+.profile-comments-list.is-loading {
+  display: grid;
+  align-content: stretch;
+  grid-template-rows: 1fr;
+  height: 100%;
+  padding: 10px 12px 8px;
+}
+
+.profile-comments-list.has-parent.is-loading,
+.profile-comments-list.has-parent.is-replies-empty {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.profile-comments-list.has-parent.is-loading .profile-comment-parent-body,
+.profile-comments-list.has-parent.is-replies-empty .profile-comment-parent-body {
+  flex: 0 0 auto;
+}
+
+.profile-comments-list.has-parent.is-loading .profile-comments-empty,
+.profile-comments-list.has-parent.is-replies-empty .profile-comments-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-content: center;
+  place-items: center;
+  align-self: stretch;
+  min-height: 160px;
+  height: auto;
+  padding: 28px 16px;
+}
+
+.profile-comment-parent-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, #fff 4%, transparent);
+}
+
+.profile-comment-parent-content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.profile-comment-parent-body p,
+.profile-comment-parent-content p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.profile-comment-image-btn {
+  display: block;
+  width: 48px;
+  height: 48px;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.profile-comment-image {
+  display: block;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  border-radius: 7px;
+  object-fit: cover;
+  background: color-mix(in srgb, #000 28%, transparent);
+}
+
+.profile-comments-lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  box-sizing: border-box;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  background: color-mix(in srgb, #05070c 88%, transparent);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  backdrop-filter: saturate(140%) blur(10px);
+  border-radius: inherit;
+}
+
+.profile-comments-lightbox-dismiss {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.profile-comments-lightbox-frame {
+  position: absolute;
+  inset: 52px 16px 16px;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.profile-comments-lightbox-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.profile-comments-lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #0a0d14 82%, transparent);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 4px 14px rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.profile-comments-empty {
+  display: grid;
+  place-content: center;
+  place-items: center;
+  align-self: stretch;
+  gap: 6px;
+  min-height: 100%;
+  padding: 24px 16px;
+  color: color-mix(in srgb, #fff 58%, transparent);
+  text-align: center;
+  font-size: 13px;
+}
+
+.profile-comments-empty-icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 4px;
+  opacity: 0.55;
+  stroke-width: 1.75;
+}
+
+.profile-comments-empty-spin {
+  width: 18px;
+  height: 18px;
+  opacity: 0.55;
+  animation: profile-post-rail-spin 0.7s linear infinite;
+}
+
+.profile-comments-empty p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: color-mix(in srgb, #fff 78%, transparent);
+  letter-spacing: 0.01em;
+}
+
+.profile-comments-empty span {
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0.85;
+  max-width: 18ch;
+}
+
+[data-appearance="light"] .profile-comments-empty {
+  color: color-mix(in srgb, #0f172a 52%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-empty p {
+  color: color-mix(in srgb, #0f172a 78%, transparent);
+}
+
+.profile-comment-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.profile-comment-row:last-child {
+  border-bottom: 0;
+}
+
+.profile-comment-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 750;
+  background: color-mix(in srgb, #fff 10%, transparent);
+}
+
+.profile-comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-comment-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-comment-meta {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-comment-meta-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.profile-comment-meta-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profile-comment-meta strong {
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.profile-comment-meta time {
+  color: color-mix(in srgb, #fff 48%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.profile-comment-creator-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #d8ff3e) 42%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent, #d8ff3e) 22%, transparent), transparent 72%),
+    color-mix(in srgb, var(--cursor-accent, #d8ff3e) 14%, rgba(255, 255, 255, 0.06));
+  color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 88%, #fff);
+  font-size: 8px;
+  font-weight: 750;
+  font-style: normal;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.profile-comment-meta .profile-comment-delete {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.profile-comment-body p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.profile-comment-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.profile-comment-actions-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.profile-comment-action,
+.profile-comment-view-replies {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: color-mix(in srgb, #fff 68%, transparent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-comment-view-replies:hover,
+.profile-comment-action:hover {
+  color: color-mix(in srgb, #fff 92%, transparent);
+}
+
+.profile-comment-like {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 28px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.profile-comment-like svg {
+  width: 16px;
+  height: 16px;
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35));
+}
+
+.profile-comment-like.is-liked {
+  color: #fff;
+}
+
+.profile-comment-like.is-liked svg {
+  color: #ff3b5c;
+  filter:
+    drop-shadow(0 1px 0 #a01028)
+    drop-shadow(0 2px 5px rgba(0, 0, 0, 0.45));
+}
+
+.profile-comment-like span {
+  color: #fff;
+}
+
+.profile-comment-delete {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, #fff 55%, transparent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.profile-comments-composer {
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: 8px;
+}
+
+.profile-comments-composer.is-sheet-composer {
+  padding: 0;
+  gap: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-comments-composer-box {
+  display: grid;
+  grid-template-rows: auto auto;
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.profile-comments-inputline {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-comments-inputline textarea {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  max-height: 96px;
+  margin: 0;
+  padding: 10px 14px 4px;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  outline: none;
+  box-shadow: none;
+}
+
+.profile-comments-inputline textarea::placeholder {
+  color: color-mix(in srgb, #fff 38%, transparent);
+}
+
+.profile-comments-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+
+.profile-comments-circle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: color-mix(in srgb, #fff 82%, transparent);
+  cursor: pointer;
+}
+
+.profile-comments-circle-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.profile-comments-circle-btn:disabled:not(.is-send) {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.profile-comments-circle-btn.is-on {
+  border-color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 48%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 16%, transparent);
+  color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 90%, #fff);
+}
+
+.profile-comments-attach-preview {
+  position: relative;
+  width: fit-content;
+  margin: 10px 14px 0;
+}
+
+.profile-comments-composer.is-sheet-composer .profile-comments-attach-preview {
+  margin: 10px 14px 0;
+}
+
+.profile-comments-attach-preview img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.profile-comments-attach-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 72%, transparent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.profile-comments-circle-btn.is-send {
+  border: 1px solid color-mix(in srgb, var(--cursor-accent-hover, #e8ff6a) 52%, var(--cursor-accent, #d8ff3e) 48%);
+  border-bottom-color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 62%, #000 28%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--cursor-accent-hover, #e8ff6a) 90%, #fff 6%) 0%,
+    color-mix(in srgb, var(--cursor-accent, #d8ff3e) 90%, transparent) 46%,
+    color-mix(in srgb, var(--cursor-accent, #d8ff3e) 70%, #000 24%) 100%
+  );
+  box-shadow:
+    inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
+    0 2px 3px color-mix(in srgb, #000 22%, transparent),
+    0 4px 10px color-mix(in srgb, var(--cursor-accent, #d8ff3e) 18%, transparent);
+  color: #10140a;
+}
+
+.profile-comments-circle-btn.is-send:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.profile-comments-error {
+  margin: 0;
+  padding: 8px 14px 0;
+  color: #ffb4b4;
+  font-size: 12px;
+}
+
+.profile-comments-composer.is-sheet-composer .profile-comments-error {
+  padding: 8px 14px 0;
+}
+
+.profile-comments-input-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.profile-comments-attach-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: color-mix(in srgb, #fff 82%, transparent);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.profile-comments-attach-btn.is-on {
+  border-color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 48%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 16%, transparent);
+  color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 90%, #fff);
+}
+
+.profile-comments-attach-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.profile-comments-input-row input {
+  min-width: 0;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, #000 28%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  padding: 0 14px;
+  outline: none;
+}
+
+.profile-comments-input-row button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--cursor-accent, #d8ff3e);
+  color: #10140a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.profile-comments-input-row button:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+[data-appearance="light"] .profile-comments-panel.is-sheet::before {
+  background: color-mix(in srgb, #ffffff 72%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-panel {
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-appearance="light"] .profile-comments-dock {
+  color: #0f172a;
+  border-left-color: rgba(15, 23, 42, 0.12);
+  box-shadow: inset 1px 0 0 rgba(15, 23, 42, 0.04);
+}
+
+[data-appearance="light"] .profile-comments-dock::before {
+  background: color-mix(in srgb, #ffffff 72%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-dock .profile-comments-composer {
+  background: transparent;
+  border-top-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-appearance="light"] .profile-comments-input-row input {
+  background: color-mix(in srgb, #0b1220 4%, #fff);
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-appearance="light"] .profile-comments-thread-preview time,
+[data-appearance="light"] .profile-comment-action,
+[data-appearance="light"] .profile-comment-view-replies,
+[data-appearance="light"] .profile-comment-meta time {
+  color: color-mix(in srgb, #0f172a 52%, transparent);
+}
+
+[data-appearance="light"] .profile-comment-view-replies:hover,
+[data-appearance="light"] .profile-comment-action:hover {
+  color: color-mix(in srgb, #0f172a 82%, transparent);
+}
+
+[data-appearance="light"] .profile-comment-like {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+[data-appearance="light"] .profile-comment-like svg {
+  filter: none;
+}
+
+[data-appearance="light"] .profile-comment-like.is-liked {
+  color: #0f172a;
+}
+
+[data-appearance="light"] .profile-comment-like.is-liked svg {
+  color: #e11d48;
+}
+
+[data-appearance="light"] .profile-comment-like span,
+[data-appearance="light"] .profile-comments-post-action span {
+  color: #0f172a;
+}
+
+[data-appearance="light"] .profile-post-rail-btn span {
+  color: #fff;
+}
+
+[data-appearance="light"] .profile-comment-row {
+  border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+[data-appearance="light"] .profile-comment-parent-body {
+  background: color-mix(in srgb, #0f172a 3%, transparent);
+  border-bottom-color: rgba(15, 23, 42, 0.12);
+}
+
+[data-appearance="light"] .profile-comment-creator-tag {
+  border-color: color-mix(in srgb, var(--cursor-accent, #84cc16) 46%, rgba(15, 23, 42, 0.16));
+  color: color-mix(in srgb, #3f6212 70%, #0f172a);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent, #84cc16) 18%, transparent), transparent 72%),
+    color-mix(in srgb, var(--cursor-accent, #84cc16) 12%, #fff);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+[data-appearance="light"] .profile-comments-inputline textarea::placeholder {
+  color: color-mix(in srgb, #0f172a 40%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-circle-btn {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: color-mix(in srgb, #0f172a 5%, transparent);
+  color: color-mix(in srgb, #0f172a 78%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-back,
+[data-appearance="light"] .profile-comments-close {
+  background: color-mix(in srgb, #0f172a 6%, transparent);
+}

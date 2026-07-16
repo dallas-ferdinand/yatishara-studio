@@ -22,10 +22,12 @@ type AssistanceApproval = {
 export function AssistanceApprovalCard({
   approval,
   costLabel,
+  expired = false,
   onDecision,
 }: {
   approval: AssistanceApproval;
   costLabel?: string;
+  expired?: boolean;
   onDecision?: (
     approvalId: string,
     decision: "approve" | "deny",
@@ -35,9 +37,10 @@ export function AssistanceApprovalCard({
     "approve" | "deny" | null
   >(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const pending = approval.status === "pending";
+  const pending = !expired && approval.status === "pending";
   const running =
-    approval.status === "approved" || approval.status === "executing";
+    !expired &&
+    (approval.status === "approved" || approval.status === "executing");
 
   async function decide(decision: "approve" | "deny") {
     if (!onDecision || !pending) return;
@@ -108,16 +111,18 @@ export function AssistanceApprovalCard({
         </div>
       ) : (
         <p
-          className={`studio-assist-approval-status is-${approval.status}`}
+          className={`studio-assist-approval-status is-${expired ? "expired" : approval.status}`}
           aria-live={running ? "polite" : undefined}
         >
-          {running
-            ? "Running approved action…"
-            : approval.status === "completed"
-              ? "Completed"
-              : approval.status === "denied"
-                ? "Denied"
-                : "Failed"}
+          {expired
+            ? "Expired"
+            : running
+              ? "Running approved action…"
+              : approval.status === "completed"
+                ? "Completed"
+                : approval.status === "denied"
+                  ? "Denied"
+                  : "Failed"}
         </p>
       )}
     </article>

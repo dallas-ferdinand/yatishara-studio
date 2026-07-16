@@ -178,6 +178,40 @@ function ProgressiveThumb({
   );
 }
 
+function VideoThumb({ src, className = "" }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [src]);
+
+  if (!src || failed) {
+    return (
+      <div className="desk-file-thumb-fallback">
+        <Icon name="film" size={26} className="text-cursor-muted" />
+      </div>
+    );
+  }
+
+  return (
+    <span className={`desk-file-thumb-video-wrap${loaded ? " is-ready" : ""}`}>
+      {!loaded ? <span className="desk-file-thumb-skeleton desk-file-thumb-skeleton--spinner" aria-hidden /> : null}
+      <video
+        src={src}
+        className={className}
+        crossOrigin="anonymous"
+        muted
+        playsInline
+        preload="metadata"
+        onLoadedData={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    </span>
+  );
+}
+
 function FolderPeekStack({ items, size = "grid" }) {
   const cards = (items ?? []).slice(0, 3);
   if (!cards.length) return null;
@@ -401,14 +435,7 @@ export function FileEntryThumb({
               eager={eagerFirst}
             />
           ) : mediaUrl || thumbUrl ? (
-            <video
-              src={mediaUrl ?? thumbUrl}
-              className="desk-file-thumb-video"
-              crossOrigin="anonymous"
-              muted
-              playsInline
-              preload="metadata"
-            />
+            <VideoThumb src={mediaUrl ?? thumbUrl} className="desk-file-thumb-video" />
           ) : (
             <div className="desk-file-thumb-fallback">
               <Icon name="film" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />

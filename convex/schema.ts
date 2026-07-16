@@ -829,10 +829,19 @@ export default defineSchema({
     assetId: v.id("assets"),
     caption: v.optional(v.string()),
     likeCount: v.number(),
+    /** Total opens/views; optional for posts created before this field existed. */
+    viewCount: v.optional(v.number()),
+    /** Comment count; optional for posts created before this field existed. */
+    commentCount: v.optional(v.number()),
+    /** Bookmark / save count; optional for older posts. */
+    saveCount: v.optional(v.number()),
+    /** Share action count; optional for older posts. */
+    shareCount: v.optional(v.number()),
     publishedAt: v.number(),
     unpublishedAt: v.optional(v.number()),
   })
     .index("by_profile_and_published", ["profileId", "publishedAt"])
+    .index("by_published", ["publishedAt"])
     .index("by_asset", ["assetId"])
     .index("by_owner", ["ownerId"]),
 
@@ -851,5 +860,49 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_user_and_post", ["userId", "postId"])
-    .index("by_post", ["postId"]),
+    .index("by_post", ["postId"])
+    .index("by_user_and_created", ["userId", "createdAt"]),
+
+  profileSaves: defineTable({
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    createdAt: v.number(),
+  })
+    .index("by_user_and_post", ["userId", "postId"])
+    .index("by_post", ["postId"])
+    .index("by_user_and_created", ["userId", "createdAt"]),
+
+  profileShares: defineTable({
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    createdAt: v.number(),
+  })
+    .index("by_user_and_post", ["userId", "postId"])
+    .index("by_post", ["postId"])
+    .index("by_user_and_created", ["userId", "createdAt"]),
+
+  profileComments: defineTable({
+    postId: v.id("profilePosts"),
+    userId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    /** Reply target; omitted/undefined for top-level comments. */
+    parentId: v.optional(v.id("profileComments")),
+    likeCount: v.optional(v.number()),
+    replyCount: v.optional(v.number()),
+    /** Optional single image attachment. */
+    imageAssetId: v.optional(v.id("assets")),
+  })
+    .index("by_post_and_created", ["postId", "createdAt"])
+    .index("by_parent_and_created", ["parentId", "createdAt"])
+    .index("by_user", ["userId"]),
+
+  profileCommentLikes: defineTable({
+    userId: v.id("users"),
+    commentId: v.id("profileComments"),
+    createdAt: v.number(),
+  })
+    .index("by_user_and_comment", ["userId", "commentId"])
+    .index("by_comment", ["commentId"]),
 });

@@ -1,10 +1,11 @@
 // @ts-nocheck
 "use client";
 
-import { Folder, Sparkles } from "lucide-react";
+import { Cloud, Folder, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const NAV_ITEMS = [
+  { id: "feed", label: "Feed", Icon: Cloud, iconOnly: true },
   { id: "files", label: "Files", Icon: Folder },
   { id: "composer", label: "Create", Icon: Sparkles },
 ];
@@ -20,7 +21,10 @@ export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
     const sections = sectionsRef.current;
     const index = NAV_ITEMS.findIndex((item) => item.id === section);
     const button = itemRefs.current[index];
-    if (!nav || !sections || !button) return;
+    if (!nav || !sections || !button || index < 0) {
+      setIndicator({ width: 0, x: 0 });
+      return;
+    }
     const navRect = nav.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
     setIndicator({
@@ -59,12 +63,14 @@ export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
                 itemRefs.current[index] = node;
               }}
               type="button"
-              className={`studio-mobile-nav-btn${active ? " is-active" : ""}`}
+              className={`studio-mobile-nav-btn${active ? " is-active" : ""}${item.iconOnly ? " is-icon-only" : ""}`}
               aria-current={active ? "page" : undefined}
+              aria-label={item.label}
+              title={item.label}
               onClick={() => onSelect(item.id)}
             >
               <Icon aria-hidden="true" />
-              <span>{item.label}</span>
+              {item.iconOnly ? null : <span>{item.label}</span>}
             </button>
           );
         })}

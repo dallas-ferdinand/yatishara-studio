@@ -100,7 +100,7 @@ async function putBunny(path, body, contentType) {
     headers: {
       AccessKey: key,
       "Content-Type": contentType,
-      "Cache-Control": "public, max-age=31536000, immutable",
+      "Cache-Control": "public, max-age=0, must-revalidate",
     },
     body,
   });

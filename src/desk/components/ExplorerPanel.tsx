@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Icon } from "./Icons";
 import { FileTree } from "./FileTree";
 import { FileBreadcrumbs } from "./FileBreadcrumbs";
@@ -220,7 +221,6 @@ export function ExplorerPanel({
   const [dropOver, setDropOver] = useState(false);
   const [sheetEntry, setSheetEntry] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
-  const [toast, setToast] = useState("");
   const [downloads, setDownloads] = useState([]);
   const downloadControllers = useRef({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -296,7 +296,7 @@ export function ExplorerPanel({
       const parent = normalizeExplorerPath(parentPath);
       const next = addPinnedFolder(path, name, parent, userId);
       setPinnedFolders(next);
-      showToast(parent ? "Pinned here" : "Pinned to root");
+      toast.success(parent ? "Pinned here" : "Pinned to root");
     },
     [userId],
   );
@@ -308,23 +308,14 @@ export function ExplorerPanel({
       const parent = normalizeExplorerPath(parentPath);
       const next = removePinnedFolder(path, parent, userId);
       setPinnedFolders(next);
-      showToast("Unpinned");
+      toast.success("Unpinned");
     },
     [userId],
   );
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(""), 1800);
-    return () => window.clearTimeout(t);
-  }, [toast]);
-
   const setView = (mode) => {
     setViewMode(mode);
     saveViewMode(mode);
   };
-
-  const showToast = (msg) => setToast(msg);
 
   /** Start a tracked folder ZIP download; reports live bytes to the pill. */
   const startFolderZip = useCallback(
@@ -422,7 +413,7 @@ export function ExplorerPanel({
       const result = await onRenameFile(fromPath, newName);
       const toPath = result?.path ?? fromPath;
       setPinnedFolders(renamePinnedFolders(fromPath, toPath, userId));
-      showToast("Renamed");
+      toast.success("Renamed");
       onRefresh?.();
     },
     [onRenameFile, onRefresh, userId],
@@ -458,7 +449,7 @@ export function ExplorerPanel({
       try {
         await onDeleteFile(entry.path);
         setPinnedFolders(removePinnedFoldersUnder(entry.path, userId));
-        showToast("Deleted");
+        toast.success("Deleted");
         onRefresh?.();
         setDeleteConfirm(null);
         setContextMenu(null);
@@ -513,12 +504,12 @@ export function ExplorerPanel({
       }
       if (action === "copy-path") {
         const ok = await copyWorkspacePath(entry.path ?? name);
-        showToast(ok ? "Path copied" : "Could not copy");
+        if (ok) toast.success("Path copied"); else toast.error("Could not copy");
         return;
       }
       if (action === "download") {
         const ok = downloadWorkspaceFile(entry.path, workspaceId);
-        showToast(ok ? "Download started" : "Could not download");
+        if (ok) toast.success("Download started"); else toast.error("Could not download");
         return;
       }
       if (action === "download-zip") {
@@ -645,7 +636,7 @@ export function ExplorerPanel({
       icon: "copy",
       onPress: async () => {
         const ok = await copyWorkspacePath(sheetEntry.path ?? name);
-        showToast(ok ? "Path copied" : "Could not copy");
+        if (ok) toast.success("Path copied"); else toast.error("Could not copy");
       },
     });
 
@@ -656,7 +647,7 @@ export function ExplorerPanel({
         icon: "download",
         onPress: () => {
           const ok = downloadWorkspaceFile(sheetEntry.path, workspaceId);
-          showToast(ok ? "Download started" : "Could not download");
+          if (ok) toast.success("Download started"); else toast.error("Could not download");
         },
       });
     }
@@ -881,12 +872,6 @@ export function ExplorerPanel({
           onBlankContextMenu={openBlankContextMenu}
         />
       </div>
-
-      {toast ? (
-        <div className="desk-explorer-toast" role="status">
-          {toast}
-        </div>
-      ) : null}
 
       <ExplorerContextMenu
         entry={contextMenu?.entry}
