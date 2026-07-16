@@ -67,7 +67,7 @@ export function PublicProfileView({
   });
   const posts = useQuery(
     api.profiles.listPublicPosts,
-    profile ? { username, expiresUnix, limit: 60 } : "skip",
+    profile ? { username, expiresUnix, limit: 36 } : "skip",
   );
   const follow = useMutation(api.profiles.follow);
   const unfollow = useMutation(api.profiles.unfollow);
@@ -81,6 +81,11 @@ export function PublicProfileView({
     Record<string, { liked: boolean; likeCount: number }>
   >({});
 
+  const activeMedia = useQuery(
+    api.profiles.getPublicPostMedia,
+    activePost ? { postId: activePost._id, expiresUnix } : "skip",
+  );
+
   const resolvedPosts = useMemo(() => {
     return (posts ?? []).map((post) => {
       const local = localLikes[post._id];
@@ -89,6 +94,20 @@ export function PublicProfileView({
         : post;
     });
   }, [posts, localLikes]);
+
+  const lightboxPost = useMemo(() => {
+    if (!activePost) return null;
+    const local = localLikes[activePost._id];
+    const withLikes = local
+      ? { ...activePost, likedByViewer: local.liked, likeCount: local.likeCount }
+      : activePost;
+    if (!activeMedia || activeMedia.postId !== activePost._id) return withLikes;
+    return {
+      ...withLikes,
+      thumbnailUrl: activeMedia.thumbnailUrl ?? withLikes.thumbnailUrl,
+      mediaUrl: activeMedia.mediaUrl ?? withLikes.mediaUrl,
+    };
+  }, [activeMedia, activePost, localLikes]);
 
   async function handleFollowToggle() {
     if (!profile) return;
@@ -282,12 +301,12 @@ export function PublicProfileView({
         </section>
       </main>
 
-      {activePost ? (
+      {lightboxPost ? (
         <div
           className="public-profile-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={activePost.caption || activePost.name}
+          aria-label={lightboxPost.caption || lightboxPost.name}
           onClick={() => setActivePost(null)}
         >
           <button
@@ -303,30 +322,40 @@ export function PublicProfileView({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="public-profile-lightbox-media">
-              {activePost.kind === "video" && activePost.mediaUrl ? (
-                <video src={activePost.mediaUrl} controls playsInline poster={activePost.thumbnailUrl} />
-              ) : (
+              {lightboxPost.kind === "video" && lightboxPost.mediaUrl ? (
+                <video
+                  src={lightboxPost.mediaUrl}
+                  controls
+                  playsInline
+                  poster={lightboxPost.thumbnailUrl}
+                />
+              ) : lightboxPost.mediaUrl || lightboxPost.thumbnailUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={activePost.mediaUrl || activePost.thumbnailUrl}
-                  alt={activePost.caption || activePost.name}
+                  src={lightboxPost.mediaUrl || lightboxPost.thumbnailUrl}
+                  alt={lightboxPost.caption || lightboxPost.name}
                 />
+              ) : (
+                <div className="public-profile-loading is-inline">
+                  <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                  <span>Loading…</span>
+                </div>
               )}
             </div>
             <div className="public-profile-lightbox-footer">
-              {activePost.caption ? <p>{activePost.caption}</p> : null}
+              {lightboxPost.caption ? <p>{lightboxPost.caption}</p> : null}
               <button
                 type="button"
-                className={`public-profile-like${activePost.likedByViewer ? " is-liked" : ""}`}
-                onClick={() => void handleLike(activePost)}
-                disabled={likeBusyId === activePost._id}
+                className={`public-profile-like${lightboxPost.likedByViewer ? " is-liked" : ""}`}
+                onClick={() => void handleLike(lightboxPost)}
+                disabled={likeBusyId === lightboxPost._id}
               >
-                {likeBusyId === activePost._id ? (
+                {likeBusyId === lightboxPost._id ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 ) : (
                   <Heart className="h-4 w-4" aria-hidden="true" />
                 )}
-                <span>{formatCount(activePost.likeCount)}</span>
+                <span>{formatCount(lightboxPost.likeCount)}</span>
               </button>
             </div>
           </div>

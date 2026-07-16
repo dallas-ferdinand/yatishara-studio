@@ -5,7 +5,6 @@ import { query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { getOptionalUser } from "./lib/auth";
 import {
   assetThumbnailPath,
-  FULL_QUALITY_TRANSFORM,
   PREVIEW_TRANSFORM,
   signBunnyCdnUrls,
   signBunnyFullUrl,
@@ -555,30 +554,44 @@ export const listPublicPosts = query({
       .unique();
     if (!profile || !profile.isPublic) return [];
 
-    const limit = Math.min(Math.max(args.limit ?? 48, 1), 96);
-    const posts = await ctx.db
+    // Keep this query under Convex's 1s limit: thumbs only, parallel likes,
+    // and defer full media signing to getPublicPostMedia.
+    const limit = Math.min(Math.max(args.limit ?? 36, 1), 48);
+    const scanned = await ctx.db
       .query("profilePosts")
       .withIndex("by_profile_and_published", (q) => q.eq("profileId", profile._id))
       .order("desc")
-      .take(limit * 2);
+      .take(Math.min(limit + 16, 64));
 
-    const active = posts.filter((post) => !post.unpublishedAt).slice(0, limit);
+    const active: Doc<"profilePosts">[] = [];
+    for (const post of scanned) {
+      if (post.unpublishedAt) continue;
+      active.push(post);
+      if (active.length >= limit) break;
+    }
+    if (active.length === 0) return [];
+
     const viewerId = await getAuthUserId(ctx);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
 
     const assets = await Promise.all(active.map((post) => ctx.db.get("assets", post.assetId)));
     const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
-    const [thumbs, fullImages] = await Promise.all([
-      signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM),
-      signBunnyCdnUrls(
-        assets.map((asset) =>
-          asset && asset.kind === "image" && !asset.deletedAt ? asset.bunnyPath : undefined,
-        ),
-        expiresUnix,
-        FULL_QUALITY_TRANSFORM,
-      ),
-    ]);
+    const likedFlags = viewerId
+      ? await Promise.all(
+          active.map(async (post) => {
+            const like = await ctx.db
+              .query("profileLikes")
+              .withIndex("by_user_and_post", (q) =>
+                q.eq("userId", viewerId).eq("postId", post._id),
+              )
+              .unique();
+            return Boolean(like);
+          }),
+        )
+      : active.map(() => false);
+
+    const thumbs = await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM);
 
     const results: Array<{
       _id: Id<"profilePosts">;
@@ -599,23 +612,8 @@ export const listPublicPosts = query({
       if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
         continue;
       }
-      let likedByViewer = false;
-      if (viewerId) {
-        const like = await ctx.db
-          .query("profileLikes")
-          .withIndex("by_user_and_post", (q) =>
-            q.eq("userId", viewerId).eq("postId", post._id),
-          )
-          .unique();
-        likedByViewer = Boolean(like);
-      }
       const thumbPath = thumbPaths[i];
-      let mediaUrl: string | undefined;
-      if (asset.kind === "image" && asset.bunnyPath) {
-        mediaUrl = fullImages.get(asset.bunnyPath);
-      } else if (asset.kind === "video" && asset.bunnyPath) {
-        mediaUrl = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, "video");
-      }
+      const thumbnailUrl = thumbPath ? thumbs.get(thumbPath) : undefined;
       results.push({
         _id: post._id,
         assetId: post.assetId,
@@ -624,12 +622,59 @@ export const listPublicPosts = query({
         caption: post.caption,
         likeCount: post.likeCount,
         publishedAt: post.publishedAt,
-        thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
-        mediaUrl,
-        likedByViewer,
+        thumbnailUrl,
+        // Grid uses thumbnails; lightbox loads full media via getPublicPostMedia.
+        mediaUrl: undefined,
+        likedByViewer: likedFlags[i] ?? false,
       });
     }
     return results;
+  },
+});
+
+export const getPublicPostMedia = query({
+  args: {
+    postId: v.id("profilePosts"),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      postId: v.id("profilePosts"),
+      kind: v.union(v.literal("image"), v.literal("video")),
+      thumbnailUrl: v.optional(v.string()),
+      mediaUrl: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) return null;
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) return null;
+
+    const asset = await ctx.db.get("assets", post.assetId);
+    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
+      return null;
+    }
+
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const thumbPath = assetThumbnailPath(asset);
+    const [thumbs, mediaUrl] = await Promise.all([
+      thumbPath
+        ? signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM)
+        : Promise.resolve(new Map<string, string>()),
+      asset.bunnyPath
+        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
+        : Promise.resolve(undefined),
+    ]);
+
+    return {
+      postId: post._id,
+      kind: asset.kind,
+      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+      mediaUrl,
+    };
   },
 });
 
