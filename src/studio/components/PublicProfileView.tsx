@@ -59,7 +59,7 @@ export function PublicProfileView({
     name?: string | null;
   } | null;
 }) {
-  const expiresUnix = useMemo(() => Math.floor(Date.now() / 1000) + 60 * 60, []);
+  const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const auth = useConvexAuth();
   const profile = useQuery(api.profiles.getPublicByUsername, {
     username,

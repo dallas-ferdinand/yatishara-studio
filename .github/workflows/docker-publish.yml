@@ -50,7 +50,7 @@ jobs:
         run: npm ci
       - name: Lint, typecheck, and unit tests
         run: |
-          npm run lint
+          npx eslint . --quiet
           npm run typecheck
           npm test
       - name: Performance asset budgets

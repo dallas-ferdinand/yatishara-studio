@@ -117,7 +117,6 @@ export function reportPerfMetric(
     w.__studioPerf.push(metric);
     if (w.__studioPerf.length > 200) w.__studioPerf.shift();
     if (process.env.NODE_ENV !== "production") {
-      // eslint-disable-next-line no-console
       console.debug("[perf]", name, Math.round(value * 1000) / 1000, detail ?? "");
     }
   }

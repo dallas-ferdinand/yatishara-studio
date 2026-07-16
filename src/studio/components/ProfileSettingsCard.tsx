@@ -59,7 +59,7 @@ export function ProfileSettingsCard({
   displayNameHint?: string;
   onOpenPublicProfile?: (username: string) => void;
 }) {
-  const expiresUnix = useMemo(() => Math.floor(Date.now() / 1000) + 60 * 60, []);
+  const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const profile = useQuery(api.profiles.getMine, { expiresUnix });
   const claimUsername = useMutation(api.profiles.claimUsername);
   const updateMine = useMutation(api.profiles.updateMine);
