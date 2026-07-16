@@ -1073,6 +1073,8 @@ export function ProfilePostViewer({
       const target = event.target as HTMLElement | null;
       if (target?.closest?.("[data-video-control]")) return;
       if (target?.closest?.(".profile-post-rail")) return;
+      // Tap timing must use wall clock; not render-time state.
+      // eslint-disable-next-line react-hooks/purity -- pointer-up gesture clock
       const now = Date.now();
       if (now - lastTapRef.current < 320) {
         lastTapRef.current = 0;

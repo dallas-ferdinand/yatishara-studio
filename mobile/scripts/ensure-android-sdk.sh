@@ -26,14 +26,19 @@ fi
 
 yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/tmp/android-sdk-licenses.log 2>&1 || true
 
-yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
-  "platforms;android-35" \
-  "build-tools;35.0.0" \
-  "platform-tools" >/tmp/android-sdk-install.log 2>&1 || {
-  echo "sdkmanager failed; last 40 log lines:"
-  tail -n 40 /tmp/android-sdk-install.log
-  exit 1
-}
+# Prefer an already-installed SDK when sdkmanager XML is out of sync with packages.
+if [[ -d "$SDK_ROOT/platforms/android-35" && -d "$SDK_ROOT/build-tools/35.0.0" ]]; then
+  echo "Android SDK packages already present; skipping sdkmanager install."
+else
+  yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+    "platforms;android-35" \
+    "build-tools;35.0.0" \
+    "platform-tools" >/tmp/android-sdk-install.log 2>&1 || {
+    echo "sdkmanager failed; last 40 log lines:"
+    tail -n 40 /tmp/android-sdk-install.log
+    exit 1
+  }
+fi
 
 # Capacitor / Gradle look for local.properties next to the android project.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
