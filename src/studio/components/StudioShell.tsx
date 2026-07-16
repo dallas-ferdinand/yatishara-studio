@@ -3481,11 +3481,15 @@ export function StudioShell({
           object-fit: cover;
         }
         .studio-profile-menu-initials {
-          font-size: 11px;
+          font-size: 13px;
           font-weight: 750;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.01em;
+          line-height: 1;
           color: #fff;
           text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
+        }
+        .studio-mobile-nav-tools .studio-profile-menu-initials {
+          font-size: 14px;
         }
         .studio-profile-menu-popover {
           position: absolute;
