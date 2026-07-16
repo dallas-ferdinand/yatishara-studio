@@ -33,5 +33,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "packages/studio-mcp"]
+  "exclude": ["node_modules", "packages/studio-mcp", "mobile"]
 }
