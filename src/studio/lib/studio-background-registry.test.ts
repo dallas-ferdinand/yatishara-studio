@@ -7,17 +7,17 @@ import {
 
 describe("studio background delivery", () => {
   it("requests viewport-sized wallpaper transforms instead of 8K", () => {
-    const params = studioBackgroundTransformParams({ width: 390, dpr: 2.75, quality: 78 });
+    const params = studioBackgroundTransformParams({ width: 390, dpr: 2.75, quality: 88 });
     expect(params).toContain("width=1073");
-    expect(params).toContain("quality=78");
+    expect(params).toContain("quality=88");
     expect(params).not.toContain("8192");
     expect(params).not.toContain("quality=100");
   });
 
-  it("caps desktop wallpaper decode size at 2560", () => {
+  it("caps desktop wallpaper decode size at 3840 with high glass-ready quality", () => {
     const params = studioBackgroundTransformParams({ width: 2560, dpr: 2 });
-    expect(params).toContain("width=2560");
-    expect(params).toContain("quality=82");
+    expect(params).toContain("width=3840");
+    expect(params).toContain("quality=92");
   });
 
   it("builds CDN paths with transform query when CDN is configured", () => {

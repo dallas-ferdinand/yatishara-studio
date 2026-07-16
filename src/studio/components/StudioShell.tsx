@@ -132,6 +132,10 @@ const ProfileSettingsCard = dynamic(
   () => import("./ProfileSettingsCard").then((m) => m.ProfileSettingsCard),
   { ssr: false },
 );
+const StudioRenameDialog = dynamic(
+  () => import("./StudioRenameDialog").then((m) => m.StudioRenameDialog),
+  { ssr: false },
+);
 const PublicProfileView = dynamic(
   () => import("./PublicProfileView").then((m) => m.PublicProfileView),
   { ssr: false },
@@ -454,6 +458,7 @@ export function StudioShell({
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [entitlementNow] = useState(() => Date.now());
@@ -1782,6 +1787,13 @@ export function StudioShell({
     if (!username) return;
     openedInitialProfileRef.current = true;
     openPublicProfile(username);
+    // Keep shareable /u/... URLs; drop ?profile= once the tab is open.
+    if (fromQuery && !fromPath) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("profile");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+    }
   }, [initialProfileUsername, isMobile]);
 
   useEffect(() => {
@@ -2117,24 +2129,29 @@ export function StudioShell({
     return result;
   }
 
-  async function renameEntry(entry) {
+  function renameEntry(entry) {
+    if (!entry || isTrashView) return;
+    setRenameTarget(entry);
+  }
+
+  async function confirmRenameEntry(nextName) {
+    const entry = renameTarget;
     if (!entry) return;
-    const nextName = window.prompt(
-      "Rename",
-      entry.name.replace(/^@/, "").replace(/\.edit$/i, "").replace(/\.md$/i, ""),
-    );
-    if (!nextName?.trim()) return;
+    const trimmed = String(nextName ?? "").trim();
+    if (!trimmed) return;
     if (entry.studioKind === "folder") {
-      await updateFolder({ folderId: entry.studioId, name: nextName.trim() });
+      await updateFolder({ folderId: entry.studioId, name: trimmed });
     } else if (entry.studioKind === "document") {
-      await updateDocument({ documentId: entry.studioId, title: nextName.trim().replace(/\.md$/i, "") });
+      await updateDocument({ documentId: entry.studioId, title: trimmed.replace(/\.md$/i, "") });
     } else if (entry.studioKind === "asset") {
-      await updateAsset({ assetId: entry.studioId, name: nextName.trim() });
+      await updateAsset({ assetId: entry.studioId, name: trimmed });
     } else if (entry.studioKind === "videoEdit") {
       await updateVideoEdit({
         projectId: entry.studioId,
-        name: nextName.trim().replace(/\.edit$/i, ""),
+        name: trimmed.replace(/\.edit$/i, ""),
       });
+    } else if (entry.studioKind === "element") {
+      await updateElement({ elementId: entry.studioId, name: trimmed });
     }
   }
 
@@ -2822,13 +2839,16 @@ export function StudioShell({
           --studio-mobile-nav-height: 44px;
           /* Fixed control size so chrome bars can grow without scaling buttons/tabs/pills */
           --studio-mobile-chrome-control: 30px;
-          --studio-mobile-chrome-glass:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
-            color-mix(in srgb, var(--mos-bg) 82%, transparent);
-          --studio-mobile-chrome-glass-foot:
-            radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--cursor-accent) 8%, transparent), transparent 52%),
-            color-mix(in srgb, var(--mos-bg) 82%, transparent);
-          --studio-mobile-chrome-blur: saturate(150%) blur(8px);
+          --studio-mobile-chrome-glass: var(
+            --studio-composer-glass,
+            color-mix(in srgb, var(--color-mos-composer, #07111f) 42%, transparent)
+          );
+          --studio-mobile-chrome-glass-foot: var(
+            --studio-composer-glass,
+            color-mix(in srgb, var(--color-mos-composer, #07111f) 42%, transparent)
+          );
+          /* Same recipe as composer — not a mushy 22px “frost slab” */
+          --studio-mobile-chrome-blur: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
           --studio-mobile-chrome-border: rgba(255, 255, 255, 0.14);
           /* Active / muted chrome: right-corner → left fade border stroke */
           --studio-chrome-glow-border: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
@@ -2925,7 +2945,10 @@ export function StudioShell({
           backdrop-filter: var(--studio-mobile-chrome-blur);
           -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
           box-shadow: none !important;
-          contain: layout style;
+          transform: none;
+          filter: none;
+          isolation: auto;
+          contain: none;
         }
         .studio-mobile-nav-sections {
           display: flex;
@@ -3025,20 +3048,40 @@ export function StudioShell({
           }
           .studio-polish .studio-main-panels {
             padding-bottom: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px));
-            contain: layout style;
           }
           .studio-polish.is-studio-mobile .studio-main-panels > [data-panel] {
             flex: 1 1 100% !important;
             width: 100% !important;
             min-width: 0 !important;
           }
-          .studio-polish.is-studio-mobile .cursor-workspace-head {
-            backdrop-filter: var(--studio-mobile-chrome-blur);
-            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          .studio-polish.is-studio-mobile .cursor-workspace-head,
+          .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
+            background: var(--studio-mobile-chrome-glass) !important;
+            backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+            transform: none !important;
+            filter: none !important;
+            isolation: auto !important;
+            contain: none !important;
           }
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            backdrop-filter: var(--studio-mobile-chrome-blur);
-            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+            background: var(--studio-mobile-chrome-glass-foot) !important;
+          }
+          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box {
+            background: var(--studio-composer-glass) !important;
+            backdrop-filter: var(--studio-composer-glass-blur) !important;
+            -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+            transform: none !important;
+            filter: none !important;
+            isolation: auto !important;
+          }
+          .studio-polish.is-studio-mobile .studio-mode-row {
+            background: var(--studio-composer-glass-muted) !important;
+            backdrop-filter: var(--studio-composer-glass-blur) !important;
+            -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+            transform: none !important;
+            filter: none !important;
+            isolation: auto !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tabs.is-dragging-strip,
           .studio-polish.is-studio-mobile .cursor-unified-tab.is-entering {
@@ -3050,6 +3093,23 @@ export function StudioShell({
           .studio-polish.is-studio-mobile {
             --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
+            /* Slightly clearer glass on phone so wallpaper reads through (not a solid slab) */
+            --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 38%, transparent);
+            --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent);
+            --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 30%, transparent);
+            --studio-composer-glass-blur: saturate(150%) blur(12px);
+            --studio-mobile-chrome-glass: var(--studio-composer-glass);
+            --studio-mobile-chrome-glass-foot: var(--studio-composer-glass);
+            --studio-mobile-chrome-blur: var(--studio-composer-glass-blur);
+          }
+          [data-appearance="light"] .studio-polish.is-studio-mobile {
+            --studio-composer-glass: color-mix(in srgb, #ffffff 40%, transparent);
+            --studio-composer-glass-strong: color-mix(in srgb, #ffffff 52%, transparent);
+            --studio-composer-glass-muted: color-mix(in srgb, #ffffff 32%, transparent);
+            --studio-composer-glass-blur: saturate(160%) blur(12px);
+            --studio-mobile-chrome-glass: var(--studio-composer-glass);
+            --studio-mobile-chrome-glass-foot: var(--studio-composer-glass);
+            --studio-mobile-chrome-blur: var(--studio-composer-glass-blur);
           }
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
@@ -4105,18 +4165,31 @@ export function StudioShell({
           display: flex;
           flex-direction: column;
           overflow: hidden;
-          padding: 0 0 10px;
+          padding: 0 !important;
+          gap: 0 !important;
+          min-height: 0;
         }
         .studio-settings-mobile-sheet .studio-settings-workspace {
           flex: 1 1 0%;
           min-height: 0;
+          min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
         }
         .studio-settings-mobile-sheet .studio-settings-workspace-head {
           background: transparent;
           border-bottom-color: color-mix(in srgb, var(--color-cursor-border) 70%, transparent);
         }
+        .studio-settings-sidebar .studio-settings-workspace-body {
+          padding-bottom: 12px;
+        }
         .studio-settings-mobile-sheet .studio-settings-workspace-body {
-          padding-inline: 10px;
+          padding: 10px 10px 12px !important;
+          min-width: 0;
+          max-width: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          -webkit-overflow-scrolling: touch;
         }
         .studio-files-mobile-sheet .studio-mobile-app-menu-body {
           display: flex;
@@ -4654,13 +4727,10 @@ export function StudioShell({
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish {
-          --studio-mobile-chrome-glass:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 6%, transparent), transparent 52%),
-            color-mix(in srgb, #ffffff 92%, transparent);
-          --studio-mobile-chrome-glass-foot:
-            radial-gradient(circle at 50% 100%, color-mix(in srgb, var(--cursor-accent) 6%, transparent), transparent 52%),
-            color-mix(in srgb, #ffffff 92%, transparent);
+          --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 46%, transparent);
+          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 46%, transparent);
           --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
+          --studio-mobile-chrome-blur: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
           --studio-chrome-muted-border-fade: linear-gradient(
             225deg,
             rgba(15, 23, 42, 0.18),
@@ -5109,13 +5179,17 @@ export function StudioShell({
         }
         .studio-settings-workspace-body {
           min-height: 0;
+          min-width: 0;
           flex: 1;
-          overflow: auto;
-          padding: 12px 14px 16px;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 12px 14px 12px;
           display: grid;
           gap: 10px;
           align-content: start;
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
           scrollbar-width: none;
           -ms-overflow-style: none;
         }
@@ -6324,10 +6398,14 @@ export function StudioShell({
           display: grid;
           gap: 10px;
           padding: 10px !important;
+          min-width: 0;
+          max-width: 100%;
+          box-sizing: border-box;
         }
         .studio-settings-workspace .studio-account-card,
         .studio-settings-workspace .studio-settings-appearance-card {
-          overflow: visible;
+          overflow-x: clip;
+          overflow-y: visible;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
           background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
@@ -6336,6 +6414,10 @@ export function StudioShell({
             0 1px 2px color-mix(in srgb, #000 8%, transparent),
             0 4px 10px color-mix(in srgb, #000 6%, transparent);
           padding: 14px 16px !important;
+          min-width: 0;
+          max-width: 100%;
+          width: 100%;
+          box-sizing: border-box;
         }
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-account-card,
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-appearance-card {
@@ -6381,10 +6463,14 @@ export function StudioShell({
         .studio-account-fields {
           display: grid;
           gap: 10px;
+          min-width: 0;
+          max-width: 100%;
         }
         .studio-account-fields label {
           display: grid;
           gap: 5px;
+          min-width: 0;
+          max-width: 100%;
         }
         .studio-account-fields span {
           color: var(--color-cursor-muted);
@@ -6392,9 +6478,11 @@ export function StudioShell({
           font-weight: 650;
         }
         .studio-account-fields input,
-        .studio-account-fields textarea,
-        .studio-profile-link-type select {
+        .studio-account-fields textarea {
           width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
           min-height: 40px;
           height: auto;
           border-radius: 12px;
@@ -6409,87 +6497,92 @@ export function StudioShell({
           min-height: 88px;
           padding: 10px 12px;
           resize: vertical;
+          max-width: 100%;
         }
         .studio-account-fields input:focus,
-        .studio-account-fields textarea:focus,
-        .studio-profile-link-type select:focus {
+        .studio-account-fields textarea:focus {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
         }
-        .studio-profile-stack {
+        .studio-profile-editor {
+          min-width: 0;
+          max-width: min(100%, 520px);
+          width: 100%;
+          box-sizing: border-box;
+        }
+        .studio-profile-form {
           display: grid;
-          gap: 12px;
+          gap: 14px;
+          min-width: 0;
         }
-        .studio-profile-intro h3 {
-          margin: 0;
-          font-size: 16px;
-          color: var(--color-cursor-text-bright);
+        .studio-profile-form > label {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
         }
-        .studio-profile-intro p {
-          margin: 6px 0 12px;
+        .studio-profile-form > label > span,
+        .studio-profile-identity-fields > label > span,
+        .studio-profile-links-head > span {
           color: var(--color-cursor-muted);
-          font-size: 13px;
-          line-height: 1.45;
+          font-size: 11px;
+          font-weight: 650;
         }
-        .studio-profile-intro code {
-          font-family: var(--font-jetbrains), monospace;
-          font-size: 12px;
-        }
-        .studio-profile-username-field {
-          display: flex;
-          align-items: center;
-          gap: 0;
-          border-radius: 12px;
+        .studio-profile-form input,
+        .studio-profile-form textarea {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          min-height: 36px;
+          border-radius: 10px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
           background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          overflow: hidden;
-        }
-        .studio-profile-username-prefix {
-          padding: 0 0 0 12px;
-          color: var(--color-cursor-muted);
-          font-weight: 700;
-        }
-        .studio-profile-username-field input {
-          border: 0 !important;
-          box-shadow: none !important;
-          background: transparent !important;
-        }
-        .studio-profile-photo-block {
-          display: grid;
-          gap: 12px;
-          justify-items: center;
-          text-align: center;
-        }
-        .studio-profile-photo-copy {
-          display: grid;
-          gap: 4px;
-        }
-        .studio-profile-photo-copy strong {
+          padding: 0 11px;
           color: var(--color-cursor-text-bright);
-          font-size: 14px;
+          font: inherit;
+          font-size: 13px;
+          outline: none;
         }
-        .studio-profile-photo-copy p,
-        .studio-profile-hint,
-        .studio-profile-public-row p,
-        .studio-profile-share-row p {
-          margin: 0;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
-          line-height: 1.4;
+        .studio-profile-form textarea {
+          min-height: 56px;
+          padding: 9px 11px;
+          resize: vertical;
+        }
+        .studio-profile-form input:focus,
+        .studio-profile-form textarea:focus {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-profile-identity {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          gap: 14px;
+          align-items: center;
+          min-width: 0;
+        }
+        .studio-profile-photo {
+          position: relative;
+          width: 72px;
+          height: 72px;
+          flex: 0 0 auto;
         }
         .studio-profile-photo-drop {
           position: relative;
-          width: 112px;
-          height: 112px;
+          width: 72px;
+          height: 72px;
           border-radius: 50%;
-          border: 1px dashed color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-          color: var(--cursor-accent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
+          background: color-mix(in srgb, var(--mos-bg) 28%, transparent);
+          color: var(--color-cursor-muted);
           display: grid;
           place-items: center;
           overflow: hidden;
           cursor: pointer;
-          flex: 0 0 auto;
+          padding: 0;
+        }
+        .studio-profile-photo-drop:hover:not(:disabled) {
+          color: var(--color-cursor-text);
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
         }
         .studio-profile-photo-drop:disabled {
           opacity: 0.55;
@@ -6497,13 +6590,7 @@ export function StudioShell({
         }
         .studio-profile-photo-empty {
           display: grid;
-          justify-items: center;
-          gap: 6px;
-        }
-        .studio-profile-photo-empty em {
-          font-style: normal;
-          font-size: 12px;
-          font-weight: 700;
+          place-items: center;
         }
         .studio-profile-avatar-img {
           width: 100%;
@@ -6512,84 +6599,221 @@ export function StudioShell({
         }
         .studio-profile-avatar-overlay {
           position: absolute;
-          inset: auto 0 0 0;
+          inset: 0;
           display: grid;
           place-items: center;
-          padding: 8px 0;
           background: color-mix(in srgb, #000 45%, transparent);
           color: #fff;
-          opacity: 0;
-          transition: opacity 0.15s ease;
         }
-        .studio-profile-photo-drop:hover .studio-profile-avatar-overlay,
-        .studio-profile-photo-drop:focus-visible .studio-profile-avatar-overlay {
-          opacity: 1;
+        .studio-profile-photo-clear {
+          position: absolute;
+          right: -2px;
+          bottom: -2px;
+          display: grid;
+          place-items: center;
+          width: 24px;
+          height: 24px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: var(--mos-surface);
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+          padding: 0;
+          z-index: 1;
         }
-        .studio-profile-avatar-actions,
-        .studio-profile-share-actions {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
+        .studio-profile-photo-clear:hover:not(:disabled) {
+          color: var(--color-cursor-text);
+          background: var(--color-cursor-hover);
+        }
+        .studio-profile-photo-clear:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-profile-identity-fields {
+          display: grid;
           gap: 8px;
+          min-width: 0;
         }
-        .studio-profile-public-row,
-        .studio-profile-share-row,
-        .studio-profile-links-head {
+        .studio-profile-identity-fields > label {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+        .studio-profile-handle-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+        }
+        .studio-profile-username-field {
+          display: flex;
+          align-items: center;
+          flex: 1 1 auto;
+          min-width: 0;
+          border-radius: 10px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          overflow: hidden;
+        }
+        .studio-profile-username-field.is-readonly {
+          opacity: 0.78;
+        }
+        .studio-profile-username-prefix {
+          padding: 0 0 0 11px;
+          color: var(--color-cursor-muted);
+          font-weight: 700;
+          flex: 0 0 auto;
+        }
+        .studio-profile-username-field input {
+          border: 0 !important;
+          box-shadow: none !important;
+          background: transparent !important;
+          min-width: 0;
+          flex: 1 1 auto;
+          min-height: 36px;
+          padding: 0 10px 0 4px;
+        }
+        .studio-profile-icon-btn {
+          display: inline-grid;
+          place-items: center;
+          width: 34px;
+          height: 34px;
+          flex: 0 0 auto;
+          border-radius: 10px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: transparent;
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-profile-icon-btn:hover:not(:disabled) {
+          color: var(--color-cursor-text);
+          background: var(--color-cursor-hover);
+        }
+        .studio-profile-icon-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-profile-text-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          border: 0;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+          padding: 4px 2px;
+        }
+        .studio-profile-text-btn:hover:not(:disabled) {
+          color: var(--color-cursor-text);
+        }
+        .studio-profile-text-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-profile-public-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
+          min-height: 36px;
+          padding: 2px 0;
+          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
         }
-        .studio-profile-public-row {
-          padding-top: 4px;
-        }
-        .studio-profile-public-row strong,
-        .studio-profile-links-head strong,
-        .studio-profile-share-row strong {
+        .studio-profile-public-row > span {
           color: var(--color-cursor-text-bright);
           font-size: 13px;
+          font-weight: 650;
         }
         .studio-profile-links-block {
           display: grid;
-          gap: 10px;
-          margin-top: 4px;
+          gap: 8px;
+          min-width: 0;
+        }
+        .studio-profile-links-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-height: 24px;
         }
         .studio-profile-links-list {
           display: grid;
-          gap: 10px;
+          gap: 6px;
+          min-width: 0;
         }
         .studio-profile-link-row {
           display: grid;
-          grid-template-columns: 110px 1fr 1.2fr auto;
-          gap: 8px;
-          align-items: end;
+          grid-template-columns: minmax(0, 120px) minmax(0, 1fr) auto;
+          gap: 6px;
+          align-items: center;
+          min-width: 0;
         }
-        @media (max-width: 720px) {
-          .studio-profile-link-row {
-            grid-template-columns: 1fr;
-          }
+        .studio-profile-type-menu {
+          min-width: 0;
         }
-        .studio-profile-link-type-control {
+        .studio-profile-type-trigger {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          width: 100%;
+          min-width: 0;
+          min-height: 36px;
+          border-radius: 10px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          padding: 0 8px 0 10px;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 13px;
+          cursor: pointer;
+        }
+        .studio-profile-type-trigger span {
+          flex: 1 1 auto;
+          min-width: 0;
+          text-align: left;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-profile-type-trigger:hover,
+        .studio-profile-type-trigger.is-open {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+          background: var(--color-cursor-hover);
+        }
+        .studio-profile-type-popover {
+          display: grid;
+          gap: 2px;
+          padding: 6px !important;
+          min-width: 0;
+        }
+        .studio-profile-type-popover .cursor-tab-context-item {
           display: flex;
           align-items: center;
           gap: 8px;
-        }
-        .studio-profile-link-remove {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          width: 100%;
+          min-height: 32px;
+          border: 0;
+          border-radius: 8px;
           background: transparent;
-          color: var(--color-cursor-muted);
-          display: grid;
-          place-items: center;
+          color: var(--color-cursor-text);
+          font: inherit;
+          font-size: 13px;
+          text-align: left;
           cursor: pointer;
+          padding: 0 8px;
         }
-        .studio-profile-char-count {
-          color: var(--color-cursor-muted);
-          font-size: 11px;
-          font-style: normal;
-          justify-self: end;
+        .studio-profile-type-popover .cursor-tab-context-item:hover,
+        .studio-profile-type-popover .cursor-tab-context-item.is-active {
+          background: var(--color-cursor-hover);
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-profile-link-value {
+          min-width: 0;
         }
         .studio-profile-status {
           display: inline-flex;
@@ -6606,14 +6830,14 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-profile-status.is-error {
           color: #991b1b;
         }
-        .studio-profile-open-link {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          text-decoration: none;
+        .studio-profile-footer {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 2px;
         }
-        .studio-profile-hint {
-          margin-top: 10px !important;
+        .studio-profile-footer .studio-account-save {
+          width: auto;
+          min-width: 96px;
         }
         .studio-profile-share-toast {
           position: fixed;
@@ -6621,6 +6845,38 @@ export function StudioShell({
           bottom: calc(18px + env(safe-area-inset-bottom, 0px));
           transform: translateX(-50%);
           z-index: 80;
+        }
+        @media (max-width: 560px) {
+          .studio-profile-editor {
+            max-width: 100%;
+          }
+          .studio-profile-identity {
+            gap: 12px;
+            align-items: start;
+          }
+          .studio-profile-photo,
+          .studio-profile-photo-drop {
+            width: 64px;
+            height: 64px;
+          }
+          .studio-profile-link-row {
+            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-areas:
+              "type trash"
+              "value value";
+          }
+          .studio-profile-type-menu {
+            grid-area: type;
+          }
+          .studio-profile-link-value {
+            grid-area: value;
+          }
+          .studio-profile-link-row > .studio-profile-icon-btn {
+            grid-area: trash;
+          }
+          .studio-profile-footer .studio-account-save {
+            width: 100%;
+          }
         }
         .studio-account-actions {
           display: grid;
@@ -12000,8 +12256,7 @@ export function StudioShell({
           -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           overflow: hidden;
           padding: 12px 14px;
-          content-visibility: auto;
-          contain-intrinsic-size: auto 96px;
+          /* Do not use content-visibility here — paint containment blanks backdrop-filter glass. */
           box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-bubble.is-user {
@@ -12991,7 +13246,7 @@ export function StudioShell({
           onRequestRename={(entry) => {
             if (isTrashView) return;
             setContextMenu(null);
-            void renameEntry(entry);
+            renameEntry(entry);
           }}
           onRequestDelete={(entry) => {
             setContextMenu(null);
@@ -13048,6 +13303,12 @@ export function StudioShell({
           }}
         />
       ) : null}
+      <StudioRenameDialog
+        open={Boolean(renameTarget)}
+        entry={renameTarget}
+        onClose={() => setRenameTarget(null)}
+        onRename={confirmRenameEntry}
+      />
       {profileShareToast ? (
         <div className="studio-voice-toast studio-profile-share-toast" role="status" aria-live="polite">
           {profileShareToast}

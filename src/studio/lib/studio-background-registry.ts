@@ -81,7 +81,11 @@ export function studioBackgroundCdnBase(): string {
   return raw.replace(/\/$/, "");
 }
 
-/** Viewport/DPR-aware wallpaper transform — keeps visual fidelity without shipping 8K to phones. */
+/** Viewport/DPR-aware wallpaper transform.
+ * Glass backdrop-filter samples this image — keep quality high enough that frost
+ * still reads as crystalline, not muddy JPEG mush. Cap decode size below the old
+ * unconditional 8192×q100 path so phones are not punished.
+ */
 export function studioBackgroundTransformParams(
   options?: { width?: number; quality?: number; dpr?: number },
 ): string {
@@ -91,9 +95,9 @@ export function studioBackgroundTransformParams(
   const cssWidth =
     options?.width ??
     (typeof window !== "undefined" ? Math.max(window.innerWidth || 1280, 390) : 1920);
-  // Cap source decode size: 2× CSS width up to 2560 logical, never 8192.
-  const width = Math.min(2560, Math.round(cssWidth * Math.max(1, dpr)));
-  const quality = options?.quality ?? (width >= 1920 ? 82 : 78);
+  // Up to ~4K device pixels; enough detail under frosted glass without full 8K.
+  const width = Math.min(3840, Math.round(cssWidth * Math.max(1, dpr)));
+  const quality = options?.quality ?? (width >= 1920 ? 92 : 88);
   return `width=${width}&quality=${quality}`;
 }
 
@@ -224,8 +228,8 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + "if(!STUDIO_BG_CDN)return \"/\"+file;"
     + "var dpr=Math.min((window.devicePixelRatio||1),3);"
     + "var cssW=Math.max(window.innerWidth||1280,390);"
-    + "var w=Math.min(2560,Math.round(cssW*Math.max(1,dpr)));"
-    + "var q=w>=1920?82:78;"
+    + "var w=Math.min(3840,Math.round(cssW*Math.max(1,dpr)));"
+    + "var q=w>=1920?92:88;"
     + "return STUDIO_BG_CDN+\"/\"+file+\"?width=\"+w+\"&quality=\"+q;"
     + "}"
     + "function studioBootWallpaperFallback(family,theme,mode){"
