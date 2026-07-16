@@ -12690,9 +12690,12 @@ export function StudioShell({
           min-width: 0;
           min-height: 100%;
           flex-direction: column;
-          justify-content: flex-end;
+          justify-content: flex-start;
           align-items: stretch;
           gap: 12px;
+        }
+        .studio-chat-stream-inner > :first-child {
+          margin-top: auto;
         }
         .studio-chat-stream-inner.is-empty {
           justify-content: center;
@@ -13105,6 +13108,8 @@ export function StudioShell({
             var(--studio-gen-card-shadow);
         }
         .studio-chat-result-card.is-openable {
+          appearance: none;
+          -webkit-appearance: none;
           cursor: pointer;
           padding: 0;
           width: 100%;
@@ -13112,6 +13117,24 @@ export function StudioShell({
           text-align: left;
           color: inherit;
           font: inherit;
+        }
+        .studio-chat-result-card.is-image-result {
+          border: 0;
+          background: transparent;
+          box-shadow: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-card.is-image-result {
+          border: 0;
+          background: transparent;
+          box-shadow: none;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
+        .studio-chat-result-card.is-image-result .studio-chat-result-media,
+        .studio-chat-result-card.is-image-result img {
+          width: 100%;
+          background: transparent;
+          object-fit: cover;
         }
         .studio-chat-result-card[draggable="true"] {
           cursor: grab;
@@ -16737,6 +16760,7 @@ function StudioThreadChat({
   const displayEvents = compressThreadDisplayEvents(safeEvents);
   const streamRef = useRef(null);
   const stickToBottomRef = useRef(true);
+  const scrolledThreadRef = useRef(null);
   const userInitials = initialsFromUser(currentUser);
 
   useLayoutEffect(() => {
@@ -16750,15 +16774,21 @@ function StudioThreadChat({
       root.scrollTop = root.scrollHeight;
     };
 
-    // New/changed thread tail → pin to bottom once.
-    stickToBottomRef.current = true;
-    scrollToBottom();
-    const raf = window.requestAnimationFrame(scrollToBottom);
-
     const onScroll = () => {
       stickToBottomRef.current = distanceFromBottom() <= NEAR_BOTTOM_PX;
     };
     root.addEventListener("scroll", onScroll, { passive: true });
+
+    const threadKey = safeEvents[0]?.threadId ?? safeEvents[0]?._id;
+    const changedThread = scrolledThreadRef.current !== threadKey;
+    if (changedThread) {
+      scrolledThreadRef.current = threadKey;
+      stickToBottomRef.current = true;
+    }
+    if (stickToBottomRef.current) scrollToBottom();
+    const raf = window.requestAnimationFrame(() => {
+      if (stickToBottomRef.current) scrollToBottom();
+    });
 
     // Content growth (images, review cards) only follows if user stayed pinned.
     const observer = new ResizeObserver(() => {
@@ -16772,7 +16802,7 @@ function StudioThreadChat({
       root.removeEventListener("scroll", onScroll);
       observer.disconnect();
     };
-  }, [displayEvents.length, assistBusy, displayEvents.at(-1)?._id]);
+  }, [displayEvents.length, displayEvents.at(-1)?._id]);
 
   return (
     <div className="studio-chat-render-area">
@@ -17183,7 +17213,7 @@ function StudioChatResultCard({ entry, onOpen }) {
     return (
       <button
         type="button"
-        className={`studio-chat-result-card${canOpen ? " is-openable" : ""}`}
+        className={`studio-chat-result-card is-image-result${canOpen ? " is-openable" : ""}`}
         onClick={openEntry}
         draggable={canDrag}
         onDragStart={handleDragStart}

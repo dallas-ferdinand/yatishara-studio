@@ -38,11 +38,13 @@ export function StudioBootLoader({ recovery }: Props) {
             />
           </picture>
         </div>
-        <p className="ys-boot-v2-wordmark">Yatishara Studio</p>
-        <div className="ys-boot-v2-track" aria-hidden="true">
-          <div className="ys-boot-v2-bar" />
+        <div className="ys-boot-v2-details">
+          <p className="ys-boot-v2-wordmark">Yatishara Studio</p>
+          <div className="ys-boot-v2-track" aria-hidden="true">
+            <div className="ys-boot-v2-bar" />
+          </div>
+          {recovery}
         </div>
-        {recovery}
       </div>
     </main>
   );

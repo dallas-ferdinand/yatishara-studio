@@ -356,8 +356,7 @@ function StudioSignIn() {
   const whatsAppExpiry =
     !isWhatsAppCodeStep
       ? 0
-      : (step.clientExpiresAt ??
-        Math.min(step.expiresAt, Date.now() + WHATSAPP_CODE_TTL_MS));
+      : (step.clientExpiresAt ?? step.expiresAt);
   const whatsAppTimeLeftMs = Math.max(0, whatsAppExpiry - nowMs);
   const whatsAppTimeLeftSeconds = Math.ceil(whatsAppTimeLeftMs / 1000);
   const whatsAppExpired = isWhatsAppCodeStep && whatsAppTimeLeftSeconds <= 0;
