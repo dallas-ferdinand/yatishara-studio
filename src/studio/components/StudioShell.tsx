@@ -18,7 +18,6 @@ import {
   ChatUserAvatar,
   initialsFromUser,
 } from "./guided-video/ChatMessageAvatars";
-import { createBrowserStt } from "@/studio/lib/browser-stt";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -266,6 +265,17 @@ const STYLE = {
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
 };
+
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 export function StudioShell() {
   const { isMobile } = useMobileLayout();
@@ -11587,9 +11597,11 @@ function StudioComposer({
   guidedVideoTypes = [],
   assistBusy = false,
 }) {
+  const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
-  const browserSttRef = useRef(null);
-  const voicePrefixRef = useRef("");
+  const [transcribing, setTranscribing] = useState(false);
+  const micBusyRef = useRef(false);
+  const micStartedRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
@@ -11877,60 +11889,61 @@ function StudioComposer({
     />
   );
 
-  function applyVoiceTranscript(voiceText) {
-    const spoken = String(voiceText ?? "").replace(/\s+/g, " ").trim();
-    const prefix = String(voicePrefixRef.current ?? "").replace(/\s+$/g, "");
-    if (!spoken) {
-      setEditorText(prefix);
-      return;
-    }
-    setEditorText(prefix ? `${prefix} ${spoken}` : spoken);
-  }
+  async function toggleVoice() {
+    if (micBusyRef.current || transcribing) return;
 
-  function stopBrowserStt() {
-    const stt = browserSttRef.current;
-    browserSttRef.current = null;
-    setRecording(false);
-    stt?.stop?.();
-  }
-
-  function toggleVoice() {
     try {
-      if (recording || browserSttRef.current?.isActive?.()) {
-        stopBrowserStt();
+      if (recording) {
+        micBusyRef.current = true;
+        setRecording(false);
+        setTranscribing(true);
+        const voice = await import("@/desk/lib/voice-desk");
+        const elapsed = Date.now() - micStartedRef.current;
+        if (elapsed < 700) {
+          await voice.cancelRecording();
+          throw new Error("Recording too brief — tap mic, speak, tap again to stop");
+        }
+        const data = await voice.stopRecording();
+        if (!data?.blob) {
+          throw new Error("No audio captured — tap mic to start, tap again to stop");
+        }
+        const audioBase64 = await blobToBase64(data.blob);
+        const result = await transcribeVoice({
+          audioBase64,
+          mimetype: data.mimetype || data.blob.type || "audio/webm",
+        });
+        const text = result?.text?.trim();
+        if (text) {
+          const editor = editorRef.current;
+          if (editor) {
+            insertComposerTextAtCaret(editor, text);
+            setDraft(readComposerEditorText(editor));
+          } else {
+            setEditorText(`${draft}${draft ? " " : ""}${text}`);
+          }
+        }
         return;
       }
 
-      const editor = editorRef.current;
-      voicePrefixRef.current = editor
-        ? readComposerEditorText(editor).replace(/\s+$/g, "")
-        : String(draft ?? "").replace(/\s+$/g, "");
-
-      const stt = createBrowserStt({
-        onUpdate: applyVoiceTranscript,
-        onError: (error) => {
-          console.error("Voice input failed", error);
-          stopBrowserStt();
-        },
-        onEnd: () => {
-          browserSttRef.current = null;
-          setRecording(false);
-        },
-      });
-      browserSttRef.current = stt;
-      stt.start();
+      micBusyRef.current = true;
+      const voice = await import("@/desk/lib/voice-desk");
+      await voice.startRecording();
+      micStartedRef.current = Date.now();
       setRecording(true);
     } catch (error) {
-      browserSttRef.current = null;
       setRecording(false);
       console.error("Voice input failed", error);
+    } finally {
+      setTranscribing(false);
+      micBusyRef.current = false;
     }
   }
 
   useEffect(() => {
     return () => {
-      browserSttRef.current?.abort?.();
-      browserSttRef.current = null;
+      void import("@/desk/lib/voice-desk")
+        .then((voice) => voice.cancelRecording())
+        .catch(() => {});
     };
   }, []);
 
@@ -12059,7 +12072,7 @@ function StudioComposer({
         ) : null}
         <div className="studio-composer-row">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
-          <div className={`cursor-composer-box ${recording ? "is-recording" : ""}${dragOver ? " is-drop-target" : ""}`}>
+          <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -12170,12 +12183,17 @@ function StudioComposer({
         <div className="studio-composer-actions">
           <button
             type="button"
-            className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}`}
-            title={recording ? "Stop voice typing" : "Use your voice"}
-            aria-label={recording ? "Stop voice typing" : "Use your voice"}
-            onClick={() => toggleVoice()}
+            className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}`}
+            title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
+            aria-label={transcribing ? "Turning voice into text" : recording ? "Stop recording" : "Use your voice"}
+            onClick={() => void toggleVoice()}
+            disabled={transcribing}
           >
-            <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
+            {transcribing ? (
+              <Loader2 size={14} strokeWidth={2.25} className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
+            )}
           </button>
           <button
             type="button"

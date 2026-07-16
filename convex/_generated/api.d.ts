@@ -37,6 +37,7 @@ import type * as lib_bunny from "../lib/bunny.js";
 import type * as lib_composerScriptTypes from "../lib/composerScriptTypes.js";
 import type * as lib_creativeDirection from "../lib/creativeDirection.js";
 import type * as lib_customFunctions from "../lib/customFunctions.js";
+import type * as lib_deepgram from "../lib/deepgram.js";
 import type * as lib_elementAssetModel from "../lib/elementAssetModel.js";
 import type * as lib_elementSheetGuides from "../lib/elementSheetGuides.js";
 import type * as lib_elementSheets from "../lib/elementSheets.js";
@@ -79,6 +80,7 @@ import type * as videoEditActions from "../videoEditActions.js";
 import type * as videoEditInternal from "../videoEditInternal.js";
 import type * as videoEdits from "../videoEdits.js";
 import type * as videoModels from "../videoModels.js";
+import type * as voiceActions from "../voiceActions.js";
 import type * as whatsappAuth from "../whatsappAuth.js";
 
 import type {
@@ -117,6 +119,7 @@ declare const fullApi: ApiFromModules<{
   "lib/composerScriptTypes": typeof lib_composerScriptTypes;
   "lib/creativeDirection": typeof lib_creativeDirection;
   "lib/customFunctions": typeof lib_customFunctions;
+  "lib/deepgram": typeof lib_deepgram;
   "lib/elementAssetModel": typeof lib_elementAssetModel;
   "lib/elementSheetGuides": typeof lib_elementSheetGuides;
   "lib/elementSheets": typeof lib_elementSheets;
@@ -159,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   videoEditInternal: typeof videoEditInternal;
   videoEdits: typeof videoEdits;
   videoModels: typeof videoModels;
+  voiceActions: typeof voiceActions;
   whatsappAuth: typeof whatsappAuth;
 }>;
 
