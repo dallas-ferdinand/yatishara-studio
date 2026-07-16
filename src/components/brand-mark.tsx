@@ -38,9 +38,7 @@ export function BrandMark({ size = 48, subtle = false, appearance }: Props) {
           decoding="async"
           loading="eager"
           fetchPriority="high"
-          onLoad={() => {
-            queueMicrotask(() => setLoaded(true));
-          }}
+          onLoad={() => setLoaded(true)}
           className={`mos-brand-logo object-contain${loaded ? " is-loaded" : ""}${ambient ? " mos-brand-logo--breathe" : ""}`}
           style={{ width: size, height: size }}
         />

@@ -177,8 +177,7 @@ export function StudioAuthGate({
   }, []);
 
   useEffect(() => {
-    // Hand off from the static first-paint boot in layout.tsx.
-    document.getElementById("ys-paint-boot")?.remove();
+    // PaintBoot hides itself declaratively in the same passive-effect flush.
     setBootMountReady(true);
   }, []);
 

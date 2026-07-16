@@ -1,6 +1,6 @@
 "use client";
 
-import { ChatAssistAvatar, ChatMessageRow } from "./ChatMessageAvatars";
+import { ChatMessageRow } from "./ChatMessageAvatars";
 
 type Props = {
   message?: string;
@@ -9,7 +9,7 @@ type Props = {
 export function AssistantMessage({ message }: Props) {
   if (!message?.trim()) return null;
   return (
-    <ChatMessageRow role="assistant" avatar={<ChatAssistAvatar />}>
+    <ChatMessageRow role="assistant">
       <article className="studio-chat-bubble is-assistant">
         <p className="studio-chat-text" style={{ whiteSpace: "pre-wrap" }}>
           {message}

@@ -8706,24 +8706,42 @@
 }
 
 .studio-polish .studio-chat-bubble.is-user {
-  background: var(
-    --studio-composer-glass-strong,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 74%, transparent)
-  ) !important;
+  border-color: color-mix(in srgb, var(--cursor-accent) 42%, transparent) !important;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--cursor-accent) 72%, #fff 8%) 0%,
+      color-mix(in srgb, var(--cursor-accent) 58%, transparent) 48%,
+      color-mix(in srgb, var(--cursor-accent-hover, var(--cursor-accent)) 46%, #07111f 18%) 100%
+    ) !important;
+  box-shadow:
+    0 14px 32px color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent) !important;
+  color: #fff;
+}
+
+[data-appearance="light"] .studio-polish .studio-chat-bubble.is-user {
+  border-color: color-mix(in srgb, var(--cursor-accent) 38%, transparent) !important;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--cursor-accent) 78%, #fff 10%) 0%,
+      color-mix(in srgb, var(--cursor-accent) 62%, transparent) 52%,
+      color-mix(in srgb, var(--cursor-accent-hover, var(--cursor-accent)) 54%, #fff 12%) 100%
+    ) !important;
 }
 
 .studio-polish .studio-chat-bubble.is-system {
-  background: var(
-    --studio-composer-glass-muted,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 44%, transparent)
-  ) !important;
+  background: color-mix(in srgb, #05080f 90%, var(--cursor-accent) 4%) !important;
 }
 
 .studio-polish .studio-chat-bubble.is-assistant {
-  background: var(
-    --studio-composer-glass-muted,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent)
-  ) !important;
+  background: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%) !important;
+}
+
+[data-appearance="light"] .studio-polish .studio-chat-bubble.is-system,
+[data-appearance="light"] .studio-polish .studio-chat-bubble.is-assistant {
+  background: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%) !important;
 }
 
 .studio-polish .studio-chat-bubble.is-thinking {
@@ -9528,6 +9546,36 @@
   align-items: stretch;
   width: 100%;
   min-width: 0;
+}
+
+.studio-chat-row.is-avatarless {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-chat-row.is-avatarless.is-user {
+  justify-content: flex-end;
+}
+
+.studio-chat-row.is-avatarless.is-assistant {
+  justify-content: flex-start;
+}
+
+.studio-chat-row.is-avatarless .studio-chat-row-body {
+  width: auto;
+  max-width: var(--studio-chat-bubble-max, 90%);
+  min-width: 0;
+}
+
+.studio-chat-row.is-avatarless .studio-chat-row-body:has(.studio-assist-card) {
+  max-width: var(--studio-chat-bubble-max, 90%);
+  width: min(100%, var(--studio-chat-bubble-max, 90%));
+}
+
+.studio-chat-row.is-avatarless .studio-chat-bubble {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .studio-chat-row.is-user {

@@ -25,24 +25,28 @@ const nextConfig: NextConfig = {
   async headers() {
     // Order matters: first matching source wins in Next.js.
     return [
-      {
-        source: "/_next/static/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            // Hashed filenames — revalidate every load so deploys never stick.
-            value: "public, max-age=0, must-revalidate",
-          },
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains; preload",
-          },
-          {
-            key: "X-Content-Type-Options",
-            value: "nosniff",
-          },
-        ],
-      },
+      ...(process.env.NODE_ENV === "production"
+        ? [
+            {
+              source: "/_next/static/:path*",
+              headers: [
+                {
+                  key: "Cache-Control",
+                  // Hashed filenames — revalidate every load so deploys never stick.
+                  value: "public, max-age=0, must-revalidate",
+                },
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=31536000; includeSubDomains; preload",
+                },
+                {
+                  key: "X-Content-Type-Options",
+                  value: "nosniff",
+                },
+              ],
+            },
+          ]
+        : []),
       {
         source: "/sw.js",
         headers: [

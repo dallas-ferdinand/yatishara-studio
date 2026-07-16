@@ -1,11 +1,11 @@
 "use client";
 
-import { ChatAssistAvatar, ChatMessageRow } from "./ChatMessageAvatars";
+import { ChatMessageRow } from "./ChatMessageAvatars";
 
 /** Compact inline “AI is working” bubble — scribbling pencil only. */
 export function AssistanceThinkingIndicator() {
   return (
-    <ChatMessageRow role="assistant" avatar={<ChatAssistAvatar />}>
+    <ChatMessageRow role="assistant">
       <article
         className="studio-chat-bubble is-assistant is-thinking"
         aria-live="polite"

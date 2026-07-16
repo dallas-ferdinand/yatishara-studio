@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileText, ImageIcon, Sparkles, Video } from "lucide-react";
-import { ChatAssistAvatar, ChatMessageRow } from "./ChatMessageAvatars";
+import { ChatMessageRow } from "./ChatMessageAvatars";
 
 type BriefPayload = {
   subject?: string;
@@ -230,7 +230,7 @@ export function AssistanceReviewCard({
     modeTitle;
 
   return (
-    <ChatMessageRow role="assistant" avatar={<ChatAssistAvatar />}>
+    <ChatMessageRow role="assistant">
     <article className="studio-assist-card studio-assist-review-card" aria-live="polite">
       <header className="studio-assist-review-hero">
         <h3 className="studio-assist-review-title">

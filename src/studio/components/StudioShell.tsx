@@ -12,11 +12,7 @@ import {
   VideoTypeTriggerButton,
 } from "./guided-video/VideoTypePicker";
 import { AssistanceThinkingIndicator } from "./guided-video/AssistanceThinkingIndicator";
-import {
-  ChatMessageRow,
-  ChatUserAvatar,
-  initialsFromUser,
-} from "./guided-video/ChatMessageAvatars";
+import { ChatMessageRow } from "./guided-video/ChatMessageAvatars";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -498,7 +494,7 @@ function cssUrlToPath(value) {
 const STYLE = {
   shell: "flex h-dvh min-h-0 text-cursor-text",
   sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border-soft",
-  main: "flex h-full min-h-0 min-w-0 flex-1 flex-col",
+  main: "flex min-h-0 min-w-0 flex-1 flex-col",
   panelHead: "cursor-panel-head cursor-sidebar-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
@@ -523,22 +519,23 @@ export function StudioShell({
   const { isMobile } = useMobileLayout();
   const { signOut } = useAuthActions();
   const [mainPanelSizes, setMainPanelSizes] = useState(readStudioMainPanelSizes);
+  const mainPanelSizesRef = useRef(mainPanelSizes);
   const handleMainPanelLayout = useCallback(
     (sizes) => {
       if (isMobile || !Array.isArray(sizes) || sizes.length !== 2) return;
       const next = normalizeStudioMainPanelSizes(sizes);
-      setMainPanelSizes((prev) => {
-        if (
-          Array.isArray(prev) &&
-          prev.length === 2 &&
-          Math.abs(prev[0] - next[0]) < 0.05 &&
-          Math.abs(prev[1] - next[1]) < 0.05
-        ) {
-          return prev;
-        }
-        writeStudioMainPanelSizes(next);
-        return next;
-      });
+      const current = mainPanelSizesRef.current;
+      if (
+        Array.isArray(current) &&
+        current.length === 2 &&
+        Math.abs(current[0] - next[0]) < 0.05 &&
+        Math.abs(current[1] - next[1]) < 0.05
+      ) {
+        return;
+      }
+      mainPanelSizesRef.current = next;
+      writeStudioMainPanelSizes(next);
+      setMainPanelSizes(next);
     },
     [isMobile]
   );
@@ -3129,22 +3126,27 @@ export function StudioShell({
           --studio-hover-scale: 1;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 62%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 40%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #05080f 90%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #05080f 94%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #05080f 84%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.14);
-          --studio-composer-glass-blur: saturate(160%) blur(12px);
+          --studio-composer-glass-blur: saturate(180%) blur(28px);
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          --studio-composer-shell-max: min(600px, 94vw);
+          --studio-composer-shell-max: 100%;
+          /* Message column only — composer stays full width */
+          --studio-chat-column-max: min(92%, 36rem);
+          --studio-chat-bubble-max: 90%;
           --studio-composer-min-height: 96px;
           --studio-composer-side-width: 0px;
           --studio-mode-switcher-width: 0px;
           --studio-generate-column-width: 0px;
           --studio-composer-row-gap: 8px;
-          /* Fallback clearance until the composer measures its overlap with the chat area */
-          --studio-chat-empty-clearance: calc(180px + env(safe-area-inset-bottom, 0px));
+          /* Fallback: input glass only (not mode pills above it) */
+          --studio-chat-empty-clearance: calc(104px + env(safe-area-inset-bottom, 0px));
+          /* Extra stream end pad so the last message rests above the mode pills */
+          --studio-chat-stream-end-pad: 44px;
           --studio-mobile-nav-height: 38px;
           /* Gap between composer dock and mobile bottom nav */
           --studio-mobile-composer-gap: 8px;
@@ -3216,14 +3218,16 @@ export function StudioShell({
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: rgba(0, 0, 0, 0.9);
-          --studio-gen-frame-text: var(--color-cursor-text-bright);
-          --studio-gen-card-shadow: 0 28px 64px rgb(0 0 0 / 0.65);
-          --studio-gen-media-bg: rgba(0, 0, 0, 0.9);
-          --studio-gen-glass-fill: color-mix(in srgb, #ffffff 32%, transparent);
-          --studio-gen-glass-blur: saturate(190%) blur(20px);
-          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 30%, transparent);
-          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 24%, transparent);
+          --studio-gen-frame-bg: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
+          --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 78%, var(--color-cursor-muted));
+          --studio-gen-card-shadow:
+            0 10px 28px rgba(0, 0, 0, 0.22),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          --studio-gen-media-bg: color-mix(in srgb, #05080f 94%, transparent);
+          --studio-gen-glass-fill: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
+          --studio-gen-glass-blur: saturate(140%) blur(10px);
+          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 7%, transparent);
+          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 4%, transparent);
           position: relative;
           background: var(--mos-bg) !important;
           overflow: hidden;
@@ -3410,9 +3414,9 @@ export function StudioShell({
             isolation: auto !important;
           }
           .studio-polish.is-studio-mobile .studio-mode-row {
-            background: var(--studio-composer-glass-muted) !important;
-            backdrop-filter: var(--studio-composer-glass-blur) !important;
-            -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+            background: color-mix(in srgb, #05080f 48%, transparent) !important;
+            backdrop-filter: saturate(140%) blur(8px) !important;
+            -webkit-backdrop-filter: saturate(140%) blur(8px) !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
@@ -3425,7 +3429,7 @@ export function StudioShell({
             transition: color 120ms ease, border-color 120ms ease !important;
           }
           .studio-polish.is-studio-mobile {
-            --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
+            --studio-chat-empty-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
             /* Dark overlay chrome — readable bars, still slightly frosted */
             --studio-mobile-chrome-glass: color-mix(in srgb, #05080f 88%, transparent);
@@ -3632,6 +3636,9 @@ export function StudioShell({
             padding-top: 2px;
             padding-bottom: 0;
           }
+          .studio-polish .studio-chat-composer-align {
+            max-width: var(--studio-chat-column-max, min(92%, 36rem));
+          }
           .studio-polish .studio-composer-row {
             flex-direction: column;
             flex: 0 0 auto;
@@ -3660,11 +3667,11 @@ export function StudioShell({
             justify-content: center;
             gap: 4px;
             padding: 0 6px;
-            border: 1px solid var(--studio-composer-glass-border);
+            border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
             border-radius: 999px;
-            background: var(--studio-composer-glass-muted);
-            backdrop-filter: var(--studio-composer-glass-blur);
-            -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+            background: color-mix(in srgb, #05080f 48%, transparent);
+            backdrop-filter: saturate(140%) blur(8px);
+            -webkit-backdrop-filter: saturate(140%) blur(8px);
             font-size: 9px;
           }
           .studio-polish .studio-mode-row.is-active {
@@ -3778,13 +3785,9 @@ export function StudioShell({
           .studio-polish .studio-composer-circle-btn {
             display: inline-flex;
           }
-          .studio-polish .studio-chat-stream {
-            padding-bottom: calc(220px + env(safe-area-inset-bottom, 0px));
-            scroll-padding-bottom: calc(220px + env(safe-area-inset-bottom, 0px));
-          }
           .studio-polish .studio-chat-composer-align {
             grid-template-columns: minmax(0, 1fr);
-            max-width: 100%;
+            max-width: var(--studio-chat-column-max, min(92%, 36rem));
             left: 0;
             padding-inline: 0;
           }
@@ -5121,9 +5124,9 @@ export function StudioShell({
             rgba(15, 23, 42, 0.04) 55%,
             transparent 80%
           );
-          --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #ffffff) 50%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #ffffff) 62%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #ffffff) 40%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #e8ecf2 88%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #e8ecf2 92%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 82%, transparent);
           --studio-composer-glass-border: rgba(15, 23, 42, 0.12);
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
@@ -5139,14 +5142,16 @@ export function StudioShell({
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 5.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 6%, var(--mos-bg));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: transparent;
-          --studio-gen-frame-text: var(--color-cursor-text);
-          --studio-gen-card-shadow: var(--studio-composer-glass-shadow);
-          --studio-gen-media-bg: transparent;
-          --studio-gen-glass-fill: color-mix(in srgb, #ffffff 32%, transparent);
-          --studio-gen-glass-blur: saturate(190%) blur(20px);
-          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 8%, transparent);
+          --studio-gen-frame-bg: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+          --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 72%, var(--color-cursor-muted));
+          --studio-gen-card-shadow:
+            0 6px 18px color-mix(in srgb, #000 4%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
+          --studio-gen-media-bg: color-mix(in srgb, #e8ecf2 88%, transparent);
+          --studio-gen-glass-fill: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+          --studio-gen-glass-blur: saturate(140%) blur(10px);
+          --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 5%, transparent);
+          --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 3%, transparent);
         }
         [data-appearance="light"] .studio-polish :where(
           .studio-composer .cursor-composer-box,
@@ -8061,11 +8066,25 @@ export function StudioShell({
           background: transparent !important;
         }
         @media (min-width: 900px) {
+          .studio-polish {
+            --studio-composer-shell-max: 100%;
+            --studio-chat-column-max: calc(100% - 36px);
+            --studio-composer-glass-blur: saturate(190%) blur(36px);
+            --studio-chat-bubble-max: 58%;
+          }
           .studio-composer .cursor-composer {
-            left: -5px;
+            left: 0;
+            max-width: 100%;
+            padding-inline: 10px;
           }
           .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock {
-            transform: translateX(-5px);
+            transform: none;
+            width: 100%;
+            max-width: 100%;
+          }
+          .studio-chat-composer-align {
+            max-width: var(--studio-chat-column-max);
+            padding-inline: 4px;
           }
         }
         .studio-composer-row {
@@ -8200,11 +8219,12 @@ export function StudioShell({
           min-width: 0;
           min-height: 28px;
           height: 28px;
-          border: 1px solid var(--studio-composer-glass-border);
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
           border-radius: 999px;
-          background: var(--studio-composer-glass-muted);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          /* Keep pills readable but translucent so messages can scroll through this band. */
+          background: color-mix(in srgb, #05080f 48%, transparent);
+          backdrop-filter: saturate(140%) blur(8px);
+          -webkit-backdrop-filter: saturate(140%) blur(8px);
           padding: 0 6px;
           color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
           font-size: 9px;
@@ -10143,13 +10163,17 @@ export function StudioShell({
           filter: none;
         }
         @media (max-width: 640px) {
+          .studio-polish {
+            --studio-chat-column-max: min(92%, 36rem);
+            --studio-chat-bubble-max: 90%;
+          }
           .studio-composer .cursor-composer {
             max-width: 100%;
             padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(10px, env(safe-area-inset-right, 0px));
             left: 0;
           }
           .studio-chat-composer-align {
-            max-width: 100%;
+            max-width: var(--studio-chat-column-max, min(92%, 36rem));
           }
         }
         .studio-composer-circle-btn {
@@ -12287,11 +12311,58 @@ export function StudioShell({
         .studio-chat-render-area {
           position: relative;
           display: flex;
-          height: 100%;
           min-height: 0;
-          flex: 1 1 auto;
+          flex: 1 1 0;
           flex-direction: column;
           overflow: hidden;
+          /* Clip at the input glass only — mode pills sit above this inset. */
+          padding-bottom: var(--studio-chat-empty-clearance, 104px);
+          box-sizing: border-box;
+        }
+        .studio-active-pane {
+          position: relative;
+          display: flex;
+          min-height: 0;
+          flex: 1 1 0;
+          width: 100%;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .studio-social-keepalive {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          min-height: 0;
+          pointer-events: none;
+        }
+        .studio-social-keepalive-slot {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        .studio-social-keepalive-slot.is-active {
+          z-index: 2;
+          opacity: 1;
+          pointer-events: auto;
+        }
+        .studio-pane-foreground {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          min-height: 0;
+          flex: 1 1 0;
+          width: 100%;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .studio-pane-foreground.is-covered {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          opacity: 0;
+          pointer-events: none;
         }
         .studio-history-floating-panel {
           width: 100%;
@@ -12675,23 +12746,28 @@ export function StudioShell({
         }
         .studio-chat-stream {
           min-height: 0;
-          flex: 1 1 auto;
-          height: 100%;
+          flex: 1 1 0;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
           -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
           scrollbar-gutter: auto;
-          padding: 18px 10px calc(180px + env(safe-area-inset-bottom, 0px));
-          scroll-padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+          padding: 18px 10px var(--studio-chat-stream-end-pad, 44px);
+          scroll-padding-bottom: var(--studio-chat-stream-end-pad, 44px);
+        }
+        .studio-chat-stream::-webkit-scrollbar {
+          width: 0;
+          height: 0;
+          display: none;
         }
         .studio-chat-composer-align {
           display: grid;
           grid-template-columns: minmax(0, 1fr);
           gap: var(--studio-composer-row-gap);
           width: 100%;
-          max-width: var(--studio-composer-shell-max, min(600px, 94vw));
+          max-width: var(--studio-chat-column-max, min(92%, 36rem));
           min-height: 100%;
           margin: 0 auto;
           position: relative;
@@ -12736,31 +12812,85 @@ export function StudioShell({
         }
         .studio-chat-bubble {
           position: relative;
-          width: 100%;
-          max-width: 100%;
+          width: fit-content;
+          max-width: var(--studio-chat-bubble-max, 90%);
           min-width: 0;
           box-sizing: border-box;
           border: 1px solid var(--studio-composer-glass-border);
-          border-radius: 18px;
+          border-radius: 8px 18px 18px 18px;
           background: var(--studio-composer-glass);
           backdrop-filter: var(--studio-composer-glass-blur);
           -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           overflow: hidden;
-          padding: 12px 14px;
+          padding: 11px 14px;
           /* Do not use content-visibility here — paint containment blanks backdrop-filter glass. */
           box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-bubble.is-user {
-          background: var(--studio-composer-glass-strong);
+          margin-left: auto;
+          border-radius: 18px 8px 18px 18px;
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, transparent);
+          background:
+            linear-gradient(
+              145deg,
+              color-mix(in srgb, var(--cursor-accent) 72%, #fff 8%) 0%,
+              color-mix(in srgb, var(--cursor-accent) 58%, transparent) 48%,
+              color-mix(in srgb, var(--cursor-accent-hover, var(--cursor-accent)) 46%, #07111f 18%) 100%
+            );
+          box-shadow:
+            0 14px 32px color-mix(in srgb, var(--cursor-accent) 22%, transparent),
+            inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+          color: #fff;
+        }
+        .studio-chat-bubble.is-user .studio-chat-text,
+        .studio-chat-bubble.is-user .studio-chat-markdown,
+        .studio-chat-bubble.is-user .studio-chat-markdown-bit {
+          color: #fff;
+        }
+        [data-appearance="light"] .studio-chat-bubble.is-user {
+          border-color: color-mix(in srgb, var(--cursor-accent) 38%, transparent);
+          background:
+            linear-gradient(
+              145deg,
+              color-mix(in srgb, var(--cursor-accent) 78%, #fff 10%) 0%,
+              color-mix(in srgb, var(--cursor-accent) 62%, transparent) 52%,
+              color-mix(in srgb, var(--cursor-accent-hover, var(--cursor-accent)) 54%, #fff 12%) 100%
+            );
+          box-shadow:
+            0 12px 28px color-mix(in srgb, var(--cursor-accent) 18%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        }
+        .studio-chat-bubble.is-assistant {
+          margin-right: auto;
+          border-radius: 8px 18px 18px 18px;
+          background: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
+          backdrop-filter: saturate(140%) blur(10px);
+          -webkit-backdrop-filter: saturate(140%) blur(10px);
         }
         .studio-chat-bubble.is-result {
-          background: var(--studio-composer-glass-strong);
-          box-shadow:
-            var(--studio-composer-glass-shadow),
-            0 0 24px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          width: min(100%, var(--studio-chat-bubble-max, 90%));
+          max-width: var(--studio-chat-bubble-max, 90%);
+          margin-right: auto;
+          background: color-mix(in srgb, #05080f 94%, var(--cursor-accent) 3%);
+          backdrop-filter: saturate(140%) blur(10px);
+          -webkit-backdrop-filter: saturate(140%) blur(10px);
+          box-shadow: var(--studio-gen-card-shadow);
         }
         .studio-chat-bubble.is-system {
-          background: var(--studio-composer-glass-muted);
+          margin-right: auto;
+          background: color-mix(in srgb, #05080f 90%, var(--cursor-accent) 4%);
+          backdrop-filter: saturate(140%) blur(10px);
+          -webkit-backdrop-filter: saturate(140%) blur(10px);
+        }
+        [data-appearance="light"] .studio-chat-bubble.is-assistant,
+        [data-appearance="light"] .studio-chat-bubble.is-system {
+          background: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+        }
+        .studio-chat-stream-inner > .studio-chat-bubble {
+          align-self: flex-start;
+        }
+        .studio-chat-stream-inner > .studio-chat-bubble.is-user {
+          align-self: flex-end;
         }
 
         .studio-chat-kicker {
@@ -12773,13 +12903,15 @@ export function StudioShell({
         }
         .studio-chat-text {
           color: var(--color-cursor-text);
-          font-size: 13px;
+          font-size: 13.5px;
+          font-weight: 400;
           line-height: 1.5;
           white-space: pre-wrap;
         }
         .studio-chat-markdown {
           color: var(--color-cursor-text);
-          font-size: 13px;
+          font-size: 13.5px;
+          font-weight: 400;
           line-height: 1.55;
           white-space: normal;
         }
@@ -12793,10 +12925,9 @@ export function StudioShell({
           font-size: 0.92em;
         }
         .studio-chat-prompt {
-          display: grid;
-          gap: 10px;
+          display: block;
+          min-width: 0;
         }
-        .studio-chat-prompt-chips,
         .studio-chat-prompt-body {
           display: flex;
           flex-wrap: wrap;
@@ -12888,7 +13019,8 @@ export function StudioShell({
         .studio-chat-markdown-bit {
           display: inline;
           color: var(--color-cursor-text);
-          font-size: 13px;
+          font-size: 13.5px;
+          font-weight: 400;
           line-height: 1.5;
         }
         .studio-chat-markdown-bit :where(p) {
@@ -12905,55 +13037,56 @@ export function StudioShell({
           display: inline;
           margin: 0;
         }
+        .studio-video-progress-card,
+        .studio-chat-stream-inner > .studio-assist-card {
+          width: min(100%, var(--studio-chat-bubble-max, 90%));
+          max-width: var(--studio-chat-bubble-max, 90%);
+          align-self: flex-start;
+          box-sizing: border-box;
+        }
         .studio-video-progress-card {
           overflow: hidden;
           border-radius: 18px;
           border: 1px solid var(--studio-composer-glass-border);
-          background: var(--studio-gen-frame-bg);
+          background: var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
           box-shadow: var(--studio-gen-card-shadow);
-        }
-        [data-appearance="light"] .studio-polish .studio-video-progress-card {
-          background: transparent;
-          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-video-progress-frame {
           position: relative;
           aspect-ratio: 16 / 9;
           overflow: hidden;
-          background: var(--studio-gen-frame-bg);
-        }
-        [data-appearance="light"] .studio-polish .studio-video-progress-frame {
-          background: var(--studio-gen-glass-fill);
-          backdrop-filter: var(--studio-gen-glass-blur);
-          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+          background: transparent;
         }
         .studio-video-progress-frame::before {
           content: "";
           position: absolute;
           inset: -80%;
+          opacity: 0.55;
           background:
-            radial-gradient(circle at 30% 50%, var(--studio-gen-aura-a) 0%, transparent 40%),
-            radial-gradient(circle at 70% 50%, var(--studio-gen-aura-b) 0%, transparent 40%);
-          animation: studio-aura-drift 5000ms ease-in-out infinite alternate;
+            radial-gradient(circle at 30% 50%, var(--studio-gen-aura-a) 0%, transparent 42%),
+            radial-gradient(circle at 70% 50%, var(--studio-gen-aura-b) 0%, transparent 42%);
+          animation: studio-aura-drift 7000ms ease-in-out infinite alternate;
         }
         @keyframes studio-aura-drift {
-          0% { transform: translate(-10%, -5%) scale(1); }
-          50% { transform: translate(5%, 5%) scale(1.1); }
-          100% { transform: translate(10%, -5%) scale(1); }
+          0% { transform: translate(-6%, -3%) scale(1); }
+          50% { transform: translate(3%, 3%) scale(1.04); }
+          100% { transform: translate(6%, -3%) scale(1); }
         }
         .studio-video-progress-frame::after {
           content: "";
           position: absolute;
           inset: -100%;
           background:
-            radial-gradient(circle at 50% 50%, transparent 20%, color-mix(in srgb, var(--mos-text-bright) 20%, transparent) 40%, transparent 55%),
-            radial-gradient(circle at 50% 50%, transparent 0%, color-mix(in srgb, var(--cursor-accent) 12%, transparent) 25%, transparent 45%);
-          animation: studio-ripple-pulse 3000ms cubic-bezier(0.25, 0, 0.2, 1) infinite;
+            radial-gradient(circle at 50% 50%, transparent 22%, color-mix(in srgb, var(--mos-text-bright) 6%, transparent) 40%, transparent 56%),
+            radial-gradient(circle at 50% 50%, transparent 0%, color-mix(in srgb, var(--cursor-accent) 5%, transparent) 25%, transparent 45%);
+          animation: studio-ripple-pulse 4200ms cubic-bezier(0.25, 0, 0.2, 1) infinite;
         }
         @keyframes studio-ripple-pulse {
-          0% { transform: scale(0.5); opacity: 0; }
-          15% { opacity: 0.7; }
-          100% { transform: scale(1.8); opacity: 0; }
+          0% { transform: scale(0.55); opacity: 0; }
+          18% { opacity: 0.28; }
+          100% { transform: scale(1.55); opacity: 0; }
         }
         .studio-gen-status-frame.has-dot-wave::before,
         .studio-gen-status-frame.has-dot-wave::after {
@@ -12979,22 +13112,22 @@ export function StudioShell({
         }
         .studio-dot-grid-wave-dot {
           display: block;
-          width: 5px;
-          height: 5px;
+          width: 4px;
+          height: 4px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--cursor-accent) 82%, white);
-          box-shadow: 0 0 10px color-mix(in srgb, var(--cursor-accent) 34%, transparent);
-          animation: studio-dot-grid-wave 1.85s ease-in-out infinite;
+          background: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-muted));
+          box-shadow: none;
+          animation: studio-dot-grid-wave 2.4s ease-in-out infinite;
           animation-delay: var(--dot-delay, 0s);
         }
         @keyframes studio-dot-grid-wave {
           0%, 100% {
-            transform: scale(0.72);
-            opacity: 0.28;
+            transform: scale(0.7);
+            opacity: 0.16;
           }
           50% {
-            transform: scale(1.12);
-            opacity: 1;
+            transform: scale(1.02);
+            opacity: 0.55;
           }
         }
         .studio-gen-status-content.is-minimal {
@@ -13002,9 +13135,9 @@ export function StudioShell({
           padding-bottom: 14px;
         }
         .studio-gen-status-content.is-minimal strong {
-          font-size: 12px;
-          font-weight: 600;
-          color: color-mix(in srgb, var(--studio-gen-frame-text) 78%, var(--color-cursor-muted));
+          font-size: 11px;
+          font-weight: 500;
+          color: color-mix(in srgb, var(--studio-gen-frame-text) 70%, var(--color-cursor-muted));
         }
         .studio-video-progress-content,
         .studio-gen-status-content {
@@ -13015,21 +13148,22 @@ export function StudioShell({
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 8px;
+          gap: 6px;
           padding: 18px 20px;
           color: var(--studio-gen-frame-text);
           text-align: center;
         }
         .studio-gen-status-content strong {
-          font-size: 13px;
-          font-weight: 650;
+          font-size: 12px;
+          font-weight: 500;
           line-height: 1.35;
+          letter-spacing: 0.01em;
         }
         .studio-gen-status-detail {
           margin: 0;
           max-width: 36ch;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
+          color: color-mix(in srgb, var(--color-cursor-muted) 88%, transparent);
+          font-size: 11px;
           font-weight: 450;
           line-height: 1.45;
         }
@@ -13037,59 +13171,36 @@ export function StudioShell({
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 34px;
-          height: 34px;
+          width: 28px;
+          height: 28px;
           border-radius: 999px;
-          background: color-mix(in srgb, currentColor 10%, transparent);
+          opacity: 0.72;
+          background: color-mix(in srgb, currentColor 7%, transparent);
         }
         .studio-gen-status-icon svg {
-          width: 18px;
-          height: 18px;
+          width: 15px;
+          height: 15px;
         }
         .studio-gen-status-card.is-failed .studio-gen-status-frame {
           background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #ef4444 10%, transparent), transparent 58%),
-            var(--studio-gen-frame-bg);
-        }
-        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-failed .studio-gen-status-frame {
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #ef4444 14%, transparent), transparent 62%),
-            var(--studio-gen-glass-fill);
-          backdrop-filter: var(--studio-gen-glass-blur);
-          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, #ef4444 6%, transparent), transparent 58%);
         }
         .studio-gen-status-card.is-failed .studio-gen-status-content {
-          color: color-mix(in srgb, #ef4444 72%, var(--studio-gen-frame-text));
+          color: color-mix(in srgb, #ef4444 52%, var(--studio-gen-frame-text));
         }
         .studio-gen-status-card.is-failed .studio-gen-status-detail {
-          color: color-mix(in srgb, #ef4444 42%, var(--color-cursor-muted));
+          color: color-mix(in srgb, #ef4444 28%, var(--color-cursor-muted));
         }
         .studio-gen-status-card.is-cancelled .studio-gen-status-frame {
           background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 12%, transparent), transparent 58%),
-            var(--studio-gen-frame-bg);
-        }
-        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-cancelled .studio-gen-status-frame {
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 10%, transparent), transparent 62%),
-            var(--studio-gen-glass-fill);
-          backdrop-filter: var(--studio-gen-glass-blur);
-          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 7%, transparent), transparent 58%);
         }
         .studio-gen-status-card.is-cancelled .studio-gen-status-content {
-          color: var(--color-cursor-text);
+          color: var(--color-cursor-muted);
         }
         .studio-gen-status-card.is-expired .studio-gen-status-frame {
           background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 12%, transparent), transparent 58%),
-            var(--studio-gen-frame-bg);
-        }
-        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-expired .studio-gen-status-frame {
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 10%, transparent), transparent 62%),
-            var(--studio-gen-glass-fill);
-          backdrop-filter: var(--studio-gen-glass-blur);
-          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+            radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--color-cursor-muted) 7%, transparent), transparent 58%);
         }
         .studio-gen-status-card.is-expired .studio-gen-status-content {
           color: var(--color-cursor-muted);
@@ -13119,11 +13230,11 @@ export function StudioShell({
           width: 100%;
           min-width: 0;
           border-radius: 14px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
-          background: var(--studio-gen-frame-bg);
-          box-shadow:
-            inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
-            var(--studio-gen-card-shadow);
+          border: 1px solid var(--studio-composer-glass-border);
+          background: var(--studio-gen-glass-fill);
+          backdrop-filter: var(--studio-gen-glass-blur);
+          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
+          box-shadow: var(--studio-gen-card-shadow);
         }
         .studio-chat-result-card.is-openable {
           appearance: none;
@@ -13166,8 +13277,7 @@ export function StudioShell({
         .studio-chat-result-card.is-openable:focus-visible {
           outline: none;
           box-shadow:
-            0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-            inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent),
+            0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent),
             var(--studio-gen-card-shadow);
         }
         .studio-chat-result-open {
@@ -13187,11 +13297,7 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-surface));
         }
         [data-appearance="light"] .studio-polish .studio-chat-result-card {
-          background: var(--studio-gen-glass-fill);
-          backdrop-filter: var(--studio-gen-glass-blur);
-          -webkit-backdrop-filter: var(--studio-gen-glass-blur);
           border-color: var(--studio-composer-glass-border);
-          box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-result-card img,
         .studio-chat-result-card video {
@@ -13221,13 +13327,9 @@ export function StudioShell({
           font-size: 11px;
         }
         @media (max-width: 899px) {
-          .studio-video-progress-card {
-            max-width: none;
-            width: 100%;
-          }
           .studio-chat-stream {
-            padding: 12px 12px calc(154px + env(safe-area-inset-bottom, 0px));
-            scroll-padding-bottom: calc(154px + env(safe-area-inset-bottom, 0px));
+            padding: 12px 12px var(--studio-chat-stream-end-pad, 48px);
+            scroll-padding-bottom: var(--studio-chat-stream-end-pad, 48px);
           }
         }
         @keyframes studio-logo-breathe {
@@ -13505,7 +13607,7 @@ export function StudioShell({
             ) : null}
           </div>
         </header>
-        <section className="min-h-0 flex-1 overflow-hidden">
+        <section className="flex min-h-0 flex-1 overflow-hidden">
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
@@ -14012,10 +14114,12 @@ function StudioComposer({
         composer.querySelector(".studio-composer-row")
         || composer.querySelector(".cursor-composer-box")
         || composer;
+      // Input glass only — never the mode-switcher row above it.
+      const inputBox = composer.querySelector(".cursor-composer-box");
       // Align overlays to the visible composer glass (inside padding), not the
       // padded .cursor-composer outer box — that looked left-shifted on mobile.
       const band =
-        composer.querySelector(".cursor-composer-box")
+        inputBox
         || composer.querySelector(".studio-composer-row")
         || root.querySelector(".studio-chat-composer-align")
         || composer.querySelector(".cursor-composer")
@@ -14047,13 +14151,29 @@ function StudioComposer({
           ? prev
           : nextBox,
       );
-      if (!chat) {
+      if (!chat || !inputBox) {
         root.style.removeProperty("--studio-chat-empty-clearance");
+        root.style.removeProperty("--studio-chat-stream-end-pad");
+        if (chat instanceof HTMLElement) chat.style.removeProperty("padding-bottom");
         return;
       }
       const chatBox = chat.getBoundingClientRect();
-      const clearance = Math.max(0, Math.round(chatBox.bottom - rowBox.top));
-      root.style.setProperty("--studio-chat-empty-clearance", `${clearance}px`);
+      const inputBoxRect = inputBox.getBoundingClientRect();
+      const modeSwitcher = composer.querySelector(".studio-mode-switcher");
+      const modeBox = modeSwitcher?.getBoundingClientRect();
+      // Hard clip at the input glass. End-pad parks the last message above the pills.
+      const clearance = Math.max(0, Math.round(chatBox.bottom - inputBoxRect.top));
+      const pillsBand = modeBox
+        ? Math.max(0, Math.round(inputBoxRect.top - modeBox.top))
+        : 36;
+      const endPad = pillsBand + 12;
+      const clearancePx = `${clearance}px`;
+      const endPadPx = `${endPad}px`;
+      root.style.setProperty("--studio-chat-empty-clearance", clearancePx);
+      root.style.setProperty("--studio-chat-stream-end-pad", endPadPx);
+      if (chat instanceof HTMLElement) {
+        chat.style.paddingBottom = clearancePx;
+      }
     };
 
     const observer = new ResizeObserver(syncClearance);
@@ -14065,18 +14185,28 @@ function StudioComposer({
     if (main) observer.observe(main);
     const chat = root.querySelector(".studio-chat-render-area");
     if (chat) observer.observe(chat);
+    const modeSwitcher = composer.querySelector(".studio-mode-switcher");
+    if (modeSwitcher) observer.observe(modeSwitcher);
     window.addEventListener("resize", syncClearance);
     window.visualViewport?.addEventListener("resize", syncClearance);
     syncClearance();
     const raf = window.requestAnimationFrame(syncClearance);
+    // Chat mount can lag the composer on tab switches — resync a couple frames later.
+    const raf2 = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(syncClearance);
+    });
 
     return () => {
       window.cancelAnimationFrame(raf);
+      window.cancelAnimationFrame(raf2);
       observer.disconnect();
       window.removeEventListener("resize", syncClearance);
       window.visualViewport?.removeEventListener("resize", syncClearance);
       root.style.removeProperty("--studio-chat-empty-clearance");
+      root.style.removeProperty("--studio-chat-stream-end-pad");
       root.style.removeProperty("--studio-composer-stack-height");
+      const chatEl = root.querySelector(".studio-chat-render-area");
+      if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
     };
   }, [isMobile, presetGridOpen, videoTypeGridOpen, composerOptionsOpen]);
@@ -16779,8 +16909,6 @@ function StudioThreadChat({
   const streamRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const scrolledThreadRef = useRef(null);
-  const userInitials = initialsFromUser(currentUser);
-
   useLayoutEffect(() => {
     const root = streamRef.current;
     if (!root || !displayEvents.length) return undefined;
@@ -16849,7 +16977,6 @@ function StudioThreadChat({
                   onPatchGuidedProduction={onPatchGuidedProduction}
                   creditPriceCents={creditPriceCents}
                   assistApproveBusy={assistApproveBusy}
-                  userInitials={userInitials}
                 />
               ))}
             </div>
@@ -16874,14 +17001,10 @@ function StudioThreadEvent({
   onPatchGuidedProduction,
   creditPriceCents,
   assistApproveBusy = false,
-  userInitials = "?",
 }) {
   if (event.kind === "prompt") {
     return (
-      <ChatMessageRow
-        role="user"
-        avatar={<ChatUserAvatar initials={userInitials} />}
-      >
+      <ChatMessageRow role="user">
         <article className={`studio-chat-bubble is-user${event.optimistic ? " is-optimistic" : ""}`}>
           <StudioPromptMessage prompt={event.prompt} assets={assets} elements={elements} />
         </article>
@@ -17416,6 +17539,8 @@ function ActivePane({
             key={tabKey}
             className={`studio-social-keepalive-slot${isActive ? " is-active" : ""}`}
             data-tab={tabKey}
+            inert={!isActive}
+            aria-hidden={!isActive}
           >
             <div className="profile-post-viewer-host">
               <ProfilePostViewer
@@ -17436,6 +17561,8 @@ function ActivePane({
             key={tabKey}
             className={`studio-social-keepalive-slot${isActive ? " is-active" : ""}`}
             data-tab={tabKey}
+            inert={!isActive}
+            aria-hidden={!isActive}
           >
             <PublicProfileView
               username={username}

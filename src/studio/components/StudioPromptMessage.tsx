@@ -154,30 +154,44 @@ export function StudioPromptMessage({ prompt, assets = [], elements = [] }) {
     [assets, elements],
   );
   const hasBody = segments.some((segment) => segment.type === "text" && String(segment.value ?? "").trim());
+  const hasMentions = segments.some((segment) => segment.type === "mention");
+  const showInline = refs.length > 0 || hasBody || hasMentions;
 
   function previewForRef(refItem) {
     return resolveStudioPromptRefPreview(refItem, previewLookup);
   }
 
+  function resolveMentionRef(label) {
+    const needle = String(label ?? "")
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    return (
+      refs.find(
+        (ref) =>
+          String(ref.label ?? "")
+            .trim()
+            .replace(/^@/, "")
+            .toLowerCase() === needle,
+      ) ?? { label }
+    );
+  }
+
   return (
     <div className="studio-chat-prompt">
-      {refs.length ? (
-        <div className="studio-chat-prompt-chips" aria-label="References">
+      {showInline ? (
+        <div className="studio-chat-prompt-body msg-user-text--inline">
           {refs.map((ref) => (
             <StudioChatChip
-              key={`${ref.label}-${ref.path ?? ref.kind}`}
+              key={`r-${ref.label}-${ref.path ?? ref.kind ?? ref.studioId ?? ""}`}
               refItem={ref}
               preview={previewForRef(ref)}
               title={[ref.path, ref.notes].filter(Boolean).join(" · ") || ref.label}
             />
           ))}
-        </div>
-      ) : null}
-      {hasBody || segments.some((s) => s.type === "mention") ? (
-        <div className="studio-chat-prompt-body msg-user-text--inline">
           {segments.map((segment, index) => {
             if (segment.type === "mention") {
-              const refItem = { label: segment.label };
+              const refItem = resolveMentionRef(segment.label);
               return (
                 <StudioChatChip
                   key={`m-${index}-${segment.label}`}

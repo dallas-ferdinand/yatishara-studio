@@ -1300,6 +1300,7 @@ export function ProfilePostViewer({
         <div className="profile-post-track" ref={trackRef}>
           {slidePool.map((post) => {
             const role = slideRole(post._id);
+            const isInteractiveSlide = tabActive && role === "current";
             const postUsername = post.username || authorUsername;
             const postComments = localComments[post._id] ?? post.commentCount ?? 0;
             const postSaves =
@@ -1309,7 +1310,8 @@ export function ProfilePostViewer({
               <article
                 key={post._id}
                 className={`profile-post-slide is-${role} is-${axis}`}
-                aria-hidden={role === "idle"}
+                aria-hidden={!isInteractiveSlide}
+                inert={!isInteractiveSlide}
               >
                 <div className="profile-post-slide-glass" aria-hidden="true" />
                 <FeedMedia
