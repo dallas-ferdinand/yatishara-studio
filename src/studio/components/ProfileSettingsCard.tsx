@@ -3,8 +3,8 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   Check,
-  ExternalLink,
   Globe,
+  ImagePlus,
   Link2,
   Loader2,
   Mail,
@@ -53,9 +53,11 @@ function LinkTypeIcon({ type }: { type: ContactLinkType }) {
 export function ProfileSettingsCard({
   rootFolderId,
   displayNameHint,
+  onOpenPublicProfile,
 }: {
   rootFolderId?: Id<"folders"> | null;
   displayNameHint?: string;
+  onOpenPublicProfile?: (username: string) => void;
 }) {
   const expiresUnix = useMemo(() => Math.floor(Date.now() / 1000) + 60 * 60, []);
   const profile = useQuery(api.profiles.getMine, { expiresUnix });
@@ -70,6 +72,7 @@ export function ProfileSettingsCard({
   const [isPublic, setIsPublic] = useState(true);
   const [links, setLinks] = useState<ContactLinkDraft[]>([]);
   const [avatarPreview, setAvatarPreview] = useState<string | undefined>();
+  const [pendingAvatarFile, setPendingAvatarFile] = useState<File | null>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -91,8 +94,10 @@ export function ProfileSettingsCard({
         }),
       ),
     );
-    setAvatarPreview(profile.avatarUrl);
-  }, [profile]);
+    if (!pendingAvatarFile) {
+      setAvatarPreview(profile.avatarUrl);
+    }
+  }, [profile, pendingAvatarFile]);
 
   const publicUrl =
     typeof window !== "undefined" && profile
@@ -100,6 +105,30 @@ export function ProfileSettingsCard({
       : profile
         ? profile.publicUrlPath
         : "";
+
+  async function uploadAvatarFile(file: File) {
+    if (!rootFolderId) {
+      throw new Error("Studio folder not ready yet — try again in a moment");
+    }
+    const reserved = await reserveUpload({
+      folderId: rootFolderId,
+      name: file.name || "avatar.png",
+      kind: "image",
+      mimeType: file.type || "image/png",
+    });
+    const res = await fetch(reserved.putUrl, {
+      method: "PUT",
+      headers: {
+        AccessKey: reserved.storageAccessKey,
+        "Content-Type": file.type || "image/png",
+      },
+      body: file,
+    });
+    if (!res.ok) throw new Error("Avatar upload failed");
+    await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
+    await updateMine({ avatarAssetId: reserved.assetId });
+    return reserved.assetId;
+  }
 
   async function handleClaim(event: FormEvent) {
     event.preventDefault();
@@ -111,6 +140,15 @@ export function ProfileSettingsCard({
         username,
         displayName: displayName || displayNameHint || undefined,
       });
+      if (pendingAvatarFile) {
+        setAvatarBusy(true);
+        try {
+          await uploadAvatarFile(pendingAvatarFile);
+          setPendingAvatarFile(null);
+        } finally {
+          setAvatarBusy(false);
+        }
+      }
       setStatus(`Claimed @${result.username}`);
     } catch (err) {
       setError(friendlyConvexError(err, "Could not claim username"));
@@ -140,50 +178,40 @@ export function ProfileSettingsCard({
     }
   }
 
-  async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleAvatarPick(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !profile) return;
+    if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Avatar must be an image");
       return;
     }
-    if (!rootFolderId) {
-      setError("Studio folder not ready yet — try again in a moment");
+    setError("");
+    setAvatarPreview(URL.createObjectURL(file));
+    if (!profile) {
+      setPendingAvatarFile(file);
+      setStatus("Photo ready — claim your username to save it");
       return;
     }
     setAvatarBusy(true);
-    setError("");
     setStatus("");
-    try {
-      const reserved = await reserveUpload({
-        folderId: rootFolderId,
-        name: file.name || "avatar.png",
-        kind: "image",
-        mimeType: file.type || "image/png",
-      });
-      const res = await fetch(reserved.putUrl, {
-        method: "PUT",
-        headers: {
-          AccessKey: reserved.storageAccessKey,
-          "Content-Type": file.type || "image/png",
-        },
-        body: file,
-      });
-      if (!res.ok) throw new Error("Avatar upload failed");
-      await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
-      await updateMine({ avatarAssetId: reserved.assetId });
-      setAvatarPreview(URL.createObjectURL(file));
-      setStatus("Avatar updated");
-    } catch (err) {
-      setError(friendlyConvexError(err, "Could not update avatar"));
-    } finally {
-      setAvatarBusy(false);
-    }
+    void uploadAvatarFile(file)
+      .then(() => {
+        setPendingAvatarFile(null);
+        setStatus("Avatar updated");
+      })
+      .catch((err) => {
+        setError(friendlyConvexError(err, "Could not update avatar"));
+      })
+      .finally(() => setAvatarBusy(false));
   }
 
   async function clearAvatar() {
-    if (!profile) return;
+    if (!profile) {
+      setPendingAvatarFile(null);
+      setAvatarPreview(undefined);
+      return;
+    }
     setAvatarBusy(true);
     setError("");
     try {
@@ -207,6 +235,64 @@ export function ProfileSettingsCard({
     }
   }
 
+  const avatarBlock = (
+    <section className="cursor-settings-section studio-account-card studio-profile-card">
+      <div className="studio-profile-photo-block">
+        <div className="studio-profile-photo-copy">
+          <strong>Profile photo</strong>
+          <p>Shown at the top center of your public profile</p>
+        </div>
+        <button
+          type="button"
+          className="studio-profile-photo-drop"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={avatarBusy || (!!profile && !rootFolderId)}
+          aria-label="Upload profile photo"
+        >
+          {avatarPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarPreview} alt="" className="studio-profile-avatar-img" />
+          ) : (
+            <span className="studio-profile-photo-empty">
+              <ImagePlus className="h-5 w-5" aria-hidden="true" />
+              <em>Add photo</em>
+            </span>
+          )}
+          <span className="studio-profile-avatar-overlay">
+            {avatarBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          </span>
+        </button>
+        <div className="studio-profile-avatar-actions">
+          <button
+            type="button"
+            className="cursor-settings-action"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={avatarBusy || (!!profile && !rootFolderId)}
+          >
+            {avatarPreview ? "Change photo" : "Upload photo"}
+          </button>
+          {avatarPreview ? (
+            <button
+              type="button"
+              className="cursor-settings-action"
+              onClick={() => void clearAvatar()}
+              disabled={avatarBusy}
+            >
+              Remove
+            </button>
+          ) : null}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={handleAvatarPick}
+        />
+      </div>
+    </section>
+  );
+
   if (profile === undefined) {
     return (
       <section className="cursor-settings-section studio-account-card studio-profile-card">
@@ -217,107 +303,65 @@ export function ProfileSettingsCard({
 
   if (profile === null) {
     return (
-      <section className="cursor-settings-section studio-account-card studio-profile-card">
-        <div className="studio-profile-intro">
-          <h3>Claim your public profile</h3>
-          <p>
-            Pick a username people can find at <code>/u/yourname</code>. Share work from the
-            explorer with Share to profile.
-          </p>
-        </div>
-        <form className="studio-account-fields" onSubmit={(event) => void handleClaim(event)}>
-          <label>
-            <span>Username</span>
-            <div className="studio-profile-username-field">
-              <span className="studio-profile-username-prefix">@</span>
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value.toLowerCase())}
-                placeholder="yourname"
-                autoComplete="off"
-                spellCheck={false}
-                required
-              />
-            </div>
-          </label>
-          <label>
-            <span>Display name</span>
-            <input
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder={displayNameHint || "How your name appears"}
-            />
-          </label>
-          {error ? <p className="studio-profile-status is-error">{error}</p> : null}
-          {status ? <p className="studio-profile-status">{status}</p> : null}
-          <div className="studio-account-actions">
-            <button type="submit" className="studio-account-save" disabled={busy || !username.trim()}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-              Claim username
-            </button>
+      <div className="studio-settings-stack studio-profile-stack">
+        {avatarBlock}
+        <section className="cursor-settings-section studio-account-card studio-profile-card">
+          <div className="studio-profile-intro">
+            <h3>Claim your public profile</h3>
+            <p>
+              Pick a username. People open <code>/u/yourname</code> as a Studio tab.
+            </p>
           </div>
-        </form>
-      </section>
+          <form className="studio-account-fields" onSubmit={(event) => void handleClaim(event)}>
+            <label>
+              <span>Username</span>
+              <div className="studio-profile-username-field">
+                <span className="studio-profile-username-prefix">@</span>
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value.toLowerCase())}
+                  placeholder="yourname"
+                  autoComplete="off"
+                  spellCheck={false}
+                  required
+                />
+              </div>
+            </label>
+            <label>
+              <span>Display name</span>
+              <input
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder={displayNameHint || "How your name appears"}
+              />
+            </label>
+            {error ? <p className="studio-profile-status is-error">{error}</p> : null}
+            {status ? <p className="studio-profile-status">{status}</p> : null}
+            <div className="studio-account-actions">
+              <button type="submit" className="studio-account-save" disabled={busy || !username.trim()}>
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+                Claim username
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
     );
   }
 
   return (
     <div className="studio-settings-stack studio-profile-stack">
-      <section className="cursor-settings-section studio-account-card studio-profile-card">
-        <div className="studio-profile-avatar-row">
-          <button
-            type="button"
-            className="studio-profile-avatar-button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={avatarBusy || !rootFolderId}
-            aria-label="Upload avatar"
-          >
-            {avatarPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarPreview} alt="" className="studio-profile-avatar-img" />
-            ) : (
-              <span>{(profile.displayName || profile.username).slice(0, 1).toUpperCase()}</span>
-            )}
-            <span className="studio-profile-avatar-overlay">
-              {avatarBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            </span>
-          </button>
-          <div className="studio-profile-avatar-meta">
-            <strong>@{profile.username}</strong>
-            <p>Top-center avatar on your public page</p>
-            <div className="studio-profile-avatar-actions">
-              <button
-                type="button"
-                className="cursor-settings-action"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={avatarBusy || !rootFolderId}
-              >
-                Change photo
-              </button>
-              {profile.avatarAssetId ? (
-                <button
-                  type="button"
-                  className="cursor-settings-action"
-                  onClick={() => void clearAvatar()}
-                  disabled={avatarBusy}
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(event) => void handleAvatarChange(event)}
-          />
-        </div>
-      </section>
+      {avatarBlock}
 
       <section className="cursor-settings-section studio-account-card studio-profile-card">
         <form className="studio-account-fields" onSubmit={(event) => void handleSave(event)}>
+          <label>
+            <span>Username</span>
+            <div className="studio-profile-username-field">
+              <span className="studio-profile-username-prefix">@</span>
+              <input value={profile.username} readOnly />
+            </div>
+          </label>
           <label>
             <span>Display name</span>
             <input
@@ -468,15 +512,13 @@ export function ProfileSettingsCard({
             <button type="button" className="cursor-settings-action" onClick={() => void copyPublicUrl()}>
               Copy link
             </button>
-            <a
-              className="cursor-settings-action studio-profile-open-link"
-              href={profile.publicUrlPath}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              className="cursor-settings-action"
+              onClick={() => onOpenPublicProfile?.(profile.username)}
             >
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              Open
-            </a>
+              Open tab
+            </button>
           </div>
         </div>
         <p className="studio-profile-hint">

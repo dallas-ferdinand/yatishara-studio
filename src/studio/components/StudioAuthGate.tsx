@@ -73,7 +73,11 @@ function WhatsAppIcon({ className }: { className?: string }) {
   );
 }
 
-export function StudioAuthGate() {
+export function StudioAuthGate({
+  initialProfileUsername,
+}: {
+  initialProfileUsername?: string;
+} = {}) {
   const auth = useConvexAuth();
   const currentUser = useQuery(api.users.current, auth?.isAuthenticated ? {} : "skip");
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
@@ -105,7 +109,7 @@ export function StudioAuthGate() {
   if (!currentUser.accountComplete) {
     return <StudioCompleteAccount currentUser={currentUser} />;
   }
-  return <StudioShell />;
+  return <StudioShell initialProfileUsername={initialProfileUsername} />;
 }
 
 function StudioCompleteAccount({

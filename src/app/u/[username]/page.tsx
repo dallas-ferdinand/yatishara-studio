@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { ConvexClientProvider } from "@/app/ConvexClientProvider";
-import { PublicProfileView } from "@/studio/components/PublicProfileView";
-import "@/studio/components/public-profile.css";
+import { StudioClientPage } from "@/components/studio-client-page";
 
 type PageProps = {
   params: Promise<{ username: string }>;
@@ -22,9 +20,5 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function PublicProfilePage({ params }: PageProps) {
   const { username } = await params;
-  return (
-    <ConvexClientProvider>
-      <PublicProfileView username={username} />
-    </ConvexClientProvider>
-  );
+  return <StudioClientPage initialProfileUsername={username} />;
 }

@@ -13,11 +13,11 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import "./public-profile.css";
 
 type PublicPost = {
   _id: Id<"profilePosts">;
@@ -45,7 +45,15 @@ function formatCount(value: number): string {
   return String(value);
 }
 
-export function PublicProfileView({ username }: { username: string }) {
+export function PublicProfileView({
+  username,
+  embedded = false,
+  onEditProfile,
+}: {
+  username: string;
+  embedded?: boolean;
+  onEditProfile?: () => void;
+}) {
   const expiresUnix = useMemo(() => Math.floor(Date.now() / 1000) + 60 * 60, []);
   const auth = useConvexAuth();
   const profile = useQuery(api.profiles.getPublicByUsername, {
@@ -126,7 +134,7 @@ export function PublicProfileView({ username }: { username: string }) {
 
   if (profile === undefined) {
     return (
-      <div className="public-profile-shell">
+      <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
         <div className="public-profile-loading">
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           <span>Loading profile…</span>
@@ -137,14 +145,11 @@ export function PublicProfileView({ username }: { username: string }) {
 
   if (profile === null) {
     return (
-      <div className="public-profile-shell">
+      <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
         <div className="public-profile-empty">
           <UserRound className="h-8 w-8" aria-hidden="true" />
           <h1>Profile not found</h1>
           <p>This username is private or doesn’t exist.</p>
-          <Link href="/" className="public-profile-home-link">
-            Back to Studio
-          </Link>
         </div>
       </div>
     );
@@ -153,20 +158,17 @@ export function PublicProfileView({ username }: { username: string }) {
   const title = profile.displayName || `@${profile.username}`;
 
   return (
-    <div className="public-profile-shell">
-      <header className="public-profile-topbar">
-        <Link href="/" className="public-profile-brand">
-          Yatishara Studio
-        </Link>
-        {profile.isOwner ? (
-          <Link href="/?settings=profile" className="public-profile-edit-link">
-            Edit profile
-          </Link>
-        ) : null}
-      </header>
-
+    <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
       <main className="public-profile-main">
         <section className="public-profile-hero">
+          {profile.isOwner && onEditProfile ? (
+            <div className="public-profile-owner-bar">
+              <button type="button" className="public-profile-edit-link" onClick={onEditProfile}>
+                Edit profile
+              </button>
+            </div>
+          ) : null}
+
           <div className="public-profile-avatar">
             {profile.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
