@@ -61,7 +61,6 @@ import type * as lib_studioApi_httpHelpers from "../lib/studioApi/httpHelpers.js
 import type * as lib_studioApi_openapi from "../lib/studioApi/openapi.js";
 import type * as lib_studioApi_scopes from "../lib/studioApi/scopes.js";
 import type * as lib_styleSheetGuides from "../lib/styleSheetGuides.js";
-import type * as lib_transcribe from "../lib/transcribe.js";
 import type * as lib_videoGeneration from "../lib/videoGeneration.js";
 import type * as lib_videoModels from "../lib/videoModels.js";
 import type * as notifications from "../notifications.js";
@@ -80,7 +79,6 @@ import type * as videoEditActions from "../videoEditActions.js";
 import type * as videoEditInternal from "../videoEditInternal.js";
 import type * as videoEdits from "../videoEdits.js";
 import type * as videoModels from "../videoModels.js";
-import type * as voiceActions from "../voiceActions.js";
 import type * as whatsappAuth from "../whatsappAuth.js";
 
 import type {
@@ -143,7 +141,6 @@ declare const fullApi: ApiFromModules<{
   "lib/studioApi/openapi": typeof lib_studioApi_openapi;
   "lib/studioApi/scopes": typeof lib_studioApi_scopes;
   "lib/styleSheetGuides": typeof lib_styleSheetGuides;
-  "lib/transcribe": typeof lib_transcribe;
   "lib/videoGeneration": typeof lib_videoGeneration;
   "lib/videoModels": typeof lib_videoModels;
   notifications: typeof notifications;
@@ -162,7 +159,6 @@ declare const fullApi: ApiFromModules<{
   videoEditInternal: typeof videoEditInternal;
   videoEdits: typeof videoEdits;
   videoModels: typeof videoModels;
-  voiceActions: typeof voiceActions;
   whatsappAuth: typeof whatsappAuth;
 }>;
 
