@@ -121,6 +121,7 @@ export function MobileExperienceRuntime() {
     let startY = 0;
     let longPressFired = false;
     let suppressClickUntil = 0;
+    let lastTouchAt = 0;
 
     const clearLongPress = () => {
       if (longPressTimer) clearTimeout(longPressTimer);
@@ -129,6 +130,7 @@ export function MobileExperienceRuntime() {
     };
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType !== "touch" || event.button !== 0) return;
+      lastTouchAt = Date.now();
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (
         !target ||
@@ -180,7 +182,7 @@ export function MobileExperienceRuntime() {
       }
     };
     const onContextMenu = (event: MouseEvent) => {
-      if (event.defaultPrevented && event.sourceCapabilities?.firesTouchEvents) {
+      if (event.defaultPrevented && Date.now() - lastTouchAt < 1_000) {
         clearLongPress();
         suppressClickUntil = Date.now() + 700;
         void triggerHaptic("heavy");
