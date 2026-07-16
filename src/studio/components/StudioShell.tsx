@@ -3640,7 +3640,8 @@ export function StudioShell({
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
-          background: var(--studio-mobile-chrome-glass) !important;
+          /* Former active fill — used for every tab; only the border fade changes when active */
+          background: var(--studio-chrome-glow-bg-active) !important;
           backdrop-filter: var(--studio-mobile-chrome-blur);
           -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
           padding: 0 10px !important;
@@ -3730,9 +3731,10 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
           place-items: center;
-          font-size: 9px;
-          font-weight: 750;
-          letter-spacing: 0.02em;
+          font-size: 7px;
+          font-weight: 700;
+          letter-spacing: 0;
+          line-height: 1;
           color: var(--color-cursor-text-bright);
           background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
         }
@@ -3823,8 +3825,7 @@ export function StudioShell({
         .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active),
         .studio-polish .cursor-unified-tab.is-active {
           border: 1px solid transparent !important;
-          /* Same glass fill as inactive — active only changes the right-corner border fade */
-          background: var(--studio-mobile-chrome-glass) !important;
+          background: var(--studio-chrome-glow-bg-active) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
@@ -4129,6 +4130,7 @@ export function StudioShell({
           .cursor-tab.is-active,
           .cursor-agent-chat-tab.is-active
         ),
+        [data-appearance="light"] .studio-polish .cursor-unified-tab,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-streaming.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting.is-active,
@@ -4137,7 +4139,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-plan.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-error.is-active {
           border: 1px solid transparent !important;
-          background: var(--studio-mobile-chrome-glass) !important;
+          background: color-mix(in srgb, var(--cursor-accent) 12%, #ffffff) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
@@ -17599,6 +17601,8 @@ function virtualFileName(name, ext) {
 }
 
 function profileInitials({ firstName, lastName, name, displayName, username }) {
+  const handle = String(username ?? "").trim().replace(/^@/, "");
+  if (handle) return handle[0].toUpperCase();
   const first = String(firstName ?? "").trim();
   const last = String(lastName ?? "").trim();
   if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
@@ -17612,8 +17616,7 @@ function profileInitials({ firstName, lastName, name, displayName, username }) {
     }
     return display[0].toUpperCase();
   }
-  const handle = String(username ?? "").trim().replace(/^@/, "");
-  return handle ? handle[0].toUpperCase() : "?";
+  return "?";
 }
 
 function tabDescriptor({
