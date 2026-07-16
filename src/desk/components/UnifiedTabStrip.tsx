@@ -35,9 +35,9 @@ function stripTabsEqual(prev, next) {
       a[i].status !== b[i].status ||
       a[i].tabSignal !== b[i].tabSignal ||
       a[i].previewUrl !== b[i].previewUrl ||
+      a[i].previewInitials !== b[i].previewInitials ||
       Boolean(a[i].dirty) !== Boolean(b[i].dirty) ||
-      Boolean(a[i].loading) !== Boolean(b[i].loading) ||
-      a[i].previewUrl !== b[i].previewUrl
+      Boolean(a[i].loading) !== Boolean(b[i].loading)
     ) {
       return false;
     }

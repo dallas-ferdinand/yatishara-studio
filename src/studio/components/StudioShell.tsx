@@ -1488,7 +1488,7 @@ export function StudioShell({
   }
 
   function openOwnProfile() {
-    const username = sharedProfileAssets?.username;
+    const username = myPublicProfile?.username || sharedProfileAssets?.username;
     if (!username) {
       openSettingsTab("profile");
       return;
@@ -13592,15 +13592,19 @@ function StudioProfileMenu({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   const avatarUrl = profile?.avatarUrl;
-  const handle = String(username || profile?.username || "").trim().replace(/^@/, "");
-  const initials = profileInitials({
-    username: handle,
-    // Only fall back to account name when no username is claimed yet.
-    firstName: handle ? undefined : currentUser?.firstName,
-    lastName: handle ? undefined : currentUser?.lastName,
-    name: handle ? undefined : currentUser?.name,
-    displayName: handle ? undefined : profile?.displayName,
-  });
+  const handle = String(username || profile?.username || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
+  // Username initial only — never account first/last name when a handle exists.
+  const initials = handle
+    ? handle[0].toUpperCase()
+    : profileInitials({
+        firstName: currentUser?.firstName,
+        lastName: currentUser?.lastName,
+        name: currentUser?.name,
+        displayName: profile?.displayName,
+      });
   const label = handle ? `@${handle}` : currentUser?.name || "Profile";
 
   useEffect(() => {
@@ -17638,8 +17642,10 @@ function tabDescriptor({
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
   }
   if (key.startsWith("profile:")) {
-    const username = key.slice("profile:".length);
-    const meta = profileMetaByUsername?.get?.(username);
+    const username = key.slice("profile:".length).trim().replace(/^@/, "");
+    const meta =
+      profileMetaByUsername?.get?.(username) ||
+      profileMetaByUsername?.get?.(username.toLowerCase());
     const isMine =
       myProfile?.username &&
       username &&
@@ -17650,16 +17656,9 @@ function tabDescriptor({
       username ||
       "Profile";
     const avatarUrl = meta?.avatarUrl || (isMine ? myProfile?.avatarUrl : undefined);
-    const handle = String(username || (isMine ? myProfile?.username : "") || "").trim();
-    const initials = profileInitials({
-      username: handle,
-      firstName: handle ? undefined : isMine ? currentUser?.firstName : undefined,
-      lastName: handle ? undefined : isMine ? currentUser?.lastName : undefined,
-      name: handle ? undefined : isMine ? currentUser?.name : undefined,
-      displayName: handle
-        ? undefined
-        : meta?.displayName || (isMine ? myProfile?.displayName : undefined),
-    });
+    // Always take the initial from the profile handle in the tab key.
+    const handle = (username || (isMine ? myProfile?.username : "") || "").trim();
+    const initials = handle ? handle[0].toUpperCase() : "?";
     return {
       key,
       kind: "file",
