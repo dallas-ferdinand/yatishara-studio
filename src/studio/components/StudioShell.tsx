@@ -3093,11 +3093,11 @@ export function StudioShell({
           .studio-polish.is-studio-mobile {
             --studio-chat-empty-clearance: calc(220px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
-            /* Slightly clearer glass on phone so wallpaper reads through (not a solid slab) */
-            --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 38%, transparent);
-            --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent);
-            --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 30%, transparent);
-            --studio-composer-glass-blur: saturate(150%) blur(12px);
+            /* Match desktop frost exactly; weaker mobile tint made the header look washed out. */
+            --studio-composer-glass: color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent);
+            --studio-composer-glass-strong: color-mix(in srgb, var(--color-mos-composer, #07111f) 62%, transparent);
+            --studio-composer-glass-muted: color-mix(in srgb, var(--color-mos-composer, #07111f) 40%, transparent);
+            --studio-composer-glass-blur: saturate(160%) blur(12px);
             --studio-mobile-chrome-glass: var(--studio-composer-glass);
             --studio-mobile-chrome-glass-foot: var(--studio-composer-glass);
             --studio-mobile-chrome-blur: var(--studio-composer-glass-blur);
@@ -3992,8 +3992,8 @@ export function StudioShell({
             justify-content: flex-start;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab {
-            height: calc(var(--cursor-head-h) - 8px) !important;
-            min-height: calc(var(--cursor-head-h) - 8px) !important;
+            height: calc(var(--cursor-head-h) - 2px) !important;
+            min-height: calc(var(--cursor-head-h) - 2px) !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
@@ -4070,11 +4070,11 @@ export function StudioShell({
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-unified-tab-preview {
-            width: 22px;
-            height: 22px;
+            width: 20px;
+            height: 20px;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-preview.is-initials {
-            font-size: 9px;
+            font-size: 8px;
           }
         }
         .studio-new-tab-cluster {
