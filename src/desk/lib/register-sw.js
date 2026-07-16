@@ -1,8 +1,16 @@
-/** Register push-only service worker. Disabled on preview/local so updates stay live. */
+/** Register push-only service worker. Disabled on preview/local/native so updates stay live. */
 function isPreviewHost() {
   if (typeof window === "undefined") return true;
   const host = window.location.hostname || "";
   return host.includes("preview.") || host === "localhost" || host === "127.0.0.1";
+}
+
+function isNativeShell() {
+  if (typeof window === "undefined") return false;
+  const cap = window.Capacitor;
+  if (cap?.isNativePlatform?.()) return true;
+  const ua = String(navigator.userAgent || "");
+  return /\bwv\b/i.test(ua) && /Android/i.test(ua);
 }
 
 export async function registerDeskServiceWorker() {
@@ -10,7 +18,8 @@ export async function registerDeskServiceWorker() {
 
   try {
     // Never keep a sticky SW on preview — it only fights hot reload.
-    if (isPreviewHost()) {
+    // Android WebView SW support is unreliable and can blank/error the shell.
+    if (isPreviewHost() || isNativeShell()) {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));
       if ("caches" in window) {

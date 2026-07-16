@@ -34,11 +34,19 @@ function isPreviewHost() {
   return host.includes("preview.") || host === "localhost" || host === "127.0.0.1";
 }
 
+function isNativeShell() {
+  const cap = window.Capacitor;
+  if (cap?.isNativePlatform?.()) return true;
+  const ua = String(navigator.userAgent || "");
+  return /\bwv\b/i.test(ua) && /Android/i.test(ua);
+}
+
 async function registerSw() {
   if (!("serviceWorker" in navigator)) return;
   if (!location.protocol.startsWith("http")) return;
   // Preview/local must stay uncached so HMR and source edits are never sticky.
-  if (isPreviewHost()) {
+  // Capacitor WebView SW support is unreliable — keep the live site uncached.
+  if (isPreviewHost() || isNativeShell()) {
     try {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));

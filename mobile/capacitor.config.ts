@@ -12,8 +12,13 @@ const config: CapacitorConfig = {
     url: "https://studio.yatishara.com",
     cleartext: false,
     androidScheme: "https",
-    // Keep Studio + first-party auth hosts inside the WebView.
-    allowNavigation: ["studio.yatishara.com", "*.yatishara.com"],
+    // Keep Studio + Convex/CDN hosts inside the WebView (not Chrome).
+    allowNavigation: [
+      "studio.yatishara.com",
+      "*.yatishara.com",
+      "convex-studio-api.yatishara.com",
+      "*.b-cdn.net",
+    ],
   },
   android: {
     allowMixedContent: false,
