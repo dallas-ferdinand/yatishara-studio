@@ -56,6 +56,7 @@ import {
   Upload,
   Wand2,
   X,
+  UserCog,
   UserRound,
   Video,
   Zap,
@@ -13967,7 +13968,7 @@ function StudioMobileAppMenu({
       label: "Account",
       items: [
         { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
-        { label: "Account details", Icon: UserRound, onClick: () => onOpenSettings?.("account") },
+        { label: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
         { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
         { label: "Credits", Icon: Zap, onClick: onOpenCredits },
         { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
