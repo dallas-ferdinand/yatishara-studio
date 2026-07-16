@@ -98,6 +98,7 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "pulse") return "infinity";
   if (tab.kind === "buckets") return "bucket";
   if (tab.kind === "settings") return "settings";
+  if (tab.studioKind === "profile") return "user";
   if (tab.studioKind === "element") {
     if (tab.elementType === "character") return "user";
     if (tab.elementType === "prop") return "package";

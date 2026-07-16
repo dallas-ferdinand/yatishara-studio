@@ -35,7 +35,6 @@ import {
   List,
   Loader2,
   Lock,
-  Mail,
   MapPin,
   Maximize2,
   Mic,
@@ -440,10 +439,43 @@ export function StudioShell({
     api.profiles.listMySharedAssetIds,
     hasCurrentUser ? {} : "skip",
   );
+  const myPublicProfile = useQuery(
+    api.profiles.getMine,
+    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+  );
   const sharedAssetIds = useMemo(
     () => new Set(sharedProfileAssets?.assetIds ?? []),
     [sharedProfileAssets?.assetIds],
   );
+  const openProfileUsernames = useMemo(
+    () =>
+      openTabs
+        .filter((key) => key.startsWith("profile:"))
+        .map((key) => key.slice("profile:".length))
+        .filter(Boolean),
+    [openTabs],
+  );
+  const profileTabMetaQueries = useMemo(() => {
+    if (!hasCurrentUser) return {};
+    const queries = {};
+    for (const username of openProfileUsernames) {
+      queries[`profileMeta:${username}`] = {
+        query: api.profiles.getPublicByUsername,
+        args: { username, expiresUnix: assetUrlExpiresUnix },
+      };
+    }
+    return queries;
+  }, [assetUrlExpiresUnix, hasCurrentUser, openProfileUsernames]);
+  const profileTabMetaResults = useQueries(profileTabMetaQueries);
+  const profileTabMetaByUsername = useMemo(() => {
+    const map = new Map();
+    for (const username of openProfileUsernames) {
+      const result = profileTabMetaResults[`profileMeta:${username}`];
+      if (result === undefined || result === null) continue;
+      map.set(username, result);
+    }
+    return map;
+  }, [openProfileUsernames, profileTabMetaResults]);
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const adminPayments = useQuery(
     api.billing.adminListPayments,
@@ -1311,10 +1343,26 @@ export function StudioShell({
         videoEdits,
         elements,
         snapshots: tabEntrySnapshots,
+        profileMetaByUsername: profileTabMetaByUsername,
+        myProfile: myPublicProfile,
+        currentUser,
       }),
     );
     return descriptors.filter(Boolean);
-  }, [openTabs, threads, assetLookupPool, assetsWithPreviewUrls, assets, documents, videoEdits, elements, tabEntrySnapshots]);
+  }, [
+    openTabs,
+    threads,
+    assetLookupPool,
+    assetsWithPreviewUrls,
+    assets,
+    documents,
+    videoEdits,
+    elements,
+    tabEntrySnapshots,
+    profileTabMetaByUsername,
+    myPublicProfile,
+    currentUser,
+  ]);
 
   const activeEntry = useMemo(
     () =>
@@ -3387,63 +3435,55 @@ export function StudioShell({
           width: 18px;
           height: 18px;
         }
-        .studio-user-menu-wrap {
-          position: relative;
-          min-width: 0;
-        }
-        .studio-user-menu-trigger {
+        .studio-sidebar-brand {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          max-width: 100%;
-          border: 0;
-          background: transparent;
-          font-family: inherit;
-          cursor: pointer;
-          pointer-events: auto;
-        }
-        .cursor-sidebar-brand-user {
-          display: inline-flex;
           min-width: 0;
-          align-items: center;
-          gap: 5px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border));
-          border-radius: 999px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-surface)), color-mix(in srgb, var(--mos-surface) 68%, var(--mos-bg)));
-          padding: 3px 7px;
+          pointer-events: none;
+        }
+        .studio-sidebar-brand-label {
           color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+        }
+        .studio-profile-menu-wrap {
+          position: relative;
+          flex: 0 0 auto;
+        }
+        .studio-profile-menu-trigger {
+          padding: 0 !important;
+          overflow: hidden;
+        }
+        .studio-profile-menu-avatar,
+        .studio-profile-menu-initials {
+          display: grid;
+          place-items: center;
+          width: 100%;
+          height: 100%;
+          border-radius: inherit;
+        }
+        .studio-profile-menu-avatar {
+          object-fit: cover;
+        }
+        .studio-profile-menu-initials {
           font-size: 11px;
-          font-weight: 650;
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 12%, transparent) inset,
-            0 8px 18px color-mix(in srgb, #000 20%, transparent),
-            0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          font-weight: 750;
+          letter-spacing: 0.02em;
+          color: var(--color-cursor-text-bright);
+          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
         }
-        .studio-user-menu-trigger:hover .cursor-sidebar-brand-user {
-          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border));
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-surface)), color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-surface)));
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 18%, transparent) inset,
-            0 10px 22px color-mix(in srgb, #000 24%, transparent),
-            0 0 20px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
-        }
-        .cursor-sidebar-brand-user-type-icon {
-          width: 13px;
-          height: 13px;
-          flex-shrink: 0;
-          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-bright));
-        }
-        .cursor-sidebar-brand-user-name {
-          max-width: 132px;
-        }
-        .studio-user-menu-popover {
+        .studio-profile-menu-popover {
           position: absolute;
-          top: 32px;
-          left: 0;
-          z-index: 60;
-          width: 150px;
+          top: calc(100% + 8px);
+          right: 0;
+          z-index: 90;
+          min-width: 168px;
+        }
+        .studio-mobile-nav-tools .studio-profile-menu-popover {
+          top: auto;
+          bottom: calc(100% + 8px);
         }
         .studio-polish main {
           position: relative;
@@ -3687,6 +3727,15 @@ export function StudioShell({
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
         }
+        .studio-polish .cursor-unified-tab-preview.is-initials {
+          display: inline-grid;
+          place-items: center;
+          font-size: 9px;
+          font-weight: 750;
+          letter-spacing: 0.02em;
+          color: var(--color-cursor-text-bright);
+          background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+        }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
           display: block;
@@ -3774,7 +3823,8 @@ export function StudioShell({
         .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active),
         .studio-polish .cursor-unified-tab.is-active {
           border: 1px solid transparent !important;
-          background: var(--studio-chrome-glow-bg-active) !important;
+          /* Same glass fill as inactive — active only changes the right-corner border fade */
+          background: var(--studio-mobile-chrome-glass) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
@@ -4013,12 +4063,6 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .cursor-sidebar-brand-logo-img {
           filter: none;
         }
-        [data-appearance="light"] .studio-polish .cursor-sidebar-brand-user,
-        [data-appearance="light"] .studio-polish .studio-user-menu-trigger:hover .cursor-sidebar-brand-user {
-          border-color: var(--color-cursor-border-soft) !important;
-          background: var(--color-cursor-panel) !important;
-          box-shadow: none !important;
-        }
         [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
           .studio-settings-pill,
           .studio-credit-pill,
@@ -4093,7 +4137,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting-plan.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-error.is-active {
           border: 1px solid transparent !important;
-          background: color-mix(in srgb, var(--cursor-accent) 12%, #ffffff) !important;
+          background: var(--studio-mobile-chrome-glass) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
@@ -11592,7 +11636,7 @@ export function StudioShell({
         >
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
-          <StudioUserMenu currentUser={currentUser} onSignOut={() => void signOut()} />
+          <StudioSidebarBrand />
           <div className="flex items-center gap-1">
             <StudioAddMenu
               open={addMenuOpen}
@@ -11713,22 +11757,14 @@ export function StudioShell({
                 {isAdminUser ? (
                   <AdminQuickLinks onOpenAdminTab={openAdminTab} />
                 ) : null}
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${
-                    activeTab.startsWith("profile:") ? " is-active" : ""
-                  }`}
-                  onClick={openOwnProfile}
-                  aria-label="Public profile"
-                  title={
-                    sharedProfileAssets?.username
-                      ? `@${sharedProfileAssets.username}`
-                      : "Set up public profile"
-                  }
-                  aria-pressed={activeTab.startsWith("profile:")}
-                >
-                  <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
+                <StudioProfileMenu
+                  currentUser={currentUser}
+                  profile={myPublicProfile}
+                  isProfileTabActive={activeTab.startsWith("profile:")}
+                  onViewProfile={openOwnProfile}
+                  onEditProfile={() => openSettingsTab("profile")}
+                  onSignOut={() => void signOut()}
+                />
                 <button
                   className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
                   onClick={() => setHistoryOpen((open) => !open)}
@@ -11906,22 +11942,14 @@ export function StudioShell({
                 creditPriceCents={pricing?.creditPriceCents}
                 onClick={openCreditsPane}
               />
-              <button
-                type="button"
-                className={`studio-settings-pill studio-settings-trigger${
-                  activeTab.startsWith("profile:") ? " is-active" : ""
-                }`}
-                onClick={openOwnProfile}
-                aria-label="Public profile"
-                title={
-                  sharedProfileAssets?.username
-                    ? `@${sharedProfileAssets.username}`
-                    : "Set up public profile"
-                }
-                aria-pressed={activeTab.startsWith("profile:")}
-              >
-                <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
+              <StudioProfileMenu
+                currentUser={currentUser}
+                profile={myPublicProfile}
+                isProfileTabActive={activeTab.startsWith("profile:")}
+                onViewProfile={openOwnProfile}
+                onEditProfile={() => openSettingsTab("profile")}
+                onSignOut={() => void signOut()}
+              />
               <button
                 type="button"
                 className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
@@ -13528,62 +13556,123 @@ function AdminQuickLinks({ onOpenAdminTab }) {
   );
 }
 
-function WhatsAppIcon({ className }) {
+function StudioSidebarBrand() {
+  const sidebarLogo = useMercurySidebarLogo();
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12.04 2.25a9.66 9.66 0 0 0-8.19 14.78l-1.1 4.01 4.11-1.08a9.66 9.66 0 1 0 5.18-17.71Zm0 1.78a7.88 7.88 0 1 1 0 15.76 7.8 7.8 0 0 1-4-1.1l-.29-.17-2.44.64.65-2.38-.19-.3a7.88 7.88 0 0 1 6.27-12.45Zm-3.35 3.7c-.18 0-.47.07-.71.34-.24.26-.93.91-.93 2.22 0 1.31.96 2.58 1.09 2.76.13.17 1.85 2.96 4.58 4.03 2.27.89 2.73.71 3.22.67.49-.04 1.59-.65 1.81-1.28.22-.63.22-1.17.15-1.28-.07-.11-.24-.18-.51-.31-.27-.13-1.59-.78-1.84-.87-.25-.09-.43-.13-.61.13-.18.27-.7.87-.86 1.05-.16.18-.31.2-.58.07-.27-.13-1.13-.42-2.15-1.33-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.12-.55.12-.12.27-.31.4-.47.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.47-.07-.13-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47h-.52Z" />
-    </svg>
+    <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
+      <span className="cursor-sidebar-brand-logo" aria-hidden="true">
+        <img
+          src={sidebarLogo}
+          alt=""
+          width={16}
+          height={16}
+          decoding="async"
+          loading="eager"
+          className="cursor-sidebar-brand-logo-img"
+        />
+      </span>
+      <span className="studio-sidebar-brand-label truncate">Studio</span>
+    </div>
   );
 }
 
-function StudioUserMenu({ currentUser, onSignOut }) {
+function StudioProfileMenu({
+  currentUser,
+  profile,
+  isProfileTabActive,
+  onViewProfile,
+  onEditProfile,
+  onSignOut,
+}) {
   const [open, setOpen] = useState(false);
-  const sidebarLogo = useMercurySidebarLogo();
-  const label = currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator";
-  const contactType = currentUser?.phone ? "whatsapp" : currentUser?.email ? "email" : "creator";
+  const wrapRef = useRef(null);
+  const avatarUrl = profile?.avatarUrl;
+  const initials = profileInitials({
+    firstName: currentUser?.firstName,
+    lastName: currentUser?.lastName,
+    name: currentUser?.name,
+    displayName: profile?.displayName,
+    username: profile?.username,
+  });
+  const label = profile?.username
+    ? `@${profile.username}`
+    : currentUser?.name || "Profile";
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event) => {
+      if (wrapRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <div className="studio-user-menu-wrap">
-                      <button
-                        type="button"
-        className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-user-menu-trigger min-w-0"
+    <div ref={wrapRef} className="studio-profile-menu-wrap">
+      <button
+        type="button"
+        className={`studio-settings-pill studio-settings-trigger studio-profile-menu-trigger${
+          open || isProfileTabActive ? " is-active" : ""
+        }`}
+        aria-label="Profile menu"
         aria-expanded={open}
+        aria-haspopup="menu"
+        title={label}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="cursor-sidebar-brand-logo" aria-hidden="true">
-          <img
-            src={sidebarLogo}
-            alt=""
-            width={16}
-            height={16}
-            decoding="async"
-            loading="eager"
-            className="cursor-sidebar-brand-logo-img"
-          />
-        </span>
-        <span className="cursor-sidebar-brand-user">
-          {contactType === "whatsapp" ? (
-            <WhatsAppIcon className="cursor-sidebar-brand-user-type-icon" />
-          ) : contactType === "email" ? (
-            <Mail className="cursor-sidebar-brand-user-type-icon" aria-hidden="true" />
-          ) : null}
-          <span className="cursor-sidebar-brand-user-name truncate">{label}</span>
-          <ChevronDown className="h-3 w-3" aria-hidden="true" />
-        </span>
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt="" className="studio-profile-menu-avatar" />
+        ) : (
+          <span className="studio-profile-menu-initials">{initials}</span>
+        )}
       </button>
       {open ? (
-        <div className="cursor-tab-context-menu studio-user-menu-popover">
-                  <button
-                    type="button"
+        <div className="cursor-tab-context-menu studio-profile-menu-popover" role="menu">
+          <button
+            type="button"
             className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onViewProfile?.();
+            }}
+          >
+            View profile
+          </button>
+          <button
+            type="button"
+            className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEditProfile?.();
+            }}
+          >
+            Edit profile
+          </button>
+          <div className="cursor-tab-context-sep" role="separator" />
+          <button
+            type="button"
+            className="cursor-tab-context-item is-danger"
+            role="menuitem"
             onClick={() => {
               setOpen(false);
               onSignOut?.();
             }}
           >
             Sign out
-                  </button>
+          </button>
         </div>
-                ) : null}
+      ) : null}
     </div>
   );
 }
@@ -17509,18 +17598,68 @@ function virtualFileName(name, ext) {
   return cleanName.toLowerCase().endsWith(ext.toLowerCase()) ? cleanName : `${cleanName}${ext}`;
 }
 
-function tabDescriptor({ key, threads, assets, documents, videoEdits, elements, snapshots }) {
+function profileInitials({ firstName, lastName, name, displayName, username }) {
+  const first = String(firstName ?? "").trim();
+  const last = String(lastName ?? "").trim();
+  if (first && last) return `${first[0]}${last[0]}`.toUpperCase();
+  if (first) return first[0].toUpperCase();
+  if (last) return last[0].toUpperCase();
+  const display = String(displayName || name || "").trim();
+  if (display) {
+    const parts = display.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return display[0].toUpperCase();
+  }
+  const handle = String(username ?? "").trim().replace(/^@/, "");
+  return handle ? handle[0].toUpperCase() : "?";
+}
+
+function tabDescriptor({
+  key,
+  threads,
+  assets,
+  documents,
+  videoEdits,
+  elements,
+  snapshots,
+  profileMetaByUsername,
+  myProfile,
+  currentUser,
+}) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
   }
   if (key.startsWith("profile:")) {
     const username = key.slice("profile:".length);
+    const meta = profileMetaByUsername?.get?.(username);
+    const isMine =
+      myProfile?.username &&
+      username &&
+      myProfile.username.toLowerCase() === username.toLowerCase();
+    const title =
+      meta?.displayName?.trim() ||
+      (isMine ? myProfile?.displayName?.trim() : "") ||
+      username ||
+      "Profile";
+    const avatarUrl = meta?.avatarUrl || (isMine ? myProfile?.avatarUrl : undefined);
+    const initials = profileInitials({
+      firstName: isMine ? currentUser?.firstName : undefined,
+      lastName: isMine ? currentUser?.lastName : undefined,
+      name: isMine ? currentUser?.name : undefined,
+      displayName: meta?.displayName || (isMine ? myProfile?.displayName : undefined),
+      username,
+    });
     return {
       key,
       kind: "file",
-      title: username ? `@${username}` : "Profile",
+      title,
       status: "ready",
       studioKind: "profile",
+      previewUrl: avatarUrl,
+      previewKind: avatarUrl ? "image" : undefined,
+      previewInitials: avatarUrl ? undefined : initials,
     };
   }
   if (key.startsWith("admin:")) {

@@ -673,7 +673,7 @@ function UnifiedTabStripInner({
             tab.status === "error");
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
-        const showPreview = tab.kind === "file" && previewUrl;
+        const showPreview = Boolean(previewUrl || tab.previewInitials);
         return (
           <div
             key={tab.key}
@@ -726,6 +726,13 @@ function UnifiedTabStripInner({
                 ) : (
                   <img src={tab.previewUrl} alt="" loading="lazy" />
                 )}
+              </span>
+            ) : tab.previewInitials ? (
+              <span
+                className="cursor-unified-tab-preview is-initials shrink-0 pointer-events-none"
+                aria-hidden="true"
+              >
+                {tab.previewInitials}
               </span>
             ) : (
               <Icon
