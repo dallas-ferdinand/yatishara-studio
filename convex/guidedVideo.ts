@@ -1521,7 +1521,7 @@ export const applyAnalysisResult = internalMutation({
         order: now + 1,
         briefId: brief._id,
         briefRevision: nextRevision,
-        message: "Ready when you are — review and generate.",
+        message: "ready when you are 🙂",
         briefSnapshotJson: serializeReviewSnapshot({
           mode: resolvedMode,
           videoType: resolvedVideoType,
@@ -2228,7 +2228,7 @@ export const migrateLegacyAssistanceData = internalMutation({
           order: now,
           briefId: brief._id,
           briefRevision: nextRevision,
-          message: "Ready when you are — review and generate.",
+          message: "ready when you are 🙂",
           briefSnapshotJson: serializeReviewSnapshot({
             mode: brief.mode,
             videoType: brief.videoType,

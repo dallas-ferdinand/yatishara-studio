@@ -341,10 +341,7 @@ export function formatAssistanceChatMessage(
 ): string {
   const base = message.trim();
   if (!questions.length) {
-    return (
-      base ||
-      "Reply in the chat with more detail — you can also attach images or logos here."
-    );
+    return base || "got more detail? you can attach refs too";
   }
   const lines = questions.map((question) => {
     if (question.kind === "choice" || question.kind === "multi") {
@@ -352,11 +349,11 @@ export function formatAssistanceChatMessage(
         .map((option) => option.label)
         .filter(Boolean);
       return options.length
-        ? `${question.prompt} Reply with one of: ${options.join("; ")}.`
+        ? `${question.prompt} (${options.join(" / ")})`
         : question.prompt;
     }
     if (question.kind === "upload") {
-      return `${question.prompt} Attach it in the chat when you reply.`;
+      return `${question.prompt} (attach in chat)`;
     }
     return question.prompt;
   });
@@ -365,12 +362,13 @@ export function formatAssistanceChatMessage(
     return needle.length > 0 && !base.toLowerCase().includes(needle);
   });
   if (!extras.length) return base;
-  if (extras.length === 1) {
-    return [base, extras[0]].filter(Boolean).join(base ? "\n\n" : "");
+  // Keep chat short: prefer a single inline question, never a numbered dump.
+  const questionLine = extras[0];
+  if (!base) return questionLine;
+  if (base.toLowerCase().includes(questionLine.slice(0, 24).toLowerCase())) {
+    return base;
   }
-  return [base, extras.map((line, index) => `${index + 1}. ${line}`).join("\n")]
-    .filter(Boolean)
-    .join("\n\n");
+  return `${base}\n${questionLine}`;
 }
 
 function parseQuestions(raw: unknown): GuidedQuestion[] {

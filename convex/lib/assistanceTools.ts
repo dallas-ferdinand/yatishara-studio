@@ -1781,11 +1781,15 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     ask_user: tool({
       description:
-        "End this turn by asking the user one high-leverage question in chat. Prefer a single required question. Do not ask for values you already stored with tools.",
+        "End this turn with one short casual chat message that asks a single high-leverage question. Do not ask for values you already stored with tools. Do not narrate tool updates.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
-          message: { type: "string" },
+          message: {
+            type: "string",
+            description:
+              "1 short sentence (max 2). Casual human chat. Light emoji ok. No \"I've updated…\" recaps or filler openers.",
+          },
           questions: {
             type: "array",
             items: {
@@ -1847,7 +1851,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         }
         session.terminal = {
           kind: "ask",
-          message: String(raw.message || "").trim().slice(0, 4_000) || "What should we do next?",
+          message: String(raw.message || "").trim().slice(0, 280) || "what’s next?",
           questions: filtered,
         };
         session.agentState = {
@@ -1866,11 +1870,15 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     prepare_review: tool({
       description:
-        "End this turn with a ready-to-generate review. You MUST author a detailed final generation prompt covering composition, hierarchy, exact copy, materials, lighting, palette, references, and negative constraints. Do not submit vague hero-product prompts for flyers/promos.",
+        "End this turn with a ready-to-generate review. Put ALL production detail in finalPrompt. The chat message must stay short and casual — never dump the prompt into chat.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
-          message: { type: "string" },
+          message: {
+            type: "string",
+            description:
+              "Brief friendly chat note only (e.g. \"ready when you are 🙂\"). Details belong in finalPrompt, not here.",
+          },
           finalPrompt: { type: "string" },
           negativePrompt: { type: "string" },
           rationale: { type: "string" },
@@ -1929,8 +1937,8 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         session.terminal = {
           kind: "review",
           message:
-            String(raw.message || "").trim().slice(0, 4_000) ||
-            "Ready when you are — review and generate.",
+            String(raw.message || "").trim().slice(0, 280) ||
+            "ready when you are 🙂",
           finalPrompt: compiledFinalPrompt,
           negativePrompt,
           rationale: raw.rationale?.trim().slice(0, 1_000),

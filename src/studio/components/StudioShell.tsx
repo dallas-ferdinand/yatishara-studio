@@ -3126,9 +3126,9 @@ export function StudioShell({
           --studio-hover-scale: 1;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          --studio-composer-glass: color-mix(in srgb, #05080f 90%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #05080f 94%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #05080f 84%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #05080f 48%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #05080f 58%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #05080f 36%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.14);
           --studio-composer-glass-blur: saturate(180%) blur(28px);
           --studio-composer-glass-shadow:
@@ -3218,13 +3218,13 @@ export function StudioShell({
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
+          --studio-gen-frame-bg: color-mix(in srgb, #05080f 50%, var(--cursor-accent) 3%);
           --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 78%, var(--color-cursor-muted));
           --studio-gen-card-shadow:
             0 10px 28px rgba(0, 0, 0, 0.22),
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
-          --studio-gen-media-bg: color-mix(in srgb, #05080f 94%, transparent);
-          --studio-gen-glass-fill: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
+          --studio-gen-media-bg: color-mix(in srgb, #05080f 52%, transparent);
+          --studio-gen-glass-fill: color-mix(in srgb, #05080f 48%, var(--cursor-accent) 3%);
           --studio-gen-glass-blur: saturate(140%) blur(10px);
           --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 7%, transparent);
           --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 4%, transparent);
@@ -5124,9 +5124,9 @@ export function StudioShell({
             rgba(15, 23, 42, 0.04) 55%,
             transparent 80%
           );
-          --studio-composer-glass: color-mix(in srgb, #e8ecf2 88%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #e8ecf2 92%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 82%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #e8ecf2 42%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #e8ecf2 54%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 32%, transparent);
           --studio-composer-glass-border: rgba(15, 23, 42, 0.12);
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
@@ -12863,28 +12863,28 @@ export function StudioShell({
         .studio-chat-bubble.is-assistant {
           margin-right: auto;
           border-radius: 8px 18px 18px 18px;
-          background: color-mix(in srgb, #05080f 92%, var(--cursor-accent) 4%);
-          backdrop-filter: saturate(140%) blur(10px);
-          -webkit-backdrop-filter: saturate(140%) blur(10px);
+          background: color-mix(in srgb, #05080f 46%, var(--cursor-accent) 3%);
+          backdrop-filter: saturate(150%) blur(14px);
+          -webkit-backdrop-filter: saturate(150%) blur(14px);
         }
         .studio-chat-bubble.is-result {
           width: min(100%, var(--studio-chat-bubble-max, 90%));
           max-width: var(--studio-chat-bubble-max, 90%);
           margin-right: auto;
-          background: color-mix(in srgb, #05080f 94%, var(--cursor-accent) 3%);
-          backdrop-filter: saturate(140%) blur(10px);
-          -webkit-backdrop-filter: saturate(140%) blur(10px);
+          background: color-mix(in srgb, #05080f 50%, var(--cursor-accent) 3%);
+          backdrop-filter: saturate(150%) blur(14px);
+          -webkit-backdrop-filter: saturate(150%) blur(14px);
           box-shadow: var(--studio-gen-card-shadow);
         }
         .studio-chat-bubble.is-system {
           margin-right: auto;
-          background: color-mix(in srgb, #05080f 90%, var(--cursor-accent) 4%);
-          backdrop-filter: saturate(140%) blur(10px);
-          -webkit-backdrop-filter: saturate(140%) blur(10px);
+          background: color-mix(in srgb, #05080f 44%, var(--cursor-accent) 3%);
+          backdrop-filter: saturate(150%) blur(14px);
+          -webkit-backdrop-filter: saturate(150%) blur(14px);
         }
         [data-appearance="light"] .studio-chat-bubble.is-assistant,
         [data-appearance="light"] .studio-chat-bubble.is-system {
-          background: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+          background: color-mix(in srgb, #e8ecf2 48%, var(--cursor-accent) 3%);
         }
         .studio-chat-stream-inner > .studio-chat-bubble {
           align-self: flex-start;
