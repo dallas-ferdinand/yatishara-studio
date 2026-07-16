@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.yatishara.studio",
+      "sha256_cert_fingerprints": [
+        "1D:2A:92:EE:8B:85:AE:A7:28:E8:9C:E8:C9:0E:54:12:C7:B3:5F:A7:8F:05:93:29:89:3B:63:4D:E3:05:FA:66"
+      ]
+    }
+  }
+]

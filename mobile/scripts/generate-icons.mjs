@@ -61,6 +61,27 @@ async function main() {
 `,
   );
 
+  // Android notification icons are monochrome alpha masks. Convert the
+  // existing black/white app mark into a transparent white status icon.
+  const notificationSize = 96;
+  const alpha = await sharp(source)
+    .resize(notificationSize, notificationSize)
+    .greyscale()
+    .threshold(96)
+    .raw()
+    .toBuffer();
+  await sharp({
+    create: {
+      width: notificationSize,
+      height: notificationSize,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 },
+    },
+  })
+    .joinChannel(alpha, { raw: { width: notificationSize, height: notificationSize, channels: 1 } })
+    .png()
+    .toFile(path.join(resDir, "drawable/ic_stat_studio.png"));
+
   // Replace default Capacitor splash placeholders with black + mark.
   const splashDirs = (await readdir(resDir, { withFileTypes: true }))
     .filter((d) => d.isDirectory() && d.name.startsWith("drawable"))

@@ -12,8 +12,8 @@ const config: CapacitorConfig = {
     url: "https://studio.yatishara.com",
     cleartext: false,
     androidScheme: "https",
-    // Keep Studio + first-party auth hosts inside the WebView.
-    allowNavigation: ["studio.yatishara.com", "*.yatishara.com"],
+    // Native APIs are exposed only to the Studio origin.
+    allowNavigation: ["studio.yatishara.com"],
   },
   android: {
     allowMixedContent: false,
@@ -28,6 +28,13 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: "DARK",
       backgroundColor: "#000000",
+    },
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"],
+    },
+    LocalNotifications: {
+      smallIcon: "ic_stat_studio",
+      iconColor: "#FFFFFF",
     },
   },
 };
