@@ -8399,10 +8399,90 @@ export function StudioShell() {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
         }
+        .studio-composer-circle-btn.cursor-composer-mic {
+          position: relative;
+          overflow: visible;
+        }
         .studio-composer-circle-btn.cursor-composer-mic.is-recording {
-          border-color: color-mix(in srgb, #ef4444 48%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, #ef4444 18%, var(--studio-composer-glass-muted));
-          color: #fecaca;
+          border-color: rgba(248, 113, 113, 0.85);
+          background: color-mix(in srgb, #ef4444 34%, var(--studio-composer-glass-muted));
+          color: #fff1f2;
+          box-shadow:
+            0 0 0 1px rgba(248, 113, 113, 0.35),
+            0 0 18px rgba(239, 68, 68, 0.35);
+          animation: studio-mic-record-pulse 1.15s ease-in-out infinite;
+        }
+        .studio-composer-circle-btn.cursor-composer-mic.is-recording::before,
+        .studio-composer-circle-btn.cursor-composer-mic.is-recording::after {
+          content: "";
+          position: absolute;
+          inset: -3px;
+          border-radius: inherit;
+          border: 1.5px solid rgba(248, 113, 113, 0.55);
+          pointer-events: none;
+          animation: studio-mic-record-ring 1.4s ease-out infinite;
+        }
+        .studio-composer-circle-btn.cursor-composer-mic.is-recording::after {
+          animation-delay: 0.7s;
+        }
+        .studio-composer-mic-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 999px;
+          background: #fecaca;
+          box-shadow: 0 0 10px rgba(248, 113, 113, 0.9);
+        }
+        .studio-composer .cursor-composer-box.is-recording {
+          border-color: rgba(248, 113, 113, 0.55) !important;
+          box-shadow:
+            0 0 0 1px rgba(248, 113, 113, 0.22) inset,
+            0 0 22px rgba(239, 68, 68, 0.18) !important;
+          animation: studio-mic-composer-glow 1.25s ease-in-out infinite;
+        }
+        @keyframes studio-mic-record-pulse {
+          0%, 100% {
+            transform: scale(1);
+            background: color-mix(in srgb, #ef4444 30%, var(--studio-composer-glass-muted));
+          }
+          50% {
+            transform: scale(1.06);
+            background: color-mix(in srgb, #ef4444 48%, var(--studio-composer-glass-muted));
+          }
+        }
+        @keyframes studio-mic-record-ring {
+          0% {
+            transform: scale(1);
+            opacity: 0.85;
+          }
+          100% {
+            transform: scale(1.7);
+            opacity: 0;
+          }
+        }
+        @keyframes studio-mic-composer-glow {
+          0%, 100% {
+            border-color: rgba(248, 113, 113, 0.42);
+            box-shadow:
+              0 0 0 1px rgba(248, 113, 113, 0.16) inset,
+              0 0 14px rgba(239, 68, 68, 0.12);
+          }
+          50% {
+            border-color: rgba(248, 113, 113, 0.72);
+            box-shadow:
+              0 0 0 1px rgba(248, 113, 113, 0.28) inset,
+              0 0 28px rgba(239, 68, 68, 0.28);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .studio-composer-circle-btn.cursor-composer-mic.is-recording,
+          .studio-composer-circle-btn.cursor-composer-mic.is-recording::before,
+          .studio-composer-circle-btn.cursor-composer-mic.is-recording::after,
+          .studio-composer .cursor-composer-box.is-recording {
+            animation: none;
+          }
+          .studio-composer-circle-btn.cursor-composer-mic.is-recording {
+            box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.55);
+          }
         }
         .studio-composer-circle-btn.cursor-composer-mic.is-transcribing {
           border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
@@ -12191,6 +12271,8 @@ function StudioComposer({
           >
             {transcribing ? (
               <Loader2 size={14} strokeWidth={2.25} className="animate-spin" aria-hidden="true" />
+            ) : recording ? (
+              <span className="studio-composer-mic-dot" aria-hidden="true" />
             ) : (
               <Mic size={14} strokeWidth={2.25} aria-hidden="true" />
             )}
