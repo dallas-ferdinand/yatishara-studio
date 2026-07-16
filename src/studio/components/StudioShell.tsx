@@ -7,6 +7,8 @@ import { StudioMobileBottomNav } from "./StudioMobileBottomNav";
 import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioDotGridWave } from "./StudioDotGridWave";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
+import { ProfileSettingsCard } from "./ProfileSettingsCard";
+import { PublicProfileView } from "./PublicProfileView";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
 import { VideoTypePicker } from "./guided-video/VideoTypePicker";
 import { AssistantMessage } from "./guided-video/AssistantMessage";
@@ -277,7 +279,11 @@ async function blobToBase64(blob) {
   return btoa(binary);
 }
 
-export function StudioShell() {
+export function StudioShell({
+  initialProfileUsername,
+}: {
+  initialProfileUsername?: string;
+} = {}) {
   const { isMobile } = useMobileLayout();
   const { signOut } = useAuthActions();
   const [mainPanelSizes, setMainPanelSizes] = useState(readStudioMainPanelSizes);
@@ -316,6 +322,8 @@ export function StudioShell() {
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
+  const shareAssetToProfile = useMutation(api.profiles.shareAsset);
+  const unshareAssetFromProfile = useMutation(api.profiles.unshareAsset);
   const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const generatePresetThumbnails = useAction(api.stylePresetActions.adminGenerateThumbnails);
   const runFlow = useAction(api.generationActions.runFlow);
@@ -388,6 +396,7 @@ export function StudioShell() {
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
+  const [profileShareToast, setProfileShareToast] = useState("");
   const [mobileSection, setMobileSection] = useState("composer");
   const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
@@ -427,6 +436,14 @@ export function StudioShell() {
     hasCurrentUser && needsBillingDetails ? {} : "skip",
   );
   const notifications = useQuery(api.notifications.listMine, hasCurrentUser ? {} : "skip");
+  const sharedProfileAssets = useQuery(
+    api.profiles.listMySharedAssetIds,
+    hasCurrentUser ? {} : "skip",
+  );
+  const sharedAssetIds = useMemo(
+    () => new Set(sharedProfileAssets?.assetIds ?? []),
+    [sharedProfileAssets?.assetIds],
+  );
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const adminPayments = useQuery(
     api.billing.adminListPayments,
@@ -1410,6 +1427,27 @@ export function StudioShell() {
     setActiveTab(key);
   }
 
+  function openPublicProfile(username) {
+    const normalized = String(username ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "");
+    if (!normalized) return;
+    openTab(`profile:${normalized}`);
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
+  function openOwnProfile() {
+    const username = sharedProfileAssets?.username;
+    if (!username) {
+      openSettingsTab("profile");
+      return;
+    }
+    openPublicProfile(username);
+  }
+
   function openNewComposerTab() {
     composerTabIndexRef.current += 1;
     openTab(`composer:${composerTabIndexRef.current}`);
@@ -1477,6 +1515,36 @@ export function StudioShell() {
     if (isMobile) setMobileSection("settings");
   }, [isMobile]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const settings = params.get("settings");
+    if (settings !== "profile") return;
+    setSettingsSection("profile");
+    setSettingsOpen(true);
+    if (isMobile) setMobileSection("settings");
+  }, [isMobile]);
+
+  const openedInitialProfileRef = useRef(false);
+  useEffect(() => {
+    if (openedInitialProfileRef.current) return;
+    if (typeof window === "undefined") return;
+    const fromPath = window.location.pathname.match(/^\/u\/([^/?#]+)\/?$/i)?.[1];
+    const fromQuery = new URLSearchParams(window.location.search).get("profile");
+    const username = initialProfileUsername || fromPath || fromQuery;
+    if (!username) return;
+    openedInitialProfileRef.current = true;
+    openPublicProfile(username);
+  }, [initialProfileUsername, isMobile]);
+
+  useEffect(() => {
+    if (!profileShareToast) return;
+    const timer = window.setTimeout(() => setProfileShareToast(""), 3200);
+    return () => window.clearTimeout(timer);
+  }, [profileShareToast]);
+
+  const rootFolderId = navTrail[0]?.id ?? null;
+
   const settingsPanelProps = {
     settingsSection,
     currentUser,
@@ -1484,6 +1552,8 @@ export function StudioShell() {
     notifications,
     billingAccount,
     pricing,
+    rootFolderId,
+    onOpenPublicProfile: openPublicProfile,
     onClose: () => {
       setSettingsOpen(false);
       if (isMobile) setMobileSection("composer");
@@ -5540,7 +5610,9 @@ export function StudioShell() {
           font-size: 11px;
           font-weight: 650;
         }
-        .studio-account-fields input {
+        .studio-account-fields input,
+        .studio-account-fields textarea,
+        .studio-profile-link-type select {
           width: 100%;
           min-height: 40px;
           height: auto;
@@ -5552,9 +5624,222 @@ export function StudioShell() {
           font: inherit;
           outline: none;
         }
-        .studio-account-fields input:focus {
+        .studio-account-fields textarea {
+          min-height: 88px;
+          padding: 10px 12px;
+          resize: vertical;
+        }
+        .studio-account-fields input:focus,
+        .studio-account-fields textarea:focus,
+        .studio-profile-link-type select:focus {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-profile-stack {
+          display: grid;
+          gap: 12px;
+        }
+        .studio-profile-intro h3 {
+          margin: 0;
+          font-size: 16px;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-profile-intro p {
+          margin: 6px 0 12px;
+          color: var(--color-cursor-muted);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .studio-profile-intro code {
+          font-family: var(--font-jetbrains), monospace;
+          font-size: 12px;
+        }
+        .studio-profile-username-field {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          overflow: hidden;
+        }
+        .studio-profile-username-prefix {
+          padding: 0 0 0 12px;
+          color: var(--color-cursor-muted);
+          font-weight: 700;
+        }
+        .studio-profile-username-field input {
+          border: 0 !important;
+          box-shadow: none !important;
+          background: transparent !important;
+        }
+        .studio-profile-photo-block {
+          display: grid;
+          gap: 12px;
+          justify-items: center;
+          text-align: center;
+        }
+        .studio-profile-photo-copy {
+          display: grid;
+          gap: 4px;
+        }
+        .studio-profile-photo-copy strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+        }
+        .studio-profile-photo-copy p,
+        .studio-profile-hint,
+        .studio-profile-public-row p,
+        .studio-profile-share-row p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-profile-photo-drop {
+          position: relative;
+          width: 112px;
+          height: 112px;
+          border-radius: 50%;
+          border: 1px dashed color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          color: var(--cursor-accent);
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          cursor: pointer;
+          flex: 0 0 auto;
+        }
+        .studio-profile-photo-drop:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .studio-profile-photo-empty {
+          display: grid;
+          justify-items: center;
+          gap: 6px;
+        }
+        .studio-profile-photo-empty em {
+          font-style: normal;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-profile-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .studio-profile-avatar-overlay {
+          position: absolute;
+          inset: auto 0 0 0;
+          display: grid;
+          place-items: center;
+          padding: 8px 0;
+          background: color-mix(in srgb, #000 45%, transparent);
+          color: #fff;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+        .studio-profile-photo-drop:hover .studio-profile-avatar-overlay,
+        .studio-profile-photo-drop:focus-visible .studio-profile-avatar-overlay {
+          opacity: 1;
+        }
+        .studio-profile-avatar-actions,
+        .studio-profile-share-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 8px;
+        }
+        .studio-profile-public-row,
+        .studio-profile-share-row,
+        .studio-profile-links-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-profile-public-row {
+          padding-top: 4px;
+        }
+        .studio-profile-public-row strong,
+        .studio-profile-links-head strong,
+        .studio-profile-share-row strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+        }
+        .studio-profile-links-block {
+          display: grid;
+          gap: 10px;
+          margin-top: 4px;
+        }
+        .studio-profile-links-list {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-profile-link-row {
+          display: grid;
+          grid-template-columns: 110px 1fr 1.2fr auto;
+          gap: 8px;
+          align-items: end;
+        }
+        @media (max-width: 720px) {
+          .studio-profile-link-row {
+            grid-template-columns: 1fr;
+          }
+        }
+        .studio-profile-link-type-control {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .studio-profile-link-remove {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: transparent;
+          color: var(--color-cursor-muted);
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+        .studio-profile-char-count {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-style: normal;
+          justify-self: end;
+        }
+        .studio-profile-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin: 0;
+          color: var(--color-cursor-text);
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-profile-status.is-error {
+          color: #fecaca;
+        }
+        [data-appearance="light"] .studio-polish .studio-profile-status.is-error {
+          color: #991b1b;
+        }
+        .studio-profile-open-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          text-decoration: none;
+        }
+        .studio-profile-hint {
+          margin-top: 10px !important;
+        }
+        .studio-profile-share-toast {
+          position: fixed;
+          left: 50%;
+          bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+          transform: translateX(-50%);
+          z-index: 80;
         }
         .studio-account-actions {
           display: grid;
@@ -11429,6 +11714,22 @@ export function StudioShell() {
                   <AdminQuickLinks onOpenAdminTab={openAdminTab} />
                 ) : null}
                 <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${
+                    activeTab.startsWith("profile:") ? " is-active" : ""
+                  }`}
+                  onClick={openOwnProfile}
+                  aria-label="Public profile"
+                  title={
+                    sharedProfileAssets?.username
+                      ? `@${sharedProfileAssets.username}`
+                      : "Set up public profile"
+                  }
+                  aria-pressed={activeTab.startsWith("profile:")}
+                >
+                  <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
                   className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
                   onClick={() => setHistoryOpen((open) => !open)}
                   aria-label="Generation history"
@@ -11524,6 +11825,8 @@ export function StudioShell() {
             onOpenAssetTab={(assetId) => openTab(`asset:${assetId}`)}
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
             activeEditTab={activeTab}
+            onOpenPublicProfile={openPublicProfile}
+            onEditOwnProfile={() => openSettingsTab("profile")}
           />
         </section>
         {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
@@ -11605,6 +11908,22 @@ export function StudioShell() {
               />
               <button
                 type="button"
+                className={`studio-settings-pill studio-settings-trigger${
+                  activeTab.startsWith("profile:") ? " is-active" : ""
+                }`}
+                onClick={openOwnProfile}
+                aria-label="Public profile"
+                title={
+                  sharedProfileAssets?.username
+                    ? `@${sharedProfileAssets.username}`
+                    : "Set up public profile"
+                }
+                aria-pressed={activeTab.startsWith("profile:")}
+              >
+                <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
                 className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
                 onClick={() => setHistoryOpen((open) => !open)}
                 aria-label="Generation history"
@@ -11635,6 +11954,7 @@ export function StudioShell() {
           canCreateFolder={!isTrashView}
           inTrashView={isTrashView}
           createItems={CREATE_MENU_ITEMS}
+          sharedAssetIds={sharedAssetIds}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashView) return;
@@ -11653,8 +11973,38 @@ export function StudioShell() {
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
             if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
+            if (action === "share-profile") {
+              if (!entry?.studioId || entry.studioKind !== "asset") return;
+              if (!sharedProfileAssets?.hasProfile) {
+                setProfileShareToast("Claim a username in Settings → Profile first");
+                openSettingsTab("profile");
+                return;
+              }
+              void shareAssetToProfile({ assetId: entry.studioId })
+                .then((result) => {
+                  const handle = result.publicUrlPath.replace(/^\/u\//, "");
+                  setProfileShareToast(`Shared to @${handle}`);
+                  if (handle) openPublicProfile(handle);
+                })
+                .catch((error) => {
+                  setProfileShareToast(friendlyConvexError(error, "Could not share to profile"));
+                });
+            }
+            if (action === "unshare-profile") {
+              if (!entry?.studioId || entry.studioKind !== "asset") return;
+              void unshareAssetFromProfile({ assetId: entry.studioId })
+                .then(() => setProfileShareToast("Removed from profile"))
+                .catch((error) => {
+                  setProfileShareToast(friendlyConvexError(error, "Could not update profile"));
+                });
+            }
           }}
         />
+      ) : null}
+      {profileShareToast ? (
+        <div className="studio-voice-toast studio-profile-share-toast" role="status" aria-live="polite">
+          {profileShareToast}
+        </div>
       ) : null}
     </div>
   );
@@ -14837,7 +15187,13 @@ function ActivePane({
   onEditorStatus,
   onVideoEditProjectSaved,
   activeEditTab,
+  onOpenPublicProfile,
+  onEditOwnProfile,
 }) {
+  const profileUsername = activeTab.startsWith("profile:")
+    ? activeTab.slice("profile:".length)
+    : null;
+
   useEffect(() => {
     if (!activeTab.startsWith("create:")) return;
     const createTarget = parseCreateTab(activeTab);
@@ -14909,6 +15265,15 @@ function ActivePane({
         elements={elements}
         onOpenEntry={onOpenEntry}
         currentUser={currentUser}
+      />
+    );
+  }
+  if (profileUsername) {
+    return (
+      <PublicProfileView
+        username={profileUsername}
+        embedded
+        onEditProfile={onEditOwnProfile}
       />
     );
   }
@@ -15936,6 +16301,8 @@ function SettingsSidePanel({
   notifications,
   billingAccount,
   pricing,
+  rootFolderId,
+  onOpenPublicProfile,
   onClose,
   onSaveAccount,
   customCursorEnabled,
@@ -15956,6 +16323,8 @@ function SettingsSidePanel({
         notifications={notifications}
         billingAccount={billingAccount}
         pricing={pricing}
+        rootFolderId={rootFolderId}
+        onOpenPublicProfile={onOpenPublicProfile}
         onSaveAccount={onSaveAccount}
         customCursorEnabled={customCursorEnabled}
         onCustomCursorChange={onCustomCursorChange}
@@ -15971,6 +16340,8 @@ function SettingsWorkspacePane({
   notifications,
   billingAccount,
   pricing,
+  rootFolderId,
+  onOpenPublicProfile,
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
@@ -16127,11 +16498,16 @@ function SettingsWorkspacePane({
   const items = [
     { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
+    { id: "profile", label: "Profile" },
     { id: "account", label: "Account details" },
     { id: "activity", label: "Activity" },
     { id: "api-keys", label: "API keys" },
   ];
   const settingsSectionId = section === "top-up" ? "billing" : section;
+  const profileDisplayHint = [currentUser?.firstName, currentUser?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || currentUser?.name || "";
   return (
     <div className="studio-settings-workspace">
       <header className="studio-settings-workspace-head">
@@ -16149,6 +16525,14 @@ function SettingsWorkspacePane({
         </nav>
       </header>
       <div className="studio-settings-workspace-body">
+        {settingsSectionId === "profile" ? (
+          <ProfileSettingsCard
+            rootFolderId={rootFolderId}
+            displayNameHint={profileDisplayHint}
+            onOpenPublicProfile={onOpenPublicProfile}
+          />
+        ) : null}
+
         {settingsSectionId === "account" ? (
           <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} />
           ) : null}
@@ -17128,6 +17512,16 @@ function virtualFileName(name, ext) {
 function tabDescriptor({ key, threads, assets, documents, videoEdits, elements, snapshots }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
+  }
+  if (key.startsWith("profile:")) {
+    const username = key.slice("profile:".length);
+    return {
+      key,
+      kind: "file",
+      title: username ? `@${username}` : "Profile",
+      status: "ready",
+      studioKind: "profile",
+    };
   }
   if (key.startsWith("admin:")) {
     const kind = key.slice("admin:".length);

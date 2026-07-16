@@ -14,6 +14,7 @@ function buildMenuItems(entry, {
   onRequestRename,
   onRequestDelete,
   inTrashView = false,
+  sharedAssetIds,
 }) {
   if (!entry) return [];
 
@@ -76,6 +77,18 @@ function buildMenuItems(entry, {
     items.push({ id: "copy-path", label: "Copy item link" });
     if (isDir && !isParent) items.push({ id: "download-zip", label: "Download folder" });
     if (isFile) items.push({ id: "download", label: "Download" });
+    if (
+      isFile &&
+      entry.studioKind === "asset" &&
+      (entry.kind === "image" || entry.kind === "video") &&
+      entry.studioId
+    ) {
+      const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
+      items.push({
+        id: alreadyShared ? "unshare-profile" : "share-profile",
+        label: alreadyShared ? "Remove from profile" : "Share to profile",
+      });
+    }
     if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });
     items.push({ id: "sep-1", sep: true });
     if (!isParent) items.push({ id: "attach", label: isDir ? "Use folder in chat" : "Use in chat" });
@@ -102,6 +115,7 @@ export function ExplorerContextMenu({
   canCreateFolder = false,
   createItems,
   inTrashView = false,
+  sharedAssetIds,
 }) {
   const menuRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
@@ -117,6 +131,7 @@ export function ExplorerContextMenu({
         onRequestRename,
         onRequestDelete,
         inTrashView,
+        sharedAssetIds,
       }),
     [
       entry,
@@ -128,6 +143,7 @@ export function ExplorerContextMenu({
       onRequestRename,
       onRequestDelete,
       inTrashView,
+      sharedAssetIds,
     ],
   );
 

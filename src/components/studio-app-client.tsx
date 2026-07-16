@@ -3,10 +3,14 @@
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { StudioAuthGate } from "@/studio/components/StudioAuthGate";
 
-export function StudioAppClient() {
+export function StudioAppClient({
+  initialProfileUsername,
+}: {
+  initialProfileUsername?: string;
+} = {}) {
   return (
     <ConvexClientProvider>
-      <StudioAuthGate />
+      <StudioAuthGate initialProfileUsername={initialProfileUsername} />
     </ConvexClientProvider>
   );
 }

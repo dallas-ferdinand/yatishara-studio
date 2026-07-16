@@ -16,6 +16,16 @@ export async function getCurrentUser(ctx: QueryCtx | MutationCtx): Promise<Authe
   return user;
 }
 
+/** Returns the signed-in user, or null when the request is anonymous. */
+export async function getOptionalUser(
+  ctx: QueryCtx | MutationCtx,
+): Promise<AuthedUser | null> {
+  const userId = await getAuthUserId(ctx);
+  if (userId === null) return null;
+  const user = await ctx.db.get("users", userId);
+  return user ?? null;
+}
+
 export async function requireAdmin(ctx: QueryCtx | MutationCtx): Promise<AuthedUser> {
   const user = await getCurrentUser(ctx);
   if (user.role !== "admin" && user.role !== "super_admin") {
