@@ -3733,8 +3733,8 @@ export function StudioShell({
           }
         }
         .studio-polish .cursor-unified-tab-preview {
-          width: 22px;
-          height: 22px;
+          width: 20px;
+          height: 20px;
           flex-shrink: 0;
           border-radius: 999px;
           overflow: hidden;
@@ -3744,7 +3744,7 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
           place-items: center;
-          font-size: 9px;
+          font-size: 8px;
           font-weight: 750;
           letter-spacing: 0.01em;
           line-height: 1;
@@ -3753,11 +3753,11 @@ export function StudioShell({
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-unified-tab-preview {
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-preview.is-initials {
-            font-size: 10px;
+            font-size: 9px;
           }
         }
         .studio-new-tab-cluster {
