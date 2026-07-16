@@ -129,7 +129,7 @@ export function SettingsPanel({ open, onClose, chatState, onBump, onOpenPulse })
         <header className="cursor-panel-head cursor-settings-head">
           <h2 className="text-sm font-medium flex-1 min-w-0">Settings</h2>
           <div className="cursor-panel-head-tools">
-            <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">
+            <button type="button" className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close" onClick={onClose} aria-label="Close">
               <Icon name="x" size={18} />
             </button>
           </div>

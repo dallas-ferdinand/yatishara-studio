@@ -26,8 +26,15 @@ export function saveMobileTab(tab: MobileTab) {
   }
 }
 
+function readIsMobile(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`).matches;
+}
+
 export function useMobileLayout() {
-  const [isMobile, setIsMobile] = useState(false);
+  // Initialize from the viewport on the client so the first paint matches mobile
+  // chrome instead of flashing desktop structure after hydration.
+  const [isMobile, setIsMobile] = useState(readIsMobile);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {

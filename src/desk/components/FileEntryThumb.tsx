@@ -31,7 +31,26 @@ function entryKind(entry) {
   if (entry?.type === "dir" || entry?.type === "parent") {
     return entry.type === "parent" ? "parent" : "dir";
   }
+  if (entry?.studioKind === "document") return "markdown";
+  if (entry?.studioKind === "videoEdit") return "videoEdit";
+  if (entry?.kind === "image" || entry?.kind === "video" || entry?.kind === "audio") {
+    return entry.kind;
+  }
   return fileViewerKind(entry?.ext ?? fileExt(entry?.path ?? entry?.name ?? ""));
+}
+
+function ThumbWithPeek({ children, name, badge }) {
+  return (
+    <div className="desk-file-thumb-peek-wrap">
+      {children}
+      {badge ? (
+        <span className="desk-file-thumb-badge" aria-hidden>
+          <Icon name={badge} size={14} />
+        </span>
+      ) : null}
+      <ThumbPeekLabel name={name} />
+    </div>
+  );
 }
 
 export function elementBadgeIcon(elementType) {
@@ -352,73 +371,74 @@ export function FileEntryThumb({
   } else {
     const isImage = kind === "image";
     const isVideo = kind === "video";
+    const isScript = kind === "markdown" || entry?.studioKind === "document";
+    const isVideoEdit = kind === "videoEdit" || entry?.studioKind === "videoEdit";
     const videoPosterUrl =
       isVideo && thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl)
         ? thumbUrl
         : undefined;
 
-    if (isImage && thumbUrl) {
+    if (isImage && (thumbUrl || mediaUrl)) {
       visual = (
-        <div className="desk-file-thumb-peek-wrap">
+        <ThumbWithPeek name={label} badge="image">
           <ProgressiveThumb
-            src={thumbUrl}
+            src={thumbUrl || mediaUrl}
             lqipSrc={lqipUrl}
             className="desk-file-thumb-image"
             eager={eagerFirst}
           />
-          <span className="desk-file-thumb-badge" aria-hidden>
-            <Icon name="image" size={14} />
-          </span>
-          <ThumbPeekLabel name={label} />
-        </div>
+        </ThumbWithPeek>
       );
-    } else if (isImage && mediaUrl) {
+      inlinePeekLabel = true;
+    } else if (isVideo) {
       visual = (
-        <div className="desk-file-thumb-peek-wrap">
-          <ProgressiveThumb
-            src={mediaUrl}
-            lqipSrc={lqipUrl}
-            className="desk-file-thumb-image"
-            eager={eagerFirst}
-          />
-          <span className="desk-file-thumb-badge" aria-hidden>
-            <Icon name="image" size={14} />
-          </span>
-          <ThumbPeekLabel name={label} />
-        </div>
+        <ThumbWithPeek name={label} badge="film">
+          {videoPosterUrl ? (
+            <ProgressiveThumb
+              src={videoPosterUrl}
+              lqipSrc={lqipUrl}
+              className="desk-file-thumb-video"
+              eager={eagerFirst}
+            />
+          ) : mediaUrl || thumbUrl ? (
+            <video
+              src={mediaUrl ?? thumbUrl}
+              className="desk-file-thumb-video"
+              crossOrigin="anonymous"
+              muted
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <div className="desk-file-thumb-fallback">
+              <Icon name="film" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+            </div>
+          )}
+        </ThumbWithPeek>
       );
-    } else if (isVideo && videoPosterUrl) {
+      inlinePeekLabel = true;
+    } else if (isScript) {
       visual = (
-        <div className="desk-file-thumb-peek-wrap">
-          <ProgressiveThumb
-            src={videoPosterUrl}
-            lqipSrc={lqipUrl}
-            className="desk-file-thumb-video"
-            eager={eagerFirst}
-          />
-          <span className="desk-file-thumb-badge" aria-hidden>
-            <Icon name="film" size={14} />
-          </span>
-          <ThumbPeekLabel name={label} />
-        </div>
+        <ThumbWithPeek name={label} badge="fileText">
+          {entry?.path && size === "preview" && entry?.studioKind !== "document" ? (
+            <TextSnippet path={entry.path} workspaceId={workspaceId} className="desk-file-thumb-text-wrap" />
+          ) : (
+            <div className="desk-file-thumb-fallback">
+              <Icon name="fileText" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+            </div>
+          )}
+        </ThumbWithPeek>
       );
-    } else if (isVideo && (mediaUrl || thumbUrl)) {
+      inlinePeekLabel = true;
+    } else if (isVideoEdit) {
       visual = (
-        <div className="desk-file-thumb-peek-wrap">
-          <video
-            src={mediaUrl ?? thumbUrl}
-            className="desk-file-thumb-video"
-            crossOrigin="anonymous"
-            muted
-            playsInline
-            preload="metadata"
-          />
-          <span className="desk-file-thumb-badge" aria-hidden>
-            <Icon name="film" size={14} />
-          </span>
-          <ThumbPeekLabel name={label} />
-        </div>
+        <ThumbWithPeek name={label} badge="film">
+          <div className="desk-file-thumb-fallback">
+            <Icon name="film" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+          </div>
+        </ThumbWithPeek>
       );
+      inlinePeekLabel = true;
     } else if (kind === "audio" && mediaUrl) {
       visual = (
         <div className="desk-file-thumb-audio">
@@ -432,14 +452,12 @@ export function FileEntryThumb({
     }
   }
 
-  inlinePeekLabel =
-    kind === "dir" ||
-    kind === "parent" ||
-    (entry?.studioKind === "element"
-      ? Boolean(thumbUrl && !isVideoFileUrl(thumbUrl))
-      : kind === "image" || kind === "video"
-        ? Boolean(thumbUrl || mediaUrl)
-        : false);
+  if (!inlinePeekLabel) {
+    inlinePeekLabel =
+      kind === "dir" ||
+      kind === "parent" ||
+      (entry?.studioKind === "element" && Boolean(thumbUrl && !isVideoFileUrl(thumbUrl)));
+  }
 
   return (
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>

@@ -3,9 +3,13 @@ import {
   studioBackgroundCssValue,
   studioBackgroundPath,
 } from "@/studio/lib/studio-background-registry";
-
-const SCHEME_KEY = "mercuryos-theme-v1";
-const BG_PACK_KEY = "mercuryos-studio-bg-pack-v1";
+import {
+  DEFAULT_WALLPAPER,
+  getCurrentWallpaper,
+  getUrlHint,
+  readWallpaperState,
+  type WallpaperRef,
+} from "@/studio/lib/wallpaper-state";
 
 function paintWallpaper(path: string | null) {
   const root = document.documentElement;
@@ -18,19 +22,81 @@ function paintWallpaper(path: string | null) {
   }
 }
 
-/** Apply wallpaper CSS vars — probes family asset and falls back to animated on 404. */
+export function resolveWallpaperImageUrl(
+  ref: WallpaperRef = getCurrentWallpaper(),
+  appearance?: "light" | "dark",
+): string | null {
+  const mode =
+    appearance
+    ?? (typeof document !== "undefined" && document.documentElement.dataset.appearance === "light"
+      ? "light"
+      : "dark");
+
+  if (ref.kind === "preset") {
+    return studioBackgroundPath(ref.family, ref.themeId, mode);
+  }
+  return getUrlHint(ref);
+}
+
+function probeAndPaint(primary: string, fallback: string | null) {
+  paintWallpaper(primary);
+  if (!fallback || fallback === primary) return;
+
+  const probe = new Image();
+  probe.onload = () => {
+    paintWallpaper(primary);
+  };
+  probe.onerror = () => {
+    paintWallpaper(fallback);
+  };
+  probe.src = primary;
+}
+
+async function handleAssetMissing(assetId: string) {
+  try {
+    const theme = await import("@/mos-app/theme.js");
+    theme.fallbackWallpaper?.(assetId);
+  } catch {
+    // Theme module unavailable — leave painted state as-is.
+  }
+}
+
+/** Apply wallpaper CSS vars from wallpaper-first state (preset or asset URL hint). */
 export function applyStudioBackgroundNow() {
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
-  const family = normalizeStudioBackgroundFamily(
-    root.dataset.studioBgFamily
-      ?? root.dataset.studioBgPack
-      ?? localStorage.getItem(BG_PACK_KEY),
-  );
-  const themeId = root.dataset.theme ?? localStorage.getItem(SCHEME_KEY) ?? "agent";
   const appearance = root.dataset.appearance === "light" ? "light" : "dark";
+  const state = readWallpaperState();
+  const current = state.current;
 
+  if (current.kind === "asset") {
+    const hint = getUrlHint(current);
+    if (!hint) {
+      // No URL yet — paint default preset until signed URL is refreshed.
+      const fallback = studioBackgroundPath(
+        DEFAULT_WALLPAPER.family,
+        DEFAULT_WALLPAPER.themeId,
+        appearance,
+      );
+      paintWallpaper(fallback);
+      return;
+    }
+
+    paintWallpaper(hint);
+    const probe = new Image();
+    probe.onload = () => {
+      paintWallpaper(hint);
+    };
+    probe.onerror = () => {
+      void handleAssetMissing(current.assetId);
+    };
+    probe.src = hint;
+    return;
+  }
+
+  const family = normalizeStudioBackgroundFamily(current.family);
+  const themeId = current.themeId || "agent";
   const primary = studioBackgroundPath(family, themeId, appearance);
   const animated = studioBackgroundPath("animated", themeId, appearance);
 
@@ -39,14 +105,5 @@ export function applyStudioBackgroundNow() {
     return;
   }
 
-  paintWallpaper(primary);
-
-  const probe = new Image();
-  probe.onload = () => {
-    paintWallpaper(primary);
-  };
-  probe.onerror = () => {
-    paintWallpaper(animated);
-  };
-  probe.src = primary;
+  probeAndPaint(primary, animated);
 }

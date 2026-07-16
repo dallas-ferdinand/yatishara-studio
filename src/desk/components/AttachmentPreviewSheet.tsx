@@ -287,8 +287,8 @@ export function AttachmentPreviewSheet({
             Save
           </button>
         ) : null}
-        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">
-          <Icon name="x" size={16} />
+        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close" onClick={onClose} aria-label="Close">
+          <Icon name="x" size={18} />
         </button>
       </div>
     </header>

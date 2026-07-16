@@ -35,9 +35,11 @@ function stripTabsEqual(prev, next) {
       a[i].status !== b[i].status ||
       a[i].tabSignal !== b[i].tabSignal ||
       a[i].previewUrl !== b[i].previewUrl ||
+      a[i].previewInitials !== b[i].previewInitials ||
+      a[i].previewAvatarStyle?.background !== b[i].previewAvatarStyle?.background ||
+      a[i].previewAvatarStyle?.color !== b[i].previewAvatarStyle?.color ||
       Boolean(a[i].dirty) !== Boolean(b[i].dirty) ||
-      Boolean(a[i].loading) !== Boolean(b[i].loading) ||
-      a[i].previewUrl !== b[i].previewUrl
+      Boolean(a[i].loading) !== Boolean(b[i].loading)
     ) {
       return false;
     }
@@ -673,7 +675,7 @@ function UnifiedTabStripInner({
             tab.status === "error");
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
-        const showPreview = tab.kind === "file" && previewUrl;
+        const showPreview = Boolean(previewUrl || tab.previewInitials);
         return (
           <div
             key={tab.key}
@@ -727,6 +729,14 @@ function UnifiedTabStripInner({
                   <img src={tab.previewUrl} alt="" loading="lazy" />
                 )}
               </span>
+            ) : tab.previewInitials ? (
+              <span
+                className="cursor-unified-tab-preview is-initials shrink-0 pointer-events-none"
+                aria-hidden="true"
+                style={tab.previewAvatarStyle || undefined}
+              >
+                {tab.previewInitials}
+              </span>
             ) : (
               <Icon
                 name={workspaceTabIcon(tab)}
@@ -750,24 +760,25 @@ function UnifiedTabStripInner({
               <span className="chat-spin shrink-0 pointer-events-none">
                 <Icon name="loader" size={12} />
               </span>
-            ) : (
-              <button
-                type="button"
-                className="cursor-tab-close shrink-0"
-                tabIndex={-1}
-                title="Close tab"
-                aria-label="Close tab"
-                onPointerDown={(e) => e.stopPropagation()}
-                onPointerUp={(e) => e.stopPropagation()}
-                onClick={(e) => onCloseTab(tab, e)}
-                onAuxClick={(e) => {
-                  e.stopPropagation();
-                  onMiddleClose(tab, e);
-                }}
-              >
-                <Icon name="x" size={12} className="pointer-events-none" />
-              </button>
-            )}
+            ) : null}
+            <button
+              type="button"
+              className="cursor-tab-close shrink-0"
+              tabIndex={0}
+              title="Close tab"
+              aria-label="Close tab"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onPointerUp={(e) => e.stopPropagation()}
+              onClick={(e) => onCloseTab(tab, e)}
+              onAuxClick={(e) => {
+                e.stopPropagation();
+                onMiddleClose(tab, e);
+              }}
+            >
+              <Icon name="x" size={12} className="pointer-events-none" />
+            </button>
           </div>
         );
       })}

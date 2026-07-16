@@ -295,6 +295,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_archived", ["ownerId", "archivedAt"])
+    .index("by_owner_archived_updated", ["ownerId", "archivedAt", "updatedAt"])
     .index("by_folder", ["linkedFolderId"]),
 
   generationEvents: defineTable({
@@ -512,6 +513,10 @@ export default defineSchema({
     skipPromptEnhancement: v.optional(v.boolean()),
     /** Atomic execution claim so duplicate schedules cannot run the provider twice. */
     executionAttemptId: v.optional(v.string()),
+    /** Soft lease deadline for the current execution attempt (watchdog reclaim). */
+    executionLeaseUntil: v.optional(v.number()),
+    /** How many times this job has been claimed for execution. */
+    executionAttemptCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -519,7 +524,8 @@ export default defineSchema({
     .index("by_thread", ["threadId"])
     .index("by_stage", ["stage"])
     .index("by_external_task", ["externalTaskId"])
-    .index("by_owner_and_created", ["ownerId", "createdAt"]),
+    .index("by_owner_and_created", ["ownerId", "createdAt"])
+    .index("by_api_key_and_stage", ["apiKeyId", "stage"]),
 
   generationInputs: defineTable({
     jobId: v.id("generationJobs"),
@@ -784,4 +790,66 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_folder", ["folderId"])
     .index("by_source_asset", ["sourceAssetId"]),
+
+  /** Public creative identity — separate from private account details on users. */
+  profiles: defineTable({
+    userId: v.id("users"),
+    /** Unique browser-friendly handle, stored lowercase. */
+    username: v.string(),
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    avatarAssetId: v.optional(v.id("assets")),
+    /** Public contact / social links shown on the profile. */
+    contactLinks: v.array(
+      v.object({
+        type: v.union(
+          v.literal("website"),
+          v.literal("phone"),
+          v.literal("email"),
+          v.literal("other"),
+        ),
+        label: v.string(),
+        value: v.string(),
+      }),
+    ),
+    isPublic: v.boolean(),
+    followerCount: v.number(),
+    followingCount: v.number(),
+    postCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_username", ["username"]),
+
+  /** Assets the owner chose to publish on their public profile. */
+  profilePosts: defineTable({
+    profileId: v.id("profiles"),
+    ownerId: v.id("users"),
+    assetId: v.id("assets"),
+    caption: v.optional(v.string()),
+    likeCount: v.number(),
+    publishedAt: v.number(),
+    unpublishedAt: v.optional(v.number()),
+  })
+    .index("by_profile_and_published", ["profileId", "publishedAt"])
+    .index("by_asset", ["assetId"])
+    .index("by_owner", ["ownerId"]),
+
+  profileFollows: defineTable({
+    followerUserId: v.id("users"),
+    followingProfileId: v.id("profiles"),
+    createdAt: v.number(),
+  })
+    .index("by_follower", ["followerUserId"])
+    .index("by_following", ["followingProfileId"])
+    .index("by_pair", ["followerUserId", "followingProfileId"]),
+
+  profileLikes: defineTable({
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    createdAt: v.number(),
+  })
+    .index("by_user_and_post", ["userId", "postId"])
+    .index("by_post", ["postId"]),
 });

@@ -1,18 +1,14 @@
 // @ts-nocheck
 "use client";
 
-import { StudioApiKeysSettings } from "./StudioApiKeysSettings";
-import { StudioHistoryPanel } from "./StudioHistoryPanel";
+import dynamic from "next/dynamic";
 import { StudioMobileBottomNav } from "./StudioMobileBottomNav";
 import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioDotGridWave } from "./StudioDotGridWave";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
 import { VideoTypePicker } from "./guided-video/VideoTypePicker";
-import { AssistantMessage } from "./guided-video/AssistantMessage";
-import { AssistanceReviewCard } from "./guided-video/AssistanceReviewCard";
 import { AssistanceThinkingIndicator } from "./guided-video/AssistanceThinkingIndicator";
-import { AssistanceApprovalCard } from "./guided-video/AssistanceApprovalCard";
 import {
   ChatMessageRow,
   ChatUserAvatar,
@@ -24,24 +20,30 @@ import { api } from "../../../convex/_generated/api";
 import {
   ChevronDown,
   Clock3,
+  CreditCard,
   FileText,
+  Folder,
   Gauge,
   History,
   Image as ImageIcon,
   CircleDot,
+  KeyRound,
   LayoutGrid,
   List,
   Loader2,
   Lock,
-  Mail,
+  LogOut,
   MapPin,
   Maximize2,
+  Menu,
   Mic,
   Package,
   Palette,
+  Pencil,
   Plus,
   ArrowUp,
   Scissors,
+  Search,
   SlidersHorizontal,
   RectangleHorizontal,
   Settings,
@@ -49,12 +51,13 @@ import {
   Upload,
   Wand2,
   X,
+  UserCog,
   UserRound,
   Video,
   Zap,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, useCallback, memo } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { createPortal } from "react-dom";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
@@ -64,18 +67,15 @@ import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import { Icon } from "@/desk/components/Icons";
-import { ImageZoomViewer } from "@/desk/components/ImageZoomViewer";
-import { MarkdownDocEditor } from "@/desk/components/MarkdownDocEditor";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
-import { ThemeSettings } from "@/desk/components/ThemeSettings";
 import {
   isHiddenStyleSheet,
   StudioStyleSheetPickerPanel,
   StudioStyleSheetTriggerButton,
 } from "@/studio/components/StudioStyleSheetPicker";
-import { StudioVideoEditor } from "@/studio/editor/StudioVideoEditor";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -102,9 +102,16 @@ import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { playUiSound } from "@/mos-app/sounds.js";
-import { randomizeStudioAppearance, SCHEMES, STUDIO_BACKGROUND_FAMILIES } from "@/mos-app/theme.js";
+import {
+  fallbackWallpaper,
+  getWallpaper,
+  randomizeStudioAppearance,
+  refreshAssetWallpaperUrl,
+  useAssetAsWallpaper,
+} from "@/mos-app/theme.js";
 import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
+import { markPerfMilestone, markWorkspaceReady } from "@/lib/performance";
 import {
   creditCostForGeneration,
   imageCreditCost,
@@ -112,6 +119,51 @@ import {
   TEXT_GENERATION_BASE_CREDITS,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
+
+const StudioApiKeysSettings = dynamic(
+  () => import("./StudioApiKeysSettings").then((m) => m.StudioApiKeysSettings),
+  { ssr: false },
+);
+const StudioHistoryPanel = dynamic(
+  () => import("./StudioHistoryPanel").then((m) => m.StudioHistoryPanel),
+  { ssr: false },
+);
+const ProfileSettingsCard = dynamic(
+  () => import("./ProfileSettingsCard").then((m) => m.ProfileSettingsCard),
+  { ssr: false },
+);
+const PublicProfileView = dynamic(
+  () => import("./PublicProfileView").then((m) => m.PublicProfileView),
+  { ssr: false },
+);
+const ThemeSettings = dynamic(
+  () => import("@/desk/components/ThemeSettings").then((m) => m.ThemeSettings),
+  { ssr: false },
+);
+const StudioVideoEditor = dynamic(
+  () => import("@/studio/editor/StudioVideoEditor").then((m) => m.StudioVideoEditor),
+  { ssr: false },
+);
+const ImageZoomViewer = dynamic(
+  () => import("@/desk/components/ImageZoomViewer").then((m) => m.ImageZoomViewer),
+  { ssr: false },
+);
+const MarkdownDocEditor = dynamic(
+  () => import("@/desk/components/MarkdownDocEditor").then((m) => m.MarkdownDocEditor),
+  { ssr: false },
+);
+const AssistantMessage = dynamic(
+  () => import("./guided-video/AssistantMessage").then((m) => m.AssistantMessage),
+  { ssr: false },
+);
+const AssistanceReviewCard = dynamic(
+  () => import("./guided-video/AssistanceReviewCard").then((m) => m.AssistanceReviewCard),
+  { ssr: false },
+);
+const AssistanceApprovalCard = dynamic(
+  () => import("./guided-video/AssistanceApprovalCard").then((m) => m.AssistanceApprovalCard),
+  { ssr: false },
+);
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
@@ -277,7 +329,11 @@ async function blobToBase64(blob) {
   return btoa(binary);
 }
 
-export function StudioShell() {
+export function StudioShell({
+  initialProfileUsername,
+}: {
+  initialProfileUsername?: string;
+} = {}) {
   const { isMobile } = useMobileLayout();
   const { signOut } = useAuthActions();
   const [mainPanelSizes, setMainPanelSizes] = useState(readStudioMainPanelSizes);
@@ -316,6 +372,8 @@ export function StudioShell() {
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
+  const shareAssetToProfile = useMutation(api.profiles.shareAsset);
+  const unshareAssetFromProfile = useMutation(api.profiles.unshareAsset);
   const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const generatePresetThumbnails = useAction(api.stylePresetActions.adminGenerateThumbnails);
   const runFlow = useAction(api.generationActions.runFlow);
@@ -388,6 +446,7 @@ export function StudioShell() {
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
+  const [profileShareToast, setProfileShareToast] = useState("");
   const [mobileSection, setMobileSection] = useState("composer");
   const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
@@ -396,6 +455,7 @@ export function StudioShell() {
   });
   const [contextMenu, setContextMenu] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   useStudioBackground();
@@ -415,6 +475,30 @@ export function StudioShell() {
   const syncedBriefAttachmentsRevisionRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
+
+  // Keep asset wallpaper signed URL fresh after auth / on boot.
+  useEffect(() => {
+    if (!hasCurrentUser) return;
+    const wallpaper = getWallpaper();
+    if (wallpaper.kind !== "asset") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const url = await convex.query(api.assets.signedReadUrl, {
+          assetId: wallpaper.assetId,
+          expiresUnix: assetUrlExpiresUnix,
+        });
+        if (cancelled || !url) return;
+        refreshAssetWallpaperUrl(wallpaper.assetId, url);
+      } catch {
+        if (!cancelled) fallbackWallpaper(wallpaper.assetId);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assetUrlExpiresUnix, convex, hasCurrentUser]);
+
   const billingAccount = useQuery(api.billing.currentAccount, hasCurrentUser ? {} : "skip");
   const pricing = useQuery(api.billing.getPricing, hasCurrentUser ? {} : "skip");
   // Defer payment lists until settings or admin — they stampeded boot and near-timeouted with listThreads.
@@ -422,11 +506,65 @@ export function StudioShell() {
     settingsOpen ||
     activeTab.startsWith("admin:") ||
     openTabs.some((tab) => tab.startsWith("admin:"));
+  const needsProfileData =
+    settingsOpen ||
+    settingsSection === "profile" ||
+    openTabs.some((tab) => tab.startsWith("profile:")) ||
+    Boolean(initialProfileUsername);
   const payments = useQuery(
     api.billing.listMyPayments,
     hasCurrentUser && needsBillingDetails ? {} : "skip",
   );
-  const notifications = useQuery(api.notifications.listMine, hasCurrentUser ? {} : "skip");
+  const notifications = useQuery(
+    api.notifications.listMine,
+    hasCurrentUser && (settingsOpen || historyOpen) ? {} : "skip",
+  );
+  const sharedProfileAssets = useQuery(
+    api.profiles.listMySharedAssetIds,
+    hasCurrentUser && needsProfileData ? {} : "skip",
+  );
+  const myPublicProfile = useQuery(
+    api.profiles.getMine,
+    hasCurrentUser && needsProfileData ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+  );
+  const sharedAssetIds = useMemo(
+    () => new Set(sharedProfileAssets?.assetIds ?? []),
+    [sharedProfileAssets?.assetIds],
+  );
+  const openProfileUsernames = useMemo(
+    () =>
+      [
+        ...new Set(
+          openTabs
+            .filter((key) => key.startsWith("profile:"))
+            .map((key) => key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase())
+            .filter(Boolean),
+        ),
+      ],
+    [openTabs],
+  );
+  const profileTabMetaQueries = useMemo(() => {
+    if (!hasCurrentUser) return {};
+    const queries = {};
+    for (const username of openProfileUsernames) {
+      queries[`profileMeta:${username}`] = {
+        query: api.profiles.getPublicByUsername,
+        args: { username, expiresUnix: assetUrlExpiresUnix },
+      };
+    }
+    return queries;
+  }, [assetUrlExpiresUnix, hasCurrentUser, openProfileUsernames]);
+  const profileTabMetaResults = useQueries(profileTabMetaQueries);
+  const profileTabMetaByUsername = useMemo(() => {
+    const map = new Map();
+    for (const username of openProfileUsernames) {
+      const result = profileTabMetaResults[`profileMeta:${username}`];
+      if (result === undefined || result === null) continue;
+      map.set(username, result);
+      if (result.username) map.set(String(result.username).toLowerCase(), result);
+    }
+    return map;
+  }, [openProfileUsernames, profileTabMetaResults]);
   const isAdminUser = currentUser?.role === "admin" || currentUser?.role === "super_admin";
   const adminPayments = useQuery(
     api.billing.adminListPayments,
@@ -438,7 +576,8 @@ export function StudioShell() {
   );
   const topFolders = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+    // Boot without CDN signing — signing every root peek was timing out the 1s query budget.
+    hasCurrentUser ? {} : "skip",
   );
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
   const selectedFolder = useQuery(
@@ -454,6 +593,117 @@ export function StudioShell() {
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
+
+  // Mobile: kill native `title` tooltips on tap; only show a tip after long-press.
+  useEffect(() => {
+    if (!isMobile) return;
+    const root = document.body;
+
+    const disarmTitle = (el) => {
+      if (!(el instanceof Element)) return;
+      const title = el.getAttribute("title");
+      if (!title) return;
+      if (!el.getAttribute("data-studio-title")) {
+        el.setAttribute("data-studio-title", title);
+      }
+      el.removeAttribute("title");
+    };
+
+    const disarmTree = (node) => {
+      if (!(node instanceof Element)) return;
+      disarmTitle(node);
+      node.querySelectorAll("[title]").forEach(disarmTitle);
+    };
+
+    disarmTree(root);
+
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes" && record.attributeName === "title") {
+          disarmTitle(record.target);
+        }
+        for (const node of record.addedNodes) disarmTree(node);
+      }
+    });
+    observer.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["title"],
+    });
+
+    let pressTimer = null;
+    let tipNode = null;
+    let startX = 0;
+    let startY = 0;
+
+    const hideTip = () => {
+      tipNode?.remove();
+      tipNode = null;
+    };
+
+    const showTip = (text, x, y) => {
+      hideTip();
+      tipNode = document.createElement("div");
+      tipNode.className = "studio-touch-tip";
+      tipNode.textContent = text;
+      tipNode.setAttribute("role", "tooltip");
+      document.body.appendChild(tipNode);
+      const pad = 10;
+      const rect = tipNode.getBoundingClientRect();
+      const left = Math.min(window.innerWidth - rect.width - pad, Math.max(pad, x - rect.width / 2));
+      const top = Math.max(pad, y - rect.height - 16);
+      tipNode.style.left = `${left}px`;
+      tipNode.style.top = `${top}px`;
+    };
+
+    const onTouchStart = (event) => {
+      hideTip();
+      const target = event.target?.closest?.("[data-studio-title], [title]");
+      if (!target) return;
+      disarmTitle(target);
+      const text = target.getAttribute("data-studio-title");
+      if (!text) return;
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      window.clearTimeout(pressTimer);
+      pressTimer = window.setTimeout(() => showTip(text, startX, startY), 480);
+    };
+
+    const onTouchMove = (event) => {
+      if (!pressTimer) return;
+      const touch = event.touches?.[0];
+      if (!touch) return;
+      if (Math.abs(touch.clientX - startX) > 12 || Math.abs(touch.clientY - startY) > 12) {
+        window.clearTimeout(pressTimer);
+        pressTimer = null;
+        hideTip();
+      }
+    };
+
+    const onTouchEnd = () => {
+      window.clearTimeout(pressTimer);
+      pressTimer = null;
+      window.setTimeout(hideTip, 900);
+    };
+
+    root.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
+    root.addEventListener("touchmove", onTouchMove, { capture: true, passive: true });
+    root.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
+    root.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: true });
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(pressTimer);
+      hideTip();
+      root.removeEventListener("touchstart", onTouchStart, { capture: true });
+      root.removeEventListener("touchmove", onTouchMove, { capture: true });
+      root.removeEventListener("touchend", onTouchEnd, { capture: true });
+      root.removeEventListener("touchcancel", onTouchEnd, { capture: true });
+    };
+  }, [isMobile]);
   const childFolders = useQuery(
     api.folders.listWithPeeks,
     hasCurrentUser && activeFolder && !isTrashView
@@ -497,12 +747,12 @@ export function StudioShell() {
   const events = useQuery(
     api.generation.listEvents,
     hasCurrentUser && activeThreadId && threads?.some((t) => t._id === activeThreadId)
-      ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix }
+      ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix, limit: 80 }
       : "skip",
   );
   const assistanceApprovals = useQuery(
     api.assistanceApprovals.listForThread,
-    hasCurrentUser && activeThreadId
+    hasCurrentUser && activeThreadId && assistanceEnabled
       ? { threadId: activeThreadId }
       : "skip",
   );
@@ -512,15 +762,19 @@ export function StudioShell() {
   );
   const guidedVideoTypes = useQuery(
     api.guidedVideo.listVideoTypes,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && assistanceEnabled ? {} : "skip",
   );
   const activeGuidedBrief = useQuery(
     api.guidedVideo.getBriefForThread,
-    hasCurrentUser && activeThreadId ? { threadId: activeThreadId } : "skip",
+    hasCurrentUser && activeThreadId && assistanceEnabled
+      ? { threadId: activeThreadId }
+      : "skip",
   );
   const activeGuidedBriefAttachments = useQuery(
     api.guidedVideo.listBriefAttachments,
-    hasCurrentUser && activeGuidedBrief?._id ? { briefId: activeGuidedBrief._id } : "skip",
+    hasCurrentUser && activeGuidedBrief?._id && assistanceEnabled
+      ? { briefId: activeGuidedBrief._id }
+      : "skip",
   );
   const chatEvents = useMemo(
     () => mergeOptimisticThreadEvents(events ?? [], optimisticByThread[activeThreadId] ?? []),
@@ -1233,55 +1487,48 @@ export function StudioShell() {
     ? (lastRootEntriesRef.current ?? rootEntries)
     : rootEntries;
 
-  // Warm LQIP + thumbs as soon as Convex returns — browser cache before paint.
+  // Warm only the first viewport of thumbs — not every peek in the folder.
   useEffect(() => {
-    const entries = displayCurrentEntries.entries ?? [];
+    const entries = (displayCurrentEntries.entries ?? []).slice(0, 24);
     for (const entry of entries) {
       warmThumbUrl(entry.thumbnailLqipUrl);
       warmThumbUrl(entry.thumbnailUrl);
-      for (const peek of entry.peekItems ?? []) {
+      for (const peek of (entry.peekItems ?? []).slice(0, 3)) {
         warmThumbUrl(peek.thumbnailLqipUrl);
         warmThumbUrl(peek.thumbnailUrl);
       }
     }
   }, [displayCurrentEntries.entries]);
 
+  useEffect(() => {
+    if (!hasCurrentUser || !topFolders) return;
+    markWorkspaceReady("authenticated");
+    markPerfMilestone("first-folder-ready", {
+      folderCount: topFolders.length,
+    });
+  }, [hasCurrentUser, topFolders]);
+
   const visibleFolderIds = useMemo(
     () =>
       (displayCurrentEntries.entries ?? [])
         .filter((entry) => entry.type === "dir" && entry.studioId && entry.studioId !== activeFolder?._id)
-        .slice(0, 8)
+        .slice(0, 3)
         .map((entry) => entry.studioId),
     [activeFolder?._id, displayCurrentEntries.entries],
   );
   const folderPrefetchQueries = useMemo(() => {
     const queries = {};
     if (!hasCurrentUser) return queries;
+    // Prefetch only child folder names for the first few visible folders —
+    // full asset/document fan-out was creating ~40 speculative subscriptions.
     for (const folderId of visibleFolderIds) {
       queries[`folders:${folderId}`] = {
         query: api.folders.list,
         args: { parentId: folderId },
       };
-      // Prefetch signed thumbs so opening a folder feels instant.
-      queries[`assets:${folderId}`] = {
-        query: api.assets.listByFolder,
-        args: { folderId, expiresUnix: assetUrlExpiresUnix },
-      };
-      queries[`foldersPeek:${folderId}`] = {
-        query: api.folders.listWithPeeks,
-        args: { parentId: folderId, expiresUnix: assetUrlExpiresUnix },
-      };
-      queries[`documents:${folderId}`] = {
-        query: api.documents.listByFolder,
-        args: { folderId },
-      };
-      queries[`videoEdits:${folderId}`] = {
-        query: api.videoEdits.listByFolder,
-        args: { folderId },
-      };
     }
     return queries;
-  }, [assetUrlExpiresUnix, hasCurrentUser, visibleFolderIds]);
+  }, [hasCurrentUser, visibleFolderIds]);
   useQueries(folderPrefetchQueries);
 
   const tabs = useMemo(() => {
@@ -1294,10 +1541,26 @@ export function StudioShell() {
         videoEdits,
         elements,
         snapshots: tabEntrySnapshots,
+        profileMetaByUsername: profileTabMetaByUsername,
+        myProfile: myPublicProfile,
+        currentUser,
       }),
     );
     return descriptors.filter(Boolean);
-  }, [openTabs, threads, assetLookupPool, assetsWithPreviewUrls, assets, documents, videoEdits, elements, tabEntrySnapshots]);
+  }, [
+    openTabs,
+    threads,
+    assetLookupPool,
+    assetsWithPreviewUrls,
+    assets,
+    documents,
+    videoEdits,
+    elements,
+    tabEntrySnapshots,
+    profileTabMetaByUsername,
+    myPublicProfile,
+    currentUser,
+  ]);
 
   const activeEntry = useMemo(
     () =>
@@ -1410,6 +1673,27 @@ export function StudioShell() {
     setActiveTab(key);
   }
 
+  function openPublicProfile(username) {
+    const normalized = String(username ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "");
+    if (!normalized) return;
+    openTab(`profile:${normalized}`);
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
+  function openOwnProfile() {
+    const username = myPublicProfile?.username || sharedProfileAssets?.username;
+    if (!username) {
+      openSettingsTab("profile");
+      return;
+    }
+    openPublicProfile(username);
+  }
+
   function openNewComposerTab() {
     composerTabIndexRef.current += 1;
     openTab(`composer:${composerTabIndexRef.current}`);
@@ -1462,7 +1746,10 @@ export function StudioShell() {
     if (activeTab.startsWith("settings:")) {
       setActiveTab(COMPOSER_TAB);
     }
-    if (isMobile) setMobileSection("settings");
+    if (isMobile) {
+      setMobileAppMenuOpen(false);
+      setHistoryOpen(false);
+    }
     setSettingsOpen(true);
   }
 
@@ -1474,8 +1761,36 @@ export function StudioShell() {
     if (!outcome || !paymentId) return;
     setSettingsSection("billing");
     setSettingsOpen(true);
-    if (isMobile) setMobileSection("settings");
   }, [isMobile]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const settings = params.get("settings");
+    if (settings !== "profile") return;
+    setSettingsSection("profile");
+    setSettingsOpen(true);
+  }, [isMobile]);
+
+  const openedInitialProfileRef = useRef(false);
+  useEffect(() => {
+    if (openedInitialProfileRef.current) return;
+    if (typeof window === "undefined") return;
+    const fromPath = window.location.pathname.match(/^\/u\/([^/?#]+)\/?$/i)?.[1];
+    const fromQuery = new URLSearchParams(window.location.search).get("profile");
+    const username = initialProfileUsername || fromPath || fromQuery;
+    if (!username) return;
+    openedInitialProfileRef.current = true;
+    openPublicProfile(username);
+  }, [initialProfileUsername, isMobile]);
+
+  useEffect(() => {
+    if (!profileShareToast) return;
+    const timer = window.setTimeout(() => setProfileShareToast(""), 3200);
+    return () => window.clearTimeout(timer);
+  }, [profileShareToast]);
+
+  const rootFolderId = navTrail[0]?.id ?? null;
 
   const settingsPanelProps = {
     settingsSection,
@@ -1484,9 +1799,10 @@ export function StudioShell() {
     notifications,
     billingAccount,
     pricing,
+    rootFolderId,
+    onOpenPublicProfile: openPublicProfile,
     onClose: () => {
       setSettingsOpen(false);
-      if (isMobile) setMobileSection("composer");
     },
     onSaveAccount: (values) =>
       updateAccountDetails(values)
@@ -1506,7 +1822,10 @@ export function StudioShell() {
     setSettingsSection("billing");
     setOpenTabs((tabs) => tabs.filter((tab) => !tab.startsWith("settings:")));
     setActiveTab((tab) => (tab.startsWith("settings:") ? COMPOSER_TAB : tab));
-    if (isMobile) setMobileSection("settings");
+    if (isMobile) {
+      setMobileAppMenuOpen(false);
+      setHistoryOpen(false);
+    }
     setSettingsOpen(true);
   }, [isMobile, settingsOpen, settingsSection]);
 
@@ -1519,9 +1838,17 @@ export function StudioShell() {
 
   function openMobileSection(section) {
     startMobileTransition(() => {
+      if (section === "settings") {
+        setMobileAppMenuOpen(false);
+        setHistoryOpen(false);
+        setSettingsOpen(true);
+        return;
+      }
       setMobileSection(section);
       if (section === "composer") {
         setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
         if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
           setActiveTab(lastChatTabRef.current || COMPOSER_TAB);
         }
@@ -1529,10 +1856,8 @@ export function StudioShell() {
       }
       if (section === "files") {
         setSettingsOpen(false);
-        return;
-      }
-      if (section === "settings") {
-        setSettingsOpen(true);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
       }
     });
   }
@@ -1578,6 +1903,25 @@ export function StudioShell() {
     const key = `${entry.studioKind}:${entry.studioId}`;
     setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
     openTab(key);
+    if (entry.studioKind === "document" && entry.studioId) {
+      void (async () => {
+        try {
+          const doc = await convex.query(api.documents.get, { documentId: entry.studioId });
+          if (!doc) return;
+          setTabEntrySnapshots((snapshots) => ({
+            ...snapshots,
+            [key]: {
+              ...entry,
+              ...documentToEntry(doc),
+              description: doc.contentMarkdown ?? "",
+            },
+          }));
+        } catch {
+          /* keep lightweight list snapshot */
+        }
+      })();
+    }
+    if (isMobile) setMobileSection("composer");
   }
 
   function handleOpenPath(path) {
@@ -1826,11 +2170,13 @@ export function StudioShell() {
       const id = await duplicateAsset({ assetId: entry.studioId, targetFolderId: activeFolder._id });
       openTab(`asset:${id}`);
     } else if (entry.studioKind === "document") {
-      const doc = documents?.find((item) => item._id === entry.studioId);
+      const doc =
+        (await convex.query(api.documents.get, { documentId: entry.studioId })) ??
+        documents?.find((item) => item._id === entry.studioId);
       const id = await createDocument({
         folderId: activeFolder._id,
         title: `Copy of ${doc?.title ?? entry.name.replace(/\.md$/i, "")}`,
-        contentMarkdown: doc?.contentMarkdown ?? "",
+        contentMarkdown: doc?.contentMarkdown ?? entry.description ?? "",
       });
       openTab(`document:${id}`);
     }
@@ -2465,7 +2811,7 @@ export function StudioShell() {
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
-          --studio-composer-shell-max: min(540px, 94vw);
+          --studio-composer-shell-max: min(600px, 94vw);
           --studio-composer-min-height: 96px;
           --studio-composer-side-width: 0px;
           --studio-mode-switcher-width: 0px;
@@ -2550,7 +2896,7 @@ export function StudioShell() {
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -2617,7 +2963,7 @@ export function StudioShell() {
           font-size: 11px;
           font-weight: 650;
         }
-        .studio-mobile-nav-tools .studio-settings-pill {
+        .studio-mobile-nav-tools .studio-settings-pill:not(.studio-profile-menu-trigger) {
           min-width: var(--studio-mobile-chrome-control, 30px) !important;
           min-height: 100% !important;
           width: var(--studio-mobile-chrome-control, 30px) !important;
@@ -2709,9 +3055,7 @@ export function StudioShell() {
             .cursor-workspace-head,
             .cursor-panel-head,
             .cursor-sidebar-head,
-            .cursor-panel-search,
-            .studio-folder-pathbar,
-            .desk-file-breadcrumbs
+            .cursor-panel-search
           ) {
             min-height: var(--studio-mobile-nav-height, 44px) !important;
             height: var(--studio-mobile-nav-height, 44px) !important;
@@ -2720,15 +3064,16 @@ export function StudioShell() {
             min-height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
             height: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px)) !important;
           }
+          .studio-polish.is-studio-mobile .studio-folder-pathbar,
           .studio-polish.is-studio-mobile .studio-folder-pathbar .desk-file-breadcrumbs {
-            min-height: 100% !important;
-            height: 100% !important;
+            min-height: 0 !important;
+            height: auto !important;
             border-bottom: none;
           }
           .studio-polish.is-studio-mobile .desk-file-breadcrumbs-track {
-            min-height: var(--studio-mobile-nav-height, 44px);
-            padding: 0 10px;
-            gap: 6px;
+            min-height: 0;
+            padding: 4px 10px;
+            gap: 4px;
             align-items: center;
           }
           .studio-polish.is-studio-mobile .cursor-panel-search-input {
@@ -2786,7 +3131,7 @@ export function StudioShell() {
             align-self: stretch;
             height: 100%;
           }
-          .studio-polish .cursor-workspace-tools .studio-settings-pill {
+          .studio-polish .cursor-workspace-tools .studio-settings-pill:not(.studio-profile-menu-trigger) {
             min-width: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
             width: var(--studio-mobile-chrome-control, 30px) !important;
@@ -3183,7 +3528,7 @@ export function StudioShell() {
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -3317,63 +3662,91 @@ export function StudioShell() {
           width: 18px;
           height: 18px;
         }
-        .studio-user-menu-wrap {
-          position: relative;
-          min-width: 0;
-        }
-        .studio-user-menu-trigger {
+        .studio-sidebar-brand {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          max-width: 100%;
-          border: 0;
-          background: transparent;
-          font-family: inherit;
-          cursor: pointer;
-          pointer-events: auto;
-        }
-        .cursor-sidebar-brand-user {
-          display: inline-flex;
           min-width: 0;
-          align-items: center;
-          gap: 5px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border));
-          border-radius: 999px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-surface)), color-mix(in srgb, var(--mos-surface) 68%, var(--mos-bg)));
-          padding: 3px 7px;
+          pointer-events: none;
+        }
+        .studio-sidebar-brand-label {
           color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+        }
+        .studio-profile-menu-wrap {
+          position: relative;
+          flex: 0 0 auto;
+        }
+        .studio-profile-menu-trigger,
+        .studio-mobile-nav-tools .studio-profile-menu-trigger,
+        .cursor-workspace-tools .studio-profile-menu-trigger {
+          padding: 0 !important;
+          overflow: hidden;
+          border: 0 !important;
+          box-shadow: none !important;
+          background: transparent !important;
+          width: 22px !important;
+          min-width: 22px !important;
+          height: 22px !important;
+          min-height: 22px !important;
+        }
+        .studio-mobile-nav-tools .studio-profile-menu-trigger,
+        .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-profile-menu-trigger,
+        .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-profile-menu-trigger {
+          width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+          min-width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+          height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+          min-height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+        }
+        .studio-profile-menu-avatar,
+        .studio-profile-menu-initials {
+          display: grid;
+          place-items: center;
+          width: 100%;
+          height: 100%;
+          border-radius: inherit;
+        }
+        .studio-profile-menu-avatar {
+          object-fit: cover;
+        }
+        .studio-profile-menu-initials {
           font-size: 11px;
-          font-weight: 650;
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 12%, transparent) inset,
-            0 8px 18px color-mix(in srgb, #000 20%, transparent),
-            0 0 14px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+          font-weight: 750;
+          letter-spacing: 0.01em;
+          line-height: 1;
+          color: #fff;
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
         }
-        .studio-user-menu-trigger:hover .cursor-sidebar-brand-user {
-          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border));
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 22%, var(--mos-surface)), color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-surface)));
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 18%, transparent) inset,
-            0 10px 22px color-mix(in srgb, #000 24%, transparent),
-            0 0 20px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+        .studio-mobile-nav-tools .studio-profile-menu-initials {
+          font-size: 12px;
         }
-        .cursor-sidebar-brand-user-type-icon {
-          width: 13px;
-          height: 13px;
-          flex-shrink: 0;
-          color: color-mix(in srgb, var(--cursor-accent) 72%, var(--color-cursor-text-bright));
-        }
-        .cursor-sidebar-brand-user-name {
-          max-width: 132px;
-        }
-        .studio-user-menu-popover {
+        .studio-profile-menu-popover {
           position: absolute;
-          top: 32px;
-          left: 0;
-          z-index: 60;
-          width: 150px;
+          top: calc(100% + 8px);
+          right: 0;
+          z-index: 90;
+          min-width: 168px;
+        }
+        .studio-mobile-nav-tools .studio-profile-menu-popover {
+          top: auto;
+          bottom: calc(100% + 8px);
+        }
+        .studio-touch-tip {
+          position: fixed;
+          z-index: 10000;
+          max-width: min(240px, calc(100vw - 20px));
+          padding: 8px 10px;
+          border-radius: 10px;
+          border: 1px solid color-mix(in srgb, #fff 14%, transparent);
+          background: color-mix(in srgb, #0b1220 88%, transparent);
+          color: #fff;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.3;
+          pointer-events: none;
+          box-shadow: 0 10px 28px color-mix(in srgb, #000 36%, transparent);
         }
         .studio-polish main {
           position: relative;
@@ -3530,7 +3903,8 @@ export function StudioShell() {
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
-          background: var(--studio-mobile-chrome-glass) !important;
+          /* Former active fill — used for every tab; only the border fade changes when active */
+          background: var(--studio-chrome-glow-bg-active) !important;
           backdrop-filter: var(--studio-mobile-chrome-blur);
           -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
           padding: 0 10px !important;
@@ -3582,12 +3956,19 @@ export function StudioShell() {
             margin: 0 !important;
             flex: 0 0 auto;
           }
-          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill,
-          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill {
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill:not(.studio-profile-menu-trigger),
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill:not(.studio-profile-menu-trigger) {
             min-width: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
             width: var(--studio-mobile-chrome-control, 30px) !important;
             height: var(--studio-mobile-chrome-control, 30px) !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-profile-menu-trigger,
+          .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-profile-menu-trigger {
+            width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+            min-width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+            height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+            min-height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill svg,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill svg,
@@ -3601,7 +3982,7 @@ export function StudioShell() {
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
             height: var(--studio-mobile-chrome-control, 30px) !important;
           }
-          .studio-polish.is-studio-mobile .studio-settings-trigger {
+          .studio-polish.is-studio-mobile .studio-settings-trigger:not(.studio-profile-menu-trigger) {
             width: var(--studio-mobile-chrome-control, 30px) !important;
             min-width: var(--studio-mobile-chrome-control, 30px) !important;
             height: var(--studio-mobile-chrome-control, 30px) !important;
@@ -3609,13 +3990,444 @@ export function StudioShell() {
           }
         }
         .studio-polish .cursor-unified-tab-preview {
-          width: 18px;
-          height: 18px;
+          width: 20px;
+          height: 20px;
           flex-shrink: 0;
           border-radius: 999px;
           overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border: 0;
           background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview.is-initials {
+          display: inline-grid;
+          place-items: center;
+          font-size: 8px;
+          font-weight: 750;
+          letter-spacing: 0.01em;
+          line-height: 1;
+          color: #fff;
+          text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
+        }
+        @media (max-width: 899px) {
+          .studio-polish.is-studio-mobile .cursor-unified-tab-preview {
+            width: 22px;
+            height: 22px;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab-preview.is-initials {
+            font-size: 9px;
+          }
+        }
+        .studio-new-tab-cluster {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex: 0 0 auto;
+        }
+        .studio-mobile-app-menu-sheet {
+          position: fixed;
+          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
+          left: 8px;
+          right: 8px;
+          bottom: auto;
+          /* Explicit height — top+bottom alone can fail when this is a flex child of .studio-polish,
+             so the panel shrink-wraps content and gets clipped with no internal scroll. */
+          height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - 8px
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - 8px
+          );
+          max-height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - 8px
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - 8px
+          );
+          z-index: 121;
+          display: flex;
+          flex-direction: column;
+          flex: none;
+          min-height: 0;
+          overflow: hidden;
+          border-radius: 20px;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+          /* Glass lives on ::before — backdrop-filter on this overflow:hidden shell
+             breaks touch scroll and can kill blur (same class of bug as composer glass). */
+          background: transparent;
+          transform: none;
+          filter: none;
+          isolation: auto;
+          box-shadow: var(
+            --studio-composer-glass-shadow,
+            0 20px 48px rgba(0, 0, 0, 0.38),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08)
+          );
+        }
+        .studio-mobile-app-menu-sheet::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: color-mix(
+            in srgb,
+            var(--color-mos-composer, #07111f) 68%,
+            transparent
+          );
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+        }
+        .studio-mobile-app-menu-body,
+        .studio-history-list,
+        .studio-history-mobile-sheet .studio-history-list,
+        .studio-settings-mobile-sheet .studio-settings-workspace-body,
+        .studio-settings-mobile-sheet .studio-settings-horizontal-menu {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .studio-mobile-app-menu-body::-webkit-scrollbar,
+        .studio-history-list::-webkit-scrollbar,
+        .studio-history-mobile-sheet .studio-history-list::-webkit-scrollbar,
+        .studio-settings-mobile-sheet .studio-settings-workspace-body::-webkit-scrollbar,
+        .studio-settings-mobile-sheet .studio-settings-horizontal-menu::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+        .studio-settings-mobile-sheet .studio-mobile-app-menu-body {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0 0 10px;
+        }
+        .studio-settings-mobile-sheet .studio-settings-workspace {
+          flex: 1 1 0%;
+          min-height: 0;
+        }
+        .studio-settings-mobile-sheet .studio-settings-workspace-head {
+          background: transparent;
+          border-bottom-color: color-mix(in srgb, var(--color-cursor-border) 70%, transparent);
+        }
+        .studio-settings-mobile-sheet .studio-settings-workspace-body {
+          padding-inline: 10px;
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-body {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0 0 10px;
+          gap: 0;
+        }
+        .studio-files-mobile-toolbar {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex: 0 0 auto;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          padding: 0 10px 8px;
+        }
+        .studio-files-mobile-crumbs {
+          flex: 1 1 auto;
+          min-width: 0;
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .studio-files-mobile-crumbs::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+        .studio-files-mobile-toolbar .studio-add-menu-trigger,
+        .studio-files-mobile-toolbar .studio-settings-pill {
+          flex: 0 0 auto;
+        }
+        .studio-files-search-wrap {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          flex: 0 0 auto;
+          margin: 0 10px 8px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
+          transition: border-color 120ms ease, box-shadow 120ms ease;
+        }
+        .studio-files-search-wrap:focus-within {
+          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-files-search-icon {
+          margin-left: 11px;
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+          color: var(--color-cursor-muted);
+          pointer-events: none;
+        }
+        .studio-files-search {
+          flex: 1;
+          min-width: 0;
+          margin: 0;
+          padding: 9px 10px;
+          border: 0;
+          border-radius: 12px;
+          background: transparent;
+          color: var(--color-cursor-text);
+          font-size: 12px;
+          outline: none;
+          box-shadow: none;
+        }
+        .studio-files-search::placeholder {
+          color: color-mix(in srgb, var(--color-cursor-text) 36%, transparent);
+          opacity: 1;
+        }
+        .studio-files-search-clear {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          margin-right: 6px;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          cursor: pointer;
+        }
+        .studio-files-search-clear svg {
+          width: 14px;
+          height: 14px;
+        }
+        .studio-files-search-clear:hover {
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-files-mobile-sheet .cursor-explorer-body,
+        .studio-files-mobile-sheet .cursor-explorer-panel,
+        .studio-files-mobile-sheet .studio-folder-pathbar,
+        .studio-files-mobile-sheet .cursor-panel-search {
+          background: transparent !important;
+          border: 0 !important;
+          box-shadow: none !important;
+        }
+        .studio-files-mobile-sheet .cursor-explorer-body {
+          position: relative;
+          z-index: 1;
+          flex: 1 1 0%;
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .studio-files-mobile-sheet .desk-file-breadcrumbs,
+        .studio-files-mobile-sheet .desk-file-breadcrumbs-track {
+          min-height: 0 !important;
+          height: auto !important;
+          border: 0 !important;
+          background: transparent !important;
+          padding: 0 !important;
+          gap: 6px;
+        }
+        .studio-files-mobile-sheet .desk-file-breadcrumbs-chip {
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
+          min-height: 24px;
+          height: 24px;
+          padding: 0 10px;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
+        }
+        .studio-files-mobile-sheet .desk-file-breadcrumbs-chip.is-current,
+        .studio-files-mobile-sheet .desk-file-breadcrumbs-chip:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-files-mobile-sheet .cursor-explorer-panel,
+        .studio-files-mobile-sheet .desk-file-grid,
+        .studio-files-mobile-sheet .desk-file-list {
+          flex: 1 1 0%;
+          min-height: 0;
+          overflow: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          padding-inline: 10px;
+          background: transparent !important;
+        }
+        .studio-files-mobile-sheet .cursor-explorer-panel::-webkit-scrollbar,
+        .studio-files-mobile-sheet .desk-file-grid::-webkit-scrollbar,
+        .studio-files-mobile-sheet .desk-file-list::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+        .studio-polish.is-studio-mobile {
+          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text-bright) 7%, transparent);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text-bright) 11%, transparent);
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text-bright) 9%, transparent);
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 13%, transparent);
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 16%, transparent);
+        }
+        [data-appearance="light"] .studio-polish.is-studio-mobile {
+          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text) 6%, transparent);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 10%, transparent);
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 8%, transparent);
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 12%, transparent);
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 12%, transparent);
+        }
+        .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual,
+        .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual,
+        .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual,
+        .studio-files-mobile-sheet .desk-file-preview-item .desk-file-thumb-visual {
+          background: var(--studio-grid-tile-bg) !important;
+          backdrop-filter: saturate(140%) blur(10px);
+          -webkit-backdrop-filter: saturate(140%) blur(10px);
+          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+        }
+        .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
+        .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
+          background: color-mix(in srgb, var(--mos-text-bright) 5%, transparent) !important;
+        }
+        [data-appearance="light"] .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
+        [data-appearance="light"] .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
+          background: color-mix(in srgb, var(--mos-text) 6%, transparent) !important;
+        }
+        .studio-polish.is-studio-mobile .desk-file-thumb-progressive,
+        .studio-files-mobile-sheet .desk-file-thumb-progressive {
+          background: transparent;
+        }
+        .studio-mobile-app-menu-head {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          flex: 0 0 auto;
+          padding: 14px 14px 10px;
+        }
+        .studio-mobile-app-menu-title {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 16px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+        }
+        .studio-mobile-app-menu-close {
+          display: inline-grid;
+          place-items: center;
+          width: 36px;
+          height: 36px;
+          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, #fff 6%, transparent);
+          color: var(--color-cursor-text-bright);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-mobile-app-menu-close svg {
+          width: 18px;
+          height: 18px;
+        }
+        .studio-mobile-app-menu-body {
+          position: relative;
+          z-index: 1;
+          flex: 1 1 0%;
+          min-height: 0;
+          height: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+          padding: 4px 10px 14px;
+          -webkit-overflow-scrolling: touch;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          align-content: flex-start;
+        }
+        .studio-mobile-app-menu-section {
+          flex: 0 0 auto;
+          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, #fff 4%, transparent);
+          overflow: hidden;
+        }
+        .studio-mobile-app-menu-label {
+          margin: 0;
+          padding: 10px 12px 8px;
+          text-align: center;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 58%, transparent);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          border-bottom: 1px solid color-mix(in srgb, #fff 10%, transparent);
+        }
+        .studio-mobile-app-menu-list {
+          display: grid;
+          gap: 2px;
+          padding: 4px;
+        }
+        .studio-mobile-app-menu-item {
+          display: flex;
+          width: 100%;
+          align-items: center;
+          gap: 12px;
+          min-height: 46px;
+          padding: 0 12px;
+          border: 0;
+          border-radius: 14px;
+          background: transparent;
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 14px;
+          font-weight: 650;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-mobile-app-menu-item:hover,
+        .studio-mobile-app-menu-item:active {
+          background: color-mix(in srgb, #fff 8%, transparent);
+        }
+        .studio-mobile-app-menu-item.is-danger {
+          color: #ff8a9a;
+        }
+        .studio-mobile-app-menu-item-icon {
+          display: inline-grid;
+          place-items: center;
+          width: 32px;
+          height: 32px;
+          flex: 0 0 auto;
+          border-radius: 10px;
+          background: color-mix(in srgb, #fff 8%, transparent);
+          color: inherit;
+        }
+        .studio-mobile-app-menu-item.is-danger .studio-mobile-app-menu-item-icon {
+          background: color-mix(in srgb, #ff8a9a 14%, transparent);
+        }
+        .studio-mobile-app-menu-item-icon svg {
+          width: 16px;
+          height: 16px;
+        }
+        .studio-mobile-app-menu-item-label {
+          min-width: 0;
+          flex: 1 1 auto;
         }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
@@ -3734,12 +4546,24 @@ export function StudioShell() {
           filter: none !important;
           stroke-width: inherit;
         }
+        .studio-polish .cursor-unified-tab .cursor-tab-close {
+          opacity: 1 !important;
+          pointer-events: auto !important;
+          z-index: 6 !important;
+          position: relative;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 72%, transparent);
+        }
+        .studio-polish .cursor-unified-tab .cursor-tab-close:hover,
+        .studio-polish .cursor-unified-tab .cursor-tab-close:active {
+          color: var(--color-cursor-text-bright) !important;
+          background: color-mix(in srgb, var(--mos-text-bright) 10%, transparent) !important;
+        }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close {
           background: transparent !important;
           color: currentColor !important;
         }
         .studio-polish .cursor-unified-tab.is-active .cursor-tab-close:hover {
-          background: transparent !important;
+          background: color-mix(in srgb, var(--mos-text-bright) 12%, transparent) !important;
           color: var(--color-cursor-text-bright) !important;
         }
         .studio-polish .cursor-unified-tab.is-active,
@@ -3943,12 +4767,6 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish .cursor-sidebar-brand-logo-img {
           filter: none;
         }
-        [data-appearance="light"] .studio-polish .cursor-sidebar-brand-user,
-        [data-appearance="light"] .studio-polish .studio-user-menu-trigger:hover .cursor-sidebar-brand-user {
-          border-color: var(--color-cursor-border-soft) !important;
-          background: var(--color-cursor-panel) !important;
-          box-shadow: none !important;
-        }
         [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
           .studio-settings-pill,
           .studio-credit-pill,
@@ -4015,6 +4833,7 @@ export function StudioShell() {
           .cursor-tab.is-active,
           .cursor-agent-chat-tab.is-active
         ),
+        [data-appearance="light"] .studio-polish .cursor-unified-tab,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-streaming.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting.is-active,
@@ -4145,6 +4964,9 @@ export function StudioShell() {
           background: var(--color-cursor-border-soft);
           transition: background 120ms ease, width 120ms ease;
         }
+        .studio-side-sheet-resize-grip {
+          display: none;
+        }
         .studio-polish.is-custom-cursor .studio-side-sheet-resize {
           cursor: var(--studio-cursor-resize-x, ew-resize) !important;
         }
@@ -4177,10 +4999,37 @@ export function StudioShell() {
         }
         @media (max-width: 899px) {
           .studio-side-sheet-shell {
-            width: min(100vw, 420px) !important;
+            width: 100vw !important;
+            max-width: 100vw;
           }
           .studio-side-sheet-resize {
-            display: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 18px;
+            width: 18px;
+            margin-right: 0;
+            background: transparent;
+            cursor: default;
+            pointer-events: none;
+          }
+          .studio-side-sheet-resize-grip {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            width: 6px;
+            padding: 10px 0;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--color-cursor-muted) 18%, transparent);
+          }
+          .studio-side-sheet-resize-grip span {
+            display: block;
+            width: 3px;
+            height: 3px;
+            border-radius: 999px;
+            background: color-mix(in srgb, var(--color-cursor-text-bright) 55%, transparent);
           }
         }
         .studio-settings-floating-head {
@@ -4230,23 +5079,32 @@ export function StudioShell() {
         .studio-settings-horizontal-menu button {
           display: inline-flex;
           flex: 0 0 auto;
-          min-height: 24px;
-          height: 24px;
+          min-height: 28px;
+          height: 28px;
           align-items: center;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: var(--cursor-radius-sm);
-          background: color-mix(in srgb, var(--mos-surface) 64%, transparent);
-          padding: 0 10px;
-          color: var(--color-cursor-muted);
+          justify-content: center;
+          gap: 4px;
+          border: 1px solid var(--studio-composer-glass-border, var(--color-cursor-border-soft));
+          border-radius: 999px;
+          background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-surface) 64%, transparent));
+          padding: 0 12px;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
           font-size: 11px;
           font-weight: 650;
           font-family: inherit;
+          line-height: 1;
           cursor: pointer;
+          transition:
+            border-color var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease),
+            color var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease),
+            background var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease);
         }
-        .studio-settings-horizontal-menu button:hover,
+        .studio-settings-horizontal-menu button:hover {
+          color: var(--color-cursor-text-bright);
+        }
         .studio-settings-horizontal-menu button.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-surface));
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-surface));
           color: var(--color-cursor-text-bright);
         }
         .studio-settings-workspace-body {
@@ -4677,19 +5535,16 @@ export function StudioShell() {
           width: 100%;
           min-height: 42px;
           margin-top: 2px;
-          border: 1px solid color-mix(in srgb, #4ade80 55%, #22c55e 45%);
+          border: 1px solid color-mix(in srgb, #4ade80 52%, #22c55e 48%);
           border-bottom-color: color-mix(in srgb, #15803d 62%, #000 28%);
           border-radius: 999px;
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 14%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              #4ade80 0%,
-              #22c55e 46%,
-              #15803d 100%
-            );
+          background: linear-gradient(
+            180deg,
+            #4ade80 0%,
+            #22c55e 46%,
+            #15803d 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #052e16 22%, transparent),
             0 2px 3px color-mix(in srgb, #052e16 24%, transparent),
             0 4px 10px color-mix(in srgb, #16a34a 18%, transparent);
@@ -4710,16 +5565,13 @@ export function StudioShell() {
           filter: none;
           border-color: color-mix(in srgb, #4ade80 58%, #22c55e 42%);
           border-bottom-color: color-mix(in srgb, #15803d 64%, #000 26%);
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 16%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              #5ee78c 0%,
-              #22c55e 46%,
-              #16803d 100%
-            );
+          background: linear-gradient(
+            180deg,
+            #5ee78c 0%,
+            #22c55e 46%,
+            #16803d 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #052e16 22%, transparent),
             0 2px 4px color-mix(in srgb, #052e16 24%, transparent),
             0 5px 12px color-mix(in srgb, #16a34a 18%, transparent);
@@ -4730,7 +5582,6 @@ export function StudioShell() {
           transform: translateY(1px) scale(0.99);
           box-shadow:
             inset 0 2px 3px color-mix(in srgb, #052e16 28%, transparent),
-            inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
             0 1px 2px color-mix(in srgb, #052e16 18%, transparent);
         }
         .studio-settings-topup-pay:disabled:not(.is-loading) {
@@ -4738,13 +5589,13 @@ export function StudioShell() {
           filter: none;
           transform: none;
           border-color: color-mix(in srgb, #4b7c5c 55%, #2a3a30 20%);
-          background:
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, #5f8f6e 70%, #3d5a48),
-              color-mix(in srgb, #3f6b50 78%, #2a4034)
-            );
-          box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+          border-bottom-color: color-mix(in srgb, #2a4034 70%, #000 20%);
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, #5f8f6e 70%, #3d5a48),
+            color-mix(in srgb, #3f6b50 78%, #2a4034)
+          );
+          box-shadow: inset 0 -1px 0 color-mix(in srgb, #000 16%, transparent);
           color: color-mix(in srgb, #d7e6db 62%, #7a9484);
           text-shadow: none;
           opacity: 1;
@@ -4755,18 +5606,15 @@ export function StudioShell() {
           pointer-events: none;
         }
         .studio-settings-topup-pay.is-loading:disabled {
-          border-color: color-mix(in srgb, #4ade80 55%, #22c55e 45%);
+          border-color: color-mix(in srgb, #4ade80 52%, #22c55e 48%);
           border-bottom-color: color-mix(in srgb, #15803d 62%, #000 28%);
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 14%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              #4ade80 0%,
-              #22c55e 46%,
-              #15803d 100%
-            );
+          background: linear-gradient(
+            180deg,
+            #4ade80 0%,
+            #22c55e 46%,
+            #15803d 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #052e16 22%, transparent),
             0 2px 3px color-mix(in srgb, #052e16 24%, transparent),
             0 4px 10px color-mix(in srgb, #16a34a 18%, transparent);
@@ -4776,14 +5624,12 @@ export function StudioShell() {
         .studio-settings-topup-pay.is-error:not(.is-loading) {
           border-color: color-mix(in srgb, #f87171 45%, #991b1b 20%);
           border-bottom-color: color-mix(in srgb, #b91c1c 70%, #000 20%);
-          background:
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, #f87171 88%, #fff 8%),
-              color-mix(in srgb, #dc2626 82%, #000 12%)
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, #f87171 88%, #fff 6%),
+            color-mix(in srgb, #dc2626 82%, #000 12%)
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 22%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #7f1d1d 24%, transparent),
             0 2px 4px color-mix(in srgb, #7f1d1d 20%, transparent);
           color: #ffffff;
@@ -5481,7 +6327,7 @@ export function StudioShell() {
         }
         .studio-settings-workspace .studio-account-card,
         .studio-settings-workspace .studio-settings-appearance-card {
-          overflow: hidden;
+          overflow: visible;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
           background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
@@ -5504,14 +6350,19 @@ export function StudioShell() {
           background: transparent !important;
           padding: 0 !important;
           box-shadow: none !important;
+          overflow: visible;
         }
         .studio-settings-appearance-group {
           display: grid;
           gap: 8px;
           margin-bottom: 12px;
+          min-width: 0;
         }
         .studio-settings-appearance-group:last-child {
           margin-bottom: 0;
+        }
+        .studio-settings-appearance-card .wallpaper-theme-grid {
+          max-height: none;
         }
         .studio-settings-cursor-row {
           display: flex;
@@ -5540,7 +6391,9 @@ export function StudioShell() {
           font-size: 11px;
           font-weight: 650;
         }
-        .studio-account-fields input {
+        .studio-account-fields input,
+        .studio-account-fields textarea,
+        .studio-profile-link-type select {
           width: 100%;
           min-height: 40px;
           height: auto;
@@ -5552,9 +6405,222 @@ export function StudioShell() {
           font: inherit;
           outline: none;
         }
-        .studio-account-fields input:focus {
+        .studio-account-fields textarea {
+          min-height: 88px;
+          padding: 10px 12px;
+          resize: vertical;
+        }
+        .studio-account-fields input:focus,
+        .studio-account-fields textarea:focus,
+        .studio-profile-link-type select:focus {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-profile-stack {
+          display: grid;
+          gap: 12px;
+        }
+        .studio-profile-intro h3 {
+          margin: 0;
+          font-size: 16px;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-profile-intro p {
+          margin: 6px 0 12px;
+          color: var(--color-cursor-muted);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+        .studio-profile-intro code {
+          font-family: var(--font-jetbrains), monospace;
+          font-size: 12px;
+        }
+        .studio-profile-username-field {
+          display: flex;
+          align-items: center;
+          gap: 0;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          overflow: hidden;
+        }
+        .studio-profile-username-prefix {
+          padding: 0 0 0 12px;
+          color: var(--color-cursor-muted);
+          font-weight: 700;
+        }
+        .studio-profile-username-field input {
+          border: 0 !important;
+          box-shadow: none !important;
+          background: transparent !important;
+        }
+        .studio-profile-photo-block {
+          display: grid;
+          gap: 12px;
+          justify-items: center;
+          text-align: center;
+        }
+        .studio-profile-photo-copy {
+          display: grid;
+          gap: 4px;
+        }
+        .studio-profile-photo-copy strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 14px;
+        }
+        .studio-profile-photo-copy p,
+        .studio-profile-hint,
+        .studio-profile-public-row p,
+        .studio-profile-share-row p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-profile-photo-drop {
+          position: relative;
+          width: 112px;
+          height: 112px;
+          border-radius: 50%;
+          border: 1px dashed color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          color: var(--cursor-accent);
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          cursor: pointer;
+          flex: 0 0 auto;
+        }
+        .studio-profile-photo-drop:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+        .studio-profile-photo-empty {
+          display: grid;
+          justify-items: center;
+          gap: 6px;
+        }
+        .studio-profile-photo-empty em {
+          font-style: normal;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .studio-profile-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .studio-profile-avatar-overlay {
+          position: absolute;
+          inset: auto 0 0 0;
+          display: grid;
+          place-items: center;
+          padding: 8px 0;
+          background: color-mix(in srgb, #000 45%, transparent);
+          color: #fff;
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+        .studio-profile-photo-drop:hover .studio-profile-avatar-overlay,
+        .studio-profile-photo-drop:focus-visible .studio-profile-avatar-overlay {
+          opacity: 1;
+        }
+        .studio-profile-avatar-actions,
+        .studio-profile-share-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 8px;
+        }
+        .studio-profile-public-row,
+        .studio-profile-share-row,
+        .studio-profile-links-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+        }
+        .studio-profile-public-row {
+          padding-top: 4px;
+        }
+        .studio-profile-public-row strong,
+        .studio-profile-links-head strong,
+        .studio-profile-share-row strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+        }
+        .studio-profile-links-block {
+          display: grid;
+          gap: 10px;
+          margin-top: 4px;
+        }
+        .studio-profile-links-list {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-profile-link-row {
+          display: grid;
+          grid-template-columns: 110px 1fr 1.2fr auto;
+          gap: 8px;
+          align-items: end;
+        }
+        @media (max-width: 720px) {
+          .studio-profile-link-row {
+            grid-template-columns: 1fr;
+          }
+        }
+        .studio-profile-link-type-control {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .studio-profile-link-remove {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: transparent;
+          color: var(--color-cursor-muted);
+          display: grid;
+          place-items: center;
+          cursor: pointer;
+        }
+        .studio-profile-char-count {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-style: normal;
+          justify-self: end;
+        }
+        .studio-profile-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          margin: 0;
+          color: var(--color-cursor-text);
+          font-size: 12px;
+          font-weight: 650;
+        }
+        .studio-profile-status.is-error {
+          color: #fecaca;
+        }
+        [data-appearance="light"] .studio-polish .studio-profile-status.is-error {
+          color: #991b1b;
+        }
+        .studio-profile-open-link {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          text-decoration: none;
+        }
+        .studio-profile-hint {
+          margin-top: 10px !important;
+        }
+        .studio-profile-share-toast {
+          position: fixed;
+          left: 50%;
+          bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+          transform: translateX(-50%);
+          z-index: 80;
         }
         .studio-account-actions {
           display: grid;
@@ -6237,21 +7303,22 @@ export function StudioShell() {
           box-shadow: none !important;
         }
         .studio-polish .desk-file-breadcrumbs {
-          min-height: 38px;
+          min-height: 0;
           border-bottom: none;
           background: transparent;
         }
         .studio-polish .desk-file-breadcrumbs-track {
           gap: 4px;
-          padding: 5px 10px;
+          padding: 4px 10px;
         }
         .studio-polish .desk-file-breadcrumbs-chip {
-          border-radius: 8px;
-          min-height: 32px;
-          padding: 7px 12px;
-          font-size: 13px;
-          font-weight: 550;
-          line-height: 1.2;
+          border-radius: 999px;
+          min-height: 24px;
+          height: 24px;
+          padding: 0 10px;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1;
           color: var(--color-cursor-muted);
         }
         .studio-polish .desk-file-breadcrumbs-chip.is-current {
@@ -6259,26 +7326,28 @@ export function StudioShell() {
           color: var(--color-cursor-text);
         }
         .studio-polish.is-studio-mobile .desk-file-breadcrumbs-chip {
-          min-height: 36px;
-          padding: 8px 14px;
-          font-size: 14px;
+          min-height: 24px;
+          height: 24px;
+          padding: 0 10px;
+          font-size: 11px;
         }
         .studio-polish.is-studio-mobile .desk-file-breadcrumbs-sep {
-          width: 14px;
-          height: 14px;
+          width: 12px;
+          height: 12px;
         }
         .studio-polish.is-studio-mobile .desk-file-breadcrumbs-sep svg {
-          width: 14px !important;
-          height: 14px !important;
+          width: 12px !important;
+          height: 12px !important;
         }
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .cursor-panel-search {
             min-height: var(--studio-mobile-nav-height, 44px) !important;
             height: var(--studio-mobile-nav-height, 44px) !important;
           }
-          .studio-polish.is-studio-mobile .desk-file-breadcrumbs {
-            min-height: var(--studio-mobile-nav-height, 44px) !important;
-            height: var(--studio-mobile-nav-height, 44px) !important;
+          .studio-polish.is-studio-mobile .desk-file-breadcrumbs,
+          .studio-polish.is-studio-mobile .studio-folder-pathbar {
+            min-height: 0 !important;
+            height: auto !important;
           }
         }
         .studio-polish .desk-file-search-divider {
@@ -6336,7 +7405,7 @@ export function StudioShell() {
           flex-direction: column;
           align-items: stretch;
           width: 100%;
-          max-width: var(--studio-composer-shell-max, min(540px, 94vw));
+          max-width: var(--studio-composer-shell-max, min(600px, 94vw));
           margin: 0 auto;
           position: relative;
           left: 0;
@@ -6617,13 +7686,18 @@ export function StudioShell() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 28px;
-          height: 28px;
+          width: 36px;
+          height: 36px;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 999px;
           background: var(--studio-composer-glass-muted);
           color: var(--color-cursor-muted);
           cursor: pointer;
+          padding: 0;
+        }
+        .studio-preset-grid-close svg {
+          width: 18px;
+          height: 18px;
         }
         .studio-preset-grid-close:hover {
           color: var(--color-cursor-text);
@@ -6783,14 +7857,17 @@ export function StudioShell() {
           display: none;
         }
         .studio-composer .studio-pill-btn.studio-preset-trigger {
+          width: 30px;
+          min-width: 30px;
           height: 30px;
           min-height: 30px;
-          max-width: min(96px, 28vw);
-          padding: 0 7px 0 3px;
-          gap: 5px;
-          font-size: 11px;
-          font-weight: 650;
-          line-height: 1;
+          max-width: 30px;
+          padding: 0;
+          gap: 0;
+          justify-content: center;
+        }
+        .studio-composer .studio-pill-btn.studio-preset-trigger .studio-preset-trigger-copy {
+          display: none;
         }
         .studio-preset-trigger {
           display: inline-flex;
@@ -7207,7 +8284,7 @@ export function StudioShell() {
         }
         .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock {
           width: calc(100% - 24px);
-          max-width: var(--studio-composer-shell-max, min(540px, 94vw));
+          max-width: var(--studio-composer-shell-max, min(600px, 94vw));
           margin-left: auto;
           margin-right: auto;
           background: var(--studio-composer-glass) !important;
@@ -7578,14 +8655,15 @@ export function StudioShell() {
           height: 22px;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-pill-btn.studio-preset-trigger {
-          width: auto;
-          max-width: min(88px, 28vw);
-          padding: 0 6px 0 2px;
-          gap: 4px;
-          font-size: 10px;
+          width: 32px;
+          min-width: 32px;
+          max-width: 32px;
+          padding: 0;
+          gap: 0;
+          justify-content: center;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-preset-trigger-copy {
-          font-size: 10px;
+          display: none;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-send-cost {
           font-size: 9px;
@@ -8206,19 +9284,16 @@ export function StudioShell() {
           justify-content: center;
           gap: 3px;
           padding: 8px 6px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent-hover) 55%, var(--cursor-accent) 45%);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent-hover) 52%, var(--cursor-accent) 48%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 62%, #000 28%);
           border-radius: 14px;
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 14%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 90%, #fff 8%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 88%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 70%, #000 24%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 90%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 70%, #000 24%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
             0 2px 3px color-mix(in srgb, #000 22%, transparent),
             0 4px 10px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
@@ -8230,21 +9305,19 @@ export function StudioShell() {
             filter var(--studio-motion-fast) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
-            border-color var(--studio-motion-fast) var(--studio-motion-ease);
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease);
         }
         [data-appearance="light"] .studio-polish .studio-generate-btn:not(:disabled) {
-          border-color: color-mix(in srgb, var(--cursor-accent-hover) 60%, var(--cursor-accent) 40%);
+          border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 68%, #000 22%);
-          background:
-            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 92%, #ffffff 6%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 76%, #000 20%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #ffffff 5%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 76%, #000 20%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.22),
             inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
             0 2px 3px rgba(15, 23, 42, 0.1),
             0 4px 10px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
@@ -8255,16 +9328,13 @@ export function StudioShell() {
           transform: none;
           border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 64%, #000 26%);
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 16%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 92%, #fff 8%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 72%, #000 22%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 72%, #000 22%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
             0 2px 4px color-mix(in srgb, #000 24%, transparent),
             0 5px 12px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
@@ -8272,16 +9342,13 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish .studio-generate-btn:hover:not(:disabled) {
           border-color: color-mix(in srgb, var(--cursor-accent-hover) 62%, var(--cursor-accent) 38%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 70%, #000 20%);
-          background:
-            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.2), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 94%, #ffffff 5%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 78%, #000 18%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 94%, #ffffff 4%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 78%, #000 18%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.24),
             inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
             0 2px 4px rgba(15, 23, 42, 0.11),
             0 5px 12px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
@@ -8292,7 +9359,6 @@ export function StudioShell() {
           transform: translateY(1px) scale(0.99);
           box-shadow:
             inset 0 2px 3px color-mix(in srgb, #000 28%, transparent),
-            inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
             0 1px 2px color-mix(in srgb, #000 16%, transparent);
         }
         [data-appearance="light"] .studio-polish .studio-generate-btn:active:not(:disabled),
@@ -8300,7 +9366,6 @@ export function StudioShell() {
           transform: translateY(1px) scale(0.99);
           box-shadow:
             inset 0 2px 3px rgba(15, 23, 42, 0.22),
-            inset 0 1px 0 rgba(255, 255, 255, 0.16),
             0 1px 2px rgba(15, 23, 42, 0.12);
         }
         .studio-generate-btn:disabled {
@@ -8309,14 +9374,14 @@ export function StudioShell() {
           background: color-mix(in srgb, var(--mos-text) 5%, var(--studio-composer-glass-muted));
           backdrop-filter: var(--studio-composer-glass-blur);
           -webkit-backdrop-filter: var(--studio-composer-glass-blur);
-          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+          box-shadow: none;
           color: var(--color-cursor-muted);
         }
         [data-appearance="light"] .studio-polish .studio-generate-btn:disabled {
           border-color: var(--color-cursor-border-soft);
           background: color-mix(in srgb, var(--mos-text) 7%, var(--mos-panel));
           color: color-mix(in srgb, var(--mos-text) 46%, var(--mos-muted));
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+          box-shadow: none;
         }
         .studio-generate-btn:disabled .studio-generate-label,
         .studio-generate-btn:disabled .studio-generate-cost {
@@ -8553,18 +9618,15 @@ export function StudioShell() {
           min-width: 30px;
           padding: 0 10px 0 8px;
           border-radius: 999px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent-hover) 55%, var(--cursor-accent) 45%);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent-hover) 52%, var(--cursor-accent) 48%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 62%, #000 28%);
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 14%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 90%, #fff 8%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 88%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 70%, #000 24%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 90%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 70%, #000 24%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
             0 2px 3px color-mix(in srgb, #000 22%, transparent),
             0 4px 10px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
@@ -8601,33 +9663,27 @@ export function StudioShell() {
           transform: none;
           border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 64%, #000 26%);
-          background:
-            radial-gradient(circle at 50% 0%, color-mix(in srgb, #fff 16%, transparent), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 92%, #fff 8%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 72%, #000 22%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 72%, #000 22%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 color-mix(in srgb, #fff 20%, transparent),
             inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
             0 2px 4px color-mix(in srgb, #000 24%, transparent),
             0 5px 12px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
         }
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:not(:disabled) {
-          border-color: color-mix(in srgb, var(--cursor-accent-hover) 60%, var(--cursor-accent) 40%);
+          border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 68%, #000 22%);
-          background:
-            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 92%, #ffffff 6%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 76%, #000 20%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #ffffff 5%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 76%, #000 20%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.22),
             inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
             0 2px 3px rgba(15, 23, 42, 0.1),
             0 4px 10px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
@@ -8635,16 +9691,13 @@ export function StudioShell() {
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled) {
           border-color: color-mix(in srgb, var(--cursor-accent-hover) 62%, var(--cursor-accent) 38%);
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 70%, #000 20%);
-          background:
-            radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.2), transparent 50%),
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--cursor-accent-hover) 94%, #ffffff 5%) 0%,
-              color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
-              color-mix(in srgb, var(--cursor-accent) 78%, #000 18%) 100%
-            );
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 94%, #ffffff 4%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 78%, #000 18%) 100%
+          );
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.24),
             inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
             0 2px 4px rgba(15, 23, 42, 0.11),
             0 5px 12px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
@@ -8657,7 +9710,6 @@ export function StudioShell() {
           border-bottom-color: color-mix(in srgb, var(--cursor-accent) 55%, #000 30%);
           box-shadow:
             inset 0 2px 3px color-mix(in srgb, #000 28%, transparent),
-            inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent),
             0 1px 2px color-mix(in srgb, #000 16%, transparent);
         }
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:active:not(:disabled),
@@ -8665,14 +9717,13 @@ export function StudioShell() {
           transform: translateY(1px) scale(0.99);
           box-shadow:
             inset 0 2px 3px rgba(15, 23, 42, 0.22),
-            inset 0 1px 0 rgba(255, 255, 255, 0.16),
             0 1px 2px rgba(15, 23, 42, 0.12);
         }
         .studio-composer-circle-btn.studio-composer-send-btn:disabled {
           cursor: not-allowed;
           border-color: var(--color-cursor-border-soft);
           background: color-mix(in srgb, var(--mos-text) 5%, var(--studio-composer-glass-muted));
-          box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+          box-shadow: none;
           color: var(--color-cursor-muted);
         }
         .studio-composer-circle-btn.studio-composer-send-btn:disabled .studio-composer-send-cost {
@@ -8684,7 +9735,7 @@ export function StudioShell() {
           flex-direction: column;
           gap: 0;
           width: 100%;
-          max-width: var(--studio-composer-shell-max, min(540px, 94vw));
+          max-width: var(--studio-composer-shell-max, min(600px, 94vw));
           margin-left: auto;
           margin-right: auto;
           flex: 0 0 auto;
@@ -8767,8 +9818,8 @@ export function StudioShell() {
         }
         .studio-composer-options-close {
           display: inline-flex;
-          width: 28px;
-          height: 28px;
+          width: 36px;
+          height: 36px;
           align-items: center;
           justify-content: center;
           justify-self: end;
@@ -8776,6 +9827,12 @@ export function StudioShell() {
           border-radius: 999px;
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 80%, transparent);
           color: var(--color-cursor-muted);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-composer-options-close svg {
+          width: 18px;
+          height: 18px;
         }
         .studio-composer-options-body {
           display: flex;
@@ -9192,6 +10249,21 @@ export function StudioShell() {
         }
         .studio-asset-preview .desk-image-viewer-name,
         .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-name {
+          color: var(--color-cursor-text);
+        }
+        .studio-document-preview .cursor-doc-toolbar.has-name {
+          border-bottom: 1px solid var(--studio-chrome-divider);
+          background: var(--color-cursor-sidebar) !important;
+        }
+        .studio-document-preview .desk-image-viewer-name {
+          color: var(--color-cursor-text);
+        }
+        .studio-document-preview .cursor-doc-tool {
+          color: var(--color-cursor-muted);
+        }
+        .studio-document-preview .cursor-doc-tool:hover,
+        .studio-document-preview .cursor-doc-tool.active {
+          background: var(--color-cursor-hover);
           color: var(--color-cursor-text);
         }
         .studio-asset-preview .desk-image-viewer-status {
@@ -10486,34 +11558,40 @@ export function StudioShell() {
         .studio-history-floating-panel {
           width: 100%;
         }
+        /* Mobile history reuses .studio-mobile-app-menu-sheet (inset above bottom nav, glass, no overlay). */
+        .studio-history-mobile-sheet .studio-history-search-wrap {
+          margin: 0 0 2px;
+          flex: 0 0 auto;
+        }
+        .studio-history-mobile-sheet .studio-history-list {
+          flex: 0 0 auto;
+          min-height: 0;
+          overflow: visible;
+          padding: 0 0 8px;
+          scrollbar-gutter: auto;
+        }
         .studio-history-floating-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 8px;
-          padding: 14px 10px 12px 14px;
+          flex: 0 0 auto;
+          padding: 12px 10px 12px 14px;
           border-bottom: 1px solid var(--color-cursor-border);
-        }
-        .studio-history-head-copy {
-          min-width: 0;
         }
         .studio-history-head-title {
           margin: 0;
           color: var(--color-cursor-text-bright);
-          font-size: 13px;
+          font-size: 15px;
           font-weight: 700;
           line-height: 1.2;
-        }
-        .studio-history-head-meta {
-          margin: 3px 0 0;
-          color: var(--color-cursor-muted);
-          font-size: 11px;
-          line-height: 1.2;
+          letter-spacing: -0.02em;
         }
         .studio-history-search-wrap {
           position: relative;
           display: flex;
           align-items: center;
+          flex: 0 0 auto;
           margin: 10px 12px 8px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
           border-radius: 12px;
@@ -10552,93 +11630,215 @@ export function StudioShell() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          width: 28px;
+          height: 28px;
           margin-right: 6px;
-          padding: 4px;
+          padding: 0;
           border: 0;
           border-radius: 999px;
           background: transparent;
           color: var(--color-cursor-muted);
           cursor: pointer;
         }
+        .studio-history-search-clear svg {
+          width: 14px;
+          height: 14px;
+        }
         .studio-history-search-clear:hover {
           color: var(--color-cursor-text);
           background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
         }
         .studio-history-list {
-          flex: 1;
+          flex: 1 1 0%;
           min-height: 0;
+          overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
+          touch-action: pan-y;
           scrollbar-gutter: stable;
           padding: 4px 10px 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
         }
-        .studio-history-group + .studio-history-group {
-          margin-top: 12px;
+        .studio-history-group {
+          flex: 0 0 auto;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 80%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--color-cursor-panel) 42%, transparent);
+          overflow: hidden;
+        }
+        .studio-history-group-toggle {
+          display: grid;
+          grid-template-columns: 42px minmax(0, 1fr) 42px;
+          width: 100%;
+          align-items: center;
+          gap: 4px;
+          margin: 0;
+          padding: 10px 12px 8px;
+          border: 0;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border) 70%, transparent);
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          cursor: pointer;
+        }
+        .studio-history-group:not(.is-open) .studio-history-group-toggle {
+          border-bottom-color: transparent;
+        }
+        .studio-history-group-toggle:hover {
+          background: color-mix(in srgb, var(--cursor-accent) 6%, transparent);
         }
         .studio-history-group-label {
-          margin: 0 0 6px;
-          padding: 0 4px;
-          color: var(--color-cursor-muted);
-          font-size: 10px;
+          margin: 0;
+          text-align: center;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 58%, transparent);
+          font-size: 11px;
           font-weight: 700;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
+        }
+        .studio-history-group-meta {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--color-cursor-muted);
+        }
+        .studio-history-group-meta.is-start {
+          justify-content: flex-start;
+        }
+        .studio-history-group-meta.is-end {
+          justify-content: flex-end;
+        }
+        .studio-history-group-count {
+          font-size: 11px;
+          font-weight: 650;
+          opacity: 0.85;
+        }
+        .studio-history-group-chevron {
+          width: 16px;
+          height: 16px;
+          transition: transform 140ms ease;
+        }
+        .studio-history-group.is-open .studio-history-group-chevron {
+          transform: rotate(180deg);
+        }
+        .studio-history-group-body {
+          padding: 4px;
         }
         .studio-history-group-items {
           display: grid;
-          gap: 4px;
+          gap: 6px;
+          padding: 6px;
         }
         .studio-history-item {
           display: flex;
           width: 100%;
           align-items: flex-start;
           gap: 10px;
-          padding: 10px;
-          border: 1px solid transparent;
-          border-radius: 12px;
-          background: transparent;
+          padding: 10px 12px;
+          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           color: inherit;
           font-family: inherit;
           font-size: inherit;
           text-align: left;
           cursor: pointer;
-          transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+          transition: background 120ms ease, border-color 120ms ease;
         }
-        .studio-history-item:hover {
-          background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
-          border-color: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        .studio-history-item:hover,
+        .studio-history-item:active {
+          background: color-mix(in srgb, var(--cursor-accent) 10%, color-mix(in srgb, var(--mos-text-bright) 5%, transparent));
+          border-color: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
         }
         .studio-history-item.is-active {
-          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
-          border-color: color-mix(in srgb, var(--cursor-accent) 30%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 14%, color-mix(in srgb, var(--mos-text-bright) 4%, transparent));
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
           box-shadow: inset 2px 0 0 var(--cursor-accent);
         }
-        .studio-history-item-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          flex-shrink: 0;
-          border-radius: 8px;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
-          color: var(--cursor-accent);
-        }
-        .studio-history-item-body {
+        .studio-history-item-main {
           display: flex;
           min-width: 0;
           flex: 1;
           flex-direction: column;
-          gap: 3px;
+          gap: 5px;
         }
         .studio-history-item-title {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
           color: var(--color-cursor-text-bright);
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 650;
-          line-height: 1.3;
+          line-height: 1.35;
+          word-break: break-word;
+        }
+        .studio-history-item-snippet {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          overflow: hidden;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 62%, transparent);
+          font-size: 11px;
+          line-height: 1.35;
+          word-break: break-word;
+        }
+        .studio-history-item-chips {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 5px;
+          min-width: 0;
+        }
+        .studio-history-chip {
+          display: inline-flex;
+          max-width: 100%;
+          align-items: center;
+          gap: 5px;
+          min-width: 0;
+          padding: 3px 8px 3px 4px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-panel) 70%, transparent);
+          color: var(--color-cursor-text);
+          font-size: 10px;
+          font-weight: 650;
+          line-height: 1.2;
+        }
+        .studio-history-chip--image {
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          padding: 0;
+          border-radius: 8px;
+          overflow: hidden;
+        }
+        .studio-history-chip-media {
+          display: block;
+          width: 28px;
+          height: 28px;
+          object-fit: cover;
+          background: color-mix(in srgb, var(--color-cursor-muted) 16%, transparent);
+        }
+        .studio-history-chip-media.is-inline {
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+        }
+        .studio-history-chip-icon {
+          width: 12px;
+          height: 12px;
+          flex-shrink: 0;
+          opacity: 0.85;
+        }
+        .studio-history-chip-label {
+          min-width: 0;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          max-width: 9rem;
         }
         .studio-history-item-date {
           display: inline-flex;
@@ -10653,6 +11853,44 @@ export function StudioShell() {
           height: 11px;
           flex-shrink: 0;
           opacity: 0.8;
+        }
+        .studio-history-group-loading,
+        .studio-history-group-empty {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 14px 10px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
+        .studio-history-spin {
+          width: 14px;
+          height: 14px;
+          animation: studio-history-spin 0.8s linear infinite;
+        }
+        @keyframes studio-history-spin {
+          to { transform: rotate(360deg); }
+        }
+        .studio-history-load-more {
+          display: flex;
+          width: calc(100% - 8px);
+          margin: 4px;
+          align-items: center;
+          justify-content: center;
+          min-height: 36px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 80%, transparent);
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--color-cursor-panel) 55%, transparent);
+          color: var(--color-cursor-text-bright);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+        .studio-history-load-more:disabled {
+          opacity: 0.6;
+          cursor: default;
         }
         .studio-history-empty {
           display: flex;
@@ -10682,6 +11920,21 @@ export function StudioShell() {
           font-size: 12px;
           line-height: 1.45;
         }
+        .studio-panel-close,
+        .cursor-icon-btn.studio-panel-close,
+        .cursor-icon-btn-sm.studio-panel-close {
+          width: 36px !important;
+          height: 36px !important;
+          min-width: 36px !important;
+          min-height: 36px !important;
+          border-radius: 999px !important;
+        }
+        .studio-panel-close svg,
+        .cursor-icon-btn.studio-panel-close svg,
+        .cursor-icon-btn-sm.studio-panel-close svg {
+          width: 18px !important;
+          height: 18px !important;
+        }
         .studio-chat-stream {
           min-height: 0;
           flex: 1;
@@ -10695,7 +11948,7 @@ export function StudioShell() {
           grid-template-columns: minmax(0, 1fr);
           gap: var(--studio-composer-row-gap);
           width: 100%;
-          max-width: var(--studio-composer-shell-max, min(540px, 94vw));
+          max-width: var(--studio-composer-shell-max, min(600px, 94vw));
           min-height: 100%;
           margin: 0 auto;
           position: relative;
@@ -10747,6 +12000,8 @@ export function StudioShell() {
           -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           overflow: hidden;
           padding: 12px 14px;
+          content-visibility: auto;
+          contain-intrinsic-size: auto 96px;
           box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-bubble.is-user {
@@ -11297,17 +12552,17 @@ export function StudioShell() {
         className="studio-main-panels min-w-0 flex-1"
         onLayout={handleMainPanelLayout}
       >
-        {(!isMobile || mobileSection === "files") ? (
+        {!isMobile ? (
         <Panel
           id="studio-sidebar"
           order={1}
-          defaultSize={isMobile ? 100 : mainPanelSizes[0]}
-          minSize={isMobile ? 100 : STUDIO_MAIN_SIDEBAR_MIN}
-          maxSize={isMobile ? 100 : STUDIO_MAIN_SIDEBAR_MAX}
+          defaultSize={mainPanelSizes[0]}
+          minSize={STUDIO_MAIN_SIDEBAR_MIN}
+          maxSize={STUDIO_MAIN_SIDEBAR_MAX}
         >
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
-          <StudioUserMenu currentUser={currentUser} onSignOut={() => void signOut()} />
+          <StudioSidebarBrand />
           <div className="flex items-center gap-1">
             <StudioAddMenu
               open={addMenuOpen}
@@ -11335,61 +12590,33 @@ export function StudioShell() {
             }}
           />
         </div>
-        <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
-        <PanelSearchBar value={search} onChange={setSearch} placeholder="Search your content" aria-label="Search your content" />
-        <div className="studio-folder-pathbar shrink-0">
-          <FileBreadcrumbs path={breadcrumbPath} onNavigate={handleBreadcrumbNavigate} onDropEntry={handleBreadcrumbDrop} />
-        </div>
-        <FileTree
+        <StudioFilesExplorerBody
+          search={search}
+          setSearch={setSearch}
+          breadcrumbPath={breadcrumbPath}
+          onBreadcrumbNavigate={handleBreadcrumbNavigate}
+          onBreadcrumbDrop={handleBreadcrumbDrop}
           viewMode={viewMode}
-          workspaceId={WORKSPACE_ID}
-          rootEntries={displayRootEntries}
-          flatEntries={displayCurrentEntries}
-          listDir={() => {}}
-          onNavigate={(path, navEntry) => {
-            if (navEntry?.type === "parent" && navEntry.studioId) {
-              setActiveFolderId(navEntry.studioId);
-              setNavTrail((trail) => trail.slice(0, -1));
-              return;
-            }
-            const entry = pathToEntry.get(path);
-            if (entry) {
-              handleEntryOpen(entry);
-              return;
-            }
-            const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
-              (item) => studioPathForFolder(item) === path,
-            );
-            if (folder) {
-              setActiveFolderId(folder._id);
-              setNavTrail((trail) => [...trail, { id: folder._id, name: folder.name }]);
-            }
-          }}
-          onOpenFile={handleOpenPath}
-          searchQuery={search}
-          searchScope={breadcrumbPath}
-          searchResults={searchState.entries}
-          searchBusy={search !== deferredSearch}
-          searchTruncated={searchState.truncated}
-          onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
-          onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
-          enableLongPress={isMobile}
-          longPressDelay={isMobile ? 280 : 450}
-          onEntryLongPress={(entry, coords) =>
-            setContextMenu({
-              entry,
-              x: coords?.x ?? window.innerWidth / 2,
-              y: coords?.y ?? window.innerHeight / 2,
-            })
-          }
+          displayRootEntries={displayRootEntries}
+          displayCurrentEntries={displayCurrentEntries}
+          pathToEntry={pathToEntry}
+          topFolders={topFolders}
+          childFolders={childFolders}
+          setActiveFolderId={setActiveFolderId}
+          setNavTrail={setNavTrail}
+          onOpenPath={handleOpenPath}
+          onEntryOpen={handleEntryOpen}
+          searchState={searchState}
+          deferredSearch={deferredSearch}
+          setContextMenu={setContextMenu}
+          activeFolder={activeFolder}
           onEntryDrop={handleEntryDrop}
+          isMobile={false}
         />
-      </div>
-    </aside>
+      </aside>
         </Panel>
         ) : null}
         {!isMobile ? <PanelResizeHandle className="cursor-resize" /> : null}
-        {(!isMobile || mobileSection !== "files") ? (
         <Panel
           id="studio-main"
           order={2}
@@ -11409,15 +12636,33 @@ export function StudioShell() {
             disableDrag={isMobile}
           />
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            <button
-              type="button"
-              className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
-              onClick={openNewComposerTab}
-              aria-label="New chat"
-              title="New chat"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <div className="studio-new-tab-cluster">
+              <button
+                type="button"
+                className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
+                onClick={openNewComposerTab}
+                aria-label="New chat"
+                title="New chat"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              {isMobile ? (
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                  onClick={() => {
+                    setMobileAppMenuOpen(false);
+                    setSettingsOpen(false);
+                    setHistoryOpen((open) => !open);
+                  }}
+                  aria-label="Generation history"
+                  title="Generation history"
+                  aria-pressed={historyOpen}
+                >
+                  <History className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
             {!isMobile ? (
               <>
                 <CreditPill
@@ -11428,9 +12673,22 @@ export function StudioShell() {
                 {isAdminUser ? (
                   <AdminQuickLinks onOpenAdminTab={openAdminTab} />
                 ) : null}
+                <StudioProfileMenu
+                  currentUser={currentUser}
+                  profile={myPublicProfile}
+                  username={myPublicProfile?.username || sharedProfileAssets?.username}
+                  isProfileTabActive={activeTab.startsWith("profile:")}
+                  onViewProfile={openOwnProfile}
+                  onEditProfile={() => openSettingsTab("profile")}
+                  onSignOut={() => void signOut()}
+                />
                 <button
                   className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                  onClick={() => setHistoryOpen((open) => !open)}
+                  onClick={() => {
+                    setMobileAppMenuOpen(false);
+                    setSettingsOpen(false);
+                    setHistoryOpen((open) => !open);
+                  }}
                   aria-label="Generation history"
                   title="Generation history"
                   aria-pressed={historyOpen}
@@ -11524,6 +12782,7 @@ export function StudioShell() {
             onOpenAssetTab={(assetId) => openTab(`asset:${assetId}`)}
             onVideoEditProjectSaved={handleVideoEditProjectSaved}
             activeEditTab={activeTab}
+            onOpenPublicProfile={openPublicProfile}
           />
         </section>
         {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
@@ -11589,8 +12848,37 @@ export function StudioShell() {
       </main>
       </StudioWorkspaceColumn>
         </Panel>
-        ) : null}
       </PanelGroup>
+
+      {isMobile && mobileSection === "files" ? (
+        <StudioFilesMobileSheet
+          onClose={() => setMobileSection("composer")}
+          addMenuOpen={addMenuOpen}
+          setAddMenuOpen={setAddMenuOpen}
+          onCreateAction={runCreateAction}
+          fileInputRef={fileInputRef}
+          onUploadFiles={uploadFiles}
+          search={search}
+          setSearch={setSearch}
+          breadcrumbPath={breadcrumbPath}
+          onBreadcrumbNavigate={handleBreadcrumbNavigate}
+          onBreadcrumbDrop={handleBreadcrumbDrop}
+          displayRootEntries={displayRootEntries}
+          displayCurrentEntries={displayCurrentEntries}
+          pathToEntry={pathToEntry}
+          topFolders={topFolders}
+          childFolders={childFolders}
+          setActiveFolderId={setActiveFolderId}
+          setNavTrail={setNavTrail}
+          onOpenPath={handleOpenPath}
+          onEntryOpen={handleEntryOpen}
+          searchState={searchState}
+          deferredSearch={deferredSearch}
+          setContextMenu={setContextMenu}
+          activeFolder={activeFolder}
+          onEntryDrop={handleEntryDrop}
+        />
+      ) : null}
 
       {isMobile ? (
         <StudioMobileBottomNav
@@ -11603,27 +12891,90 @@ export function StudioShell() {
                 creditPriceCents={pricing?.creditPriceCents}
                 onClick={openCreditsPane}
               />
+              <StudioProfileMenu
+                currentUser={currentUser}
+                profile={myPublicProfile}
+                username={myPublicProfile?.username || sharedProfileAssets?.username}
+                isProfileTabActive={activeTab.startsWith("profile:")}
+                mode="direct"
+                onViewProfile={openOwnProfile}
+                onEditProfile={() => openSettingsTab("profile")}
+                onSignOut={() => void signOut()}
+              />
               <button
                 type="button"
-                className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                onClick={() => setHistoryOpen((open) => !open)}
-                aria-label="Generation history"
-                title="Generation history"
-                aria-pressed={historyOpen}
+                className={`studio-settings-pill studio-settings-trigger${mobileAppMenuOpen ? " is-active" : ""}`}
+                onClick={() => {
+                  setHistoryOpen(false);
+                  setSettingsOpen(false);
+                  setMobileAppMenuOpen((open) => !open);
+                }}
+                aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
+                title="Menu"
+                aria-expanded={mobileAppMenuOpen}
               >
-                <History className="h-3.5 w-3.5" aria-hidden="true" />
+                {mobileAppMenuOpen ? (
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Menu className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
               </button>
             </>
           }
         />
       ) : null}
 
+      {isMobile && mobileAppMenuOpen ? (
+        <StudioMobileAppMenu
+          isAdminUser={isAdminUser}
+          onClose={() => setMobileAppMenuOpen(false)}
+          onViewProfile={() => {
+            setMobileAppMenuOpen(false);
+            openOwnProfile();
+          }}
+          onEditProfile={() => {
+            setMobileAppMenuOpen(false);
+            openSettingsTab("profile");
+          }}
+          onOpenSection={(section) => {
+            setMobileAppMenuOpen(false);
+            openMobileSection(section);
+          }}
+          onOpenSettings={(section) => {
+            setMobileAppMenuOpen(false);
+            openSettingsTab(section);
+          }}
+          onOpenCredits={() => {
+            setMobileAppMenuOpen(false);
+            openCreditsPane();
+          }}
+          onOpenHistory={() => {
+            setMobileAppMenuOpen(false);
+            setSettingsOpen(false);
+            setHistoryOpen(true);
+          }}
+          onOpenAdmin={() => {
+            setMobileAppMenuOpen(false);
+            openAdminTab("payments");
+          }}
+          onSignOut={() => {
+            setMobileAppMenuOpen(false);
+            void signOut();
+          }}
+        />
+      ) : null}
+
       {historyOpen ? (
         <StudioHistoryPanel
-          threads={threads ?? []}
+          indexThreads={threads ?? []}
+          openThreadIds={openTabs
+            .filter((tab) => tab.startsWith("thread:"))
+            .map((tab) => tab.slice("thread:".length))}
           activeThreadId={activeThreadId}
           onSelectThread={openHistoryThread}
           onClose={() => setHistoryOpen(false)}
+          expiresUnix={assetUrlExpiresUnix}
+          isMobile={isMobile}
         />
       ) : null}
       {contextMenu ? (
@@ -11635,6 +12986,7 @@ export function StudioShell() {
           canCreateFolder={!isTrashView}
           inTrashView={isTrashView}
           createItems={CREATE_MENU_ITEMS}
+          sharedAssetIds={sharedAssetIds}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashView) return;
@@ -11653,8 +13005,53 @@ export function StudioShell() {
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
             if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
+            if (action === "use-wallpaper") {
+              if (!entry?.studioId || entry.studioKind !== "asset" || entry.kind !== "image") return;
+              void (async () => {
+                try {
+                  const url = await convex.query(api.assets.signedReadUrl, {
+                    assetId: entry.studioId,
+                    expiresUnix: assetUrlExpiresUnix,
+                  });
+                  await useAssetAsWallpaper(entry.studioId, url);
+                  setProfileShareToast("Wallpaper updated");
+                } catch (error) {
+                  setProfileShareToast(friendlyConvexError(error, "Could not set wallpaper"));
+                }
+              })();
+            }
+            if (action === "share-profile") {
+              if (!entry?.studioId || entry.studioKind !== "asset") return;
+              if (!sharedProfileAssets?.hasProfile) {
+                setProfileShareToast("Claim a username in Settings → Profile first");
+                openSettingsTab("profile");
+                return;
+              }
+              void shareAssetToProfile({ assetId: entry.studioId })
+                .then((result) => {
+                  const handle = result.publicUrlPath.replace(/^\/u\//, "");
+                  setProfileShareToast(`Shared to @${handle}`);
+                  if (handle) openPublicProfile(handle);
+                })
+                .catch((error) => {
+                  setProfileShareToast(friendlyConvexError(error, "Could not share to profile"));
+                });
+            }
+            if (action === "unshare-profile") {
+              if (!entry?.studioId || entry.studioKind !== "asset") return;
+              void unshareAssetFromProfile({ assetId: entry.studioId })
+                .then(() => setProfileShareToast("Removed from profile"))
+                .catch((error) => {
+                  setProfileShareToast(friendlyConvexError(error, "Could not update profile"));
+                });
+            }
           }}
         />
+      ) : null}
+      {profileShareToast ? (
+        <div className="studio-voice-toast studio-profile-share-toast" role="status" aria-live="polite">
+          {profileShareToast}
+        </div>
       ) : null}
     </div>
   );
@@ -12158,7 +13555,7 @@ function StudioComposer({
                 aria-label="Close style picker"
                 onClick={() => setPresetGridOpen(false)}
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                <X aria-hidden="true" />
               </button>
             </div>
             <StudioStyleSheetPickerPanel
@@ -12203,7 +13600,7 @@ function StudioComposer({
                 aria-label="Close settings"
                 onClick={() => setComposerOptionsOpen(false)}
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                <X aria-hidden="true" />
               </button>
             </div>
             {controlStrip}
@@ -12248,13 +13645,17 @@ function StudioComposer({
           suppressContentEditableWarning
           data-placeholder={
             assistanceOn
-              ? "Chat with Assistance — attach photos or logos anytime"
+              ? "Chat with Assistance or attach photos and logos anytime"
               : isElementMode
                 ? `Name your ${elementTypeLabel(elementType).toLowerCase()} and drop reference media`
-                : "Describe the video, ad, or post you want"
+                : "Chat about the video, ad, or post you want"
           }
           className="cursor-composer-textarea cursor-composer-mention-editor"
-          onInput={(event) => setDraft(readComposerEditorText(event.currentTarget))}
+          onInput={(event) => {
+            const next = readComposerEditorText(event.currentTarget);
+            // Keep typing responsive — defer shell reconciliation of draft-driven UI.
+            startTransition(() => setDraft(next));
+          }}
           onKeyDown={(event) => {
             if (
               (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
@@ -12277,6 +13678,13 @@ function StudioComposer({
       </div>
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
+          {assistanceFeatureEnabled ? (
+            <AssistanceToggle
+              enabled={assistanceEnabled}
+              onChange={(enabled) => onAssistanceChange?.(enabled)}
+              disabled={disabled || assistBusy}
+            />
+          ) : null}
           <StudioUploadButton inputRef={uploadInputRef} />
           <button
             type="button"
@@ -12308,13 +13716,6 @@ function StudioComposer({
               value={videoType}
               options={guidedVideoTypes}
               onChange={setVideoType}
-              disabled={disabled || assistBusy}
-            />
-          ) : null}
-          {assistanceFeatureEnabled ? (
-            <AssistanceToggle
-              enabled={assistanceEnabled}
-              onChange={(enabled) => onAssistanceChange?.(enabled)}
               disabled={disabled || assistBusy}
             />
           ) : null}
@@ -13178,63 +14579,238 @@ function AdminQuickLinks({ onOpenAdminTab }) {
   );
 }
 
-function WhatsAppIcon({ className }) {
+function StudioSidebarBrand() {
+  const sidebarLogo = useMercurySidebarLogo();
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12.04 2.25a9.66 9.66 0 0 0-8.19 14.78l-1.1 4.01 4.11-1.08a9.66 9.66 0 1 0 5.18-17.71Zm0 1.78a7.88 7.88 0 1 1 0 15.76 7.8 7.8 0 0 1-4-1.1l-.29-.17-2.44.64.65-2.38-.19-.3a7.88 7.88 0 0 1 6.27-12.45Zm-3.35 3.7c-.18 0-.47.07-.71.34-.24.26-.93.91-.93 2.22 0 1.31.96 2.58 1.09 2.76.13.17 1.85 2.96 4.58 4.03 2.27.89 2.73.71 3.22.67.49-.04 1.59-.65 1.81-1.28.22-.63.22-1.17.15-1.28-.07-.11-.24-.18-.51-.31-.27-.13-1.59-.78-1.84-.87-.25-.09-.43-.13-.61.13-.18.27-.7.87-.86 1.05-.16.18-.31.2-.58.07-.27-.13-1.13-.42-2.15-1.33-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.12-.55.12-.12.27-.31.4-.47.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.47-.07-.13-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47h-.52Z" />
-    </svg>
+    <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
+      <span className="cursor-sidebar-brand-logo" aria-hidden="true">
+        <img
+          src={sidebarLogo}
+          alt=""
+          width={16}
+          height={16}
+          decoding="async"
+          loading="eager"
+          className="cursor-sidebar-brand-logo-img"
+        />
+      </span>
+      <span className="studio-sidebar-brand-label truncate">Studio</span>
+    </div>
   );
 }
 
-function StudioUserMenu({ currentUser, onSignOut }) {
+function StudioProfileMenu({
+  currentUser,
+  profile,
+  username,
+  isProfileTabActive,
+  mode = "dropdown",
+  onViewProfile,
+  onEditProfile,
+  onSignOut,
+}) {
   const [open, setOpen] = useState(false);
-  const sidebarLogo = useMercurySidebarLogo();
-  const label = currentUser?.phone ?? currentUser?.email ?? currentUser?.name ?? "Creator";
-  const contactType = currentUser?.phone ? "whatsapp" : currentUser?.email ? "email" : "creator";
+  const wrapRef = useRef(null);
+  const avatarUrl = profile?.avatarUrl;
+  const handle = String(username || profile?.username || "")
+    .trim()
+    .replace(/^@/, "")
+    .toLowerCase();
+  const initials = profileNameInitials({
+    firstName: currentUser?.firstName,
+    lastName: currentUser?.lastName,
+    name: currentUser?.name,
+    displayName: profile?.displayName,
+  });
+  const avatarStyle = avatarUrl ? undefined : profileAvatarStyle(initials);
+  const label = handle ? `@${handle}` : currentUser?.name || "Profile";
+  const direct = mode === "direct";
+
+  useEffect(() => {
+    if (!open || direct) return;
+    const onDoc = (event) => {
+      if (wrapRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [direct, open]);
+
   return (
-    <div className="studio-user-menu-wrap">
-                      <button
-                        type="button"
-        className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-user-menu-trigger min-w-0"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+    <div ref={wrapRef} className="studio-profile-menu-wrap">
+      <button
+        type="button"
+        className={`studio-settings-pill studio-settings-trigger studio-profile-menu-trigger${
+          open || isProfileTabActive ? " is-active" : ""
+        }`}
+        aria-label={direct ? "View profile" : "Profile menu"}
+        aria-expanded={direct ? undefined : open}
+        aria-haspopup={direct ? undefined : "menu"}
+        title={label}
+        onClick={() => {
+          if (direct) {
+            onViewProfile?.();
+            return;
+          }
+          setOpen((value) => !value);
+        }}
       >
-        <span className="cursor-sidebar-brand-logo" aria-hidden="true">
-          <img
-            src={sidebarLogo}
-            alt=""
-            width={16}
-            height={16}
-            decoding="async"
-            loading="eager"
-            className="cursor-sidebar-brand-logo-img"
-          />
-        </span>
-        <span className="cursor-sidebar-brand-user">
-          {contactType === "whatsapp" ? (
-            <WhatsAppIcon className="cursor-sidebar-brand-user-type-icon" />
-          ) : contactType === "email" ? (
-            <Mail className="cursor-sidebar-brand-user-type-icon" aria-hidden="true" />
-          ) : null}
-          <span className="cursor-sidebar-brand-user-name truncate">{label}</span>
-          <ChevronDown className="h-3 w-3" aria-hidden="true" />
-        </span>
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt="" className="studio-profile-menu-avatar" />
+        ) : (
+          <span className="studio-profile-menu-initials" style={avatarStyle}>
+            {initials}
+          </span>
+        )}
       </button>
-      {open ? (
-        <div className="cursor-tab-context-menu studio-user-menu-popover">
-                  <button
-                    type="button"
+      {!direct && open ? (
+        <div className="cursor-tab-context-menu studio-profile-menu-popover" role="menu">
+          <button
+            type="button"
             className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onViewProfile?.();
+            }}
+          >
+            View profile
+          </button>
+          <button
+            type="button"
+            className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onEditProfile?.();
+            }}
+          >
+            Edit profile
+          </button>
+          <div className="cursor-tab-context-sep" role="separator" />
+          <button
+            type="button"
+            className="cursor-tab-context-item is-danger"
+            role="menuitem"
             onClick={() => {
               setOpen(false);
               onSignOut?.();
             }}
           >
             Sign out
-                  </button>
+          </button>
         </div>
-                ) : null}
+      ) : null}
     </div>
+  );
+}
+
+function StudioMobileAppMenu({
+  isAdminUser,
+  onClose,
+  onViewProfile,
+  onEditProfile,
+  onOpenSection,
+  onOpenSettings,
+  onOpenCredits,
+  onOpenHistory,
+  onOpenAdmin,
+  onSignOut,
+}) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const sections = [
+    {
+      label: "Profile",
+      items: [
+        { label: "View profile", Icon: UserRound, onClick: onViewProfile },
+        { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
+      ],
+    },
+    {
+      label: "Navigate",
+      items: [
+        { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
+        { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
+        { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
+        { label: "History", Icon: History, onClick: onOpenHistory },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
+        { label: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
+        { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
+        { label: "Credits", Icon: Zap, onClick: onOpenCredits },
+        { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
+        { label: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
+        ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
+      ],
+    },
+    {
+      label: "Session",
+      items: [{ label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true }],
+    },
+  ];
+
+  return createPortal(
+    <div className="studio-mobile-app-menu-sheet" role="dialog" aria-modal="true" aria-label="Studio menu">
+      <div className="studio-mobile-app-menu-head">
+        <h2 className="studio-mobile-app-menu-title">Menu</h2>
+        <button
+          type="button"
+          className="studio-mobile-app-menu-close"
+          aria-label="Close menu"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+      <div className="studio-mobile-app-menu-body">
+        {sections.map((section) => (
+          <section key={section.label} className="studio-mobile-app-menu-section">
+            <p className="studio-mobile-app-menu-label">{section.label}</p>
+            <div className="studio-mobile-app-menu-list" role="menu">
+              {section.items.map((item) => {
+                const Icon = item.Icon;
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    role="menuitem"
+                    className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
+                    onClick={item.onClick}
+                  >
+                    <span className="studio-mobile-app-menu-item-icon" aria-hidden="true">
+                      <Icon />
+                    </span>
+                    <span className="studio-mobile-app-menu-item-label">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>,
+    // Must live inside .studio-polish (wallpaper overflow root) or backdrop-filter
+    // samples blank like the old body-portal glass bug — same as composer.
+    document.querySelector(".studio-polish") ?? document.body,
   );
 }
 
@@ -14837,7 +16413,12 @@ function ActivePane({
   onEditorStatus,
   onVideoEditProjectSaved,
   activeEditTab,
+  onOpenPublicProfile,
 }) {
+  const profileUsername = activeTab.startsWith("profile:")
+    ? activeTab.slice("profile:".length)
+    : null;
+
   useEffect(() => {
     if (!activeTab.startsWith("create:")) return;
     const createTarget = parseCreateTab(activeTab);
@@ -14912,10 +16493,20 @@ function ActivePane({
       />
     );
   }
+  if (profileUsername) {
+    return (
+      <PublicProfileView
+        username={profileUsername}
+        embedded
+        ownerName={currentUser}
+      />
+    );
+  }
   if (activeEntry?.studioKind === "document") {
     return (
-      <div className="h-full min-h-0">
+      <div className="studio-asset-preview studio-document-preview">
         <MarkdownDocEditor
+          name={activeEntry.name}
           value={activeEntry.description ?? ""}
           onChange={(contentMarkdown) => onDocumentChange(activeEntry, contentMarkdown)}
           onSave={() => {}}
@@ -15814,7 +17405,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
             <p className="studio-admin-card-kicker">Payment</p>
             <h3>{formatMoney(payment.amountCents)}</h3>
           </div>
-          <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close">
+          <button type="button" className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close" onClick={onClose} aria-label="Close">
             ×
           </button>
         </header>
@@ -15909,9 +17500,211 @@ function paymentCustomerName(payment) {
   return payment.customer?.name ?? payment.customer?.email ?? payment.customer?.phone ?? "Unknown customer";
 }
 
+function StudioFilesExplorerBody({
+  search,
+  setSearch,
+  breadcrumbPath,
+  onBreadcrumbNavigate,
+  onBreadcrumbDrop,
+  viewMode,
+  displayRootEntries,
+  displayCurrentEntries,
+  pathToEntry,
+  topFolders,
+  childFolders,
+  setActiveFolderId,
+  setNavTrail,
+  onOpenPath,
+  onEntryOpen,
+  searchState,
+  deferredSearch,
+  setContextMenu,
+  activeFolder,
+  onEntryDrop,
+  isMobile,
+  showSearch = true,
+  showPathbar = true,
+}) {
+  const tree = (
+      <FileTree
+        viewMode={isMobile ? "grid" : viewMode}
+        workspaceId={WORKSPACE_ID}
+        rootEntries={displayRootEntries}
+        flatEntries={displayCurrentEntries}
+        listDir={() => {}}
+        onNavigate={(path, navEntry) => {
+          if (navEntry?.type === "parent" && navEntry.studioId) {
+            setActiveFolderId(navEntry.studioId);
+            setNavTrail((trail) => trail.slice(0, -1));
+            return;
+          }
+          const entry = pathToEntry.get(path);
+          if (entry) {
+            onEntryOpen(entry);
+            return;
+          }
+          const folder = [...(topFolders ?? []), ...(childFolders ?? [])].find(
+            (item) => studioPathForFolder(item) === path,
+          );
+          if (folder) {
+            setActiveFolderId(folder._id);
+            setNavTrail((trail) => [...trail, { id: folder._id, name: folder.name }]);
+          }
+        }}
+        onOpenFile={onOpenPath}
+        searchQuery={search}
+        searchScope={breadcrumbPath}
+        searchResults={searchState.entries}
+        searchBusy={search !== deferredSearch}
+        searchTruncated={searchState.truncated}
+        onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
+        onBlankContextMenu={(x, y) => setContextMenu({ entry: { type: "blank", path: activeFolder?.name ?? "" }, x, y })}
+        enableLongPress={isMobile}
+        longPressDelay={isMobile ? 280 : 450}
+        onEntryLongPress={(entry, coords) =>
+          setContextMenu({
+            entry,
+            x: coords?.x ?? window.innerWidth / 2,
+            y: coords?.y ?? window.innerHeight / 2,
+          })
+        }
+        onEntryDrop={onEntryDrop}
+      />
+  );
+
+  return (
+    <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
+      {showSearch ? (
+        <PanelSearchBar value={search} onChange={setSearch} placeholder="Search your content" aria-label="Search your content" />
+      ) : null}
+      {showPathbar ? (
+        <div className="studio-folder-pathbar shrink-0">
+          <FileBreadcrumbs path={breadcrumbPath} onNavigate={onBreadcrumbNavigate} onDropEntry={onBreadcrumbDrop} />
+        </div>
+      ) : null}
+      {tree}
+    </div>
+  );
+}
+
+function StudioFilesMobileSheet({
+  onClose,
+  addMenuOpen,
+  setAddMenuOpen,
+  onCreateAction,
+  fileInputRef,
+  onUploadFiles,
+  search,
+  setSearch,
+  breadcrumbPath,
+  onBreadcrumbNavigate,
+  onBreadcrumbDrop,
+  ...explorerProps
+}) {
+  const [portalRoot, setPortalRoot] = useState(null);
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div
+      className="studio-mobile-app-menu-sheet studio-files-mobile-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Files"
+    >
+      <div className="studio-mobile-app-menu-head">
+        <h2 className="studio-mobile-app-menu-title">Files</h2>
+        <button
+          type="button"
+          className="studio-mobile-app-menu-close"
+          aria-label="Close files"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+      <div className="studio-mobile-app-menu-body">
+        <div className="studio-files-search-wrap">
+          <Search className="studio-files-search-icon" aria-hidden="true" />
+          <input
+            ref={searchRef}
+            className="studio-files-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search your content…"
+            aria-label="Search your content"
+          />
+          {search ? (
+            <button
+              type="button"
+              className="studio-files-search-clear"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+            >
+              <X aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+        <div className="studio-files-mobile-toolbar">
+          <div className="studio-files-mobile-crumbs">
+            <FileBreadcrumbs
+              path={breadcrumbPath}
+              onNavigate={onBreadcrumbNavigate}
+              onDropEntry={onBreadcrumbDrop}
+            />
+          </div>
+          <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
+          <input
+            ref={fileInputRef}
+            className="hidden"
+            type="file"
+            multiple
+            onChange={(event) => {
+              void onUploadFiles(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
+        </div>
+        <StudioFilesExplorerBody
+          {...explorerProps}
+          search={search}
+          setSearch={setSearch}
+          breadcrumbPath={breadcrumbPath}
+          onBreadcrumbNavigate={onBreadcrumbNavigate}
+          onBreadcrumbDrop={onBreadcrumbDrop}
+          isMobile
+          showSearch={false}
+          showPathbar={false}
+          viewMode="grid"
+        />
+      </div>
+    </div>,
+    portalRoot,
+  );
+}
+
 function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, children }) {
   if (settingsOpen && isMobile) {
-    return <SettingsSidePanel {...settingsPanelProps} />;
+    return (
+      <>
+        {children}
+        <SettingsSidePanel {...settingsPanelProps} isMobile />
+      </>
+    );
   }
   if (settingsOpen && !isMobile) {
     return (
@@ -15936,30 +17729,81 @@ function SettingsSidePanel({
   notifications,
   billingAccount,
   pricing,
+  rootFolderId,
+  onOpenPublicProfile,
   onClose,
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
+  isMobile = false,
 }) {
+  const [portalRoot, setPortalRoot] = useState(null);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMobile, onClose]);
+
+  const pane = (
+    <SettingsWorkspacePane
+      tab={settingsSection}
+      currentUser={currentUser}
+      payments={payments}
+      notifications={notifications}
+      billingAccount={billingAccount}
+      pricing={pricing}
+      rootFolderId={rootFolderId}
+      onOpenPublicProfile={onOpenPublicProfile}
+      onSaveAccount={onSaveAccount}
+      customCursorEnabled={customCursorEnabled}
+      onCustomCursorChange={onCustomCursorChange}
+    />
+  );
+
+  if (isMobile) {
+    if (!portalRoot) return null;
+    return createPortal(
+      <div
+        className="studio-mobile-app-menu-sheet studio-settings-mobile-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+      >
+        <div className="studio-mobile-app-menu-head">
+          <h2 className="studio-mobile-app-menu-title">Settings</h2>
+          <button
+            type="button"
+            className="studio-mobile-app-menu-close"
+            aria-label="Close settings"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+        <div className="studio-mobile-app-menu-body">{pane}</div>
+      </div>,
+      portalRoot,
+    );
+  }
+
   return (
     <aside className="studio-settings-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft">
       <div className={`${STYLE.panelHead} shrink-0`}>
         <span className="text-sm font-medium text-cursor-text-bright">Settings</span>
-        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm" onClick={onClose} aria-label="Close settings">
+        <button type="button" className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close" onClick={onClose} aria-label="Close settings">
           ×
         </button>
       </div>
-      <SettingsWorkspacePane
-        tab={settingsSection}
-        currentUser={currentUser}
-        payments={payments}
-        notifications={notifications}
-        billingAccount={billingAccount}
-        pricing={pricing}
-        onSaveAccount={onSaveAccount}
-        customCursorEnabled={customCursorEnabled}
-        onCustomCursorChange={onCustomCursorChange}
-      />
+      {pane}
     </aside>
   );
 }
@@ -15971,6 +17815,8 @@ function SettingsWorkspacePane({
   notifications,
   billingAccount,
   pricing,
+  rootFolderId,
+  onOpenPublicProfile,
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
@@ -16127,11 +17973,16 @@ function SettingsWorkspacePane({
   const items = [
     { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
+    { id: "profile", label: "Profile" },
     { id: "account", label: "Account details" },
     { id: "activity", label: "Activity" },
     { id: "api-keys", label: "API keys" },
   ];
   const settingsSectionId = section === "top-up" ? "billing" : section;
+  const profileDisplayHint = [currentUser?.firstName, currentUser?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || currentUser?.name || "";
   return (
     <div className="studio-settings-workspace">
       <header className="studio-settings-workspace-head">
@@ -16149,6 +18000,14 @@ function SettingsWorkspacePane({
         </nav>
       </header>
       <div className="studio-settings-workspace-body">
+        {settingsSectionId === "profile" ? (
+          <ProfileSettingsCard
+            rootFolderId={rootFolderId}
+            displayNameHint={profileDisplayHint}
+            onOpenPublicProfile={onOpenPublicProfile}
+          />
+        ) : null}
+
         {settingsSectionId === "account" ? (
           <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} />
           ) : null}
@@ -17125,9 +18984,61 @@ function virtualFileName(name, ext) {
   return cleanName.toLowerCase().endsWith(ext.toLowerCase()) ? cleanName : `${cleanName}${ext}`;
 }
 
-function tabDescriptor({ key, threads, assets, documents, videoEdits, elements, snapshots }) {
+function tabDescriptor({
+  key,
+  threads,
+  assets,
+  documents,
+  videoEdits,
+  elements,
+  snapshots,
+  profileMetaByUsername,
+  myProfile,
+  currentUser,
+}) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
+  }
+  if (key.startsWith("profile:")) {
+    const username = key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase();
+    const meta = profileMetaByUsername?.get?.(username);
+    const mineHandle = String(myProfile?.username ?? "")
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    const isMine = Boolean(mineHandle && username && mineHandle === username);
+    // Prefer the canonical handle from the profile record when available.
+    const handle = String(meta?.username || (isMine ? myProfile?.username : "") || username)
+      .trim()
+      .replace(/^@/, "")
+      .toLowerCase();
+    const title =
+      meta?.displayName?.trim() ||
+      (isMine ? myProfile?.displayName?.trim() : "") ||
+      handle ||
+      "Profile";
+    const avatarUrl = meta?.avatarUrl || (isMine ? myProfile?.avatarUrl : undefined);
+    const initials = profileNameInitials({
+      firstName: isMine ? currentUser?.firstName : undefined,
+      lastName: isMine ? currentUser?.lastName : undefined,
+      name: isMine ? currentUser?.name : undefined,
+      displayName:
+        meta?.displayName ||
+        (isMine ? myProfile?.displayName : undefined) ||
+        title,
+    });
+    const previewAvatarStyle = avatarUrl ? undefined : profileAvatarStyle(initials);
+    return {
+      key,
+      kind: "file",
+      title,
+      status: "ready",
+      studioKind: "profile",
+      previewUrl: avatarUrl,
+      previewKind: avatarUrl ? "image" : undefined,
+      previewInitials: avatarUrl ? undefined : initials,
+      previewAvatarStyle,
+    };
   }
   if (key.startsWith("admin:")) {
     const kind = key.slice("admin:".length);

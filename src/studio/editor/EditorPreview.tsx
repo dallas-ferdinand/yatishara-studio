@@ -56,6 +56,7 @@ export function useEditorPlayback({
   const rafRef = useRef(null);
   const boundVideoClipRef = useRef(null);
   const boundAudioClipRef = useRef(null);
+  const lastPlayheadCommitRef = useRef(0);
 
   const clipsSig = useMemo(
     () =>
@@ -68,6 +69,15 @@ export function useEditorPlayback({
   projectRef.current = project;
   playheadRef.current = playhead;
   playingRef.current = playing;
+
+  const commitPlayhead = (time, force = false) => {
+    playheadRef.current = time;
+    const now = performance.now();
+    // Keep media clock at full frame rate via refs; throttle React commits to ~30 Hz.
+    if (!force && now - lastPlayheadCommitRef.current < 33) return;
+    lastPlayheadCommitRef.current = now;
+    onPlayheadChange(time);
+  };
 
   useEffect(() => {
     boundVideoClipRef.current = null;
@@ -126,11 +136,11 @@ export function useEditorPlayback({
       const end = projectEndTime(proj);
       const next = Math.min(end, playheadRef.current + dt);
       if (next >= end - 0.01) {
-        onPlayheadChange(end);
+        commitPlayhead(end, true);
         onPlayingChange(false);
         return;
       }
-      onPlayheadChange(next);
+      commitPlayhead(next);
     };
 
     const tick = (now) => {
@@ -161,15 +171,14 @@ export function useEditorPlayback({
             if (next >= clipEnd - 0.02) {
               const after = clipEnd + 0.001;
               if (after >= projectEndTime(proj) - 0.01) {
-                onPlayheadChange(projectEndTime(proj));
+                commitPlayhead(projectEndTime(proj), true);
                 onPlayingChange(false);
                 return;
               }
-              onPlayheadChange(after);
+              commitPlayhead(after, true);
               boundVideoClipRef.current = null;
             } else {
-              playheadRef.current = next;
-              onPlayheadChange(next);
+              commitPlayhead(next);
             }
           }
         } else {
@@ -277,7 +286,7 @@ export function EditorPreview({
               ref={videoRef}
               className="studio-editor-preview-video"
               playsInline
-              preload="auto"
+              preload="metadata"
               style={{ opacity: videoOpacity }}
               onClick={() => onPlayingChange(!playing)}
             />

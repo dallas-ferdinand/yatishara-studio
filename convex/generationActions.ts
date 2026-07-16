@@ -91,6 +91,16 @@ const markStageRef = internalMutationRef<
   null
 >("generation:markStage");
 
+const claimJobExecutionRef = internalMutationRef<
+  { jobId: Id<"generationJobs">; attemptId: string; leaseMs?: number },
+  { acquired: boolean; stage: string }
+>("generation:claimJobExecution");
+
+const heartbeatJobExecutionRef = internalMutationRef<
+  { jobId: Id<"generationJobs">; attemptId: string; leaseMs?: number },
+  boolean
+>("generation:heartbeatJobExecution");
+
 const getJobRunContextRef = internalQueryRef<
   { jobId: Id<"generationJobs"> },
   {
@@ -620,6 +630,14 @@ async function executeQueuedApiJob(
   },
 ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
   const referenceInputs = args.referenceInputs ?? [];
+  const attemptId = `api_${args.jobId}_${Date.now()}`;
+  const claim = await ctx.runMutation(claimJobExecutionRef, {
+    jobId: args.jobId,
+    attemptId,
+  });
+  if (!claim.acquired) {
+    return { jobId: args.jobId };
+  }
   try {
     const { job, preset } = await ctx.runQuery(getJobRunContextRef, { jobId: args.jobId });
     if (args.mode === "video") {
@@ -630,7 +648,7 @@ async function executeQueuedApiJob(
         surface: "internal",
       });
     }
-    await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
+    await ctx.runMutation(heartbeatJobExecutionRef, { jobId: args.jobId, attemptId });
     const skipEnhancement = shouldSkipPromptEnhancement({
       skipPromptEnhancement: job.skipPromptEnhancement,
       presetSlug: preset.slug,

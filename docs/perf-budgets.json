@@ -1,0 +1,29 @@
+{
+  "$schema": "./perf-budgets.schema.json",
+  "description": "True Performance hard budgets — fail CI when exceeded.",
+  "route": {
+    "initialJsGzipKb": 180,
+    "initialCssGzipKb": 50,
+    "initialFontsKb": 250
+  },
+  "field": {
+    "lcpMsP75": 2500,
+    "inpMsP75": 200,
+    "clsP75": 0.1,
+    "workspaceReadyMsP75": 3500,
+    "longTaskMs": 200
+  },
+  "assets": {
+    "maxPublicFileKb": 500,
+    "forbidGlobs": [
+      "**/archive/**",
+      "**/*-archive*/**",
+      "**/blur-test*.html",
+      "**/*.apk",
+      "**/*-research*/**"
+    ]
+  },
+  "docker": {
+    "maxImageSizeRegressionPct": 5
+  }
+}

@@ -15,13 +15,16 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "export": "next build",
+    "check:perf-budgets": "node scripts/check-perf-budgets.mjs",
     "check:launch-env": "node scripts/check-launch-env.mjs",
     "check:launch-env:convex": "node scripts/check-launch-env.mjs --convex",
     "generate:studio-light-wallpapers": "node scripts/generate-studio-light-wallpapers.mjs",
     "generate:studio-light-wallpapers:procedural": "node scripts/generate-studio-light-wallpapers.mjs",
     "process:studio-light-wallpapers": "node scripts/process-studio-light-wallpapers.mjs",
     "generate:family-wallpapers": "node scripts/generate-studio-family-wallpapers.mjs",
-    "bootstrap:wallpaper-families": "node scripts/bootstrap-wallpaper-families.mjs"
+    "bootstrap:wallpaper-families": "node scripts/bootstrap-wallpaper-families.mjs",
+    "mobile:sync": "npm --prefix mobile run sync",
+    "mobile:apk": "npm --prefix mobile run build:apk"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.11",

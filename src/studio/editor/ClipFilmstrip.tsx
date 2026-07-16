@@ -6,8 +6,8 @@ import { resolveClipPoster } from "./videoPoster";
 
 export function ClipFilmstrip({ media, label, widthPx }) {
   const [poster, setPoster] = useState(null);
+  // One CSS-repeated tile instead of N <img> nodes per clip width.
   const tileW = 44;
-  const count = Math.max(1, Math.ceil(Math.max(widthPx, 28) / tileW));
 
   useEffect(() => {
     let cancelled = false;
@@ -22,26 +22,34 @@ export function ClipFilmstrip({ media, label, widthPx }) {
 
   if (poster) {
     return (
-      <div className="studio-editor-filmstrip" aria-hidden="true">
-        {Array.from({ length: count }, (_, index) => (
-          <img key={index} src={poster} alt="" draggable={false} loading="lazy" />
-        ))}
-      </div>
-    );
-  }
-
-  if (media?.kind === "video" && media.url) {
-    return (
-      <video
-        className="studio-editor-filmstrip-video"
-        src={media.url}
-        muted
-        playsInline
-        preload="metadata"
+      <div
+        className="studio-editor-filmstrip studio-editor-filmstrip--css"
         aria-hidden="true"
+        title={label}
+        style={{
+          backgroundImage: `url("${poster}")`,
+          backgroundSize: `${tileW}px 100%`,
+          backgroundRepeat: "repeat-x",
+          width: Math.max(widthPx, 28),
+        }}
       />
     );
   }
 
-  return <span className="studio-editor-clip-label">{label}</span>;
+  if (media?.kind === "video" && media.thumbnailUrl) {
+    return (
+      <div
+        className="studio-editor-filmstrip studio-editor-filmstrip--css"
+        aria-hidden="true"
+        style={{
+          backgroundImage: `url("${media.thumbnailUrl}")`,
+          backgroundSize: `${tileW}px 100%`,
+          backgroundRepeat: "repeat-x",
+          width: Math.max(widthPx, 28),
+        }}
+      />
+    );
+  }
+
+  return <div className="studio-editor-filmstrip-empty" aria-hidden="true" />;
 }

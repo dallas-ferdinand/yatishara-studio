@@ -1,13 +1,12 @@
 // @ts-nocheck
 "use client";
 
-import { LayoutGrid, Settings, Sparkles } from "lucide-react";
+import { Folder, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const NAV_ITEMS = [
-  { id: "files", label: "Files", Icon: LayoutGrid },
+  { id: "files", label: "Files", Icon: Folder },
   { id: "composer", label: "Create", Icon: Sparkles },
-  { id: "settings", label: "Settings", Icon: Settings },
 ];
 
 export function StudioMobileBottomNav({ section, onSelect, tools = null }) {

@@ -4,7 +4,7 @@ import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, LQIP_TRANSFORM, signBunnyCdnUrl, signBunnyFullUrl, THUMB_TRANSFORM } from "./lib/bunny";
+import { buildAssetPath, LQIP_TRANSFORM, signBunnyCdnUrl, THUMB_TRANSFORM } from "./lib/bunny";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import {
   CREDIT_PRICE_TTD,
@@ -49,6 +49,13 @@ const sendPushForNotificationRef = makeFunctionReference<
   number
 >;
 
+const threadPreviewChip = v.object({
+  label: v.string(),
+  kind: v.string(),
+  elementType: v.optional(v.string()),
+  thumbnailUrl: v.optional(v.string()),
+});
+
 const threadReturn = v.object({
   _id: v.id("generationThreads"),
   _creationTime: v.number(),
@@ -60,6 +67,264 @@ const threadReturn = v.object({
   assistanceEnabled: v.optional(v.boolean()),
   createdAt: v.number(),
   updatedAt: v.number(),
+  previewSnippet: v.optional(v.string()),
+  previewChips: v.optional(v.array(threadPreviewChip)),
+  resultThumbs: v.optional(
+    v.array(
+      v.object({
+        _id: v.id("assets"),
+        kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio"), v.literal("document")),
+        thumbnailUrl: v.optional(v.string()),
+      }),
+    ),
+  ),
+});
+
+const REFERENCES_MARKER = "\n\nReferences:\n";
+
+function parseHistoryReferenceLine(line: string) {
+  const trimmed = String(line ?? "").trim();
+  const match = trimmed.match(/^-\s*@(.+?)(?:\s*\|\s*(.+))?$/);
+  if (!match) return null;
+  const label = match[1].trim();
+  if (!label || label === "[object Object]") return null;
+  const metaParts = String(match[2] ?? "")
+    .split("|")
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+  let kind = "file";
+  let elementType = "";
+  let thumb = "";
+  for (const part of metaParts) {
+    const [key, ...rest] = part.split(":");
+    const value = rest.join(":").trim();
+    if (!value) continue;
+    if (key === "kind") kind = value;
+    else if (key === "element") elementType = value;
+    else if (key === "thumb") thumb = value;
+  }
+  return {
+    label,
+    kind,
+    ...(elementType ? { elementType } : {}),
+    ...(thumb ? { thumbnailUrl: thumb } : {}),
+  };
+}
+
+function historyPromptSummary(prompt?: string) {
+  const raw = String(prompt ?? "");
+  const splitIdx = raw.indexOf(REFERENCES_MARKER);
+  const body = (splitIdx === -1 ? raw : raw.slice(0, splitIdx))
+    .replace(/\uFFFC/g, " ")
+    .replace(/@([^\s@|]+)/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+  const chips: Array<{
+    label: string;
+    kind: string;
+    elementType?: string;
+    thumbnailUrl?: string;
+  }> = [];
+  if (splitIdx !== -1) {
+    for (const line of raw.slice(splitIdx + REFERENCES_MARKER.length).split("\n")) {
+      const parsed = parseHistoryReferenceLine(line);
+      if (!parsed) continue;
+      chips.push(parsed);
+      if (chips.length >= 4) break;
+    }
+  }
+  const snippet = body.replace(/\s+/g, " ").trim();
+  return {
+    snippet: snippet ? snippet.slice(0, 120) : undefined,
+    chips,
+  };
+}
+
+/** Cap history queries — unbounded collect() exceeds Convex's 1s query limit. */
+const LIST_THREADS_LIMIT = 100;
+const HISTORY_PAGE_LIMIT = 12;
+const HISTORY_SCAN_LIMIT = 240;
+
+const historyRange = v.union(
+  v.literal("recent"),
+  v.literal("this_week"),
+  v.literal("older"),
+);
+
+const historyPageReturn = v.object({
+  threads: v.array(threadReturn),
+  nextCursor: v.optional(v.number()),
+  hasMore: v.boolean(),
+});
+
+function historyRangeBounds(range: "recent" | "this_week" | "older") {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const yesterdayStart = todayStart - dayMs;
+  const weekStart = todayStart - 7 * dayMs;
+  if (range === "recent") {
+    return { minMs: yesterdayStart, maxMs: Number.POSITIVE_INFINITY };
+  }
+  if (range === "this_week") {
+    return { minMs: weekStart, maxMs: yesterdayStart };
+  }
+  return { minMs: 0, maxMs: weekStart };
+}
+
+async function enrichHistoryThread(
+  ctx: QueryCtx,
+  thread: Doc<"generationThreads">,
+  expiresUnix: number | undefined,
+  signThumb: boolean,
+) {
+  const recentEvents = await ctx.db
+    .query("generationEvents")
+    .withIndex("by_thread_and_order", (q) => q.eq("threadId", thread._id))
+    .order("desc")
+    .take(8);
+
+  const promptEvent = recentEvents.find((event) => event.kind === "prompt" && event.prompt);
+  const resultEvent = recentEvents.find(
+    (event) => event.kind === "result" && (event.assetIds?.length ?? 0) > 0,
+  );
+  const { snippet, chips } = historyPromptSummary(promptEvent?.prompt);
+
+  let resultThumbs:
+    | Array<{
+        _id: Id<"assets">;
+        kind: Doc<"assets">["kind"];
+        thumbnailUrl?: string;
+      }>
+    | undefined;
+
+  if (signThumb && resultEvent?.assetIds?.length && expiresUnix) {
+    const asset = await ctx.db.get("assets", resultEvent.assetIds[0]!);
+    if (asset) {
+      const thumbPath =
+        asset.thumbnailPath ||
+        (asset.bunnyPath && asset.kind === "image" ? asset.bunnyPath : undefined);
+      const thumbnailUrl = thumbPath
+        ? await signBunnyCdnUrl(thumbPath, expiresUnix, THUMB_TRANSFORM)
+        : undefined;
+      resultThumbs = [
+        {
+          _id: asset._id,
+          kind: asset.kind,
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
+        },
+      ];
+    }
+  }
+
+  const cleanedTitle =
+    thread.title?.trim() && thread.title.trim() !== "[object Object]"
+      ? thread.title.trim()
+      : undefined;
+
+  return {
+    ...thread,
+    title:
+      cleanedTitle &&
+      cleanedTitle !== "New generation" &&
+      cleanedTitle !== "API generation"
+        ? cleanedTitle
+        : snippet || cleanedTitle || "Untitled",
+    ...(snippet ? { previewSnippet: snippet } : {}),
+    ...(chips.length ? { previewChips: chips } : {}),
+    ...(resultThumbs?.length ? { resultThumbs } : {}),
+  };
+}
+
+export const listThreads = authedQuery({
+  args: {},
+  returns: v.array(threadReturn),
+  handler: async (ctx) => {
+    // Newest first within non-archived (archivedAt is unused today but keep the filter).
+    const threads = await ctx.db
+      .query("generationThreads")
+      .withIndex("by_owner_and_archived", (q) =>
+        q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
+      )
+      .order("desc")
+      .take(LIST_THREADS_LIMIT);
+
+    return threads.map((thread) => {
+      const cleanedTitle =
+        thread.title?.trim() && thread.title.trim() !== "[object Object]"
+          ? thread.title.trim()
+          : "Untitled";
+      return {
+        ...thread,
+        title: cleanedTitle,
+      };
+    });
+  },
+});
+
+/**
+ * Paginated enriched history for one time range.
+ * recent = today + yesterday; this_week / older load only when their accordion opens.
+ */
+export const listHistoryThreads = authedQuery({
+  args: {
+    range: historyRange,
+    expiresUnix: v.optional(v.number()),
+    cursor: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: historyPageReturn,
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? HISTORY_PAGE_LIMIT, 1), HISTORY_PAGE_LIMIT);
+    const { minMs, maxMs } = historyRangeBounds(args.range);
+    const cursor = args.cursor;
+
+    // Prefer the updatedAt index so "load more" can walk beyond the newest window.
+    let scanned = await ctx.db
+      .query("generationThreads")
+      .withIndex("by_owner_archived_updated", (q) =>
+        q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
+      )
+      .order("desc")
+      .take(HISTORY_SCAN_LIMIT);
+
+    if (scanned.length === 0) {
+      scanned = await ctx.db
+        .query("generationThreads")
+        .withIndex("by_owner_and_archived", (q) =>
+          q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
+        )
+        .order("desc")
+        .take(HISTORY_SCAN_LIMIT);
+    }
+
+    const matched = scanned.filter((thread) => {
+      const ts = thread.updatedAt ?? thread._creationTime;
+      if (cursor != null && ts >= cursor) return false;
+      return ts >= minMs && ts < maxMs;
+    });
+
+    const page = matched.slice(0, limit);
+    const hasMore = matched.length > limit;
+    const nextCursor = hasMore
+      ? page[page.length - 1]?.updatedAt ?? page[page.length - 1]?._creationTime
+      : undefined;
+
+    const threads = [];
+    for (let index = 0; index < page.length; index += 1) {
+      threads.push(
+        await enrichHistoryThread(ctx, page[index]!, args.expiresUnix, index < 8),
+      );
+    }
+
+    return {
+      threads,
+      ...(nextCursor != null ? { nextCursor } : {}),
+      hasMore,
+    };
+  },
 });
 
 const eventReturn = v.object({
@@ -105,36 +370,23 @@ const eventReturn = v.object({
   }))),
 });
 
-/** Cap history queries — unbounded collect() exceeds Convex's 1s query limit. */
-const LIST_THREADS_LIMIT = 100;
-
-export const listThreads = authedQuery({
-  args: {},
-  returns: v.array(threadReturn),
-  handler: async (ctx) => {
-    // Newest first within non-archived (archivedAt is unused today but keep the filter).
-    return await ctx.db
-      .query("generationThreads")
-      .withIndex("by_owner_and_archived", (q) =>
-        q.eq("ownerId", ctx.user._id).eq("archivedAt", undefined),
-      )
-      .order("desc")
-      .take(LIST_THREADS_LIMIT);
-  },
-});
-
 export const listEvents = authedQuery({
   args: {
     threadId: v.id("generationThreads"),
     expiresUnix: v.optional(v.number()),
+    /** When set, return only the newest N events (reactive live tail). */
+    limit: v.optional(v.number()),
   },
   returns: v.array(eventReturn),
   handler: async (ctx, args) => {
     await requireThreadOwner(ctx, args.threadId);
-    const events = await ctx.db
+    const limit = args.limit != null ? Math.min(Math.max(args.limit, 1), 200) : undefined;
+    const eventQuery = ctx.db
       .query("generationEvents")
-      .withIndex("by_thread_and_order", (q) => q.eq("threadId", args.threadId))
-      .collect();
+      .withIndex("by_thread_and_order", (q) => q.eq("threadId", args.threadId));
+    const events = limit
+      ? (await eventQuery.order("desc").take(limit)).reverse()
+      : await eventQuery.collect();
     const resultAssetIds = Array.from(new Set(events.flatMap((event) => event.assetIds ?? [])));
     const assets = (await Promise.all(resultAssetIds.map((assetId) => ctx.db.get("assets", assetId))))
       .filter((asset): asset is Doc<"assets"> => asset !== null);
@@ -179,9 +431,8 @@ export const listEvents = authedQuery({
                   kind: asset.kind,
                   mimeType: asset.mimeType,
                   byteSize: asset.byteSize,
-                  signedReadUrl: asset.bunnyPath && args.expiresUnix
-                    ? await signBunnyFullUrl(asset.bunnyPath, args.expiresUnix, asset.kind)
-                    : undefined,
+                  // List rows only ship thumbnails; full media is lazy-loaded on open.
+                  signedReadUrl: undefined,
                   signedThumbnailUrl,
                   signedThumbnailLqipUrl,
                 };
@@ -1163,12 +1414,14 @@ export const markStage = internalMutation({
 
 /**
  * Atomically claim a queued job for provider execution.
- * Returns acquired=false when another worker already claimed it.
+ * Returns acquired=false when another worker already claimed it with a live lease.
  */
 export const claimJobExecution = internalMutation({
   args: {
     jobId: v.id("generationJobs"),
     attemptId: v.string(),
+    /** Lease duration in ms (default 15 minutes). */
+    leaseMs: v.optional(v.number()),
   },
   returns: v.object({
     acquired: v.boolean(),
@@ -1182,22 +1435,39 @@ export const claimJobExecution = internalMutation({
         stage: job.stage as "queued" | "generating" | "saving" | "done" | "failed",
       };
     }
+    const now = Date.now();
+    const leaseMs = Math.min(Math.max(args.leaseMs ?? 15 * 60_000, 60_000), 60 * 60_000);
+    const leaseLive =
+      job.executionLeaseUntil != null && job.executionLeaseUntil > now;
     if (job.executionAttemptId) {
-      return {
-        acquired: job.executionAttemptId === args.attemptId,
-        stage: job.stage as "queued" | "generating" | "saving" | "done" | "failed",
-      };
-    }
-    if (job.stage !== "queued") {
+      if (job.executionAttemptId === args.attemptId) {
+        await ctx.db.patch(job._id, {
+          executionLeaseUntil: now + leaseMs,
+          updatedAt: now,
+        });
+        return {
+          acquired: true,
+          stage: job.stage as "queued" | "generating" | "saving" | "done" | "failed",
+        };
+      }
+      if (leaseLive) {
+        return {
+          acquired: false,
+          stage: job.stage as "queued" | "generating" | "saving" | "done" | "failed",
+        };
+      }
+      // Stale lease — reclaim for this attempt.
+    } else if (job.stage !== "queued") {
       return {
         acquired: false,
         stage: job.stage as "queued" | "generating" | "saving" | "done" | "failed",
       };
     }
-    const now = Date.now();
     await ctx.db.patch(job._id, {
       stage: "generating",
       executionAttemptId: args.attemptId,
+      executionLeaseUntil: now + leaseMs,
+      executionAttemptCount: (job.executionAttemptCount ?? 0) + 1,
       updatedAt: now,
     });
     await ctx.db.insert("generationEvents", {
@@ -1210,6 +1480,111 @@ export const claimJobExecution = internalMutation({
       createdAt: now,
     });
     return { acquired: true, stage: "generating" as const };
+  },
+});
+
+/** Refresh the execution lease while a long provider call is in flight. */
+export const heartbeatJobExecution = internalMutation({
+  args: {
+    jobId: v.id("generationJobs"),
+    attemptId: v.string(),
+    leaseMs: v.optional(v.number()),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId);
+    if (job.executionAttemptId !== args.attemptId) return false;
+    if (job.stage === "done" || job.stage === "failed") return false;
+    const now = Date.now();
+    const leaseMs = Math.min(Math.max(args.leaseMs ?? 15 * 60_000, 60_000), 60 * 60_000);
+    await ctx.db.patch(job._id, {
+      executionLeaseUntil: now + leaseMs,
+      updatedAt: now,
+    });
+    return true;
+  },
+});
+
+const MAX_EXECUTION_ATTEMPTS = 3;
+const STALE_LEASE_GRACE_MS = 2 * 60_000;
+
+/**
+ * Fail (and refund) jobs whose execution lease expired without completion.
+ * Safe to run periodically from a cron.
+ */
+export const reclaimStaleJobExecutions = internalMutation({
+  args: {},
+  returns: v.object({
+    scanned: v.number(),
+    failed: v.number(),
+  }),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const active = await ctx.db
+      .query("generationJobs")
+      .withIndex("by_stage", (q) => q.eq("stage", "generating"))
+      .take(40);
+    const saving = await ctx.db
+      .query("generationJobs")
+      .withIndex("by_stage", (q) => q.eq("stage", "saving"))
+      .take(20);
+    const queued = await ctx.db
+      .query("generationJobs")
+      .withIndex("by_stage", (q) => q.eq("stage", "queued"))
+      .take(20);
+
+    let failed = 0;
+    const candidates = [...active, ...saving, ...queued];
+    for (const job of candidates) {
+      const leaseExpired =
+        job.executionLeaseUntil != null &&
+        job.executionLeaseUntil + STALE_LEASE_GRACE_MS < now;
+      const neverLeasedStuck =
+        !job.executionLeaseUntil &&
+        job.executionAttemptId &&
+        job.updatedAt + 20 * 60_000 < now;
+      const queuedTooLong =
+        job.stage === "queued" &&
+        !job.executionAttemptId &&
+        job.updatedAt + 30 * 60_000 < now;
+
+      if (!leaseExpired && !neverLeasedStuck && !queuedTooLong) continue;
+
+      const attempts = job.executionAttemptCount ?? 0;
+      if (attempts >= MAX_EXECUTION_ATTEMPTS || queuedTooLong || job.stage === "saving") {
+        if (job.stage === "done" || job.stage === "failed") continue;
+        if (job.reservedCreditTransactionId) {
+          await refundReservedCredits(ctx, job, "Generation timed out");
+        }
+        await ctx.db.patch(job._id, {
+          stage: "failed",
+          error: "Generation timed out and was automatically refunded.",
+          updatedAt: now,
+          executionAttemptId: undefined,
+          executionLeaseUntil: undefined,
+        });
+        await ctx.db.insert("generationEvents", {
+          ownerId: job.ownerId,
+          threadId: job.threadId,
+          kind: "stage",
+          order: now,
+          stage: "failed",
+          generationJobId: job._id,
+          createdAt: now,
+        });
+        failed += 1;
+      } else {
+        // Clear claim so a retry scheduler can re-acquire.
+        await ctx.db.patch(job._id, {
+          stage: "queued",
+          executionAttemptId: undefined,
+          executionLeaseUntil: undefined,
+          updatedAt: now,
+        });
+      }
+    }
+
+    return { scanned: candidates.length, failed };
   },
 });
 

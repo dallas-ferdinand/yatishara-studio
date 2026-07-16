@@ -17,7 +17,9 @@ export function useStudioBackground() {
             mutation.attributeName === "data-theme"
             || mutation.attributeName === "data-studio-bg-family"
             || mutation.attributeName === "data-studio-bg-pack"
-            || mutation.attributeName === "data-appearance",
+            || mutation.attributeName === "data-appearance"
+            || mutation.attributeName === "data-wallpaper-kind"
+            || mutation.attributeName === "data-wallpaper-asset-id",
         )
       ) {
         onChange();
@@ -31,6 +33,8 @@ export function useStudioBackground() {
         "data-studio-bg-family",
         "data-studio-bg-pack",
         "data-appearance",
+        "data-wallpaper-kind",
+        "data-wallpaper-asset-id",
       ],
     });
     window.addEventListener("mercuryos-theme-change", onChange);

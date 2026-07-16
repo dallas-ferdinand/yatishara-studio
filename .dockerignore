@@ -12,3 +12,13 @@ yarn-debug.log*
 yarn-error.log*
 *.tsbuildinfo
 packages/studio-mcp
+*.apk
+**/*-debug.apk
+public/blur-test*.html
+public/archive
+**/yatishara-studio-native-debug.apk
+bytedance-*.json
+modelark-*.json
+.cursor
+agent-transcripts
+docs/research

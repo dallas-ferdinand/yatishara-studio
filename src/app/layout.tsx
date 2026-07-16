@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import Script from "next/script";
 import { Bricolage_Grotesque, JetBrains_Mono, Onest } from "next/font/google";
 import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
+import { getDeskBuildGuardInlineScript } from "@/mos-app/desk-build-guard.js";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
+import { PerformanceReporter } from "@/components/performance-reporter";
 import "./globals.css";
 
 const onest = Onest({
@@ -71,7 +72,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? ""} />
+        <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? "boot-v2-20260716"} />
         {MERCURY_LOGO_PRELOAD.map((asset) => (
           <link
             key={asset.href}
@@ -81,6 +82,11 @@ export default function RootLayout({
             type={asset.type}
           />
         ))}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `.ys-boot-v2-overlay{position:fixed;inset:0;z-index:2147483000;background:#fff}.ys-boot-v2{position:relative;display:flex;box-sizing:border-box;min-height:100dvh;min-height:100vh;width:100%;align-items:center;justify-content:center;padding:0 0 12vh;overflow:hidden;margin:0;background:#fff;color:#0f172a}.ys-boot-v2-overlay .ys-boot-v2{min-height:100%;height:100%}.ys-boot-v2-stack{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 24px;transform:translateY(-10px)}.ys-boot-v2-logo{width:48px;height:48px;flex:0 0 48px}.ys-boot-v2-logo img{display:block;width:48px;height:48px;object-fit:contain}.ys-boot-v2-wordmark{margin:14px 0 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;font-weight:600;letter-spacing:.08em;line-height:1.2;color:rgb(15 23 42/.62);white-space:nowrap}.ys-boot-v2-track{margin-top:22px;width:112px;height:2px;overflow:hidden;border-radius:999px;background:rgb(15 23 42/.12)}.ys-boot-v2-bar{height:100%;width:38%;border-radius:999px;background:rgb(15 23 42/.5);animation:ys-boot-v2-bar 1.15s ease-in-out infinite}@keyframes ys-boot-v2-bar{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}`,
+          }}
+        />
         <link rel="icon" href="/branding/yatishara-logo-dark-32.png" media="(prefers-color-scheme: light)" />
         <link rel="icon" href="/branding/yatishara-logo-light-32.png" media="(prefers-color-scheme: dark)" />
         <link rel="apple-touch-icon" href="/branding/yatishara-appicon-180.png" />
@@ -114,12 +120,18 @@ export default function RootLayout({
           href="/branding/yatishara-splash-dark-ipad-2048x2732.png"
           media="(prefers-color-scheme: light) and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)"
         />
-        <Script id="mos-theme-boot" strategy="beforeInteractive">
-          {getThemeBootInlineScript()}
-        </Script>
+        <script
+          id="ys-build-guard"
+          dangerouslySetInnerHTML={{ __html: getDeskBuildGuardInlineScript() }}
+        />
+        <script
+          id="mos-theme-boot"
+          dangerouslySetInnerHTML={{ __html: getThemeBootInlineScript() }}
+        />
       </head>
       <body className="h-full overflow-hidden" suppressHydrationWarning>
         <MosTooltipLayer />
+        <PerformanceReporter surface="root" />
         {children}
       </body>
     </html>

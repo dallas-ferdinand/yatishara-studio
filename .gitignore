@@ -47,3 +47,16 @@ public/archive/studio-wallpapers-local-leftovers/
 # Local VPS/agent secrets (never commit)
 _system/
 .wip-backup/
+
+# Capacitor Android shell
+mobile/node_modules/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/captures/
+mobile/android/local.properties
+mobile/*.keystore
+mobile/*.jks
+mobile/android/app/*.keystore
+mobile/android/app/*.jks
+mobile/dist-apk/

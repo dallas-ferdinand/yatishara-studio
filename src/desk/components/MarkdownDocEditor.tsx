@@ -21,7 +21,7 @@ function ToolbarButton({ title, icon, onClick, active = false }) {
   );
 }
 
-export function MarkdownDocEditor({ value, onChange, onSave }) {
+export function MarkdownDocEditor({ value, onChange, onSave, name }) {
   const editorRef = useRef(null);
   const lastMarkdownRef = useRef(value ?? "");
   const dirtyRef = useRef(false);
@@ -60,18 +60,40 @@ export function MarkdownDocEditor({ value, onChange, onSave }) {
     emitChange();
   };
 
+  const tools = (
+    <>
+      <ToolbarButton title="Bold" icon="bold" onClick={() => runCmd("bold")} />
+      <ToolbarButton title="Italic" icon="italic" onClick={() => runCmd("italic")} />
+      <span className="cursor-doc-tool-divider" />
+      <ToolbarButton title="Heading 1" icon="heading1" onClick={() => runCmd("formatBlock", "h1")} />
+      <ToolbarButton title="Heading 2" icon="heading2" onClick={() => runCmd("formatBlock", "h2")} />
+      <span className="cursor-doc-tool-divider" />
+      <ToolbarButton title="Bullet list" icon="list" onClick={() => runCmd("insertUnorderedList")} />
+      <ToolbarButton title="Numbered list" icon="listOrdered" onClick={() => runCmd("insertOrderedList")} />
+      <ToolbarButton title="Quote" icon="quote" onClick={() => runCmd("formatBlock", "blockquote")} />
+    </>
+  );
+
   return (
-    <div className="cursor-doc-editor">
-      <div className="cursor-doc-toolbar" role="toolbar" aria-label="Formatting">
-        <ToolbarButton title="Bold" icon="bold" onClick={() => runCmd("bold")} />
-        <ToolbarButton title="Italic" icon="italic" onClick={() => runCmd("italic")} />
-        <span className="cursor-doc-tool-divider" />
-        <ToolbarButton title="Heading 1" icon="heading1" onClick={() => runCmd("formatBlock", "h1")} />
-        <ToolbarButton title="Heading 2" icon="heading2" onClick={() => runCmd("formatBlock", "h2")} />
-        <span className="cursor-doc-tool-divider" />
-        <ToolbarButton title="Bullet list" icon="list" onClick={() => runCmd("insertUnorderedList")} />
-        <ToolbarButton title="Numbered list" icon="listOrdered" onClick={() => runCmd("insertOrderedList")} />
-        <ToolbarButton title="Quote" icon="quote" onClick={() => runCmd("formatBlock", "blockquote")} />
+    <div className={`cursor-doc-editor${name ? " has-name" : ""}`}>
+      <div
+        className={`cursor-doc-toolbar${name ? " has-name" : ""}`}
+        role="toolbar"
+        aria-label="Formatting"
+      >
+        {name ? (
+          <>
+            <div className="cursor-doc-toolbar-left">
+              <span className="desk-image-viewer-name truncate" title={name}>
+                {name}
+              </span>
+            </div>
+            <div className="cursor-doc-toolbar-center">{tools}</div>
+            <div className="cursor-doc-toolbar-right" />
+          </>
+        ) : (
+          tools
+        )}
       </div>
       <div className="cursor-doc-scroll">
         <div

@@ -291,7 +291,6 @@ export function StudioStyleSheetTriggerButton({
       onClick={onClick}
     >
       {lead}
-      <span className="studio-preset-trigger-copy">{label}</span>
     </button>
   );
 }
