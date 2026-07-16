@@ -72,7 +72,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? "boot-v2"} />
+        <meta name="x-studio-build" content={process.env.NEXT_PUBLIC_DESK_BUILD ?? "boot-v2-20260716"} />
         {MERCURY_LOGO_PRELOAD.map((asset) => (
           <link
             key={asset.href}
