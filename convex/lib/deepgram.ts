@@ -43,7 +43,7 @@ export async function transcribeWithDeepgram(input: {
 
   const audio = Buffer.from(input.audioBase64, "base64");
   if (audio.byteLength < 500) {
-    throw new Error("Recording too short — tap mic, speak, tap again to stop");
+    throw new Error("No audio detected. Tap mic, speak, then tap again to stop.");
   }
 
   const contentType = normalizeMime(input.mimetype);
@@ -81,7 +81,7 @@ export async function transcribeWithDeepgram(input: {
     .replace(/\s+/g, " ")
     .trim();
   if (!text) {
-    throw new Error("No speech detected — speak clearly, then tap mic to stop");
+    throw new Error("No speech detected. Speak a bit longer, then tap the mic to stop.");
   }
 
   return { text, confidence: alt?.confidence };

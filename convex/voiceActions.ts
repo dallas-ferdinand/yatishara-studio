@@ -24,10 +24,10 @@ export const transcribe = action({
     }
 
     if (!args.audioBase64 || args.audioBase64.length < 8) {
-      throw new Error("No audio captured — tap mic to start, tap again to stop");
+      throw new Error("No audio detected. Tap mic, speak, then tap again to stop.");
     }
     if (args.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
-      throw new Error("Recording too long — try a shorter clip");
+      throw new Error("That clip was too long. Try a shorter recording.");
     }
 
     return await transcribeWithDeepgram({

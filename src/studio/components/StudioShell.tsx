@@ -6363,7 +6363,7 @@ export function StudioShell() {
         }
         .studio-composer .cursor-composer-box {
           position: relative;
-          overflow: hidden;
+          overflow: visible;
           display: flex;
           align-self: stretch;
           min-height: var(--studio-composer-min-height);
@@ -7229,6 +7229,7 @@ export function StudioShell() {
           margin-top: auto;
           padding: 4px 8px 8px;
           min-width: 0;
+          overflow: visible;
         }
         .studio-composer-toolbar-scroll {
           display: none !important;
@@ -7348,6 +7349,9 @@ export function StudioShell() {
           gap: 6px;
           flex: 0 0 auto;
           margin-left: auto;
+          overflow: visible;
+          position: relative;
+          z-index: 3;
         }
         .studio-composer .studio-pill-btn {
           height: 26px;
@@ -8402,6 +8406,7 @@ export function StudioShell() {
         .studio-composer-circle-btn.cursor-composer-mic {
           position: relative;
           overflow: visible;
+          z-index: 2;
         }
         .studio-composer-circle-btn.cursor-composer-mic.is-recording {
           border-color: rgba(248, 113, 113, 0.85);
@@ -8409,21 +8414,21 @@ export function StudioShell() {
           color: #fff1f2;
           box-shadow:
             0 0 0 1px rgba(248, 113, 113, 0.35),
-            0 0 18px rgba(239, 68, 68, 0.35);
+            0 0 12px rgba(239, 68, 68, 0.28);
           animation: studio-mic-record-pulse 1.15s ease-in-out infinite;
         }
         .studio-composer-circle-btn.cursor-composer-mic.is-recording::before,
         .studio-composer-circle-btn.cursor-composer-mic.is-recording::after {
           content: "";
           position: absolute;
-          inset: -3px;
+          inset: 0;
           border-radius: inherit;
           border: 1.5px solid rgba(248, 113, 113, 0.55);
           pointer-events: none;
-          animation: studio-mic-record-ring 1.4s ease-out infinite;
+          animation: studio-mic-record-ring 1.35s ease-out infinite;
         }
         .studio-composer-circle-btn.cursor-composer-mic.is-recording::after {
-          animation-delay: 0.7s;
+          animation-delay: 0.65s;
         }
         .studio-composer-mic-dot {
           width: 9px;
@@ -8436,7 +8441,7 @@ export function StudioShell() {
           border-color: rgba(248, 113, 113, 0.55) !important;
           box-shadow:
             0 0 0 1px rgba(248, 113, 113, 0.22) inset,
-            0 0 22px rgba(239, 68, 68, 0.18) !important;
+            0 0 16px rgba(239, 68, 68, 0.14) !important;
           animation: studio-mic-composer-glow 1.25s ease-in-out infinite;
         }
         @keyframes studio-mic-record-pulse {
@@ -8445,7 +8450,7 @@ export function StudioShell() {
             background: color-mix(in srgb, #ef4444 30%, var(--studio-composer-glass-muted));
           }
           50% {
-            transform: scale(1.06);
+            transform: scale(1.03);
             background: color-mix(in srgb, #ef4444 48%, var(--studio-composer-glass-muted));
           }
         }
@@ -8455,7 +8460,7 @@ export function StudioShell() {
             opacity: 0.85;
           }
           100% {
-            transform: scale(1.7);
+            transform: scale(1.28);
             opacity: 0;
           }
         }
@@ -8464,13 +8469,49 @@ export function StudioShell() {
             border-color: rgba(248, 113, 113, 0.42);
             box-shadow:
               0 0 0 1px rgba(248, 113, 113, 0.16) inset,
-              0 0 14px rgba(239, 68, 68, 0.12);
+              0 0 10px rgba(239, 68, 68, 0.1);
           }
           50% {
             border-color: rgba(248, 113, 113, 0.72);
             box-shadow:
               0 0 0 1px rgba(248, 113, 113, 0.28) inset,
-              0 0 28px rgba(239, 68, 68, 0.28);
+              0 0 18px rgba(239, 68, 68, 0.2);
+          }
+        }
+        .studio-voice-toast {
+          position: fixed;
+          top: calc(10px + env(safe-area-inset-top, 0px));
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 80;
+          max-width: min(420px, calc(100vw - 28px));
+          padding: 10px 14px;
+          border-radius: 14px;
+          border: 1px solid color-mix(in srgb, #ef4444 28%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, #1a1214 88%, #000 12%);
+          color: #ffe4e6;
+          font-size: 13px;
+          line-height: 1.35;
+          letter-spacing: 0.01em;
+          text-align: center;
+          box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          animation: studio-voice-toast-in 180ms ease-out;
+        }
+        [data-appearance="light"] .studio-voice-toast {
+          background: color-mix(in srgb, #fff 92%, #fee2e2 8%);
+          color: #7f1d1d;
+          border-color: color-mix(in srgb, #ef4444 24%, var(--color-cursor-border-soft));
+        }
+        @keyframes studio-voice-toast-in {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
           }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -11680,8 +11721,10 @@ function StudioComposer({
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [voiceToast, setVoiceToast] = useState("");
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
+  const voiceToastTimerRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
@@ -11969,6 +12012,17 @@ function StudioComposer({
     />
   );
 
+  function showVoiceToast(message) {
+    const text = String(message ?? "").trim();
+    if (!text) return;
+    setVoiceToast(text);
+    if (voiceToastTimerRef.current) window.clearTimeout(voiceToastTimerRef.current);
+    voiceToastTimerRef.current = window.setTimeout(() => {
+      setVoiceToast("");
+      voiceToastTimerRef.current = null;
+    }, 3200);
+  }
+
   async function toggleVoice() {
     if (micBusyRef.current || transcribing) return;
 
@@ -11981,11 +12035,11 @@ function StudioComposer({
         const elapsed = Date.now() - micStartedRef.current;
         if (elapsed < 700) {
           await voice.cancelRecording();
-          throw new Error("Recording too brief — tap mic, speak, tap again to stop");
+          throw new Error("No audio detected. Tap mic, speak, then tap again to stop.");
         }
         const data = await voice.stopRecording();
         if (!data?.blob) {
-          throw new Error("No audio captured — tap mic to start, tap again to stop");
+          throw new Error("No audio detected. Tap mic, speak, then tap again to stop.");
         }
         const audioBase64 = await blobToBase64(data.blob);
         const result = await transcribeVoice({
@@ -11993,14 +12047,15 @@ function StudioComposer({
           mimetype: data.mimetype || data.blob.type || "audio/webm",
         });
         const text = result?.text?.trim();
-        if (text) {
-          const editor = editorRef.current;
-          if (editor) {
-            insertComposerTextAtCaret(editor, text);
-            setDraft(readComposerEditorText(editor));
-          } else {
-            setEditorText(`${draft}${draft ? " " : ""}${text}`);
-          }
+        if (!text) {
+          throw new Error("No speech detected. Speak a bit longer, then tap the mic to stop.");
+        }
+        const editor = editorRef.current;
+        if (editor) {
+          insertComposerTextAtCaret(editor, text);
+          setDraft(readComposerEditorText(editor));
+        } else {
+          setEditorText(`${draft}${draft ? " " : ""}${text}`);
         }
         return;
       }
@@ -12012,6 +12067,9 @@ function StudioComposer({
       setRecording(true);
     } catch (error) {
       setRecording(false);
+      showVoiceToast(
+        friendlyConvexError(error, "Couldn't turn that into text. Try again."),
+      );
       console.error("Voice input failed", error);
     } finally {
       setTranscribing(false);
@@ -12021,6 +12079,7 @@ function StudioComposer({
 
   useEffect(() => {
     return () => {
+      if (voiceToastTimerRef.current) window.clearTimeout(voiceToastTimerRef.current);
       void import("@/desk/lib/voice-desk")
         .then((voice) => voice.cancelRecording())
         .catch(() => {});
@@ -12308,6 +12367,14 @@ function StudioComposer({
         }}
       />
       </div>
+      {voiceToast && typeof document !== "undefined"
+        ? createPortal(
+            <div className="studio-voice-toast" role="status" aria-live="polite">
+              {voiceToast}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

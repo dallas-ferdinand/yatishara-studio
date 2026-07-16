@@ -146,6 +146,30 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     match: /notification not found/i,
     message: "That notification isn't available anymore.",
   },
+  {
+    match: /no speech detected/i,
+    message: "No speech detected. Speak a bit longer, then tap the mic to stop.",
+  },
+  {
+    match: /recording too short|recording too brief|no audio captured|no audio detected/i,
+    message: "No audio detected. Tap mic, speak, then tap again to stop.",
+  },
+  {
+    match: /mic blocked|microphone|not allowed|permission denied/i,
+    message: "Microphone blocked. Allow mic access for this site, then try again.",
+  },
+  {
+    match: /deepgram|voice is not configured|transcription/i,
+    message: "Couldn't turn that into text. Try again.",
+  },
+  {
+    match: /sign in to use voice/i,
+    message: "Sign in to use voice input.",
+  },
+  {
+    match: /recording too long/i,
+    message: "That clip was too long. Try a shorter recording.",
+  },
 ];
 
 /**
