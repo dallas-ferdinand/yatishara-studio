@@ -42,8 +42,7 @@ export function mercuryLogoAssets(cssPx: number, appearance?: string | null) {
   };
 }
 
-/** Preload boot/loading logo (52px BrandMark → 192w retina). Skip 384 — only empty-state @2x. */
+/** Preload boot/loading logo only (default dark UI → light ink). Don't preload both inks — unused preload warns in Chrome. */
 export const MERCURY_LOGO_PRELOAD = [
-  { href: logoPath(192, "webp", "light"), type: "image/webp" },
-  { href: logoPath(192, "webp", "dark"), type: "image/webp" },
+  { href: MERCURY_LOGO_BOOT, type: "image/webp" },
 ] as const;

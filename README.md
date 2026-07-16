@@ -10,7 +10,7 @@ Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `h
 - Auth and users: Convex Auth with email OTP and WhatsApp OTP, plus admin/super-admin roles.
 - Assets and documents: Bunny-backed uploads, signed reads, documents, character/prop/location/doc elements.
 - Generation: prompt enhancement plus Vercel AI Gateway image/video generation (Seedream / Seedance), saved outputs, generation threads, events, and notifications.
-- Billing: credit accounts, pricing, bank transfer receipts, admin review, subscriptions, and audit events.
+- Billing: credit accounts, pricing, PayWise checkout top-ups, legacy bank review, subscriptions, and audit events.
 - Notifications: in-app notifications and web push subscriptions.
 
 ## Repo Map

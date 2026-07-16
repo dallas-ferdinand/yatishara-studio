@@ -32,6 +32,8 @@ export type CreativeDirectionContext = {
   scriptType?: ComposerScriptTypeSlug | string;
   referenceIntent?: ReferenceIntentSlug | string;
   presetSlug?: string;
+  /** When set, enhancement sticks this Style Sheet into the rewrite. */
+  styleSheetElementId?: string | null;
   /** When false, the preset's own energy leads and only the show-don't-tell core applies. Defaults to true. */
   storytellingEnabled?: boolean;
   durationSeconds?: number;
@@ -97,6 +99,7 @@ function resolvedReferenceIntent(context: CreativeDirectionContext): ReferenceIn
   return resolveReferenceIntent({
     intent: context.referenceIntent,
     presetSlug: context.presetSlug,
+    styleSheetElementId: context.styleSheetElementId,
     hasRawImageRef: context.hasRawImageReference ?? context.hasImageReference,
     hasElementAttachment: context.hasElementReference,
     hasBuiltElementRef: context.hasElementReference,
@@ -114,6 +117,7 @@ export function buildCreativeSystemPrompt(
     | "scriptType"
     | "referenceIntent"
     | "presetSlug"
+    | "styleSheetElementId"
     | "hasRawImageReference"
     | "hasImageReference"
     | "hasElementReference"

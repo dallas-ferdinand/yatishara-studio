@@ -1,83 +1,190 @@
 import { v } from "convex/values";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { userHasPassword } from "./passwordAuth";
+import { normalizePhone } from "./phonePasswordAuth";
+
+function accountHasRequiredContacts(user: {
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+}): boolean {
+  const names = resolveNameParts(user);
+  return Boolean(
+    user.email?.trim() &&
+      user.phone?.trim() &&
+      names.firstName &&
+      names.lastName,
+  );
+}
+
+function resolveNameParts(user: {
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+}): { firstName?: string; lastName?: string } {
+  const firstName = user.firstName?.trim();
+  const lastName = user.lastName?.trim();
+  if (firstName && lastName) {
+    return { firstName, lastName };
+  }
+  const split = splitLegacyName(user.name);
+  return {
+    firstName: firstName || split.firstName,
+    lastName: lastName || split.lastName,
+  };
+}
+
+function splitLegacyName(name: string | undefined): {
+  firstName?: string;
+  lastName?: string;
+} {
+  const trimmed = name?.trim();
+  if (!trimmed) return {};
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0] };
+  }
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function composeDisplayName(firstName: string, lastName: string): string {
+  return `${firstName} ${lastName}`.trim();
+}
 
 export const current = authedQuery({
   args: {},
   returns: v.object({
     userId: v.id("users"),
     name: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
+    phoneVerifiedAt: v.optional(v.number()),
+    accountComplete: v.boolean(),
     role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
     hasPassword: v.boolean(),
+    /** Missing → true (Assistance on by default). */
+    assistanceDefaultEnabled: v.boolean(),
+    activeStyleSheetId: v.optional(v.id("elements")),
   }),
   handler: async (ctx) => {
+    const names = resolveNameParts(ctx.user);
     return {
       userId: ctx.user._id,
-      name: ctx.user.name,
+      name: ctx.user.name || (names.firstName && names.lastName
+        ? composeDisplayName(names.firstName, names.lastName)
+        : undefined),
+      firstName: names.firstName,
+      lastName: names.lastName,
       email: ctx.user.email,
       phone: ctx.user.phone,
+      phoneVerifiedAt: ctx.user.phoneVerifiedAt,
+      accountComplete: accountHasRequiredContacts(ctx.user),
       role: ctx.user.role,
       hasPassword: await userHasPassword(ctx, ctx.user),
+      assistanceDefaultEnabled: ctx.user.assistanceDefaultEnabled !== false,
+      activeStyleSheetId: ctx.user.activeStyleSheetId,
     };
+  },
+});
+
+export const setAssistanceDefault = authedMutation({
+  args: {
+    enabled: v.boolean(),
+  },
+  returns: v.object({
+    assistanceDefaultEnabled: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(ctx.user._id, {
+      assistanceDefaultEnabled: args.enabled,
+      updatedAt: Date.now(),
+    });
+    return { assistanceDefaultEnabled: args.enabled };
   },
 });
 
 export const updateAccountDetails = authedMutation({
   args: {
-    name: v.optional(v.string()),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    phone: v.string(),
   },
   returns: v.object({
     userId: v.id("users"),
     name: v.optional(v.string()),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    phoneVerifiedAt: v.optional(v.number()),
+    accountComplete: v.boolean(),
     role: v.union(v.literal("user"), v.literal("admin"), v.literal("super_admin")),
   }),
   handler: async (ctx, args) => {
-    const name = normalizeOptional(args.name);
-    const email = normalizeEmail(args.email);
-    const phone = normalizeOptional(args.phone);
+    const firstName = requireNamePart(args.firstName, "First name");
+    const lastName = requireNamePart(args.lastName, "Last name");
+    const email = requireEmail(args.email);
+    const phone = requirePhone(args.phone);
+    const name = composeDisplayName(firstName, lastName);
 
-    if (email) {
-      const existingEmail = await ctx.db
-        .query("users")
-        .withIndex("email", (q) => q.eq("email", email))
-        .unique();
-      if (existingEmail && existingEmail._id !== ctx.user._id) {
-        throw new Error("Email already belongs to another account");
-      }
+    // Once set, contacts can only be changed — never cleared.
+    if (ctx.user.email && !email) {
+      throw new Error("Email is required and cannot be removed");
+    }
+    if (ctx.user.phone && !phone) {
+      throw new Error("Phone is required and cannot be removed");
     }
 
-    if (phone) {
-      const existingPhone = await ctx.db
-        .query("users")
-        .withIndex("by_phone", (q) => q.eq("phone", phone))
-        .unique();
-      if (existingPhone && existingPhone._id !== ctx.user._id) {
-        throw new Error("Phone already belongs to another account");
-      }
+    const existingEmail = await ctx.db
+      .query("users")
+      .withIndex("email", (q) => q.eq("email", email))
+      .unique();
+    if (existingEmail && existingEmail._id !== ctx.user._id) {
+      throw new Error("Email already belongs to another account");
     }
 
+    const existingPhone = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    if (existingPhone && existingPhone._id !== ctx.user._id) {
+      throw new Error("Phone already belongs to another account");
+    }
+
+    const phoneChanged = phone !== ctx.user.phone;
+    const emailChanged = email !== ctx.user.email;
     await ctx.db.patch(ctx.user._id, {
+      firstName,
+      lastName,
       name,
       email,
       phone,
+      emailVerified: emailChanged ? false : ctx.user.emailVerified,
+      phoneVerifiedAt: phoneChanged ? undefined : ctx.user.phoneVerifiedAt,
       updatedAt: Date.now(),
     });
 
     const updated = await ctx.db.get(ctx.user._id);
-    if (!updated) {
+    if (!updated || !updated.email || !updated.phone || !updated.firstName || !updated.lastName) {
       throw new Error("User not found");
     }
     return {
       userId: updated._id,
       name: updated.name,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
       email: updated.email,
       phone: updated.phone,
+      phoneVerifiedAt: updated.phoneVerifiedAt,
+      accountComplete: accountHasRequiredContacts(updated),
       role: updated.role,
     };
   },
@@ -183,6 +290,10 @@ export const adminListCustomers = adminQuery({
       paymentCount: v.number(),
       latestPaymentStatus: v.optional(
         v.union(
+          v.literal("pending"),
+          v.literal("needs_review"),
+          v.literal("checkout_failed"),
+          v.literal("cancelled"),
           v.literal("receipt_uploaded"),
           v.literal("receipt_received"),
           v.literal("payment_completed"),
@@ -236,11 +347,26 @@ export const adminListCustomers = adminQuery({
   },
 });
 
-function normalizeOptional(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
+function requireNamePart(value: string, label: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 80) {
+    throw new Error(`${label} is required`);
+  }
+  return trimmed;
 }
 
-function normalizeEmail(value: string | undefined): string | undefined {
-  return normalizeOptional(value)?.toLowerCase();
+function requireEmail(value: string): string {
+  const email = value.trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("A valid email is required");
+  }
+  return email;
+}
+
+function requirePhone(value: string): string {
+  const phone = normalizePhone(value);
+  if (!phone) {
+    throw new Error("A valid phone / WhatsApp number is required");
+  }
+  return phone;
 }

@@ -1,10 +1,14 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { studioApiV1, studioApiV1Options } from "./studioApiHttp";
+import { paywiseCallback, paywiseNotify } from "./paywiseHttp";
 
 const http = httpRouter();
 
 auth.addHttpRoutes(http);
+
+http.route({ path: "/paywise/notify", method: "POST", handler: paywiseNotify });
+http.route({ path: "/paywise/callback", method: "POST", handler: paywiseCallback });
 
 const exactGetPost = [
   "/api/v1",
@@ -16,6 +20,7 @@ const exactGetPost = [
   "/api/v1/assets/upload-inline",
   "/api/v1/documents",
   "/api/v1/elements",
+  "/api/v1/style-sheets",
   "/api/v1/style-presets",
   "/api/v1/video-models",
   "/api/v1/generations/estimate",

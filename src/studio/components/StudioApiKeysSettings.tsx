@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useMemo, useState, type FormEvent } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 
 type CreatedKey = {
   id: Id<"apiKeys">;
@@ -91,7 +92,7 @@ export function StudioApiKeysSettings() {
       setCreatedKey(result);
       setName("");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to create API key.");
+      setStatus(friendlyConvexError(error, "Failed to create API key."));
     } finally {
       setBusy(false);
     }
@@ -116,7 +117,7 @@ export function StudioApiKeysSettings() {
       setEditingKeyId(null);
       setStatus("Saved.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to update API key.");
+      setStatus(friendlyConvexError(error, "Failed to update API key."));
     } finally {
       setBusy(false);
     }
@@ -133,7 +134,7 @@ export function StudioApiKeysSettings() {
       if (editingKeyId === apiKeyId) setEditingKeyId(null);
       setStatus("Key revoked.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to revoke API key.");
+      setStatus(friendlyConvexError(error, "Failed to revoke API key."));
     } finally {
       setBusy(false);
     }

@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { action, type ActionCtx } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import { putObject } from "./lib/bunny";
 import {
@@ -24,7 +24,11 @@ import {
   extractCreativeVideoPrompt,
   finalizeGatewayVideoPrompt,
 } from "./lib/videoGeneration";
-import { resolveVideoModel } from "./lib/videoModels";
+import {
+  billingTierForMode,
+  resolveVideoModel,
+  validateVideoModelCapabilities,
+} from "./lib/videoModels";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
 import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
 
@@ -36,11 +40,13 @@ function finalizeVideoPrompt(
     gatewayModelId: string;
     skipPromptEnhancement?: boolean;
     presetSlug?: string;
+    styleSheetElementId?: string | null;
   },
 ): string {
   const directPrompt = isDirectPromptMode({
     skipPromptEnhancement: args.skipPromptEnhancement,
     presetSlug: args.presetSlug,
+    styleSheetElementId: args.styleSheetElementId,
   });
   return finalizeGatewayVideoPrompt({
     prompt,
@@ -65,10 +71,12 @@ const createQueuedJobRef = makeFunctionReference<
     audioEnabled?: boolean;
     aspectRatio?: string;
     resolution?: string;
+    quality?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
+    hasStartFrame?: boolean;
     skipPromptEnhancement?: boolean;
   },
   Id<"generationJobs">
@@ -94,7 +102,9 @@ const getJobRunContextRef = internalQueryRef<
       durationSeconds?: number;
       resolution?: string;
       aspectRatio?: string;
+      quality?: string;
       skipPromptEnhancement?: boolean;
+      styleSheetElementId?: Id<"elements">;
     };
     preset: {
       slug: string;
@@ -224,6 +234,7 @@ const internalCreateQueuedJobRef = internalMutationRef<
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
+    hasStartFrame?: boolean;
     apiKeyId?: Id<"apiKeys">;
   },
   Id<"generationJobs">
@@ -244,10 +255,12 @@ const prepareApiGenerationRef = internalMutationRef<
     audioEnabled?: boolean;
     aspectRatio?: string;
     resolution?: string;
+    quality?: string;
     durationSeconds?: number;
     hasReferenceInput?: boolean;
     hasVideoReferenceInput?: boolean;
     hasNonVideoReferenceInput?: boolean;
+    hasStartFrame?: boolean;
     skipPromptEnhancement?: boolean;
   },
   { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> }
@@ -313,12 +326,11 @@ export const generateScript = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const skipEnhancement = args.styleSheetElementId
-        ? args.skipPromptEnhancement === true
-        : shouldSkipPromptEnhancement({
-            skipPromptEnhancement: args.skipPromptEnhancement,
-            presetSlug: preset.slug,
-          });
+      const skipEnhancement = shouldSkipPromptEnhancement({
+        skipPromptEnhancement: args.skipPromptEnhancement,
+        presetSlug: preset.slug,
+        styleSheetElementId: args.styleSheetElementId,
+      });
       const contentMarkdown = skipEnhancement
         ? args.userPrompt.trim()
         : await generateScriptWithGateway({
@@ -328,6 +340,7 @@ export const generateScript = action({
             scriptInstructions: preset.scriptInstructions,
             scriptType: normalizeScriptType(args.scriptType),
             presetSlug: preset.slug,
+            styleSheetElementId: args.styleSheetElementId,
             referenceIntent: normalizeReferenceIntent(args.referenceIntent),
             storytellingEnabled: preset.storytelling,
             negativePrompt: preset.negativePrompt,
@@ -367,6 +380,7 @@ export const runFlow = action({
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
@@ -393,18 +407,30 @@ export const runFlow = action({
     assetIds?: Id<"assets">[];
     externalTaskId?: string;
   }> => {
-    const resolvedModel = modelForRequest(args.mode, args.videoModel);
     const referenceInputs = args.referenceInputs ?? [];
+    const videoModel =
+      args.mode === "video"
+        ? validateVideoModelCapabilities(args.videoModel, {
+            durationSeconds: args.durationSeconds,
+            hasStartFrame: Boolean(args.startFrameUrl),
+            referenceKinds: referenceInputs.map((input) => input.kind),
+            surface: "studio",
+          })
+        : undefined;
+    const resolvedModel =
+      videoModel?.gatewayModelId ?? modelForRequest(args.mode, args.videoModel);
+    const billingTier = billingTierForMode(args.mode);
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: args.mode,
-      tier: args.tier,
+      tier: billingTier,
       resolvedModel,
       stylePresetId: args.stylePresetId,
       userPrompt: args.userPrompt,
       audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
@@ -415,6 +441,7 @@ export const runFlow = action({
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      hasStartFrame: args.mode === "video" && Boolean(args.startFrameUrl),
       skipPromptEnhancement: args.skipPromptEnhancement,
       styleSheetElementId: args.styleSheetElementId,
     });
@@ -430,6 +457,7 @@ export const runFlow = action({
       const skipEnhancement = shouldSkipPromptEnhancement({
         skipPromptEnhancement: job.skipPromptEnhancement,
         presetSlug: preset.slug,
+        styleSheetElementId: job.styleSheetElementId,
       });
       const enhancedPrompt = skipEnhancement
         ? job.userPrompt
@@ -442,6 +470,7 @@ export const runFlow = action({
             outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
             storytellingEnabled: preset.storytelling,
             presetSlug: preset.slug,
+            styleSheetElementId: job.styleSheetElementId,
             referenceIntent: normalizeReferenceIntent(args.referenceIntent),
             durationSeconds: job.durationSeconds ?? args.durationSeconds,
             resolution: job.resolution ?? args.resolution,
@@ -471,6 +500,7 @@ export const runFlow = action({
           gatewayModelId: job.resolvedModel,
           skipPromptEnhancement: job.skipPromptEnhancement,
           presetSlug: preset.slug,
+          styleSheetElementId: job.styleSheetElementId,
         });
         const video = await generateVideo({
           prompt: videoPrompt,
@@ -510,6 +540,7 @@ export const runFlow = action({
         prompt: enhancedPrompt,
         aspectRatio: args.aspectRatio,
         resolution: args.resolution,
+        quality: args.quality,
         referenceUrls: args.referenceUrls ?? [],
       });
       await ctx.runMutation(markStageRef, {
@@ -543,12 +574,13 @@ export const runFlow = action({
   },
 });
 
-export const executeApiJob = action({
+export const executeApiJob = internalAction({
   args: {
     jobId: v.id("generationJobs"),
     mode: v.union(v.literal("image"), v.literal("video")),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioEnabled: v.optional(v.boolean()),
     referenceUrls: v.optional(v.array(v.string())),
@@ -574,6 +606,7 @@ async function executeQueuedApiJob(
     mode: "image" | "video";
     aspectRatio?: string;
     resolution?: string;
+    quality?: string;
     durationSeconds?: number;
     audioEnabled?: boolean;
     referenceUrls?: string[];
@@ -588,11 +621,20 @@ async function executeQueuedApiJob(
 ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
   const referenceInputs = args.referenceInputs ?? [];
   try {
-    await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
     const { job, preset } = await ctx.runQuery(getJobRunContextRef, { jobId: args.jobId });
+    if (args.mode === "video") {
+      validateVideoModelCapabilities(job.resolvedModel, {
+        durationSeconds: args.durationSeconds ?? job.durationSeconds,
+        hasStartFrame: Boolean(args.startFrameUrl),
+        referenceKinds: referenceInputs.map((input) => input.kind),
+        surface: "internal",
+      });
+    }
+    await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "generating" });
     const skipEnhancement = shouldSkipPromptEnhancement({
       skipPromptEnhancement: job.skipPromptEnhancement,
       presetSlug: preset.slug,
+      styleSheetElementId: job.styleSheetElementId,
     });
     const enhancedPrompt = skipEnhancement
       ? job.userPrompt
@@ -605,6 +647,7 @@ async function executeQueuedApiJob(
           outputKind: job.mode === "video" ? "video_prompt" : "image_prompt",
           storytellingEnabled: preset.storytelling,
           presetSlug: preset.slug,
+          styleSheetElementId: job.styleSheetElementId,
           referenceIntent: normalizeReferenceIntent(args.referenceIntent),
           durationSeconds: job.durationSeconds ?? args.durationSeconds,
           resolution: job.resolution ?? args.resolution,
@@ -634,6 +677,7 @@ async function executeQueuedApiJob(
         gatewayModelId: job.resolvedModel,
         skipPromptEnhancement: job.skipPromptEnhancement,
         presetSlug: preset.slug,
+        styleSheetElementId: job.styleSheetElementId,
       });
       const video = await generateVideo({
         prompt: videoPrompt,
@@ -667,6 +711,7 @@ async function executeQueuedApiJob(
       prompt: enhancedPrompt,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       referenceUrls: args.referenceUrls ?? [],
     });
     await ctx.runMutation(markStageRef, { jobId: args.jobId, stage: "saving" });
@@ -693,19 +738,19 @@ async function executeQueuedApiJob(
   }
 }
 
-export const runGenerationForApi = action({
+export const runGenerationForApi = internalAction({
   args: {
     userId: v.id("users"),
     folderId: v.id("folders"),
     apiKeyId: v.optional(v.id("apiKeys")),
     mode: v.union(v.literal("image"), v.literal("video")),
-    tier: generationTier,
     stylePresetId: v.id("stylePresets"),
     styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     referenceUrls: v.optional(v.array(v.string())),
     referenceInputs: v.optional(v.array(referenceInputValidator)),
@@ -723,13 +768,23 @@ export const runGenerationForApi = action({
   }),
   handler: async (ctx, args) => {
     const referenceInputs = args.referenceInputs ?? [];
-    const resolvedModel = modelForRequest(args.mode, args.videoModel);
+    const videoModel =
+      args.mode === "video"
+        ? validateVideoModelCapabilities(args.videoModel, {
+            durationSeconds: args.durationSeconds,
+            hasStartFrame: Boolean(args.startFrameUrl),
+            referenceKinds: referenceInputs.map((input) => input.kind),
+            surface: "api",
+          })
+        : undefined;
+    const resolvedModel =
+      videoModel?.gatewayModelId ?? modelForRequest(args.mode, args.videoModel);
     const prepared = await ctx.runMutation(prepareApiGenerationRef, {
       userId: args.userId,
       folderId: args.folderId,
       apiKeyId: args.apiKeyId,
       mode: args.mode,
-      tier: args.tier,
+      tier: billingTierForMode(args.mode),
       resolvedModel,
       stylePresetId: args.stylePresetId,
       styleSheetElementId: args.styleSheetElementId,
@@ -738,6 +793,7 @@ export const runGenerationForApi = action({
       audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
@@ -748,6 +804,7 @@ export const runGenerationForApi = action({
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
+      hasStartFrame: args.mode === "video" && Boolean(args.startFrameUrl),
       skipPromptEnhancement: args.skipPromptEnhancement,
     });
     const executed = await executeQueuedApiJob(ctx, {
@@ -755,10 +812,12 @@ export const runGenerationForApi = action({
       mode: args.mode,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
+      quality: args.quality,
       durationSeconds: args.durationSeconds,
       audioEnabled: args.audioEnabled,
       referenceUrls: args.referenceUrls,
       referenceInputs,
+      startFrameUrl: args.startFrameUrl,
       referenceIntent: args.referenceIntent,
       hasRawImageReference: args.hasRawImageReference,
       hasElementReference: args.hasElementReference,
@@ -771,7 +830,7 @@ export const runGenerationForApi = action({
   },
 });
 
-export const runScriptForApi = action({
+export const runScriptForApi = internalAction({
   args: {
     userId: v.id("users"),
     folderId: v.id("folders"),
@@ -831,12 +890,11 @@ export const runScriptForApi = action({
       audioReferenceCount: referenceInputs.filter((input) => input.kind === "audio").length,
     });
     try {
-      const skipScript = args.styleSheetElementId
-        ? args.skipScriptEnhancement === true
-        : shouldSkipPromptEnhancement({
-            skipPromptEnhancement: args.skipScriptEnhancement,
-            presetSlug: preset.slug,
-          });
+      const skipScript = shouldSkipPromptEnhancement({
+        skipPromptEnhancement: args.skipScriptEnhancement,
+        presetSlug: preset.slug,
+        styleSheetElementId: args.styleSheetElementId,
+      });
       const contentMarkdown = skipScript
         ? args.userPrompt.trim()
         : await generateScriptWithGateway({
@@ -846,6 +904,7 @@ export const runScriptForApi = action({
             scriptInstructions: preset.scriptInstructions,
             scriptType: normalizeScriptType(args.scriptType),
             presetSlug: preset.slug,
+            styleSheetElementId: args.styleSheetElementId,
             referenceIntent: normalizeReferenceIntent(args.referenceIntent),
             storytellingEnabled: preset.storytelling,
             negativePrompt: preset.negativePrompt,
@@ -974,6 +1033,7 @@ async function enhancePromptWithFallback(args: {
   outputKind: "image_prompt" | "video_prompt";
   storytellingEnabled?: boolean;
   presetSlug?: string;
+  styleSheetElementId?: string | null;
   referenceIntent?: string;
   durationSeconds?: number;
   resolution?: string;
@@ -995,6 +1055,7 @@ async function enhancePromptWithFallback(args: {
       outputKind: args.outputKind,
       storytellingEnabled: args.storytellingEnabled,
       presetSlug: args.presetSlug,
+      styleSheetElementId: args.styleSheetElementId,
       referenceIntent: args.referenceIntent,
       durationSeconds: args.durationSeconds,
       resolution: args.resolution,

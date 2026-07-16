@@ -52,13 +52,21 @@ export function styleSheetSystemInstructions(args: {
   name: string;
   styleRules?: string;
   renderMode?: StyleSheetRenderMode;
+  hasVisualReference?: boolean;
 }): string {
   const mode = args.renderMode ?? "mixed";
   const rules = args.styleRules?.trim();
   const parts = [
-    `Apply the "${args.name}" Style Sheet consistently across the generation.`,
+    `Apply the "${args.name}" Style Sheet as a complete visual WORLD, not a light theme or color filter.`,
     `Render mode: ${mode.replace(/_/g, " ")}.`,
+    "REIMAGINE LOCK: rebuild every subject and surface into this production grammar — character design, proportions, line/material language, wardrobe construction, and environments must look native to this world. Do not wash a photographic base with a stylized overlay. Identity cues from user references may survive; form language must convert fully.",
+    "FULL-SCENE STYLE LOCK: restyle the entire output frame as one coherent world — people, wardrobe, props, architecture, ground, foliage, vehicles, sky, weather, atmosphere, reflections, and lighting. Never leave photographic or mismatched backgrounds behind stylized subjects. Never collage stylized characters onto live-action environments.",
   ];
+  if (args.hasVisualReference) {
+    parts.push(
+      "The first attached image is the active Style Sheet visual. Match its cartoon/world grammar (line, materials, lighting logic, palette behavior, finish) across every surface. Do not copy its specific people, identities, wardrobe, poses, location layout, or camera composition unless the user prompt independently requests them.",
+    );
+  }
   if (rules) {
     parts.push(`Style rules:\n${rules}`);
   }

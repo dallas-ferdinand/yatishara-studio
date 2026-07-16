@@ -15,7 +15,7 @@ argument-hint: "plan | run {slug}"
 
 Stage director for the **creative department**. You run phases, iterations, packet handoffs, Studio MCP calls, and cost ledger. You do **not** substitute for specialist skills — load and follow them.
 
-**Studio is cartoon-only** — prime 2D, adult 2D, family soft, optional stylized 3D. Not photoreal. Not anime.
+**Studio uses Style Sheet elements for styled generation** — create a Style Sheet (visual rules + optional style board), select it in the composer, or pass `styleSheetElementId` on MCP/API. **Direct** mode (`skipPromptEnhancement: true`, no sheet) sends prompts verbatim. Cartoon element sheets still use `stylePresetSlug: unstyled` on `studio_generate_element_sheet`.
 
 ## Invocation modes
 
@@ -34,7 +34,7 @@ Stage director for the **creative department**. You run phases, iterations, pack
 5. **Load specialist SKILL.md** from `specialists/` when executing that role's builder or scrutiny pass.
 6. **Visual scrutiny requires viewing** — never approve props or clips from prompt text alone ([references/visual-asset-pipeline.md](references/visual-asset-pipeline.md)).
 7. **Reference allocation is mandatory** — orchestrator computes `referenceElementIds[]` per shot from `approved_asset_registry` before director merge; intercut shots include all locations. Phase E uses `referenceElementIds` only — never raw upload refs. **People on camera:** storyboard still → `startFrameAssetId` before video ([references/start-frame-workflow.md](references/start-frame-workflow.md), [references/shot-reference-allocation.md](references/shot-reference-allocation.md)). **No `scene` element type.**
-8. **All Studio generation uses direct prompts** — `{ skipPromptEnhancement: true, stylePreset: "unstyled" }` on every `studio_generate_image` and `studio_generate_video` ([references/direct-prompt-handoff.md](references/direct-prompt-handoff.md)). **No Flash/GPT rewrite** — prompts reach Seedance/GPT Image 2 verbatim. Pass `stylePresetSlug: style_family` **only** on `studio_generate_element_sheet`. Never use `toon-*` as `stylePreset` on shot gen unless Dallas explicitly wants `skipPromptEnhancement: false`.
+8. **All Studio shot generation uses direct prompts by default** — `{ skipPromptEnhancement: true }` on every `studio_generate_image` and `studio_generate_video` ([references/direct-prompt-handoff.md](references/direct-prompt-handoff.md)). **No Flash/GPT rewrite** unless you pass `styleSheetElementId` with `skipPromptEnhancement: false`. Pass `stylePresetSlug: unstyled` on `studio_generate_element_sheet`. Legacy `toon-*` stylePreset slugs are deprecated (410).
 9. **Cost ledger** — enforce approved cap before each generate ([references/cost-ledger.md](references/cost-ledger.md)).
 10. **Video model choice** — Studio UI default is Seedance 2.0. MCP: omit `videoModel` for Seedance, or pass `videoModel: "kling-3.0-i2v"` when production chooses Kling (start-frame I2V, faces). Call `studio_list_video_models` first; pass same slug on estimate + generate; log choice in `production-state.json` overrides. Verify `resolvedModel` on poll. **Kling:** gateway 2500-char cap — never shorten signed `generation_prompt`; iterate shot prose or regen per [references/kling-prompt-length.md](references/kling-prompt-length.md).
 11. **Gate validation** — call `studio_validate_production_gates` before each phase's first `studio_generate_*` ([references/gate-validation.md](references/gate-validation.md)).

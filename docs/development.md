@@ -56,8 +56,10 @@ Generation:
 
 - `AI_GATEWAY_API_KEY`
 - `GATEWAY_TEXT_MODEL_ID` — prompt enhancement and scripts (default: `google/gemini-2.5-flash-lite`)
+- `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `google/gemini-3-flash`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `openai/gpt-image-2`)
 - `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `bytedance/seedance-2.0`)
+- `GUIDED_VIDEO_ASSISTANCE_ENABLED` — set `0`/`false` to hide Assistance UI (default on)
 
 Storage, video, and push:
 
@@ -73,12 +75,20 @@ Storage, video, and push:
 - `NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY`
 - `WEB_PUSH_SUBJECT`
 
-Billing defaults:
+PayWise Checkout (set on Convex deployment):
 
-- `STUDIO_BANK_NAME`
-- `STUDIO_BANK_ACCOUNT_NAME`
-- `STUDIO_BANK_ACCOUNT_NUMBER`
-- `STUDIO_BANK_ACCOUNT_TYPE`
+- `PAYWISE_API_BASE`
+- `PAYWISE_ENVIRONMENT` (`sandbox` or `production`; must match the API host)
+- `PAYWISE_SUBSCRIPTION_KEY`
+- `PAYWISE_API_KEY`
+- `PAYWISE_PAYEE_MOBILE`
+- `PAYWISE_ORIGIN_COUNTRY`
+- `PAYWISE_IP_ADDRESS` (`127.0.0.1` is permitted by PayWise sandbox; production requires the deployed backend's public egress IP)
+- `PAYWISE_PAID_STATUSES` (comma-separated values captured and verified in the target PayWise environment)
+- optional contract overrides: `PAYWISE_PENDING_STATUSES`, `PAYWISE_REJECTED_STATUSES`, `PAYWISE_CANCELLED_STATUSES`
+
+Browser return URLs use `SITE_URL`; PayWise notify/callback URLs use `CONVEX_SITE_URL`.
+Run `npm run check:launch-env:convex` before release to verify these names exist on the selected Convex deployment.
 
 Preview only:
 

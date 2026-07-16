@@ -25,12 +25,14 @@ For broader architecture, local setup, production deployment, and preview hot re
 4. Complete first OTP login with `STUDIO_SUPER_ADMIN_EMAIL`, then use Settings to:
    - seed style presets,
    - confirm pricing,
-   - add/confirm bank account details.
+   - confirm PayWise env vars are set on Convex.
 
 ## Verification Commands
 
 ```bash
 npm run check:launch-env
+npm run check:launch-env:convex
+npm run lint
 npm run typecheck
 npm run build
 docker build -t yatishara-studio:launch-check .
@@ -52,6 +54,14 @@ Set these on the dedicated Studio Convex deployment (`https://convex-studio-api.
 - `EVOLUTION_API_URL`
 - `EVOLUTION_API_KEY`
 - `EVOLUTION_INSTANCE`
+- `PAYWISE_API_BASE`
+- `PAYWISE_ENVIRONMENT`
+- `PAYWISE_SUBSCRIPTION_KEY`
+- `PAYWISE_API_KEY`
+- `PAYWISE_PAYEE_MOBILE`
+- `PAYWISE_ORIGIN_COUNTRY`
+- `PAYWISE_IP_ADDRESS`
+- `PAYWISE_PAID_STATUSES` captured from a successful sandbox status response
 
 ## Preview Hot Reload
 
@@ -75,11 +85,11 @@ The preview gate sets a short-lived HTTP-only cookie before normal Convex Auth m
 - Visit `https://studio.yatishara.com`.
 - Sign in via OTP email.
 - Confirm root folder and billing account are created.
-- Use Settings as super admin to seed presets, save pricing, and add bank account details.
+- Use Settings as super admin to seed presets and save pricing.
 - Upload a tiny image/file and verify it appears in the asset list.
 - Create a script/document and insert it into prompt context.
-- Submit a bank top-up receipt and approve it from admin payment review.
-- Confirm credits increase after approval.
+- Complete a PayWise sandbox top-up and confirm credits land without manual approval.
+- Replay the callback and status sync; confirm credits increase exactly once.
 - Enable browser push notifications.
 - Run one image generation through AI Gateway.
 - Run one video generation through AI Gateway.

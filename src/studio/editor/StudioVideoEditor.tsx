@@ -5,6 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { EditorPreview } from "./EditorPreview";
 import { EditorInspector } from "./EditorInspector";
 import { EditorTimeline, EditorTransportBar } from "./EditorTimeline";
@@ -161,7 +162,7 @@ export function StudioVideoEditor({
       onStatus?.("Export ready.");
       if (result?.assetId) onOpenAsset?.(result.assetId);
     } catch (error) {
-      onStatus?.(error instanceof Error ? error.message : "Export failed.");
+      onStatus?.(friendlyConvexError(error, "Export failed."));
     } finally {
       setExporting(false);
     }

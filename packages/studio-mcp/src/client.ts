@@ -11,7 +11,7 @@ export function requireConfig(): { apiKey: string; apiUrl: string } {
   return { apiKey, apiUrl };
 }
 
-export async function studioFetch(path: string, init: RequestInit = {}) {
+export async function studioFetch(path: string, init: RequestInit = {}): Promise<unknown> {
   const { apiKey, apiUrl } = requireConfig();
   const response = await fetch(`${apiUrl}/api/v1${path}`, {
     ...init,

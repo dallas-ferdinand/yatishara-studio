@@ -75,7 +75,11 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_list_trash` | List soft-deleted items |
 | `studio_trash` | Move item to trash |
 | `studio_restore` | Restore from trash |
-| `studio_list_presets` | Style presets (includes `unstyled` for MCP handoff) |
+| `studio_list_style_sheets` | Built Style Sheet elements |
+| `studio_create_style_sheet` | New Style Sheet (unbuilt) |
+| `studio_build_style_sheet` | Build visual style board |
+| `studio_set_active_style_sheet` | Doc-only — pass `styleSheetElementId` on generate |
+| `studio_list_presets` | Deprecated — Direct/unstyled only |
 | `studio_estimate_generation` | Single-call credit cost check (accepts `referenceElementIds`) |
 | `studio_estimate_production` | Batch budget with credits + TT$ |
 | `studio_list_generations` | Recent jobs |
@@ -86,19 +90,25 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_validate_production_gates` | Pre-flight cartoon gate check — pass `production-state.json` body before `studio_generate_*` |
 | `studio_generate_script` | Script → document |
 
-## Cartoon ad production defaults
+## Style Sheets + direct handoff
 
-For `@cartoon-ad-production` automated runs, pass **verbatim handoff prompts** (no GPT rewrite, no start-frame prefix injection):
+**Direct (default for cartoon-ad-production):**
 
 ```json
-{ "stylePreset": "unstyled", "skipPromptEnhancement": true }
+{ "skipPromptEnhancement": true }
 ```
 
-`unstyled` is MCP/API-only — empty preset instructions; your `storyboard_prompt` / `generation_prompt` reach Seedance as written.
+Prompts reach Seedance/GPT Image 2 verbatim — no GPT rewrite.
 
-Style families for **metadata or styled rewrite** (set `skipPromptEnhancement: false` if you want GPT enhancement): `toon-prime`, `toon-adult`, `toon-surreal`, `toon-family`, `toon-cgi`, `toon-neon-idol`. Pass `stylePresetSlug` on `studio_generate_element_sheet`.
+**Styled generation:** create a Style Sheet element first:
 
-`raw` is an alias for `unstyled`. Call `studio_validate_production_gates` before phase generate batches.
+1. `studio_create_style_sheet` — name + `styleRules` (+ optional mood refs)
+2. `studio_build_style_sheet` — visual style board image
+3. `studio_generate_image|video|script` with `styleSheetElementId` and `skipPromptEnhancement: false`
+
+`studio_list_style_sheets` lists built sheets. `studio_list_presets` is deprecated (Direct/unstyled only). Legacy `toon-*` stylePreset slugs return HTTP 410.
+
+Element sheets: `stylePresetSlug: unstyled` on `studio_generate_element_sheet`.
 
 Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
 

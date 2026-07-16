@@ -1,10 +1,20 @@
 /** Map raw gateway / billing errors to user-facing copy (stored on failed jobs). */
 
+import { CREDIT_PRICE_TTD } from "./generationPricing";
+
 export type GenerationUserError = {
   title: string;
   message: string;
   hint?: string;
 };
+
+function formatTtdFromCredits(credits: number): string {
+  const amount = credits * CREDIT_PRICE_TTD;
+  const formatted = Number.isInteger(amount)
+    ? amount.toLocaleString()
+    : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `$${formatted} TTD`;
+}
 
 export function friendlyGenerationError(
   raw: string | null | undefined,
@@ -12,24 +22,31 @@ export function friendlyGenerationError(
 ): GenerationUserError {
   const text = (raw ?? "").trim();
   const lower = text.toLowerCase();
+  const noun = mode === "video" ? "video" : mode === "image" ? "image" : "request";
 
   if (!text) {
     return {
       title: "Something went wrong",
       message:
-        "That didn't work. We're looking into it — your credits were refunded if this was a paid render.",
+        "That didn't work. We're looking into it — your balance was refunded if this was a paid render.",
     };
   }
 
-  if (/credit|insufficient|top up|needs \d+ credit/i.test(lower)) {
-    const match = text.match(/(\d+)\s*credit/i);
-    const cost = match?.[1];
+  if (/credit|insufficient|top up|needs \d+ credit|tt\$|\bttd\b/i.test(lower)) {
+    const ttdMatch =
+      text.match(/\$?\s*([\d.]+)\s*TTD\b/i) ?? text.match(/TT\$\s*([\d.]+)/i);
+    const creditMatch = text.match(/(\d+)\s*credit/i);
+    const amountLabel = ttdMatch
+      ? `$${ttdMatch[1]} TTD`
+      : creditMatch
+        ? formatTtdFromCredits(Number(creditMatch[1]))
+        : null;
     return {
-      title: "Not enough credits",
-      message: cost
-        ? `You need ${cost} credits for this ${mode === "video" ? "video" : mode === "image" ? "image" : "request"}.`
-        : "You're out of credits for this generation.",
-      hint: "Top up credits to continue.",
+      title: "Not enough balance",
+      message: amountLabel
+        ? `You need ${amountLabel} for this ${noun}.`
+        : "You're out of balance for this generation.",
+      hint: "Top up to continue.",
     };
   }
 
@@ -98,7 +115,7 @@ export function friendlyGenerationError(
     return {
       title: "Something went wrong",
       message:
-        "That didn't work. We're looking into it — your credits were refunded if this was a paid render.",
+        "That didn't work. We're looking into it — your balance was refunded if this was a paid render.",
     };
   }
 

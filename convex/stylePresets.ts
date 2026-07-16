@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, signBunnyCdnUrl } from "./lib/bunny";
+import { buildAssetPath, PREVIEW_TRANSFORM, signBunnyCdnUrl } from "./lib/bunny";
 import { presetStaticPreviewPath } from "./lib/presetThumbnails";
 import { adminMutation, adminQuery, authedQuery } from "./lib/customFunctions";
 import { isAdminRole } from "./lib/auth";
@@ -312,7 +312,7 @@ async function resolvePresetPreviewUrl(
   if (preset.thumbnailAssetId && expiresUnix !== undefined) {
     const asset = await ctx.db.get("assets", preset.thumbnailAssetId);
     if (asset?.bunnyPath) {
-      return await signBunnyCdnUrl(asset.bunnyPath, expiresUnix);
+      return await signBunnyCdnUrl(asset.bunnyPath, expiresUnix, PREVIEW_TRANSFORM);
     }
   }
   return presetStaticPreviewPath(preset.slug);

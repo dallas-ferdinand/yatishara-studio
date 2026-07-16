@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import {
   PREVIEW_GATE_PATH,
   hasPreviewGateCookie,
+  isPreviewGatePath,
   isPreviewHost,
   previewGatePassword,
 } from "@/lib/preview-gate";
@@ -14,7 +15,7 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const previewPassword = previewGatePassword();
   if (previewPassword || isPreviewHost(request.headers.get("host"))) {
     const pathname = request.nextUrl.pathname;
-    if (pathname.startsWith(PREVIEW_GATE_PATH)) {
+    if (isPreviewGatePath(pathname)) {
       return NextResponse.next();
     }
 

@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { makeFunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { action, type ActionCtx } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { generateElementSheet } from "./lib/aiGateway";
 import { assertSheetGenerationReady, inferElementSourceMode } from "./lib/elementSheetGuides";
@@ -382,7 +382,7 @@ export const generateElementTextSheetForApi = action({
   },
 });
 
-export const generateElementSheetForApi = action({
+export const generateElementSheetForApi = internalAction({
   args: {
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),

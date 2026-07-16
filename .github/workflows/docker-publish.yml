@@ -34,7 +34,38 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/yatishara-studio
 
 jobs:
+  # Convex additive backend (schema + compatibility shims + migration) must land
+  # before the Next image, so cached clients still talk to readable endpoints
+  # while Assistance turns use the new lifecycle.
+  deploy-convex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Deploy Convex functions
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+          CONVEX_SELF_HOSTED_URL: ${{ secrets.CONVEX_SELF_HOSTED_URL }}
+          CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.CONVEX_SELF_HOSTED_ADMIN_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CONVEX_DEPLOY_KEY:-}" && -z "${CONVEX_SELF_HOSTED_ADMIN_KEY:-}" ]]; then
+            echo "No Convex deploy credentials configured — skip backend deploy."
+            echo "Deploy Convex manually before releasing frontend when Assistance schema changes."
+            exit 0
+          fi
+          # Self-hosted uses CONVEX_SELF_HOSTED_URL + CONVEX_SELF_HOSTED_ADMIN_KEY from env.
+          npx convex deploy --yes
+          echo "After deploy: run migrateLegacyAssistanceData (idempotent) until legacy question events are cleared."
+
   build-and-push:
+    needs: deploy-convex
     runs-on: ubuntu-latest
     timeout-minutes: 45
     outputs:

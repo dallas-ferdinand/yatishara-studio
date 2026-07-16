@@ -614,16 +614,38 @@ function UnifiedTabStripInner({
 
   const tabCount = stripItems.filter((item) => item.kind === "tab").length;
 
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const pinLeft = () => {
+      el.scrollLeft = 0;
+    };
+    // Tabs start on the left; only nudge when the active tab is off-screen.
+    if (activeKey && tabCount > 0) {
+      const activeEl = tabRefs.current.get(activeKey);
+      if (activeEl) {
+        activeEl.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+        return;
+      }
+    }
+    pinLeft();
+    const raf = window.requestAnimationFrame(pinLeft);
+    return () => window.cancelAnimationFrame(raf);
+  }, [baseOrder, activeKey, tabCount]);
+
   return (
     <>
     <div
-      ref={stripRef}
       className={`cursor-unified-tabs${disableDrag ? " is-compact" : ""}${isDragging ? " is-dragging-strip" : ""}${isSettling ? " is-settling-strip" : ""}`}
-      role="tablist"
-      aria-label="Workspace tabs"
       style={tabCount > 0 ? ({ "--tab-count": tabCount } as React.CSSProperties) : undefined}
-      onPointerMove={disableDrag ? undefined : onTabPointerMove}
     >
+      <div
+        ref={stripRef}
+        className="cursor-unified-tabs-scroll"
+        role="tablist"
+        aria-label="Workspace tabs"
+        onPointerMove={disableDrag ? undefined : onTabPointerMove}
+      >
       {stripItems.map((item, itemIndex) => {
         if (item.kind === "placeholder") {
           return (
@@ -749,6 +771,7 @@ function UnifiedTabStripInner({
           </div>
         );
       })}
+      </div>
       {onNewChat ? (
         <button
           ref={newChatRef}

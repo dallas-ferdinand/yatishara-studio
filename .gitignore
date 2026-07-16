@@ -43,3 +43,7 @@ next-env.d.ts
 packages/studio-mcp/node_modules/
 .tmp/
 public/archive/studio-wallpapers-local-leftovers/
+
+# Local VPS/agent secrets (never commit)
+_system/
+.wip-backup/

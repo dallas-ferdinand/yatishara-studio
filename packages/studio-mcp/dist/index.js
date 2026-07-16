@@ -11,8 +11,8 @@ import { registerProductionTools } from "./tools/production.js";
 import { registerTrashTools } from "./tools/trash.js";
 requireConfig();
 const server = new McpServer({
-    name: "yatishara-studio",
-    version: "0.2.5",
+  name: "yatishara-studio",
+  version: "0.2.5"
 });
 registerAccountTools(server);
 registerFolderTools(server);

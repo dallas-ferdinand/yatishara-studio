@@ -5,7 +5,8 @@
 - Keep dedicated GitHub repo `dallas-ferdinand/yatishara-studio` pushed before Coolify deploys.
 - Confirm `AI_GATEWAY_API_KEY` and `GATEWAY_*` model IDs are set on the Convex deployment.
 - Resend DNS verification complete for `yatishara.com`.
-- Add/confirm Studio bank account details from the super-admin Settings panel after first login.
+- Configure PayWise sandbox/production keys on the Convex deployment (`PAYWISE_*`).
+- Record the exact successful sandbox payment status in `PAYWISE_PAID_STATUSES`; do not infer it.
 
 ## Repo Findings
 
@@ -22,6 +23,8 @@
 ## Verification Gates
 
 - `CONVEX_AGENT_MODE=anonymous npx convex dev --once --typecheck disable --tail-logs disable`
+- `npm run check:launch-env:convex`
+- `npm run lint`
 - `npm run typecheck`
 - `npm run build`
 - `docker build -t yatishara-studio:launch-check .`
@@ -31,5 +34,6 @@
 - Bunny upload and signed read work. Completed locally against live Bunny API.
 - AI Gateway image generation works with `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`).
 - Seedance 2.0 video generation works with `GATEWAY_VIDEO_MODEL_ID`.
-- Bank payment approval grants credits and sends notifications.
+- PayWise top-up checkout grants credits after provider status verification and sends notifications.
+- Callback replay, return-sync replay, amount/currency/ID mismatch, and delayed settlement tests pass without duplicate credits.
 - Web push subscription and delivery work.

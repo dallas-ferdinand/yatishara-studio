@@ -62,11 +62,58 @@ export const generationEventKind = v.union(
   v.literal("result"),
   v.literal("folder_switched"),
   v.literal("stage"),
+  /** Assistance co-pilot replies, question cards, and review/approval cards. */
+  v.literal("assistant"),
+  v.literal("question"),
+  v.literal("review"),
+  v.literal("approval"),
 );
 
-export const paymentMethod = v.union(v.literal("bank"), v.literal("card"));
+export const assistedMode = v.union(
+  v.literal("image"),
+  v.literal("video"),
+  v.literal("script"),
+  v.literal("element"),
+);
+
+export const videoType = v.union(
+  v.literal("standard"),
+  v.literal("hypermotion_ad"),
+);
+
+export const guidedBriefStatus = v.union(
+  v.literal("collecting"),
+  v.literal("awaiting_input"),
+  v.literal("review_ready"),
+  v.literal("approved"),
+  v.literal("generating"),
+  v.literal("done"),
+  v.literal("failed"),
+  v.literal("abandoned"),
+);
+
+export const guidedAttachmentRole = v.union(
+  v.literal("product"),
+  v.literal("logo"),
+  v.literal("style"),
+  v.literal("motion"),
+  v.literal("audio"),
+  v.literal("start_frame"),
+  v.literal("supporting"),
+  v.literal("reference"),
+);
+
+export const paymentMethod = v.union(
+  v.literal("bank"),
+  v.literal("card"),
+  v.literal("paywise"),
+);
 
 export const paymentStatus = v.union(
+  v.literal("pending"),
+  v.literal("needs_review"),
+  v.literal("checkout_failed"),
+  v.literal("cancelled"),
   v.literal("receipt_uploaded"),
   v.literal("receipt_received"),
   v.literal("payment_completed"),
@@ -98,6 +145,8 @@ export default defineSchema({
 
   users: defineTable({
     name: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     email: v.optional(v.string()),
     emailVerified: v.optional(v.boolean()),
     phone: v.optional(v.string()),
@@ -106,6 +155,11 @@ export default defineSchema({
     role: userRole,
     /** Active Style Sheet for composer styled generation */
     activeStyleSheetId: v.optional(v.id("elements")),
+    /**
+     * Account default for Assistance mode. Missing → treated as true.
+     * Per-thread value is stored on generationThreads.assistanceEnabled.
+     */
+    assistanceDefaultEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.optional(v.number()),
@@ -234,6 +288,8 @@ export default defineSchema({
     title: v.string(),
     sortOrder: v.number(),
     archivedAt: v.optional(v.number()),
+    /** Thread-sticky Assistance mode. Undefined → fall back to user default. */
+    assistanceEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -252,13 +308,180 @@ export default defineSchema({
     assetIds: v.optional(v.array(v.id("assets"))),
     fromFolderId: v.optional(v.id("folders")),
     toFolderId: v.optional(v.id("folders")),
+    /** Assistance card linkage */
+    briefId: v.optional(v.id("guidedBriefs")),
+    briefRevision: v.optional(v.number()),
+    /** Assistant prose / review summary */
+    message: v.optional(v.string()),
+    /** Serialized guided questions for question cards */
+    questionsJson: v.optional(v.string()),
+    /** Immutable Assistance review data for historical confirmation cards. */
+    briefSnapshotJson: v.optional(v.string()),
+    /** Generic paid/destructive Assistance approval linkage. */
+    approvalId: v.optional(v.id("assistanceApprovals")),
     createdAt: v.number(),
   })
     .index("by_thread_and_order", ["threadId", "order"])
     .index("by_owner", ["ownerId"])
-    .index("by_job", ["generationJobId"]),
+    .index("by_job", ["generationJobId"])
+    .index("by_brief", ["briefId"]),
+
+  /**
+   * Durable Assistance brief — one active draft per thread (mode + optional video type).
+   * Accumulates edits until the user Approves; generation then snapshots into generationJobs.
+   */
+  guidedBriefs: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("generationThreads"),
+    mode: assistedMode,
+    /** Only meaningful when mode === "video". */
+    videoType: v.optional(videoType),
+    status: guidedBriefStatus,
+    revision: v.number(),
+    /** Latest user prompt / notes that fed the brief. */
+    userPrompt: v.string(),
+    /** Structured pending request payload (JSON-compatible object). */
+    payload: v.any(),
+    lockedFields: v.array(v.string()),
+    inferredFields: v.array(v.string()),
+    assumptions: v.array(v.string()),
+    warnings: v.array(v.string()),
+    offeredOptionalIds: v.array(v.string()),
+    skippedOptionalIds: v.array(v.string()),
+    pendingQuestionsJson: v.optional(v.string()),
+    /** @deprecated Prefer agentStateJson. Kept readable for compatibility. */
+    agentPlanJson: v.optional(v.string()),
+    /** Sanitized multi-turn Assistance agent state (no private reasoning). */
+    agentStateJson: v.optional(v.string()),
+    compiledPrompt: v.optional(v.string()),
+    /** Immutable normalized inputs shown at review and consumed by approval. */
+    generationPlanJson: v.optional(v.string()),
+    generationPlanFingerprint: v.optional(v.string()),
+    estimatedCredits: v.optional(v.number()),
+    stylePresetId: v.optional(v.id("stylePresets")),
+    styleSheetElementId: v.optional(v.id("elements")),
+    approvedRevision: v.optional(v.number()),
+    approvedJobId: v.optional(v.id("generationJobs")),
+    approvedDocumentId: v.optional(v.id("documents")),
+    approvedElementId: v.optional(v.id("elements")),
+    approvedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_thread", ["threadId"])
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_status", ["ownerId", "status"])
+    .index("by_job", ["approvedJobId"]),
+
+  guidedBriefAttachments: defineTable({
+    briefId: v.id("guidedBriefs"),
+    ownerId: v.id("users"),
+    assetId: v.optional(v.id("assets")),
+    documentId: v.optional(v.id("documents")),
+    elementId: v.optional(v.id("elements")),
+    role: guidedAttachmentRole,
+    label: v.optional(v.string()),
+    sortOrder: v.number(),
+    briefRevision: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_brief", ["briefId"])
+    .index("by_asset", ["assetId"])
+    .index("by_document", ["documentId"])
+    .index("by_element", ["elementId"]),
+
+  /**
+   * Idempotent Assistance chat turns. Begin → analyze → commit/fail.
+   * Brief mutations and chat events happen only on commit.
+   */
+  assistanceTurns: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("generationThreads"),
+    briefId: v.id("guidedBriefs"),
+    clientTurnId: v.string(),
+    phase: v.union(
+      v.literal("begun"),
+      v.literal("committed"),
+      v.literal("failed"),
+    ),
+    briefRevisionAtBegin: v.number(),
+    briefRevisionAtCommit: v.optional(v.number()),
+    userPrompt: v.string(),
+    requestJson: v.optional(v.string()),
+    analysisJson: v.optional(v.string()),
+    resultJson: v.optional(v.string()),
+    creditTransactionId: v.optional(v.id("creditTransactions")),
+    modelId: v.optional(v.string()),
+    repaired: v.optional(v.boolean()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_brief_and_client_turn", ["briefId", "clientTurnId"])
+    .index("by_thread", ["threadId"])
+    .index("by_brief", ["briefId"])
+    .index("by_owner", ["ownerId"]),
+
+  assistanceToolCalls: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("generationThreads"),
+    turnId: v.id("assistanceTurns"),
+    toolCallId: v.string(),
+    toolName: v.string(),
+    argumentsJson: v.string(),
+    status: v.union(
+      v.literal("started"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    outputJson: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_turn_and_call", ["turnId", "toolCallId"])
+    .index("by_turn", ["turnId"])
+    .index("by_owner", ["ownerId"]),
+
+  assistanceApprovals: defineTable({
+    ownerId: v.id("users"),
+    threadId: v.id("generationThreads"),
+    briefId: v.id("guidedBriefs"),
+    turnId: v.id("assistanceTurns"),
+    toolCallId: v.string(),
+    action: v.union(
+      v.literal("trash"),
+      v.literal("move"),
+      v.literal("generation"),
+      v.literal("element_build"),
+    ),
+    title: v.string(),
+    summary: v.string(),
+    argumentsJson: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("approved"),
+      v.literal("denied"),
+      v.literal("executing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    estimatedCredits: v.optional(v.number()),
+    resultJson: v.optional(v.string()),
+    error: v.optional(v.string()),
+    decidedAt: v.optional(v.number()),
+    executedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_turn_and_call", ["turnId", "toolCallId"])
+    .index("by_thread_and_status", ["threadId", "status"])
+    .index("by_owner_and_status", ["ownerId", "status"])
+    .index("by_brief", ["briefId"]),
 
   generationJobs: defineTable({
+
     ownerId: v.id("users"),
     threadId: v.id("generationThreads"),
     saveFolderId: v.id("folders"),
@@ -274,6 +497,8 @@ export default defineSchema({
     audioEnabled: v.optional(v.boolean()),
     aspectRatio: v.optional(v.string()),
     resolution: v.optional(v.string()),
+    /** Image quality for GPT Image 2: low | medium | high */
+    quality: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
@@ -285,6 +510,8 @@ export default defineSchema({
     source: v.optional(generationSource),
     apiKeyId: v.optional(v.id("apiKeys")),
     skipPromptEnhancement: v.optional(v.boolean()),
+    /** Atomic execution claim so duplicate schedules cannot run the provider twice. */
+    executionAttemptId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -300,6 +527,7 @@ export default defineSchema({
     documentId: v.optional(v.id("documents")),
     elementId: v.optional(v.id("elements")),
     kind: v.union(v.literal("asset"), v.literal("document"), v.literal("element")),
+    role: v.optional(guidedAttachmentRole),
     sortOrder: v.number(),
   })
     .index("by_job", ["jobId"])
@@ -333,13 +561,15 @@ export default defineSchema({
     balanceAfter: v.number(),
     generationJobId: v.optional(v.id("generationJobs")),
     paymentId: v.optional(v.id("payments")),
+    reversesTransactionId: v.optional(v.id("creditTransactions")),
     reason: v.optional(v.string()),
     adminId: v.optional(v.id("users")),
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_payment", ["paymentId"])
-    .index("by_generation_job", ["generationJobId"]),
+    .index("by_generation_job", ["generationJobId"])
+    .index("by_reversed_transaction", ["reversesTransactionId"]),
 
   subscriptionPlans: defineTable({
     name: v.string(),
@@ -407,6 +637,15 @@ export default defineSchema({
     subscriptionPlanId: v.optional(v.id("subscriptionPlans")),
     bankAccountId: v.optional(v.id("bankAccounts")),
     externalPaymentId: v.optional(v.string()),
+    clientRequestId: v.optional(v.string()),
+    checkoutUrl: v.optional(v.string()),
+    providerRequestId: v.optional(v.string()),
+    providerStatus: v.optional(v.string()),
+    lastStatusCheckedAt: v.optional(v.number()),
+    nextStatusCheckAt: v.optional(v.number()),
+    statusCheckAttempts: v.optional(v.number()),
+    reconciliationLeaseUntil: v.optional(v.number()),
+    callbackToken: v.optional(v.string()),
     reference: v.optional(v.string()),
     rejectionReason: v.optional(v.string()),
     reviewedBy: v.optional(v.id("users")),
@@ -416,7 +655,24 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_status", ["status"])
-    .index("by_method_and_status", ["method", "status"]),
+    .index("by_method_and_status", ["method", "status"])
+    .index("by_client_request", ["clientRequestId"])
+    .index("by_external_payment", ["externalPaymentId"])
+    .index("by_status_and_next_check", ["status", "nextStatusCheckAt"])
+    .index("by_method_status_and_next_check", ["method", "status", "nextStatusCheckAt"]),
+
+  paywiseCallbackEvents: defineTable({
+    paymentId: v.id("payments"),
+    endpoint: v.union(v.literal("notify"), v.literal("callback")),
+    method: v.string(),
+    requestId: v.optional(v.string()),
+    bodySha256: v.optional(v.string()),
+    accepted: v.boolean(),
+    failureReason: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_payment", ["paymentId"])
+    .index("by_received_at", ["receivedAt"]),
 
   paymentReceipts: defineTable({
     paymentId: v.id("payments"),

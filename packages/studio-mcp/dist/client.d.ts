@@ -2,7 +2,7 @@ export declare function requireConfig(): {
     apiKey: string;
     apiUrl: string;
 };
-export declare function studioFetch(path: string, init?: RequestInit): Promise<any>;
+export declare function studioFetch(path: string, init?: RequestInit): Promise<unknown>;
 export type GenerationJob = {
     id: string;
     status: string;

@@ -15,10 +15,18 @@ Production is deployed from the dedicated GitHub repository through Coolify on t
 ## Production Flow
 
 1. Verify repo changes locally.
-2. Push `main` (or run **Docker publish** workflow). GitHub Actions builds the image on GitHub runners.
-3. Image publishes to `ghcr.io/dallas-ferdinand/yatishara-studio` (`:latest` + commit sha).
-4. Workflow patches Coolify’s image tag and triggers deploy — Coolify **pulls only** (no `npm`/`next` on the VPS).
-5. Smoke `https://studio.yatishara.com`.
+2. Push `main` (or run **Docker publish** workflow).
+3. **Convex first:** the workflow’s `deploy-convex` job pushes additive schema/functions (Assistance turn lifecycle, compatibility shims) before building the Next image. Configure `CONVEX_DEPLOY_KEY` and/or `CONVEX_SELF_HOSTED_*` secrets; if unset, deploy Convex manually before Coolify picks up a new frontend.
+4. After Convex deploy, run `migrateLegacyAssistanceData` (internal mutation, resumable) until question events and stale `review_ready` briefs without plan fingerprints are cleared.
+5. Image publishes to `ghcr.io/dallas-ferdinand/yatishara-studio` (`:latest` + commit sha).
+6. Workflow patches Coolify’s image tag and triggers deploy — Coolify **pulls only** (no `npm`/`next` on the VPS).
+7. Smoke `https://studio.yatishara.com` (Assistance: composer-only turns, review → Generate; no question cards).
+
+### Assistance rollout (additive)
+
+- Keep `answerQuestions` / `editBrief` / `question` event kind readable until cached clients and legacy rows are gone.
+- New frontend never calls those mutations; composer submits `clientTurnId` turns only.
+- Cleanup release (later): remove shims, `pendingQuestionsJson` / `questionsJson` writers, and regenerate Convex API after zero legacy rows and zero compatibility callers.
 
 Manual Coolify pull deploy (after an image exists):
 
@@ -50,7 +58,7 @@ Set these on Coolify for the Next app:
 - server URLs: `CONVEX_SELF_HOSTED_URL`, `CONVEX_SITE_URL`, `SITE_URL`
 - auth/email/WhatsApp: `AUTH_SECRET`, `AUTH_RESEND_KEY`, `AUTH_RESEND_FROM`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`, `EVOLUTION_INSTANCE`
 - admin bootstrap: `STUDIO_SUPER_ADMIN_EMAIL`, `STUDIO_SUPER_ADMIN_PHONE`, `STUDIO_WHATSAPP_NUMBER`
-- generation: `AI_GATEWAY_API_KEY`, `GATEWAY_TEXT_MODEL_ID`, `GATEWAY_IMAGE_MODEL_ID`, `GATEWAY_VIDEO_MODEL_ID`
+- generation: `AI_GATEWAY_API_KEY`, `GATEWAY_TEXT_MODEL_ID`, `GATEWAY_ASSISTANT_MODEL_ID`, `GATEWAY_IMAGE_MODEL_ID`, `GATEWAY_VIDEO_MODEL_ID`, optional `GUIDED_VIDEO_ASSISTANCE_ENABLED`
 - Bunny: storage, CDN signing, stream library, stream access key vars
 - public wallpapers: `NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallpapers/v1` (unsigned; upload via `node scripts/upload-studio-wallpapers.mjs`)
 - web push: VAPID public/private vars and `WEB_PUSH_SUBJECT`
@@ -72,7 +80,9 @@ Set Convex-side env where Convex functions need it:
 - Gateway model ID vars (`GATEWAY_*`)
 - Bunny vars
 - web push vars
-- billing default vars
+- PayWise vars: `PAYWISE_API_BASE`, `PAYWISE_ENVIRONMENT`, `PAYWISE_SUBSCRIPTION_KEY`,
+  `PAYWISE_API_KEY`, `PAYWISE_PAYEE_MOBILE`, `PAYWISE_ORIGIN_COUNTRY`,
+  `PAYWISE_IP_ADDRESS`, and sandbox-verified `PAYWISE_PAID_STATUSES`
 
 ## Preview Hot Reload
 
@@ -107,6 +117,8 @@ Before production deploy:
 
 ```bash
 npm run check:launch-env
+npm run check:launch-env:convex
+npm run lint
 npm run typecheck
 npm run build
 ```
@@ -127,7 +139,7 @@ Live smoke after deploy:
 - Confirm root folder and billing account exist.
 - Upload a small asset and preview signed media.
 - Create/edit a document.
-- Submit a bank top-up receipt and review from admin account.
+- Complete a PayWise top-up and confirm credits grant after status verification.
 - Run image/video generation only after AI Gateway model IDs are configured.
 - Confirm notifications and generated assets are saved.
 

@@ -1,5 +1,7 @@
 /** Client-side generation error copy (mirrors convex/lib/generationUserErrors.ts). */
 
+import { formatTtdFromCredits } from "@/studio/lib/money";
+
 export type GenerationUserError = {
   title: string;
   message: string;
@@ -25,17 +27,25 @@ export function friendlyGenerationError(
     return {
       title: "Something went wrong",
       message:
-        "That didn't work. We're looking into it — your credits were refunded if this was a paid render.",
+        "That didn't work. We're looking into it — your balance was refunded if this was a paid render.",
     };
   }
 
-  if (/credit|insufficient|top up|needs \d+ credit/i.test(lower)) {
-    const match = text.match(/(\d+)\s*credit/i);
-    const cost = match?.[1];
+  if (/credit|insufficient|top up|needs \d+ credit|tt\$|\bttd\b/i.test(lower)) {
+    const ttdMatch =
+      text.match(/\$?\s*([\d.]+)\s*TTD\b/i) ?? text.match(/TT\$\s*([\d.]+)/i);
+    const creditMatch = text.match(/(\d+)\s*credit/i);
+    const amountLabel = ttdMatch
+      ? `$${ttdMatch[1]} TTD`
+      : creditMatch
+        ? formatTtdFromCredits(Number(creditMatch[1]))
+        : null;
     return {
-      title: "Not enough credits",
-      message: cost ? `You need ${cost} credits for this ${noun}.` : `You're out of credits for this ${noun}.`,
-      hint: "Top up credits to continue.",
+      title: "Not enough balance",
+      message: amountLabel
+        ? `You need ${amountLabel} for this ${noun}.`
+        : `You're out of balance for this ${noun}.`,
+      hint: "Top up to continue.",
     };
   }
 
@@ -101,7 +111,7 @@ export function friendlyGenerationError(
     return {
       title: "Something went wrong",
       message:
-        "That didn't work. We're looking into it — your credits were refunded if this was a paid render.",
+        "That didn't work. We're looking into it — your balance was refunded if this was a paid render.",
     };
   }
 

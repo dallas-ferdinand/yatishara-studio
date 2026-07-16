@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, getStorageUploadCredentials, signBunnyCdnUrl } from "./lib/bunny";
+import { buildAssetPath, getStorageUploadCredentials, signBunnyCdnUrl, signBunnyFullUrl } from "./lib/bunny";
 import {
   assertReferenceCount,
   referenceAssetIdsFromInput,
@@ -437,7 +437,7 @@ export const getAssetReferenceUrls = internalQuery({
         assetId: asset._id,
         kind: asset.kind,
         mimeType: asset.mimeType,
-        url: await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix),
+        url: await signBunnyFullUrl(asset.bunnyPath, args.expiresUnix, asset.kind),
       });
     }
     return results;
@@ -550,6 +550,8 @@ export const estimateGenerationCost = internalQuery({
     sandboxFolderId: v.id("folders"),
     mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
     resolution: v.optional(v.string()),
+    quality: v.optional(v.string()),
+    aspectRatio: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioEnabled: v.optional(v.boolean()),
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
@@ -636,12 +638,15 @@ export const estimateGenerationCost = internalQuery({
     const cost = creditCostForGeneration({
       tier,
       resolution,
+      quality: args.mode === "image" ? args.quality : undefined,
+      aspectRatio: args.mode === "image" ? args.aspectRatio : undefined,
       durationSeconds: args.durationSeconds,
       audioEnabled: args.audioEnabled,
       videoModel:
         args.mode === "video"
           ? ((args.videoModel as
               | "seedance-2.0"
+              | "google-omni-flash"
               | "kling-3.0-i2v"
               | undefined) ?? "seedance-2.0")
           : undefined,
@@ -1123,6 +1128,8 @@ export const resolveReferenceElementIds = internalQuery({
     /** full = element bibles on job prompt. gateway_kling = compact stubs (shot packet keeps full definition). */
     promptAppendStyle: v.optional(v.union(v.literal("full"), v.literal("gateway_kling"))),
     hasStartFrame: v.optional(v.boolean()),
+    /** Number of image references already placed before element sheets (for [Image N] labels). */
+    referenceImageStartIndex: v.optional(v.number()),
   },
   returns: v.object({
     referenceAssetIds: v.array(v.id("assets")),
@@ -1144,7 +1151,7 @@ export const resolveReferenceElementIds = internalQuery({
     const videoMode = args.generationMode === "video";
     const compactKling = args.promptAppendStyle === "gateway_kling";
     const hasStartFrame = args.hasStartFrame === true;
-    let referenceImageIndex = 0;
+    let referenceImageIndex = Math.max(0, Math.floor(args.referenceImageStartIndex ?? 0));
 
     for (const elementId of args.elementIds) {
       const element = await ctx.db.get("elements", elementId);
@@ -1250,6 +1257,7 @@ export const createElementForApi = internalMutation({
     sourceAssetIds: v.optional(v.array(v.id("assets"))),
     sourceDocumentId: v.optional(v.id("documents")),
     sourceMode: v.optional(v.union(v.literal("photographic"), v.literal("designed"))),
+    sheetAssetId: v.optional(v.id("assets")),
     styleRules: v.optional(v.string()),
     renderMode: v.optional(
       v.union(
@@ -1274,6 +1282,20 @@ export const createElementForApi = internalMutation({
       }
       if (!(await isFolderInSandbox(ctx, asset.folderId, args.sandboxFolderId))) {
         throw new Error("Asset not found");
+      }
+    }
+    if (args.sheetAssetId) {
+      const sheetAsset = await ctx.db.get("assets", args.sheetAssetId);
+      if (
+        !sheetAsset ||
+        sheetAsset.ownerId !== args.userId ||
+        sheetAsset.deletedAt ||
+        sheetAsset.kind !== "image"
+      ) {
+        throw new Error("Sheet asset not found");
+      }
+      if (!(await isFolderInSandbox(ctx, sheetAsset.folderId, args.sandboxFolderId))) {
+        throw new Error("Sheet asset not found");
       }
     }
     if (args.sourceDocumentId) {
@@ -1302,6 +1324,8 @@ export const createElementForApi = internalMutation({
       sourceAssetIds: referenceAssetIds,
       referenceAssetIds,
       sourceDocumentId: args.sourceDocumentId,
+      sheetAssetId: args.sheetAssetId,
+      builtAt: args.sheetAssetId ? now : undefined,
       styleRules: args.type === "style_sheet" ? args.styleRules?.trim() : undefined,
       renderMode: args.type === "style_sheet" ? args.renderMode : undefined,
       createdAt: now,
@@ -1823,9 +1847,21 @@ export const refundTextGenerationForApi = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const transaction = await ctx.db.get("creditTransactions", args.transactionId);
-    if (!transaction || transaction.userId !== args.userId || transaction.amount >= 0) {
+    if (
+      !transaction ||
+      transaction.userId !== args.userId ||
+      transaction.kind !== "spent" ||
+      transaction.amount >= 0
+    ) {
       return null;
     }
+    const existingRefund = await ctx.db
+      .query("creditTransactions")
+      .withIndex("by_reversed_transaction", (q) =>
+        q.eq("reversesTransactionId", transaction._id),
+      )
+      .unique();
+    if (existingRefund) return null;
     const account = await ctx.db.get("billingAccounts", transaction.billingAccountId);
     if (!account || account.userId !== args.userId) {
       return null;
@@ -1843,6 +1879,7 @@ export const refundTextGenerationForApi = internalMutation({
       kind: "refunded",
       amount: refundAmount,
       balanceAfter,
+      reversesTransactionId: transaction._id,
       reason: args.reason ?? "Text generation failed (API)",
       createdAt: now,
     });
@@ -1875,7 +1912,7 @@ async function formatAsset(
     kind: asset.kind,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
-    url: asset.bunnyPath ? await signBunnyCdnUrl(asset.bunnyPath, expiresUnix) : undefined,
+    url: asset.bunnyPath ? await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind) : undefined,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
   };

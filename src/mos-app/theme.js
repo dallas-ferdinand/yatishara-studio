@@ -401,15 +401,30 @@ export function getStudioBackgroundPack() {
   return getStudioBackgroundFamily();
 }
 
-export function setStudioBackgroundFamily(id) {
+function pickNextSchemeId(excludeId) {
+  const ids = Object.keys(SCHEMES);
+  if (ids.length === 0) return "agent";
+  if (ids.length === 1) return ids[0];
+  let next = ids[Math.floor(Math.random() * ids.length)];
+  let guard = 0;
+  while (next === excludeId && guard++ < 24) {
+    next = ids[Math.floor(Math.random() * ids.length)];
+  }
+  return next;
+}
+
+function writeStudioBackgroundFamily(id) {
   const family = normalizeBgFamily(id);
   document.documentElement.dataset.studioBgFamily = family;
   document.documentElement.dataset.studioBgPack = family === "animated" ? "worlds" : family;
   localStorage.setItem(STUDIO_BG_PACK_KEY, family);
-  window.dispatchEvent(
-    new CustomEvent("mercuryos-theme-change", { detail: { bgFamily: family, bgPack: family } }),
-  );
-  syncStudioBackgroundCss();
+  return family;
+}
+
+export function setStudioBackgroundFamily(id) {
+  writeStudioBackgroundFamily(id);
+  // New scene type always rolls a new accent theme + CSS vars + wallpaper.
+  applyTheme(pickNextSchemeId(getSchemeId()), getAppearanceMode());
 }
 
 /** @deprecated use setStudioBackgroundFamily */
@@ -462,7 +477,17 @@ export function applyTheme(schemeId, mode) {
   syncSchemeChips(sid);
   syncAppearanceControls(appearance);
 
-  window.dispatchEvent(new CustomEvent("mercuryos-theme-change", { detail: { schemeId: sid, mode: appearance } }));
+  const bgFamilyNow = getStudioBackgroundFamily();
+  window.dispatchEvent(
+    new CustomEvent("mercuryos-theme-change", {
+      detail: {
+        schemeId: sid,
+        mode: appearance,
+        bgFamily: bgFamilyNow,
+        bgPack: bgFamilyNow === "animated" ? "worlds" : bgFamilyNow,
+      },
+    }),
+  );
   syncStudioBackgroundCss();
 }
 
@@ -472,7 +497,8 @@ function syncStudioBackgroundCss() {
 }
 
 export function setAppearanceMode(mode) {
-  applyTheme(getSchemeId(), mode);
+  // Light/dark switch always rolls a new accent theme + CSS vars + wallpaper.
+  applyTheme(pickNextSchemeId(getSchemeId()), mode === "light" ? "light" : "dark");
 }
 
 export function setColorScheme(id) {
@@ -486,7 +512,7 @@ export function randomizeStudioAppearance() {
   const schemeIds = Object.keys(SCHEMES);
   const nextScheme = schemeIds[Math.floor(Math.random() * schemeIds.length)] ?? "agent";
   const nextMode = Math.random() < 0.5 ? "light" : "dark";
-  setStudioBackgroundFamily(nextFamily);
+  writeStudioBackgroundFamily(nextFamily);
   applyTheme(nextScheme, nextMode);
   return { family: nextFamily, schemeId: nextScheme, mode: nextMode };
 }

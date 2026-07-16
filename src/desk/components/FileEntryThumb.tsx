@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "./Icons";
 import * as api from "@mos-app/api.js";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
@@ -59,8 +59,8 @@ function peekDisplayName(label) {
 }
 
 /**
- * Instant-feel thumb: skeleton → tiny LQIP blur → sharp resized thumb fade-in.
- * Mimics Next.js Image blur placeholder without the optimizer pipeline.
+ * Instant-feel thumb: calm placeholder → optional LQIP → sharp thumb crossfade.
+ * Avoids blinky remounts when the browser already has the image decoded.
  */
 function ProgressiveThumb({
   src,
@@ -69,31 +69,77 @@ function ProgressiveThumb({
   eager = false,
 }) {
   const [hiLoaded, setHiLoaded] = useState(false);
+  const [showUnderlay, setShowUnderlay] = useState(true);
   const [failed, setFailed] = useState(false);
+  const hiRef = useRef(null);
+  const loadedSrcRef = useRef("");
+  const underlayTimerRef = useRef(0);
 
-  useEffect(() => {
-    setHiLoaded(false);
+  const markLoaded = useCallback((url) => {
+    if (!url) return;
+    loadedSrcRef.current = url;
+    setHiLoaded(true);
+    window.clearTimeout(underlayTimerRef.current);
+    underlayTimerRef.current = window.setTimeout(() => {
+      setShowUnderlay(false);
+    }, 280);
+  }, []);
+
+  useLayoutEffect(() => {
     setFailed(false);
+    window.clearTimeout(underlayTimerRef.current);
+
+    if (!src) {
+      setHiLoaded(false);
+      setShowUnderlay(true);
+      return;
+    }
+
+    // Same URL already shown — keep it painted (avoids Convex re-render blink).
+    if (loadedSrcRef.current === src) {
+      setHiLoaded(true);
+      setShowUnderlay(false);
+      return;
+    }
+
     warmThumbUrl(lqipSrc);
     warmThumbUrl(src);
-  }, [src, lqipSrc]);
+
+    const img = hiRef.current;
+    if (img?.complete && img.naturalWidth > 0 && img.currentSrc) {
+      markLoaded(src);
+      return;
+    }
+
+    setHiLoaded(false);
+    setShowUnderlay(true);
+  }, [src, lqipSrc, markLoaded]);
+
+  useEffect(() => {
+    return () => window.clearTimeout(underlayTimerRef.current);
+  }, []);
 
   if (!src || failed) return null;
 
   return (
-    <span className="desk-file-thumb-progressive">
-      {!hiLoaded ? <span className="desk-file-thumb-skeleton" aria-hidden /> : null}
-      {lqipSrc && !hiLoaded ? (
-        <img
-          src={lqipSrc}
-          alt=""
-          className={`desk-file-thumb-lqip ${className}`.trim()}
-          decoding="async"
-          loading={eager ? "eager" : "lazy"}
-          draggable={false}
-        />
+    <span className={`desk-file-thumb-progressive${hiLoaded ? " is-ready" : ""}`}>
+      {showUnderlay ? (
+        <>
+          <span className="desk-file-thumb-skeleton" aria-hidden />
+          {lqipSrc ? (
+            <img
+              src={lqipSrc}
+              alt=""
+              className={`desk-file-thumb-lqip ${className}`.trim()}
+              decoding="async"
+              loading={eager ? "eager" : "lazy"}
+              draggable={false}
+            />
+          ) : null}
+        </>
       ) : null}
       <img
+        ref={hiRef}
         src={src}
         alt=""
         className={`desk-file-thumb-hi ${className}${hiLoaded ? " is-loaded" : ""}`.trim()}
@@ -101,8 +147,13 @@ function ProgressiveThumb({
         loading={eager ? "eager" : "lazy"}
         fetchPriority={eager ? "high" : "auto"}
         draggable={false}
-        onLoad={() => setHiLoaded(true)}
-        onError={() => setFailed(true)}
+        onLoad={() => markLoaded(src)}
+        onError={() => {
+          setFailed(true);
+          setHiLoaded(false);
+          setShowUnderlay(true);
+          loadedSrcRef.current = "";
+        }}
       />
     </span>
   );
@@ -247,27 +298,36 @@ export function FileEntryThumb({
   let inlinePeekLabel = false;
 
   if (kind === "dir" || kind === "parent") {
-    const hasFolderPeek = entry?.type === "dir" && (entry?.peekItems ?? []).length > 0;
-    visual = (
-      <div
-        className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${hasFolderPeek ? " desk-file-thumb-peek-wrap--folder-peek" : ""}`}
-      >
-        <FolderThumbVisual
-          entry={entry}
-          icon={icon}
-          folderIconClass={folderIconClass}
-          size={size}
-        />
-        <span className="desk-file-thumb-badge" aria-hidden="true">
-          <Icon
-            name={icon}
-            size={14}
-            className={folderIconClass === "desk-file-entry-icon--pinned" ? folderIconClass : undefined}
+    const isTrash = entry?.studioKind === "trash";
+    if (isTrash) {
+      visual = (
+        <div className="desk-file-thumb-fallback desk-file-thumb-fallback--trash">
+          <Icon name="trash" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+        </div>
+      );
+    } else {
+      const hasFolderPeek = entry?.type === "dir" && (entry?.peekItems ?? []).length > 0;
+      visual = (
+        <div
+          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${hasFolderPeek ? " desk-file-thumb-peek-wrap--folder-peek" : ""}`}
+        >
+          <FolderThumbVisual
+            entry={entry}
+            icon={icon}
+            folderIconClass={folderIconClass}
+            size={size}
           />
-        </span>
-        <ThumbPeekLabel name={label} />
-      </div>
-    );
+          <span className="desk-file-thumb-badge" aria-hidden="true">
+            <Icon
+              name={icon}
+              size={14}
+              className={folderIconClass === "desk-file-entry-icon--pinned" ? folderIconClass : undefined}
+            />
+          </span>
+          <ThumbPeekLabel name={label} />
+        </div>
+      );
+    }
   } else if (entry?.studioKind === "element") {
     const badge = elementBadgeIcon(entry.elementType);
     const sheetUrl = thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : null;

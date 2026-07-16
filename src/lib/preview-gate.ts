@@ -1,9 +1,12 @@
 import type { NextRequest } from "next/server";
 
 export const PREVIEW_GATE_COOKIE = "studio_preview_gate";
-export const PREVIEW_GATE_PATH = "/preview-gate";
+export const PREVIEW_GATE_PATH = "/preview-gate/";
 export const PREVIEW_HOST = "preview.studio.yatishara.com";
 
+export function isPreviewGatePath(pathname: string): boolean {
+  return pathname === "/preview-gate" || pathname === PREVIEW_GATE_PATH || pathname.startsWith("/preview-gate/");
+}
 export function previewGatePassword(): string | undefined {
   return process.env.PREVIEW_STUDIO_PASSWORD;
 }

@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Film, Folder, Image as ImageIcon, Music, Sparkles, FileText } from "lucide-react";
 import { enhanceMarkdown, renderMarkdownFragment } from "@/desk/lib/markdown-desk.js";
+import { writeExplorerDragData, clearActiveExplorerDrag } from "@/desk/lib/explorer-dnd.js";
+import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
 import {
   composerTokenIconKind,
   parseStudioPrompt,
@@ -19,6 +21,32 @@ const ICONS = {
   file: FileText,
 };
 
+function entryFromPromptRef(refItem, preview) {
+  const studioId = refItem?.studioId;
+  const path =
+    refItem?.path ||
+    (studioId
+      ? refItem?.elementType
+        ? `/Studio/elements/${studioId}`
+        : `/Studio/assets/${studioId}`
+      : "");
+  if (!path) return null;
+  const name = refItem?.label ?? refItem?.filename ?? path.split("/").pop() ?? "Reference";
+  const kind = preview?.kind ?? refItem?.kind ?? "file";
+  return {
+    path,
+    name,
+    type: "file",
+    studioKind: refItem?.elementType || path.includes("/elements/") ? "element" : "asset",
+    studioId,
+    elementType: refItem?.elementType || preview?.elementType,
+    kindLabel: kind,
+    mediaKind: kind === "image" || kind === "video" || kind === "audio" ? kind : null,
+    thumbnailUrl: preview?.thumbnailUrl,
+    mediaUrl: preview?.mediaUrl ?? preview?.thumbnailUrl,
+  };
+}
+
 function StudioChatChip({ refItem, label, title, preview }) {
   const displayLabel = label ?? refItem?.label ?? "Reference";
   const iconKey = composerTokenIconKind({
@@ -33,13 +61,39 @@ function StudioChatChip({ refItem, label, title, preview }) {
   const imageOnly =
     Boolean(thumb) &&
     (isElement || mediaKind === "image" || mediaKind === "video");
+  const dragEntry = entryFromPromptRef(refItem, preview);
+  const canDrag = Boolean(dragEntry?.path);
+
+  function handleDragStart(event) {
+    if (!canDrag || !dragEntry) return;
+    writeExplorerDragData(event.dataTransfer, dragEntry);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove";
+    setChipDragImage(event.dataTransfer, {
+      label: displayLabel,
+      thumbnailUrl: thumb || dragEntry.thumbnailUrl,
+      kind: mediaKind || dragEntry.mediaKind || "file",
+    });
+  }
+
+  function handleDragEnd() {
+    clearActiveExplorerDrag();
+  }
+
+  const commonProps = {
+    className: `studio-chat-chip${imageOnly ? " studio-chat-chip--image-only" : ""}${
+      thumb && !imageOnly ? " studio-chat-chip--preview" : ""
+    }${canDrag ? " is-draggable" : ""}`,
+    title:
+      title ??
+      (canDrag ? `${displayLabel} · drag into composer` : displayLabel),
+    draggable: canDrag,
+    onDragStart: handleDragStart,
+    onDragEnd: handleDragEnd,
+  };
 
   if (imageOnly) {
     return (
-      <span
-        className="studio-chat-chip studio-chat-chip--image-only"
-        title={title ?? displayLabel}
-      >
+      <span {...commonProps}>
         <span className="studio-chat-chip-media-wrap">
           {mediaKind === "video" && !isElement ? (
             <video
@@ -48,9 +102,10 @@ function StudioChatChip({ refItem, label, title, preview }) {
               muted
               playsInline
               preload="metadata"
+              draggable={false}
             />
           ) : (
-            <img className="studio-chat-chip-media" src={thumb} alt="" loading="lazy" />
+            <img className="studio-chat-chip-media" src={thumb} alt="" loading="lazy" draggable={false} />
           )}
         </span>
         <span className="studio-chat-chip-overlay" aria-hidden="true">
@@ -61,10 +116,10 @@ function StudioChatChip({ refItem, label, title, preview }) {
   }
 
   return (
-    <span className={`studio-chat-chip${thumb ? " studio-chat-chip--preview" : ""}`} title={title ?? displayLabel}>
+    <span {...commonProps}>
       {thumb ? (
         <span className="studio-chat-chip-media-wrap">
-          <img className="studio-chat-chip-media" src={thumb} alt="" loading="lazy" />
+          <img className="studio-chat-chip-media" src={thumb} alt="" loading="lazy" draggable={false} />
         </span>
       ) : (
         <Icon className="studio-chat-chip-icon" aria-hidden="true" />

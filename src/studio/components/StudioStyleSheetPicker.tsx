@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { Palette, Plus, X, Zap } from "lucide-react";
+import { Paintbrush, Palette, X } from "lucide-react";
 
 type StyleSheetRow = {
   _id: string;
   name?: string;
+  description?: string;
   deletedAt?: number;
   updatedAt?: number;
   _creationTime?: number;
   sheetAssetId?: string;
+  sheetPreviewUrl?: string;
   styleRules?: string;
   renderMode?: string;
 };
@@ -19,7 +21,113 @@ type AssetRow = {
   studioId?: string;
   previewUrl?: string;
   mediaUrl?: string;
+  signedReadUrl?: string;
+  signedThumbnailUrl?: string;
 };
+
+function styleSheetThumbUrl(
+  asset?: AssetRow | null,
+  sheetPreviewUrl?: string,
+): string | undefined {
+  // Style cards should show full (or high-quality) sheet art — not grid thumbs.
+  const candidates = [
+    sheetPreviewUrl,
+    asset?.signedReadUrl,
+    asset?.mediaUrl,
+    asset?.signedThumbnailUrl,
+    asset?.previewUrl,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string" || !/^https?:\/\//i.test(candidate)) continue;
+    try {
+      const parsed = new URL(candidate);
+      const isThumb =
+        parsed.searchParams.has("width") ||
+        parsed.searchParams.has("quality") ||
+        parsed.searchParams.has("blur");
+      if (!isThumb) return candidate;
+    } catch {
+      return candidate;
+    }
+  }
+  return candidates.find(
+    (candidate) => typeof candidate === "string" && /^https?:\/\//i.test(candidate),
+  );
+}
+
+function styleSheetBlurb(sheet: StyleSheetRow): string {
+  const description = sheet.description?.trim();
+  if (description) return description;
+  const firstRuleLine = sheet.styleRules
+    ?.split("\n")
+    .map((line) => line.replace(/^#+\s*/, "").trim())
+    .find((line) => line && !line.startsWith("-") && !/^visual reference/i.test(line));
+  if (firstRuleLine) return firstRuleLine;
+  switch (sheet.renderMode) {
+    case "photoreal":
+      return "Live-action photographic realism";
+    case "illustrated_2d":
+      return "Illustrated 2D finish";
+    case "illustrated_3d":
+      return "Stylized 3D finish";
+    case "mixed":
+      return "Mixed photographic and illustrated finish";
+    default:
+      return "Custom look for your generation";
+  }
+}
+
+/** UI label: prefer one word, never more than two. */
+const STYLE_SHORT_NAMES: Record<string, string> = {
+  primetime: "Primetime",
+  cutaway: "Cutaway",
+  "ink classic": "Ink Classic",
+  "soft 3d": "Soft 3D",
+  anime: "Anime",
+  "cinematic anime": "Anime",
+  realism: "Realism",
+  "cinematic realism": "Realism",
+  "no applied style": "None",
+  direct: "None",
+};
+
+/** Allowed cartoon/world styles on the desk (everything else is retired). */
+const STYLE_ALLOWED_KEYS = new Set([
+  "primetime",
+  "cutaway",
+  "ink classic",
+  "soft 3d",
+  "anime",
+  "realism",
+  "cinematic realism",
+  "cinematic anime",
+]);
+
+export function styleSheetShortName(name?: string | null): string {
+  const raw = name?.trim();
+  if (!raw) return "Style";
+  const mapped = STYLE_SHORT_NAMES[raw.toLowerCase()];
+  if (mapped) return mapped;
+  const words = raw
+    .replace(/[_./]+/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .filter((word) => !/^(2d|3d|the|a|an)$/i.test(word));
+  if (!words.length) return raw.slice(0, 12);
+  if (words.length === 1) return words[0];
+  const weak = /^(cinematic|premium|stylized|graphic|cartoon|storybook)$/i;
+  if (weak.test(words[0]) && words[1]) return words[1];
+  return `${words[0]} ${words[1]}`;
+}
+
+export function isHiddenStyleSheet(sheet: StyleSheetRow): boolean {
+  const raw = sheet.name?.trim().toLowerCase() ?? "";
+  if (!raw) return true;
+  if (STYLE_ALLOWED_KEYS.has(raw)) return false;
+  const short = styleSheetShortName(sheet.name).toLowerCase();
+  return !STYLE_ALLOWED_KEYS.has(short);
+}
 
 type PickerPanelProps = {
   styleSheets?: StyleSheetRow[];
@@ -29,7 +137,6 @@ type PickerPanelProps = {
   onSelectDirect: () => void;
   onSelectStyleSheet: (id: string) => void;
   onClose: () => void;
-  onCreateStyleSheet: () => void;
 };
 
 export function StudioStyleSheetPickerPanel({
@@ -40,7 +147,6 @@ export function StudioStyleSheetPickerPanel({
   onSelectDirect,
   onSelectStyleSheet,
   onClose,
-  onCreateStyleSheet,
 }: PickerPanelProps) {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -50,8 +156,10 @@ export function StudioStyleSheetPickerPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const userSheets = [...(styleSheets ?? [])]
+  const premadeSheets = [...(styleSheets ?? [])]
     .filter((sheet) => !sheet.deletedAt)
+    .filter((sheet) => Boolean(sheet.sheetAssetId || sheet.styleRules?.trim()))
+    .filter((sheet) => !isHiddenStyleSheet(sheet))
     .sort((a, b) => (b.updatedAt ?? b._creationTime ?? 0) - (a.updatedAt ?? a._creationTime ?? 0));
 
   return (
@@ -75,20 +183,20 @@ export function StudioStyleSheetPickerPanel({
           >
             <div className="studio-preset-grid-thumb is-direct-clean" aria-hidden="true">
               <span className="studio-preset-grid-thumb-fallback studio-preset-direct-mark">
-                <Zap className="h-5 w-5" aria-hidden="true" />
+                <Paintbrush className="h-10 w-10" strokeWidth={1.75} aria-hidden="true" />
               </span>
             </div>
             <div className="studio-preset-grid-copy">
-              <strong>Direct</strong>
-              <span className="text-xs text-cursor-muted">Prompt goes straight to the model</span>
+              <strong>None</strong>
             </div>
           </button>
-          {userSheets.map((sheet) => {
+          {premadeSheets.map((sheet) => {
             const active = selectedMode === "styled" && activeStyleSheetId === sheet._id;
             const thumbAsset = assets.find(
               (asset) => asset._id === sheet.sheetAssetId || asset.studioId === sheet.sheetAssetId,
             );
-            const isBuilt = Boolean(sheet.sheetAssetId || sheet.styleRules?.trim());
+            const thumbUrl = styleSheetThumbUrl(thumbAsset, sheet.sheetPreviewUrl);
+            const shortName = styleSheetShortName(sheet.name);
             return (
               <button
                 key={sheet._id}
@@ -97,10 +205,11 @@ export function StudioStyleSheetPickerPanel({
                 aria-selected={active}
                 className={`studio-preset-grid-card${active ? " is-active" : ""}`}
                 onClick={() => onSelectStyleSheet(sheet._id)}
+                title={sheet.name ? `${sheet.name} — ${styleSheetBlurb(sheet)}` : styleSheetBlurb(sheet)}
               >
                 <div className="studio-preset-grid-thumb">
-                  {thumbAsset?.previewUrl || thumbAsset?.mediaUrl ? (
-                    <img src={thumbAsset.previewUrl ?? thumbAsset.mediaUrl} alt="" loading="lazy" />
+                  {thumbUrl ? (
+                    <img src={thumbUrl} alt="" loading="lazy" />
                   ) : (
                     <span className="studio-preset-grid-thumb-fallback">
                       <Palette className="h-5 w-5" aria-hidden="true" />
@@ -108,32 +217,14 @@ export function StudioStyleSheetPickerPanel({
                   )}
                 </div>
                 <div className="studio-preset-grid-copy">
-                  <strong>{sheet.name}</strong>
-                  <span className="text-xs text-cursor-muted">
-                    {isBuilt
-                      ? (sheet.renderMode?.replace(/_/g, " ") ?? "Style Sheet")
-                      : "Draft — add rules or build sheet"}
-                  </span>
+                  <strong>{shortName}</strong>
                 </div>
               </button>
             );
           })}
-          <button
-            type="button"
-            role="option"
-            aria-selected={false}
-            className="studio-preset-grid-card studio-preset-grid-card--create"
-            onClick={onCreateStyleSheet}
-          >
-            <div className="studio-preset-grid-thumb is-create-sheet">
-              <span className="studio-preset-grid-thumb-fallback">
-                <Plus className="h-6 w-6" aria-hidden="true" />
-              </span>
-            </div>
-            <div className="studio-preset-grid-copy">
-              <strong>Create Style Sheet</strong>
-            </div>
-          </button>
+          {!premadeSheets.length ? (
+            <p className="px-2 text-xs text-cursor-muted">Premade styles coming soon. None is available now.</p>
+          ) : null}
         </div>
       )}
     </div>
@@ -157,37 +248,50 @@ export function StudioStyleSheetTriggerButton({
   onClick,
   panel = false,
 }: TriggerButtonProps) {
-  const label =
-    selectedMode === "direct"
-      ? "Direct"
-      : activeSheet?.name ?? "Style Sheet";
-  const sheetThumb = activeSheetAsset?.previewUrl ?? activeSheetAsset?.mediaUrl;
+  const hasStyle = selectedMode !== "direct" && Boolean(activeSheet?.name);
+  const label = hasStyle ? styleSheetShortName(activeSheet?.name) : "Style";
+  const detailLabel = hasStyle ? (activeSheet?.name ?? label) : "None";
+  const sheetThumb = styleSheetThumbUrl(activeSheetAsset, activeSheet?.sheetPreviewUrl);
+  const iconSize = panel ? 16 : 14;
+  const lead =
+    hasStyle && sheetThumb ? (
+      <span className="studio-preset-trigger-thumb">
+        <img src={sheetThumb} alt="" className="studio-preset-trigger-sheet-img" />
+      </span>
+    ) : (
+      <Paintbrush size={iconSize} strokeWidth={2.25} aria-hidden="true" />
+    );
+  if (panel) {
+    return (
+      <button
+        type="button"
+        className={`studio-composer-setting-card studio-preset-trigger is-panel${open ? " is-open" : ""}`}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={hasStyle ? `Style: ${label}` : "Choose style"}
+        title={detailLabel}
+        onClick={onClick}
+      >
+        <span className="studio-composer-setting-card-icon" aria-hidden="true">
+          {lead}
+        </span>
+        <span className="studio-composer-setting-card-label">Style</span>
+        <strong className="studio-composer-setting-card-value">{label}</strong>
+      </button>
+    );
+  }
   return (
     <button
       type="button"
-      className={`studio-pill-btn studio-preset-trigger${open ? " is-open" : ""}${panel ? " is-panel" : ""}`}
+      className={`studio-pill-btn studio-preset-trigger${open ? " is-open" : ""}`}
       aria-expanded={open}
       aria-haspopup="listbox"
-      aria-label={label ? `Style: ${label}` : "Choose style"}
-      title={label ?? "Choose style"}
+      aria-label={hasStyle ? `Style: ${label}` : "Choose style"}
+      title={detailLabel}
       onClick={onClick}
     >
-      <span className="studio-preset-trigger-thumb">
-        {selectedMode === "direct" ? (
-          <span className="studio-preset-grid-thumb is-direct-clean studio-preset-trigger-direct" aria-hidden="true">
-            <span className="studio-preset-grid-thumb-fallback studio-preset-direct-mark">
-              <Zap className="h-3 w-3" aria-hidden="true" />
-            </span>
-          </span>
-        ) : sheetThumb ? (
-          <img src={sheetThumb} alt="" className="studio-preset-trigger-sheet-img" />
-        ) : (
-          <span className="studio-preset-grid-thumb-fallback">
-            <Palette className="h-3 w-3" aria-hidden="true" />
-          </span>
-        )}
-      </span>
-      <span className="studio-preset-trigger-copy">{label ?? "Style"}</span>
+      {lead}
+      <span className="studio-preset-trigger-copy">{label}</span>
     </button>
   );
 }

@@ -110,9 +110,25 @@ export type BunnyImageTransform = {
 
 /** Grid / asset list thumbs — small WebP, edge-cached after first hit. */
 export const THUMB_TRANSFORM: BunnyImageTransform = {
-  width: 420,
-  quality: 62,
+  width: 640,
+  quality: 74,
   format: "webp",
+};
+
+/** Style-sheet / large preview cards — sharp enough for look selection. */
+export const PREVIEW_TRANSFORM: BunnyImageTransform = {
+  width: 1280,
+  quality: 88,
+  format: "webp",
+};
+
+/**
+ * Full image views — high width ceiling + quality 100 so Bunny Optimizer Autopilot
+ * does not downscale to ~1600px. Bunny will not upscale past the origin.
+ */
+export const FULL_QUALITY_TRANSFORM: BunnyImageTransform = {
+  width: 8192,
+  quality: 100,
 };
 
 /** Folder peek cards — even smaller. */
@@ -184,13 +200,25 @@ export async function signBunnyCdnUrls(
   return new Map(entries);
 }
 
-/** List/peek thumbnail URL (resized). Full media still uses signBunnyCdnUrl(path, expires). */
+/** List/peek thumbnail URL (resized). Full media uses FULL_QUALITY_TRANSFORM for images. */
 export async function signBunnyThumbUrl(
   path: string,
   expiresUnix: number,
   transform: BunnyImageTransform = THUMB_TRANSFORM,
 ): Promise<string> {
   return signBunnyCdnUrl(path, expiresUnix, transform);
+}
+
+/** Sign a full-fidelity image URL (bypass Autopilot downscale). Videos: raw path. */
+export async function signBunnyFullUrl(
+  path: string,
+  expiresUnix: number,
+  kind?: string,
+): Promise<string> {
+  if (kind && kind !== "image") {
+    return signBunnyCdnUrl(path, expiresUnix);
+  }
+  return signBunnyCdnUrl(path, expiresUnix, FULL_QUALITY_TRANSFORM);
 }
 
 function normalizeStoragePath(path: string): string {

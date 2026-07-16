@@ -99,7 +99,9 @@ export function studioBackgroundPath(
 ): string {
   const file = studioBackgroundFilename(family, themeId, appearance);
   const cdn = studioBackgroundCdnBase();
-  return cdn ? `${cdn}/${file}` : `/${file}`;
+  if (!cdn) return `/${file}`;
+  // Bunny Optimizer Autopilot otherwise downscales ~1600px; pin full fidelity.
+  return `${cdn}/${file}?width=8192&quality=100`;
 }
 
 /** Resolve wallpaper path; falls back to animated when family assets are missing. */
@@ -176,7 +178,7 @@ export function getStudioBackgroundBootInlineFragment(): string {
     + "var familyPrefix=STUDIO_BG_PREFIX[family];"
     + "var animatedPrefix=STUDIO_BG_PREFIX.animated;"
     + "var file=(familyPrefix||animatedPrefix)+\"-\"+slug+suffix;"
-    + "return STUDIO_BG_CDN?(STUDIO_BG_CDN+\"/\"+file):(\"/\"+file);"
+    + "return STUDIO_BG_CDN?(STUDIO_BG_CDN+\"/\"+file+\"?width=8192&quality=100\"):(\"/\"+file);"
     + "}"
     + "function studioBootWallpaperFallback(family,theme,mode){"
     + "var primary=studioBootWallpaper(family,theme,mode);"

@@ -48,20 +48,10 @@ export function ThemeSettings() {
     setStudioBackgroundFamily(id);
   };
 
-  const activeFamily =
-    STUDIO_BACKGROUND_FAMILIES[bgFamily as keyof typeof STUDIO_BACKGROUND_FAMILIES]
-    ?? STUDIO_BACKGROUND_FAMILIES.animated;
-
   return (
-    <section className="cursor-settings-section">
-      <h3>Look and feel</h3>
-      <p className="studio-settings-appearance-lead">
-        Set mode, background style, and accent theme for Studio.
-      </p>
-
+    <section className="cursor-settings-section studio-settings-appearance">
       <div className="studio-settings-appearance-group">
-        <p className="studio-settings-appearance-label">Mode</p>
-        <div className="cursor-seg">
+        <div className="cursor-seg" role="group" aria-label="Mode">
           <button type="button" className={mode === "dark" ? "active" : ""} onClick={() => pickMode("dark")}>
             <Icon name="moon" size={12} /> Dark
           </button>
@@ -72,32 +62,30 @@ export function ThemeSettings() {
       </div>
 
       <div className="studio-settings-appearance-group">
-        <p className="studio-settings-appearance-label">Background</p>
-        <div className="cursor-seg cursor-seg-wrap">
+        <div className="cursor-seg cursor-seg-wrap" role="group" aria-label="Background">
           {Object.entries(STUDIO_BACKGROUND_FAMILIES).map(([id, family]) => (
             <button key={id} type="button" className={bgFamily === id ? "active" : ""} onClick={() => pickBgFamily(id)}>
               {family.label}
             </button>
           ))}
         </div>
-        <p className="studio-settings-appearance-hint">{activeFamily.description}</p>
       </div>
 
       <div className="studio-settings-appearance-group">
-        <p className="studio-settings-appearance-label">Accent theme</p>
-        <div className="cursor-theme-grid" role="listbox" aria-label="Theme">
+        <div className="cursor-theme-grid is-compact" role="listbox" aria-label="Accent">
           {Object.entries(SCHEMES).map(([id, t]) => (
             <button
               key={id}
               type="button"
               role="option"
               aria-selected={scheme === id}
-              className={`theme-chip${scheme === id ? " active" : ""}`}
+              aria-label={t.label}
+              title={t.label}
+              className={`theme-chip theme-chip-swatch-only${scheme === id ? " active" : ""}`}
               data-theme={id}
               onClick={() => pickScheme(id)}
             >
               <span className="theme-chip-swatch" style={{ background: t.accent }} aria-hidden="true" />
-              <span className="theme-chip-label">{t.label}</span>
             </button>
           ))}
         </div>

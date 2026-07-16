@@ -15,6 +15,17 @@ export const COMPOSER_SCRIPT_TYPE_SLUGS = [
 
 export type ComposerScriptTypeSlug = (typeof COMPOSER_SCRIPT_TYPE_SLUGS)[number];
 
+/** Script types shown in Studio UI. Agent/API still accept the full slug list. */
+export const UI_COMPOSER_SCRIPT_TYPE_SLUGS = [
+  "production",
+  "storyboard",
+  "shot_list",
+  "image_prompt",
+  "video_prompt",
+  "scene_split",
+  "vo_script",
+] as const satisfies readonly ComposerScriptTypeSlug[];
+
 export type ComposerScriptTypeDefinition = {
   slug: ComposerScriptTypeSlug;
   label: string;
@@ -109,6 +120,10 @@ export const COMPOSER_SCRIPT_TYPES: ComposerScriptTypeDefinition[] = [
     includesStoryboardPrompt: false,
   },
 ];
+
+export const UI_COMPOSER_SCRIPT_TYPES = COMPOSER_SCRIPT_TYPES.filter((item) =>
+  (UI_COMPOSER_SCRIPT_TYPE_SLUGS as readonly string[]).includes(item.slug),
+);
 
 const STORYBOARD_PROMPT_HEADING = "## Storyboard prompt";
 

@@ -28,7 +28,9 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 - `convex/folders.ts`, `convex/assets.ts`, `convex/documents.ts`, `convex/elements.ts`: workspace content APIs.
 - `convex/generation.ts`: generation threads, events, jobs, entitlement checks, and state transitions.
 - `convex/generationActions.ts`: Node action that calls Vercel AI Gateway and stores generated outputs.
-- `convex/billing.ts`: credits, pricing, bank receipts, admin review, subscriptions, and audit events.
+- `convex/guidedVideo.ts`, `convex/guidedVideoActions.ts`, `convex/lib/guidedVideoTypes.ts`, `convex/lib/hypermotionWorkflow.ts`, `convex/lib/assistedAnalysis.ts`: Studio Assistance co-pilot — mode-agnostic brief/question/review flow (image, video, script, element). Video types such as `hypermotion_ad` inject specialized requirements; generation only starts after approval.
+- `convex/billing.ts`: credits, pricing, PayWise settlement helpers, legacy bank review, subscriptions, and audit events.
+- `convex/paywiseActions.ts`, `convex/paywiseHttp.ts`, `convex/lib/paywise.ts`, `convex/crons.ts`: PayWise hosted checkout, notify/callback settlement, and pending-payment reconciliation.
 - `convex/notifications.ts`, `convex/notificationsActions.ts`: in-app notifications and web push.
 - `convex/lib/bunny.ts`: Bunny Storage/CDN path, upload, and signed URL helpers.
 - `convex/lib/aiGateway.ts`: Vercel AI Gateway prompt, image, and video helpers.
@@ -39,8 +41,8 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 
 - Identity: Convex Auth tables plus Studio `users`, admin invites, roles, WhatsApp auth requests.
 - Workspace: folders, assets, documents, and elements owned by each user.
-- Generation: style presets, threads, prompt/result events, jobs, inputs, and outputs.
-- Billing: accounts, transactions, plans, subscriptions, pricing, bank accounts, payments, receipts.
+- Generation: style presets, threads, prompt/result/assistant/question/review events, jobs, inputs, outputs, and Assisted briefs (`guidedBriefs` / attachments).
+- Billing: accounts, transactions, plans, subscriptions, pricing, payments (PayWise + legacy bank), optional legacy receipts.
 - Messaging: notifications, push subscriptions, and admin audit events.
 
 ## External Services
@@ -51,4 +53,5 @@ Yatishara Studio is a browser-based creative workspace backed by Convex. The UI 
 - Resend: email OTP delivery.
 - Evolution API: WhatsApp OTP delivery.
 - Web Push: browser push notification delivery.
+- PayWise: hosted card checkout for credit top-ups (`/payments/request` + status verify).
 - Coolify/VPS: production app build, runtime, proxy, and preview hot reload service.
