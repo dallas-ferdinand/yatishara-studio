@@ -107,7 +107,7 @@ import {
   getWallpaper,
   randomizeStudioAppearance,
   refreshAssetWallpaperUrl,
-  useAssetAsWallpaper,
+  useAssetAsWallpaper as applyAssetAsWallpaper,
 } from "@/mos-app/theme.js";
 import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
@@ -13013,7 +13013,7 @@ export function StudioShell({
                     assetId: entry.studioId,
                     expiresUnix: assetUrlExpiresUnix,
                   });
-                  await useAssetAsWallpaper(entry.studioId, url);
+                  await applyAssetAsWallpaper(entry.studioId, url);
                   setProfileShareToast("Wallpaper updated");
                 } catch (error) {
                   setProfileShareToast(friendlyConvexError(error, "Could not set wallpaper"));
