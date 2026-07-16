@@ -6927,7 +6927,7 @@
   border-radius: 5px;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--color-cursor-border) 88%, transparent);
+  border: 0;
   background: color-mix(in srgb, var(--color-cursor-panel) 72%, transparent);
 }
 .cursor-unified-tab.has-preview .cursor-unified-tab-label {

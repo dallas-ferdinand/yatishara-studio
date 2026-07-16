@@ -77,7 +77,7 @@
   display: grid;
   place-items: center;
   background: var(--pp-surface);
-  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+  border: 0;
   box-shadow: 0 18px 48px color-mix(in srgb, #000 36%, transparent);
   font-family: var(--font-bricolage), sans-serif;
   font-size: 34px;

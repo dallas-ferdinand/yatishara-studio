@@ -3463,6 +3463,8 @@ export function StudioShell({
         .studio-profile-menu-trigger {
           padding: 0 !important;
           overflow: hidden;
+          border: 0 !important;
+          box-shadow: none !important;
         }
         .studio-profile-menu-avatar,
         .studio-profile-menu-initials {
@@ -3733,7 +3735,7 @@ export function StudioShell({
           flex-shrink: 0;
           border-radius: 999px;
           overflow: hidden;
-          border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+          border: 0;
           background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
         }
         .studio-polish .cursor-unified-tab-preview.is-initials {
