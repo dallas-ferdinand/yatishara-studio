@@ -411,62 +411,64 @@ body {
   display: block;
 }
 
-/* Boot v2 — true viewport center (no optical offsets that drift on mobile). */
-.ys-boot-v2-overlay {
+/* Boot v3 — logo pinned to the safe-area visual center; wordmark floats below. */
+.ys-boot-v3-overlay {
   position: fixed;
   inset: 0;
   z-index: 2147483000;
   background: #ffffff;
 }
-.ys-boot-v2 {
+.ys-boot-v3 {
   position: relative;
-  display: flex;
   box-sizing: border-box;
-  min-height: 100vh;
-  min-height: 100dvh;
   width: 100%;
-  align-items: center;
-  justify-content: center;
+  min-height: 100svh;
+  min-height: 100dvh;
+  margin: 0;
   padding: 0;
   overflow: hidden;
-  margin: 0;
   background: #ffffff;
   color: #0f172a;
 }
-.ys-boot-v2-overlay .ys-boot-v2 {
-  min-height: 100%;
-  height: 100%;
+.ys-boot-v3-overlay .ys-boot-v3 {
+  position: absolute;
+  inset: 0;
+  min-height: 0;
+  height: auto;
 }
-.ys-boot-v2-stack {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 24px;
-}
-.ys-boot-v2-logo {
+.ys-boot-v3-logo {
+  position: absolute;
+  /* Center inside the safe rectangle (status / home-indicator aware). */
+  top: calc(
+    50% + (env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 2
+  );
+  left: 50%;
   width: 48px;
   height: 48px;
-  flex: 0 0 48px;
+  transform: translate(-50%, -50%);
 }
-.ys-boot-v2-logo img {
+.ys-boot-v3-logo img {
   display: block;
   width: 48px;
   height: 48px;
   object-fit: contain;
-  opacity: 1;
 }
-.ys-boot-v2-details {
+.ys-boot-v3-details {
   position: absolute;
-  top: calc(100% + 14px);
+  top: calc(
+    50% + (env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 2 + 38px
+  );
   left: 50%;
   display: flex;
   width: max-content;
+  max-width: calc(100vw - 48px);
   flex-direction: column;
   align-items: center;
   transform: translateX(-50%);
+  padding: 0 24px;
+  box-sizing: border-box;
 }
-.ys-boot-v2-wordmark {
+.ys-boot-v3-wordmark {
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
@@ -476,7 +478,7 @@ body {
   color: rgb(15 23 42 / 0.62);
   white-space: nowrap;
 }
-.ys-boot-v2-track {
+.ys-boot-v3-track {
   margin-top: 22px;
   width: 112px;
   height: 2px;
@@ -484,19 +486,19 @@ body {
   border-radius: 999px;
   background: rgb(15 23 42 / 0.12);
 }
-.ys-boot-v2-bar {
+.ys-boot-v3-bar {
   height: 100%;
   width: 38%;
   border-radius: 999px;
   background: rgb(15 23 42 / 0.5);
-  animation: ys-boot-v2-bar 1.15s ease-in-out infinite;
+  animation: ys-boot-v3-bar 1.15s ease-in-out infinite;
 }
-@keyframes ys-boot-v2-bar {
+@keyframes ys-boot-v3-bar {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(320%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ys-boot-v2-bar {
+  .ys-boot-v3-bar {
     animation: none;
     width: 40%;
     margin-inline: auto;

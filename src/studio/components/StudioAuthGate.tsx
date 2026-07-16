@@ -213,7 +213,7 @@ export function StudioAuthGate({
   return (
     <>
       {showBoot ? (
-        <div className="ys-boot-v2-overlay">
+        <div className="ys-boot-v3-overlay">
           <StudioBootLoader />
         </div>
       ) : null}
