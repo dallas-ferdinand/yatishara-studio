@@ -618,7 +618,10 @@ export function ProfilePostViewer({
   const auth = useConvexAuth();
   const { isMobile } = useMobileLayout();
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
-  const seedPostId = !postId || String(postId) === "home" ? undefined : postId;
+  const seedPostId =
+    !postId || String(postId) === "home"
+      ? undefined
+      : (postId as Id<"profilePosts">);
   const feed = useQuery(api.profiles.listFeed, {
     expiresUnix,
     limit: 28,
