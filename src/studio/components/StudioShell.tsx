@@ -11589,6 +11589,7 @@ function StudioComposer({
 }) {
   const [recording, setRecording] = useState(false);
   const browserSttRef = useRef(null);
+  const voicePrefixRef = useRef("");
   const [dragOver, setDragOver] = useState(false);
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
@@ -11876,17 +11877,14 @@ function StudioComposer({
     />
   );
 
-  function insertVoiceText(text) {
-    const piece = String(text ?? "").trim();
-    if (!piece) return;
-    const editor = editorRef.current;
-    if (editor) {
-      insertComposerTextAtCaret(editor, piece);
-      setDraft(readComposerEditorText(editor));
+  function applyVoiceTranscript(voiceText) {
+    const spoken = String(voiceText ?? "").replace(/\s+/g, " ").trim();
+    const prefix = String(voicePrefixRef.current ?? "").replace(/\s+$/g, "");
+    if (!spoken) {
+      setEditorText(prefix);
       return;
     }
-    const current = String(draft ?? "").trimEnd();
-    setEditorText(current ? `${current} ${piece}` : piece);
+    setEditorText(prefix ? `${prefix} ${spoken}` : spoken);
   }
 
   function stopBrowserStt() {
@@ -11903,8 +11901,13 @@ function StudioComposer({
         return;
       }
 
+      const editor = editorRef.current;
+      voicePrefixRef.current = editor
+        ? readComposerEditorText(editor).replace(/\s+$/g, "")
+        : String(draft ?? "").replace(/\s+$/g, "");
+
       const stt = createBrowserStt({
-        onFinal: insertVoiceText,
+        onUpdate: applyVoiceTranscript,
         onError: (error) => {
           console.error("Voice input failed", error);
           stopBrowserStt();

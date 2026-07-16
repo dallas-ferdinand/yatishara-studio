@@ -1,5 +1,9 @@
 /**
  * Browser speech-to-text via the Web Speech API (no server round-trip).
+ *
+ * Emits one growing session transcript via onUpdate — callers should REPLACE
+ * the voice segment, not append chunks (mobile browsers often resend the full
+ * phrase as successive "final" results).
  */
 
 export function getSpeechRecognitionConstructor() {
@@ -9,6 +13,16 @@ export function getSpeechRecognitionConstructor() {
 
 export function browserSttSupported() {
   return Boolean(getSpeechRecognitionConstructor());
+}
+
+function normalizeTranscript(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function joinTranscript(...parts) {
+  return normalizeTranscript(parts.filter(Boolean).join(" "));
 }
 
 export function createBrowserStt(options = {}) {
@@ -23,21 +37,36 @@ export function createBrowserStt(options = {}) {
   const recognition = new SpeechRecognition();
   recognition.continuous = true;
   recognition.interimResults = true;
-  recognition.lang = options.lang || (typeof navigator !== "undefined" ? navigator.language : "en-US") || "en-US";
+  recognition.lang =
+    options.lang ||
+    (typeof navigator !== "undefined" ? navigator.language : "en-US") ||
+    "en-US";
   recognition.maxAlternatives = 1;
 
   let active = false;
   let stopping = false;
+  /** Final text kept across mobile auto-restarts. */
+  let committedFinal = "";
+  /** Finals from the current recognition instance. */
+  let instanceFinal = "";
+
+  const publish = (interim = "") => {
+    const full = joinTranscript(committedFinal, instanceFinal, interim);
+    options.onUpdate?.(full);
+  };
 
   recognition.onresult = (event) => {
-    let finalChunk = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+    let finals = "";
+    let interim = "";
+    for (let i = 0; i < event.results.length; i += 1) {
       const result = event.results[i];
-      if (!result?.isFinal) continue;
-      const piece = String(result[0]?.transcript ?? "").trim();
-      if (piece) finalChunk = finalChunk ? `${finalChunk} ${piece}` : piece;
+      const piece = String(result?.[0]?.transcript ?? "");
+      if (!piece) continue;
+      if (result.isFinal) finals += `${piece} `;
+      else interim += `${piece} `;
     }
-    if (finalChunk) options.onFinal?.(finalChunk);
+    instanceFinal = normalizeTranscript(finals);
+    publish(interim);
   };
 
   recognition.onerror = (event) => {
@@ -54,12 +83,17 @@ export function createBrowserStt(options = {}) {
   recognition.onend = () => {
     const wasActive = active;
     active = false;
+    committedFinal = joinTranscript(committedFinal, instanceFinal);
+    instanceFinal = "";
+    publish();
+
     if (stopping) {
       stopping = false;
       options.onEnd?.();
       return;
     }
-    // Some mobile browsers end the session after a pause; restart while user still wants listening.
+
+    // Some mobile browsers end the session after a pause; restart while listening.
     if (wasActive) {
       try {
         recognition.start();
@@ -78,6 +112,8 @@ export function createBrowserStt(options = {}) {
       if (active) return;
       stopping = false;
       active = true;
+      committedFinal = "";
+      instanceFinal = "";
       recognition.start();
     },
     stop() {
@@ -93,6 +129,8 @@ export function createBrowserStt(options = {}) {
     abort() {
       stopping = true;
       active = false;
+      committedFinal = "";
+      instanceFinal = "";
       try {
         recognition.abort();
       } catch {
