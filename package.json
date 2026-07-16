@@ -36,6 +36,7 @@
     "convex-helpers": "^0.1.118",
     "dompurify": "^3.2.4",
     "fflate": "^0.8.3",
+    "firebase-admin": "^14.1.0",
     "katex": "^0.16.22",
     "lucia": "^3.2.2",
     "lucide-react": "^1.18.0",
