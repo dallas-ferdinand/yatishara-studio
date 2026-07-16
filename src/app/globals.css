@@ -411,14 +411,14 @@ body {
   display: block;
 }
 
-/* Boot v4 — flexbox true-center (no absolute/safe-area math that offsets on Android). */
-.ys-boot-v4-overlay {
+/* Boot — flexbox true-center. Stable class names (do not version) to avoid SSR/HMR mismatches. */
+.ys-boot-overlay {
   position: fixed;
   inset: 0;
   z-index: 2147483000;
   background: #ffffff;
 }
-.ys-boot-v4 {
+.ys-boot {
   box-sizing: border-box;
   display: flex;
   width: 100%;
@@ -432,13 +432,13 @@ body {
   background: #ffffff;
   color: #0f172a;
 }
-.ys-boot-v4-overlay .ys-boot-v4 {
+.ys-boot-overlay .ys-boot {
   position: absolute;
   inset: 0;
   min-height: 0;
   height: auto;
 }
-.ys-boot-v4-stack {
+.ys-boot-stack {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -448,18 +448,18 @@ body {
   padding: 0 24px;
   box-sizing: border-box;
 }
-.ys-boot-v4-logo {
+.ys-boot-logo {
   width: 48px;
   height: 48px;
   flex: 0 0 auto;
 }
-.ys-boot-v4-logo img {
+.ys-boot-logo img {
   display: block;
   width: 48px;
   height: 48px;
   object-fit: contain;
 }
-.ys-boot-v4-wordmark {
+.ys-boot-wordmark {
   margin: 14px 0 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
@@ -469,7 +469,7 @@ body {
   color: rgb(15 23 42 / 0.62);
   white-space: nowrap;
 }
-.ys-boot-v4-track {
+.ys-boot-track {
   margin-top: 22px;
   width: 112px;
   height: 2px;
@@ -477,19 +477,19 @@ body {
   border-radius: 999px;
   background: rgb(15 23 42 / 0.12);
 }
-.ys-boot-v4-bar {
+.ys-boot-bar {
   height: 100%;
   width: 38%;
   border-radius: 999px;
   background: rgb(15 23 42 / 0.5);
-  animation: ys-boot-v4-bar 1.15s ease-in-out infinite;
+  animation: ys-boot-bar 1.15s ease-in-out infinite;
 }
-@keyframes ys-boot-v4-bar {
+@keyframes ys-boot-bar {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(320%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ys-boot-v4-bar {
+  .ys-boot-bar {
     animation: none;
     width: 40%;
     margin-inline: auto;

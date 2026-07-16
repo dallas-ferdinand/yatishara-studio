@@ -13,14 +13,20 @@ const BOOT_LOGO_SIZE = 48;
 const BOOT_LOGO = mercuryLogoAssets(BOOT_LOGO_SIZE, "light");
 
 /**
- * Fixed white boot screen — class prefix ys-boot-v4 uses flexbox true-center
- * (no absolute + safe-area math that shoved the mark toward the top on Android).
+ * Fixed white boot screen. Stable `ys-boot` class names (no vN churn) so
+ * SSR/HMR/SW never hydrate a mismatched class prefix.
  */
 export function StudioBootLoader({ recovery }: Props) {
   return (
-    <main className="ys-boot-v4" data-ys-boot="4" aria-busy="true" aria-label="Loading Yatishara Studio">
-      <div className="ys-boot-v4-stack">
-        <div className="ys-boot-v4-logo" aria-hidden="true">
+    <main
+      className="ys-boot"
+      data-ys-boot="boot"
+      aria-busy="true"
+      aria-label="Loading Yatishara Studio"
+      suppressHydrationWarning
+    >
+      <div className="ys-boot-stack" suppressHydrationWarning>
+        <div className="ys-boot-logo" aria-hidden="true">
           <picture>
             <source type="image/webp" srcSet={BOOT_LOGO.srcSet} sizes={BOOT_LOGO.sizes} />
             <source
@@ -39,9 +45,9 @@ export function StudioBootLoader({ recovery }: Props) {
             />
           </picture>
         </div>
-        <p className="ys-boot-v4-wordmark">Yatishara Studio</p>
-        <div className="ys-boot-v4-track" aria-hidden="true">
-          <div className="ys-boot-v4-bar" />
+        <p className="ys-boot-wordmark">Yatishara Studio</p>
+        <div className="ys-boot-track" aria-hidden="true">
+          <div className="ys-boot-bar" />
         </div>
         {recovery}
       </div>
