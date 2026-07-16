@@ -105,7 +105,6 @@ import { playUiSound } from "@/mos-app/sounds.js";
 import { randomizeStudioAppearance, SCHEMES, STUDIO_BACKGROUND_FAMILIES } from "@/mos-app/theme.js";
 import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
-import { getDeviceId, loadSession } from "@/lib/session";
 import {
   creditCostForGeneration,
   imageCreditCost,
@@ -113,7 +112,6 @@ import {
   TEXT_GENERATION_BASE_CREDITS,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
-import * as mosApi from "@mos-app/api.js";
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
@@ -268,22 +266,15 @@ const STYLE = {
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
 };
 
-function ensureStudioVoiceSession() {
-  const current = mosApi.getSession?.();
-  if (current?.gatewayUrl) return true;
-
-  const stored = loadSession();
-  if (!stored?.gatewayUrl || !stored?.token) return false;
-
-  mosApi.setDeviceIdProvider?.(getDeviceId);
-  mosApi.setSession({
-    gatewayUrl: stored.gatewayUrl.replace(/\/+$/, ""),
-    token: stored.token,
-    deviceId: stored.deviceId,
-    userId: stored.userId,
-    clientTag: "desk",
-  });
-  return true;
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }
 
 export function StudioShell() {
@@ -8413,6 +8404,18 @@ export function StudioShell() {
           background: color-mix(in srgb, #ef4444 18%, var(--studio-composer-glass-muted));
           color: #fecaca;
         }
+        .studio-composer-circle-btn.cursor-composer-mic.is-transcribing {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 14%, var(--studio-composer-glass-muted));
+        }
+        .studio-composer-voice-status {
+          margin: 4px 2px 0;
+          padding: 0 2px;
+          color: var(--color-cursor-text-muted, rgba(255, 255, 255, 0.62));
+          font-size: 11px;
+          line-height: 1.35;
+          letter-spacing: 0.01em;
+        }
         .studio-composer-circle-btn.studio-composer-options-btn.is-open {
           border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 16%, var(--studio-composer-glass-muted));
@@ -11602,8 +11605,12 @@ function StudioComposer({
   guidedVideoTypes = [],
   assistBusy = false,
 }) {
+  const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const micBusyRef = useRef(false);
+  const micStartedRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
   const [dropMarker, setDropMarker] = useState(null);
   const [selectionHighlights, setSelectionHighlights] = useState([]);
@@ -11892,35 +11899,62 @@ function StudioComposer({
   );
 
   async function toggleVoice() {
+    if (micBusyRef.current || transcribing) return;
+
     try {
       if (recording) {
-        const voice = await import("@/desk/lib/voice-desk");
+        micBusyRef.current = true;
         setRecording(false);
         setTranscribing(true);
+        setVoiceStatus("Turning voice into text…");
+        const voice = await import("@/desk/lib/voice-desk");
+        const elapsed = Date.now() - micStartedRef.current;
+        if (elapsed < 700) {
+          await voice.cancelRecording();
+          throw new Error("Recording too brief — tap mic, speak, tap again to stop");
+        }
         const data = await voice.stopRecording();
-        const text = await voice.transcribeRecording(data);
-        if (text?.trim()) {
+        if (!data?.blob) {
+          throw new Error("No audio captured — tap mic to start, tap again to stop");
+        }
+        const audioBase64 = await blobToBase64(data.blob);
+        const result = await transcribeVoice({
+          audioBase64,
+          mimetype: data.mimetype || data.blob.type || "audio/webm",
+        });
+        const text = result?.text?.trim();
+        if (text) {
           const editor = editorRef.current;
           if (editor) {
-            insertComposerTextAtCaret(editor, text.trim());
+            insertComposerTextAtCaret(editor, text);
             setDraft(readComposerEditorText(editor));
           } else {
-            setEditorText(`${draft}${draft ? " " : ""}${text.trim()}`);
+            setEditorText(`${draft}${draft ? " " : ""}${text}`);
           }
+          setVoiceStatus("");
+        } else {
+          throw new Error("No speech detected — speak clearly, then tap mic to stop");
         }
         return;
       }
-      if (!ensureStudioVoiceSession()) return;
+
+      micBusyRef.current = true;
+      setVoiceStatus("Listening… tap mic to stop");
       const voice = await import("@/desk/lib/voice-desk");
       await voice.startRecording();
+      micStartedRef.current = Date.now();
       setRecording(true);
     } catch (error) {
-      if (error instanceof Error && error.message !== "Not connected") {
-        console.error("Voice input failed", error);
-      }
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Voice input failed — try again";
+      setVoiceStatus(message);
       setRecording(false);
+      console.error("Voice input failed", error);
     } finally {
       setTranscribing(false);
+      micBusyRef.current = false;
     }
   }
 
@@ -12160,8 +12194,9 @@ function StudioComposer({
         <div className="studio-composer-actions">
           <button
             type="button"
-            className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}`}
+            className={`studio-composer-circle-btn cursor-composer-mic${recording ? " is-recording" : ""}${transcribing ? " is-transcribing" : ""}`}
             title={transcribing ? "Turning voice into text..." : recording ? "Stop recording" : "Use your voice"}
+            aria-label={transcribing ? "Turning voice into text" : recording ? "Stop recording" : "Use your voice"}
             onClick={() => void toggleVoice()}
             disabled={transcribing}
           >
@@ -12188,6 +12223,11 @@ function StudioComposer({
           </button>
         </div>
       </div>
+      {voiceStatus ? (
+        <p className="studio-composer-voice-status" aria-live="polite">
+          {voiceStatus}
+        </p>
+      ) : null}
           </div>
         </div>
       <input

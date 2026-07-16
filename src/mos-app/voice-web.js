@@ -10,10 +10,19 @@ export function isAndroidUa() {
   return /Android/i.test(navigator.userAgent);
 }
 
+export function isAppleMobileUa() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export function pickRecordingMime() {
-  const candidates = isAndroidUa()
-    ? ["audio/mp4", "audio/aac", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
-    : ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4", "audio/aac"];
+  // Prefer mp4/aac on Android + iOS — webm is unreliable or unsupported there.
+  const candidates =
+    isAndroidUa() || isAppleMobileUa()
+      ? ["audio/mp4", "audio/aac", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"]
+      : ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4", "audio/aac"];
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return "";
+  }
   for (const m of candidates) {
     if (MediaRecorder.isTypeSupported(m)) return m;
   }
@@ -42,6 +51,14 @@ export class WebVoiceRecorder {
 
     this.chunks = [];
     this.lastDiag = null;
+
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      throw new Error("Microphone needs HTTPS — open Studio over a secure connection");
+    }
+
+    if (typeof MediaRecorder === "undefined") {
+      throw new Error("This browser cannot record audio — try Chrome or Safari");
+    }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error("Microphone not available in this browser");

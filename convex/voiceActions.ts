@@ -1,0 +1,51 @@
+"use node";
+
+import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { action } from "./_generated/server";
+import { transcribeAudio } from "./lib/transcribe";
+
+/** Max base64 payload (~3MB binary). Short voice notes stay well under this. */
+const MAX_AUDIO_BASE64_CHARS = 4_200_000;
+
+export const transcribe = action({
+  args: {
+    audioBase64: v.string(),
+    mimetype: v.string(),
+  },
+  returns: v.object({
+    text: v.string(),
+    language: v.optional(v.string()),
+    durationInSeconds: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to use voice input");
+    }
+
+    if (!args.audioBase64 || args.audioBase64.length < 8) {
+      throw new Error("No audio captured — tap mic to start, tap again to stop");
+    }
+    if (args.audioBase64.length > MAX_AUDIO_BASE64_CHARS) {
+      throw new Error("Recording too long — try a shorter clip");
+    }
+
+    try {
+      return await transcribeAudio({
+        audioBase64: args.audioBase64,
+        mimetype: args.mimetype,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Transcription failed";
+      if (
+        message.includes("No speech detected") ||
+        message.includes("Recording too short") ||
+        message.includes("too long")
+      ) {
+        throw error;
+      }
+      throw new Error(`Voice failed: ${message}`);
+    }
+  },
+});
