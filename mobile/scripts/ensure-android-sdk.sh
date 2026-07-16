@@ -26,7 +26,7 @@ fi
 
 yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/tmp/android-sdk-licenses.log 2>&1 || true
 
-yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+"$SDKMANAGER" --sdk_root="$SDK_ROOT" \
   "platforms;android-35" \
   "build-tools;35.0.0" \
   "platform-tools" >/tmp/android-sdk-install.log 2>&1 || {
