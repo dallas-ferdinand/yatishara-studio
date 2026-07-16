@@ -31,21 +31,9 @@ export const transcribe = action({
       throw new Error("Recording too long — try a shorter clip");
     }
 
-    try {
-      return await transcribeAudio({
-        audioBase64: args.audioBase64,
-        mimetype: args.mimetype,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Transcription failed";
-      if (
-        message.includes("No speech detected") ||
-        message.includes("Recording too short") ||
-        message.includes("too long")
-      ) {
-        throw error;
-      }
-      throw new Error(`Voice failed: ${message}`);
-    }
+    return await transcribeAudio({
+      audioBase64: args.audioBase64,
+      mimetype: args.mimetype,
+    });
   },
 });

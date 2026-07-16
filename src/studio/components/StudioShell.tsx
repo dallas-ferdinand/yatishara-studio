@@ -8408,14 +8408,6 @@ export function StudioShell() {
           border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 14%, var(--studio-composer-glass-muted));
         }
-        .studio-composer-voice-status {
-          margin: 4px 2px 0;
-          padding: 0 2px;
-          color: var(--color-cursor-text-muted, rgba(255, 255, 255, 0.62));
-          font-size: 11px;
-          line-height: 1.35;
-          letter-spacing: 0.01em;
-        }
         .studio-composer-circle-btn.studio-composer-options-btn.is-open {
           border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--cursor-accent) 16%, var(--studio-composer-glass-muted));
@@ -11608,7 +11600,6 @@ function StudioComposer({
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [voiceStatus, setVoiceStatus] = useState("");
   const micBusyRef = useRef(false);
   const micStartedRef = useRef(0);
   const [dragOver, setDragOver] = useState(false);
@@ -11906,7 +11897,6 @@ function StudioComposer({
         micBusyRef.current = true;
         setRecording(false);
         setTranscribing(true);
-        setVoiceStatus("Turning voice into text…");
         const voice = await import("@/desk/lib/voice-desk");
         const elapsed = Date.now() - micStartedRef.current;
         if (elapsed < 700) {
@@ -11931,25 +11921,16 @@ function StudioComposer({
           } else {
             setEditorText(`${draft}${draft ? " " : ""}${text}`);
           }
-          setVoiceStatus("");
-        } else {
-          throw new Error("No speech detected — speak clearly, then tap mic to stop");
         }
         return;
       }
 
       micBusyRef.current = true;
-      setVoiceStatus("Listening… tap mic to stop");
       const voice = await import("@/desk/lib/voice-desk");
       await voice.startRecording();
       micStartedRef.current = Date.now();
       setRecording(true);
     } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : "Voice input failed — try again";
-      setVoiceStatus(message);
       setRecording(false);
       console.error("Voice input failed", error);
     } finally {
@@ -12223,11 +12204,6 @@ function StudioComposer({
           </button>
         </div>
       </div>
-      {voiceStatus ? (
-        <p className="studio-composer-voice-status" aria-live="polite">
-          {voiceStatus}
-        </p>
-      ) : null}
           </div>
         </div>
       <input
