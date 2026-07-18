@@ -241,19 +241,8 @@ function Scene({
       canvas.removeEventListener("webglcontextlost", onContextLost, false)
   }, [gl])
 
-  const uniformsRef = useRef<{
-    uColor1: THREE.Uniform
-    uColor2: THREE.Uniform
-    uOffsets: { value: number[] }
-    uPerlinTexture: THREE.Uniform
-    uTime: THREE.Uniform
-    uAnimation: THREE.Uniform
-    uInverted: THREE.Uniform
-    uInputVolume: THREE.Uniform
-    uOutputVolume: THREE.Uniform
-    uOpacity: THREE.Uniform
-  } | null>(null)
-  if (!uniformsRef.current) {
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization -- R3F uniforms mutate texture wrap + read document appearance once
+  const uniforms = useMemo(() => {
     perlinNoiseTexture.wrapS = THREE.RepeatWrapping
     perlinNoiseTexture.wrapT = THREE.RepeatWrapping
     const root = typeof document !== "undefined" ? document.documentElement : null
@@ -265,7 +254,7 @@ function Scene({
           (appearance !== "light" &&
             window.matchMedia?.("(prefers-color-scheme: dark)").matches))
     )
-    uniformsRef.current = {
+    return {
       uColor1: new THREE.Uniform(new THREE.Color(initialColorsRef.current[0])),
       uColor2: new THREE.Uniform(new THREE.Color(initialColorsRef.current[1])),
       uOffsets: { value: offsets },
@@ -277,10 +266,7 @@ function Scene({
       uOutputVolume: new THREE.Uniform(0),
       uOpacity: new THREE.Uniform(0),
     }
-  }
-  const uniforms = uniformsRef.current
-  uniforms.uOffsets.value = offsets
-  uniforms.uPerlinTexture.value = perlinNoiseTexture
+  }, [perlinNoiseTexture, offsets])
 
   return (
     <mesh ref={circleRef}>
