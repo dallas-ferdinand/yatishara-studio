@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENV="${STUDIO_ENV_FILE:-$ROOT/.env.local}"
 MCP_ENV="$ROOT/_system/env/studio-mcp.env"
 NODE="${STUDIO_NODE:-$(command -v node)}"
+MCP_PKG="$ROOT/packages/studio-mcp"
+ENTRY="$MCP_PKG/dist/index.js"
 
 load_var() {
   local key="$1" file="$2"
@@ -36,9 +38,31 @@ if [[ -z "$STUDIO_API_URL" ]]; then
   exit 1
 fi
 
-ENTRY="$ROOT/packages/studio-mcp/dist/index.js"
+needs_build=0
 if [[ ! -f "$ENTRY" ]]; then
-  echo "studio-mcp: missing build — run: cd $ROOT/packages/studio-mcp && npm run build" >&2
+  needs_build=1
+else
+  # Rebuild when any src file is newer than the entry bundle.
+  while IFS= read -r -d '' src; do
+    if [[ "$src" -nt "$ENTRY" ]]; then
+      needs_build=1
+      break
+    fi
+  done < <(find "$MCP_PKG/src" -type f -name '*.ts' -print0 2>/dev/null)
+fi
+
+if [[ "$needs_build" -eq 1 ]]; then
+  echo "studio-mcp: rebuilding dist (src newer or missing)" >&2
+  if [[ -f "$MCP_PKG/package.json" ]]; then
+    (cd "$MCP_PKG" && npm run build) >&2
+  else
+    echo "studio-mcp: missing $MCP_PKG — cannot build" >&2
+    exit 1
+  fi
+fi
+
+if [[ ! -f "$ENTRY" ]]; then
+  echo "studio-mcp: missing build — run: cd $MCP_PKG && npm run build" >&2
   exit 1
 fi
 

@@ -18,6 +18,14 @@ import {
   emptyAudioPlan,
   emptyBrandDecisions,
 } from "./guidedVideoTypes";
+import {
+  clampBeatsToDurationPlan,
+  clampVideoDurationSeconds,
+  defaultBeatsForDuration,
+  planVideoDuration,
+  videoDurationAgentGuidance,
+} from "./videoDurationPlan";
+import { seedancePromptCraftGuidance } from "./seedancePromptCraft";
 
 export const MAX_QUESTIONS_PER_TURN = 3;
 
@@ -61,12 +69,12 @@ const BASE_ASSISTANT_RULES = [
   "You are Studio Assistance — a multi-turn creative collaborator in chat.",
   "Done WITH the user in chat, not FOR them via forms. Users reply in the composer and may attach media there.",
   "Chat voice: short, casual, human. 1–2 sentences max. Light emoji ok (❤️ 😂 🙂 😏). Never narrate tool updates.",
-  "Think and update the agent plan every turn before asking or reviewing.",
+  "Think like a creative director every turn: infer what a successful finished outcome requires from this specific request, then update the agent plan before asking or reviewing.",
   "Never invent logo, CTA, contact number, offer text, or product identity.",
-  "Infer creative choices only after core facts exist; mark them as assumptions.",
+  "Ask about unresolved facts that affect truth, identity, usability, or the core outcome. Make noncritical creative choices yourself and mark them as assumptions.",
   "Return schema-valid JSON only. Decision is ask | review_ready.",
-  "Ask at most one short chat question per turn. Prefer shipping over polish.",
-  "Only review_ready when the critical checklist is covered or the user explicitly says to proceed.",
+  "Ask at most one short high-leverage chat question per turn. Avoid both shallow rushing and unnecessary interrogation.",
+  "Only review_ready when the intended outcome is clear, material unknowns are resolved, and the proposed deliverable has enough concrete substance to succeed. A user's request to proceed does not authorize inventing missing facts.",
 ].join(" ");
 
 const ILLUSTRATED_STYLE =
@@ -143,49 +151,16 @@ function optionalAlreadyHandled(
   );
 }
 
-function clampBeats(beats: TimedBeat[] | undefined, duration: number): TimedBeat[] {
-  if (!beats?.length) return [];
-  return beats
-    .map((beat) => ({
-      ...beat,
-      startSec: Math.max(0, Math.min(duration, beat.startSec)),
-      endSec: Math.max(0, Math.min(duration, beat.endSec)),
-      action: String(beat.action ?? "").trim(),
-    }))
-    .filter((beat) => beat.action && beat.endSec > beat.startSec)
-    .slice(0, 7);
+function clampBeats(
+  beats: TimedBeat[] | undefined,
+  duration: number,
+  videoType: VideoType = "hypermotion_ad",
+): TimedBeat[] {
+  return clampBeatsToDurationPlan(beats, duration, videoType);
 }
 
 function defaultHypermotionBeats(duration: number, subject: string): TimedBeat[] {
-  const d = Math.max(4, Math.min(15, duration));
-  const cut = d / 4;
-  const label = subject || "the product";
-  return [
-    {
-      startSec: 0,
-      endSec: Math.max(1, cut),
-      action: `Extreme macro hook on ${label}; instant scroll-stop texture`,
-      camera: "snap push-in",
-    },
-    {
-      startSec: cut,
-      endSec: cut * 2,
-      action: `Rapid cut to material/detail surfaces of ${label}`,
-      camera: "orbit whip",
-    },
-    {
-      startSec: cut * 2,
-      endSec: cut * 3,
-      action: `Hero reveal of ${label} in kinetic environment`,
-      camera: "tracking glide",
-    },
-    {
-      startSec: cut * 3,
-      endSec: d,
-      action: `Final lock-up of ${label}; brand clarity`,
-      camera: "settle hold",
-    },
-  ];
+  return defaultBeatsForDuration(duration, subject, "hypermotion_ad");
 }
 
 function audioContradiction(payload: AssistedBriefPayload): string | undefined {
@@ -407,7 +382,13 @@ function evaluateHypermotion(ctx: PolicyContext): PolicyResult {
         { value: "conceptual", label: "Conceptual — stylized take" },
       ],
     });
-  } else if (brand.productFidelity === "exact" && !ctx.attachments.hasProduct && !ctx.attachments.hasAnyMedia) {
+  } else if (
+    brand.productFidelity === "exact" &&
+    !ctx.attachments.hasProduct &&
+    !ctx.attachments.hasAnyMedia
+  ) {
+    // Any attached image/reference (including flyer artwork) can satisfy exact
+    // fidelity for promo jobs; only block when there is no media at all.
     blockers.push("Exact fidelity needs a product image or element.");
     questions.push({
       id: "product_upload",
@@ -497,9 +478,16 @@ function evaluateHypermotion(ctx: PolicyContext): PolicyResult {
     }
   }
 
-  const beats = clampBeats(ctx.payload.timedBeats, duration);
-  if (beats.length < 3) {
-    warnings.push("Will expand to at least 3 timed Hypermotion beats on compile.");
+  const durationPlan = planVideoDuration(duration, "hypermotion_ad");
+  const beats = clampBeats(ctx.payload.timedBeats, duration, "hypermotion_ad");
+  if (beats.length < durationPlan.minBeats) {
+    warnings.push(
+      `Will expand to ${durationPlan.beatCount} timed Hypermotion beats for a ${durationPlan.durationSeconds}s clip on compile.`,
+    );
+  } else if (beats.length > durationPlan.maxBeats) {
+    warnings.push(
+      `Beat count will be trimmed to ${durationPlan.maxBeats} for a ${durationPlan.durationSeconds}s clip.`,
+    );
   }
 
   // Audio must be explicit for hypermotion (defaults are fine if set).
@@ -519,10 +507,11 @@ function compileHypermotionPrompt(
   payload: AssistedBriefPayload,
   attachments: AttachmentPresence,
 ): string {
-  const duration = Math.max(4, Math.min(15, payload.production.durationSeconds ?? 8));
+  const durationPlan = planVideoDuration(payload.production.durationSeconds, "hypermotion_ad");
+  const duration = durationPlan.durationSeconds;
   const subject = payload.subject?.trim() || "the product";
-  let beats = clampBeats(payload.timedBeats, duration);
-  if (beats.length < 3) {
+  let beats = clampBeats(payload.timedBeats, duration, "hypermotion_ad");
+  if (beats.length < durationPlan.minBeats) {
     beats = defaultHypermotionBeats(duration, subject);
   }
 
@@ -557,7 +546,9 @@ function compileHypermotionPrompt(
   if (payload.brand.ctaMode === "custom" && payload.brand.ctaText?.trim()) {
     brandLines.push(`On-screen CTA: "${payload.brand.ctaText.trim()}".`);
   } else if (payload.brand.ctaMode === "contact" && payload.brand.contactValue?.trim()) {
-    brandLines.push(`On-screen contact: "${payload.brand.contactValue.trim()}".`);
+    brandLines.push(
+      `On-screen contact, rendered verbatim with all punctuation: "${payload.brand.contactValue.trim()}".`,
+    );
   } else {
     brandLines.push("No on-screen CTA text.");
   }
@@ -565,17 +556,42 @@ function compileHypermotionPrompt(
     brandLines.push(`Offer line: "${payload.brand.offerText.trim()}".`);
   }
 
+  const editCueForBeat = (index: number): string => {
+    const isLast = index === beats.length - 1;
+    if (isLast) {
+      const holdSeconds = Math.min(
+        2,
+        Math.max(1.5, beats[index]!.endSec - beats[index]!.startSec),
+      );
+      return `decelerate into a stable hero/CTA lock; readable hold ~${holdSeconds.toFixed(1)}s; no transition out`;
+    }
+    if (index === 0) {
+      return "impact ramp: brief anticipation → fast hook acceleration → clean detail landing; ramp-to-cut at peak motion";
+    }
+    if (index % 3 === 1) {
+      return "elliptical action/graphic match: remove the middle; match shape, position, and motion direction into the next shot";
+    }
+    if (index % 3 === 2) {
+      return "one-flow speed ramp: normal/slow entry → accelerated middle → controlled slow landing on texture";
+    }
+    return "ramp-to-cut through foreground occlusion or object wipe; preserve screen direction and product identity";
+  };
   const beatBlock = beats
     .map(
       (b, i) =>
         `${i + 1}. ${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}s: ${b.action}${
           b.camera ? ` | Camera: ${b.camera}` : ""
-        }`,
+        } | Speed/edit: ${editCueForBeat(i)} | Audio: land the transition on a music/SFX accent without masking voiceover`,
     )
     .join("\n");
+  const resolutionLabel = String(payload.production.resolution ?? "").includes(
+    "1920",
+  )
+    ? "1080p"
+    : "720p";
 
   return [
-    `Hypermotion ad · ${duration}s · ${payload.production.aspectRatio ?? "9:16"} · ${payload.production.resolution ?? "1280x720"}`,
+    `Hypermotion ad · ${durationPlan.compileHint} · ${payload.production.aspectRatio ?? "9:16"} · ${resolutionLabel}`,
     `Subject: ${subject}`,
     payload.objective ? `Objective: ${payload.objective}` : null,
     payload.keyMessage ? `Message: ${payload.keyMessage}` : null,
@@ -584,8 +600,9 @@ function compileHypermotionPrompt(
     payload.visualDirection ? `Look: ${payload.visualDirection}` : null,
     fidelity,
     "",
-    "Timed beats (rapid cuts, macro texture, one coherent product continuity):",
+    `Timed beats for ${duration}s (${durationPlan.pacing}; rapid cuts, macro texture, one coherent product continuity):`,
     beatBlock,
+    "Edit rhythm: vary velocity; do not speed-ramp every moment. Keep match anchors and screen direction coherent, use blur/occlusion to hide cuts, and never morph the product or existing text.",
     "",
     "Audio:",
     ...audioLines,
@@ -593,15 +610,28 @@ function compileHypermotionPrompt(
     "Brand lock:",
     ...brandLines,
     "",
-    "Constraints: no multi-clip assembly claim; single continuous-feeling hypermotion piece; no photoreal skin unless refs require; forbid long held static frames; one primary camera energy per beat.",
+    "Constraints: one coherent edited Hypermotion sequence; no photoreal skin unless refs require; no chaotic camera stacking; one primary camera move per beat; no product/text morphing; preserve a readable final lock.",
   ]
     .filter((line) => line !== null)
     .join("\n");
 }
 
 function compileStandardVideoPrompt(payload: AssistedBriefPayload): string {
-  const duration = payload.production.durationSeconds ?? 8;
+  const durationPlan = planVideoDuration(payload.production.durationSeconds, "standard");
+  const duration = durationPlan.durationSeconds;
   const subject = payload.subject?.trim() || payload.keyMessage?.trim() || "the scene";
+  let beats = clampBeats(payload.timedBeats, duration, "standard");
+  if (beats.length < durationPlan.minBeats) {
+    beats = defaultBeatsForDuration(duration, subject, "standard");
+  }
+  const beatBlock = beats
+    .map(
+      (b, i) =>
+        `${i + 1}. ${b.startSec.toFixed(1)}–${b.endSec.toFixed(1)}s: ${b.action}${
+          b.camera ? ` | Camera: ${b.camera}` : ""
+        }`,
+    )
+    .join("\n");
   const audio =
     payload.audio.voiceover === "include" ||
     payload.audio.sfx === "include" ||
@@ -609,11 +639,14 @@ function compileStandardVideoPrompt(payload: AssistedBriefPayload): string {
       ? `Audio: VO ${payload.audio.voiceover}, SFX ${payload.audio.sfx}, music ${payload.audio.music}.`
       : "Audio: silent.";
   return [
-    `${duration}s video of ${subject}.`,
+    `${durationPlan.compileHint} of ${subject}.`,
     payload.hook ? `Hook: ${payload.hook}` : null,
     payload.setting ? `Setting: ${payload.setting}` : null,
     payload.visualDirection ? `Look: ${payload.visualDirection}` : null,
     audio,
+    "",
+    `Structure (${durationPlan.pacing}):`,
+    beatBlock,
   ]
     .filter(Boolean)
     .join("\n");
@@ -658,7 +691,7 @@ function compileImagePrompt(
     payload.brand.ctaMode === "custom" && payload.brand.ctaText?.trim()
       ? `CTA text: "${payload.brand.ctaText.trim()}"`
       : payload.brand.ctaMode === "contact" && payload.brand.contactValue?.trim()
-        ? `Contact text: "${payload.brand.contactValue.trim()}"`
+        ? `Contact text, render verbatim with all punctuation: "${payload.brand.contactValue.trim()}"`
         : null,
     payload.notes ? `Additional requirements: ${payload.notes.trim()}` : null,
     promotionalDesign
@@ -726,8 +759,12 @@ export const WORKFLOWS: Record<string, WorkflowDefinition> = {
     label: "Standard video",
     description: "General guided video",
     modes: ["video"],
-    systemContext:
+    systemContext: [
       "Help gather a clear subject, duration, and audio preferences for a single video clip.",
+      "Always plan to the chosen duration (4–15s): short clips = one continuous moment;",
+      "longer clips may use 2–3 beats. Never invent a story arc that needs more screen time than the clip.",
+      "When writing finalPrompt, use Shot beats with concrete verbs and one camera move per beat — Seedance-ready, not mood copy.",
+    ].join(" "),
     evaluate: evaluateStandardVideo,
     compilePrompt: (payload) => compileStandardVideoPrompt(payload),
   },
@@ -740,8 +777,11 @@ export const WORKFLOWS: Record<string, WorkflowDefinition> = {
     systemContext: [
       "Video type: Hypermotion ad.",
       "Grammar: scroll-stopping opening, rapid cuts, extreme macro/product textures,",
-      "aggressive but coherent camera energy, 3–7 timed beats, clear product continuity,",
-      "single 4–15s clip. Optional but important: logo, CTA/contact, offer — always offer leave-out.",
+      "aggressive but coherent camera energy, clear product continuity, single 4–15s clip.",
+      "Scale beat count to duration (about 3 beats at 4–5s up to 7 at 13–15s); stretch action to fit the seconds,",
+      "do not keep a fixed 4-beat template when length changes.",
+      "finalPrompt still names one camera move per beat (hook → texture/product → lock); kinetic energy without stacking every move at once.",
+      "Optional but important: logo, CTA/contact, offer — always offer leave-out.",
       "Do not invent brand assets. Prefer product refs for exact fidelity.",
     ].join(" "),
     evaluate: evaluateHypermotion,
@@ -792,9 +832,29 @@ export function compileBriefPrompt(
 export function workflowSystemContext(
   mode: AssistedMode,
   videoType?: VideoType,
+  durationSeconds?: number,
+  options?: { hasStartFrame?: boolean },
 ): string {
   const workflow = resolveWorkflow(mode, videoType);
-  return `${baseAssistantSystemPrompt(mode, videoType)}\nWorkflow: ${workflow.systemContext}`;
+  const parts = [
+    baseAssistantSystemPrompt(mode, videoType),
+    `Workflow: ${workflow.systemContext}`,
+  ];
+  if (mode === "video") {
+    parts.push(
+      `Duration plan: ${videoDurationAgentGuidance(
+        durationSeconds ?? clampVideoDurationSeconds(undefined),
+        videoType,
+      )}`,
+    );
+    parts.push(
+      seedancePromptCraftGuidance({
+        videoType,
+        hasStartFrame: options?.hasStartFrame,
+      }),
+    );
+  }
+  return parts.join("\n");
 }
 
 const TEXT_FIELDS = [
@@ -814,6 +874,38 @@ function safeText(value: unknown, maxLength = 4_000): string | undefined {
   if (typeof value !== "string") return undefined;
   const text = value.trim();
   return text ? text.slice(0, maxLength) : undefined;
+}
+
+/**
+ * Format North American Numbering Plan numbers for readable on-screen copy
+ * while preserving labels such as "Call or WhatsApp".
+ */
+export function formatNanpContactNumbers(value: string): string {
+  return value.replace(
+    /(^|[^\d])(?:\+?1[\s().-]*)?(\(?\d{3}\)?)[\s.-]*(\d{3})[\s.-]*(\d{4})(?=$|[^\d])/g,
+    (_match, leading: string, rawArea: string, exchange: string, line: string) => {
+      const area = rawArea.replace(/\D/g, "");
+      return `${leading}+1 (${area}) ${exchange}-${line}`;
+    },
+  );
+}
+
+/**
+ * Extract the first NANP / WhatsApp contact from free text for CTA prefill.
+ */
+export function extractContactFromText(text: string): string | undefined {
+  const source = text?.trim();
+  if (!source) return undefined;
+  const match = source.match(
+    /(?:whatsapp\s*)?(?:\+?1[\s().-]*)?(?:\(?\d{3}\)?[\s.-]*)\d{3}[\s.-]*\d{4}/i,
+  );
+  if (!match?.[0]) return undefined;
+  const formatted = formatNanpContactNumbers(match[0].trim());
+  const number = formatted.match(/\+1 \(\d{3}\) \d{3}-\d{4}/)?.[0];
+  if (!number) return formatted.slice(0, 80);
+  return /whatsapp/i.test(match[0]) || /whatsapp/i.test(source.slice(Math.max(0, (match.index ?? 0) - 24), (match.index ?? 0) + match[0].length + 8))
+    ? `WhatsApp ${number}`
+    : number;
 }
 
 const ASSISTANCE_ASPECT_RATIOS = new Set([
@@ -899,7 +991,10 @@ export function normalizeBriefPatch(value: unknown): AssistedBriefPatch | undefi
     }
     for (const field of ["ctaText", "contactValue", "offerText"] as const) {
       const text = safeText(brand[field], 1_000);
-      if (text !== undefined) next[field] = text;
+      if (text !== undefined) {
+        next[field] =
+          field === "contactValue" ? formatNanpContactNumbers(text) : text;
+      }
     }
     if (Object.keys(next).length) patch.brand = next;
   }
@@ -1069,6 +1164,7 @@ const MODE_COMPATIBLE_PATHS: Record<AssistedMode, Set<string>> = {
     "production.styleSheetElementId",
     "production.referenceIntent",
     "production.skipPromptEnhancement",
+    "videoType",
   ]),
   script: new Set([
     ...TEXT_FIELDS,
@@ -1134,6 +1230,23 @@ export function transitionAssistedMode(args: {
       resetFields.push("audio", "brand");
       delete next.production.durationSeconds;
     }
+    // Image tiers (1K/2K/4K) must not leak into Seedance video jobs as WxH.
+    if (args.nextMode === "video") {
+      const res = String(next.production.resolution ?? "");
+      if (/^(1k|2k|3k|4k)$/i.test(res.trim())) {
+        next.production.resolution = "1280x720";
+        resetFields.push("production.resolution");
+      } else if (!res.trim()) {
+        next.production.resolution = "1280x720";
+      }
+    }
+    if (args.nextMode === "image") {
+      const res = String(next.production.resolution ?? "");
+      if (/^\d+x\d+$/i.test(res.trim()) || /^(480p|720p|1080p)$/i.test(res.trim())) {
+        next.production.resolution = "2K";
+        resetFields.push("production.resolution");
+      }
+    }
     if (args.nextMode !== "script") {
       if (next.production.scriptType) resetFields.push("production.scriptType");
       delete next.production.scriptType;
@@ -1144,7 +1257,7 @@ export function transitionAssistedMode(args: {
     }
   }
 
-  // Hypermotion-specific campaign decisions must not leak into a generic video.
+  // Hypermotion beat plans are type-specific; keep resolved brand/CTA/contact.
   if (
     args.nextMode === "video" &&
     (switchingMode || switchingVideoType) &&
@@ -1152,8 +1265,6 @@ export function transitionAssistedMode(args: {
   ) {
     if (next.timedBeats) resetFields.push("timedBeats");
     next.timedBeats = undefined;
-    next.brand = emptyBrandDecisions();
-    resetFields.push("brand");
   }
 
   const compatible = MODE_COMPATIBLE_PATHS[args.nextMode];
@@ -1329,7 +1440,7 @@ export function applyQuestionAnswer(args: {
     lockedFields.push("brand.ctaText");
     accepted = true;
   } else if (!question && id === "cta_contact" && args.value) {
-    payload.brand.contactValue = args.value.trim();
+    payload.brand.contactValue = formatNanpContactNumbers(args.value.trim());
     lockedFields.push("brand.contactValue");
     accepted = true;
   } else if (!question && id === "offer") {

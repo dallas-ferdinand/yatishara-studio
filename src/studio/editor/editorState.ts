@@ -15,6 +15,7 @@ import {
   pruneEmptyTracks,
 } from "./editorTimelineUtils";
 import { computeRippleInsertForNewClip } from "./editorRipple";
+import { normalizeFrameRatio } from "./projectContract";
 
 export function newClipId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -25,6 +26,47 @@ export function newClipId(): string {
 
 export function clipDuration(clip: EditorClip): number {
   return Math.max(0.05, clip.trimOut - clip.trimIn);
+}
+
+const JOINT_GAP_SEC = 0.05;
+
+function clearTransitionOut(clip: EditorClip): EditorClip {
+  if (!clip.transitionOut || clip.transitionOut.type === "none") return clip;
+  const next = { ...clip };
+  delete next.transitionOut;
+  return next;
+}
+
+/** Previous video clip on the same track when abutting (within joint gap). */
+function previousAdjacentClip(clips: EditorClip[], clip: EditorClip): EditorClip | null {
+  if (clip.kind !== "video") return null;
+  const sorted = clips
+    .filter((item) => item.trackId === clip.trackId && item.kind === "video")
+    .sort((a, b) => a.startTime - b.startTime);
+  const idx = sorted.findIndex((item) => item.id === clip.id);
+  if (idx <= 0) return null;
+  const prev = sorted[idx - 1]!;
+  const prevEnd = prev.startTime + clipDuration(prev);
+  if (clip.startTime - prevEnd > JOINT_GAP_SEC) return null;
+  return prev;
+}
+
+/** Drop transitions on a moved clip and its former left neighbor. */
+function stripTransitionsForMovedClips(
+  originalClips: EditorClip[],
+  nextClips: EditorClip[],
+  movedIds: Iterable<string>,
+): EditorClip[] {
+  const clearIds = new Set<string>();
+  for (const id of movedIds) {
+    const before = originalClips.find((clip) => clip.id === id);
+    if (!before || before.kind !== "video") continue;
+    clearIds.add(id);
+    const prev = previousAdjacentClip(originalClips, before);
+    if (prev) clearIds.add(prev.id);
+  }
+  if (clearIds.size === 0) return nextClips;
+  return nextClips.map((clip) => (clearIds.has(clip.id) ? clearTransitionOut(clip) : clip));
 }
 
 export function projectEndTime(project: EditorProject): number {
@@ -45,13 +87,22 @@ export function createEmptyProject(args: {
     folderId: args.folderId,
     sourceAssetId: args.sourceAssetId,
     duration: 30,
+    frameRatio: "16:9",
     tracks: DEFAULT_TRACKS.map((track) => ({ ...track })),
     clips: [],
   });
 }
 
 export function normalizeProject(project: EditorProject): EditorProject {
-  const tracks = [...project.tracks];
+  const seen = new Set<string>();
+  const tracks = project.tracks.map((track) => {
+    const id = LEGACY_TRACK_MAP[track.id] ?? track.id;
+    return { ...track, id };
+  }).filter((track) => {
+    if (seen.has(track.id)) return false;
+    seen.add(track.id);
+    return true;
+  });
   if (!tracks.some((track) => track.kind === "video")) {
     tracks.unshift({ id: "track-v1", kind: "video", label: "V1" });
   }
@@ -60,22 +111,33 @@ export function normalizeProject(project: EditorProject): EditorProject {
   }
 
   const clips = project.clips.map((clip) => {
-    const trackId = LEGACY_TRACK_MAP[clip.trackId] ?? clip.trackId;
-    const track = tracks.find((item) => item.id === trackId);
+    const mappedId = LEGACY_TRACK_MAP[clip.trackId] ?? clip.trackId;
+    const track =
+      tracks.find((item) => item.id === mappedId) ??
+      tracks.find((item) => item.kind === clip.kind);
     return {
       ...clip,
-      trackId: track?.id ?? trackId,
+      trackId: track?.id ?? mappedId,
       kind: track?.kind ?? clip.kind,
       effects: clip.effects ?? undefined,
     };
   });
 
-  return pruneEmptyTracks({ ...project, tracks, clips });
+  return pruneEmptyTracks({
+    ...project,
+    frameRatio: normalizeFrameRatio(project.frameRatio),
+    tracks,
+    clips,
+  });
 }
 
 export function createInitialState(project: EditorProject): EditorState {
+  const normalized = normalizeProject(project);
   return {
-    project: { ...project, duration: Math.max(project.duration, projectEndTime(project)) },
+    project: {
+      ...normalized,
+      duration: Math.max(normalized.duration, projectEndTime(normalized)),
+    },
     ui: {
       playhead: 0,
       selectedClipId: null,
@@ -87,6 +149,7 @@ export function createInitialState(project: EditorProject): EditorState {
     },
     past: [],
     future: [],
+    liveBaseline: null,
   };
 }
 
@@ -101,8 +164,20 @@ function withHistory(state: EditorState, nextProject: EditorProject): EditorStat
       ...pruned,
       duration: Math.max(pruned.duration, projectEndTime(pruned)),
     },
-    past: [...state.past.slice(-49), state.project],
+    past: [...state.past.slice(-49), state.liveBaseline ?? state.project],
     future: [],
+    liveBaseline: null,
+  };
+}
+
+function withLive(state: EditorState, nextProject: EditorProject): EditorState {
+  return {
+    ...state,
+    liveBaseline: state.liveBaseline ?? state.project,
+    project: {
+      ...nextProject,
+      duration: Math.max(nextProject.duration, projectEndTime(nextProject)),
+    },
   };
 }
 
@@ -130,7 +205,13 @@ export type EditorAction =
   | { type: "add_text_clip"; startTime?: number; trackId?: string }
   | { type: "add_track_layer"; kind: "video" | "text" }
   | { type: "update_clip"; clipId: string; patch: Partial<EditorClip> }
-  | { type: "set_joint_transition"; jointKey: string; transition: EditorClip["transitionOut"] }
+  | { type: "update_project"; patch: Partial<Pick<EditorProject, "frameRatio" | "name" | "duration">> }
+  | {
+      type: "set_joint_transition";
+      jointKey: string;
+      transition: EditorClip["transitionOut"];
+      live?: boolean;
+    }
   | { type: "move_clip"; clipId: string; startTime: number; trackId?: string; live?: boolean }
   | {
       type: "apply_track_layout";
@@ -240,8 +321,27 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         },
       };
     case "delete_selected": {
+      if (state.ui.selectedJointKey) {
+        const [leftId] = state.ui.selectedJointKey.split("::");
+        const clips = state.project.clips.map((clip) =>
+          clip.id === leftId ? clearTransitionOut(clip) : clip,
+        );
+        return {
+          ...withEdit(state, { ...state.project, clips }),
+          ui: {
+            ...state.ui,
+            selectedJointKey: null,
+            editorMode: "select",
+            playing: false,
+          },
+        };
+      }
       if (!state.ui.selectedClipId) return state;
-      const clips = state.project.clips.filter((clip) => clip.id !== state.ui.selectedClipId);
+      const deleted = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId);
+      const prev = deleted ? previousAdjacentClip(state.project.clips, deleted) : null;
+      const clips = state.project.clips
+        .filter((clip) => clip.id !== state.ui.selectedClipId)
+        .map((clip) => (prev && clip.id === prev.id ? clearTransitionOut(clip) : clip));
       return {
         ...withEdit(state, { ...state.project, clips }),
         ui: { ...state.ui, selectedClipId: null, playing: false },
@@ -296,9 +396,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       );
     }
     case "add_track_layer": {
-      const index = defaultInsertIndex(state.project.tracks, action.kind);
-      const inserted = insertTrackAt(state.project, action.kind, index);
-      return withHistory(state, inserted.project);
+      // Multi-layer export is not supported yet — keep a single video/text stack.
+      return state;
     }
     case "update_clip": {
       const clips = state.project.clips.map((clip) =>
@@ -306,12 +405,23 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       );
       return withHistory(state, { ...state.project, clips });
     }
+    case "update_project": {
+      const next = normalizeProject({
+        ...state.project,
+        ...action.patch,
+        frameRatio: action.patch.frameRatio
+          ? normalizeFrameRatio(action.patch.frameRatio)
+          : state.project.frameRatio,
+      });
+      return withHistory(state, next);
+    }
     case "set_joint_transition": {
       const [leftId] = action.jointKey.split("::");
       const clips = state.project.clips.map((clip) =>
         clip.id === leftId ? { ...clip, transitionOut: action.transition } : clip,
       );
-      return withHistory(state, { ...state.project, clips });
+      const nextProject = { ...state.project, clips };
+      return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
     }
     case "split_at_playhead": {
       const clip = state.project.clips.find((item) => item.id === state.ui.selectedClipId);
@@ -350,7 +460,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       });
     }
     case "move_clip": {
-      const clips = state.project.clips.map((clip) => {
+      const before = state.project.clips.find((clip) => clip.id === action.clipId);
+      let clips = state.project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
         const nextTrackId = action.trackId ?? clip.trackId;
         const track = state.project.tracks.find((item) => item.id === nextTrackId);
@@ -362,16 +473,25 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           kind: track?.kind ?? clip.kind,
         };
       });
+      if (!action.live && before) {
+        const after = clips.find((clip) => clip.id === action.clipId);
+        if (
+          after &&
+          (after.startTime !== before.startTime || after.trackId !== before.trackId)
+        ) {
+          clips = stripTransitionsForMovedClips(state.project.clips, clips, [action.clipId]);
+        }
+      }
       const nextProject = {
         ...state.project,
         clips,
         duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
       };
-      return action.live ? { ...state, project: nextProject } : withHistory(state, nextProject);
+      return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
     }
     case "apply_track_layout": {
       const positionById = new Map(action.placements.map((p) => [p.clipId, p]));
-      const clips = state.project.clips.map((clip) => {
+      let clips = state.project.clips.map((clip) => {
         const placement = positionById.get(clip.id);
         if (!placement) return clip;
         const track = state.project.tracks.find((item) => item.id === placement.trackId);
@@ -382,12 +502,24 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           kind: track?.kind ?? clip.kind,
         };
       });
+      if (!action.live) {
+        const movedIds = action.placements
+          .filter((placement) => {
+            const before = state.project.clips.find((clip) => clip.id === placement.clipId);
+            if (!before) return false;
+            return (
+              before.startTime !== placement.startTime || before.trackId !== placement.trackId
+            );
+          })
+          .map((placement) => placement.clipId);
+        clips = stripTransitionsForMovedClips(state.project.clips, clips, movedIds);
+      }
       const nextProject = {
         ...state.project,
         clips,
         duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
       };
-      return action.live ? { ...state, project: nextProject } : withEdit(state, nextProject);
+      return action.live ? withLive(state, nextProject) : withEdit(state, nextProject);
     }
     case "move_clip_to_track": {
       const moving = state.project.clips.find((clip) => clip.id === action.clipId);
@@ -404,7 +536,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
 
       if (action.ripplePlacements?.length) {
         const positionById = new Map(action.ripplePlacements.map((p) => [p.clipId, p]));
-        const clips = project.clips.map((clip) => {
+        let clips = project.clips.map((clip) => {
           const placement = positionById.get(clip.id);
           if (!placement) return clip;
           const track = project.tracks.find((item) => item.id === placement.trackId);
@@ -415,10 +547,20 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
             kind: track?.kind ?? clip.kind,
           };
         });
+        const movedIds = action.ripplePlacements
+          .filter((placement) => {
+            const before = project.clips.find((clip) => clip.id === placement.clipId);
+            if (!before) return false;
+            return (
+              before.startTime !== placement.startTime || before.trackId !== placement.trackId
+            );
+          })
+          .map((placement) => placement.clipId);
+        clips = stripTransitionsForMovedClips(project.clips, clips, movedIds);
         return withEdit(state, { ...project, clips });
       }
 
-      const clips = project.clips.map((clip) => {
+      let clips = project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
         const track = project.tracks.find((item) => item.id === trackId);
         return {
@@ -428,6 +570,12 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           kind: track?.kind ?? clip.kind,
         };
       });
+      if (
+        action.startTime !== moving.startTime ||
+        trackId !== moving.trackId
+      ) {
+        clips = stripTransitionsForMovedClips(project.clips, clips, [action.clipId]);
+      }
       return withEdit(state, { ...project, clips });
     }
     case "ripple_add_clip": {
@@ -467,10 +615,19 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
     case "trim_clip": {
       const clips = state.project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
+        const sourceMax =
+          clip.sourceDuration != null && clip.sourceDuration > 0
+            ? clip.sourceDuration
+            : Number.POSITIVE_INFINITY;
+        const nextTrimIn = Math.max(0, Math.min(action.trimIn, sourceMax - 0.05));
+        const nextTrimOut = Math.max(
+          nextTrimIn + 0.05,
+          Math.min(action.trimOut, sourceMax),
+        );
         const next: EditorClip = {
           ...clip,
-          trimIn: Math.max(0, action.trimIn),
-          trimOut: Math.max(action.trimIn + 0.05, action.trimOut),
+          trimIn: nextTrimIn,
+          trimOut: nextTrimOut,
         };
         if (action.startTime !== undefined) {
           next.startTime = Math.max(0, action.startTime);
@@ -482,7 +639,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         clips,
         duration: Math.max(state.project.duration, projectEndTime({ ...state.project, clips })),
       };
-      return action.live ? { ...state, project: nextProject } : withHistory(state, nextProject);
+      return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
     }
     case "toggle_track_mute": {
       const tracks = state.project.tracks.map((track) =>
@@ -499,6 +656,7 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         },
         past: [],
         future: [],
+        liveBaseline: null,
       };
     default:
       return state;
@@ -539,10 +697,26 @@ export function formatTimecode(seconds: number): string {
 }
 
 export function formatTimecodeRuler(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
+  const total = Math.max(0, seconds);
   const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  const rest = total - m * 60;
+  const whole = Math.floor(rest + 1e-9);
+  const frac = rest - whole;
+
+  // Sub-second majors (high zoom): show tenths or frames.
+  if (frac > 1e-3 && frac < 1 - 1e-3) {
+    if (Math.abs(frac - 0.5) < 0.02) {
+      return `${String(m).padStart(2, "0")}:${String(whole).padStart(2, "0")}.5`;
+    }
+    const tenths = Math.round(frac * 10);
+    if (Math.abs(frac * 10 - tenths) < 0.05) {
+      return `${String(m).padStart(2, "0")}:${String(whole).padStart(2, "0")}.${tenths}`;
+    }
+    const frames = Math.round(frac * 30);
+    return `${String(m).padStart(2, "0")}:${String(whole).padStart(2, "0")}:${String(frames).padStart(2, "0")}`;
+  }
+
+  return `${String(m).padStart(2, "0")}:${String(whole).padStart(2, "0")}`;
 }
 
 export function formatTimecodeFull(seconds: number): string {

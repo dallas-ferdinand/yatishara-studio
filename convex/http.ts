@@ -23,8 +23,16 @@ const exactGetPost = [
   "/api/v1/style-sheets",
   "/api/v1/style-presets",
   "/api/v1/video-models",
+  "/api/v1/catalog/script-types",
+  "/api/v1/catalog/reference-intents",
+  "/api/v1/voices",
+  "/api/v1/voices/saved",
   "/api/v1/generations/estimate",
+  "/api/v1/generations/estimate-batch",
   "/api/v1/generations",
+  "/api/v1/assistance/briefs",
+  "/api/v1/assistance/approvals",
+  "/api/v1/edits",
 ] as const;
 
 for (const path of exactGetPost) {
@@ -32,24 +40,40 @@ for (const path of exactGetPost) {
   http.route({ path, method: "POST", handler: studioApiV1 });
 }
 
-http.route({ pathPrefix: "/api/v1/folders/", method: "GET", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/folders/", method: "POST", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/folders/", method: "PATCH", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/folders/", method: "DELETE", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/assets/", method: "GET", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/assets/", method: "POST", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/assets/", method: "PATCH", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/assets/", method: "DELETE", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/documents/", method: "GET", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/documents/", method: "PATCH", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/documents/", method: "POST", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/documents/", method: "DELETE", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/elements/", method: "GET", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/elements/", method: "POST", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/elements/", method: "PATCH", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/elements/", method: "DELETE", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/generations/", method: "GET", handler: studioApiV1 });
-http.route({ pathPrefix: "/api/v1/generations/", method: "POST", handler: studioApiV1 });
+const prefixMethods = [
+  ["GET", "POST", "PATCH", "DELETE"],
+  ["GET", "POST", "PATCH", "DELETE"],
+  ["GET", "PATCH", "POST", "DELETE"],
+  ["GET", "POST", "PATCH", "DELETE"],
+  ["GET", "POST"],
+  ["GET", "POST", "DELETE"],
+  ["GET", "POST", "PATCH"],
+  ["GET", "POST"],
+  ["GET", "POST", "PUT", "PATCH"],
+] as const;
+
+const prefixes = [
+  "/api/v1/folders/",
+  "/api/v1/assets/",
+  "/api/v1/documents/",
+  "/api/v1/elements/",
+  "/api/v1/generations/",
+  "/api/v1/voices/",
+  "/api/v1/assistance/",
+  "/api/v1/catalog/",
+  "/api/v1/edits/",
+] as const;
+
+for (let i = 0; i < prefixes.length; i += 1) {
+  const pathPrefix = prefixes[i];
+  for (const method of prefixMethods[i]) {
+    http.route({
+      pathPrefix,
+      method: method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+      handler: studioApiV1,
+    });
+  }
+}
 
 http.route({
   pathPrefix: "/api/v1/",

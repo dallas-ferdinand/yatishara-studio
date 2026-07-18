@@ -20,12 +20,20 @@ import {
   isOmniFlashGatewayModel,
   isSeedanceGatewayModel,
 } from "./videoModels";
+import {
+  normalizeSeedanceAspectRatio,
+  normalizeSeedanceResolution,
+} from "./seedanceResolution";
 import { normalizeImageQuality } from "./generationPricing";
 
 export type GenerationMode = "image" | "video";
 
 export type EnhancementInput = CreativeDirectionContext & {
   modelId?: string;
+  /** Attached image / video / audio — model must see the full media, not just flags. */
+  referenceInputs?: ReferenceInput[];
+  /** Opening still for I2V — included as an image part when present. */
+  startFrameUrl?: string;
 };
 
 export type ImageGenerationInput = {
@@ -91,6 +99,18 @@ function textModelId(): string {
 
 export async function enhancePrompt(input: EnhancementInput): Promise<string> {
   const model = input.modelId ?? textModelId();
+  const referenceInputs = input.referenceInputs ?? [];
+  const hasStartFrame = Boolean(input.startFrameUrl?.trim());
+  const hasAudioReference =
+    input.hasAudioReference ||
+    referenceInputs.some((reference) => reference.kind === "audio");
+  const hasVideoReference =
+    input.hasVideoReference ||
+    referenceInputs.some((reference) => reference.kind === "video");
+  const hasImageReference =
+    input.hasImageReference ||
+    hasStartFrame ||
+    referenceInputs.some((reference) => reference.kind === "image");
   const context: CreativeDirectionContext = {
     userPrompt: input.userPrompt,
     presetName: input.presetName,
@@ -106,17 +126,37 @@ export async function enhancePrompt(input: EnhancementInput): Promise<string> {
     durationSeconds: input.durationSeconds,
     resolution: input.resolution,
     aspectRatio: input.aspectRatio,
-    hasVideoReference: input.hasVideoReference,
-    hasImageReference: input.hasImageReference,
+    hasVideoReference,
+    hasImageReference,
     hasRawImageReference: input.hasRawImageReference,
     hasElementReference: input.hasElementReference,
+    hasAudioReference,
     attachedScriptMarkdown: input.attachedScriptMarkdown,
     referenceSummaries: input.referenceSummaries,
   };
+  const mediaParts = [
+    ...(hasStartFrame
+      ? contentPartForReference({
+          kind: "image",
+          url: input.startFrameUrl!.trim(),
+        })
+      : []),
+    ...referenceInputs.flatMap((reference) => contentPartForReference(reference)),
+  ];
+  const userText = buildCreativeUserPrompt(context);
   const result = await generateText({
     model: gateway.languageModel(model),
     system: buildCreativeSystemPrompt(context),
-    prompt: buildCreativeUserPrompt(context),
+    ...(mediaParts.length
+      ? {
+          messages: [
+            {
+              role: "user" as const,
+              content: [{ type: "text" as const, text: userText }, ...mediaParts],
+            },
+          ],
+        }
+      : { prompt: userText }),
   });
   const enhanced = result.text.trim();
   return enhanced || context.userPrompt;
@@ -260,12 +300,40 @@ export async function generateVideo(
   const multimodalProviderRefs =
     seedance && hasStartFrame && (hasReferenceVideos || hasReferenceAudio);
 
+  // Seedance 2.0 (Vercel catalog): only "720p" / "1080p".
+  // WxH (1280x720) and 480p both fail with
+  // "resolution … is not valid for model dreamina-seedance-2-0 in r2v/t2v".
+  const resolution = seedance
+    ? normalizeSeedanceResolution(input.resolution)
+    : normalizeSize(input.resolution);
+  const aspectRatio = seedance
+    ? normalizeSeedanceAspectRatio(input.aspectRatio)
+    : normalizeAspectRatio(input.aspectRatio);
+  const durationSeconds = seedance
+    ? Math.max(4, Math.min(15, Math.round(Number(input.durationSeconds) || 4)))
+    : input.durationSeconds;
+
+  if (seedance) {
+    console.info("[seedance] generateVideo request", {
+      model,
+      inputResolution: input.resolution ?? null,
+      resolution,
+      aspectRatio: aspectRatio ?? null,
+      durationSeconds,
+      hasStartFrame,
+      referenceImageCount: referenceImageUrls.length,
+      referenceVideoCount: referenceVideoUrls.length,
+      referenceAudioCount: referenceAudioUrls.length,
+    });
+  }
+
   const result = await experimental_generateVideo({
     model: gateway.videoModel(model),
     prompt: input.prompt,
-    aspectRatio: normalizeAspectRatio(input.aspectRatio),
-    resolution: normalizeSize(input.resolution),
-    duration: input.durationSeconds,
+    aspectRatio,
+    // Seedance labels are not WxH; cast for the SDK's size union.
+    resolution: resolution as `${number}x${number}` | undefined,
+    duration: durationSeconds,
     generateAudio: input.generateAudio,
     frameImages: hasStartFrame
       ? [{ image: startFrameUrl!, frameType: "first_frame" as const }]

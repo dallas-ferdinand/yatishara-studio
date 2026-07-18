@@ -84,6 +84,7 @@ function buildMenuItems(entry, {
       entry.studioId
     ) {
       items.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+      items.push({ id: "set-profile-image", label: "Set as profile image" });
     }
     if (
       isFile &&

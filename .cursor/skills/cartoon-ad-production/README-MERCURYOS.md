@@ -82,6 +82,10 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_get_generation` | Poll job status |
 | `studio_generate_image` | Sync image gen — **storyboard stills** with full `referenceElementIds` (characters included) |
 | `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs |
+| `studio_generate_audio` | Voiceover / SFX (explore voices first) |
+| `studio_estimate_batch` | Multi-item production budget with contingency |
+| `studio_ensure_brief` / `studio_approve_brief` | Assisted production without chat streaming |
+| `studio_create_edit` / `studio_export_edit` | Timeline project from assets → export asset |
 | `studio_generate_script` | Script → document |
 
 ## Cartoon ad production defaults

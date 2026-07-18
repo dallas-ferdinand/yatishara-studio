@@ -1,0 +1,292 @@
+.studio-chat-video-player {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}
+
+.studio-chat-video-player-stage {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #05070c;
+  line-height: 0;
+}
+
+.studio-chat-video-player-video {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 520px);
+  max-height: min(52dvh, 420px);
+  object-fit: contain;
+  background: #05070c;
+}
+
+.studio-chat-video-player-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  appearance: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.studio-chat-video-player-surface:focus-visible {
+  outline: 2px solid color-mix(in srgb, #fff 68%, transparent);
+  outline-offset: -3px;
+}
+
+.studio-chat-video-player-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  color: #fff;
+  transition:
+    opacity 0.16s ease,
+    visibility 0s linear 0.16s;
+}
+
+.studio-chat-video-player-chrome.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.studio-chat-video-player-toggle {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: auto;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  color: #fff;
+  background: transparent;
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 68%));
+  cursor: pointer;
+  pointer-events: none;
+  transform: scale(0.94);
+  transition:
+    transform 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.studio-chat-video-player-chrome.is-visible .studio-chat-video-player-toggle {
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.studio-chat-video-player-toggle:hover {
+  transform: scale(1.06);
+}
+
+.studio-chat-video-player-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, #fff 62%, transparent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
+.studio-chat-video-player-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.studio-chat-video-player-toggle svg {
+  display: block;
+  margin-left: 2px;
+}
+
+.studio-chat-video-player-toggle[aria-label="Pause"] svg {
+  margin-left: 0;
+}
+
+.studio-chat-video-player-bar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 13px 10px 9px;
+  border: 0;
+  color: #fff;
+  background: transparent;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 78%);
+}
+
+.studio-chat-video-player-chrome.is-visible .studio-chat-video-player-bar {
+  pointer-events: auto;
+}
+
+.studio-chat-video-player-scrub {
+  --chat-video-progress: 0%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 58%));
+}
+
+.studio-chat-video-player-scrub::before,
+.studio-chat-video-player-scrub::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  height: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.studio-chat-video-player-scrub::before {
+  right: 0;
+  background: color-mix(in srgb, #fff 28%, transparent);
+}
+
+.studio-chat-video-player-scrub::after {
+  width: var(--chat-video-progress);
+  background: #fff;
+}
+
+.studio-chat-video-player-scrub input[type="range"] {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.studio-chat-video-player-scrub input[type="range"]:focus-visible {
+  filter: drop-shadow(0 0 2px #fff);
+}
+
+.studio-chat-video-player-scrub input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+
+.studio-chat-video-player-scrub input[type="range"]::-webkit-slider-thumb {
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 42%);
+}
+
+.studio-chat-video-player-scrub input[type="range"]::-moz-range-track {
+  height: 3px;
+  border: 0;
+  background: transparent;
+}
+
+.studio-chat-video-player-scrub input[type="range"]::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 42%);
+}
+
+.studio-chat-video-player-time {
+  min-width: 3.2ch;
+  overflow: hidden;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+.studio-chat-video-player-time:last-child {
+  text-align: right;
+}
+
+.studio-chat-video-player-buffering,
+.studio-chat-video-player-failure {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.studio-chat-video-player-buffering {
+  overflow: hidden;
+  background: transparent;
+}
+
+.studio-chat-video-player-buffering .media-load-frame-wave {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-chat-video-player-failure {
+  padding: 12px;
+  color: color-mix(in srgb, #fff 82%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-align: center;
+  background: color-mix(in srgb, #000 42%, transparent);
+}
+
+.studio-chat-video-player-failure.is-soft {
+  top: auto;
+  right: 10px;
+  bottom: 9px;
+  left: 10px;
+  min-height: 26px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, #000 55%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-chat-video-player-chrome,
+  .studio-chat-video-player-toggle {
+    transition: none;
+  }
+}

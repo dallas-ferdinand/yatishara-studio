@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { getOrCreatePrefetcher, scheduleVideoPrefetch } from "@/desk/lib/video-chunk-prefetch.js";
+import {
+  getOrCreatePrefetcher,
+  releaseVideoPrefetch,
+  scheduleVideoPrefetch,
+} from "@/desk/lib/video-chunk-prefetch.js";
 
 /**
  * Warm HTTP range cache for media URLs and keep read-ahead during playback.
@@ -9,12 +13,25 @@ import { getOrCreatePrefetcher, scheduleVideoPrefetch } from "@/desk/lib/video-c
  */
 export function useVideoChunkPrefetch({ url, mediaRef, enabled = true, fileSize = null }) {
   const prefetcherRef = useRef(null);
+  const activeUrlRef = useRef(null);
 
   useEffect(() => {
-    if (!enabled || !url) return undefined;
+    if (!enabled || !url) {
+      if (activeUrlRef.current) {
+        releaseVideoPrefetch(activeUrlRef.current);
+        activeUrlRef.current = null;
+      }
+      prefetcherRef.current = null;
+      return undefined;
+    }
     const p = scheduleVideoPrefetch(url, { fileSize });
     prefetcherRef.current = p;
-    return undefined;
+    activeUrlRef.current = url;
+    return () => {
+      releaseVideoPrefetch(url);
+      if (activeUrlRef.current === url) activeUrlRef.current = null;
+      prefetcherRef.current = null;
+    };
   }, [url, enabled, fileSize]);
 
   useEffect(() => {

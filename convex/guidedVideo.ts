@@ -37,6 +37,7 @@ import {
   evaluateBrief,
   listVideoTypesForUi,
   mergeBriefPayload,
+  normalizeAssistanceAspectRatio,
   transitionAssistedMode,
 } from "./lib/hypermotionWorkflow";
 import {
@@ -55,6 +56,7 @@ import {
 } from "./lib/assistanceGenerationPlan";
 import { resolveVideoModel } from "./lib/videoModels";
 import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
+import { isFolderInSandbox } from "./lib/studioApi/folderScope";
 
 const briefReturn = v.object({
   _id: v.id("guidedBriefs"),
@@ -156,8 +158,20 @@ function serializeReviewSnapshot(args: {
   });
 }
 
+type AuthedCtx = (QueryCtx | MutationCtx) & {
+  user: Doc<"users"> & { _id: Id<"users"> };
+};
+
+async function asUserCtx(ctx: QueryCtx | MutationCtx, userId: Id<"users">): Promise<AuthedCtx> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  return Object.assign(ctx, { user: { ...user, _id: userId } });
+}
+
 async function requireThreadOwner(
-  ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: AuthedCtx,
   threadId: Id<"generationThreads">,
 ) {
   const thread = await ctx.db.get("generationThreads", threadId);
@@ -168,7 +182,7 @@ async function requireThreadOwner(
 }
 
 async function requireBriefOwner(
-  ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: AuthedCtx,
   briefId: Id<"guidedBriefs">,
 ) {
   const brief = await ctx.db.get("guidedBriefs", briefId);
@@ -194,7 +208,7 @@ function estimateCreditsForBrief(
         payload.audio.voiceover === "include" ||
         payload.audio.sfx === "include" ||
         payload.audio.music === "include",
-      videoModel: "seedance-2.0",
+      videoModel: resolveVideoModel().slug,
     });
   }
   if (mode === "image") {
@@ -481,6 +495,187 @@ export const listBriefAttachments = authedQuery({
   },
 });
 
+async function ensureBriefHandler(
+  ctx: AuthedCtx & MutationCtx,
+  args: {
+    threadId: Id<"generationThreads">;
+    mode: AssistedMode;
+    videoType?: VideoType;
+    stylePresetId?: Id<"stylePresets">;
+    styleSheetElementId?: Id<"elements">;
+    durationIsUserExplicit?: boolean;
+    production?: AssistedBriefPayload["production"];
+  },
+): Promise<Id<"guidedBriefs">> {
+  if (!isGuidedVideoAssistanceEnabled()) {
+    throw new Error("Assistance is disabled on this deployment.");
+  }
+  await requireThreadOwner(ctx, args.threadId);
+  if (args.styleSheetElementId) {
+    const sheet = await ctx.db.get("elements", args.styleSheetElementId);
+    if (
+      !sheet ||
+      sheet.ownerId !== ctx.user._id ||
+      sheet.deletedAt ||
+      sheet.type !== "style_sheet"
+    ) {
+      throw new Error("Style Sheet not found.");
+    }
+  }
+  const existing = await ctx.db
+    .query("guidedBriefs")
+    .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+    .order("desc")
+    .first();
+  const now = Date.now();
+  if (existing && !["approved", "generating", "done"].includes(existing.status)) {
+    const currentMode = normalizeAssistedMode(existing.mode);
+    const modeChanged = currentMode !== args.mode;
+    const nextVideoType =
+      args.mode === "video" ? normalizeVideoType(args.videoType) : undefined;
+    const videoTypeChanged =
+      args.mode === "video" &&
+      (existing.videoType ?? "standard") !== (nextVideoType ?? "standard");
+    // Composer settings may refresh style/production, but must not silently
+    // overwrite an agent-resolved mode or wipe a reviewable plan every turn.
+    if (!modeChanged && !videoTypeChanged) {
+      const explicitDurationPath = "production.durationSeconds";
+      const protectedProductionFields = existing.inferredFields.filter(
+        (path) => path.startsWith("production."),
+      );
+      const merged = mergeBriefPayload({
+        current: parsePayload(existing.payload),
+        patch: args.production ? { production: args.production } : undefined,
+        lockedFields: [
+          ...new Set([...existing.lockedFields, ...protectedProductionFields]),
+        ],
+        forceUnlock: args.durationIsUserExplicit ? [explicitDurationPath] : [],
+      });
+      await ctx.db.patch(existing._id, {
+        payload: merged.payload,
+        lockedFields: args.durationIsUserExplicit
+          ? [...new Set([...existing.lockedFields, explicitDurationPath])]
+          : existing.lockedFields,
+        inferredFields: args.durationIsUserExplicit
+          ? existing.inferredFields.filter((path) => path !== explicitDurationPath)
+          : existing.inferredFields,
+        stylePresetId: args.stylePresetId ?? existing.stylePresetId,
+        styleSheetElementId:
+          args.styleSheetElementId ?? existing.styleSheetElementId,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+    const transitioned = transitionAssistedMode({
+      currentMode,
+      nextMode: args.mode,
+      currentVideoType: existing.videoType,
+      nextVideoType,
+      payload: parsePayload(existing.payload),
+      lockedFields: existing.lockedFields,
+    });
+    const merged = mergeBriefPayload({
+      current: transitioned.payload,
+      patch: args.production ? { production: args.production } : undefined,
+      lockedFields: [
+        ...new Set([
+          ...transitioned.lockedFields,
+          ...existing.inferredFields.filter((path) =>
+            path.startsWith("production."),
+          ),
+        ]),
+      ],
+      forceUnlock: args.durationIsUserExplicit
+        ? ["production.durationSeconds"]
+        : [],
+    });
+    const previousAgentState = (() => {
+      try {
+        return existing.agentStateJson
+          ? parseAgentState(JSON.parse(existing.agentStateJson))
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    const switchedAgentState = emptyAgentState({
+      goal: `Create a strong ${args.mode} for the user`,
+      knownFacts: [
+        ...(previousAgentState?.knownFacts ?? []),
+        `Output mode: ${args.mode}${nextVideoType ? ` / ${nextVideoType}` : ""}`,
+      ],
+      missingCritical: [],
+      missingOptional: previousAgentState?.missingOptional ?? [],
+      nextFocus: `Re-evaluate the preserved brief for ${args.mode} requirements`,
+      unresolvedDecisions: [],
+      readinessRationale: "",
+      readyForReview: false,
+      turnStrategy: "confirm",
+    });
+    await ctx.db.patch(existing._id, {
+      mode: args.mode,
+      videoType: nextVideoType,
+      payload: merged.payload,
+      revision: existing.revision + 1,
+      lockedFields: args.durationIsUserExplicit
+        ? [
+            ...new Set([
+              ...transitioned.lockedFields,
+              "production.durationSeconds",
+            ]),
+          ]
+        : transitioned.lockedFields,
+      inferredFields: existing.inferredFields.filter((path) =>
+        transitioned.lockedFields.includes(path) &&
+        !(args.durationIsUserExplicit && path === "production.durationSeconds"),
+      ),
+      stylePresetId: args.stylePresetId ?? existing.stylePresetId,
+      styleSheetElementId: args.styleSheetElementId ?? existing.styleSheetElementId,
+      agentStateJson: JSON.stringify(switchedAgentState),
+      agentPlanJson: JSON.stringify(switchedAgentState),
+      generationPlanJson: undefined,
+      generationPlanFingerprint: undefined,
+      estimatedCredits: undefined,
+      compiledPrompt: undefined,
+      pendingQuestionsJson: undefined,
+      assumptions: [],
+      warnings: [],
+      error: undefined,
+      approvedRevision: undefined,
+      approvedJobId: undefined,
+      approvedDocumentId: undefined,
+      approvedElementId: undefined,
+      approvedAt: undefined,
+      status: "collecting",
+      updatedAt: now,
+    });
+    return existing._id;
+  }
+  const payload = emptyBriefPayload(args.production);
+  return await ctx.db.insert("guidedBriefs", {
+    ownerId: ctx.user._id,
+    threadId: args.threadId,
+    mode: args.mode,
+    videoType: args.mode === "video" ? normalizeVideoType(args.videoType) : undefined,
+    status: "collecting",
+    revision: 1,
+    userPrompt: "",
+    payload,
+    lockedFields: args.durationIsUserExplicit
+      ? ["production.durationSeconds"]
+      : [],
+    inferredFields: [],
+    assumptions: [],
+    warnings: [],
+    offeredOptionalIds: [],
+    skippedOptionalIds: [],
+    stylePresetId: args.stylePresetId,
+    styleSheetElementId: args.styleSheetElementId,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 export const ensureBrief = authedMutation({
   args: {
     threadId: v.id("generationThreads"),
@@ -488,6 +683,7 @@ export const ensureBrief = authedMutation({
     videoType: v.optional(videoTypeValidator),
     stylePresetId: v.optional(v.id("stylePresets")),
     styleSheetElementId: v.optional(v.id("elements")),
+    durationIsUserExplicit: v.optional(v.boolean()),
     production: v.optional(
       v.object({
         durationSeconds: v.optional(v.number()),
@@ -502,121 +698,7 @@ export const ensureBrief = authedMutation({
     ),
   },
   returns: v.id("guidedBriefs"),
-  handler: async (ctx, args) => {
-    if (!isGuidedVideoAssistanceEnabled()) {
-      throw new Error("Assistance is disabled on this deployment.");
-    }
-    await requireThreadOwner(ctx, args.threadId);
-    if (args.styleSheetElementId) {
-      const sheet = await ctx.db.get("elements", args.styleSheetElementId);
-      if (
-        !sheet ||
-        sheet.ownerId !== ctx.user._id ||
-        sheet.deletedAt ||
-        sheet.type !== "style_sheet"
-      ) {
-        throw new Error("Style Sheet not found.");
-      }
-    }
-    const existing = await ctx.db
-      .query("guidedBriefs")
-      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
-      .order("desc")
-      .first();
-    const now = Date.now();
-    if (existing && !["approved", "generating", "done"].includes(existing.status)) {
-      const currentMode = normalizeAssistedMode(existing.mode);
-      const modeChanged = currentMode !== args.mode;
-      const nextVideoType =
-        args.mode === "video" ? normalizeVideoType(args.videoType) : undefined;
-      const videoTypeChanged =
-        args.mode === "video" &&
-        (existing.videoType ?? "standard") !== (nextVideoType ?? "standard");
-      // Composer settings may refresh style/production, but must not silently
-      // overwrite an agent-resolved mode or wipe a reviewable plan every turn.
-      if (!modeChanged && !videoTypeChanged) {
-        const protectedProductionFields = existing.inferredFields.filter(
-          (path) => path.startsWith("production."),
-        );
-        const merged = mergeBriefPayload({
-          current: parsePayload(existing.payload),
-          patch: args.production ? { production: args.production } : undefined,
-          lockedFields: [
-            ...new Set([...existing.lockedFields, ...protectedProductionFields]),
-          ],
-        });
-        await ctx.db.patch(existing._id, {
-          payload: merged.payload,
-          stylePresetId: args.stylePresetId ?? existing.stylePresetId,
-          styleSheetElementId:
-            args.styleSheetElementId ?? existing.styleSheetElementId,
-          updatedAt: now,
-        });
-        return existing._id;
-      }
-      const transitioned = transitionAssistedMode({
-        currentMode,
-        nextMode: args.mode,
-        currentVideoType: existing.videoType,
-        nextVideoType,
-        payload: parsePayload(existing.payload),
-        lockedFields: existing.lockedFields,
-      });
-      const merged = mergeBriefPayload({
-        current: transitioned.payload,
-        patch: args.production ? { production: args.production } : undefined,
-        lockedFields: [
-          ...new Set([
-            ...transitioned.lockedFields,
-            ...existing.inferredFields.filter((path) =>
-              path.startsWith("production."),
-            ),
-          ]),
-        ],
-      });
-      await ctx.db.patch(existing._id, {
-        mode: args.mode,
-        videoType: nextVideoType,
-        payload: merged.payload,
-        lockedFields: transitioned.lockedFields,
-        stylePresetId: args.stylePresetId ?? existing.stylePresetId,
-        styleSheetElementId: args.styleSheetElementId ?? existing.styleSheetElementId,
-        generationPlanJson: undefined,
-        generationPlanFingerprint: undefined,
-        estimatedCredits: undefined,
-        compiledPrompt: undefined,
-        approvedRevision: undefined,
-        approvedJobId: undefined,
-        approvedDocumentId: undefined,
-        approvedElementId: undefined,
-        approvedAt: undefined,
-        status: "collecting",
-        updatedAt: now,
-      });
-      return existing._id;
-    }
-    const payload = emptyBriefPayload(args.production);
-    return await ctx.db.insert("guidedBriefs", {
-      ownerId: ctx.user._id,
-      threadId: args.threadId,
-      mode: args.mode,
-      videoType: args.mode === "video" ? normalizeVideoType(args.videoType) : undefined,
-      status: "collecting",
-      revision: 1,
-      userPrompt: "",
-      payload,
-      lockedFields: [],
-      inferredFields: [],
-      assumptions: [],
-      warnings: [],
-      offeredOptionalIds: [],
-      skippedOptionalIds: [],
-      stylePresetId: args.stylePresetId,
-      styleSheetElementId: args.styleSheetElementId,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
+  handler: async (ctx, args) => ensureBriefHandler(ctx, args),
 });
 
 /**
@@ -854,15 +936,15 @@ export const answerQuestions = authedMutation({
  * @deprecated Compatibility shim for cached clients. Corrections go through the
  * composer via `submitAssistedTurn`. Remove with answerQuestions after drain.
  */
-export const editBrief = authedMutation({
+async function editBriefHandler(
+  ctx: AuthedCtx & MutationCtx,
   args: {
-    briefId: v.id("guidedBriefs"),
-    expectedRevision: v.number(),
-    patch: assistedBriefPayloadValidator,
-    lockFields: v.optional(v.array(v.string())),
+    briefId: Id<"guidedBriefs">;
+    expectedRevision: number;
+    patch: AssistedBriefPayload;
+    lockFields?: string[];
   },
-  returns: briefReturn,
-  handler: async (ctx, args) => {
+) {
     const brief = await requireBriefOwner(ctx, args.briefId);
     if (brief.revision !== args.expectedRevision) {
       throw new Error("Brief was updated elsewhere. Refresh and try again.");
@@ -929,7 +1011,7 @@ export const editBrief = authedMutation({
         order: now,
         briefId: brief._id,
         briefRevision: nextRevision,
-        message: "Updated brief — ready to approve.",
+        message: "updated — hit generate when you want",
         briefSnapshotJson: serializeReviewSnapshot({
           mode: brief.mode,
           videoType: brief.videoType,
@@ -949,23 +1031,35 @@ export const editBrief = authedMutation({
     const updated = await ctx.db.get("guidedBriefs", brief._id);
     if (!updated) throw new Error("Brief missing after update");
     return toBriefReturn(updated, attachments);
-  },
-});
+}
 
-/** UI-only production tweaks (format / resolution / quality) — no new chat event. */
-export const patchBriefProduction = authedMutation({
+export const editBrief = authedMutation({
   args: {
     briefId: v.id("guidedBriefs"),
     expectedRevision: v.number(),
-    production: v.object({
-      aspectRatio: v.optional(v.string()),
-      resolution: v.optional(v.string()),
-      quality: v.optional(v.string()),
-      durationSeconds: v.optional(v.number()),
-    }),
+    patch: assistedBriefPayloadValidator,
+    lockFields: v.optional(v.array(v.string())),
   },
   returns: briefReturn,
-  handler: async (ctx, args) => {
+  handler: async (ctx, args) => editBriefHandler(ctx, args),
+});
+
+/** UI production tweaks for review cards — rebuilds plan/estimate without a chat event. */
+async function patchBriefProductionHandler(
+  ctx: AuthedCtx & MutationCtx,
+  args: {
+    briefId: Id<"guidedBriefs">;
+    expectedRevision: number;
+    production: {
+      aspectRatio?: string;
+      resolution?: string;
+      quality?: string;
+      durationSeconds?: number;
+      videoType?: VideoType;
+      audioEnabled?: boolean;
+    };
+  },
+) {
     const brief = await requireBriefOwner(ctx, args.briefId);
     if (brief.revision !== args.expectedRevision) {
       throw new Error("Brief was updated elsewhere. Refresh and try again.");
@@ -973,27 +1067,161 @@ export const patchBriefProduction = authedMutation({
     if (["approved", "generating", "done"].includes(brief.status)) {
       throw new Error("This brief is already approved.");
     }
-    const payload = parsePayload(brief.payload);
+    let payload = parsePayload(brief.payload);
     if (!payload.production || typeof payload.production !== "object") {
       payload.production = emptyBriefPayload().production;
     }
+    const mode = normalizeAssistedMode(brief.mode);
+    let videoType =
+      mode === "video"
+        ? (normalizeVideoType(brief.videoType) as VideoType)
+        : undefined;
     const locked = new Set(brief.lockedFields);
+
+    if (args.production.videoType !== undefined) {
+      if (mode !== "video") {
+        throw new Error("Video type can only be set for video jobs.");
+      }
+      const nextVideoType = normalizeVideoType(args.production.videoType);
+      if ((videoType ?? "standard") !== nextVideoType) {
+        const transitioned = transitionAssistedMode({
+          currentMode: "video",
+          nextMode: "video",
+          currentVideoType: videoType,
+          nextVideoType,
+          payload,
+          lockedFields: [...locked],
+        });
+        payload = transitioned.payload;
+        locked.clear();
+        for (const field of transitioned.lockedFields) locked.add(field);
+        videoType = transitioned.videoType;
+      } else {
+        videoType = nextVideoType;
+      }
+      // Keep a formerly complete Standard review editable after switching into
+      // Hypermotion by applying safe leave-out defaults for undecided brand fields.
+      if (videoType === "hypermotion_ad") {
+        if (!payload.brand.productFidelity) {
+          payload.brand.productFidelity = "conceptual";
+          locked.add("brand.productFidelity");
+        }
+        if (payload.brand.logo === "undecided") {
+          payload.brand.logo = "omit";
+          locked.add("brand.logo");
+        }
+        if (payload.brand.ctaMode === "undecided") {
+          payload.brand.ctaMode = "omit";
+          locked.add("brand.ctaMode");
+        }
+      }
+      locked.add("videoType");
+    }
+
     if (args.production.aspectRatio !== undefined) {
-      payload.production.aspectRatio = args.production.aspectRatio;
+      const aspectRatio = normalizeAssistanceAspectRatio(args.production.aspectRatio);
+      if (!aspectRatio) {
+        throw new Error("Unsupported aspect ratio.");
+      }
+      payload.production.aspectRatio = aspectRatio;
       locked.add("production.aspectRatio");
     }
+
     if (args.production.resolution !== undefined) {
-      payload.production.resolution = args.production.resolution;
+      const raw = args.production.resolution.trim();
+      if (mode === "image") {
+        const compact = raw.toUpperCase().replace(/\s+/g, "");
+        if (!["1K", "2K", "4K"].includes(compact)) {
+          throw new Error("Image resolution must be 1K, 2K, or 4K.");
+        }
+        payload.production.resolution = compact;
+      } else if (mode === "video") {
+        const lower = raw.toLowerCase();
+        let next: string | null = null;
+        if (
+          lower === "720p" ||
+          lower === "720" ||
+          lower === "hd" ||
+          lower === "1280x720"
+        ) {
+          next = "1280x720";
+        } else if (
+          lower === "1080p" ||
+          lower === "1080" ||
+          lower === "fhd" ||
+          lower === "1920x1080"
+        ) {
+          next = "1920x1080";
+        }
+        if (!next) {
+          throw new Error("Video resolution must be 720p or 1080p.");
+        }
+        payload.production.resolution = next;
+      } else {
+        throw new Error("Resolution is only editable for image and video jobs.");
+      }
       locked.add("production.resolution");
     }
+
     if (args.production.quality !== undefined) {
-      payload.production.quality = args.production.quality;
+      if (mode !== "image") {
+        throw new Error("Quality is only editable for image jobs.");
+      }
+      const quality = args.production.quality.trim().toLowerCase();
+      if (!["low", "medium", "high"].includes(quality)) {
+        throw new Error("Image quality must be low, medium, or high.");
+      }
+      payload.production.quality = quality;
       locked.add("production.quality");
     }
+
     if (args.production.durationSeconds !== undefined) {
-      payload.production.durationSeconds = args.production.durationSeconds;
+      if (mode !== "video") {
+        throw new Error("Duration is only editable for video jobs.");
+      }
+      const duration = Math.round(Number(args.production.durationSeconds));
+      if (!Number.isFinite(duration) || duration < 4 || duration > 15) {
+        throw new Error("Video duration must be between 4 and 15 seconds.");
+      }
+      const previousDuration = payload.production.durationSeconds;
+      payload.production.durationSeconds = duration;
       locked.add("production.durationSeconds");
+      if (previousDuration !== duration) {
+        payload.timedBeats = undefined;
+      }
     }
+
+    if (args.production.audioEnabled !== undefined) {
+      if (mode !== "video") {
+        throw new Error("Audio is only editable for video jobs.");
+      }
+      if (args.production.audioEnabled) {
+        const alreadyOn =
+          payload.audio.voiceover === "include" ||
+          payload.audio.sfx === "include" ||
+          payload.audio.music === "include";
+        if (!alreadyOn) {
+          payload.audio = {
+            ...payload.audio,
+            music: "include",
+            voiceover: payload.audio.voiceover === "include" ? "include" : "none",
+            sfx: payload.audio.sfx === "include" ? "include" : "none",
+          };
+        }
+      } else {
+        payload.audio = {
+          ...payload.audio,
+          voiceover: "none",
+          sfx: "none",
+          music: "none",
+          voiceoverCopy: undefined,
+        };
+      }
+      locked.add("audio.voiceover");
+      locked.add("audio.sfx");
+      locked.add("audio.music");
+    }
+
     const attachments = await ctx.db
       .query("guidedBriefAttachments")
       .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
@@ -1001,10 +1229,9 @@ export const patchBriefProduction = authedMutation({
     const presence = attachmentPresenceFromRoles(
       attachments.map((a) => a.role as AttachmentRole),
     );
-    const mode = normalizeAssistedMode(brief.mode);
     const policy = evaluateBrief({
       mode,
-      videoType: brief.videoType,
+      videoType,
       payload,
       attachments: presence,
       offeredOptionalIds: brief.offeredOptionalIds,
@@ -1012,16 +1239,24 @@ export const patchBriefProduction = authedMutation({
       lockedFields: [...locked],
     });
     const compiled = policy.complete
-      ? compileBriefPrompt(mode, brief.videoType, payload, presence)
+      ? compileBriefPrompt(mode, videoType, payload, presence)
       : undefined;
     const plan =
       policy.complete && compiled
-        ? await buildPlanForBrief(ctx, brief, payload, compiled, brief.warnings)
+        ? await buildPlanForBrief(
+            ctx,
+            { ...brief, videoType },
+            payload,
+            compiled,
+            brief.warnings,
+          )
         : undefined;
     const now = Date.now();
     await ctx.db.patch(brief._id, {
       payload,
+      videoType,
       lockedFields: [...locked],
+      inferredFields: brief.inferredFields.filter((path) => !locked.has(path)),
       status: policy.complete ? "review_ready" : "awaiting_input",
       pendingQuestionsJson: serializeQuestions(policy.questions),
       compiledPrompt: compiled,
@@ -1033,7 +1268,23 @@ export const patchBriefProduction = authedMutation({
     const updated = await ctx.db.get("guidedBriefs", brief._id);
     if (!updated) throw new Error("Brief missing after update");
     return toBriefReturn(updated, attachments);
+}
+
+export const patchBriefProduction = authedMutation({
+  args: {
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    production: v.object({
+      aspectRatio: v.optional(v.string()),
+      resolution: v.optional(v.string()),
+      quality: v.optional(v.string()),
+      durationSeconds: v.optional(v.number()),
+      videoType: v.optional(videoTypeValidator),
+      audioEnabled: v.optional(v.boolean()),
+    }),
   },
+  returns: briefReturn,
+  handler: async (ctx, args) => patchBriefProductionHandler(ctx, args),
 });
 
 /** Internal helpers used by guidedVideoActions. */
@@ -1388,10 +1639,23 @@ export const applyAnalysisResult = internalMutation({
       )
       .slice(0, 3);
     const offered = new Set(brief.offeredOptionalIds);
+    const skipped = new Set(brief.skippedOptionalIds);
     for (const q of questions) {
       if (q.field === "brand.logo") offered.add("logo");
       if (q.field === "brand.ctaMode") offered.add("cta");
       if (q.field === "brand.offerText" || q.field === "offer") offered.add("offer");
+    }
+    // Resolved brand optionals must not be re-offered on later turns.
+    if (payload.brand.logo !== "undecided") {
+      offered.add("logo");
+      if (payload.brand.logo === "omit") skipped.add("logo");
+    }
+    if (payload.brand.ctaMode !== "undecided") {
+      offered.add("cta");
+      if (payload.brand.ctaMode === "omit") skipped.add("cta");
+    }
+    if (payload.brand.offerText?.trim()) {
+      offered.add("offer");
     }
 
     let agentState: AssistanceAgentState = emptyAgentState();
@@ -1490,6 +1754,7 @@ export const applyAnalysisResult = internalMutation({
       assumptions: [...new Set([...brief.assumptions, ...args.assumptions])],
       warnings,
       offeredOptionalIds: [...offered],
+      skippedOptionalIds: [...skipped],
       status,
       pendingQuestionsJson: complete ? undefined : serializeQuestions(questions),
       agentStateJson: JSON.stringify(agentState),
@@ -1502,26 +1767,17 @@ export const applyAnalysisResult = internalMutation({
       updatedAt: now,
     });
 
-    // Chat-native: only assistant bubbles + review cards. No interactive forms.
-    await ctx.db.insert("generationEvents", {
-      ownerId: brief.ownerId,
-      threadId: brief.threadId,
-      kind: "assistant",
-      order: now,
-      briefId: brief._id,
-      briefRevision: nextRevision,
-      message: chatMessage,
-      createdAt: now,
-    });
+    // Chat-native: one bubble per turn. Ready turns clip Generate onto the
+    // real assistant message — never a separate "ready when you are" row.
     if (complete) {
       await ctx.db.insert("generationEvents", {
         ownerId: brief.ownerId,
         threadId: brief.threadId,
         kind: "review",
-        order: now + 1,
+        order: now,
         briefId: brief._id,
         briefRevision: nextRevision,
-        message: "ready when you are 🙂",
+        message: chatMessage,
         briefSnapshotJson: serializeReviewSnapshot({
           mode: resolvedMode,
           videoType: resolvedVideoType,
@@ -1537,7 +1793,18 @@ export const applyAnalysisResult = internalMutation({
           stylePresetId: brief.stylePresetId,
           styleSheetElementId,
         }),
-        createdAt: now + 1,
+        createdAt: now,
+      });
+    } else {
+      await ctx.db.insert("generationEvents", {
+        ownerId: brief.ownerId,
+        threadId: brief.threadId,
+        kind: "assistant",
+        order: now,
+        briefId: brief._id,
+        briefRevision: nextRevision,
+        message: chatMessage,
+        createdAt: now,
       });
     }
     return { briefId: brief._id, revision: nextRevision, status };
@@ -1862,7 +2129,15 @@ export const commitAssistanceTurn = internalMutation({
     if (args.attachments !== undefined) {
       const brief = await ctx.db.get("guidedBriefs", turn.briefId);
       if (!brief) throw new Error("Brief not found");
-      for (const attachment of args.attachments) {
+      const attachments = args.attachments.filter((attachment) => {
+        const idCount = [
+          attachment.assetId,
+          attachment.documentId,
+          attachment.elementId,
+        ].filter(Boolean).length;
+        return idCount === 1;
+      });
+      for (const attachment of attachments) {
         await requireOwnedAttachment(ctx, brief.ownerId, attachment);
       }
       const existing = await ctx.db
@@ -1883,7 +2158,7 @@ export const commitAssistanceTurn = internalMutation({
         existing.map((row) => [attachmentKey(row), row]),
       );
       if (args.syncAttachments) {
-        const requestedKeys = new Set(args.attachments.map(attachmentKey));
+        const requestedKeys = new Set(attachments.map(attachmentKey));
         for (const row of existing) {
           if (!requestedKeys.has(attachmentKey(row))) {
             await ctx.db.delete(row._id);
@@ -1891,7 +2166,7 @@ export const commitAssistanceTurn = internalMutation({
         }
       }
       const nowAttach = Date.now();
-      for (const attachment of args.attachments) {
+      for (const attachment of attachments) {
         const current = existingByKey.get(attachmentKey(attachment));
         if (current) {
           await ctx.db.patch(current._id, {
@@ -2050,6 +2325,7 @@ export const failAssistanceTurn = internalMutation({
   args: {
     turnId: v.id("assistanceTurns"),
     error: v.string(),
+    userPrompt: v.optional(v.string()),
     assistantMessage: v.optional(v.string()),
   },
   returns: v.object({
@@ -2075,6 +2351,18 @@ export const failAssistanceTurn = internalMutation({
       };
     }
     const now = Date.now();
+    if (args.userPrompt?.trim()) {
+      await ctx.db.insert("generationEvents", {
+        ownerId: turn.ownerId,
+        threadId: turn.threadId,
+        kind: "prompt",
+        order: now - 1,
+        prompt: args.userPrompt.trim(),
+        briefId: turn.briefId,
+        briefRevision: turn.briefRevisionAtBegin,
+        createdAt: now - 1,
+      });
+    }
     if (args.assistantMessage?.trim()) {
       await ctx.db.insert("generationEvents", {
         ownerId: turn.ownerId,
@@ -2221,6 +2509,18 @@ export const migrateLegacyAssistanceData = internalMutation({
           pendingQuestionsJson: undefined,
           updatedAt: now,
         });
+        const priorAssistant = events
+          .filter(
+            (event) =>
+              event.kind === "assistant" &&
+              event.briefId === brief._id &&
+              typeof event.message === "string" &&
+              event.message.trim().length > 0,
+          )
+          .sort(
+            (a, b) =>
+              (b.createdAt ?? b.order ?? 0) - (a.createdAt ?? a.order ?? 0),
+          )[0];
         await ctx.db.insert("generationEvents", {
           ownerId: brief.ownerId,
           threadId: brief.threadId,
@@ -2228,7 +2528,9 @@ export const migrateLegacyAssistanceData = internalMutation({
           order: now,
           briefId: brief._id,
           briefRevision: nextRevision,
-          message: "ready when you are 🙂",
+          message:
+            priorAssistant?.message?.trim() ||
+            "looks set — hit generate when you want",
           briefSnapshotJson: serializeReviewSnapshot({
             mode: brief.mode,
             videoType: brief.videoType,
@@ -2363,16 +2665,16 @@ export const mirrorBriefJobStage = internalMutation({
   },
 });
 
-export const completeScriptApproval = authedMutation({
+async function completeScriptApprovalHandler(
+  ctx: AuthedCtx & MutationCtx,
   args: {
-    briefId: v.id("guidedBriefs"),
-    expectedRevision: v.number(),
-    folderId: v.id("folders"),
-    title: v.string(),
-    contentMarkdown: v.string(),
+    briefId: Id<"guidedBriefs">;
+    expectedRevision: number;
+    folderId: Id<"folders">;
+    title: string;
+    contentMarkdown: string;
   },
-  returns: v.id("documents"),
-  handler: async (ctx, args) => {
+) {
     const brief = await requireBriefOwner(ctx, args.briefId);
     if (brief.revision !== args.expectedRevision) throw new Error("Stale brief revision");
     if (brief.mode !== "script") throw new Error("Brief is not a script");
@@ -2399,29 +2701,32 @@ export const completeScriptApproval = authedMutation({
       updatedAt: now,
     });
     return documentId;
-  },
-});
+}
 
-export const beginElementApproval = authedMutation({
+export const completeScriptApproval = authedMutation({
   args: {
     briefId: v.id("guidedBriefs"),
     expectedRevision: v.number(),
     folderId: v.id("folders"),
-    type: v.union(
-      v.literal("character"),
-      v.literal("prop"),
-      v.literal("location"),
-      v.literal("doc"),
-    ),
-    name: v.string(),
-    description: v.string(),
-    sourceAssetIds: v.array(v.id("assets")),
+    title: v.string(),
+    contentMarkdown: v.string(),
   },
-  returns: v.object({
-    elementId: v.id("elements"),
-    created: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
+  returns: v.id("documents"),
+  handler: async (ctx, args) => completeScriptApprovalHandler(ctx, args),
+});
+
+async function beginElementApprovalHandler(
+  ctx: AuthedCtx & MutationCtx,
+  args: {
+    briefId: Id<"guidedBriefs">;
+    expectedRevision: number;
+    folderId: Id<"folders">;
+    type: "character" | "prop" | "location" | "doc";
+    name: string;
+    description: string;
+    sourceAssetIds: Id<"assets">[];
+  },
+) {
     const brief = await requireBriefOwner(ctx, args.briefId);
     if (brief.revision !== args.expectedRevision) throw new Error("Stale brief revision");
     if (brief.mode !== "element") throw new Error("Brief is not an element");
@@ -2475,7 +2780,28 @@ export const beginElementApproval = authedMutation({
       updatedAt: now,
     });
     return { elementId, created: true };
+}
+
+export const beginElementApproval = authedMutation({
+  args: {
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    folderId: v.id("folders"),
+    type: v.union(
+      v.literal("character"),
+      v.literal("prop"),
+      v.literal("location"),
+      v.literal("doc"),
+    ),
+    name: v.string(),
+    description: v.string(),
+    sourceAssetIds: v.array(v.id("assets")),
   },
+  returns: v.object({
+    elementId: v.id("elements"),
+    created: v.boolean(),
+  }),
+  handler: async (ctx, args) => beginElementApprovalHandler(ctx, args),
 });
 
 export const completeElementApproval = internalMutation({
@@ -2498,37 +2824,14 @@ export const completeElementApproval = internalMutation({
   },
 });
 
-export const claimBriefApproval = authedMutation({
+async function claimBriefApprovalHandler(
+  ctx: AuthedCtx & MutationCtx,
   args: {
-    briefId: v.id("guidedBriefs"),
-    expectedRevision: v.number(),
-    stylePresetId: v.optional(v.id("stylePresets")),
+    briefId: Id<"guidedBriefs">;
+    expectedRevision: number;
+    stylePresetId?: Id<"stylePresets">;
   },
-  returns: v.object({
-    briefId: v.id("guidedBriefs"),
-    threadId: v.id("generationThreads"),
-    revision: v.number(),
-    mode: assistedModeValidator,
-    videoType: v.optional(videoTypeValidator),
-    compiledPrompt: v.string(),
-    generationPlanJson: v.string(),
-    generationPlanFingerprint: v.string(),
-    estimatedCredits: v.optional(v.number()),
-    payload: assistedBriefPayloadValidator,
-    stylePresetId: v.optional(v.id("stylePresets")),
-    styleSheetElementId: v.optional(v.id("elements")),
-    alreadyApprovedJobId: v.optional(v.id("generationJobs")),
-    attachmentIds: v.array(
-      v.object({
-        assetId: v.optional(v.id("assets")),
-        documentId: v.optional(v.id("documents")),
-        elementId: v.optional(v.id("elements")),
-        role: v.string(),
-        sortOrder: v.number(),
-      }),
-    ),
-  }),
-  handler: async (ctx, args) => {
+) {
     if (!isGuidedVideoAssistanceEnabled()) {
       throw new Error("Assistance is disabled on this deployment.");
     }
@@ -2667,7 +2970,39 @@ export const claimBriefApproval = authedMutation({
         sortOrder: a.sortOrder,
       })),
     };
+}
+
+export const claimBriefApproval = authedMutation({
+  args: {
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    stylePresetId: v.optional(v.id("stylePresets")),
   },
+  returns: v.object({
+    briefId: v.id("guidedBriefs"),
+    threadId: v.id("generationThreads"),
+    revision: v.number(),
+    mode: assistedModeValidator,
+    videoType: v.optional(videoTypeValidator),
+    compiledPrompt: v.string(),
+    generationPlanJson: v.string(),
+    generationPlanFingerprint: v.string(),
+    estimatedCredits: v.optional(v.number()),
+    payload: assistedBriefPayloadValidator,
+    stylePresetId: v.optional(v.id("stylePresets")),
+    styleSheetElementId: v.optional(v.id("elements")),
+    alreadyApprovedJobId: v.optional(v.id("generationJobs")),
+    attachmentIds: v.array(
+      v.object({
+        assetId: v.optional(v.id("assets")),
+        documentId: v.optional(v.id("documents")),
+        elementId: v.optional(v.id("elements")),
+        role: v.string(),
+        sortOrder: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => claimBriefApprovalHandler(ctx, args),
 });
 
 export const attachApprovedJob = internalMutation({
@@ -2866,8 +3201,9 @@ export const resolveBriefMediaInternal = internalQuery({
             mimeType = visual.mimeType;
           }
         }
+        // Identity must be exactly one of asset/document/element. Keep the style
+        // sheet element as the attachment id; the sheet visual is exposed via url.
         out.unshift({
-          assetId: visualAssetId,
           elementId: sheet._id,
           role: "style",
           label: sheet.name,
@@ -2875,7 +3211,7 @@ export const resolveBriefMediaInternal = internalQuery({
           kind: url ? "image" : undefined,
           mimeType,
           url,
-          summary: `[style] selected Style Sheet “${sheet.name}”\nRender mode: ${sheet.renderMode ?? "unspecified"}\nRules:\n${sheet.styleRules?.trim().slice(0, 12_000) || "(visual reference only)"}${url ? "\nStyle Sheet visual attached." : ""}`,
+          summary: `[style] selected Style Sheet “${sheet.name}”\nRender mode: ${sheet.renderMode ?? "unspecified"}\nRules:\n${sheet.styleRules?.trim().slice(0, 12_000) || "(visual reference only)"}${url ? "\nStyle Sheet visual attached." : ""}${visualAssetId ? `\nSheet asset: ${visualAssetId}` : ""}`,
         });
       }
     }
@@ -2913,5 +3249,312 @@ export const markBriefTerminal = internalMutation({
       updatedAt: Date.now(),
     });
     return null;
+  },
+});
+
+const productionPatchValidator = v.object({
+  durationSeconds: v.optional(v.number()),
+  aspectRatio: v.optional(v.string()),
+  resolution: v.optional(v.string()),
+  quality: v.optional(v.string()),
+  scriptType: v.optional(v.string()),
+  elementType: v.optional(v.string()),
+  referenceIntent: v.optional(v.string()),
+  skipPromptEnhancement: v.optional(v.boolean()),
+});
+
+async function loadBriefReturn(ctx: QueryCtx | MutationCtx, briefId: Id<"guidedBriefs">) {
+  const brief = await ctx.db.get("guidedBriefs", briefId);
+  if (!brief) throw new Error("Brief not found");
+  const attachments = await ctx.db
+    .query("guidedBriefAttachments")
+    .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
+    .collect();
+  attachments.sort((a, b) => a.sortOrder - b.sortOrder || a._creationTime - b._creationTime);
+  return toBriefReturn(brief, attachments);
+}
+
+export const getBriefForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+  },
+  returns: v.union(briefReturn, v.null()),
+  handler: async (ctx, args) => {
+    const brief = await ctx.db.get("guidedBriefs", args.briefId);
+    if (!brief || brief.ownerId !== args.userId) return null;
+    const attachments = await ctx.db
+      .query("guidedBriefAttachments")
+      .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
+      .collect();
+    attachments.sort((a, b) => a.sortOrder - b.sortOrder || a._creationTime - b._creationTime);
+    return toBriefReturn(brief, attachments);
+  },
+});
+
+export const getBriefForThreadForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    threadId: v.id("generationThreads"),
+  },
+  returns: v.union(briefReturn, v.null()),
+  handler: async (ctx, args) => {
+    const authed = await asUserCtx(ctx, args.userId);
+    await requireThreadOwner(authed, args.threadId);
+    const brief = await ctx.db
+      .query("guidedBriefs")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .first();
+    if (!brief) return null;
+    const attachments = await ctx.db
+      .query("guidedBriefAttachments")
+      .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
+      .collect();
+    attachments.sort((a, b) => a.sortOrder - b.sortOrder || a._creationTime - b._creationTime);
+    return toBriefReturn(brief, attachments);
+  },
+});
+
+export const ensureBriefForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    threadId: v.optional(v.id("generationThreads")),
+    folderId: v.optional(v.id("folders")),
+    mode: assistedModeValidator,
+    videoType: v.optional(videoTypeValidator),
+    stylePresetId: v.optional(v.id("stylePresets")),
+    styleSheetElementId: v.optional(v.id("elements")),
+    durationIsUserExplicit: v.optional(v.boolean()),
+    production: v.optional(productionPatchValidator),
+  },
+  returns: briefReturn,
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    let threadId = args.threadId;
+    if (threadId) {
+      await requireThreadOwner(authed, threadId);
+    } else {
+      const folderId = args.folderId ?? args.sandboxFolderId;
+      const folder = await ctx.db.get("folders", folderId);
+      if (!folder || folder.ownerId !== args.userId || folder.deletedAt) {
+        throw new Error("Folder not found");
+      }
+      if (!(await isFolderInSandbox(ctx, folderId, args.sandboxFolderId))) {
+        throw new Error("Folder not found");
+      }
+      const now = Date.now();
+      threadId = await ctx.db.insert("generationThreads", {
+        ownerId: args.userId,
+        linkedFolderId: folderId,
+        title: "Assisted production",
+        sortOrder: now,
+        assistanceEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    const briefId = await ensureBriefHandler(authed, {
+      threadId,
+      mode: args.mode,
+      videoType: args.videoType,
+      stylePresetId: args.stylePresetId,
+      styleSheetElementId: args.styleSheetElementId,
+      durationIsUserExplicit: args.durationIsUserExplicit,
+      production: args.production,
+    });
+    return await loadBriefReturn(ctx, briefId);
+  },
+});
+
+export const editBriefForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    patch: assistedBriefPayloadValidator,
+    lockFields: v.optional(v.array(v.string())),
+  },
+  returns: briefReturn,
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    return await editBriefHandler(authed, {
+      briefId: args.briefId,
+      expectedRevision: args.expectedRevision,
+      patch: args.patch,
+      lockFields: args.lockFields,
+    });
+  },
+});
+
+export const patchBriefProductionForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    production: v.object({
+      aspectRatio: v.optional(v.string()),
+      resolution: v.optional(v.string()),
+      quality: v.optional(v.string()),
+      durationSeconds: v.optional(v.number()),
+      videoType: v.optional(videoTypeValidator),
+      audioEnabled: v.optional(v.boolean()),
+    }),
+  },
+  returns: briefReturn,
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    return await patchBriefProductionHandler(authed, {
+      briefId: args.briefId,
+      expectedRevision: args.expectedRevision,
+      production: args.production,
+    });
+  },
+});
+
+export const rejectBriefForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    reason: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("abandoned"), v.literal("failed"))),
+  },
+  returns: briefReturn,
+  handler: async (ctx, args) => {
+    const brief = await ctx.db.get("guidedBriefs", args.briefId);
+    if (!brief || brief.ownerId !== args.userId) {
+      throw new Error("Brief not found");
+    }
+    if (brief.revision !== args.expectedRevision) {
+      throw new Error("Brief was updated elsewhere. Refresh and try again.");
+    }
+    if (["approved", "generating", "done"].includes(brief.status)) {
+      throw new Error("Cannot reject an approved or generating brief.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(brief._id, {
+      status: args.status ?? "abandoned",
+      error: args.reason?.trim() || undefined,
+      revision: brief.revision + 1,
+      updatedAt: now,
+    });
+    return await loadBriefReturn(ctx, brief._id);
+  },
+});
+
+export const listReviewReadyBriefsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    threadId: v.optional(v.id("generationThreads")),
+  },
+  returns: v.array(briefReturn),
+  handler: async (ctx, args) => {
+    if (args.threadId) {
+      const thread = await ctx.db.get("generationThreads", args.threadId);
+      if (!thread || thread.ownerId !== args.userId) return [];
+    }
+    const rows = args.threadId
+      ? await ctx.db
+          .query("guidedBriefs")
+          .withIndex("by_thread", (q) => q.eq("threadId", args.threadId!))
+          .collect()
+      : await ctx.db
+          .query("guidedBriefs")
+          .withIndex("by_owner_and_status", (q) =>
+            q.eq("ownerId", args.userId).eq("status", "review_ready"),
+          )
+          .collect();
+    const briefs = rows.filter(
+      (row) =>
+        row.ownerId === args.userId &&
+        row.status === "review_ready" &&
+        (!args.threadId || row.threadId === args.threadId),
+    );
+    const results = [];
+    for (const brief of briefs) {
+      const attachments = await ctx.db
+        .query("guidedBriefAttachments")
+        .withIndex("by_brief", (q) => q.eq("briefId", brief._id))
+        .collect();
+      attachments.sort((a, b) => a.sortOrder - b.sortOrder || a._creationTime - b._creationTime);
+      results.push(toBriefReturn(brief, attachments));
+    }
+    return results;
+  },
+});
+
+export const claimBriefApprovalForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    stylePresetId: v.optional(v.id("stylePresets")),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    return await claimBriefApprovalHandler(authed, {
+      briefId: args.briefId,
+      expectedRevision: args.expectedRevision,
+      stylePresetId: args.stylePresetId,
+    });
+  },
+});
+
+export const completeScriptApprovalForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    folderId: v.id("folders"),
+    title: v.string(),
+    contentMarkdown: v.string(),
+  },
+  returns: v.id("documents"),
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    return await completeScriptApprovalHandler(authed, {
+      briefId: args.briefId,
+      expectedRevision: args.expectedRevision,
+      folderId: args.folderId,
+      title: args.title,
+      contentMarkdown: args.contentMarkdown,
+    });
+  },
+});
+
+export const beginElementApprovalForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    briefId: v.id("guidedBriefs"),
+    expectedRevision: v.number(),
+    folderId: v.id("folders"),
+    type: v.union(
+      v.literal("character"),
+      v.literal("prop"),
+      v.literal("location"),
+      v.literal("doc"),
+    ),
+    name: v.string(),
+    description: v.string(),
+    sourceAssetIds: v.array(v.id("assets")),
+  },
+  returns: v.object({
+    elementId: v.id("elements"),
+    created: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const authed = (await asUserCtx(ctx, args.userId)) as AuthedCtx & MutationCtx;
+    return await beginElementApprovalHandler(authed, {
+      briefId: args.briefId,
+      expectedRevision: args.expectedRevision,
+      folderId: args.folderId,
+      type: args.type,
+      name: args.name,
+      description: args.description,
+      sourceAssetIds: args.sourceAssetIds,
+    });
   },
 });

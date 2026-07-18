@@ -1,7 +1,7 @@
 "use client";
 
 import { useConvexAuth } from "@convex-dev/auth/react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp,
   Bookmark,
@@ -19,7 +19,9 @@ import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
+import { profileNameInitials } from "@/studio/lib/profileAvatar";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 
 type CommentRow = {
@@ -150,7 +152,7 @@ function CommentsBody({
   const deleteComment = useMutation(api.profiles.deleteComment);
   const toggleCommentLike = useMutation(api.profiles.toggleCommentLike);
   const reserveUpload = useMutation(api.assets.reserveUpload);
-  const completeUpload = useMutation(api.assets.completeUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const ensureStudioDefaults = useMutation(api.users.ensureStudioDefaults);
 
   const [draft, setDraft] = useState("");
@@ -270,23 +272,14 @@ function CommentsBody({
 
   async function uploadCommentImage(file: File): Promise<Id<"assets">> {
     const defaults = await ensureStudioDefaults({});
-    const reserved = await reserveUpload({
+    return await uploadStudioAsset({
+      file,
       folderId: defaults.rootFolderId,
-      name: file.name || "comment.jpg",
       kind: "image",
-      mimeType: file.type || "image/jpeg",
+      name: file.name || "comment.jpg",
+      reserveUpload,
+      commitStagingUpload,
     });
-    const res = await fetch(reserved.putUrl, {
-      method: "PUT",
-      headers: {
-        AccessKey: reserved.storageAccessKey,
-        "Content-Type": file.type || "image/jpeg",
-      },
-      body: file,
-    });
-    if (!res.ok) throw new Error("Image upload failed");
-    await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
-    return reserved.assetId;
   }
 
   async function submit() {
@@ -455,17 +448,14 @@ function CommentsBody({
     const replyCount = comment.replyCount ?? 0;
     return (
       <article key={comment._id} className="profile-comment-row">
-        <div
+        <StudioProfileAvatar
           className="profile-comment-avatar"
-          style={comment.avatarUrl ? undefined : profileAvatarStyle(initials)}
-        >
-          {comment.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={comment.avatarUrl} alt="" />
-          ) : (
-            <span>{initials}</span>
-          )}
-        </div>
+          size="sm"
+          src={comment.avatarUrl}
+          initials={initials}
+          displayName={comment.displayName}
+          name={comment.username}
+        />
         <div className="profile-comment-body">
           <div className="profile-comment-meta">
             <div className="profile-comment-meta-text">
@@ -569,17 +559,14 @@ function CommentsBody({
               </button>
               {parent ? (
                 <>
-                  <div
+                  <StudioProfileAvatar
                     className="profile-comments-thread-avatar"
-                    style={parent.avatarUrl ? undefined : profileAvatarStyle(parentInitials)}
-                  >
-                    {parent.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={parent.avatarUrl} alt="" />
-                    ) : (
-                      <span>{parentInitials}</span>
-                    )}
-                  </div>
+                    size="md"
+                    src={parent.avatarUrl}
+                    initials={parentInitials}
+                    displayName={parent.displayName}
+                    name={parent.username}
+                  />
                   <div className="profile-comments-thread-preview">
                     <strong>{parentName}</strong>
                     <time dateTime={new Date(parent.createdAt).toISOString()}>
@@ -595,17 +582,16 @@ function CommentsBody({
             </div>
           ) : postAuthor ? (
             <div className="profile-comments-thread-head">
-              <div
+              <StudioProfileAvatar
                 className="profile-comments-thread-avatar"
-                style={postAuthor.avatarUrl ? undefined : profileAvatarStyle(postInitials)}
-              >
-                {postAuthor.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={postAuthor.avatarUrl} alt="" />
-                ) : (
-                  <span>{postInitials}</span>
-                )}
-              </div>
+                size="md"
+                src={postAuthor.avatarUrl}
+                initials={postInitials}
+                displayName={postAuthor.displayName}
+                firstName={postAuthor.firstName}
+                lastName={postAuthor.lastName}
+                name={postAuthor.username}
+              />
               <div className="profile-comments-thread-preview">
                 <strong>{postName}</strong>
                 <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>

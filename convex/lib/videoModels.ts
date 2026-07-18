@@ -100,7 +100,7 @@ export function resolvePublicVideoModel(slug?: string | null): VideoModelDef {
   const model = resolveVideoModel(slug);
   if (model.uiVisible === false) {
     throw new Error(
-      `${model.label} is not available. Video generation uses Seedance.`,
+      `${model.label} is not available. Video generation uses the default Studio model.`,
     );
   }
   return model;
@@ -143,12 +143,14 @@ export function validateVideoModelCapabilities(
   return model;
 }
 
-export type GenerationMode = "image" | "video";
-export type GenerationBillingTier = "image" | "pro_video";
+export type GenerationMode = "image" | "video" | "audio";
+export type GenerationBillingTier = "image" | "pro_video" | "audio";
 
 /** Billing tier is an invariant of generation mode, never caller authority. */
 export function billingTierForMode(mode: GenerationMode): GenerationBillingTier {
-  return mode === "video" ? "pro_video" : "image";
+  if (mode === "video") return "pro_video";
+  if (mode === "audio") return "audio";
+  return "image";
 }
 
 export function isSeedanceGatewayModel(modelId: string): boolean {

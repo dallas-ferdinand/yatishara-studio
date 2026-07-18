@@ -4,7 +4,13 @@
 import { useState } from "react";
 import { Icon } from "./Icons";
 
-export function PanelSearchBar({ value, onChange, placeholder, "aria-label": ariaLabel }) {
+export function PanelSearchBar({
+  value,
+  onChange,
+  placeholder,
+  "aria-label": ariaLabel,
+  end = null,
+}) {
   const [focused, setFocused] = useState(false);
 
   return (
@@ -25,6 +31,7 @@ export function PanelSearchBar({ value, onChange, placeholder, "aria-label": ari
         autoCapitalize="off"
         spellCheck={false}
       />
+      {end ? <div className="cursor-panel-search-end">{end}</div> : null}
     </div>
   );
 }

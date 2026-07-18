@@ -17,14 +17,54 @@ import {
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { workspaceTabIcon } from "@/desk/lib/file-kind";
 import { displayEntryPath } from "@/desk/lib/display-path";
+import { TabContextMenu, tabCanRename } from "./TabContextMenu";
 
 function tabFromKey(tabs, key) {
   return (tabs ?? []).find((t) => t.key === key) ?? null;
 }
 
+function stripTabRenameExt(name, tab) {
+  let next = String(name ?? "").replace(/^@/, "").trim();
+  const studioKind = tab?.studioKind;
+  const key = String(tab?.key ?? "");
+  if (studioKind === "document" || key.startsWith("document:")) {
+    next = next.replace(/\.md$/i, "");
+  }
+  if (
+    studioKind === "videoEdit" ||
+    key.startsWith("videoEdit:") ||
+    key.startsWith("edit:project:")
+  ) {
+    next = next.replace(/\.edit$/i, "");
+  }
+  return next;
+}
+
+/** Type glyph over thumbnail chips — image / video (and edits). Skip profile avatars. */
+function isVideoEditTab(tab) {
+  if (!tab) return false;
+  if (tab.studioKind === "videoEdit" || tab.previewKind === "videoEdit") return true;
+  if (tab.ext === ".edit") return true;
+  const key = String(tab.key ?? "");
+  return key.startsWith("videoEdit:") || key.startsWith("edit:");
+}
+
+function tabPreviewOverlayIcon(tab) {
+  if (!tab?.previewUrl) return null;
+  if (tab.studioKind === "profile" || tab.studioKind === "profilePost") return null;
+  // Match file-manager video-edit badge (clapperboard / theater slate).
+  if (isVideoEditTab(tab)) return "clapperboard";
+  if (tab.previewKind === "video" || tab.kind === "video") return "play";
+  if (tab.previewKind === "image" || tab.kind === "image") return "image";
+  return null;
+}
+
 function stripTabsEqual(prev, next) {
   if (prev.disableDrag !== next.disableDrag) return false;
   if (prev.activeKey !== next.activeKey) return false;
+  if (prev.onReselect !== next.onReselect) return false;
+  if (prev.onTabContextAction !== next.onTabContextAction) return false;
+  if (prev.onCommitTabRename !== next.onCommitTabRename) return false;
   const a = prev.tabs ?? [];
   const b = next.tabs ?? [];
   if (a.length !== b.length) return false;
@@ -35,11 +75,14 @@ function stripTabsEqual(prev, next) {
       a[i].status !== b[i].status ||
       a[i].tabSignal !== b[i].tabSignal ||
       a[i].previewUrl !== b[i].previewUrl ||
+      a[i].previewKind !== b[i].previewKind ||
+      a[i].studioKind !== b[i].studioKind ||
       a[i].previewInitials !== b[i].previewInitials ||
       a[i].previewAvatarStyle?.background !== b[i].previewAvatarStyle?.background ||
       a[i].previewAvatarStyle?.color !== b[i].previewAvatarStyle?.color ||
       Boolean(a[i].dirty) !== Boolean(b[i].dirty) ||
-      Boolean(a[i].loading) !== Boolean(b[i].loading)
+      Boolean(a[i].loading) !== Boolean(b[i].loading) ||
+      Boolean(a[i].hasMenu) !== Boolean(b[i].hasMenu)
     ) {
       return false;
     }
@@ -51,10 +94,13 @@ function UnifiedTabStripInner({
   tabs,
   activeKey,
   onSelect,
+  onReselect,
   onClose,
   onReorder,
   onSetTabOrder,
   onNewChat,
+  onTabContextAction,
+  onCommitTabRename,
   disableDrag = false,
 }) {
   const stripRef = useRef(null);
@@ -72,8 +118,78 @@ function UnifiedTabStripInner({
 
   const [dragUi, setDragUi] = useState(null);
   const [enteringKey, setEnteringKey] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [renamingKey, setRenamingKey] = useState(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
+  const renameInputRef = useRef(null);
 
   useHorizontalWheelScroll(stripRef);
+
+  const beginTabRename = useCallback(
+    (tab) => {
+      if (!tabCanRename(tab) || typeof onCommitTabRename !== "function") return;
+      setContextMenu(null);
+      setRenamingKey(tab.key);
+      setRenameDraft(stripTabRenameExt(tab.title, tab));
+      onSelect?.(tab.key);
+    },
+    [onCommitTabRename, onSelect],
+  );
+
+  const cancelTabRename = useCallback(() => {
+    if (renameBusy) return;
+    setRenamingKey(null);
+    setRenameDraft("");
+  }, [renameBusy]);
+
+  const commitTabRename = useCallback(async () => {
+    if (!renamingKey || renameBusy) return;
+    const tab = tabFromKey(tabs, renamingKey);
+    if (!tab || typeof onCommitTabRename !== "function") {
+      cancelTabRename();
+      return;
+    }
+    const next = stripTabRenameExt(renameDraft, tab);
+    const current = stripTabRenameExt(tab.title, tab);
+    if (!next || next === current) {
+      cancelTabRename();
+      return;
+    }
+    setRenameBusy(true);
+    try {
+      await onCommitTabRename(tab, next);
+      setRenamingKey(null);
+      setRenameDraft("");
+    } catch {
+      /* keep editor open so the user can retry / Escape */
+    } finally {
+      setRenameBusy(false);
+    }
+  }, [
+    cancelTabRename,
+    onCommitTabRename,
+    renameBusy,
+    renameDraft,
+    renamingKey,
+    tabs,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!renamingKey) return;
+    const input = renameInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [renamingKey]);
+
+  useEffect(() => {
+    if (!renamingKey) return;
+    if (!(tabs ?? []).some((tab) => tab.key === renamingKey)) {
+      setRenamingKey(null);
+      setRenameDraft("");
+    }
+  }, [renamingKey, tabs]);
 
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
 
@@ -376,6 +492,8 @@ function UnifiedTabStripInner({
   const onTabPointerDown = (tab, e) => {
     if (e.button !== 0) return;
     if (e.target.closest?.(".cursor-tab-close")) return;
+    if (e.target.closest?.(".cursor-unified-tab-rename")) return;
+    if (renamingKey === tab.key) return;
     const el = tabRefs.current.get(tab.key);
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -501,6 +619,33 @@ function UnifiedTabStripInner({
     e.preventDefault();
     e.stopPropagation();
     onClose(tab.key);
+  };
+
+  const onTabContextMenu = (tab, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    pendingRef.current = null;
+    didDragRef.current = false;
+    setContextMenu({ tab, x: e.clientX, y: e.clientY });
+  };
+
+  const runTabContextAction = (actionId) => {
+    const tab = contextMenu?.tab;
+    if (!tab) return;
+    if (actionId === "rename") {
+      beginTabRename(tab);
+      return;
+    }
+    if (typeof onTabContextAction === "function") {
+      onTabContextAction(actionId, tab);
+      return;
+    }
+    if (actionId === "close") onClose?.(tab.key);
+    if (actionId === "close-others") {
+      for (const other of tabs ?? []) {
+        if (other.key !== tab.key) onClose?.(other.key);
+      }
+    }
   };
 
   useEffect(() => {
@@ -676,6 +821,7 @@ function UnifiedTabStripInner({
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
         const showPreview = Boolean(previewUrl || tab.previewInitials);
+        const previewOverlayIcon = tabPreviewOverlayIcon(tab);
         return (
           <div
             key={tab.key}
@@ -688,34 +834,59 @@ function UnifiedTabStripInner({
             data-tab-key={tab.key}
             data-tab-signal={tab.kind === "chat" ? tab.tabSignal ?? "" : undefined}
             aria-selected={active}
-            className={`cursor-unified-tab${active ? " is-active" : ""}${showPreview ? " has-preview" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${!disableDrag && enteringKey === tab.key ? " is-entering" : ""}`}
+            className={`cursor-unified-tab${active ? " is-active" : ""}${showPreview ? " has-preview" : ""}${chatTabClasses ? ` ${chatTabClasses}` : ""}${dragKey === tab.key ? " is-drag-source" : ""}${!disableDrag && enteringKey === tab.key ? " is-entering" : ""}${renamingKey === tab.key ? " is-renaming" : ""}`}
             style={{
               "--tab-stack": tabCount - tabVisualIndex,
               "--tab-overlap-inset": tabVisualIndex > 0 ? "12px" : "0px",
             } as React.CSSProperties}
             title={
-              tab.kind === "file"
-                ? displayEntryPath(tab)
-                : chatTabTitle
-                  ? `${tab.title} — ${chatTabTitle}`
-                  : tab.title
+              renamingKey === tab.key
+                ? undefined
+                : tab.kind === "file"
+                  ? displayEntryPath(tab)
+                  : chatTabTitle
+                    ? `${tab.title} — ${chatTabTitle}`
+                    : tab.title
             }
             onPointerDown={disableDrag ? undefined : (e) => onTabPointerDown(tab, e)}
             onPointerUp={disableDrag ? undefined : (e) => onTabPointerUp(tab, e)}
             onPointerCancel={disableDrag ? undefined : onTabPointerCancel}
             onAuxClick={(e) => onMiddleClose(tab, e)}
+            onContextMenu={(e) => onTabContextMenu(tab, e)}
+            onDoubleClick={(e) => {
+              if (e.target.closest?.(".cursor-tab-close")) return;
+              if (!tabCanRename(tab)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              beginTabRename(tab);
+            }}
             onKeyDown={(e) => {
               if (e.target !== e.currentTarget) return;
+              if (e.key === "F2" && tabCanRename(tab)) {
+                e.preventDefault();
+                beginTabRename(tab);
+                return;
+              }
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
+                if (active && tab.hasMenu && typeof onReselect === "function") {
+                  onReselect(tab.key);
+                  return;
+                }
                 onSelect(tab.key);
               }
             }}
             onClick={(e) => {
               if (e.target.closest?.(".cursor-tab-close")) return;
+              if (e.target.closest?.(".cursor-unified-tab-rename")) return;
+              if (renamingKey === tab.key) return;
               if (didDragRef.current) {
                 didDragRef.current = false;
                 e.preventDefault();
+                return;
+              }
+              if (active && tab.hasMenu && typeof onReselect === "function") {
+                onReselect(tab.key);
                 return;
               }
               onSelect(tab.key);
@@ -728,6 +899,11 @@ function UnifiedTabStripInner({
                 ) : (
                   <img src={tab.previewUrl} alt="" loading="lazy" />
                 )}
+                {previewOverlayIcon ? (
+                  <span className="cursor-unified-tab-preview-overlay">
+                    <Icon name={previewOverlayIcon} size={10} />
+                  </span>
+                ) : null}
               </span>
             ) : tab.previewInitials ? (
               <span
@@ -744,12 +920,46 @@ function UnifiedTabStripInner({
                 className="text-cursor-muted shrink-0 pointer-events-none"
               />
             )}
-            <span className="cursor-unified-tab-label pointer-events-none">
-              {tab.kind === "file" && tab.dirty ? "• " : ""}
-              {typeof tab.title === "string" || typeof tab.title === "number"
-                ? tab.title
-                : String(tab.title ?? "Untitled")}
-            </span>
+            {renamingKey === tab.key ? (
+              <input
+                ref={renameInputRef}
+                className="cursor-unified-tab-rename"
+                value={renameDraft}
+                disabled={renameBusy}
+                aria-label="Rename tab"
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitTabRename();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelTabRename();
+                  }
+                }}
+                onBlur={() => {
+                  void commitTabRename();
+                }}
+              />
+            ) : (
+              <span className="cursor-unified-tab-label pointer-events-none">
+                {tab.kind === "file" && tab.dirty ? "• " : ""}
+                {typeof tab.title === "string" || typeof tab.title === "number"
+                  ? tab.title
+                  : String(tab.title ?? "Untitled")}
+              </span>
+            )}
+            {tab.hasMenu ? (
+              <Icon
+                name="chevronsUpDown"
+                size={11}
+                className="cursor-unified-tab-menu-hint text-cursor-muted shrink-0 pointer-events-none"
+                aria-hidden="true"
+              />
+            ) : null}
             {showLiveDot ? (
               <span
                 className={`cursor-live-dot shrink-0 pointer-events-none ${chatDotClass}`.trim()}
@@ -797,6 +1007,15 @@ function UnifiedTabStripInner({
       ) : null}
     </div>
     {ghostLayer}
+    {contextMenu ? (
+      <TabContextMenu
+        tab={contextMenu.tab}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        onClose={() => setContextMenu(null)}
+        onAction={runTabContextAction}
+      />
+    ) : null}
     </>
   );
 }

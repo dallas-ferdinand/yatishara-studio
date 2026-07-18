@@ -2,7 +2,21 @@
 
 import { useConvexAuth } from "@convex-dev/auth/react";
 import { useMutation, useQuery } from "convex/react";
-import { Bookmark, Forward, Heart, Loader2, MessageCircle, Pause, Play } from "lucide-react";
+import {
+  Bookmark,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Forward,
+  Heart,
+  Loader2,
+  MessageCircle,
+  Pause,
+  Play,
+  Plus,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -19,15 +33,18 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
-import { MediaLoadFrame } from "./media-load-frame";
+import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import "./profile-post-viewer.css";
+
+type FeedMode = "forYou" | "following";
 
 type FeedPost = {
   _id: Id<"profilePosts">;
   assetId: Id<"assets">;
+  profileId: Id<"profiles">;
   kind: "image" | "video";
   name: string;
   caption?: string;
@@ -47,6 +64,8 @@ type FeedPost = {
   lastName?: string;
   avatarUrl?: string;
   fromFollowing: boolean;
+  isFollowing: boolean;
+  isOwner: boolean;
   score: number;
 };
 
@@ -77,7 +96,12 @@ type SlidePost = (AuthorPost | FeedPost) & {
   savedByViewer?: boolean;
   saveCount?: number;
   shareCount?: number;
+  profileId?: Id<"profiles">;
+  isFollowing?: boolean;
+  isOwner?: boolean;
 };
+
+type SlideRole = "prev" | "current" | "next" | "idle";
 
 function formatCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
@@ -87,6 +111,36 @@ function formatCount(value: number): string {
 
 function viewedKey(postId: string) {
   return `pp-viewed:${postId}`;
+}
+
+function wrapIndex(index: number, length: number) {
+  return ((index % length) + length) % length;
+}
+
+/** Collect up to `count` unique neighbors in one direction, wrapping the list. */
+function collectAxisNeighbors<T extends { _id: string }>(
+  posts: T[],
+  index: number,
+  direction: -1 | 1,
+  count = 3,
+): T[] {
+  if (index < 0 || posts.length <= 1) return [];
+  const out: T[] = [];
+  const seen = new Set<string>([posts[index]!._id]);
+  const max = Math.min(count, posts.length - 1);
+  for (let step = 1; step <= max; step++) {
+    const post = posts[wrapIndex(index + direction * step, posts.length)];
+    if (!post || seen.has(post._id)) break;
+    seen.add(post._id);
+    out.push(post);
+  }
+  return out;
+}
+
+function normalizedWheelDelta(delta: number, deltaMode: number) {
+  if (deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16;
+  if (deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * window.innerHeight;
+  return delta;
 }
 
 function formatVideoTime(seconds: number) {
@@ -102,6 +156,16 @@ function formatVideoTime(seconds: number) {
 }
 
 const VIDEO_CHROME_HIDE_MS = 2600;
+/** Settle after release — short + strong ease-out so it feels shot forward. */
+const SLIDE_MS = 180;
+const SLIDE_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
+const SLIDE_FALLBACK_MS = SLIDE_MS + 40;
+
+function roleRank(role: SlideRole): number {
+  if (role === "current") return 3;
+  if (role === "prev" || role === "next") return 2;
+  return 1;
+}
 
 function FeedMedia({
   post,
@@ -113,7 +177,9 @@ function FeedMedia({
   /** Neighbor slides (above/below/left/right) — fetch & buffer early. */
   preload?: boolean;
 }) {
-  const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
+  const [expiresUnix, setExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60,
+  );
   const media = useQuery(api.profiles.getPublicPostMedia, {
     postId: post._id,
     expiresUnix,
@@ -125,8 +191,9 @@ function FeedMedia({
   const loadedSrcRef = useRef<string | null>(null);
   const resumeAtRef = useRef(0);
   const wasPlayingRef = useRef(false);
-  // Lock the first full media URL so Convex re-signs / thumb→full swaps don't
-  // rewrite <img src> after the bitmap is already on screen.
+  const pointerSeekingRef = useRef(false);
+  // Lock the first usable media URL so Convex re-signs / thumb→full swaps don't
+  // rewrite <img>/<video> src after the media is already on screen.
   const lockedSrcRef = useRef<string | null>(null);
   const [chromeVisible, setChromeVisible] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -134,6 +201,7 @@ function FeedMedia({
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   if (postIdRef.current !== post._id) {
     postIdRef.current = post._id;
@@ -141,17 +209,35 @@ function FeedMedia({
     loadedSrcRef.current = null;
     resumeAtRef.current = 0;
     wasPlayingRef.current = false;
+    pointerSeekingRef.current = false;
   }
+
   const mediaUrl = media?.mediaUrl ?? post.mediaUrl;
   const thumbUrl = media?.thumbnailUrl ?? post.thumbnailUrl;
-  if (mediaUrl) {
+  const thumbIsVideo =
+    typeof thumbUrl === "string" && /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(thumbUrl);
+  const candidateSrc =
+    post.kind === "video"
+      ? mediaUrl || (thumbIsVideo ? thumbUrl : undefined) || undefined
+      : mediaUrl || thumbUrl || undefined;
+
+  if (!lockedSrcRef.current && candidateSrc) {
+    lockedSrcRef.current = candidateSrc;
+  } else if (
+    lockedSrcRef.current &&
+    mediaUrl &&
+    lockedSrcRef.current !== mediaUrl &&
+    thumbUrl &&
+    lockedSrcRef.current === thumbUrl
+  ) {
+    // One-time upgrade from preview thumb → full media.
     lockedSrcRef.current = mediaUrl;
-  } else if (!lockedSrcRef.current && thumbUrl) {
-    lockedSrcRef.current = thumbUrl;
   }
-  const displaySrc = lockedSrcRef.current;
-  const isVideo = post.kind === "video" && Boolean(displaySrc);
-  const playSrc = mediaUrl || displaySrc;
+
+  const stableSrc = lockedSrcRef.current;
+  const displaySrc = stableSrc;
+  const isVideo = post.kind === "video";
+  const playSrc = isVideo ? stableSrc ?? undefined : displaySrc ?? undefined;
   const shouldWarm = active || preload;
 
   const clearHideTimer = useCallback(() => {
@@ -191,6 +277,7 @@ function FeedMedia({
   useEffect(() => {
     hideChrome();
     setSeeking(false);
+    setSoundEnabled(false);
     setCurrent(0);
     setSeekValue(0);
     setDuration(0);
@@ -215,7 +302,7 @@ function FeedMedia({
     img.src = displaySrc;
   }, [shouldWarm, post.kind, displaySrc]);
 
-  // Kick video network fetch once per src — never reload on tab switches.
+  // Kick video network fetch once per locked src — never reload on role/active flips.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || post.kind !== "video" || !playSrc || !shouldWarm) return;
@@ -226,12 +313,12 @@ function FeedMedia({
     } catch {
       /* ignore */
     }
-  }, [playSrc, post.kind, shouldWarm]);
+  }, [shouldWarm, playSrc, post.kind]);
 
   // Pause when leaving the slide/tab; resume from the same position when returning.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || post.kind !== "video") return;
+    if (!video || post.kind !== "video" || !playSrc) return;
     if (active) {
       const resumeAt = resumeAtRef.current;
       if (resumeAt > 0.05) {
@@ -245,8 +332,8 @@ function FeedMedia({
         setCurrent(resumeAt);
         setSeekValue(resumeAt);
       }
-      // Fresh slide (no saved time) or was playing before leave → autoplay.
-      // If the user had paused, stay paused at the saved frame.
+      // Autoplay must stay muted until the user enables sound (browser policy).
+      video.muted = !soundEnabled;
       if (wasPlayingRef.current || resumeAt <= 0.05) {
         void video.play().catch(() => {});
       } else {
@@ -261,14 +348,14 @@ function FeedMedia({
     setCurrent(resumeAtRef.current);
     setSeekValue(resumeAtRef.current);
     video.pause();
-  }, [active, post.kind, playSrc]);
+  }, [active, playSrc, post.kind, soundEnabled]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || post.kind !== "video") return undefined;
 
     const onTime = () => {
-      if (!seeking) {
+      if (!pointerSeekingRef.current) {
         setCurrent(video.currentTime);
         setSeekValue(video.currentTime);
       }
@@ -282,12 +369,18 @@ function FeedMedia({
       setPlaying(false);
       clearHideTimer();
     };
+    const onError = () => {
+      lockedSrcRef.current = null;
+      loadedSrcRef.current = null;
+      setExpiresUnix(Math.floor(Date.now() / 1000) + 60 * 60);
+    };
 
     video.addEventListener("timeupdate", onTime);
     video.addEventListener("loadedmetadata", onMeta);
     video.addEventListener("durationchange", onMeta);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
+    video.addEventListener("error", onError);
     onMeta();
     setPlaying(!video.paused);
 
@@ -297,8 +390,9 @@ function FeedMedia({
       video.removeEventListener("durationchange", onMeta);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("error", onError);
     };
-  }, [clearHideTimer, displaySrc, post.kind, scheduleHide, seeking, playSrc]);
+  }, [clearHideTimer, playSrc, post.kind, scheduleHide]);
 
   useEffect(() => {
     if (!active || post.kind !== "video") return undefined;
@@ -319,19 +413,38 @@ function FeedMedia({
   function togglePlay() {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) void video.play().catch(() => {});
-    else video.pause();
+    if (video.paused) {
+      // User gesture: allow audible playback after the first explicit play.
+      if (!soundEnabled) {
+        setSoundEnabled(true);
+        video.muted = false;
+      }
+      void video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
     showChrome();
   }
 
   function onSeekStart(event: ReactPointerEvent<HTMLInputElement>) {
     stopFeedGesture(event);
+    pointerSeekingRef.current = true;
     setSeeking(true);
     clearHideTimer();
   }
 
   function onSeekChange(event: ChangeEvent<HTMLInputElement>) {
-    setSeekValue(Number(event.target.value));
+    const next = Number(event.target.value);
+    setSeekValue(next);
+    if (!pointerSeekingRef.current) {
+      const video = videoRef.current;
+      if (video && Number.isFinite(next)) {
+        video.currentTime = next;
+        setCurrent(next);
+      }
+      setSeeking(false);
+      if (video && !video.paused) scheduleHide();
+    }
   }
 
   function onSeekEnd(event: ReactPointerEvent<HTMLInputElement> | ReactFocusEvent<HTMLInputElement>) {
@@ -342,6 +455,7 @@ function FeedMedia({
       setCurrent(next);
       setSeekValue(next);
     }
+    pointerSeekingRef.current = false;
     setSeeking(false);
     if (video && !video.paused) scheduleHide();
   }
@@ -354,6 +468,7 @@ function FeedMedia({
         <MediaLoadFrame
           kind="video"
           src={playSrc}
+          cacheKey={post._id}
           ratio="video-portrait"
           className="profile-post-slide-frame"
         >
@@ -366,11 +481,17 @@ function FeedMedia({
               }
               playsInline
               loop
-              muted={!active}
+              muted={!active || !soundEnabled}
               controls={false}
-              preload={shouldWarm ? "auto" : "metadata"}
+              preload={shouldWarm ? "auto" : "none"}
               onLoadedData={onLoad}
-              onError={onError}
+              onCanPlay={onLoad}
+              onError={() => {
+                lockedSrcRef.current = null;
+                loadedSrcRef.current = null;
+                setExpiresUnix(Math.floor(Date.now() / 1000) + 60 * 60);
+                onError();
+              }}
             />
           )}
         </MediaLoadFrame>
@@ -378,6 +499,7 @@ function FeedMedia({
         <MediaLoadFrame
           kind="image"
           src={displaySrc}
+          cacheKey={post._id}
           ratio="image"
           className="profile-post-slide-frame"
         >
@@ -400,7 +522,7 @@ function FeedMedia({
           className={`profile-post-slide-loading ${post.kind === "video" ? "is-ratio-video" : "is-ratio-image"}`}
           aria-busy="true"
         >
-          <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+          <MediaLoadWave />
         </div>
       )}
 
@@ -452,6 +574,7 @@ function FeedMedia({
                 onPointerDown={onSeekStart}
                 onChange={onSeekChange}
                 onPointerUp={onSeekEnd}
+                onPointerCancel={onSeekEnd}
                 onBlur={onSeekEnd}
               />
             </div>
@@ -473,6 +596,9 @@ function FeedActions({
   likeBusy,
   saveBusy,
   shareBusy,
+  followBusy,
+  showFollow,
+  isFollowing,
   localComments,
   localSaves,
   localShares,
@@ -481,6 +607,7 @@ function FeedActions({
   onShare,
   onOpenComments,
   onOpenProfile,
+  onToggleFollow,
 }: {
   post: SlidePost;
   username: string;
@@ -491,6 +618,9 @@ function FeedActions({
   likeBusy: boolean;
   saveBusy: boolean;
   shareBusy: boolean;
+  followBusy: boolean;
+  showFollow: boolean;
+  isFollowing: boolean;
   localComments: number;
   localSaves: number;
   localShares: number;
@@ -499,30 +629,54 @@ function FeedActions({
   onShare: () => void;
   onOpenComments: () => void;
   onOpenProfile?: (username: string) => void;
+  onToggleFollow: () => void;
 }) {
-  const initials = profileNameInitials({ displayName, firstName, lastName });
   const saved = Boolean(post.savedByViewer);
 
   return (
     <div className="profile-post-rail">
-      <button
-        type="button"
-        className="profile-post-rail-avatar"
-        style={avatarUrl ? undefined : profileAvatarStyle(initials)}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (username) onOpenProfile?.(username);
-        }}
-        onPointerDown={(event) => event.stopPropagation()}
-        aria-label={username ? `Open @${username}` : "Open profile"}
-      >
-        {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatarUrl} alt="" draggable={false} />
-        ) : (
-          <span>{initials}</span>
-        )}
-      </button>
+      <div className="profile-post-rail-avatar-wrap">
+        <StudioProfileAvatar
+          as="button"
+          className="profile-post-rail-avatar"
+          size="sm"
+          src={avatarUrl}
+          displayName={displayName}
+          firstName={firstName}
+          lastName={lastName}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (username) onOpenProfile?.(username);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label={username ? `Open @${username}` : "Open profile"}
+        />
+        {showFollow ? (
+          <button
+            type="button"
+            className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFollow();
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            disabled={followBusy}
+            aria-label={
+              isFollowing
+                ? `Unfollow @${username}`
+                : `Follow @${username}`
+            }
+          >
+            {followBusy ? (
+              <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
+            ) : isFollowing ? (
+              <Check aria-hidden="true" strokeWidth={3} />
+            ) : (
+              <Plus aria-hidden="true" strokeWidth={3} />
+            )}
+          </button>
+        ) : null}
+      </div>
       <button
         type="button"
         className={`profile-post-rail-btn${post.likedByViewer ? " is-liked" : ""}`}
@@ -607,17 +761,22 @@ function FeedActions({
 export function ProfilePostViewer({
   postId,
   onOpenProfile,
+  mode = "forYou",
+  onModeChange,
   tabActive = true,
 }: {
   username?: string;
   postId: Id<"profilePosts"> | string;
   onOpenProfile?: (username: string) => void;
+  mode?: FeedMode;
+  onModeChange?: (mode: FeedMode) => void;
   /** False while another studio tab is focused — pause playback, keep state. */
   tabActive?: boolean;
 }) {
   const auth = useConvexAuth();
   const { isMobile } = useMobileLayout();
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
+  const feedMode: FeedMode = mode === "following" ? "following" : "forYou";
   const seedPostId =
     !postId || String(postId) === "home"
       ? undefined
@@ -625,12 +784,16 @@ export function ProfilePostViewer({
   const feed = useQuery(api.profiles.listFeed, {
     expiresUnix,
     limit: 28,
-    seedPostId,
+    // Seed pin only applies to For You; Following is pure follow graph.
+    seedPostId: feedMode === "forYou" ? seedPostId : undefined,
+    mode: feedMode,
   });
   const toggleLike = useMutation(api.profiles.toggleLike);
   const toggleSave = useMutation(api.profiles.toggleSave);
   const recordShare = useMutation(api.profiles.recordShare);
   const recordPostView = useMutation(api.profiles.recordPostView);
+  const followProfile = useMutation(api.profiles.follow);
+  const unfollowProfile = useMutation(api.profiles.unfollow);
 
   const [activePostId, setActivePostId] = useState<Id<"profilePosts"> | null>(null);
   const [likeBusyId, setLikeBusyId] = useState<Id<"profilePosts"> | null>(null);
@@ -646,6 +809,9 @@ export function ProfilePostViewer({
   const [localShares, setLocalShares] = useState<Record<string, number>>({});
   const [localViews, setLocalViews] = useState<Record<string, number>>({});
   const [localComments, setLocalComments] = useState<Record<string, number>>({});
+  /** Optimistic follow state keyed by profileId — flips all slides from that author. */
+  const [localFollows, setLocalFollows] = useState<Record<string, boolean>>({});
+  const [followBusyProfileId, setFollowBusyProfileId] = useState<string | null>(null);
   const [axis, setAxis] = useState<"x" | "y">("y");
   const [animating, setAnimating] = useState(false);
   const [likeBurst, setLikeBurst] = useState(false);
@@ -682,6 +848,7 @@ export function ProfilePostViewer({
     return (feed ?? []).map((post) => {
       const like = localLikes[post._id];
       const save = localSaves[post._id];
+      const follow = localFollows[post.profileId];
       return {
         ...post,
         ...(like
@@ -690,10 +857,11 @@ export function ProfilePostViewer({
         ...(save
           ? { savedByViewer: save.saved, saveCount: save.saveCount }
           : null),
+        ...(follow != null ? { isFollowing: follow } : null),
         shareCount: localShares[post._id] ?? post.shareCount ?? 0,
       };
     });
-  }, [feed, localLikes, localSaves, localShares]);
+  }, [feed, localLikes, localSaves, localShares, localFollows]);
 
   // One source of truth for what is on screen — axis only picks neighbor lists.
   useEffect(() => {
@@ -709,6 +877,18 @@ export function ProfilePostViewer({
     setActivePostId(id);
   }, [seedPostId, resolvedFeed]);
 
+  // Mode changes from the tab chooser — reseed to the top of the new feed.
+  const prevFeedModeRef = useRef(feedMode);
+  useEffect(() => {
+    if (prevFeedModeRef.current === feedMode) return;
+    prevFeedModeRef.current = feedMode;
+    seededRef.current = false;
+    lastFeedIndexRef.current = 0;
+    activePostIdRef.current = null;
+    setActivePostId(null);
+    setAxis("y");
+    setCommentsOpen(false);
+  }, [feedMode]);
   const feedIndexExact = activePostId
     ? resolvedFeed.findIndex((post) => post._id === activePostId)
     : -1;
@@ -785,16 +965,12 @@ export function ProfilePostViewer({
     );
   }, [activePostId, resolvedFeed, authorPosts]);
 
-  const feedPrev = feedIndex > 0 ? (resolvedFeed[feedIndex - 1] ?? null) : null;
-  const feedNext =
-    feedIndex >= 0 && feedIndex < resolvedFeed.length - 1
-      ? (resolvedFeed[feedIndex + 1] ?? null)
-      : null;
-  const authorPrev = authorIndex > 0 ? (authorPosts[authorIndex - 1] ?? null) : null;
-  const authorNext =
-    authorIndex >= 0 && authorIndex < authorPosts.length - 1
-      ? (authorPosts[authorIndex + 1] ?? null)
-      : null;
+  // Prefetch 3 posts each way (up/down feed + left/right author). Offset-1
+  // stays the animated prev/next; further offsets mount as idle warm slides.
+  const feedPrevList = collectAxisNeighbors(resolvedFeed, feedIndex, -1, 3);
+  const feedNextList = collectAxisNeighbors(resolvedFeed, feedIndex, 1, 3);
+  const authorPrevList = collectAxisNeighbors(authorPosts, authorIndex, -1, 3);
+  const authorNextList = collectAxisNeighbors(authorPosts, authorIndex, 1, 3);
 
   const recordViewOnce = useCallback(
     async (id: Id<"profilePosts">, fallbackCount: number) => {
@@ -839,7 +1015,7 @@ export function ProfilePostViewer({
     const track = trackRef.current;
     if (!track) return;
     track.style.transition = animate
-      ? "transform 300ms cubic-bezier(0.22, 0.9, 0.28, 1)"
+      ? `transform ${SLIDE_MS}ms ${SLIDE_EASE}`
       : "none";
     track.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   }, []);
@@ -864,13 +1040,12 @@ export function ProfilePostViewer({
       const { w, h } = measureSize();
       const feedIdx = feedIndexRef.current;
       const authorIdx = authorIndexRef.current;
+      const feedLen = feedLenRef.current;
+      const authorLen = authorLenRef.current;
       const canMove =
         nextAxis === "y"
-          ? delta < 0
-            ? feedIdx > 0
-            : feedIdx < feedLenRef.current - 1
-          : authorIdx >= 0 &&
-            (delta < 0 ? authorIdx > 0 : authorIdx < authorLenRef.current - 1);
+          ? feedIdx >= 0 && feedLen > 1
+          : authorIdx >= 0 && authorLen > 1;
 
       if (isMobile) setCommentsOpen(false);
 
@@ -878,7 +1053,7 @@ export function ProfilePostViewer({
         animatingRef.current = true;
         setAnimating(true);
         setTrackTransform(0, 0, true);
-        window.setTimeout(() => resetTrack(), 300);
+        window.setTimeout(() => resetTrack(), SLIDE_FALLBACK_MS);
         return;
       }
 
@@ -899,8 +1074,12 @@ export function ProfilePostViewer({
 
         const nextPost =
           pending.axis === "y"
-            ? resolvedFeedRef.current[feedIndexRef.current + pending.delta]
-            : authorPostsRef.current[authorIndexRef.current + pending.delta];
+            ? resolvedFeedRef.current[
+                wrapIndex(feedIndexRef.current + pending.delta, resolvedFeedRef.current.length)
+              ]
+            : authorPostsRef.current[
+                wrapIndex(authorIndexRef.current + pending.delta, authorPostsRef.current.length)
+              ];
         if (!nextPost) {
           setTrackTransform(0, 0, false);
           animatingRef.current = false;
@@ -912,7 +1091,10 @@ export function ProfilePostViewer({
         pendingSnapRef.current = true;
         activePostIdRef.current = nextPost._id;
         if (pending.axis === "y") {
-          lastFeedIndexRef.current = feedIndexRef.current + pending.delta;
+          lastFeedIndexRef.current = wrapIndex(
+            feedIndexRef.current + pending.delta,
+            resolvedFeedRef.current.length,
+          );
         } else {
           const fIdx = resolvedFeedRef.current.findIndex((row) => row._id === nextPost._id);
           if (fIdx >= 0) lastFeedIndexRef.current = fIdx;
@@ -929,7 +1111,7 @@ export function ProfilePostViewer({
         if (commitTokenRef.current !== token) return;
         if (!pendingCommitRef.current) return;
         finish();
-      }, 360);
+      }, SLIDE_FALLBACK_MS);
 
       requestAnimationFrame(() => {
         if (commitTokenRef.current !== token) return;
@@ -956,6 +1138,14 @@ export function ProfilePostViewer({
     if (!tabActive) return undefined;
     function onKey(event: KeyboardEvent) {
       if (animatingRef.current) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest?.(
+          "input, textarea, select, button, [data-video-control], [contenteditable='true']",
+        )
+      ) {
+        return;
+      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         commitSlide("y", 1);
@@ -975,26 +1165,36 @@ export function ProfilePostViewer({
   }, [commitSlide, tabActive]);
 
   useEffect(() => {
-    const node = rootRef.current;
-    if (!node || !tabActive) return undefined;
+    const rootNode = rootRef.current;
+    if (!rootNode || !tabActive) return undefined;
+    const node: HTMLDivElement = rootNode;
     let wheelLockUntil = 0;
     function onWheel(event: WheelEvent) {
-      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) {
-        if (Math.abs(event.deltaX) < 18) return;
+      const path = event.composedPath();
+      if (!path.includes(node)) return;
+      // Shift+wheel → horizontal author axis (desktop trackpads may already
+      // emit deltaX; treat shift as an explicit horizontal intent).
+      const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
+      const deltaY = normalizedWheelDelta(event.deltaY, event.deltaMode);
+      const shiftHorizontal = event.shiftKey && Math.abs(deltaY) >= Math.abs(deltaX);
+      const horizontal = shiftHorizontal || Math.abs(deltaY) < Math.abs(deltaX);
+      if (horizontal) {
+        const delta = shiftHorizontal ? deltaY : deltaX;
+        if (Math.abs(delta) < 8) return;
         event.preventDefault();
         if (animatingRef.current || Date.now() < wheelLockUntil) return;
-        wheelLockUntil = Date.now() + 360;
-        commitSlide("x", event.deltaX > 0 ? 1 : -1);
+        wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
+        commitSlide("x", delta > 0 ? 1 : -1);
         return;
       }
-      if (Math.abs(event.deltaY) < 18) return;
+      if (Math.abs(deltaY) < 8) return;
       event.preventDefault();
       if (animatingRef.current || Date.now() < wheelLockUntil) return;
-      wheelLockUntil = Date.now() + 360;
-      commitSlide("y", event.deltaY > 0 ? 1 : -1);
+      wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
+      commitSlide("y", deltaY > 0 ? 1 : -1);
     }
-    node.addEventListener("wheel", onWheel, { passive: false });
-    return () => node.removeEventListener("wheel", onWheel);
+    window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
   }, [commitSlide, tabActive]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1050,6 +1250,21 @@ export function ProfilePostViewer({
       const resisted = atStart || atEnd ? dx * 0.28 : dx;
       setTrackTransform(resisted, 0, false);
     }
+  }
+
+  function cancelPointer(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = pointerRef.current;
+    if (!start || start.id !== event.pointerId) return;
+    const captured = Boolean(start.captured);
+    pointerRef.current = null;
+    if (captured) {
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }
+    setTrackTransform(0, 0, false);
   }
 
   function finishPointer(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1114,7 +1329,7 @@ export function ProfilePostViewer({
     animatingRef.current = true;
     setAnimating(true);
     setTrackTransform(0, 0, true);
-    window.setTimeout(() => resetTrack(), 300);
+    window.setTimeout(() => resetTrack(), SLIDE_FALLBACK_MS);
   }
 
   async function handleDoubleTapLike() {
@@ -1202,11 +1417,43 @@ export function ProfilePostViewer({
     }
   }
 
+  function switchFeedMode(next: FeedMode) {
+    if (next === feedMode) return;
+    onModeChange?.(next);
+  }
+
+  async function handleFollowToggle(post: SlidePost) {
+    const profileId = post.profileId;
+    if (!profileId) return;
+    if (!auth.isAuthenticated) {
+      window.location.href = `/?next=${encodeURIComponent("/")}`;
+      return;
+    }
+    const currentlyFollowing =
+      localFollows[profileId] ?? Boolean(post.isFollowing);
+    // Optimistic: flip every slide by this author immediately.
+    setLocalFollows((prev) => ({ ...prev, [profileId]: !currentlyFollowing }));
+    setFollowBusyProfileId(profileId);
+    try {
+      if (currentlyFollowing) {
+        await unfollowProfile({ profileId });
+      } else {
+        await followProfile({ profileId });
+      }
+    } catch (error) {
+      // Roll back on failure.
+      setLocalFollows((prev) => ({ ...prev, [profileId]: currentlyFollowing }));
+      console.error(friendlyConvexError(error, "Could not update follow"));
+    } finally {
+      setFollowBusyProfileId(null);
+    }
+  }
+
   if (feed === undefined) {
     return (
-      <div className="profile-post-viewer is-loading">
+      <div className="profile-post-viewer is-loading" aria-busy="true">
         <div className="profile-post-viewer-blur" aria-hidden="true" />
-        <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+        <MediaLoadWave className="profile-post-viewer-load-wave" />
       </div>
     );
   }
@@ -1215,8 +1462,16 @@ export function ProfilePostViewer({
     return (
       <div className="profile-post-viewer is-empty">
         <div className="profile-post-viewer-blur" aria-hidden="true" />
-        <p>No posts in feed yet</p>
-        {authorUsername && onOpenProfile ? (
+        {feedMode === "following" ? (
+          <p>Follow people to fill this feed</p>
+        ) : (
+          <p>No posts in feed yet</p>
+        )}
+        {feedMode === "following" && onModeChange ? (
+          <button type="button" onClick={() => switchFeedMode("forYou")}>
+            Browse For You
+          </button>
+        ) : authorUsername && onOpenProfile ? (
           <button type="button" onClick={() => onOpenProfile(authorUsername)}>
             Back to @{authorUsername}
           </button>
@@ -1240,6 +1495,11 @@ export function ProfilePostViewer({
           firstName: profileMeta?.firstName,
           lastName: profileMeta?.lastName,
           avatarUrl: profileMeta?.avatarUrl,
+          profileId: profileMeta?.profileId,
+          isFollowing: profileMeta
+            ? (localFollows[profileMeta.profileId] ?? profileMeta.isFollowing)
+            : undefined,
+          isOwner: profileMeta?.isOwner,
         };
 
   const withProfile = (post: AuthorPost | FeedPost | null): SlidePost | null => {
@@ -1252,38 +1512,68 @@ export function ProfilePostViewer({
       avatarUrl: profileMeta?.avatarUrl,
       firstName: profileMeta?.firstName,
       lastName: profileMeta?.lastName,
+      profileId: profileMeta?.profileId,
+      isFollowing: profileMeta
+        ? (localFollows[profileMeta.profileId] ?? profileMeta.isFollowing)
+        : undefined,
+      isOwner: profileMeta?.isOwner,
     };
   };
 
-  // Keep feed + author neighbors mounted (hidden when idle) so axis switches and
-  // commits reuse the same <img> nodes instead of remounting media every swipe.
-  const slidePool: SlidePost[] = (() => {
-    const map = new Map<string, SlidePost>();
-    const add = (post: SlidePost | null) => {
+  // Keep one mounted media node per post so scrolling roles (current↔next)
+  // don't remount and flash the loader. Only split when the same post is both
+  // prev and next (2-item loop).
+  const slidePool: Array<{ key: string; post: SlidePost; role: SlideRole }> = (() => {
+    const slots = new Map<string, { key: string; post: SlidePost; role: SlideRole }>();
+
+    const upsert = (post: SlidePost | null, role: SlideRole, forceKey?: string) => {
       if (!post) return;
-      const prev = map.get(post._id);
-      if (!prev || ("username" in post && post.username)) map.set(post._id, post);
-      else map.set(post._id, { ...prev, ...post });
+      const key = forceKey ?? post._id;
+      const existing = slots.get(key);
+      if (!existing || roleRank(role) > roleRank(existing.role)) {
+        slots.set(key, { key, post, role });
+      }
     };
-    add(activeSlidePost);
-    add(withProfile(feedPrev));
-    add(withProfile(feedNext));
-    add(withProfile(authorPrev));
-    add(withProfile(authorNext));
-    return [...map.values()];
-  })();
 
-  const slideRole = (id: string): "prev" | "current" | "next" | "idle" => {
-    if (id === activeSlidePost._id) return "current";
-    if (axis === "y") {
-      if (feedPrev?._id === id) return "prev";
-      if (feedNext?._id === id) return "next";
+    upsert(activeSlidePost, "current");
+
+    const feedPrev = withProfile(feedPrevList[0] ?? null);
+    const feedNext = withProfile(feedNextList[0] ?? null);
+    const authorPrev = withProfile(authorPrevList[0] ?? null);
+    const authorNext = withProfile(authorNextList[0] ?? null);
+
+    if (axis === "y" && feedPrev && feedNext && feedPrev._id === feedNext._id) {
+      upsert(feedPrev, "prev", `${feedPrev._id}:prev`);
+      upsert(feedNext, "next", `${feedNext._id}:next`);
     } else {
-      if (authorPrev?._id === id) return "prev";
-      if (authorNext?._id === id) return "next";
+      upsert(feedPrev, axis === "y" ? "prev" : "idle");
+      upsert(feedNext, axis === "y" ? "next" : "idle");
     }
-    return "idle";
-  };
+
+    if (axis === "x" && authorPrev && authorNext && authorPrev._id === authorNext._id) {
+      upsert(authorPrev, "prev", `${authorPrev._id}:prev`);
+      upsert(authorNext, "next", `${authorNext._id}:next`);
+    } else {
+      upsert(authorPrev, axis === "x" ? "prev" : "idle");
+      upsert(authorNext, axis === "x" ? "next" : "idle");
+    }
+
+    // Warm offsets 2–3 without creating duplicate mounts.
+    for (let i = 1; i < feedPrevList.length; i += 1) {
+      upsert(withProfile(feedPrevList[i] ?? null), "idle");
+    }
+    for (let i = 1; i < feedNextList.length; i += 1) {
+      upsert(withProfile(feedNextList[i] ?? null), "idle");
+    }
+    for (let i = 1; i < authorPrevList.length; i += 1) {
+      upsert(withProfile(authorPrevList[i] ?? null), "idle");
+    }
+    for (let i = 1; i < authorNextList.length; i += 1) {
+      upsert(withProfile(authorNextList[i] ?? null), "idle");
+    }
+
+    return [...slots.values()];
+  })();
 
   return (
     <div className="profile-post-viewer-layout">
@@ -1294,12 +1584,11 @@ export function ProfilePostViewer({
         onPointerDown={tabActive ? onPointerDown : undefined}
         onPointerMove={tabActive ? onPointerMove : undefined}
         onPointerUp={tabActive ? finishPointer : undefined}
-        onPointerCancel={tabActive ? finishPointer : undefined}
+        onPointerCancel={tabActive ? cancelPointer : undefined}
       >
         <div className="profile-post-viewer-blur" aria-hidden="true" />
         <div className="profile-post-track" ref={trackRef}>
-          {slidePool.map((post) => {
-            const role = slideRole(post._id);
+          {slidePool.map(({ key, post, role }) => {
             const isInteractiveSlide = tabActive && role === "current";
             const postUsername = post.username || authorUsername;
             const postComments = localComments[post._id] ?? post.commentCount ?? 0;
@@ -1308,7 +1597,7 @@ export function ProfilePostViewer({
             const postShares = localShares[post._id] ?? post.shareCount ?? 0;
             return (
               <article
-                key={post._id}
+                key={key}
                 className={`profile-post-slide is-${role} is-${axis}`}
                 aria-hidden={!isInteractiveSlide}
                 inert={!isInteractiveSlide}
@@ -1316,8 +1605,8 @@ export function ProfilePostViewer({
                 <div className="profile-post-slide-glass" aria-hidden="true" />
                 <FeedMedia
                   post={post}
-                  active={tabActive && role === "current" && !animating}
-                  preload={tabActive || role !== "idle"}
+                  active={tabActive && role === "current"}
+                  preload={tabActive}
                 />
                 <FeedActions
                   post={post}
@@ -1329,6 +1618,15 @@ export function ProfilePostViewer({
                   likeBusy={likeBusyId === post._id}
                   saveBusy={saveBusyId === post._id}
                   shareBusy={shareBusyId === post._id}
+                  followBusy={
+                    Boolean(post.profileId) && followBusyProfileId === post.profileId
+                  }
+                  showFollow={Boolean(post.profileId) && !post.isOwner}
+                  isFollowing={Boolean(
+                    post.profileId
+                      ? (localFollows[post.profileId] ?? post.isFollowing)
+                      : post.isFollowing,
+                  )}
                   localComments={postComments}
                   localSaves={postSaves}
                   localShares={postShares}
@@ -1339,6 +1637,7 @@ export function ProfilePostViewer({
                     if (role === "current") setCommentsOpen(true);
                   }}
                   onOpenProfile={onOpenProfile}
+                  onToggleFollow={() => void handleFollowToggle(post)}
                 />
                 {role === "current" && likeBurst ? (
                   <div className="profile-post-like-burst" aria-hidden="true">
@@ -1349,6 +1648,55 @@ export function ProfilePostViewer({
             );
           })}
         </div>
+
+        {!isMobile && tabActive ? (
+          <>
+            <div className="profile-post-nav-rail is-vertical" aria-label="Feed navigation">
+              <button
+                type="button"
+                className="profile-post-nav-btn"
+                aria-label="Previous post"
+                disabled={resolvedFeed.length <= 1 || animating}
+                onClick={() => commitSlide("y", -1)}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ChevronUp aria-hidden="true" strokeWidth={2.25} />
+              </button>
+              <button
+                type="button"
+                className="profile-post-nav-btn"
+                aria-label="Next post"
+                disabled={resolvedFeed.length <= 1 || animating}
+                onClick={() => commitSlide("y", 1)}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ChevronDown aria-hidden="true" strokeWidth={2.25} />
+              </button>
+            </div>
+            <div className="profile-post-nav-rail is-horizontal" aria-label="Author posts navigation">
+              <button
+                type="button"
+                className="profile-post-nav-btn"
+                aria-label="Previous author post"
+                disabled={authorIndex < 0 || authorPosts.length <= 1 || animating}
+                onClick={() => commitSlide("x", -1)}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ChevronLeft aria-hidden="true" strokeWidth={2.25} />
+              </button>
+              <button
+                type="button"
+                className="profile-post-nav-btn"
+                aria-label="Next author post"
+                disabled={authorIndex < 0 || authorPosts.length <= 1 || animating}
+                onClick={() => commitSlide("x", 1)}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ChevronRight aria-hidden="true" strokeWidth={2.25} />
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
 
       <ProfileCommentsPanel

@@ -74,7 +74,7 @@ export const COMPOSER_SCRIPT_TYPES: ComposerScriptTypeDefinition[] = [
   {
     slug: "video_prompt",
     label: "Video prompt pack",
-    description: "Seedance-ready timed beats, one camera move per beat, distilled video generation prompt.",
+    description: "Production-ready timed beats, one camera move per beat, distilled video generation prompt.",
     titlePrefix: "Video prompt",
     includesGenerationPrompt: true,
     includesStoryboardPrompt: false,
@@ -168,7 +168,7 @@ export function scriptTypeSystemPrompt(slug: ComposerScriptTypeSlug): string {
       ].join(" ");
     case "video_prompt":
       return [
-        "Write a Seedance-ready video prompt pack in Markdown.",
+        "Write a production-ready video prompt pack in Markdown.",
         "Use timed beats when duration is known. One primary camera move per beat.",
         "Observable action, environment, cel-motivated light, SFX — no emotion labels.",
         `End with exactly "${GEN_PROMPT_HEADING}" — distilled motion prompt (60–100 words when start-frame workflow applies).`,
@@ -216,7 +216,7 @@ export function scriptTypeSystemPrompt(slug: ComposerScriptTypeSlug): string {
         "Write a production-ready Markdown script for short-form stylized video.",
         "Include timed scenes, minimal dialogue, visual and audio/SFX notes.",
         "Witness-object grammar: product silent; life happens around it.",
-        `End with "${GEN_PROMPT_HEADING}" — one Seedance-ready prompt distilled from the script.`,
+        `End with "${GEN_PROMPT_HEADING}" — one production-ready prompt distilled from the script.`,
       ].join(" ");
   }
 }

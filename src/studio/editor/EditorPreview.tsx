@@ -1,346 +1,245 @@
-// @ts-nocheck
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { clipOpacityAtLocalTime, textAnimationStyle } from "./editorEffects";
-import {
-  clipAtPlayhead,
-  clipDuration,
-  projectEndTime,
-  topVideoClipAtPlayhead,
-} from "./editorState";
+import { useRef, useState } from "react";
+import { Minus, Plus } from "lucide-react";
+import { clipAtPlayhead } from "./editorState";
+import { exportSizeForRatio } from "./projectContract";
+import { PreviewTransformOverlay } from "./PreviewTransformOverlay";
+import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
+import { usePlaybackEngine } from "./playback/use-playback-engine";
+import { MediaLoadWave } from "@/studio/components/media-load-frame";
 
-function timelineFromMediaTime(clip, mediaTime) {
-  return clip.startTime + (mediaTime - clip.trimIn);
-}
-
-function mediaTimeFromTimeline(clip, timelineTime) {
-  return clip.trimIn + (timelineTime - clip.startTime);
-}
-
-function clampMediaTime(clip, mediaTime) {
-  return Math.max(clip.trimIn, Math.min(mediaTime, clip.trimOut - 0.02));
-}
-
-function bindElement(el, url, clip, timelineTime) {
-  if (!el || !url || !clip) return false;
-  const key = `${clip.id}:${url}`;
-  if (el.dataset.editorBind !== key) {
-    el.src = url;
-    el.dataset.editorBind = key;
-  }
-  const target = clampMediaTime(clip, mediaTimeFromTimeline(clip, timelineTime));
-  if (Math.abs(el.currentTime - target) > 0.04) {
-    try {
-      el.currentTime = target;
-    } catch {
-      /* ignore */
-    }
-  }
-  return true;
-}
-
-export function useEditorPlayback({
-  project,
-  playhead,
-  playing,
-  mediaById,
-  onPlayheadChange,
-  onPlayingChange,
-  videoRef,
-  audioRef,
-}) {
-  const projectRef = useRef(project);
-  const playheadRef = useRef(playhead);
-  const playingRef = useRef(playing);
-  const rafRef = useRef(null);
-  const boundVideoClipRef = useRef(null);
-  const boundAudioClipRef = useRef(null);
-  const lastPlayheadCommitRef = useRef(0);
-
-  const clipsSig = useMemo(
-    () =>
-      project.clips
-        .map((c) => `${c.id}:${c.startTime}:${c.trimIn}:${c.trimOut}:${c.trackId}:${c.assetId ?? ""}`)
-        .join("|"),
-    [project.clips],
-  );
-
-  projectRef.current = project;
-  playheadRef.current = playhead;
-  playingRef.current = playing;
-
-  const commitPlayhead = (time, force = false) => {
-    playheadRef.current = time;
-    const now = performance.now();
-    // Keep media clock at full frame rate via refs; throttle React commits to ~30 Hz.
-    if (!force && now - lastPlayheadCommitRef.current < 33) return;
-    lastPlayheadCommitRef.current = now;
-    onPlayheadChange(time);
-  };
-
-  useEffect(() => {
-    boundVideoClipRef.current = null;
-    boundAudioClipRef.current = null;
-    for (const el of [videoRef.current, audioRef.current]) {
-      if (el) el.dataset.editorBind = "";
-    }
-  }, [clipsSig, videoRef, audioRef]);
-
-  // Scrub / pause: timeline drives media
-  useEffect(() => {
-    if (playing) return;
-
-    const proj = projectRef.current;
-    const ph = playheadRef.current;
-    const video = videoRef.current;
-    const audio = audioRef.current;
-    const videoClip = topVideoClipAtPlayhead(proj, ph);
-    const audioTrack = proj.tracks.find((t) => t.kind === "audio");
-    const audioClip = audioTrack ? clipAtPlayhead(proj, audioTrack.id, ph) : null;
-
-    if (video && videoClip) {
-      const url = mediaById.get(videoClip.assetId)?.url;
-      const media = mediaById.get(videoClip.assetId);
-      if (url && media?.kind !== "image") {
-        bindElement(video, url, videoClip, ph);
-        video.pause();
-        boundVideoClipRef.current = videoClip.id;
-      }
-    }
-
-    if (audio && audioClip) {
-      const url = mediaById.get(audioClip.assetId)?.url;
-      if (url) {
-        bindElement(audio, url, audioClip, ph);
-        audio.muted = Boolean(audioTrack?.muted);
-        audio.volume = Math.max(0, Math.min(1, audioClip.effects?.volume ?? 1));
-        audio.pause();
-        boundAudioClipRef.current = audioClip.id;
-      }
-    }
-  }, [playing, playhead, clipsSig, mediaById, videoRef, audioRef]);
-
-  // Play: media master clock
-  useEffect(() => {
-    if (!playing) {
-      videoRef.current?.pause();
-      audioRef.current?.pause();
-      return;
-    }
-
-    let lastWall = performance.now();
-
-    const advanceGap = (dt) => {
-      const proj = projectRef.current;
-      const end = projectEndTime(proj);
-      const next = Math.min(end, playheadRef.current + dt);
-      if (next >= end - 0.01) {
-        commitPlayhead(end, true);
-        onPlayingChange(false);
-        return;
-      }
-      commitPlayhead(next);
-    };
-
-    const tick = (now) => {
-      if (!playingRef.current) return;
-
-      const proj = projectRef.current;
-      const ph = playheadRef.current;
-      const video = videoRef.current;
-      const audio = audioRef.current;
-      const videoClip = topVideoClipAtPlayhead(proj, ph);
-      const audioTrack = proj.tracks.find((t) => t.kind === "audio");
-      const audioClip = audioTrack ? clipAtPlayhead(proj, audioTrack.id, ph) : null;
-
-      if (videoClip) {
-        const media = mediaById.get(videoClip.assetId);
-        const url = media?.url;
-        if (url && media?.kind !== "image") {
-          if (boundVideoClipRef.current !== videoClip.id) {
-            bindElement(video, url, videoClip, ph);
-            boundVideoClipRef.current = videoClip.id;
-          }
-
-          if (video.paused) void video.play().catch(() => {});
-
-          if (video.readyState >= 2) {
-            const next = timelineFromMediaTime(videoClip, video.currentTime);
-            const clipEnd = videoClip.startTime + clipDuration(videoClip);
-            if (next >= clipEnd - 0.02) {
-              const after = clipEnd + 0.001;
-              if (after >= projectEndTime(proj) - 0.01) {
-                commitPlayhead(projectEndTime(proj), true);
-                onPlayingChange(false);
-                return;
-              }
-              commitPlayhead(after, true);
-              boundVideoClipRef.current = null;
-            } else {
-              commitPlayhead(next);
-            }
-          }
-        } else {
-          advanceGap(Math.min(0.05, (now - lastWall) / 1000));
-        }
-      } else {
-        advanceGap(Math.min(0.05, (now - lastWall) / 1000));
-      }
-
-      if (audio && audioClip) {
-        const url = mediaById.get(audioClip.assetId)?.url;
-        if (url) {
-          if (boundAudioClipRef.current !== audioClip.id) {
-            bindElement(audio, url, audioClip, playheadRef.current);
-            boundAudioClipRef.current = audioClip.id;
-          }
-          audio.muted = Boolean(audioTrack?.muted);
-          audio.volume = Math.max(0, Math.min(1, audioClip.effects?.volume ?? 1));
-          const target = clampMediaTime(audioClip, mediaTimeFromTimeline(audioClip, playheadRef.current));
-          if (Math.abs(audio.currentTime - target) > 0.12) {
-            try {
-              audio.currentTime = target;
-            } catch {
-              /* ignore */
-            }
-          }
-          if (!audioTrack?.muted && audio.paused) void audio.play().catch(() => {});
-        }
-      } else {
-        audio?.pause();
-      }
-
-      lastWall = now;
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [playing, clipsSig, mediaById, onPlayheadChange, onPlayingChange, videoRef, audioRef]);
-}
+type EditorPreviewProps = {
+  project: EditorProject;
+  playhead: number;
+  playing: boolean;
+  mediaById: ReadonlyMap<string, EditorMediaItem>;
+  selectedClipId: string | null;
+  onPlayheadChange: (time: number) => void;
+  onPlayingChange: (playing: boolean) => void;
+  onSelectClip: (clipId: string | null) => void;
+  onUpdateClip: (clipId: string, patch: Partial<EditorClip>) => void;
+};
 
 export function EditorPreview({
   project,
   playhead,
   playing,
   mediaById,
+  selectedClipId,
   onPlayheadChange,
   onPlayingChange,
-}) {
-  const videoRef = useRef(null);
-  const audioRef = useRef(null);
-
-  const textTracks = project.tracks.filter((track) => track.kind === "text");
-  const videoClip = topVideoClipAtPlayhead(project, playhead);
-  const audioTrack = project.tracks.find((track) => track.kind === "audio");
-  const audioClip = audioTrack ? clipAtPlayhead(project, audioTrack.id, playhead) : null;
-  const textClips = textTracks.flatMap((track) =>
-    project.clips.filter((clip) => {
-      if (clip.trackId !== track.id) return false;
-      const end = clip.startTime + clipDuration(clip);
-      return playhead >= clip.startTime && playhead < end;
-    }),
-  );
-
-  const videoMedia = videoClip ? mediaById.get(videoClip.assetId) : null;
-  const videoUrl = videoMedia?.url;
-  const videoIsImage = videoMedia?.kind === "image";
-  const hasAudio = Boolean(audioClip && mediaById.get(audioClip.assetId)?.url);
-
-  const videoOpacity = videoClip
-    ? clipOpacityAtLocalTime(
-        videoClip.effects,
-        clipDuration(videoClip),
-        playhead - videoClip.startTime,
-      )
-    : 1;
-
-  useEditorPlayback({
+  onSelectClip,
+  onUpdateClip,
+}: EditorPreviewProps) {
+  const [viewportZoom, setViewportZoom] = useState(1);
+  const [viewportPan, setViewportPan] = useState({ x: 0, y: 0 });
+  const viewportDragRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    panX: number;
+    panY: number;
+  } | null>(null);
+  const frame = exportSizeForRatio(project.frameRatio);
+  const videoTrack = project.tracks.find((track) => track.kind === "video");
+  const activeClip = videoTrack
+    ? clipAtPlayhead(project, videoTrack.id, playhead)
+    : null;
+  const posterUrl = activeClip?.assetId
+    ? mediaById.get(activeClip.assetId)?.thumbnailUrl
+    : undefined;
+  const activeMedia = activeClip?.assetId
+    ? mediaById.get(activeClip.assetId)
+    : undefined;
+  const engine = usePlaybackEngine({
     project,
     playhead,
     playing,
     mediaById,
+    width: frame.width,
+    height: frame.height,
     onPlayheadChange,
     onPlayingChange,
-    videoRef,
-    audioRef,
   });
+  const decodedSize =
+    activeClip?.assetId && engine.sourceSize?.assetId === activeClip.assetId
+      ? engine.sourceSize
+      : null;
+
+  const setCanvasZoom = (next: number) => {
+    const zoom = Math.min(4, Math.max(0.25, next));
+    setViewportZoom(zoom);
+    if (zoom <= 1) setViewportPan({ x: 0, y: 0 });
+  };
 
   return (
     <div className="studio-editor-preview">
-      <div className="studio-editor-preview-stage">
-        {videoClip && videoUrl ? (
-          videoIsImage ? (
+      <div
+        className={`studio-editor-preview-stage${viewportZoom > 1 ? " is-zoomed" : ""}`}
+        onWheelCapture={(event) => {
+          if (!event.ctrlKey && !event.metaKey) return;
+          event.preventDefault();
+          setCanvasZoom(viewportZoom * (event.deltaY > 0 ? 0.9 : 1.1));
+        }}
+        onPointerDownCapture={(event) => {
+          if (
+            viewportZoom <= 1 ||
+            (event.button !== 1 && !event.shiftKey)
+          ) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          viewportDragRef.current = {
+            pointerId: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            panX: viewportPan.x,
+            panY: viewportPan.y,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const drag = viewportDragRef.current;
+          if (!drag || drag.pointerId !== event.pointerId) return;
+          setViewportPan({
+            x: drag.panX + event.clientX - drag.x,
+            y: drag.panY + event.clientY - drag.y,
+          });
+        }}
+        onPointerUp={(event) => {
+          if (viewportDragRef.current?.pointerId !== event.pointerId) return;
+          viewportDragRef.current = null;
+          try {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          } catch {
+            // ignore
+          }
+        }}
+      >
+        <div
+          className="studio-editor-canvas-zoom-controls"
+          role="group"
+          aria-label="Canvas zoom"
+          title="Canvas view: Ctrl/⌘ + wheel to zoom, Shift + drag to pan"
+        >
+          <button
+            type="button"
+            aria-label="Zoom canvas out"
+            onClick={() => setCanvasZoom(viewportZoom / 1.2)}
+          >
+            <Minus size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="studio-editor-canvas-zoom-value"
+            onClick={() => {
+              setViewportZoom(1);
+              setViewportPan({ x: 0, y: 0 });
+            }}
+            title="Reset canvas view"
+          >
+            {Math.round(viewportZoom * 100)}%
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom canvas in"
+            onClick={() => setCanvasZoom(viewportZoom * 1.2)}
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
+        </div>
+        <div
+          className="studio-editor-preview-frame"
+          style={{
+            aspectRatio: frame.cssRatio,
+            ["--preview-ar" as string]: String(frame.width / frame.height),
+            transform: `translate(${viewportPan.x}px, ${viewportPan.y}px) scale(${viewportZoom})`,
+          }}
+          data-frame-ratio={project.frameRatio ?? "16:9"}
+        >
+          {posterUrl ? (
+            // Signed CDN poster URLs are already transformed and cannot use Next's loader.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
-              className="studio-editor-preview-video"
-              src={videoUrl}
+              className="studio-editor-preview-video studio-editor-preview-layer studio-editor-preview-poster"
+              src={posterUrl}
               alt=""
-              style={{ opacity: videoOpacity }}
-              onClick={() => onPlayingChange(!playing)}
+              aria-hidden="true"
+            />
+          ) : null}
+          <canvas
+            ref={engine.canvasRef}
+            className="studio-editor-preview-video studio-editor-preview-layer studio-editor-preview-canvas"
+          />
+          {activeClip ? (
+            <PreviewTransformOverlay
+              clip={activeClip}
+              media={activeMedia}
+              decodedWidth={decodedSize?.width}
+              decodedHeight={decodedSize?.height}
+              canvasWidth={frame.width}
+              canvasHeight={frame.height}
+              selected={selectedClipId === activeClip.id}
+              playing={playing}
+              onSelect={(clipId) => {
+                onSelectClip(clipId);
+                if (playing) onPlayingChange(false);
+              }}
+              onUpdateClip={onUpdateClip}
+              onPreviewTransform={engine.previewTransform}
+              onTogglePlay={() => onPlayingChange(!playing)}
             />
           ) : (
-            <video
-              ref={videoRef}
-              className="studio-editor-preview-video"
-              playsInline
-              preload="metadata"
-              style={{ opacity: videoOpacity }}
+            <button
+              type="button"
+              className="studio-editor-preview-hit"
+              aria-label={playing ? "Pause" : "Play"}
               onClick={() => onPlayingChange(!playing)}
             />
-          )
-        ) : (
-          <div className="studio-editor-preview-empty" aria-hidden="true" />
-        )}
-        {textClips.map((clip) => {
-          const local = playhead - clip.startTime;
-          const duration = clipDuration(clip);
-          const anim = textAnimationStyle(
-            clip.text?.animation,
-            clip.text?.animationDuration ?? 0.5,
-            local,
-            duration,
-          );
-          const textOpacity = clipOpacityAtLocalTime(
-            clip.effects,
-            duration,
-            local,
-          );
-          return (
-            <div
-              key={clip.id}
-              className={`studio-editor-text-overlay is-align-${clip.text?.align ?? "center"}`}
-              style={{
-                opacity: anim.opacity * textOpacity,
-                transform: anim.transform,
-                color: clip.text?.color ?? "#fff",
-                fontSize: `${clip.text?.fontSize ?? 42}px`,
-              }}
-            >
-              {clip.text?.text}
+          )}
+          {engine.buffering ? (
+            <div className="studio-editor-preview-buffering" aria-busy="true" aria-label="Loading preview">
+              <MediaLoadWave size="sm" />
             </div>
-          );
-        })}
+          ) : null}
+          {engine.error ? (
+            <div className="studio-editor-preview-status is-error" role="alert">
+              {engine.error}
+            </div>
+          ) : null}
+        </div>
       </div>
-      {hasAudio ? <audio ref={audioRef} preload="auto" className="sr-only" /> : null}
     </div>
   );
 }
 
-export function activeClipsAtPlayhead(project, playhead, mediaById) {
+export function activeClipsAtPlayhead(
+  project: EditorProject,
+  playhead: number,
+  mediaById: ReadonlyMap<string, EditorMediaItem>,
+) {
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
-  const videoClip = videoTrack ? clipAtPlayhead(project, videoTrack.id, playhead) : null;
-  const audioClip = audioTrack ? clipAtPlayhead(project, audioTrack.id, playhead) : null;
-  const videoMedia = videoClip ? mediaById.get(videoClip.assetId) : null;
+  const videoClip = videoTrack
+    ? clipAtPlayhead(project, videoTrack.id, playhead)
+    : null;
+  const audioClip = audioTrack
+    ? clipAtPlayhead(project, audioTrack.id, playhead)
+    : null;
+  const videoMedia = videoClip?.assetId
+    ? mediaById.get(videoClip.assetId)
+    : undefined;
   return {
     videoClip,
     audioClip,
-    videoUrl: videoMedia?.url,
+    videoUrl: videoMedia?.proxyUrl ?? videoMedia?.url,
     videoIsImage: videoMedia?.kind === "image",
-    audioUrl: audioClip ? mediaById.get(audioClip.assetId)?.url : undefined,
+    audioUrl: audioClip?.assetId
+      ? mediaById.get(audioClip.assetId)?.proxyUrl ??
+        mediaById.get(audioClip.assetId)?.url
+      : undefined,
     audioMuted: Boolean(audioTrack?.muted),
   };
 }

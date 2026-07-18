@@ -3,7 +3,7 @@ import {
   inferMediaKind,
   peekActiveExplorerDrag,
   readExplorerDragData,
-} from "@/desk/lib/explorer-dnd";
+} from "../../desk/lib/explorer-dnd.js";
 
 export const DEFAULT_VIDEO_CLIP_SEC = 4;
 export const DEFAULT_AUDIO_CLIP_SEC = 4;
@@ -32,6 +32,12 @@ export function isTimelineDropDrag(event) {
   return types.includes(EXPLORER_DND_TYPE) || types.includes("application/x-studio-asset");
 }
 
+function durationFromEntry(entry, mediaKind) {
+  const known = Number(entry?.durationSeconds ?? entry?.duration);
+  if (Number.isFinite(known) && known > 0.1) return known;
+  return defaultClipDuration(mediaKind);
+}
+
 export function peekTimelineDragPayload() {
   const entry = peekActiveExplorerDrag();
   if (!entry || entry.studioKind !== "asset") return null;
@@ -42,7 +48,7 @@ export function peekTimelineDragPayload() {
     mediaKind,
     name: entry.name,
     thumbnailUrl: entry.thumbnailUrl ?? entry.mediaUrl,
-    duration: defaultClipDuration(mediaKind),
+    duration: durationFromEntry(entry, mediaKind),
   };
 }
 
@@ -58,7 +64,7 @@ export function readTimelineDropPayload(event) {
         mediaKind,
         name: parsed.name,
         thumbnailUrl: parsed.thumbnailUrl,
-        duration: parsed.duration && parsed.duration > 0 ? parsed.duration : defaultClipDuration(mediaKind),
+        duration: durationFromEntry(parsed, mediaKind),
       };
     } catch {
       return null;
@@ -75,6 +81,6 @@ export function readTimelineDropPayload(event) {
     mediaKind,
     name: entry.name,
     thumbnailUrl: entry.thumbnailUrl ?? entry.mediaUrl,
-    duration: defaultClipDuration(mediaKind),
+    duration: durationFromEntry(entry, mediaKind),
   };
 }

@@ -35,12 +35,14 @@ export function registerFolderTools(server: McpServer) {
     {
       name: z.string(),
       parentId: z.string().optional(),
+      icon: z.string().optional(),
+      color: z.string().optional(),
     },
-    async ({ name, parentId }) =>
+    async ({ name, parentId, icon, color }) =>
       jsonResult(
         await studioFetch("/folders", {
           method: "POST",
-          body: JSON.stringify({ name, parentId }),
+          body: JSON.stringify({ name, parentId, icon, color }),
         }),
       ),
   );

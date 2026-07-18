@@ -333,3 +333,98 @@ export const getExecutionOwner = internalQuery({
     return { ownerId: approval.ownerId };
   },
 });
+
+export const listPendingForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    threadId: v.optional(v.id("generationThreads")),
+    status: v.optional(approvalStatus),
+  },
+  returns: v.array(approvalReturn),
+  handler: async (ctx, args) => {
+    const status = args.status ?? "pending";
+    if (args.threadId) {
+      const thread = await ctx.db.get("generationThreads", args.threadId);
+      if (!thread || thread.ownerId !== args.userId) return [];
+      const rows = await ctx.db
+        .query("assistanceApprovals")
+        .withIndex("by_thread_and_status", (q) =>
+          q.eq("threadId", args.threadId!).eq("status", status),
+        )
+        .collect();
+      return rows
+        .filter((row) => row.ownerId === args.userId)
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((row) => ({
+          _id: row._id,
+          threadId: row.threadId,
+          briefId: row.briefId,
+          action: row.action,
+          title: row.title,
+          summary: row.summary,
+          status: row.status,
+          estimatedCredits: row.estimatedCredits,
+          resultJson: row.resultJson,
+          error: row.error,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        }));
+    }
+    const rows = await ctx.db
+      .query("assistanceApprovals")
+      .withIndex("by_owner_and_status", (q) =>
+        q.eq("ownerId", args.userId).eq("status", status),
+      )
+      .collect();
+    return rows
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .map((row) => ({
+        _id: row._id,
+        threadId: row.threadId,
+        briefId: row.briefId,
+        action: row.action,
+        title: row.title,
+        summary: row.summary,
+        status: row.status,
+        estimatedCredits: row.estimatedCredits,
+        resultJson: row.resultJson,
+        error: row.error,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      }));
+  },
+});
+
+export const decideForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    approvalId: v.id("assistanceApprovals"),
+    decision: v.union(v.literal("approve"), v.literal("deny")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const approval = await ctx.db.get("assistanceApprovals", args.approvalId);
+    if (!approval || approval.ownerId !== args.userId) {
+      throw new Error("Approval request not found");
+    }
+    if (approval.status !== "pending") return null;
+    const now = Date.now();
+    if (args.decision === "deny") {
+      await ctx.db.patch(approval._id, {
+        status: "denied",
+        decidedAt: now,
+        updatedAt: now,
+      });
+      return null;
+    }
+    await ctx.db.patch(approval._id, {
+      status: "approved",
+      decidedAt: now,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, internal.assistanceApprovals.execute, {
+      approvalId: approval._id,
+    });
+    return null;
+  },
+});

@@ -30,7 +30,17 @@ export const elementRenderMode = v.union(
   v.literal("mixed"),
 );
 
-export const generationMode = v.union(v.literal("image"), v.literal("video"));
+export const generationMode = v.union(
+  v.literal("image"),
+  v.literal("video"),
+  v.literal("audio"),
+);
+
+export const audioGenType = v.union(
+  v.literal("voiceover"),
+  v.literal("sfx"),
+  v.literal("music"),
+);
 
 export const generationSource = v.union(v.literal("ui"), v.literal("api"));
 
@@ -43,6 +53,7 @@ export const apiKeyScope = v.union(
 export const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
+  v.literal("audio"),
   // Legacy image tiers on older jobs
   v.literal("low"),
   v.literal("medium"),
@@ -202,9 +213,39 @@ export default defineSchema({
     kind: assetKind,
     mimeType: v.string(),
     byteSize: v.optional(v.number()),
+    storageStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("ready"),
+        v.literal("failed"),
+      ),
+    ),
     bunnyPath: v.optional(v.string()),
     bunnyStreamVideoId: v.optional(v.string()),
     thumbnailPath: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    frameRate: v.optional(v.number()),
+    videoCodec: v.optional(v.string()),
+    videoProfile: v.optional(v.string()),
+    audioCodec: v.optional(v.string()),
+    proxyKeyframeIntervalSeconds: v.optional(v.number()),
+    rotation: v.optional(v.number()),
+    editProxyStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("processing"),
+        v.literal("ready"),
+        v.literal("failed"),
+      ),
+    ),
+    editProxyPath: v.optional(v.string()),
+    editProxyByteSize: v.optional(v.number()),
+    editProxy1080Path: v.optional(v.string()),
+    editProxy1080ByteSize: v.optional(v.number()),
+    editProxyError: v.optional(v.string()),
+    editProxyUpdatedAt: v.optional(v.number()),
     sourceGenerationJobId: v.optional(v.id("generationJobs")),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -215,6 +256,25 @@ export default defineSchema({
     .index("by_folder_and_kind", ["folderId", "kind"])
     .index("by_owner_and_deleted", ["ownerId", "deletedAt"])
     .index("by_generation_job", ["sourceGenerationJobId"]),
+
+  mediaProxyJobs: defineTable({
+    assetId: v.id("assets"),
+    ownerId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+    attemptCount: v.number(),
+    leaseUntil: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_asset", ["assetId"])
+    .index("by_status", ["status"])
+    .index("by_status_and_lease", ["status", "leaseUntil"]),
 
   documents: defineTable({
     ownerId: v.id("users"),
@@ -489,7 +549,7 @@ export default defineSchema({
     mode: generationMode,
     tier: generationTier,
     resolvedModel: v.string(),
-    stylePresetId: v.id("stylePresets"),
+    stylePresetId: v.optional(v.id("stylePresets")),
     styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     enhancedPrompt: v.optional(v.string()),
@@ -504,6 +564,13 @@ export default defineSchema({
     hasReferenceInput: v.optional(v.boolean()),
     hasVideoReferenceInput: v.optional(v.boolean()),
     hasNonVideoReferenceInput: v.optional(v.boolean()),
+    /** Audio gen subtype: voiceover | sfx | music */
+    audioType: v.optional(audioGenType),
+    elevenVoiceId: v.optional(v.string()),
+    elevenVoiceName: v.optional(v.string()),
+    elevenPublicOwnerId: v.optional(v.string()),
+    audioLoop: v.optional(v.boolean()),
+    promptInfluence: v.optional(v.number()),
     externalTaskId: v.optional(v.string()),
     error: v.optional(v.string()),
     reservedCreditTransactionId: v.optional(v.id("creditTransactions")),
@@ -526,6 +593,27 @@ export default defineSchema({
     .index("by_external_task", ["externalTaskId"])
     .index("by_owner_and_created", ["ownerId", "createdAt"])
     .index("by_api_key_and_stage", ["apiKeyId", "stage"]),
+
+  /** Studio-owned “My Voices” — library picks saved per user. */
+  savedVoices: defineTable({
+    ownerId: v.id("users"),
+    voiceId: v.string(),
+    publicOwnerId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    previewUrl: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    language: v.optional(v.string()),
+    accent: v.optional(v.string()),
+    gender: v.optional(v.string()),
+    age: v.optional(v.string()),
+    useCase: v.optional(v.string()),
+    /** ElevenLabs category (premade | professional | …). */
+    category: v.optional(v.string()),
+    addedAt: v.number(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_owner_and_voice", ["ownerId", "voiceId"]),
 
   generationInputs: defineTable({
     jobId: v.id("generationJobs"),

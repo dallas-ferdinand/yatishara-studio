@@ -17,6 +17,7 @@ export function WorkspacePanel({
   onSetTabOrder,
   onNewChat,
   onTabContextAction,
+  onCommitTabRename,
   onOpenSettings,
   onToggleHistory,
   historyOpen,
@@ -59,6 +60,7 @@ export function WorkspacePanel({
           onSetTabOrder={onSetTabOrder}
           onNewChat={onNewChat}
           onTabContextAction={onTabContextAction}
+          onCommitTabRename={onCommitTabRename}
         />
         <div className="cursor-panel-head-tools cursor-workspace-tools">
           {activeKind === "chat" ? (

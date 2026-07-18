@@ -939,8 +939,23 @@ export function Shell({
         }
         return;
       }
+      if (action === "delete" && tab.kind === "file" && tab.path) {
+        void (async () => {
+          const ok = window.confirm(`Delete "${tab.title}"?`);
+          if (!ok) return;
+          try {
+            await deleteWorkspaceFile(tab.path, workspaceId);
+            closeWorkspaceTab(tab.key);
+            await loadFiles(filesPath, { silent: true });
+            await loadRoot();
+          } catch (err) {
+            console.warn("Tab delete failed", err);
+          }
+        })();
+        return;
+      }
       if (tab.kind === "file" && tab.path) {
-        if (action === "add-to-composer") {
+        if (action === "add-to-composer" || action === "attach") {
           const chatId = chatState.activeId;
           if (!chatId) return;
           attachWorkspacePathToChat(chatState, chatId, {
@@ -961,7 +976,39 @@ export function Shell({
         }
       }
     },
-    [unifiedTabs, closeWorkspaceTab, chatState, bump, loadFiles, workspaceId]
+    [
+      unifiedTabs,
+      closeWorkspaceTab,
+      chatState,
+      bump,
+      loadFiles,
+      loadRoot,
+      filesPath,
+      workspaceId,
+    ]
+  );
+
+  const onCommitTabRename = useCallback(
+    async (tab, nextName) => {
+      if (!tab?.path || tab.kind !== "file") return;
+      const result = await renameWorkspaceFile(tab.path, nextName, workspaceId);
+      const nextPath = result?.path ?? null;
+      if (nextPath && nextPath !== tab.path) {
+        // Refresh open file tab metadata via editor tab close/reopen path map.
+        setEditorTabs((prev) =>
+          prev.map((t) => {
+            const tabId = String(tab.key ?? "").replace(/^file:/, "");
+            if (t.id === tabId || t.path === tab.path) {
+              return { ...t, path: nextPath, name: nextName, title: nextName };
+            }
+            return t;
+          }),
+        );
+      }
+      await loadFiles(filesPath, { silent: true });
+      await loadRoot();
+    },
+    [workspaceId, filesPath, loadFiles, loadRoot],
   );
 
   const onCloseTab = useCallback((id) => {
@@ -1283,6 +1330,7 @@ export function Shell({
       onSetTabOrder={setWorkspaceTabOrderDirect}
       onNewChat={onNewAgentChat}
       onTabContextAction={onTabContextAction}
+      onCommitTabRename={onCommitTabRename}
       onOpenSettings={() => setSettingsOpen(true)}
       onToggleHistory={toggleChatHistory}
       historyOpen={chatHistoryOpen}

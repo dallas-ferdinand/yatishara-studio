@@ -1209,6 +1209,84 @@ export const internalAdjustCreditsByPhone = internalMutation({
   },
 });
 
+/** Internal ops: set absolute credit balance for a phone user. */
+export const internalSetCreditsByPhone = internalMutation({
+  args: {
+    phone: v.string(),
+    creditBalance: v.number(),
+    reason: v.string(),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    phone: v.string(),
+    previousCreditBalance: v.number(),
+    creditBalance: v.number(),
+    amount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const phone = args.phone.replace(/\D/g, "");
+    if (phone.length < 8 || phone.length > 15) {
+      throw new Error("Invalid phone");
+    }
+    if (!Number.isFinite(args.creditBalance) || args.creditBalance < 0) {
+      throw new Error("creditBalance must be a non-negative number");
+    }
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_phone", (q) => q.eq("phone", phone))
+      .unique();
+    if (!user) {
+      throw new Error(`No user found for phone ${phone}`);
+    }
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    const previousCreditBalance = existing?.creditBalance ?? 0;
+    const creditBalance = Math.round(args.creditBalance * 100) / 100;
+    const amount = Math.round((creditBalance - previousCreditBalance) * 100) / 100;
+    const accountId =
+      existing?._id ??
+      (await ctx.db.insert("billingAccounts", {
+        userId: user._id,
+        creditBalance: 0,
+        reservedCredits: 0,
+        createdAt: now,
+        updatedAt: now,
+      }));
+    if (amount === 0 && existing) {
+      return {
+        userId: user._id,
+        phone,
+        previousCreditBalance,
+        creditBalance: previousCreditBalance,
+        amount: 0,
+      };
+    }
+    await ctx.db.patch(accountId, {
+      creditBalance,
+      updatedAt: now,
+    });
+    await ctx.db.insert("creditTransactions", {
+      userId: user._id,
+      billingAccountId: accountId,
+      kind: "admin_adjustment",
+      amount,
+      balanceAfter: creditBalance,
+      reason: args.reason,
+      createdAt: now,
+    });
+    return {
+      userId: user._id,
+      phone,
+      previousCreditBalance,
+      creditBalance,
+      amount,
+    };
+  },
+});
+
 /**
  * One-shot/internal admin wipe: clears payments, receipts, credit ledger,
  * payment notifications, and related audit rows for a single phone user,

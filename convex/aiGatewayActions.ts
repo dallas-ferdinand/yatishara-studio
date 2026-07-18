@@ -26,8 +26,19 @@ export const enhancePromptInternal = internalAction({
     aspectRatio: v.optional(v.string()),
     hasVideoReference: v.optional(v.boolean()),
     hasImageReference: v.optional(v.boolean()),
+    hasAudioReference: v.optional(v.boolean()),
     attachedScriptMarkdown: v.optional(v.array(v.string())),
     referenceSummaries: v.array(v.string()),
+    referenceInputs: v.optional(
+      v.array(
+        v.object({
+          kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
+          url: v.string(),
+          mimeType: v.optional(v.string()),
+        }),
+      ),
+    ),
+    startFrameUrl: v.optional(v.string()),
     modelId: v.optional(v.string()),
   },
   returns: v.string(),

@@ -1,7 +1,7 @@
 import type { EditorClip, EditorProject, EditorTrack, TrackKind, TransitionJoint } from "./types";
 import { clipDuration } from "./editorState";
 
-const JOINT_GAP_SEC = 0.75;
+const JOINT_GAP_SEC = 0.05;
 
 export function clipsOnTrack(project: EditorProject, trackId: string): EditorClip[] {
   return project.clips

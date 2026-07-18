@@ -74,8 +74,23 @@ export function friendlyGenerationError(
     };
   }
 
-  if (/duration must be|between 4 and 15|invalid resolution/i.test(lower)) {
-    return { title: "Check your settings", message: text };
+  if (/duration must be|between 4 and 15/i.test(lower)) {
+    return {
+      title: "Check your settings",
+      message: "Video length must be between 4 and 15 seconds. Adjust duration, then retry.",
+    };
+  }
+
+  if (
+    /invalid resolution|unsupported resolution|resolution(?:\s+\w+){0,6}\s+is not valid|parameter resolution|not valid for model.*seedance|not valid for model.*dreamina/i.test(
+      lower,
+    )
+  ) {
+    return {
+      title: "Check your settings",
+      message:
+        "That resolution isn't supported for this video model. Try 720p or 1080p, then retry.",
+    };
   }
 
   if (/rate limit|429|quota|too many/i.test(lower)) {

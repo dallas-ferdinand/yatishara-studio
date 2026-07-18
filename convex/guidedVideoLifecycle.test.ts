@@ -3,7 +3,6 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import {
   buildAssistanceGenerationPlan,
@@ -13,6 +12,82 @@ import { emptyBriefPayload } from "./lib/guidedVideoTypes";
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"]);
 
 describe("Assistance approval lifecycle", () => {
+  it("publishes generated assets only after storage is ready", async () => {
+    const t = convexTest(schema, modules);
+    const seeded = await t.run(async (ctx) => {
+      const now = Date.now();
+      const userId = await ctx.db.insert("users", {
+        name: "Storage Tester",
+        email: "storage@example.com",
+        role: "user",
+        createdAt: now,
+        updatedAt: now,
+      });
+      const folderId = await ctx.db.insert("folders", {
+        ownerId: userId,
+        name: "Outputs",
+        icon: "folder",
+        sortOrder: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const threadId = await ctx.db.insert("generationThreads", {
+        ownerId: userId,
+        linkedFolderId: folderId,
+        title: "Storage",
+        sortOrder: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const stylePresetId = await ctx.db.insert("stylePresets", {
+        name: "Default",
+        slug: "storage-default",
+        kind: "any",
+        systemInstructions: "Default style",
+        enabled: true,
+        sortOrder: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const jobId = await ctx.db.insert("generationJobs", {
+        ownerId: userId,
+        threadId,
+        saveFolderId: folderId,
+        mode: "image",
+        tier: "image",
+        resolvedModel: "openai/gpt-image-2",
+        stylePresetId,
+        userPrompt: "A product image",
+        stage: "saving",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { jobId };
+    });
+
+    const reserved = await t.mutation(internal.generation.createGeneratedAsset, {
+      jobId: seeded.jobId,
+      name: "output.png",
+      kind: "image",
+      mimeType: "image/png",
+    });
+    await t.run(async (ctx) => {
+      expect((await ctx.db.get(reserved.assetId))?.storageStatus).toBe("pending");
+    });
+
+    await t.mutation(internal.generation.setGeneratedAssetStorageStatus, {
+      jobId: seeded.jobId,
+      assetId: reserved.assetId,
+      status: "ready",
+      byteSize: 1234,
+    });
+    await t.run(async (ctx) => {
+      const asset = await ctx.db.get(reserved.assetId);
+      expect(asset?.storageStatus).toBe("ready");
+      expect(asset?.byteSize).toBe(1234);
+    });
+  });
+
   it("atomically replaces a failed media job and snapshots the reviewed plan", async () => {
     const t = convexTest(schema, modules);
     const seeded = await t.run(async (ctx) => {

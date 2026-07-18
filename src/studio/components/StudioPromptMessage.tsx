@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { Film, Folder, Image as ImageIcon, Music, Sparkles, FileText } from "lucide-react";
+import { Play, Folder, Image as ImageIcon, Music, Sparkles, FileText } from "lucide-react";
 import { enhanceMarkdown, renderMarkdownFragment } from "@/desk/lib/markdown-desk.js";
 import { writeExplorerDragData, clearActiveExplorerDrag } from "@/desk/lib/explorer-dnd.js";
 import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
@@ -14,7 +14,7 @@ import {
 
 const ICONS = {
   image: ImageIcon,
-  video: Film,
+  video: Play,
   audio: Music,
   folder: Folder,
   sparkles: Sparkles,
@@ -47,7 +47,7 @@ function entryFromPromptRef(refItem, preview) {
   };
 }
 
-function StudioChatChip({ refItem, label, title, preview }) {
+function StudioChatChip({ refItem, label, title, preview, onOpen }) {
   const displayLabel = label ?? refItem?.label ?? "Reference";
   const iconKey = composerTokenIconKind({
     ...refItem,
@@ -63,6 +63,7 @@ function StudioChatChip({ refItem, label, title, preview }) {
     (isElement || mediaKind === "image" || mediaKind === "video");
   const dragEntry = entryFromPromptRef(refItem, preview);
   const canDrag = Boolean(dragEntry?.path);
+  const canOpen = Boolean(onOpen && dragEntry?.studioId);
 
   function handleDragStart(event) {
     if (!canDrag || !dragEntry) return;
@@ -79,16 +80,37 @@ function StudioChatChip({ refItem, label, title, preview }) {
     clearActiveExplorerDrag();
   }
 
+  function handleOpen(event) {
+    if (!canOpen || !dragEntry) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpen(dragEntry);
+  }
+
   const commonProps = {
     className: `studio-chat-chip${imageOnly ? " studio-chat-chip--image-only" : ""}${
       thumb && !imageOnly ? " studio-chat-chip--preview" : ""
-    }${canDrag ? " is-draggable" : ""}`,
+    }${canDrag ? " is-draggable" : ""}${canOpen ? " is-openable" : ""}`,
     title:
       title ??
-      (canDrag ? `${displayLabel} · drag into composer` : displayLabel),
+      (canOpen
+        ? `Open ${displayLabel}`
+        : canDrag
+          ? `${displayLabel} · drag into composer`
+          : displayLabel),
     draggable: canDrag,
     onDragStart: handleDragStart,
     onDragEnd: handleDragEnd,
+    onClick: canOpen ? handleOpen : undefined,
+    role: canOpen ? "button" : undefined,
+    tabIndex: canOpen ? 0 : undefined,
+    onKeyDown: canOpen
+      ? (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            handleOpen(event);
+          }
+        }
+      : undefined,
   };
 
   if (imageOnly) {
@@ -109,7 +131,10 @@ function StudioChatChip({ refItem, label, title, preview }) {
           )}
         </span>
         <span className="studio-chat-chip-overlay" aria-hidden="true">
-          <Icon className="studio-chat-chip-icon" />
+          <Icon
+            className="studio-chat-chip-icon"
+            {...(mediaKind === "video" ? { strokeWidth: 2.85 } : {})}
+          />
         </span>
       </span>
     );
@@ -122,7 +147,11 @@ function StudioChatChip({ refItem, label, title, preview }) {
           <img className="studio-chat-chip-media" src={thumb} alt="" loading="lazy" draggable={false} />
         </span>
       ) : (
-        <Icon className="studio-chat-chip-icon" aria-hidden="true" />
+        <Icon
+          className="studio-chat-chip-icon"
+          aria-hidden="true"
+          {...(mediaKind === "video" ? { strokeWidth: 2.85 } : {})}
+        />
       )}
       <span className="studio-chat-chip-label">{displayLabel}</span>
     </span>
@@ -147,7 +176,7 @@ function StudioMarkdownBit({ text }) {
   );
 }
 
-export function StudioPromptMessage({ prompt, assets = [], elements = [] }) {
+export function StudioPromptMessage({ prompt, assets = [], elements = [], onOpenEntry }) {
   const { refs, segments } = useMemo(() => parseStudioPrompt(prompt), [prompt]);
   const previewLookup = useMemo(
     () => ({ assets, elements }),
@@ -187,6 +216,7 @@ export function StudioPromptMessage({ prompt, assets = [], elements = [] }) {
               refItem={ref}
               preview={previewForRef(ref)}
               title={[ref.path, ref.notes].filter(Boolean).join(" · ") || ref.label}
+              onOpen={onOpenEntry}
             />
           ))}
           {segments.map((segment, index) => {
@@ -197,6 +227,7 @@ export function StudioPromptMessage({ prompt, assets = [], elements = [] }) {
                   key={`m-${index}-${segment.label}`}
                   refItem={refItem}
                   preview={previewForRef(refItem)}
+                  onOpen={onOpenEntry}
                 />
               );
             }

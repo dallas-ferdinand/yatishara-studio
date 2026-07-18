@@ -16,11 +16,15 @@ AUTH_RESEND_KEY=
 EVOLUTION_API_KEY=
 STUDIO_SUPER_ADMIN_EMAIL=
 AI_GATEWAY_API_KEY=
-GATEWAY_TEXT_MODEL_ID=google/gemini-2.5-flash-lite
-GATEWAY_ASSISTANT_MODEL_ID=google/gemini-3-flash
+GATEWAY_TEXT_MODEL_ID=google/gemini-3.1-pro-preview
+GATEWAY_ASSISTANT_MODEL_ID=google/gemini-3.1-pro-preview
 DEEPGRAM_API_KEY=
 DEEPGRAM_MODEL=nova-3
 DEEPGRAM_LANGUAGE=en
+# Audio gen (voiceover eleven_v3 / sound effects) — set on Convex backend secrets.
+ELEVENLABS_API_KEY=
+# true after ElevenLabs plan upgrade (library/shared voices via API)
+ELEVENLABS_LIBRARY_VOICES_ENABLED=
 GATEWAY_IMAGE_MODEL_ID=openai/gpt-image-2
 GATEWAY_VIDEO_MODEL_ID=bytedance/seedance-2.0
 GUIDED_VIDEO_ASSISTANCE_ENABLED=1

@@ -249,6 +249,18 @@ export const get = authedQuery({
   },
 });
 
+export const getInternal = internalQuery({
+  args: {
+    presetId: v.id("stylePresets"),
+  },
+  returns: v.union(v.null(), presetReturn),
+  handler: async (ctx, args) => {
+    const preset = await ctx.db.get("stylePresets", args.presetId);
+    if (!preset?.enabled) return null;
+    return preset;
+  },
+});
+
 export const listEnabled = authedQuery({
   args: {
     kind: v.optional(presetKind),

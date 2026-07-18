@@ -4,7 +4,6 @@
 import dynamic from "next/dynamic";
 import { StudioMobileBottomNav } from "./StudioMobileBottomNav";
 import { StudioPromptMessage } from "./StudioPromptMessage";
-import { StudioDotGridWave } from "./StudioDotGridWave";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
 import {
@@ -17,6 +16,7 @@ import { useAuthActions } from "@convex-dev/auth/react";
 import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
+  AudioLines,
   ChevronDown,
   Clapperboard,
   Clock3,
@@ -43,7 +43,6 @@ import {
   Plus,
   ArrowUp,
   Cloud,
-  Scissors,
   Search,
   SlidersHorizontal,
   RectangleHorizontal,
@@ -65,13 +64,20 @@ import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
-import { MediaLoadFrame } from "./media-load-frame";
+import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
+import { StudioChatVideoPlayer } from "./StudioChatVideoPlayer";
+import {
+  StudioChatAudioPlayer,
+  StudioChatAudioPlayerLoading,
+} from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import { Icon } from "@/desk/components/Icons";
+import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { matchesExplorerTypeFilter } from "@/desk/lib/file-kind";
 import {
   isHiddenStyleSheet,
   StudioStyleSheetPickerPanel,
@@ -79,7 +85,9 @@ import {
 } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { threadTitleFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -95,6 +103,8 @@ import {
   isBunnyOptimizedUrl,
   thumbnailDisplayUrl,
 } from "@/studio/lib/mediaUrls";
+import { isVideoFileUrl, playableMediaUrl } from "@/studio/lib/mediaPlayback";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
@@ -117,12 +127,14 @@ import { useStudioBackground } from "@/studio/hooks/useStudioBackground";
 import { useMercuryLogoAssets, useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { markPerfMilestone, markWorkspaceReady } from "@/lib/performance";
 import {
+  audioCreditCost,
   creditCostForGeneration,
   imageCreditCost,
   normalizeImageResolutionLabel as normalizeImageResolution,
   TEXT_GENERATION_BASE_CREDITS,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
+import { StudioVoicePicker } from "./StudioVoicePicker";
 
 const StudioApiKeysSettings = dynamic(
   () => import("./StudioApiKeysSettings").then((m) => m.StudioApiKeysSettings),
@@ -195,7 +207,7 @@ const CREATE_MENU_ITEMS_BASE = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
   { action: "new-file", label: "Ad copy", icon: FileText },
-  { action: "new-video-edit", label: "Video edit", icon: Scissors, previewOnly: true },
+  { action: "new-video-edit", label: "Video edit", icon: Clapperboard, previewOnly: true },
   { sep: true },
   { action: "new-element", label: "Add element", icon: Sparkles },
 ];
@@ -244,6 +256,35 @@ const PERSISTABLE_TAB_PREFIXES = [
   "edit:",
 ];
 
+/** Feed tab keys: `feed:forYou:home` | `feed:following:<postId>` (legacy `feed:<seed>` → forYou). */
+function parseFeedTabKey(key) {
+  if (typeof key !== "string" || !key.startsWith("feed:")) return null;
+  const rest = key.slice("feed:".length);
+  if (rest.startsWith("forYou:")) {
+    return { mode: "forYou", seed: rest.slice("forYou:".length) || "home" };
+  }
+  if (rest.startsWith("following:")) {
+    return { mode: "following", seed: rest.slice("following:".length) || "home" };
+  }
+  return { mode: "forYou", seed: rest || "home" };
+}
+
+function buildFeedTabKey(mode = "forYou", seed = "home") {
+  const safeMode = mode === "following" ? "following" : "forYou";
+  const id = String(seed ?? "home").trim() || "home";
+  return `feed:${safeMode}:${id}`;
+}
+
+function feedModeTabTitle(mode) {
+  return mode === "following" ? "Following" : "For You";
+}
+
+function normalizeFeedTabKey(key) {
+  const parsed = parseFeedTabKey(key);
+  if (!parsed) return key;
+  return buildFeedTabKey(parsed.mode, parsed.seed);
+}
+
 function isPersistableTabKey(tab) {
   if (typeof tab !== "string" || !tab) return false;
   return PERSISTABLE_TAB_PREFIXES.some((prefix) => tab.startsWith(prefix));
@@ -267,7 +308,7 @@ function sanitizePersistedOpenTabs(tabs) {
     if (!isPersistableTabKey(tab)) continue;
     if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(tab)) continue;
     if (tab.startsWith("feed:")) {
-      lastFeed = tab;
+      lastFeed = normalizeFeedTabKey(tab);
       if (feedSlot < 0) feedSlot = cleaned.length;
       continue;
     }
@@ -318,10 +359,14 @@ function readPersistedTabSession() {
     }
     const parsed = JSON.parse(raw);
     const openTabs = sanitizePersistedOpenTabs(parsed?.openTabs);
-    let activeTab =
-      typeof parsed?.activeTab === "string" && openTabs.includes(parsed.activeTab)
-        ? parsed.activeTab
-        : openTabs[openTabs.length - 1] || COMPOSER_TAB;
+    const rawActive =
+      typeof parsed?.activeTab === "string" ? parsed.activeTab : "";
+    const normalizedActive = rawActive.startsWith("feed:")
+      ? normalizeFeedTabKey(rawActive)
+      : rawActive;
+    let activeTab = openTabs.includes(normalizedActive)
+      ? normalizedActive
+      : openTabs[openTabs.length - 1] || COMPOSER_TAB;
     if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(activeTab)) {
       activeTab = COMPOSER_TAB;
     }
@@ -441,23 +486,38 @@ function writeStudioMainPanelSizes(sizes) {
   }
 }
 
+/** Accent SVG cursors — match Mercury OS desk (`custom-cursor.js`) sizing + light glow. */
 function studioCursorUrl(accent, active = false) {
-  const path = "M4 6.3 L4 19.9 Q4 21.9 5.258 20.346 L7.4 17.7 C8.4 16.4 9.9 15.7 11.5 15.7 L14.902 15.826 Q16.9 15.9 15.414 14.562 L5.486 5.638 Q4 4.3 4 6.3 Z";
+  const path =
+    "M4 6.3 L4 19.9 Q4 21.9 5.258 20.346 L7.4 17.7 C8.4 16.4 9.9 15.7 11.5 15.7 L14.902 15.826 Q16.9 15.9 15.414 14.562 L5.486 5.638 Q4 4.3 4 6.3 Z";
   const glow = `<path d='${path}' fill='none' stroke='${accent}' stroke-width='5' stroke-opacity='.22' stroke-linejoin='round' stroke-linecap='round' filter='blur(2.5px)'/>`;
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 26'>${glow}<path d='${path}' fill='${active ? accent : "none"}' fill-opacity='${active ? 1 : 0}' stroke='${accent}' stroke-width='${active ? 1 : 2}' stroke-linejoin='round' stroke-linecap='round'/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 4 6, auto`;
 }
 
 function studioCursorTextUrl(accent) {
+  // Vertical I-beam caret (Mercury OS) — not a horizontal bar.
   const glow = `<rect x='1' y='1' width='2' height='16' fill='${accent}' fill-opacity='.22' rx='1' filter='blur(2.5px)'/>`;
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='4' height='18' viewBox='0 0 4 18'>${glow}<rect x='1' y='1' width='2' height='16' fill='${accent}' rx='1'/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 2 9, text`;
 }
 
-function studioCursorResizeXUrl(accent) {
+function studioCursorResizeXMarkup(accent) {
   const glow = `<path d='M9 7 L3 7 M5 5 L3 7 L5 9 M19 7 L25 7 M23 5 L25 7 L23 9' fill='none' stroke='${accent}' stroke-width='5' stroke-opacity='.22' stroke-linecap='round' stroke-linejoin='round' filter='blur(2.5px)'/>`;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'>${glow}<path d='M9 7 L3 7 M5 5 L3 7 L5 9' fill='none' stroke='${accent}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/><path d='M19 7 L25 7 M23 5 L25 7 L23 9' fill='none' stroke='${accent}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+  const left = `<path d='M9 7 L3 7 M5 5 L3 7 L5 9' fill='none' stroke='${accent}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>`;
+  const right = `<path d='M19 7 L25 7 M23 5 L25 7 L23 9' fill='none' stroke='${accent}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/>`;
+  return `${glow}${left}${right}`;
+}
+
+function studioCursorResizeXUrl(accent) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'>${studioCursorResizeXMarkup(accent)}</svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 14 7, ew-resize`;
+}
+
+function studioCursorResizeYUrl(accent) {
+  // Same left/right arrows as Mercury OS, rotated for up/down.
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='28' viewBox='0 0 14 28'><g transform='translate(14 0) rotate(90)'>${studioCursorResizeXMarkup(accent)}</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 7 14, ns-resize`;
 }
 
 function studioCursorDragUrl(accent) {
@@ -482,6 +542,7 @@ function applyStudioCursorTheme(element) {
   root.style.setProperty("--studio-cursor-active", studioCursorUrl(accent, true));
   root.style.setProperty("--studio-cursor-text", studioCursorTextUrl(accent));
   root.style.setProperty("--studio-cursor-resize-x", studioCursorResizeXUrl(accent));
+  root.style.setProperty("--studio-cursor-resize-y", studioCursorResizeYUrl(accent));
   root.style.setProperty("--studio-cursor-drag", studioCursorDragUrl(accent));
   root.style.setProperty("--studio-cursor-grabbing", studioCursorGrabbingUrl(accent));
 }
@@ -492,9 +553,9 @@ function cssUrlToPath(value) {
 }
 
 const STYLE = {
-  shell: "flex h-dvh min-h-0 text-cursor-text",
-  sidebar: "flex h-full w-full min-w-0 flex-col border-r border-cursor-border-soft",
-  main: "flex min-h-0 min-w-0 flex-1 flex-col",
+  shell: "flex h-dvh min-h-0 overflow-hidden text-cursor-text",
+  sidebar: "flex h-full w-full min-w-0 flex-col overflow-hidden border-r border-cursor-border-soft",
+  main: "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
   panelHead: "cursor-panel-head cursor-sidebar-head justify-between",
   iconButton:
     "inline-flex h-8 items-center gap-1.5 rounded-md border border-cursor-border bg-cursor-panel px-2 text-xs text-cursor-muted transition hover:border-cursor-accent/50 hover:bg-cursor-hover hover:text-cursor-text",
@@ -553,7 +614,7 @@ export function StudioShell({
   const trashElement = useMutation(api.elements.moveToTrash);
   const restoreElement = useMutation(api.elements.restore);
   const reserveUpload = useMutation(api.assets.reserveUpload);
-  const completeUpload = useMutation(api.assets.completeUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const updateAsset = useMutation(api.assets.update);
   const duplicateAsset = useMutation(api.assets.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
@@ -567,13 +628,16 @@ export function StudioShell({
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
   const shareAssetToProfile = useMutation(api.profiles.shareAsset);
   const unshareAssetFromProfile = useMutation(api.profiles.unshareAsset);
+  const updateMyProfile = useMutation(api.profiles.updateMine);
   const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
   const generatePresetThumbnails = useAction(api.stylePresetActions.adminGenerateThumbnails);
   const runFlow = useAction(api.generationActions.runFlow);
+  const runAudioFlow = useAction(api.audioActions.runAudioFlow);
   const generateScript = useAction(api.generationActions.generateScript);
   const generateElementSheet = useAction(api.elementActions.generateSheet);
   const submitAssistedTurn = useAction(api.guidedVideoActions.submitAssistedTurn);
   const approveAndGenerate = useAction(api.guidedVideoActions.approveAndGenerate);
+  const ensureGuidedBrief = useMutation(api.guidedVideo.ensureBrief);
   const patchBriefProduction = useMutation(api.guidedVideo.patchBriefProduction);
   const setThreadAssistance = useMutation(api.generation.setThreadAssistance);
   const decideAssistanceApproval = useMutation(api.assistanceApprovals.decide);
@@ -592,11 +656,12 @@ export function StudioShell({
   const [navTrail, setNavTrail] = useState(() => readPersistedTabSession().navTrail);
   const [viewMode, setViewMode] = useState("grid");
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState([]);
-  const [startFrameAttachmentId, setStartFrameAttachmentId] = useState("");
   const [mode, setMode] = useState("image");
+  const pendingModeSwitchRef = useRef(null);
   const [videoType, setVideoType] = useState("hypermotion_ad");
   const [assistanceEnabled, setAssistanceEnabled] = useState(true);
   const [assistBusy, setAssistBusy] = useState(false);
@@ -663,10 +728,22 @@ export function StudioShell({
       setScriptType("production");
     }
   }, [scriptType]);
+  const [audioType, setAudioType] = useState("voiceover");
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [sfxLoop, setSfxLoop] = useState(false);
+  const [sfxDurationAuto, setSfxDurationAuto] = useState(true);
+  const [sfxDurationSeconds, setSfxDurationSeconds] = useState(5);
+  const [sfxPromptInfluence, setSfxPromptInfluence] = useState(0.3);
   /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
   const skipPromptEnhancement = composerStyleMode === "direct";
   const [referenceIntent, setReferenceIntent] = useState("auto");
   const [flowPending, setFlowPending] = useState(false);
+
+  useEffect(() => {
+    if (mode === "audio" && assistanceEnabled) {
+      setAssistanceEnabled(false);
+    }
+  }, [mode, assistanceEnabled]);
   /** Optimistic prompt + loader bubbles keyed by threadId until Convex events catch up. */
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -681,6 +758,10 @@ export function StudioShell({
   const [renameTarget, setRenameTarget] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
+  const [feedModeMenuOpen, setFeedModeMenuOpen] = useState(false);
+  const [feedModeMenuKey, setFeedModeMenuKey] = useState(null);
+  const feedModeMenuRef = useRef(null);
+  const [feedModeMenuPos, setFeedModeMenuPos] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   useStudioBackground();
@@ -975,12 +1056,14 @@ export function StudioShell({
   const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
     hasCurrentUser && activeFolder && !isTrashView && videoEditorEnabled
-      ? { folderId: activeFolder._id }
+      ? { folderId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
   const trashedVideoEditsRaw = useQuery(
     api.videoEdits.listTrash,
-    hasCurrentUser && isTrashView && videoEditorEnabled ? {} : "skip",
+    hasCurrentUser && isTrashView && videoEditorEnabled
+      ? { expiresUnix: assetUrlExpiresUnix }
+      : "skip",
   );
   const videoEdits = videoEditorEnabled ? videoEditsRaw : [];
   const trashedVideoEdits = videoEditorEnabled ? trashedVideoEditsRaw : [];
@@ -1026,6 +1109,25 @@ export function StudioShell({
     [activeThreadId, events, optimisticByThread],
   );
 
+  // Keep the open chat's save folder in sync with the explorer so generations
+  // land in the folder the user is currently viewing.
+  useEffect(() => {
+    if (!hasCurrentUser || !activeThreadId || !activeFolder?._id || isTrashView) return;
+    const thread = threads?.find((item) => item._id === activeThreadId);
+    if (!thread || thread.linkedFolderId === activeFolder._id) return;
+    void switchThreadFolder({
+      threadId: activeThreadId,
+      folderId: activeFolder._id,
+    });
+  }, [
+    activeFolder?._id,
+    activeThreadId,
+    hasCurrentUser,
+    isTrashView,
+    switchThreadFolder,
+    threads,
+  ]);
+
   useEffect(() => {
     // Assistance stays on unless the thread/user explicitly opted out (stored false).
     if (activeThreadId && threads) {
@@ -1057,12 +1159,42 @@ export function StudioShell({
     });
   }, [activeThreadId, events]);
 
+  // Newly finished chat results for the open folder — merge so the grid updates
+  // immediately even if listByFolder lags one paint behind storageStatus=ready.
+  const activeFolderResultAssets = useMemo(() => {
+    if (!activeFolder?._id || !events?.length) return [];
+    const threadLinkedFolderId = threads?.find(
+      (item) => item._id === activeThreadId,
+    )?.linkedFolderId;
+    const byId = new Map();
+    for (const event of events) {
+      if (event.kind !== "result" || !event.resultAssets?.length) continue;
+      for (const asset of event.resultAssets) {
+        if (!asset?._id) continue;
+        if (asset.folderId) {
+          if (asset.folderId !== activeFolder._id) continue;
+        } else if (threadLinkedFolderId !== activeFolder._id) {
+          continue;
+        }
+        if (asset.storageStatus === "pending" || asset.storageStatus === "failed") continue;
+        byId.set(asset._id, asset);
+      }
+    }
+    return [...byId.values()];
+  }, [activeFolder?._id, activeThreadId, events, threads]);
+
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
     if (!hasCurrentUser) return queries;
-    const previewAssets = isTrashView ? (trashedAssets ?? []) : (assets ?? []);
+    const previewAssets = isTrashView
+      ? (trashedAssets ?? [])
+      : [...(assets ?? []), ...activeFolderResultAssets];
+    const seen = new Set();
     for (const asset of previewAssets) {
-      if (!asset?._id || !["image", "video"].includes(asset.kind)) continue;
+      if (!asset?._id || !["image", "video"].includes(asset.kind) || seen.has(asset._id)) {
+        continue;
+      }
+      seen.add(asset._id);
       const hasThumb = Boolean(asset.signedThumbnailUrl);
       const hasRead = Boolean(asset.signedReadUrl);
       if (asset.kind === "image" && (hasThumb || hasRead)) continue;
@@ -1074,7 +1206,14 @@ export function StudioShell({
       };
     }
     return queries;
-  }, [assetUrlExpiresUnix, assets, hasCurrentUser, isTrashView, trashedAssets]);
+  }, [
+    activeFolderResultAssets,
+    assetUrlExpiresUnix,
+    assets,
+    hasCurrentUser,
+    isTrashView,
+    trashedAssets,
+  ]);
   const assetPreviewUrls = useQueries(assetPreviewQueries);
   const attachmentUrlQueries = useMemo(() => {
     const queries = {};
@@ -1107,26 +1246,41 @@ export function StudioShell({
     return queries;
   }, [assetUrlExpiresUnix, attachments, hasCurrentUser]);
   const attachmentMediaUrls = useQueries(attachmentUrlQueries);
-  const assetsWithPreviewUrls = useMemo(
-    () =>
-      assets?.map((asset) => {
-        // Lazy signedReadUrl query returns full CDN URLs (no Optimizer). Never treat an
-        // existing optimized thumb as signedReadUrl.
-        const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
-        const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
-        const signedThumbnailUrl =
+  const assetsWithPreviewUrls = useMemo(() => {
+    if (assets === undefined) return undefined;
+    const byId = new Map();
+    for (const asset of assets) {
+      const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
+      const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
+      const signedThumbnailUrl =
+        asset.signedThumbnailUrl ??
+        (asset.kind === "image" || asset.kind === "video"
+          ? thumbnailDisplayUrl(lazyFullUrl)
+          : undefined);
+      byId.set(asset._id, {
+        ...asset,
+        signedReadUrl,
+        signedThumbnailUrl,
+      });
+    }
+    for (const asset of activeFolderResultAssets) {
+      if (byId.has(asset._id)) continue;
+      const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
+      const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
+      byId.set(asset._id, {
+        ...asset,
+        signedReadUrl,
+        signedThumbnailUrl:
           asset.signedThumbnailUrl ??
           (asset.kind === "image" || asset.kind === "video"
-            ? thumbnailDisplayUrl(lazyFullUrl)
-            : undefined);
-        return {
-          ...asset,
-          signedReadUrl,
-          signedThumbnailUrl,
-        };
-      }),
-    [assetPreviewUrls, assets],
-  );
+            ? thumbnailDisplayUrl(lazyFullUrl, asset.signedReadUrl)
+            : undefined),
+      });
+    }
+    return [...byId.values()].sort(
+      (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
+    );
+  }, [activeFolderResultAssets, assetPreviewUrls, assets]);
   const styleSheets = useQuery(api.elements.listStyleSheets, hasCurrentUser ? {} : "skip");
   const styleSheetSheetAssetIds = useMemo(
     () =>
@@ -1263,9 +1417,8 @@ export function StudioShell({
     [attachments],
   );
   const videoGenerationInputs = useMemo(
-    () =>
-      splitVideoGenerationInputs(attachments, attachmentMediaUrls, startFrameAttachmentId),
-    [attachmentMediaUrls, attachments, startFrameAttachmentId],
+    () => splitVideoGenerationInputs(attachments, attachmentMediaUrls),
+    [attachmentMediaUrls, attachments],
   );
   const generationReferences = useMemo(() => {
     if (mode === "video") {
@@ -1273,7 +1426,6 @@ export function StudioShell({
     }
     return generationReferenceInputs(attachments, attachmentMediaUrls);
   }, [attachmentMediaUrls, attachments, mode, videoGenerationInputs.referenceInputs]);
-  const videoStartFrameUrl = mode === "video" ? videoGenerationInputs.startFrameUrl : undefined;
   const hasVideoReferenceInput = generationReferences.some((reference) => reference.kind === "video");
   const composerReferenceFlags = useMemo(() => {
     const hasElementReference = attachments.some((attachment) => attachment.studioKind === "element");
@@ -1357,6 +1509,15 @@ export function StudioShell({
       )
     ) {
       return;
+    }
+    if (
+      pendingModeSwitchRef.current &&
+      activeGuidedBrief.mode !== pendingModeSwitchRef.current
+    ) {
+      return;
+    }
+    if (activeGuidedBrief.mode === pendingModeSwitchRef.current) {
+      pendingModeSwitchRef.current = null;
     }
     if (activeGuidedBrief.mode !== mode) {
       setMode(activeGuidedBrief.mode);
@@ -1479,22 +1640,37 @@ export function StudioShell({
     api.generation.canGenerate,
     hasCurrentUser
       ? {
-          tier: mode === "video" ? "pro_video" : "image",
+          tier:
+            mode === "video" ? "pro_video" : mode === "audio" ? "audio" : "image",
           now: entitlementNow,
           resolution:
             mode === "video"
               ? resolution
-              : normalizeImageResolution(imageResolution),
+              : mode === "image"
+                ? normalizeImageResolution(imageResolution)
+                : undefined,
           quality: mode === "image" ? imageQuality : undefined,
           aspectRatio: mode === "image" ? aspectRatio : undefined,
-          durationSeconds: mode === "video" ? Number(durationSeconds) : undefined,
-          hasReferenceInput:
+          durationSeconds:
             mode === "video"
-              ? generationReferences.length > 0 || Boolean(videoStartFrameUrl)
-              : generationReferences.length > 0,
+              ? Number(durationSeconds)
+              : mode === "audio" && audioType === "sfx"
+                ? sfxDurationAuto
+                  ? undefined
+                  : sfxDurationSeconds
+                : undefined,
+          hasReferenceInput:
+            mode === "video" || mode === "image"
+              ? generationReferences.length > 0
+              : undefined,
           hasVideoReferenceInput: mode === "video" ? hasVideoReferenceInput : undefined,
           hasNonVideoReferenceInput: mode === "video" ? hasNonVideoReferenceInput : undefined,
           audioEnabled: mode === "video" ? audioEnabled : undefined,
+          audioType: mode === "audio" ? audioType : undefined,
+          characterCount:
+            mode === "audio" && audioType === "voiceover"
+              ? draft.trim().length
+              : undefined,
         }
       : "skip",
   );
@@ -1516,7 +1692,6 @@ export function StudioShell({
       draft,
       attachments,
       editorHtml: editor?.innerHTML || composerContextsRef.current[prevKey]?.editorHtml,
-      startFrameAttachmentId,
       mode,
       aspectRatio,
       imageResolution,
@@ -1527,11 +1702,16 @@ export function StudioShell({
       selectedStylePresetId,
       scriptType,
       referenceIntent,
+      audioType,
+      selectedVoice,
+      sfxLoop,
+      sfxDurationAuto,
+      sfxDurationSeconds,
+      sfxPromptInfluence,
     };
     const next = composerContextsRef.current[composerContextKey];
     setDraft(next?.draft ?? "");
     setAttachments(next?.attachments ?? []);
-    setStartFrameAttachmentId(next?.startFrameAttachmentId ?? "");
     setMode(next?.mode ?? "image");
     setAspectRatio(next?.aspectRatio ?? "16:9");
     setImageResolution(next?.imageResolution ?? "2K");
@@ -1542,6 +1722,12 @@ export function StudioShell({
     setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
     setScriptType(next?.scriptType ?? "production");
     setReferenceIntent(next?.referenceIntent ?? "auto");
+    setAudioType(next?.audioType ?? "voiceover");
+    setSelectedVoice(next?.selectedVoice ?? null);
+    setSfxLoop(next?.sfxLoop ?? false);
+    setSfxDurationAuto(next?.sfxDurationAuto ?? true);
+    setSfxDurationSeconds(next?.sfxDurationSeconds ?? 5);
+    setSfxPromptInfluence(next?.sfxPromptInfluence ?? 0.3);
     composerKeyRef.current = composerContextKey;
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -1557,7 +1743,7 @@ export function StudioShell({
     void ensureDefaults().then((defaults) => {
       setActiveFolderId((current) => current ?? defaults.rootFolderId);
       setNavTrail((trail) =>
-        trail.length ? trail : [{ id: defaults.rootFolderId, name: "Studio" }],
+        trail.length ? trail : [{ id: defaults.rootFolderId, name: "Files" }],
       );
     });
   }, [ensureDefaults]);
@@ -1638,18 +1824,21 @@ export function StudioShell({
       );
 
   const currentEntries = useMemo(() => {
+    const parentCrumb = navTrail.length > 1 ? navTrail[navTrail.length - 2] : null;
+    const parentEntry = parentCrumb
+      ? {
+          type: "parent",
+          // Root files workspace is labeled Files in the UI, not Studio.
+          name: parentCrumb.id === navTrail[0]?.id ? "Files" : parentCrumb.name,
+          path: `/Studio/${parentCrumb.name}`,
+          studioId: parentCrumb.id,
+        }
+      : null;
+
     if (isTrashView) {
       return buildFlatEntries({
         folder: activeFolder,
-        parent:
-          navTrail.length > 1
-            ? {
-                type: "parent",
-                name: "Back",
-                path: `/Studio/${navTrail[navTrail.length - 2].name}`,
-                studioId: navTrail[navTrail.length - 2].id,
-              }
-            : null,
+        parent: parentEntry,
         loading: folderContentLoading,
         folders: trashedFolders,
         assets: trashedAssetsWithPreviewUrls,
@@ -1661,15 +1850,7 @@ export function StudioShell({
 
     const entries = buildFlatEntries({
       folder: activeFolder,
-      parent:
-        navTrail.length > 1
-          ? {
-              type: "parent",
-              name: "Back",
-              path: `/Studio/${navTrail[navTrail.length - 2].name}`,
-              studioId: navTrail[navTrail.length - 2].id,
-            }
-          : null,
+      parent: parentEntry,
       loading: !activeFolder || folderContentLoading,
       folders: childFolders,
       assets: assetsWithPreviewUrls,
@@ -1789,6 +1970,8 @@ export function StudioShell({
         profileMetaByUsername: profileTabMetaByUsername,
         myProfile: myPublicProfile,
         currentUser,
+        composerAttachments:
+          key === composerContextKey ? attachments : undefined,
       }),
     );
     return descriptors.filter(Boolean);
@@ -1804,6 +1987,8 @@ export function StudioShell({
     tabEntrySnapshots,
     profileTabMetaByUsername,
     myPublicProfile,
+    composerContextKey,
+    attachments,
     currentUser,
   ]);
 
@@ -1830,12 +2015,24 @@ export function StudioShell({
     return map;
   }, [displayRootEntries, displayCurrentEntries]);
 
+  const filteredCurrentEntries = useMemo(() => {
+    if (typeFilter === "all") return displayCurrentEntries;
+    const entries = (displayCurrentEntries.entries ?? []).filter((entry) =>
+      matchesExplorerTypeFilter(entry, typeFilter),
+    );
+    return {
+      ...displayCurrentEntries,
+      parent: null,
+      entries,
+    };
+  }, [displayCurrentEntries, typeFilter]);
+
   const searchState = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return { entries: [], truncated: false };
     const entries = [];
     let truncated = false;
-    for (const entry of displayCurrentEntries.entries ?? []) {
+    for (const entry of filteredCurrentEntries.entries ?? []) {
       if (!String(entry.name ?? "").toLowerCase().includes(q)) continue;
       if (entries.length >= 80) {
         truncated = true;
@@ -1844,7 +2041,7 @@ export function StudioShell({
       entries.push(entry);
     }
     return { entries, truncated };
-  }, [displayCurrentEntries, deferredSearch]);
+  }, [filteredCurrentEntries, deferredSearch]);
 
   const breadcrumbPath = useMemo(
     () => navTrail.slice(1).map((crumb) => crumb.name).join("/"),
@@ -1884,11 +2081,11 @@ export function StudioShell({
     if (!activeFolder || isTrashView) return;
     const result = await createVideoEdit({
       folderId: activeFolder._id,
-      name: "Untitled edit",
+      name: "Untitled",
     });
     const entry = videoEditToEntry({
       _id: result.projectId,
-      name: "Untitled edit",
+      name: "Untitled",
       folderId: activeFolder._id,
       updatedAt: Date.now(),
     });
@@ -1901,6 +2098,26 @@ export function StudioShell({
 
   function handleVideoEditProjectSaved(fromTabKey, projectId, name) {
     const toKey = `videoEdit:${projectId}`;
+    // Keep edit:asset: tabs stable. Swapping the key remounts the editor and
+    // briefly wipes the timeline (looks like media vanished on ratio change).
+    if (fromTabKey?.startsWith("edit:asset:")) {
+      setTabEntrySnapshots((snapshots) => ({
+        ...snapshots,
+        [fromTabKey]: videoEditToEntry({
+          _id: projectId,
+          name,
+          folderId: activeFolder?._id,
+          updatedAt: Date.now(),
+        }),
+        [toKey]: videoEditToEntry({
+          _id: projectId,
+          name,
+          folderId: activeFolder?._id,
+          updatedAt: Date.now(),
+        }),
+      }));
+      return;
+    }
     if (fromTabKey && fromTabKey !== toKey) {
       replaceTabKey(fromTabKey, toKey);
     }
@@ -1917,7 +2134,8 @@ export function StudioShell({
 
   function openTab(key) {
     if (typeof key === "string" && key.startsWith("feed:")) {
-      openFeedTab(key.slice("feed:".length));
+      const parsed = parseFeedTabKey(key);
+      openFeedTab(parsed?.seed ?? "home", parsed?.mode ?? "forYou");
       return;
     }
     setOpenTabs((tabs) => (tabs.includes(key) ? tabs : [...tabs, key]));
@@ -1925,9 +2143,8 @@ export function StudioShell({
   }
 
   /** At most one feed tab — opening another replaces the current feed. */
-  function openFeedTab(seed = "home") {
-    const id = String(seed ?? "home").trim() || "home";
-    const key = `feed:${id}`;
+  function openFeedTab(seed = "home", mode = "forYou") {
+    const key = buildFeedTabKey(mode, seed);
     setOpenTabs((tabs) => {
       const existingIdx = tabs.findIndex((tab) => tab.startsWith("feed:"));
       if (existingIdx >= 0) {
@@ -1939,6 +2156,16 @@ export function StudioShell({
       return [...tabs.filter((tab) => !tab.startsWith("feed:")), key];
     });
     setActiveTab(key);
+  }
+
+  function setFeedMode(mode) {
+    const current = parseFeedTabKey(activeTab) ?? { mode: "forYou", seed: "home" };
+    const nextMode = mode === "following" ? "following" : "forYou";
+    // Keep deep-link seed only for For You; Following starts at home.
+    const seed = nextMode === "forYou" ? current.seed : "home";
+    openFeedTab(seed, nextMode);
+    setFeedModeMenuOpen(false);
+    setFeedModeMenuKey(null);
   }
 
   function openPublicProfile(username) {
@@ -1963,7 +2190,9 @@ export function StudioShell({
   }
 
   function openFeed() {
-    openFeedTab("home");
+    const existing = openTabs.find((tab) => tab.startsWith("feed:"));
+    const current = parseFeedTabKey(existing || activeTab);
+    openFeedTab("home", current?.mode ?? "forYou");
     setSettingsOpen(false);
     setHistoryOpen(false);
     setMobileAppMenuOpen(false);
@@ -2180,8 +2409,85 @@ export function StudioShell({
   }
 
   const handleTabSelect = useCallback((key) => {
+    setFeedModeMenuOpen(false);
+    setFeedModeMenuKey(null);
     startMobileTransition(() => setActiveTab(key));
   }, []);
+
+  const handleFeedTabReselect = useCallback((key) => {
+    if (!String(key).startsWith("feed:")) return;
+    setFeedModeMenuOpen((open) => {
+      if (open && feedModeMenuKey === key) {
+        setFeedModeMenuKey(null);
+        return false;
+      }
+      setFeedModeMenuKey(key);
+      return true;
+    });
+  }, [feedModeMenuKey]);
+
+  useLayoutEffect(() => {
+    if (!feedModeMenuOpen || !feedModeMenuKey) {
+      setFeedModeMenuPos(null);
+      return undefined;
+    }
+    const update = () => {
+      const anchor = document.querySelector(
+        `[data-tab-key="${CSS.escape(feedModeMenuKey)}"]`,
+      );
+      if (!anchor) return;
+      const r = anchor.getBoundingClientRect();
+      const menuEl = feedModeMenuRef.current;
+      const menuWidth = Math.max(menuEl?.offsetWidth ?? 132, Math.min(r.width, 180));
+      const menuHeight = menuEl?.offsetHeight ?? 88;
+      let left = r.left;
+      left = Math.max(8, Math.min(left, window.innerWidth - menuWidth - 8));
+      let top = r.bottom + 4;
+      if (top + menuHeight > window.innerHeight - 8) {
+        top = Math.max(8, r.top - menuHeight - 4);
+      }
+      setFeedModeMenuPos({ left, top, minWidth: Math.max(132, Math.min(r.width, 180)) });
+    };
+    update();
+    const raf = requestAnimationFrame(update);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [feedModeMenuOpen, feedModeMenuKey]);
+
+  useEffect(() => {
+    if (!feedModeMenuOpen) return undefined;
+    function onPointerDown(event) {
+      const target = event.target;
+      if (feedModeMenuRef.current?.contains(target)) return;
+      if (target?.closest?.('[data-tab-key^="feed:"]')) return;
+      setFeedModeMenuOpen(false);
+      setFeedModeMenuKey(null);
+    }
+    function onKey(event) {
+      if (event.key === "Escape") {
+        setFeedModeMenuOpen(false);
+        setFeedModeMenuKey(null);
+      }
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [feedModeMenuOpen]);
+
+  useEffect(() => {
+    if (!activeTab.startsWith("feed:")) {
+      setFeedModeMenuOpen(false);
+      setFeedModeMenuKey(null);
+    }
+  }, [activeTab]);
 
   function closeTab(key) {
     if (key.startsWith("composer:")) {
@@ -2440,8 +2746,7 @@ export function StudioShell({
     setRenameTarget(entry);
   }
 
-  async function confirmRenameEntry(nextName) {
-    const entry = renameTarget;
+  async function applyEntryRename(entry, nextName) {
     if (!entry) return;
     const trimmed = String(nextName ?? "").trim();
     if (!trimmed) return;
@@ -2458,6 +2763,119 @@ export function StudioShell({
       });
     } else if (entry.studioKind === "element") {
       await updateElement({ elementId: entry.studioId, name: trimmed });
+    } else {
+      return;
+    }
+    const tabKey =
+      entry.studioKind && entry.studioId
+        ? `${entry.studioKind}:${entry.studioId}`
+        : null;
+    if (tabKey) {
+      const displayName =
+        entry.studioKind === "element"
+          ? `@${trimmed.replace(/^@/, "")}`
+          : entry.studioKind === "videoEdit"
+            ? `${trimmed.replace(/\.edit$/i, "")}.edit`
+            : entry.studioKind === "document"
+              ? trimmed.replace(/\.md$/i, "")
+              : trimmed;
+      setTabEntrySnapshots((snapshots) => ({
+        ...snapshots,
+        [tabKey]: {
+          ...(snapshots[tabKey] ?? entry),
+          ...entry,
+          name: displayName,
+        },
+      }));
+    }
+  }
+
+  async function confirmRenameEntry(nextName) {
+    const entry = renameTarget;
+    if (!entry) return;
+    await applyEntryRename(entry, nextName);
+  }
+
+  async function commitTabRename(tab, nextName) {
+    if (!tab?.key || isTrashView) return;
+    const key = String(tab.key);
+    if (key.startsWith("edit:project:")) {
+      const projectId = key.slice("edit:project:".length);
+      const trimmed = String(nextName ?? "").trim().replace(/\.edit$/i, "");
+      if (!trimmed) return;
+      await updateVideoEdit({ projectId, name: trimmed });
+      return;
+    }
+    const entry = findEntryByTab(key, {
+      assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
+      documents,
+      videoEdits,
+      elements,
+      snapshots: tabEntrySnapshots,
+    });
+    if (!entry) return;
+    await applyEntryRename(entry, nextName);
+  }
+
+  function handleTabContextAction(action, tab) {
+    if (!tab?.key) return;
+    if (action === "close") {
+      closeTab(tab.key);
+      return;
+    }
+    if (action === "close-others") {
+      setOpenTabs((tabs) => {
+        const next = tabs.includes(tab.key) ? [tab.key] : tabs.slice(0, 1);
+        return next.length ? next : [COMPOSER_TAB];
+      });
+      setActiveTab(tab.key);
+      return;
+    }
+    if (action === "delete") {
+      const key = String(tab.key);
+      if (key.startsWith("edit:project:")) {
+        const projectId = key.slice("edit:project:".length);
+        const project = videoEdits?.find((item) => item._id === projectId);
+        if (project) {
+          void trashEntry(videoEditToEntry(project));
+        }
+        return;
+      }
+      const entry = findEntryByTab(key, {
+        assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
+        documents,
+        videoEdits,
+        elements,
+        snapshots: tabEntrySnapshots,
+      });
+      if (entry) void trashEntry(entry);
+      return;
+    }
+    if (action === "attach") {
+      const entry = findEntryByTab(String(tab.key), {
+        assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
+        documents,
+        videoEdits,
+        elements,
+        snapshots: tabEntrySnapshots,
+      });
+      if (entry) attachEntry(entry);
+      return;
+    }
+    if (action === "reveal-explorer") {
+      const entry = findEntryByTab(String(tab.key), {
+        assets: assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? assets),
+        documents,
+        videoEdits,
+        elements,
+        snapshots: tabEntrySnapshots,
+      });
+      if (entry?.folderId) {
+        setActiveFolderId(entry.folderId);
+      } else if (entry?.studioKind === "folder" && entry.studioId) {
+        setActiveFolderId(entry.studioId);
+      }
+      return;
     }
   }
 
@@ -2593,23 +3011,14 @@ export function StudioShell({
   async function uploadFiles(files) {
     if (!activeFolder) return;
     for (const file of Array.from(files ?? [])) {
-      const reserved = await reserveUpload({
+      const assetId = await uploadStudioAsset({
+        file,
         folderId: activeFolder._id,
-        name: file.name,
         kind: kindFromMime(file.type),
-        mimeType: file.type || "application/octet-stream",
+        reserveUpload,
+        commitStagingUpload,
       });
-      const res = await fetch(reserved.putUrl, {
-        method: "PUT",
-        headers: {
-          AccessKey: reserved.storageAccessKey,
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-      await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
-      openTab(`asset:${reserved.assetId}`);
+      openTab(`asset:${assetId}`);
     }
   }
 
@@ -2618,24 +3027,15 @@ export function StudioShell({
     const uploaded = [];
     for (const file of Array.from(files ?? [])) {
       const kind = kindFromMime(file.type);
-      const reserved = await reserveUpload({
+      const assetId = await uploadStudioAsset({
+        file,
         folderId,
-        name: file.name,
         kind,
-        mimeType: file.type || "application/octet-stream",
+        reserveUpload,
+        commitStagingUpload,
       });
-      const res = await fetch(reserved.putUrl, {
-        method: "PUT",
-        headers: {
-          AccessKey: reserved.storageAccessKey,
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-      await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
       uploaded.push({
-        assetId: reserved.assetId,
+        assetId,
         name: file.name,
         kind,
         previewUrl:
@@ -2661,30 +3061,22 @@ export function StudioShell({
           window.alert(message);
           throw new Error(message);
         }
-        const reserved = await reserveUpload({
+        const kind = kindFromMime(file.type);
+        const assetId = await uploadStudioAsset({
+          file,
           folderId: activeFolder._id,
-          name: file.name,
-          kind: kindFromMime(file.type),
-          mimeType: file.type || "application/octet-stream",
+          kind,
+          reserveUpload,
+          commitStagingUpload,
         });
-        const res = await fetch(reserved.putUrl, {
-          method: "PUT",
-          headers: {
-            AccessKey: reserved.storageAccessKey,
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-        await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
         attachComposerUpload({
-          id: `asset:${reserved.assetId}`,
-          kind: kindFromMime(file.type),
+          id: `asset:${assetId}`,
+          kind,
           label: file.name,
-          path: `/Studio/assets/${reserved.assetId}`,
+          path: `/Studio/assets/${assetId}`,
           filename: file.name,
           studioKind: "asset",
-          studioId: reserved.assetId,
+          studioId: assetId,
           thumbnailUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
         });
       }
@@ -2697,14 +3089,6 @@ export function StudioShell({
     setAttachments((items) =>
       items.some((item) => item.id === attachment.id) ? items : [...items, attachment],
     );
-    if (
-      mode === "video" &&
-      attachment.kind === "image" &&
-      attachment.studioKind === "asset" &&
-      !startFrameAttachmentId
-    ) {
-      setStartFrameAttachmentId(attachment.id);
-    }
     window.requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -2715,6 +3099,10 @@ export function StudioShell({
   }
 
   async function handleAssistanceChange(enabled) {
+    if (mode === "audio" && enabled) {
+      toast.message("Assistance is not available for Audio yet.");
+      return;
+    }
     setAssistanceEnabled(enabled);
     try {
       if (activeThreadId && threads?.some((thread) => thread._id === activeThreadId)) {
@@ -2733,14 +3121,76 @@ export function StudioShell({
     }
   }
 
+  async function handleComposerModeChange(nextMode) {
+    if (nextMode === mode) return;
+    if (!["image", "video", "script", "element", "audio"].includes(nextMode)) return;
+
+    const previousMode = mode;
+    pendingModeSwitchRef.current = nextMode;
+    setMode(nextMode);
+    if (nextMode === "audio") {
+      setAssistanceEnabled(false);
+      pendingModeSwitchRef.current = null;
+      return;
+    }
+
+    const editableBrief =
+      activeGuidedBrief &&
+      ["collecting", "awaiting_input", "review_ready", "failed"].includes(
+        activeGuidedBrief.status,
+      );
+    const canPersistSwitch =
+      assistanceFeatureEnabled &&
+      assistanceEnabled &&
+      editableBrief &&
+      activeThreadId;
+
+    if (!canPersistSwitch) {
+      pendingModeSwitchRef.current = null;
+      return;
+    }
+
+    try {
+      await ensureGuidedBrief({
+        threadId: activeThreadId,
+        mode: nextMode,
+        videoType: nextMode === "video" ? videoType : undefined,
+        stylePresetId: directPreset?._id,
+        styleSheetElementId:
+          composerStyleMode === "styled" ? activeStyleSheetId : undefined,
+        production: {
+          durationSeconds:
+            nextMode === "video" ? Number(durationSeconds) : undefined,
+          aspectRatio,
+          resolution:
+            nextMode === "image"
+              ? normalizeImageResolution(imageResolution)
+              : nextMode === "video"
+                ? resolution
+                : undefined,
+          quality: nextMode === "image" ? imageQuality : undefined,
+          scriptType: nextMode === "script" ? scriptType : undefined,
+          elementType: nextMode === "element" ? elementType : undefined,
+          referenceIntent,
+          skipPromptEnhancement,
+        },
+      });
+    } catch (error) {
+      pendingModeSwitchRef.current = null;
+      setMode(previousMode);
+      toast.error(
+        friendlyConvexError(error, `Could not switch to ${nextMode} mode.`),
+      );
+    }
+  }
+
   function composerAttachmentsForBrief() {
     const rows = [];
     let sort = 0;
     for (const attachment of attachments) {
       if (attachment.studioKind === "asset" && attachment.studioId) {
         let role = "supporting";
-        if (attachment.id === startFrameAttachmentId) role = "start_frame";
-        else if (attachment.kind === "audio") role = "audio";
+        if (attachment.kind === "audio") role = "audio";
         else if (attachment.kind === "video") role = "motion";
         else if (attachment.kind === "image") role = "reference";
         rows.push({
@@ -2782,9 +3232,168 @@ export function StudioShell({
     return rows;
   }
 
+  async function handleGenerateVideoFromImage(entry) {
+    if (!activeFolder || !entry || assistBusy || flowPending) return;
+    const fullEntry = pathToEntry.get(entry.path) ?? entry;
+    const attachment = entryToAttachment(fullEntry);
+    if (attachment.studioKind !== "asset" || !attachment.studioId) {
+      setMode("video");
+      attachEntry(fullEntry);
+      setDraft("I want to generate a video with this.");
+      if (isMobile) setMobileSection("composer");
+      return;
+    }
+
+    const prompt = "I want to generate a video with this.";
+    const nextAttachments = [attachment];
+    const userPrompt = buildPromptWithAttachments(prompt, nextAttachments);
+    const briefAttachments = [
+      {
+        assetId: attachment.studioId,
+        role: "reference",
+        label: attachment.label ?? attachment.filename,
+        sortOrder: 0,
+      },
+    ];
+
+    setMode("video");
+    if (assistanceFeatureEnabled && !assistanceEnabled) {
+      setAssistanceEnabled(true);
+      try {
+        if (activeThreadId && threads?.some((thread) => thread._id === activeThreadId)) {
+          await setThreadAssistance({
+            threadId: activeThreadId,
+            enabled: true,
+            updateAccountDefault: true,
+          });
+        }
+      } catch {
+        /* best-effort — still send the turn */
+      }
+    }
+    if (isMobile) setMobileSection("composer");
+
+    const assistanceOn = Boolean(assistanceFeatureEnabled);
+    if (!assistanceOn) {
+      attachEntry(fullEntry);
+      setDraft(prompt);
+      return;
+    }
+
+    setFlowPending(true);
+    setAssistBusy(true);
+    try {
+      if (presets === undefined) {
+        throw new Error("Style options are still loading. Try again in a moment.");
+      }
+      const preset = directPreset;
+      if (!preset) {
+        throw new Error("Direct generation preset is not ready yet.");
+      }
+      const reuseThreadId =
+        activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
+          ? activeThreadId
+          : null;
+      const clientTurnId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `turn_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      let threadId = reuseThreadId;
+      if (!threadId) {
+        threadId = await createThread({
+          folderId: activeFolder._id,
+          title: threadTitleFromPrompt(prompt, nextAttachments, "Video"),
+          assistanceEnabled: true,
+        });
+        const composerTab = activeTab;
+        if (composerTab.startsWith("composer:")) {
+          delete composerContextsRef.current[composerTab];
+          setOpenTabs((tabs) =>
+            tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
+          );
+          setActiveTab(`thread:${threadId}`);
+        } else {
+          openTab(`thread:${threadId}`);
+        }
+      }
+      const optimistic = createOptimisticAssistanceEvents({
+        prompt: userPrompt.trim() || prompt,
+      });
+      setOptimisticByThread((prev) => ({
+        ...prev,
+        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
+      }));
+      setDraft("");
+      setAttachments([]);
+      if (editorRef.current) editorRef.current.replaceChildren();
+      const chatKey = `thread:${threadId}`;
+      composerContextsRef.current[chatKey] = {
+        ...(composerContextsRef.current[chatKey] ?? {}),
+        draft: "",
+        attachments: [],
+        editorHtml: "",
+      };
+      setFlowPending(false);
+      try {
+        await submitAssistedTurn({
+          clientTurnId,
+          threadId,
+          folderId: activeFolder._id,
+          mode: "video",
+          entryPoint: "image_to_video",
+          videoType,
+          userPrompt,
+          stylePresetId: preset._id,
+          styleSheetElementId:
+            composerStyleMode === "styled" ? activeStyleSheetId : undefined,
+          production: {
+            durationSeconds: Number(durationSeconds),
+            aspectRatio,
+            resolution,
+            referenceIntent,
+            skipPromptEnhancement,
+          },
+          attachments: briefAttachments,
+        });
+        setOptimisticByThread((prev) => {
+          const current = prev[threadId] ?? [];
+          const next = current.filter(
+            (event) => event.clientId !== optimistic.clientId,
+          );
+          if (!next.length) {
+            const { [threadId]: _drop, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [threadId]: next };
+        });
+      } catch (error) {
+        setOptimisticByThread((prev) => {
+          const current = prev[threadId] ?? [];
+          const next = current.filter((event) => event.clientId !== optimistic.clientId);
+          if (!next.length) {
+            const { [threadId]: _drop, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [threadId]: next };
+        });
+        setMode("video");
+        setAttachments(nextAttachments);
+        setDraft(prompt);
+        throw error;
+      }
+    } catch (error) {
+      console.error("Generate video from image failed", error);
+      toast.error(friendlyConvexError(error, "Could not start video chat."));
+    } finally {
+      setAssistBusy(false);
+      setFlowPending(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!activeFolder) return;
-    const assistanceOn = Boolean(assistanceFeatureEnabled) && assistanceEnabled;
+    const assistanceOn =
+      Boolean(assistanceFeatureEnabled) && assistanceEnabled && mode !== "audio";
     if (!assistanceOn && !draft.trim()) return;
     if (assistanceOn && !draft.trim() && !attachments.length) return;
     setFlowPending(true);
@@ -2803,7 +3412,6 @@ export function StudioShell({
             : null;
         const capturedDraft = draft;
         const capturedAttachments = attachments;
-        const capturedStartFrame = startFrameAttachmentId;
         const capturedEditorHtml = editorRef.current?.innerHTML ?? "";
         const userPrompt = buildPromptWithAttachments(draft, attachments);
         const briefAttachments = composerAttachmentsForBrief();
@@ -2815,7 +3423,11 @@ export function StudioShell({
         if (!threadId) {
           threadId = await createThread({
             folderId: activeFolder._id,
-            title: (userPrompt.trim() || mode).slice(0, 64),
+            title: threadTitleFromPrompt(
+              userPrompt,
+              capturedAttachments,
+              mode,
+            ),
             assistanceEnabled: true,
           });
           const composerTab = activeTab;
@@ -2837,7 +3449,6 @@ export function StudioShell({
         }));
         setDraft("");
         setAttachments([]);
-        setStartFrameAttachmentId("");
         if (editorRef.current) editorRef.current.replaceChildren();
         const chatKey = `thread:${threadId}`;
         composerContextsRef.current[chatKey] = {
@@ -2875,6 +3486,17 @@ export function StudioShell({
             },
             attachments: briefAttachments,
           });
+          setOptimisticByThread((prev) => {
+            const current = prev[threadId] ?? [];
+            const next = current.filter(
+              (event) => event.clientId !== optimistic.clientId,
+            );
+            if (!next.length) {
+              const { [threadId]: _drop, ...rest } = prev;
+              return rest;
+            }
+            return { ...prev, [threadId]: next };
+          });
         } catch (error) {
           setOptimisticByThread((prev) => {
             const current = prev[threadId] ?? [];
@@ -2887,7 +3509,6 @@ export function StudioShell({
           });
           setDraft(capturedDraft);
           setAttachments(capturedAttachments);
-          setStartFrameAttachmentId(capturedStartFrame);
           if (editorRef.current) {
             editorRef.current.innerHTML = capturedEditorHtml;
           }
@@ -2901,6 +3522,110 @@ export function StudioShell({
         } finally {
           setAssistBusy(false);
         }
+        return;
+      }
+
+      if (mode === "audio") {
+        if (audioType === "music") {
+          throw new Error("Music generation is coming soon.");
+        }
+        if (audioType === "voiceover" && !selectedVoice?.voiceId) {
+          throw new Error("Select a voice for the voiceover.");
+        }
+        const userPrompt = draft.trim();
+        const estimatedCost = audioCreditCost({
+          audioType,
+          characterCount: audioType === "voiceover" ? userPrompt.length : undefined,
+          durationSeconds:
+            audioType === "sfx"
+              ? sfxDurationAuto
+                ? undefined
+                : sfxDurationSeconds
+              : undefined,
+        });
+        if (entitlement && entitlement.creditBalance < estimatedCost) {
+          openSettingsTab("billing");
+          throw new Error(
+            entitlement.reason ??
+              `You need ${formatTtdFromCredits(estimatedCost, pricing?.creditPriceCents)} to generate this audio.`,
+          );
+        }
+        const reuseThreadId =
+          activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
+            ? activeThreadId
+            : null;
+        let threadId = reuseThreadId;
+        if (!threadId) {
+          threadId = await createThread({
+            folderId: activeFolder._id,
+            title: threadTitleFromPrompt(userPrompt, attachments, "audio"),
+            assistanceEnabled: false,
+          });
+          const composerTab = activeTab;
+          if (composerTab.startsWith("composer:")) {
+            delete composerContextsRef.current[composerTab];
+            setOpenTabs((tabs) =>
+              tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
+            );
+            setActiveTab(`thread:${threadId}`);
+          } else {
+            openTab(`thread:${threadId}`);
+          }
+        }
+        const optimistic = createOptimisticGenerationEvents({
+          prompt: userPrompt,
+          mode: "audio",
+        });
+        setOptimisticByThread((prev) => ({
+          ...prev,
+          [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
+        }));
+        setDraft("");
+        setAttachments([]);
+        if (editorRef.current) editorRef.current.replaceChildren();
+        const chatKey = `thread:${threadId}`;
+        composerContextsRef.current[chatKey] = {
+          ...(composerContextsRef.current[chatKey] ?? {}),
+          draft: "",
+          attachments: [],
+          editorHtml: "",
+        };
+        setFlowPending(false);
+        void runAudioFlow({
+          threadId,
+          folderId: activeFolder._id,
+          userPrompt,
+          audioType,
+          elevenVoiceId: selectedVoice?.voiceId,
+          elevenVoiceName: selectedVoice?.name,
+          elevenPublicOwnerId: selectedVoice?.publicOwnerId,
+          durationSeconds:
+            audioType === "sfx" && !sfxDurationAuto ? sfxDurationSeconds : undefined,
+          audioLoop: audioType === "sfx" ? sfxLoop : undefined,
+          promptInfluence: audioType === "sfx" ? sfxPromptInfluence : undefined,
+        }).catch((error) => {
+          const raw =
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : "";
+          // Job is already queued server-side; websocket blips shouldn't wipe the turn.
+          if (/connection lost while action|connection lost/i.test(raw)) {
+            return;
+          }
+          setOptimisticByThread((prev) => {
+            const current = prev[threadId] ?? [];
+            const next = current.filter((event) => event.clientId !== optimistic.clientId);
+            if (!next.length) {
+              const { [threadId]: _drop, ...rest } = prev;
+              return rest;
+            }
+            return { ...prev, [threadId]: next };
+          });
+          console.error("Studio audio action failed", error);
+          toast.error(friendlyConvexError(error, "Audio generation failed."));
+        });
         return;
       }
 
@@ -3006,7 +3731,7 @@ export function StudioShell({
       if (!threadId) {
         threadId = await createThread({
           folderId: activeFolder._id,
-          title: userPrompt.trim().slice(0, 64),
+          title: threadTitleFromPrompt(userPrompt, attachments, genMode),
         });
         const composerTab = activeTab;
         if (composerTab.startsWith("composer:")) {
@@ -3022,6 +3747,7 @@ export function StudioShell({
       const optimistic = createOptimisticGenerationEvents({
         prompt: userPrompt,
         mode: genMode,
+        aspectRatio,
       });
       setOptimisticByThread((prev) => ({
         ...prev,
@@ -3029,7 +3755,6 @@ export function StudioShell({
       }));
       setDraft("");
       setAttachments([]);
-      setStartFrameAttachmentId("");
       if (editorRef.current) editorRef.current.replaceChildren();
       const chatKey = `thread:${threadId}`;
       composerContextsRef.current[chatKey] = {
@@ -3054,6 +3779,7 @@ export function StudioShell({
         resolution: genMode === "image" ? normalizeImageResolution(imageResolution) : resolution,
         quality: genMode === "image" ? imageQuality : undefined,
         durationSeconds: genMode === "video" ? Number(durationSeconds) : undefined,
+        folderId: activeFolder._id,
         referenceUrls: genMode === "image"
           ? [
               ...(activeStyleSheetReference ? [activeStyleSheetReference.url] : []),
@@ -3071,7 +3797,6 @@ export function StudioShell({
               ),
             ]
           : undefined,
-        startFrameUrl: genMode === "video" ? videoStartFrameUrl : undefined,
         skipPromptEnhancement,
         referenceIntent,
         hasRawImageReference: composerReferenceFlags.hasRawImageReference,
@@ -3126,9 +3851,9 @@ export function StudioShell({
           --studio-hover-scale: 1;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          --studio-composer-glass: color-mix(in srgb, #05080f 48%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #05080f 58%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #05080f 36%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #05080f 88%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #05080f 94%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #05080f 78%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.14);
           --studio-composer-glass-blur: saturate(180%) blur(28px);
           --studio-composer-glass-shadow:
@@ -3162,9 +3887,9 @@ export function StudioShell({
           --studio-chrome-glow-border-strong: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border));
           --studio-chrome-glow-border-fade: linear-gradient(
             225deg,
-            color-mix(in srgb, var(--cursor-accent) 100%, #fff 14%),
-            color-mix(in srgb, var(--cursor-accent) 72%, transparent) 26%,
-            color-mix(in srgb, var(--cursor-accent) 28%, transparent) 52%,
+            color-mix(in srgb, var(--cursor-accent) 58%, #fff 8%),
+            color-mix(in srgb, var(--cursor-accent) 36%, transparent) 26%,
+            color-mix(in srgb, var(--cursor-accent) 14%, transparent) 52%,
             transparent 78%
           );
           --studio-chrome-muted-border-fade: linear-gradient(
@@ -3176,17 +3901,17 @@ export function StudioShell({
           );
           --studio-chrome-glow-bg-active: color-mix(
             in srgb,
-            var(--cursor-accent) 14%,
+            var(--cursor-accent) 7%,
             var(--studio-mobile-chrome-glass)
           );
           /* Tab fill: solid on the right, fades to full transparency on the left */
           --studio-chrome-glow-bg-fade: linear-gradient(
             90deg,
             transparent 0%,
-            transparent 10%,
-            color-mix(in srgb, var(--studio-chrome-glow-bg-active) 42%, transparent) 38%,
-            var(--studio-chrome-glow-bg-active) 68%,
-            var(--studio-chrome-glow-bg-active) 100%
+            transparent 12%,
+            color-mix(in srgb, var(--studio-chrome-glow-bg-active) 28%, transparent) 40%,
+            color-mix(in srgb, var(--studio-chrome-glow-bg-active) 72%, transparent) 68%,
+            color-mix(in srgb, var(--studio-chrome-glow-bg-active) 78%, transparent) 100%
           );
           --studio-chrome-glow-bg-fade-hover: linear-gradient(
             90deg,
@@ -3585,14 +4310,14 @@ export function StudioShell({
             width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             min-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
             max-width: min(120px, var(--cursor-unified-tab-width, 132px)) !important;
-            padding: 0 10px !important;
+            padding: 0 6px !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
           }
           .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
-            padding-left: 10px !important;
+            padding-left: 6px !important;
           }
           .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
             position: relative;
@@ -3649,7 +4374,7 @@ export function StudioShell({
             width: 100%;
             min-height: 0;
             flex: 0 0 auto;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(5, minmax(0, 1fr));
             grid-template-rows: none;
             gap: 6px;
             padding: 0;
@@ -3667,18 +4392,41 @@ export function StudioShell({
             justify-content: center;
             gap: 4px;
             padding: 0 6px;
-            border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
+            border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 38%, transparent);
             border-radius: 999px;
-            background: color-mix(in srgb, #05080f 48%, transparent);
-            backdrop-filter: saturate(140%) blur(8px);
-            -webkit-backdrop-filter: saturate(140%) blur(8px);
+            background: color-mix(in srgb, #05080f 16%, transparent);
+            backdrop-filter: saturate(120%) blur(4px);
+            -webkit-backdrop-filter: saturate(120%) blur(4px);
+            color: color-mix(in srgb, var(--color-cursor-text-bright) 48%, transparent);
             font-size: 9px;
           }
           .studio-polish .studio-mode-row.is-active {
             border: 1px solid transparent !important;
-            background: var(--studio-chrome-glow-bg-active) !important;
-            color: var(--color-cursor-text-bright) !important;
-            box-shadow: none !important;
+            background:
+              radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent-hover) 22%, transparent), transparent 46%),
+              linear-gradient(
+                180deg,
+                color-mix(in srgb, var(--cursor-accent-hover) 34%, transparent) 0%,
+                color-mix(in srgb, var(--cursor-accent) 22%, transparent) 46%,
+                color-mix(in srgb, var(--cursor-accent) 12%, #000 28%) 100%
+              ),
+              linear-gradient(
+                180deg,
+                #0a101c 0%,
+                #05080f 100%
+              ) !important;
+            color: #ffffff !important;
+            box-shadow:
+              inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
+              inset 0 -2px 0 color-mix(in srgb, #000 28%, transparent),
+              0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent) !important;
+          }
+          .studio-polish .studio-mode-row.is-active svg,
+          .studio-polish .studio-mode-row.is-active svg * {
+            color: #ffffff !important;
+            stroke: #ffffff !important;
+            fill: none !important;
+            filter: none !important;
           }
           .studio-polish .studio-mode-row.is-active::before {
             content: "" !important;
@@ -3689,7 +4437,13 @@ export function StudioShell({
             border-radius: inherit;
             padding: 1px;
             pointer-events: none;
-            background: var(--studio-chrome-glow-border-fade);
+            background: linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--cursor-accent-hover) 88%, #fff 10%) 0%,
+              color-mix(in srgb, var(--cursor-accent) 58%, transparent) 38%,
+              color-mix(in srgb, var(--cursor-accent) 22%, transparent) 68%,
+              transparent 100%
+            ) !important;
             -webkit-mask:
               linear-gradient(#fff 0 0) content-box,
               linear-gradient(#fff 0 0);
@@ -3707,15 +4461,17 @@ export function StudioShell({
           .studio-polish .studio-composer .cursor-composer-box {
             width: 100%;
             /* Content-sized — flex:1 was stretching the glass box on full-height app/PWA. */
-            flex: 0 0 auto !important;
+            flex: 0 1 auto !important;
             align-self: stretch;
-            height: auto !important;
+            height: auto;
             min-height: 88px;
-            max-height: none;
+            max-height: min(38vh, 240px);
+            overflow: hidden;
           }
           .studio-polish .studio-composer-inputline {
-            flex: 0 1 auto !important;
+            flex: 1 1 auto !important;
             min-height: 0;
+            overflow: hidden;
           }
           .studio-polish .studio-composer .cursor-composer-box::before {
             width: 220px;
@@ -3837,8 +4593,24 @@ export function StudioShell({
           cursor: var(--studio-cursor-text, text) !important;
           caret-color: var(--cursor-accent);
         }
-        .studio-polish.is-custom-cursor :where(.cursor-resize, [data-panel-resize-handle-id], [role="separator"]) {
+        .studio-polish.is-custom-cursor :where(
+          .cursor-resize,
+          [data-panel-group-direction="horizontal"] > [data-panel-resize-handle-id],
+          [role="separator"][aria-orientation="vertical"],
+          .studio-editor-playhead,
+          .studio-editor-clip-handle,
+          .studio-editor-joint-handle,
+          .studio-side-sheet-resize
+        ) {
           cursor: var(--studio-cursor-resize-x, ew-resize) !important;
+        }
+        .studio-polish.is-custom-cursor :where(
+          .cursor-resize-v,
+          .studio-editor-resize-y,
+          [data-panel-group-direction="vertical"] > [data-panel-resize-handle-id],
+          [role="separator"][aria-orientation="horizontal"]
+        ) {
+          cursor: var(--studio-cursor-resize-y, ns-resize) !important;
         }
         body.is-drag-cursor,
         .studio-polish.is-custom-cursor [draggable="true"]:active {
@@ -4138,27 +4910,8 @@ export function StudioShell({
           height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
           min-height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
         }
-        .studio-profile-menu-avatar,
-        .studio-profile-menu-initials {
-          display: grid;
-          place-items: center;
-          width: 100%;
-          height: 100%;
-          border-radius: inherit;
-        }
         .studio-profile-menu-avatar {
-          object-fit: cover;
-        }
-        .studio-profile-menu-initials {
-          font-size: 11px;
-          font-weight: 750;
-          letter-spacing: 0.01em;
-          line-height: 1;
-          color: #fff;
-          text-shadow: 0 1px 1px color-mix(in srgb, #000 35%, transparent);
-        }
-        .studio-mobile-nav-tools .studio-profile-menu-initials {
-          font-size: 12px;
+          /* Glass border from StudioProfileAvatar; fills the trigger pill. */
         }
         .studio-profile-menu-popover {
           position: absolute;
@@ -4345,11 +5098,11 @@ export function StudioShell({
           border: 1px solid transparent !important;
           border-left-width: 1px !important;
           border-radius: 999px !important;
-          /* Fill fades left → transparent; border stroke still fades via ::before */
-          background: var(--studio-chrome-glow-bg-fade) !important;
+          /* Idle tabs stay flat; selected tabs get the fill fade. */
+          background: transparent !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          padding: 0 10px !important;
+          padding: 0 6px !important;
           margin: 0 !important;
           box-shadow: none !important;
           overflow: hidden;
@@ -4380,13 +5133,14 @@ export function StudioShell({
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
+            padding: 0 6px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-placeholder {
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
-            padding-left: 10px !important;
+            padding-left: 6px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab.cursor-unified-tab-new {
             position: relative !important;
@@ -4443,6 +5197,17 @@ export function StudioShell({
           overflow: hidden;
           border: 0;
           background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
+        }
+        .studio-polish .cursor-unified-tab-preview-overlay {
+          color: #fff !important;
+          background: transparent;
+        }
+        .studio-polish .cursor-unified-tab-preview-overlay svg {
+          color: #fff !important;
+          stroke-width: 2.75 !important;
+          filter:
+            drop-shadow(0 0 1.25px rgb(0 0 0 / 0.95))
+            drop-shadow(0 1px 2px rgb(0 0 0 / 0.75)) !important;
         }
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
@@ -4907,21 +5672,8 @@ export function StudioShell({
           display: none !important;
         }
         .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new)::before {
-          content: "" !important;
-          display: block !important;
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          border-radius: inherit;
-          padding: 1px;
-          pointer-events: none;
-          background: var(--studio-chrome-muted-border-fade) !important;
-          -webkit-mask:
-            linear-gradient(#fff 0 0) content-box,
-            linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          box-shadow: none !important;
+          content: none !important;
+          display: none !important;
         }
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new::before {
           content: none !important;
@@ -4935,7 +5687,7 @@ export function StudioShell({
           z-index: auto !important;
         }
         .studio-polish .cursor-unified-tab:not(.cursor-unified-tab-new):nth-child(n + 2) {
-          padding-left: 10px !important;
+          padding-left: 6px !important;
         }
         .studio-polish .cursor-unified-tab-placeholder {
           width: min(140px, var(--cursor-unified-tab-width, 154px));
@@ -4957,17 +5709,13 @@ export function StudioShell({
         .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover,
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: var(--studio-chrome-glow-bg-fade-hover) !important;
+          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new)::before {
-          background: linear-gradient(
-            225deg,
-            color-mix(in srgb, var(--cursor-accent) 42%, transparent),
-            color-mix(in srgb, var(--cursor-accent) 18%, transparent) 40%,
-            transparent 78%
-          ) !important;
+          content: none !important;
+          display: none !important;
         }
         .studio-polish .cursor-unified-tab.is-active {
           overflow: hidden;
@@ -5004,6 +5752,16 @@ export function StudioShell({
           color: currentColor !important;
           filter: none !important;
           stroke-width: inherit;
+        }
+        .studio-polish .cursor-unified-tab.is-active .cursor-unified-tab-preview-overlay,
+        .studio-polish .cursor-unified-tab.is-active .cursor-unified-tab-preview-overlay svg {
+          color: #fff !important;
+        }
+        .studio-polish .cursor-unified-tab.is-active .cursor-unified-tab-preview-overlay svg {
+          filter:
+            drop-shadow(0 0 1.25px rgb(0 0 0 / 0.95))
+            drop-shadow(0 1px 2px rgb(0 0 0 / 0.75)) !important;
+          stroke-width: 2.75 !important;
         }
         .studio-polish .cursor-unified-tab .cursor-tab-close {
           opacity: 1 !important;
@@ -5124,9 +5882,9 @@ export function StudioShell({
             rgba(15, 23, 42, 0.04) 55%,
             transparent 80%
           );
-          --studio-composer-glass: color-mix(in srgb, #e8ecf2 42%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #e8ecf2 54%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 32%, transparent);
+          --studio-composer-glass: color-mix(in srgb, #e8ecf2 92%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, #f4f6f9 96%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 86%, transparent);
           --studio-composer-glass-border: rgba(15, 23, 42, 0.12);
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
@@ -5172,13 +5930,15 @@ export function StudioShell({
           backdrop-filter: var(--studio-composer-glass-blur) !important;
           -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
         }
-        [data-appearance="light"] .studio-polish aside {
-          background: var(--mos-sidebar) !important;
+        [data-appearance="light"] .studio-polish aside,
+        [data-appearance="light"] .studio-polish .studio-settings-sidebar,
+        [data-appearance="light"] .studio-polish .cursor-explorer-panel {
+          background: #ffffff !important;
           border-right-color: var(--color-cursor-border-soft) !important;
         }
         [data-appearance="light"] .studio-polish .studio-folder-pathbar,
         [data-appearance="light"] .studio-polish .cursor-panel-search {
-          background: var(--color-cursor-sidebar) !important;
+          background: #ffffff !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
         [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
@@ -5187,8 +5947,15 @@ export function StudioShell({
           background: var(--studio-mobile-chrome-glass) !important;
           backdrop-filter: var(--studio-mobile-chrome-blur);
           -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
-          border-bottom: 0 !important;
           box-shadow: none !important;
+        }
+        [data-appearance="light"] .studio-polish aside .cursor-panel-head,
+        [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
+        [data-appearance="light"] .studio-polish .studio-settings-sidebar .cursor-panel-head {
+          border-bottom: 1px solid var(--studio-chrome-divider) !important;
+        }
+        [data-appearance="light"] .studio-polish main .cursor-workspace-head {
+          border-bottom: 0 !important;
         }
         @media (max-width: 899px) {
           [data-appearance="light"] .studio-polish main .cursor-workspace-head {
@@ -5262,7 +6029,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab {
           border-color: transparent !important;
-          background: var(--studio-chrome-glow-bg-fade) !important;
+          background: transparent !important;
           color: color-mix(in srgb, var(--color-cursor-text) 72%, transparent) !important;
           box-shadow: none !important;
           backdrop-filter: none;
@@ -5274,18 +6041,13 @@ export function StudioShell({
         ):hover,
         [data-appearance="light"] .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: var(--studio-chrome-glow-bg-fade-hover) !important;
+          background: color-mix(in srgb, var(--color-cursor-text) 5%, transparent) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new)::before {
-          display: block !important;
-          background: linear-gradient(
-            225deg,
-            color-mix(in srgb, var(--cursor-accent) 36%, transparent),
-            color-mix(in srgb, var(--cursor-accent) 14%, transparent) 42%,
-            transparent 78%
-          ) !important;
+          content: none !important;
+          display: none !important;
         }
         [data-appearance="light"] .studio-polish :where(
           .cursor-tab.active,
@@ -5293,7 +6055,6 @@ export function StudioShell({
           .cursor-tab.is-active,
           .cursor-agent-chat-tab.is-active
         ),
-        [data-appearance="light"] .studio-polish .cursor-unified-tab,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-streaming.is-active,
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-awaiting.is-active,
@@ -5311,15 +6072,14 @@ export function StudioShell({
           display: block !important;
           background: linear-gradient(
             225deg,
-            color-mix(in srgb, var(--cursor-accent) 90%, transparent),
-            color-mix(in srgb, var(--cursor-accent) 34%, transparent) 42%,
+            color-mix(in srgb, var(--cursor-accent) 48%, transparent),
+            color-mix(in srgb, var(--cursor-accent) 18%, transparent) 42%,
             transparent 78%
           ) !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab:not(.is-active):not(.cursor-unified-tab-new)::before {
-          content: "" !important;
-          display: block !important;
-          background: var(--studio-chrome-muted-border-fade) !important;
+          content: none !important;
+          display: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab.cursor-unified-tab-new {
           border-color: var(--studio-mobile-chrome-border) !important;
@@ -6957,43 +7717,11 @@ export function StudioShell({
           flex: 0 0 auto;
         }
         .studio-profile-photo-drop {
-          position: relative;
-          width: 72px;
-          height: 72px;
-          border-radius: 50%;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
-          background: color-mix(in srgb, var(--mos-bg) 28%, transparent);
+          /* Glass border from StudioProfileAvatar */
           color: var(--color-cursor-muted);
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          cursor: pointer;
-          padding: 0;
         }
         .studio-profile-photo-drop:hover:not(:disabled) {
           color: var(--color-cursor-text);
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
-        }
-        .studio-profile-photo-drop:disabled {
-          opacity: 0.55;
-          cursor: not-allowed;
-        }
-        .studio-profile-photo-empty {
-          display: grid;
-          place-items: center;
-        }
-        .studio-profile-avatar-img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-        .studio-profile-avatar-overlay {
-          position: absolute;
-          inset: 0;
-          display: grid;
-          place-items: center;
-          background: color-mix(in srgb, #000 45%, transparent);
-          color: #fff;
         }
         .studio-profile-photo-clear {
           position: absolute;
@@ -7793,6 +8521,10 @@ export function StudioShell({
           stroke-width: 2.25;
           filter: none;
         }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-badge svg:has(> polygon:only-child),
+        .studio-polish .desk-file-preview-item .desk-file-thumb-badge svg:has(> polygon:only-child) {
+          stroke-width: 2.85;
+        }
         .studio-polish .desk-file-grid-item .desk-file-thumb-folder svg,
         .studio-polish .desk-file-preview-item .desk-file-thumb-folder svg {
           opacity: 1;
@@ -7940,20 +8672,40 @@ export function StudioShell({
         .studio-polish .cursor-panel-search {
           min-height: 32px;
           height: 32px;
+          padding: 0 8px 0 10px;
           border-bottom: 1px solid var(--studio-chrome-divider);
           background: var(--color-cursor-sidebar);
         }
+        .studio-polish .cursor-panel-search > .icon-inline {
+          display: inline-flex;
+          align-items: center;
+          line-height: 0;
+        }
         .studio-polish .cursor-panel-search-input {
           font-size: 11.5px;
+          line-height: 1;
+          height: 100%;
         }
         .studio-polish .cursor-panel-search-input::placeholder {
           color: color-mix(in srgb, var(--color-cursor-text) 36%, transparent);
           opacity: 1;
+          line-height: 1;
         }
         .studio-polish .cursor-panel-search-input:focus,
         .studio-polish .cursor-panel-search-input:focus-visible {
           outline: none !important;
           box-shadow: none !important;
+        }
+        .studio-polish .cursor-panel-search-end {
+          border-left: none;
+        }
+        .studio-polish .cursor-panel-search-end::before {
+          background: var(--studio-chrome-divider);
+          height: 12px;
+        }
+        .studio-polish .desk-explorer-type-filter-trigger {
+          font-size: 11px;
+          font-weight: 600;
         }
         .studio-polish .desk-file-breadcrumbs {
           min-height: 0;
@@ -8067,24 +8819,26 @@ export function StudioShell({
         }
         @media (min-width: 900px) {
           .studio-polish {
-            --studio-composer-shell-max: 100%;
-            --studio-chat-column-max: calc(100% - 36px);
+            /* Keep composer + messages in a centered reading column on desktop. */
+            --studio-composer-shell-max: min(48rem, 80%);
+            --studio-chat-column-max: min(48rem, 80%);
             --studio-composer-glass-blur: saturate(190%) blur(36px);
-            --studio-chat-bubble-max: 58%;
+            --studio-chat-bubble-max: 88%;
           }
           .studio-composer .cursor-composer {
             left: 0;
-            max-width: 100%;
+            max-width: var(--studio-composer-shell-max);
+            margin-inline: auto;
             padding-inline: 10px;
           }
           .studio-composer.cursor-composer-shell > .cursor-attach-preview-dock {
             transform: none;
-            width: 100%;
-            max-width: 100%;
+            width: calc(100% - 20px);
+            max-width: var(--studio-composer-shell-max);
           }
           .studio-chat-composer-align {
             max-width: var(--studio-chat-column-max);
-            padding-inline: 4px;
+            padding-inline: 8px;
           }
         }
         .studio-composer-row {
@@ -8099,11 +8853,13 @@ export function StudioShell({
         }
         .studio-composer .cursor-composer-box {
           position: relative;
-          overflow: visible;
+          overflow: hidden;
           display: flex;
           align-self: stretch;
           min-height: var(--studio-composer-min-height);
-          flex: 1 1 auto;
+          height: auto;
+          max-height: min(42vh, 280px);
+          flex: 0 1 auto;
           flex-direction: column;
           min-width: 0;
           border: 0 !important;
@@ -8193,7 +8949,7 @@ export function StudioShell({
           position: relative;
           z-index: 1;
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           grid-template-rows: none;
           gap: 6px;
           flex: 0 0 auto;
@@ -8219,14 +8975,14 @@ export function StudioShell({
           min-width: 0;
           min-height: 28px;
           height: 28px;
-          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 70%, transparent);
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 38%, transparent);
           border-radius: 999px;
-          /* Keep pills readable but translucent so messages can scroll through this band. */
-          background: color-mix(in srgb, #05080f 48%, transparent);
-          backdrop-filter: saturate(140%) blur(8px);
-          -webkit-backdrop-filter: saturate(140%) blur(8px);
+          /* Quiet by default — only the active mode should feel filled. */
+          background: color-mix(in srgb, #05080f 16%, transparent);
+          backdrop-filter: saturate(120%) blur(4px);
+          -webkit-backdrop-filter: saturate(120%) blur(4px);
           padding: 0 6px;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 48%, transparent);
           font-size: 9px;
           font-weight: 650;
           line-height: 1;
@@ -8237,6 +8993,7 @@ export function StudioShell({
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             color var(--studio-motion-fast) var(--studio-motion-ease),
             background var(--studio-motion-fast) var(--studio-motion-ease),
+            box-shadow var(--studio-motion-fast) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-ease);
         }
         .studio-mode-row svg {
@@ -8245,16 +9002,44 @@ export function StudioShell({
           flex: 0 0 auto;
           stroke-width: 2.15;
           color: inherit;
+          opacity: 0.82;
         }
         .studio-mode-row:hover {
-          color: var(--color-cursor-text-bright);
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 78%, transparent);
+          background: color-mix(in srgb, #05080f 28%, transparent);
+          border-color: color-mix(in srgb, var(--studio-composer-glass-border) 62%, transparent);
           transform: none;
         }
         .studio-mode-row.is-active {
           border: 1px solid transparent;
-          background: var(--studio-chrome-glow-bg-active);
-          color: var(--color-cursor-text-bright);
-          box-shadow: none;
+          background:
+            radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--cursor-accent-hover) 22%, transparent), transparent 46%),
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--cursor-accent-hover) 34%, transparent) 0%,
+              color-mix(in srgb, var(--cursor-accent) 22%, transparent) 46%,
+              color-mix(in srgb, var(--cursor-accent) 12%, #000 28%) 100%
+            ),
+            linear-gradient(
+              180deg,
+              #0a101c 0%,
+              #05080f 100%
+            );
+          color: #ffffff;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent),
+            inset 0 -2px 0 color-mix(in srgb, #000 28%, transparent),
+            0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+        }
+        .studio-mode-row.is-active svg,
+        .studio-mode-row.is-active svg * {
+          opacity: 1;
+          color: #ffffff;
+          stroke: #ffffff;
+          fill: none;
+          filter: none;
         }
         .studio-mode-row.is-active::before {
           content: "";
@@ -8265,7 +9050,13 @@ export function StudioShell({
           border-radius: inherit;
           padding: 1px;
           pointer-events: none;
-          background: var(--studio-chrome-glow-border-fade);
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 88%, #fff 10%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 58%, transparent) 38%,
+            color-mix(in srgb, var(--cursor-accent) 22%, transparent) 68%,
+            transparent 100%
+          );
           -webkit-mask:
             linear-gradient(#fff 0 0) content-box,
             linear-gradient(#fff 0 0);
@@ -8400,29 +9191,55 @@ export function StudioShell({
           flex-direction: column;
           gap: 8px;
           min-width: 0;
-          border: 1px solid var(--studio-composer-glass-border);
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 55%, transparent);
           border-radius: 12px;
-          background: color-mix(in srgb, var(--studio-composer-glass-muted) 82%, transparent);
-          backdrop-filter: saturate(150%) blur(10px);
-          -webkit-backdrop-filter: saturate(150%) blur(10px);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 48%, transparent);
+          backdrop-filter: saturate(130%) blur(8px);
+          -webkit-backdrop-filter: saturate(130%) blur(8px);
           padding: 6px 6px 10px;
           text-align: center;
           cursor: pointer;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 62%, transparent);
           transition:
             border-color var(--studio-motion-fast) var(--studio-motion-ease),
             transform var(--studio-motion-fast) var(--studio-motion-ease),
-            box-shadow var(--studio-motion-med) var(--studio-motion-ease);
+            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-preset-grid-card:not(.is-active) .studio-preset-grid-thumb {
+          opacity: 0.72;
+          filter: saturate(0.78) brightness(0.92);
         }
         .studio-preset-grid-card:hover {
           transform: translateY(-1px);
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--studio-composer-glass-muted) 76%, var(--cursor-accent-dim) 24%);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted) 62%, var(--cursor-accent-dim) 18%);
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 86%, transparent);
           box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
         }
+        .studio-preset-grid-card:hover:not(.is-active) .studio-preset-grid-thumb {
+          opacity: 0.88;
+          filter: saturate(0.9) brightness(0.96);
+        }
         .studio-preset-grid-card.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--studio-composer-glass-muted) 82%, transparent);
-          box-shadow: none;
+          border-color: color-mix(in srgb, var(--cursor-accent) 62%, var(--color-cursor-border-soft));
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 18%,
+            var(--studio-composer-glass-muted)
+          );
+          color: var(--color-cursor-text-bright);
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 34%, transparent),
+            0 10px 22px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-preset-grid-card.is-active .studio-preset-grid-thumb {
+          opacity: 1;
+          filter: none;
+        }
+        .studio-preset-grid-card.is-active .studio-preset-grid-copy strong {
+          color: var(--color-cursor-text-bright);
         }
         .studio-preset-grid-thumb {
           position: relative;
@@ -8658,6 +9475,7 @@ export function StudioShell({
           height: auto;
           min-height: var(--studio-composer-line-size) !important;
           max-height: 100%;
+          overflow-x: hidden;
           overflow-y: auto;
           padding: 0 !important;
           margin: 0;
@@ -8668,10 +9486,15 @@ export function StudioShell({
           overflow-wrap: anywhere;
           word-break: break-word;
         }
+        .studio-composer .cursor-composer-mention-editor {
+          position: relative;
+        }
         .studio-composer .cursor-composer-mention-editor:empty::before,
         .studio-composer .cursor-composer-mention-editor:has(> br:only-child)::before,
         .studio-composer .cursor-composer-mention-editor:has(> br:first-child:last-child)::before {
           content: attr(data-placeholder) !important;
+          position: absolute !important;
+          inset: 0 !important;
           color: var(--color-cursor-text-bright) !important;
           -webkit-text-fill-color: var(--color-cursor-text-bright) !important;
           opacity: 0.38 !important;
@@ -8679,6 +9502,19 @@ export function StudioShell({
           line-height: var(--studio-composer-line-size);
           font-weight: 450;
           pointer-events: none;
+          white-space: pre-wrap;
+        }
+        .studio-composer .cursor-composer-box.is-recording .cursor-composer-mention-editor[data-listening="append"]::after,
+        .studio-composer .cursor-composer-box.is-transcribing .cursor-composer-mention-editor[data-listening="append"]::after {
+          content: attr(data-listening-label);
+          color: var(--color-cursor-text-bright);
+          -webkit-text-fill-color: var(--color-cursor-text-bright);
+          opacity: 0.38;
+          font-size: var(--studio-composer-text-size);
+          line-height: var(--studio-composer-line-size);
+          font-weight: 450;
+          pointer-events: none;
+          white-space: pre-wrap;
         }
         .studio-composer .cursor-composer-box:focus-within .cursor-composer-mention-editor:empty::before,
         .studio-composer .cursor-composer-box:focus-within .cursor-composer-mention-editor:has(> br:only-child)::before,
@@ -9014,6 +9850,13 @@ export function StudioShell({
           padding: 20px;
           color: var(--color-cursor-muted);
           font-size: 12px;
+        }
+        .studio-composer-preview-fallback.is-media-loading {
+          position: relative;
+          width: min(100%, 520px);
+          min-width: min(280px, 80vw);
+          padding: 0;
+          aspect-ratio: 16 / 9;
         }
         .studio-composer-toolbar {
           display: flex;
@@ -10204,9 +11047,38 @@ export function StudioShell({
           stroke-width: 2.25;
           flex: 0 0 auto;
         }
+        /* Dark mode default: attach + send icons stay white. */
+        .studio-polish .studio-composer-circle-btn.studio-upload-trigger,
+        .studio-polish .studio-composer-circle-btn.studio-composer-send-btn {
+          color: #ffffff;
+        }
+        .studio-polish .studio-composer-circle-btn.studio-upload-trigger svg,
+        .studio-polish .studio-composer-circle-btn.studio-composer-send-btn svg {
+          color: #ffffff;
+          stroke: #ffffff;
+        }
         .studio-composer-circle-btn:hover:not(:disabled):not(.studio-composer-send-btn):not(.is-on):not(.is-open):not(.is-recording) {
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
           background: color-mix(in srgb, var(--studio-composer-glass-muted) 68%, var(--cursor-accent-dim) 32%);
+        }
+        .studio-polish .studio-composer-circle-btn.studio-upload-trigger:hover:not(:disabled) {
+          color: #ffffff;
+        }
+        .studio-polish .studio-composer-circle-btn.studio-upload-trigger:hover:not(:disabled) svg {
+          color: #ffffff;
+          stroke: #ffffff;
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-upload-trigger {
+          color: var(--color-cursor-text);
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-upload-trigger svg {
+          color: currentColor;
+          stroke: currentColor;
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn,
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn svg {
+          color: #ffffff;
+          stroke: #ffffff;
         }
         .studio-composer-circle-btn.cursor-composer-mic {
           position: relative;
@@ -10396,6 +11268,8 @@ export function StudioShell({
           text-shadow: 0 1px 2px color-mix(in srgb, #000 42%, transparent);
         }
         .studio-composer-circle-btn.studio-composer-send-btn svg {
+          color: #ffffff;
+          stroke: #ffffff;
           filter: drop-shadow(0 1px 1px color-mix(in srgb, #000 40%, transparent));
         }
         .studio-composer-circle-btn.studio-composer-send-btn:hover:not(:disabled) {
@@ -10469,6 +11343,26 @@ export function StudioShell({
         .studio-composer-circle-btn.studio-composer-send-btn:disabled .studio-composer-send-cost {
           color: inherit;
           text-shadow: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:disabled {
+          color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 55%, transparent);
+          border-color: rgba(15, 23, 42, 0.14);
+          background: color-mix(in srgb, #ffffff 72%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:disabled svg {
+          color: currentColor;
+          stroke: currentColor;
+          filter: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:disabled .studio-composer-send-cost {
+          color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 62%, transparent);
+          text-shadow: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-options-btn {
+          color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 78%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-composer-circle-btn.cursor-composer-mic:not(.is-recording) {
+          color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 78%, transparent);
         }
         .studio-composer-options-panel {
           display: flex;
@@ -12746,7 +13640,8 @@ export function StudioShell({
         }
         .studio-chat-stream {
           min-height: 0;
-          flex: 1 1 0;
+          flex: 1 1 auto;
+          height: 100%;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -12863,28 +13758,60 @@ export function StudioShell({
         .studio-chat-bubble.is-assistant {
           margin-right: auto;
           border-radius: 8px 18px 18px 18px;
-          background: color-mix(in srgb, #05080f 46%, var(--cursor-accent) 3%);
-          backdrop-filter: saturate(150%) blur(14px);
-          -webkit-backdrop-filter: saturate(150%) blur(14px);
+          background: var(--studio-composer-glass);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
         }
         .studio-chat-bubble.is-result {
-          width: min(100%, var(--studio-chat-bubble-max, 90%));
-          max-width: var(--studio-chat-bubble-max, 90%);
+          width: fit-content;
+          max-width: min(100%, var(--studio-chat-bubble-max, 90%));
           margin-right: auto;
-          background: color-mix(in srgb, #05080f 50%, var(--cursor-accent) 3%);
-          backdrop-filter: saturate(150%) blur(14px);
-          -webkit-backdrop-filter: saturate(150%) blur(14px);
-          box-shadow: var(--studio-gen-card-shadow);
+          padding: 0;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          box-shadow: none;
+          overflow: visible;
         }
         .studio-chat-bubble.is-system {
           margin-right: auto;
-          background: color-mix(in srgb, #05080f 44%, var(--cursor-accent) 3%);
-          backdrop-filter: saturate(150%) blur(14px);
-          -webkit-backdrop-filter: saturate(150%) blur(14px);
+          background: var(--studio-composer-glass);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
         }
         [data-appearance="light"] .studio-chat-bubble.is-assistant,
         [data-appearance="light"] .studio-chat-bubble.is-system {
-          background: color-mix(in srgb, #e8ecf2 48%, var(--cursor-accent) 3%);
+          background: var(--studio-composer-glass);
+        }
+        .studio-chat-system-notice {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          align-self: stretch;
+          width: 100%;
+          margin: 2px 0;
+          padding: 0 12px;
+          pointer-events: none;
+        }
+        .studio-chat-system-notice-pill {
+          max-width: min(92%, 28rem);
+          padding: 5px 12px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-surface, #1a1a1a) 72%, transparent);
+          color: var(--color-cursor-muted);
+          font-size: 11.5px;
+          font-weight: 550;
+          line-height: 1.35;
+          letter-spacing: 0.01em;
+          text-align: center;
+          box-shadow: 0 1px 0 color-mix(in srgb, #000 12%, transparent);
+        }
+        [data-appearance="light"] .studio-chat-system-notice-pill {
+          background: color-mix(in srgb, #fff 78%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-muted, #667085) 92%, #111);
+          box-shadow: 0 1px 0 color-mix(in srgb, #000 6%, transparent);
         }
         .studio-chat-stream-inner > .studio-chat-bubble {
           align-self: flex-start;
@@ -12933,6 +13860,9 @@ export function StudioShell({
           flex-wrap: wrap;
           align-items: center;
           gap: 6px;
+        }
+        .studio-chat-chip.is-openable {
+          cursor: pointer;
         }
         .studio-chat-chip {
           display: inline-flex;
@@ -13053,6 +13983,47 @@ export function StudioShell({
           -webkit-backdrop-filter: var(--studio-gen-glass-blur);
           box-shadow: var(--studio-gen-card-shadow);
         }
+        /* Match finished chat image/video footprint + expected aspect while generating. */
+        .studio-video-progress-card.is-image,
+        .studio-video-progress-card.is-video {
+          width: fit-content;
+          max-width: 100%;
+          border-radius: 8px;
+        }
+        .studio-video-progress-card.is-image .studio-video-progress-frame {
+          --gen-aspect-w: 1;
+          --gen-aspect-h: 1;
+          width: min(
+            100%,
+            calc(min(42dvh, 320px) * var(--gen-aspect-w) / var(--gen-aspect-h))
+          );
+          max-height: min(42dvh, 320px);
+          aspect-ratio: var(--gen-aspect-ratio, 1 / 1);
+          height: auto;
+          background: color-mix(in srgb, #000 22%, transparent);
+        }
+        .studio-video-progress-card.is-video .studio-video-progress-frame {
+          --gen-aspect-w: 16;
+          --gen-aspect-h: 9;
+          width: min(
+            100%,
+            520px,
+            calc(min(52dvh, 420px) * var(--gen-aspect-w) / var(--gen-aspect-h))
+          );
+          max-height: min(52dvh, 420px);
+          aspect-ratio: var(--gen-aspect-ratio, 16 / 9);
+          height: auto;
+        }
+        .studio-chat-audio-progress-wrap {
+          width: fit-content;
+          max-width: 100%;
+          align-self: flex-start;
+        }
+        .studio-video-progress-card.is-audio .studio-video-progress-frame,
+        .studio-video-progress-frame.is-audio {
+          aspect-ratio: auto;
+          min-height: 72px;
+        }
         .studio-video-progress-frame {
           position: relative;
           aspect-ratio: 16 / 9;
@@ -13088,8 +14059,8 @@ export function StudioShell({
           18% { opacity: 0.28; }
           100% { transform: scale(1.55); opacity: 0; }
         }
-        .studio-gen-status-frame.has-dot-wave::before,
-        .studio-gen-status-frame.has-dot-wave::after {
+        .studio-gen-status-frame.has-media-loader::before,
+        .studio-gen-status-frame.has-media-loader::after {
           display: none;
         }
         .studio-dot-grid-wave {
@@ -13218,23 +14189,53 @@ export function StudioShell({
         }
         .studio-chat-result-grid {
           display: grid;
-          gap: 10px;
-          width: calc(100% + 28px);
-          max-width: none;
+          justify-items: start;
+          gap: 8px;
+          width: fit-content;
+          max-width: min(100%, var(--studio-chat-bubble-max, 90%));
           min-width: 0;
-          margin: -12px -14px;
+          margin: 0;
           box-sizing: border-box;
+          background: transparent;
+          box-shadow: none;
+        }
+        .studio-chat-result-grid.is-image-only {
+          background: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          box-shadow: none !important;
+          border: 0 !important;
+          padding: 0 !important;
         }
         .studio-chat-result-card {
           overflow: hidden;
           width: 100%;
           min-width: 0;
-          border-radius: 14px;
+          border-radius: 8px;
           border: 1px solid var(--studio-composer-glass-border);
           background: var(--studio-gen-glass-fill);
           backdrop-filter: var(--studio-gen-glass-blur);
           -webkit-backdrop-filter: var(--studio-gen-glass-blur);
           box-shadow: var(--studio-gen-card-shadow);
+        }
+        .studio-chat-audio-result-wrap {
+          width: fit-content;
+          max-width: 100%;
+        }
+        .studio-chat-audio-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: min(100%, 360px);
+          min-width: 220px;
+          min-height: calc(48px + 20px);
+          padding: 10px 12px;
+          border-radius: 16px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border, rgba(148, 163, 184, 0.16)) 90%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-composer, #07111f) 55%, transparent);
+          font-size: 12px;
+          color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 62%, transparent);
+          box-sizing: border-box;
         }
         .studio-chat-result-card.is-openable {
           appearance: none;
@@ -13248,22 +14249,80 @@ export function StudioShell({
           font: inherit;
         }
         .studio-chat-result-card.is-image-result {
-          border: 0;
-          background: transparent;
-          box-shadow: none;
+          --studio-chat-image-radius: 8px;
+          width: fit-content !important;
+          max-width: 100%;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.16)) !important;
+          border-radius: var(--studio-chat-image-radius) !important;
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, rgba(5, 8, 15, 0.55)) 55%,
+            transparent
+          ) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
+          box-shadow:
+            0 8px 22px color-mix(in srgb, #000 22%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+          overflow: hidden !important;
+          clip-path: inset(0 round var(--studio-chat-image-radius));
+          -webkit-clip-path: inset(0 round var(--studio-chat-image-radius));
+        }
+        .studio-chat-result-card.is-image-result.is-openable:hover,
+        .studio-chat-result-card.is-image-result.is-openable:focus-visible {
+          border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--studio-composer-glass-border)) !important;
+          box-shadow:
+            0 10px 26px color-mix(in srgb, #000 24%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
         }
         [data-appearance="light"] .studio-polish .studio-chat-result-card.is-image-result {
-          border: 0;
-          background: transparent;
-          box-shadow: none;
-          backdrop-filter: none;
-          -webkit-backdrop-filter: none;
+          border: 1px solid var(--studio-composer-glass-border, rgba(15, 23, 42, 0.12)) !important;
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, rgba(232, 236, 242, 0.72)) 70%,
+            transparent
+          ) !important;
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
+          box-shadow:
+            0 8px 20px rgba(15, 23, 42, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.55) !important;
         }
-        .studio-chat-result-card.is-image-result .studio-chat-result-media,
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame,
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.is-ready,
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.is-ready.ratio-image {
+          display: block !important;
+          width: fit-content !important;
+          max-width: 100% !important;
+          height: auto !important;
+          max-height: none !important;
+          aspect-ratio: auto !important;
+          border-radius: var(--studio-chat-image-radius) !important;
+          overflow: hidden !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          clip-path: inset(0 round var(--studio-chat-image-radius));
+          -webkit-clip-path: inset(0 round var(--studio-chat-image-radius));
+        }
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.ratio-image:not(.is-ready) {
+          width: min(100%, 180px) !important;
+          max-height: min(42dvh, 320px) !important;
+          aspect-ratio: 1 / 1 !important;
+          background: color-mix(in srgb, #000 22%, transparent) !important;
+        }
+        .studio-chat-result-card.is-image-result .media-load-frame-placeholder {
+          border-radius: var(--studio-chat-image-radius);
+        }
         .studio-chat-result-card.is-image-result img {
-          width: 100%;
-          background: transparent;
-          object-fit: cover;
+          display: block;
+          width: auto !important;
+          height: auto !important;
+          max-width: 100%;
+          max-height: min(42dvh, 320px);
+          border-radius: var(--studio-chat-image-radius) !important;
+          background: transparent !important;
+          object-fit: contain !important;
         }
         .studio-chat-result-card[draggable="true"] {
           cursor: grab;
@@ -13280,16 +14339,48 @@ export function StudioShell({
             0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent),
             var(--studio-gen-card-shadow);
         }
+        .studio-chat-result-card.is-video-result {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          width: fit-content !important;
+          max-width: 100%;
+          min-width: 0;
+          overflow: hidden;
+          border: 0;
+          border-radius: 8px;
+          background: transparent;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          box-shadow: none;
+        }
+        .studio-chat-result-card.is-video-result .studio-chat-video-player,
+        .studio-chat-result-card.is-video-result .studio-chat-result-media {
+          width: fit-content;
+          max-width: 100%;
+        }
+        .studio-chat-result-card.is-video-result .studio-chat-result-open {
+          /* Match video width; don't let the label widen the card. */
+          width: 0;
+          min-width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        .studio-chat-result-card.is-video-result .studio-chat-video-player-video {
+          max-width: min(100%, 520px);
+          max-height: min(52dvh, 420px);
+        }
         .studio-chat-result-open {
           display: block;
           width: 100%;
           border: 0;
-          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
           background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
           color: var(--cursor-text);
-          font-size: 12px;
+          font-size: 11px;
           font-weight: 600;
-          padding: 8px 12px;
+          line-height: 1;
+          padding: 5px 8px;
           cursor: pointer;
           text-align: center;
         }
@@ -13299,20 +14390,36 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-chat-result-card {
           border-color: var(--studio-composer-glass-border);
         }
-        .studio-chat-result-card img,
-        .studio-chat-result-card video {
+        .studio-chat-result-card:not(.is-image-result):not(.is-video-result) img,
+        .studio-chat-result-card:not(.is-image-result):not(.is-video-result) video {
           display: block;
-          width: 100%;
-          max-width: 100%;
+          width: auto;
           height: auto;
+          max-width: 100%;
+          max-height: min(42dvh, 320px);
           object-fit: contain;
           background: var(--studio-gen-media-bg);
         }
-        .studio-chat-result-media.media-load-frame {
+        .studio-chat-result-card:not(.is-image-result) .studio-chat-result-media.media-load-frame {
+          width: fit-content;
+          max-width: 100%;
+          height: auto;
           background: var(--studio-gen-frame-bg);
         }
-        .studio-chat-result-media.media-load-frame.is-ready {
+        .studio-chat-result-card:not(.is-image-result) .studio-chat-result-media.media-load-frame.is-ready {
+          width: fit-content;
+          max-width: 100%;
+          height: auto;
+          aspect-ratio: auto;
           background: transparent;
+        }
+        .studio-chat-result-card .studio-chat-result-media.media-load-frame.is-ready:not(.ratio-fill) img,
+        .studio-chat-result-card .studio-chat-result-media.media-load-frame.is-ready:not(.ratio-fill) video {
+          width: auto !important;
+          height: auto !important;
+          max-width: 100%;
+          max-height: min(42dvh, 320px);
+          object-fit: contain;
         }
         .studio-chat-result-media.media-load-frame video {
           pointer-events: auto;
@@ -13325,6 +14432,189 @@ export function StudioShell({
           padding: 9px 10px;
           color: var(--color-cursor-muted);
           font-size: 11px;
+        }
+        .studio-chat-result-stack {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 0;
+          width: fit-content;
+          max-width: 100%;
+          min-width: 0;
+        }
+        .studio-chat-result-stack.has-footer {
+          --studio-chat-image-radius: 8px;
+          overflow: hidden;
+          border-radius: var(--studio-chat-image-radius);
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.16));
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, rgba(5, 8, 15, 0.55)) 55%,
+            transparent
+          );
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          box-shadow:
+            0 8px 22px color-mix(in srgb, #000 22%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+          width: fit-content;
+          max-width: 100%;
+          padding: 0 0 2.5px;
+          gap: 2.5px;
+        }
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result {
+          width: fit-content !important;
+          max-width: 100%;
+          margin: 0 !important;
+          border: 0 !important;
+          border-radius: 0 !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          box-shadow: none !important;
+          clip-path: none !important;
+          -webkit-clip-path: none !important;
+          overflow: hidden;
+        }
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result.is-openable:hover,
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result.is-openable:focus-visible {
+          border-color: transparent !important;
+          box-shadow: none !important;
+        }
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame,
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.is-ready,
+        .studio-chat-result-stack.has-footer .studio-chat-result-card.is-image-result img {
+          border-radius: 0 !important;
+          clip-path: none !important;
+          -webkit-clip-path: none !important;
+        }
+        .studio-chat-result-gen-video {
+          appearance: none;
+          -webkit-appearance: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          /* Don't let label min-width widen the stack past the image. */
+          width: 0;
+          min-width: calc(100% - 5px);
+          max-width: calc(100% - 5px);
+          margin: 0 2.5px;
+          box-sizing: border-box;
+          min-height: 28px;
+          padding: 6px 8px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent-hover) 52%, var(--cursor-accent) 48%);
+          border-bottom-color: color-mix(in srgb, var(--cursor-accent) 62%, #000 28%);
+          border-radius: 8px;
+          overflow: hidden;
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 90%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 70%, #000 24%) 100%
+          );
+          box-shadow:
+            inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
+            0 2px 3px color-mix(in srgb, #000 22%, transparent),
+            0 4px 10px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          color: #ffffff;
+          text-shadow: 0 1px 2px color-mix(in srgb, #000 42%, transparent);
+          font: inherit;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          line-height: 1.2;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          cursor: pointer;
+          transition:
+            filter var(--studio-motion-fast) var(--studio-motion-ease),
+            transform var(--studio-motion-fast) var(--studio-motion-ease),
+            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease),
+            border-color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-chat-result-gen-video:hover,
+        .studio-chat-result-gen-video:focus-visible {
+          outline: none;
+          border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
+          border-bottom-color: color-mix(in srgb, var(--cursor-accent) 64%, #000 26%);
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #fff 6%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 72%, #000 22%) 100%
+          );
+          box-shadow:
+            inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
+            0 2px 4px color-mix(in srgb, #000 24%, transparent),
+            0 5px 12px color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+        }
+        .studio-chat-result-gen-video:active:not(:disabled) {
+          transform: translateY(1px) scale(0.99);
+          box-shadow:
+            inset 0 2px 3px color-mix(in srgb, #000 28%, transparent),
+            0 1px 2px color-mix(in srgb, #000 16%, transparent);
+        }
+        .studio-chat-result-gen-video:disabled {
+          opacity: 1;
+          cursor: not-allowed;
+          border-color: var(--color-cursor-border-soft);
+          border-bottom-color: var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-text) 5%, var(--studio-composer-glass-muted));
+          color: var(--color-cursor-muted);
+          text-shadow: none;
+          box-shadow: none;
+          transform: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-stack.has-footer {
+          border-color: var(--studio-composer-glass-border, rgba(15, 23, 42, 0.12));
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, rgba(232, 236, 242, 0.72)) 70%,
+            transparent
+          );
+          box-shadow:
+            0 8px 20px rgba(15, 23, 42, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.55);
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-gen-video {
+          border-color: color-mix(in srgb, var(--cursor-accent-hover) 58%, var(--cursor-accent) 42%);
+          border-bottom-color: color-mix(in srgb, var(--cursor-accent) 68%, #000 22%);
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 92%, #ffffff 5%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 90%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 76%, #000 20%) 100%
+          );
+          color: #ffffff;
+          box-shadow:
+            inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
+            0 2px 3px rgba(15, 23, 42, 0.1),
+            0 4px 10px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-gen-video:hover,
+        [data-appearance="light"] .studio-polish .studio-chat-result-gen-video:focus-visible {
+          border-color: color-mix(in srgb, var(--cursor-accent-hover) 62%, var(--cursor-accent) 38%);
+          border-bottom-color: color-mix(in srgb, var(--cursor-accent) 70%, #000 20%);
+          background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--cursor-accent-hover) 94%, #ffffff 4%) 0%,
+            color-mix(in srgb, var(--cursor-accent) 92%, transparent) 46%,
+            color-mix(in srgb, var(--cursor-accent) 78%, #000 18%) 100%
+          );
+          box-shadow:
+            inset 0 -2px 0 color-mix(in srgb, #000 14%, transparent),
+            0 2px 4px rgba(15, 23, 42, 0.11),
+            0 5px 12px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-chat-result-gen-video:disabled {
+          border-color: var(--color-cursor-border-soft);
+          border-bottom-color: var(--color-cursor-border-soft);
+          background: color-mix(in srgb, var(--mos-text) 7%, var(--mos-panel));
+          color: color-mix(in srgb, var(--mos-text) 46%, var(--mos-muted));
+          box-shadow: none;
         }
         @media (max-width: 899px) {
           .studio-chat-stream {
@@ -13441,7 +14731,7 @@ export function StudioShell({
       <PanelGroup
         direction="horizontal"
         autoSaveId={isMobile ? "studio-main-h-mobile" : "studio-main-h"}
-        className="studio-main-panels min-w-0 flex-1"
+        className="studio-main-panels h-full min-h-0 min-w-0 flex-1 overflow-hidden"
         onLayout={isMobile ? undefined : handleMainPanelLayout}
       >
         {!isMobile ? (
@@ -13485,12 +14775,14 @@ export function StudioShell({
         <StudioFilesExplorerBody
           search={search}
           setSearch={setSearch}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
           breadcrumbPath={breadcrumbPath}
           onBreadcrumbNavigate={handleBreadcrumbNavigate}
           onBreadcrumbDrop={handleBreadcrumbDrop}
           viewMode={viewMode}
           displayRootEntries={displayRootEntries}
-          displayCurrentEntries={displayCurrentEntries}
+          displayCurrentEntries={filteredCurrentEntries}
           pathToEntry={pathToEntry}
           topFolders={topFolders}
           childFolders={childFolders}
@@ -13523,10 +14815,53 @@ export function StudioShell({
             tabs={tabs}
             activeKey={activeTab}
             onSelect={handleTabSelect}
+            onReselect={handleFeedTabReselect}
             onClose={closeTab}
             onSetTabOrder={setOpenTabs}
+            onTabContextAction={handleTabContextAction}
+            onCommitTabRename={commitTabRename}
             disableDrag={isMobile}
           />
+          {feedModeMenuOpen && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  ref={feedModeMenuRef}
+                  data-feed-mode-menu
+                  className="studio-feed-mode-menu"
+                  role="menu"
+                  aria-label="Feed type"
+                  style={{
+                    left: feedModeMenuPos?.left ?? -9999,
+                    top: feedModeMenuPos?.top ?? -9999,
+                    minWidth: feedModeMenuPos?.minWidth ?? 132,
+                    visibility: feedModeMenuPos ? "visible" : "hidden",
+                  }}
+                >
+                  {(
+                    [
+                      { mode: "forYou", label: "For You" },
+                      { mode: "following", label: "Following" },
+                    ]
+                  ).map((item) => {
+                    const current = parseFeedTabKey(activeTab)?.mode ?? "forYou";
+                    const selected = current === item.mode;
+                    return (
+                      <button
+                        key={item.mode}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={selected ? "is-selected" : undefined}
+                        onClick={() => setFeedMode(item.mode)}
+                      >
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>,
+                document.body,
+              )
+            : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
             <div className="studio-new-tab-cluster">
               <button
@@ -13647,6 +14982,25 @@ export function StudioShell({
             }}
             onPatchGuidedProduction={async (production) => {
               if (!activeGuidedBrief) return;
+              if (production.aspectRatio) setAspectRatio(production.aspectRatio);
+              if (production.resolution && activeGuidedBrief.mode === "video") {
+                setResolution(production.resolution);
+              }
+              if (production.resolution && activeGuidedBrief.mode === "image") {
+                setImageResolution(production.resolution);
+              }
+              if (production.quality && activeGuidedBrief.mode === "image") {
+                setImageQuality(production.quality);
+              }
+              if (production.durationSeconds != null) {
+                setDurationSeconds(String(production.durationSeconds));
+              }
+              if (production.videoType) {
+                setVideoType(production.videoType);
+              }
+              if (production.audioEnabled !== undefined) {
+                setAudioEnabled(production.audioEnabled);
+              }
               await patchBriefProduction({
                 briefId: activeGuidedBrief._id,
                 expectedRevision: activeGuidedBrief.revision,
@@ -13687,6 +15041,7 @@ export function StudioShell({
             onUploadElementFiles={(files) => uploadElementFiles(files)}
             onOpenElementCreate={openElementCreateInComposer}
             onOpenEntry={handleEntryOpen}
+            onGenerateVideoFromImage={handleGenerateVideoFromImage}
             onCloseTab={closeTab}
             activeFolderId={activeFolder?._id}
             onOpenEditTab={isVideoEditorPreviewEnabled() ? openEditTab : undefined}
@@ -13695,6 +15050,7 @@ export function StudioShell({
             activeEditTab={activeTab}
             onOpenPublicProfile={openPublicProfile}
             onOpenProfilePost={openProfilePost}
+            onOpenFeedTab={openFeedTab}
             openTabs={openTabs}
           />
         </section>
@@ -13706,7 +15062,7 @@ export function StudioShell({
             attachments={attachments}
             setAttachments={setAttachments}
             mode={mode}
-            setMode={setMode}
+            setMode={handleComposerModeChange}
             aspectRatio={aspectRatio}
             setAspectRatio={setAspectRatio}
             imageResolution={imageResolution}
@@ -13719,6 +15075,18 @@ export function StudioShell({
             setDurationSeconds={setDurationSeconds}
             audioEnabled={audioEnabled}
             setAudioEnabled={setAudioEnabled}
+            audioType={audioType}
+            setAudioType={setAudioType}
+            selectedVoice={selectedVoice}
+            setSelectedVoice={setSelectedVoice}
+            sfxLoop={sfxLoop}
+            setSfxLoop={setSfxLoop}
+            sfxDurationAuto={sfxDurationAuto}
+            setSfxDurationAuto={setSfxDurationAuto}
+            sfxDurationSeconds={sfxDurationSeconds}
+            setSfxDurationSeconds={setSfxDurationSeconds}
+            sfxPromptInfluence={sfxPromptInfluence}
+            setSfxPromptInfluence={setSfxPromptInfluence}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
@@ -13735,7 +15103,7 @@ export function StudioShell({
             referenceIntents={referenceIntents}
             referenceIntent={referenceIntent}
             setReferenceIntent={setReferenceIntent}
-            hasComposerReferences={generationReferences.length > 0 || Boolean(videoStartFrameUrl)}
+            hasComposerReferences={generationReferences.length > 0}
             hasVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasVideoReferenceInput}
             hasNonVideoReferenceInput={mode === "video" && videoSupportsReferenceInput && hasNonVideoReferenceInput}
             generationReferences={generationReferences}
@@ -13743,12 +15111,11 @@ export function StudioShell({
             disabled={flowPending}
             entitlement={entitlement}
             onOpenCredits={openCreditsPane}
-            startFrameAttachmentId={startFrameAttachmentId}
-            setStartFrameAttachmentId={setStartFrameAttachmentId}
             onSubmit={handleSubmit}
             onDropEntry={(entry, range) => attachEntry(entry, range)}
             onUploadFiles={(files) => uploadComposerFiles(files)}
             uploadInputRef={composerUploadInputRef}
+            onOpenEntry={handleEntryOpen}
             assistanceFeatureEnabled={Boolean(assistanceFeatureEnabled)}
             assistanceEnabled={assistanceEnabled}
             onAssistanceChange={(enabled) => void handleAssistanceChange(enabled)}
@@ -13777,7 +15144,7 @@ export function StudioShell({
           onBreadcrumbNavigate={handleBreadcrumbNavigate}
           onBreadcrumbDrop={handleBreadcrumbDrop}
           displayRootEntries={displayRootEntries}
-          displayCurrentEntries={displayCurrentEntries}
+          displayCurrentEntries={filteredCurrentEntries}
           pathToEntry={pathToEntry}
           topFolders={topFolders}
           childFolders={childFolders}
@@ -13933,6 +15300,19 @@ export function StudioShell({
                 }
               })();
             }
+            if (action === "set-profile-image") {
+              if (!entry?.studioId || entry.studioKind !== "asset" || entry.kind !== "image") return;
+              if (!sharedProfileAssets?.hasProfile) {
+                toast.message("Claim a username in Settings → Profile first");
+                openSettingsTab("profile");
+                return;
+              }
+              void updateMyProfile({ avatarAssetId: entry.studioId })
+                .then(() => toast.success("Profile image updated"))
+                .catch((error) => {
+                  toast.error(friendlyConvexError(error, "Could not set profile image"));
+                });
+            }
             if (action === "share-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
               if (!sharedProfileAssets?.hasProfile) {
@@ -13977,8 +15357,6 @@ function StudioComposer({
   editorRef,
   attachments,
   setAttachments,
-  startFrameAttachmentId,
-  setStartFrameAttachmentId,
   mode,
   setMode,
   aspectRatio,
@@ -13993,6 +15371,18 @@ function StudioComposer({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  audioType = "voiceover",
+  setAudioType,
+  selectedVoice = null,
+  setSelectedVoice,
+  sfxLoop = false,
+  setSfxLoop,
+  sfxDurationAuto = true,
+  setSfxDurationAuto,
+  sfxDurationSeconds = 5,
+  setSfxDurationSeconds,
+  sfxPromptInfluence = 0.3,
+  setSfxPromptInfluence,
   elementType,
   setElementType,
   presets,
@@ -14021,6 +15411,7 @@ function StudioComposer({
   onDropEntry,
   onUploadFiles,
   uploadInputRef,
+  onOpenEntry,
   assistanceFeatureEnabled = false,
   assistanceEnabled = true,
   onAssistanceChange,
@@ -14040,6 +15431,7 @@ function StudioComposer({
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [presetGridOpen, setPresetGridOpen] = useState(false);
   const [videoTypeGridOpen, setVideoTypeGridOpen] = useState(false);
+  const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [composerOptionsOpen, setComposerOptionsOpen] = useState(false);
   const [overlayPanelBox, setOverlayPanelBox] = useState(null);
   const { isMobile } = useMobileLayout();
@@ -14074,6 +15466,7 @@ function StudioComposer({
   const inputLineRef = useRef(null);
   const composerShellRef = useRef(null);
   const isElementMode = mode === "element";
+  const isAudioMode = mode === "audio";
   const elementReferenceCounts = useMemo(() => {
     const media = attachments.filter(
       (attachment) =>
@@ -14098,6 +15491,7 @@ function StudioComposer({
   useEffect(() => {
     setPresetGridOpen(false);
     setVideoTypeGridOpen(false);
+    setVoicePickerOpen(false);
     setComposerOptionsOpen(false);
   }, [mode]);
 
@@ -14209,7 +15603,7 @@ function StudioComposer({
       if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
     };
-  }, [isMobile, presetGridOpen, videoTypeGridOpen, composerOptionsOpen]);
+  }, [isMobile, presetGridOpen, videoTypeGridOpen, voicePickerOpen, composerOptionsOpen]);
 
   const generationCost = composerCreditCost({
     mode,
@@ -14225,8 +15619,14 @@ function StudioComposer({
     referenceInputs: generationReferences,
     elementType,
     elementReferenceCounts,
+    audioType,
+    characterCount: draft.trim().length,
+    sfxDurationAuto,
+    sfxDurationSeconds,
   });
-  const assistanceOn = Boolean(assistanceFeatureEnabled && assistanceEnabled);
+  const assistanceOn = Boolean(
+    assistanceFeatureEnabled && assistanceEnabled && !isAudioMode,
+  );
   const cost = generationCost;
   const minimumAssistanceCredits = TEXT_GENERATION_BASE_CREDITS;
 
@@ -14234,11 +15634,13 @@ function StudioComposer({
     const el = editorRef.current;
     if (!el) return;
     if (!draft && !attachments.length) {
+      // Never materialize CSS placeholder into real text nodes.
       if (el.textContent) el.replaceChildren();
       return;
     }
-    if (document.activeElement !== el && !attachments.length && el.innerText !== draft) {
-      el.innerText = draft;
+    const current = readComposerEditorText(el);
+    if (document.activeElement !== el && !attachments.length && current !== draft) {
+      el.replaceChildren(document.createTextNode(draft));
     }
   }, [attachments.length, draft, editorRef]);
 
@@ -14277,22 +15679,23 @@ function StudioComposer({
     const openPreview = (event) => {
       const attachment = event.detail?.attachment;
       if (!attachment) return;
+      const entry = entryFromComposerAttachment(attachment);
+      if (entry && onOpenEntry) {
+        onOpenEntry(entry);
+        return;
+      }
       setPreviewAttachment(attachment);
     };
     window.addEventListener("studio-composer-token-open", openPreview);
     return () => window.removeEventListener("studio-composer-token-open", openPreview);
-  }, []);
+  }, [onOpenEntry]);
 
   function setEditorText(next) {
     const el = editorRef.current;
     if (el) {
-      el.innerText = next;
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      range.collapse(false);
-      const selection = window.getSelection();
-      selection?.removeAllRanges();
-      selection?.addRange(range);
+      if (next) el.replaceChildren(document.createTextNode(next));
+      else el.replaceChildren();
+      focusComposerEditorEnd(el);
     }
     setDraft(next);
   }
@@ -14315,12 +15718,18 @@ function StudioComposer({
   const generateDisabled =
     disabled ||
     assistBusy ||
-    (assistanceOn ? !draft.trim() && !attachments.length : !draft.trim());
+    (assistanceOn ? !draft.trim() && !attachments.length : !draft.trim()) ||
+    (isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId) ||
+    (isAudioMode && audioType === "music");
   const generateTitle = assistanceOn
     ? "Send Assistance message"
     : isElementMode
       ? `Build ${elementSheetLabel(elementType)}`
-      : "Generate";
+      : isAudioMode && audioType === "music"
+        ? "Music coming soon"
+        : isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId
+          ? "Select a voice"
+          : "Generate";
 
   const controlStrip = (
     <StudioComposerControlStrip
@@ -14348,6 +15757,23 @@ function StudioComposer({
       setDurationSeconds={setDurationSeconds}
       audioEnabled={audioEnabled}
       setAudioEnabled={setAudioEnabled}
+      audioType={audioType}
+      setAudioType={setAudioType}
+      selectedVoice={selectedVoice}
+      onOpenVoicePicker={() => {
+        setComposerOptionsOpen(false);
+        setPresetGridOpen(false);
+        setVideoTypeGridOpen(false);
+        setVoicePickerOpen(true);
+      }}
+      sfxLoop={sfxLoop}
+      setSfxLoop={setSfxLoop}
+      sfxDurationAuto={sfxDurationAuto}
+      setSfxDurationAuto={setSfxDurationAuto}
+      sfxDurationSeconds={sfxDurationSeconds}
+      setSfxDurationSeconds={setSfxDurationSeconds}
+      sfxPromptInfluence={sfxPromptInfluence}
+      setSfxPromptInfluence={setSfxPromptInfluence}
     />
   );
 
@@ -14386,6 +15812,7 @@ function StudioComposer({
         }
         const editor = editorRef.current;
         if (editor) {
+          focusComposerEditorEnd(editor);
           insertComposerTextAtCaret(editor, text);
           setDraft(readComposerEditorText(editor));
         } else {
@@ -14585,6 +16012,43 @@ function StudioComposer({
             {controlStrip}
           </div>
         ) : null}
+        {voicePickerOpen ? (
+          <div
+            className="studio-composer-options-panel is-overlay is-style"
+            role="region"
+            aria-label="Voice picker"
+            style={
+              overlayPanelBox
+                ? {
+                    top: overlayPanelBox.top,
+                    bottom: overlayPanelBox.bottom,
+                    left: overlayPanelBox.left,
+                    width: overlayPanelBox.width,
+                  }
+                : undefined
+            }
+          >
+            <div className="studio-composer-options-head">
+              <strong className="studio-composer-options-title">
+                <Mic aria-hidden="true" />
+                <span>Voices</span>
+              </strong>
+              <button
+                type="button"
+                className="studio-composer-options-close"
+                aria-label="Close voice picker"
+                onClick={() => setVoicePickerOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <StudioVoicePicker
+              selectedVoiceId={selectedVoice?.voiceId}
+              onSelect={(voice) => setSelectedVoice?.(voice)}
+              onClose={() => setVoicePickerOpen(false)}
+            />
+          </div>
+        ) : null}
         <div className="studio-composer-row">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
@@ -14623,11 +16087,25 @@ function StudioComposer({
           contentEditable
           suppressContentEditableWarning
           data-placeholder={
-            assistanceOn
-              ? "Chat with Assistance or attach photos and logos anytime"
-              : isElementMode
-                ? `Name your ${elementTypeLabel(elementType).toLowerCase()} and drop reference media`
-                : "Chat about the video, ad, or post you want"
+            recording
+              ? "Listening…"
+              : transcribing
+                ? "Transcribing…"
+                : assistanceOn
+                  ? "Message Assistant…"
+                  : isElementMode
+                    ? `Describe your ${elementTypeLabel(elementType).toLowerCase()}…`
+                    : isAudioMode && audioType === "sfx"
+                      ? "Describe the sound effect…"
+                      : isAudioMode
+                        ? "Enter voiceover script…"
+                        : "Describe what you want…"
+          }
+          data-listening={
+            (recording || transcribing) && draft.trim() ? "append" : undefined
+          }
+          data-listening-label={
+            recording ? " Listening…" : transcribing ? " Transcribing…" : undefined
           }
           className="cursor-composer-textarea cursor-composer-mention-editor"
           onInput={(event) => {
@@ -14657,14 +16135,14 @@ function StudioComposer({
       </div>
       <div className="studio-composer-toolbar">
         <div className="studio-composer-toolbar-left">
-          {assistanceFeatureEnabled ? (
+          {assistanceFeatureEnabled && !isAudioMode ? (
             <AssistanceToggle
               enabled={assistanceEnabled}
               onChange={(enabled) => onAssistanceChange?.(enabled)}
               disabled={disabled || assistBusy}
             />
           ) : null}
-          <StudioUploadButton inputRef={uploadInputRef} />
+          {!isAudioMode ? <StudioUploadButton inputRef={uploadInputRef} /> : null}
           <button
             type="button"
             className={`studio-composer-circle-btn studio-composer-options-btn${composerOptionsOpen ? " is-open" : ""}`}
@@ -14674,12 +16152,42 @@ function StudioComposer({
             onClick={() => {
               setPresetGridOpen(false);
               setVideoTypeGridOpen(false);
+              setVoicePickerOpen(false);
               setComposerOptionsOpen((open) => !open);
             }}
           >
             <SlidersHorizontal size={14} strokeWidth={2.25} aria-hidden="true" />
           </button>
-          {!isElementMode ? (
+          {isAudioMode ? (
+            <StudioInlineSettingSelect
+              icon={AudioLines}
+              label="Audio type"
+              value={audioType}
+              items={AUDIO_TYPE_OPTIONS}
+              onChange={(value) => {
+                if (value === "music") return;
+                setAudioType?.(value);
+              }}
+              hideLabel
+            />
+          ) : null}
+          {isAudioMode && audioType === "voiceover" ? (
+            <button
+              type="button"
+              className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}${voicePickerOpen ? " is-open" : ""}`}
+              title={selectedVoice ? `Voice: ${selectedVoice.name}` : "Choose voice"}
+              onClick={() => {
+                setComposerOptionsOpen(false);
+                setPresetGridOpen(false);
+                setVideoTypeGridOpen(false);
+                setVoicePickerOpen((open) => !open);
+              }}
+            >
+              <Mic size={12} aria-hidden="true" />
+              <span>{selectedVoice?.name ?? "Choose voice"}</span>
+            </button>
+          ) : null}
+          {!isElementMode && !isAudioMode ? (
             <StudioStyleSheetTriggerButton
               selectedMode={composerStyleMode}
               activeSheet={activeStyleSheet}
@@ -14688,6 +16196,7 @@ function StudioComposer({
               onClick={() => {
                 setComposerOptionsOpen(false);
                 setVideoTypeGridOpen(false);
+                setVoicePickerOpen(false);
                 setPresetGridOpen((open) => !open);
               }}
             />
@@ -14783,6 +16292,18 @@ function StudioComposerControlStrip({
   setDurationSeconds,
   audioEnabled,
   setAudioEnabled,
+  audioType = "voiceover",
+  setAudioType,
+  selectedVoice = null,
+  onOpenVoicePicker,
+  sfxLoop = false,
+  setSfxLoop,
+  sfxDurationAuto = true,
+  setSfxDurationAuto,
+  sfxDurationSeconds = 5,
+  setSfxDurationSeconds,
+  sfxPromptInfluence = 0.3,
+  setSfxPromptInfluence,
 }) {
   const scriptTypeItems = (scriptTypes ?? []).map((item) => ({
     value: item.slug,
@@ -14794,7 +16315,7 @@ function StudioComposerControlStrip({
     label: item.label,
     meta: item.description,
   }));
-  const showReferenceIntent = hasComposerReferences && !isElementMode;
+  const showReferenceIntent = hasComposerReferences && !isElementMode && mode !== "audio";
 
   return (
     <div className={layout === "panel" ? "studio-composer-options-body" : "studio-composer-controls"}>
@@ -14806,6 +16327,71 @@ function StudioComposerControlStrip({
             items={ELEMENT_TYPE_OPTIONS}
             onChange={setElementType}
           />
+        ) : mode === "audio" ? (
+          <>
+            {audioType === "voiceover" ? (
+              <div className="studio-composer-options-stack">
+                <button
+                  type="button"
+                  className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}`}
+                  onClick={() => onOpenVoicePicker?.()}
+                >
+                  <Mic size={12} aria-hidden="true" />
+                  <span>{selectedVoice?.name ?? "Choose voice"}</span>
+                </button>
+              </div>
+            ) : null}
+            {audioType === "sfx" ? (
+              <div className="studio-audio-sfx-controls">
+                <label className="studio-voice-picker-check">
+                  <input
+                    type="checkbox"
+                    checked={sfxLoop}
+                    onChange={(event) => setSfxLoop?.(event.target.checked)}
+                  />
+                  <span>Loop</span>
+                </label>
+                <label>
+                  <span>Duration</span>
+                  <select
+                    className="studio-voice-picker-select"
+                    value={sfxDurationAuto ? "auto" : String(sfxDurationSeconds)}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "auto") {
+                        setSfxDurationAuto?.(true);
+                        return;
+                      }
+                      setSfxDurationAuto?.(false);
+                      setSfxDurationSeconds?.(Number(value));
+                    }}
+                  >
+                    <option value="auto">Auto</option>
+                    {[0.5, 1, 2, 3, 5, 8, 10, 15, 20, 30].map((seconds) => (
+                      <option key={seconds} value={String(seconds)}>
+                        {seconds}s
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Prompt influence {Math.round(sfxPromptInfluence * 100)}%</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(sfxPromptInfluence * 100)}
+                    onChange={(event) =>
+                      setSfxPromptInfluence?.(Number(event.target.value) / 100)
+                    }
+                  />
+                </label>
+              </div>
+            ) : null}
+            {audioType === "music" ? (
+              <p className="studio-audio-disabled-chip">Music generation is coming soon.</p>
+            ) : null}
+          </>
         ) : (
           <>
             {mode === "script" && scriptTypeItems.length ? (
@@ -14865,13 +16451,19 @@ function StudioInlineSettingChipGroup({ label, value, items, onChange }) {
         {items.map((item) => {
           const ItemIcon = item.icon;
           const active = item.value === value;
+          const disabled = Boolean(item.disabled);
           return (
             <button
               key={item.value}
               type="button"
-              className={`studio-settings-chip${hasRatioOptions ? " has-ratio-icon" : ""}${ItemIcon ? " has-option-icon" : ""}${active ? " is-active" : ""}`}
+              className={`studio-settings-chip${hasRatioOptions ? " has-ratio-icon" : ""}${ItemIcon ? " has-option-icon" : ""}${active ? " is-active" : ""}${disabled ? " is-disabled studio-audio-disabled-chip" : ""}`}
               aria-pressed={active}
-              onClick={() => onChange(item.value)}
+              disabled={disabled}
+              title={disabled ? item.meta || "Coming soon" : undefined}
+              onClick={() => {
+                if (disabled) return;
+                onChange(item.value);
+              }}
             >
               {hasRatioOptions && String(item.value).includes(":") ? (
                 <StudioRatioGlyph ratio={item.value} />
@@ -14926,6 +16518,7 @@ function StudioModeSwitcher({ mode, setMode }) {
   const items = [
     { value: "image", label: "Image", icon: ImageIcon },
     { value: "video", label: "Video", icon: Video },
+    { value: "audio", label: "Audio", icon: AudioLines },
     { value: "script", label: "Script", icon: FileText },
     { value: "element", label: "Element", icon: Sparkles },
   ];
@@ -15190,11 +16783,14 @@ function StudioComposerInlineSettings({
     { value: "medium", label: "Medium", meta: "Balanced" },
     { value: "high", label: "High", meta: "Best detail" },
   ];
+  // Seedance 2.0 (Vercel Gateway catalog): 720p / 1080p only.
   const resolutionItems = [
-    { value: "854x480", label: "480p", meta: "Draft" },
     { value: "1280x720", label: "720p", meta: "Standard" },
     { value: "1920x1080", label: "1080p", meta: "Max" },
   ];
+  const activeVideoResolution = resolutionItems.some((item) => item.value === resolution)
+    ? resolution
+    : "1280x720";
   const durationProgress = `${((Number(localDurationSeconds) - 4) / (maxVideoDuration - 4)) * 100}%`;
   const commitDuration = (seconds = localDurationSeconds) => {
     const next = String(Math.max(4, Math.min(maxVideoDuration, Number(seconds) || 4)));
@@ -15276,7 +16872,7 @@ function StudioComposerInlineSettings({
         ) : (
           <StudioInlineSettingChipGroup
             label="Resolution"
-            value={resolution}
+            value={activeVideoResolution}
             items={resolutionItems}
             onChange={setResolution}
           />
@@ -15368,7 +16964,7 @@ function StudioComposerInlineSettings({
         <StudioInlineSettingSelect
           icon={Gauge}
           label="Resolution"
-          value={resolution}
+          value={activeVideoResolution}
           items={resolutionItems}
           onChange={setResolution}
           hideLabel={!showLabels}
@@ -15413,13 +17009,17 @@ function StudioInlineSettingSelect({ icon, label, value, items, onChange, hideLa
         <div className={`studio-settings-chip-grid${items.length === 3 ? " is-three" : ""}`} role="group" aria-label={label}>
           {items.map((item) => {
             const ItemIcon = item.icon;
+            const disabled = Boolean(item.disabled);
             return (
               <button
                 key={item.value}
                 type="button"
-                className={`studio-settings-chip${item.value.includes(":") ? " has-ratio-icon" : ""}${ItemIcon ? " has-option-icon" : ""}${item.value === value ? " is-active" : ""}`}
+                className={`studio-settings-chip${item.value.includes(":") ? " has-ratio-icon" : ""}${ItemIcon ? " has-option-icon" : ""}${item.value === value ? " is-active" : ""}${disabled ? " is-disabled" : ""}`}
                 aria-pressed={item.value === value}
+                disabled={disabled}
+                title={disabled ? item.meta || "Coming soon" : undefined}
                 onClick={() => {
+                  if (disabled) return;
                   onChange(item.value);
                   close();
                 }}
@@ -15600,7 +17200,6 @@ function StudioProfileMenu({
     name: currentUser?.name,
     displayName: profile?.displayName,
   });
-  const avatarStyle = avatarUrl ? undefined : profileAvatarStyle(initials);
   const label = handle ? `@${handle}` : currentUser?.name || "Profile";
   const direct = mode === "direct";
 
@@ -15640,14 +17239,18 @@ function StudioProfileMenu({
           setOpen((value) => !value);
         }}
       >
-        {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatarUrl} alt="" className="studio-profile-menu-avatar" />
-        ) : (
-          <span className="studio-profile-menu-initials" style={avatarStyle}>
-            {initials}
-          </span>
-        )}
+        {avatarUrl || initials ? (
+          <StudioProfileAvatar
+            className="studio-profile-menu-avatar is-fill"
+            size="sm"
+            src={avatarUrl}
+            initials={initials}
+            displayName={profile?.displayName}
+            firstName={currentUser?.firstName}
+            lastName={currentUser?.lastName}
+            name={currentUser?.name}
+          />
+        ) : null}
       </button>
       {!direct && open ? (
         <div className="cursor-tab-context-menu studio-profile-menu-popover" role="menu">
@@ -15904,6 +17507,12 @@ const ELEMENT_TYPE_OPTIONS = [
   { value: "doc", label: "Notes", meta: "Rules, style notes, references", icon: FileText },
 ];
 
+const AUDIO_TYPE_OPTIONS = [
+  { value: "voiceover", label: "Voiceover", meta: "ElevenLabs v3" },
+  { value: "sfx", label: "Sound effects", meta: "Text to sound" },
+  { value: "music", label: "Music", meta: "Soon", disabled: true },
+];
+
 function CreateStudioTab({ target, onCancel, onCreate }) {
   const kind = target.kind === "script" ? "script" : "folder";
   const [name, setName] = useState("");
@@ -15953,6 +17562,33 @@ function CreateStudioTab({ target, onCancel, onCreate }) {
       </form>
     </div>
   );
+}
+
+function entryFromComposerAttachment(attachment) {
+  if (!attachment) return null;
+  const studioId = attachment.studioId ?? attachment.id;
+  const studioKind =
+    attachment.studioKind ??
+    (attachment.elementType ? "element" : studioId ? "asset" : null);
+  if (!studioId || !studioKind) return null;
+  const kind = String(attachment.kind ?? "").toLowerCase();
+  return {
+    type: "file",
+    path:
+      attachment.path ||
+      (studioKind === "element"
+        ? `/Studio/elements/${studioId}`
+        : `/Studio/assets/${studioId}`),
+    name: attachment.label || attachment.filename || "Image",
+    studioKind,
+    studioId,
+    elementType: attachment.elementType,
+    kindLabel: kind || undefined,
+    mediaKind:
+      kind === "image" || kind === "video" || kind === "audio" ? kind : null,
+    thumbnailUrl: attachment.thumbnailUrl,
+    mediaUrl: attachment.mediaUrl ?? attachment.thumbnailUrl,
+  };
 }
 
 function createComposerAttachmentToken(attachment) {
@@ -16583,9 +18219,10 @@ const GENERATION_STAGE_RANK = {
   cancelled: 10,
 };
 
-function createOptimisticGenerationEvents({ prompt, mode }) {
+function createOptimisticGenerationEvents({ prompt, mode, aspectRatio }) {
   const clientId = `opt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   const now = Date.now();
+  const jobMode = mode === "video" ? "video" : mode === "audio" ? "audio" : "image";
   return {
     clientId,
     events: [
@@ -16602,7 +18239,10 @@ function createOptimisticGenerationEvents({ prompt, mode }) {
         _id: `${clientId}-stage`,
         kind: "stage",
         stage: "generating",
-        jobMode: mode === "video" ? "video" : "image",
+        jobMode,
+        ...(jobMode !== "audio" && aspectRatio
+          ? { aspectRatio: String(aspectRatio) }
+          : {}),
         generationJobId: `${clientId}-job`,
         optimistic: true,
         clientId,
@@ -16701,17 +18341,43 @@ function reconcileOptimisticThreadEvents(optimisticEvents = [], realEvents = [])
   return keep;
 }
 
+const REVIEW_PLACEHOLDER_MESSAGES = new Set([
+  "ready when you are 🙂",
+  "Updated brief — ready to approve.",
+  "updated — hit generate when you want",
+  "looks set — hit generate when you want",
+]);
+
+function resolveAssistanceReviewMessage(event, sourceEvents = []) {
+  const raw = typeof event?.message === "string" ? event.message.trim() : "";
+  if (raw && !REVIEW_PLACEHOLDER_MESSAGES.has(raw)) return raw;
+  const briefKey =
+    event?.briefId != null
+      ? `${event.briefId}:${event.briefRevision ?? ""}`
+      : null;
+  const eventTime = event?.createdAt ?? event?.order ?? 0;
+  const match = [...sourceEvents]
+    .filter((item) => {
+      if (item?.kind !== "assistant") return false;
+      const text =
+        typeof item.message === "string" ? item.message.trim() : "";
+      if (!text || REVIEW_PLACEHOLDER_MESSAGES.has(text)) return false;
+      if (briefKey) {
+        return (
+          item.briefId != null &&
+          `${item.briefId}:${item.briefRevision ?? ""}` === briefKey
+        );
+      }
+      return (item.createdAt ?? item.order ?? 0) <= eventTime;
+    })
+    .sort(
+      (a, b) =>
+        (b.createdAt ?? b.order ?? 0) - (a.createdAt ?? a.order ?? 0),
+    )[0];
+  return match?.message?.trim() || raw || undefined;
+}
+
 function compressThreadDisplayEvents(events = []) {
-  const runningOrCompletedBriefKeys = new Set(
-    events
-      .filter(
-        (event) =>
-          event.briefId != null &&
-          (event.kind === "result" ||
-            (event.kind === "stage" && GENERATION_PROGRESS_STAGES.has(event.stage))),
-      )
-      .map((event) => `${event.briefId}:${event.briefRevision ?? ""}`),
-  );
   const completedJobIds = new Set(
     events
       .filter((event) => event.kind === "result" && event.generationJobId)
@@ -16761,21 +18427,33 @@ function compressThreadDisplayEvents(events = []) {
       .filter((event) => event.kind === "assistant" && event.briefId != null)
       .map((event) => `${event.briefId}:${event.briefRevision ?? ""}`),
   );
+  const reviewKeys = new Set(
+    events
+      .filter((event) => event.kind === "review" && event.briefId != null)
+      .map((event) => `${event.briefId}:${event.briefRevision ?? ""}`),
+  );
 
   return events.filter((event) => {
+    // Folder switches stay durable for agent context, but never as chat UI.
+    if (event.kind === "folder_switched") {
+      return false;
+    }
     // Assisted jobs store their compiled provider prompt for audit/context, but
     // it is implementation detail—not a second user chat message.
     if (event.kind === "prompt" && event.briefId != null && event.generationJobId) {
       return false;
     }
-    // Once approval starts a render, replace the review surface with the
-    // generation loader and then the generated media.
+    // The review card renders the assistant message as its accordion summary.
+    // Hide the duplicate standalone assistant row for the same brief revision.
     if (
-      event.kind === "review" &&
-      runningOrCompletedBriefKeys.has(`${event.briefId}:${event.briefRevision ?? ""}`)
+      event.kind === "assistant" &&
+      event.briefId != null &&
+      reviewKeys.has(`${event.briefId}:${event.briefRevision ?? ""}`)
     ) {
       return false;
     }
+    // Keep review cards after generate/expire so the plan stays inspectable;
+    // the Generate half switches to a status label instead.
     if (event.kind === "question") {
       if (event.briefId != null) {
         return !assistantKeys.has(`${event.briefId}:${event.briefRevision ?? ""}`);
@@ -16895,6 +18573,8 @@ function StudioThreadChat({
   assets = [],
   elements = [],
   onOpenEntry,
+  onTrash,
+  onGenerateVideoFromImage,
   guidedBrief,
   onApproveGuidedBrief,
   onPatchGuidedProduction,
@@ -16967,15 +18647,19 @@ function StudioThreadChat({
                   key={event._id}
                   event={event}
                   displayEvents={displayEvents}
+                  sourceEvents={safeEvents}
                   assistanceApprovals={assistanceApprovals}
                   onDecideAssistanceApproval={onDecideAssistanceApproval}
                   assets={assets}
                   elements={elements}
                   onOpenEntry={onOpenEntry}
+                  onTrash={onTrash}
+                  onGenerateVideoFromImage={onGenerateVideoFromImage}
                   guidedBrief={guidedBrief}
                   onApproveGuidedBrief={onApproveGuidedBrief}
                   onPatchGuidedProduction={onPatchGuidedProduction}
                   creditPriceCents={creditPriceCents}
+                  assistBusy={assistBusy}
                   assistApproveBusy={assistApproveBusy}
                 />
               ))}
@@ -16991,22 +18675,31 @@ function StudioThreadChat({
 function StudioThreadEvent({
   event,
   displayEvents = [],
+  sourceEvents = [],
   assistanceApprovals = [],
   onDecideAssistanceApproval,
   assets,
   elements = [],
   onOpenEntry,
+  onTrash,
+  onGenerateVideoFromImage,
   guidedBrief,
   onApproveGuidedBrief,
   onPatchGuidedProduction,
   creditPriceCents,
+  assistBusy = false,
   assistApproveBusy = false,
 }) {
   if (event.kind === "prompt") {
     return (
       <ChatMessageRow role="user">
         <article className={`studio-chat-bubble is-user${event.optimistic ? " is-optimistic" : ""}`}>
-          <StudioPromptMessage prompt={event.prompt} assets={assets} elements={elements} />
+          <StudioPromptMessage
+            prompt={event.prompt}
+            assets={assets}
+            elements={elements}
+            onOpenEntry={onOpenEntry}
+          />
         </article>
       </ChatMessageRow>
     );
@@ -17129,6 +18822,13 @@ function StudioThreadEvent({
                 element?.name ||
                 attachment.role,
               kind: asset?.kind ?? (element ? "image" : undefined),
+              studioId: asset?.studioId ?? asset?._id ?? element?.studioId ?? element?._id,
+              studioKind: asset
+                ? "asset"
+                : element
+                  ? "element"
+                  : undefined,
+              elementType: element?.elementType,
               thumbnailUrl:
                 thumbSource?.signedThumbnailUrl ??
                 thumbSource?.thumbnailUrl ??
@@ -17142,10 +18842,24 @@ function StudioThreadEvent({
           }),
         }
       : reviewSnapshot;
-    const status = reviewData?.status;
-    const readOnly =
-      !isLatest ||
-      ["approved", "generating", "done"].includes(guidedBrief?.status);
+    const briefCompleted = sourceEvents.some(
+      (item) =>
+        item.kind === "result" &&
+        item.briefId === event.briefId &&
+        (item.briefRevision ?? "") === (event.briefRevision ?? ""),
+    );
+    const briefFailed = sourceEvents.some(
+      (item) =>
+        item.kind === "stage" &&
+        item.stage === "failed" &&
+        item.briefId === event.briefId &&
+        (item.briefRevision ?? "") === (event.briefRevision ?? ""),
+    );
+    const status =
+      reviewData?.status ??
+      (briefCompleted ? "done" : briefFailed ? "failed" : undefined);
+    const briefStatus = guidedBrief?.status ?? "";
+    const canRetryFailed = isLatest && briefStatus === "failed";
     const superseded =
       !isLatest ||
       displayEvents.some(
@@ -17154,7 +18868,16 @@ function StudioThreadEvent({
           (item.createdAt ?? 0) > (event.createdAt ?? 0),
       );
     const expired =
-      superseded && status !== "done" && status !== "failed";
+      superseded && status !== "done" && status !== "failed" && !briefCompleted;
+    const readOnly =
+      !isLatest ||
+      ["approved", "generating", "done"].includes(briefStatus) ||
+      briefCompleted ||
+      (briefFailed && !canRetryFailed);
+    const canApproveOrRetry =
+      isLatest &&
+      !expired &&
+      (briefStatus === "review_ready" || briefStatus === "failed");
     const styleSheet = reviewData?.styleSheetElementId
       ? elements.find(
           (element) =>
@@ -17168,7 +18891,7 @@ function StudioThreadEvent({
         videoType={reviewData?.videoType}
         status={status}
         expired={expired}
-        message={event.message}
+        message={resolveAssistanceReviewMessage(event, sourceEvents)}
         payload={reviewData?.payload ?? {}}
         assumptions={reviewData?.assumptions}
         warnings={reviewData?.warnings}
@@ -17194,12 +18917,11 @@ function StudioThreadEvent({
             ? formatTtdFromCredits(reviewData.estimatedCredits, creditPriceCents)
             : undefined
         }
-        readOnly={readOnly || expired}
-        busy={Boolean(assistApproveBusy && isLatest && !readOnly && !expired)}
-        onApprove={isLatest && !readOnly && !expired ? onApproveGuidedBrief : undefined}
-        onPatchProduction={
-          isLatest && !readOnly && !expired ? onPatchGuidedProduction : undefined
-        }
+        readOnly={(readOnly && !canRetryFailed) || expired}
+        busy={Boolean(assistApproveBusy && canApproveOrRetry)}
+        onApprove={canApproveOrRetry ? onApproveGuidedBrief : undefined}
+        onPatchProduction={canApproveOrRetry ? onPatchGuidedProduction : undefined}
+        onOpenEntry={onOpenEntry}
       />
     );
   }
@@ -17217,54 +18939,116 @@ function StudioThreadEvent({
           stage={expired ? "expired" : event.stage}
           error={event.error}
           mode={event.jobMode ?? "video"}
+          aspectRatio={event.aspectRatio}
         />
       );
     }
     return (
-      <article className="studio-chat-bubble is-system">
-        <p className="studio-thread-stage">{event.stage}</p>
-      </article>
+      <StudioChatSystemNotice>
+        {event.stage ? String(event.stage) : "Status updated"}
+      </StudioChatSystemNotice>
     );
   }
   if (event.kind === "result") {
-    const eventAssets = event.resultAssets?.length
-      ? event.resultAssets
-      : (event.assetIds ?? []).map((assetId) => assets.find((asset) => asset._id === assetId || asset.studioId === assetId));
+    const resultAssetIds =
+      event.assetIds?.length
+        ? event.assetIds
+        : (event.resultAssets ?? [])
+            .map((asset) => asset?._id ?? asset?.studioId)
+            .filter(Boolean);
+    const eventAssets = resultAssetIds.map((assetId) => {
+      const fromEvent = event.resultAssets?.find(
+        (asset) => asset?._id === assetId || asset?.studioId === assetId,
+      );
+      const fromPool = assets.find(
+        (asset) => asset._id === assetId || asset.studioId === assetId,
+      );
+      if (!fromEvent && !fromPool) return null;
+      // Prefer event payload, but fill missing media URLs from the hydrated asset pool
+      // (file manager may already have signedReadUrl when chat resultAssets do not).
+      if (fromEvent && fromPool) {
+        return {
+          ...fromPool,
+          ...fromEvent,
+          signedReadUrl: fromEvent.signedReadUrl ?? fromPool.signedReadUrl,
+          mediaUrl: fromEvent.mediaUrl ?? fromPool.mediaUrl ?? fromPool.signedReadUrl,
+          signedThumbnailUrl:
+            fromEvent.signedThumbnailUrl ?? fromPool.signedThumbnailUrl,
+          thumbnailUrl:
+            fromEvent.thumbnailUrl ??
+            fromPool.thumbnailUrl ??
+            fromPool.signedThumbnailUrl,
+          signedThumbnailLqipUrl:
+            fromEvent.signedThumbnailLqipUrl ?? fromPool.signedThumbnailLqipUrl,
+          thumbnailLqipUrl:
+            fromEvent.thumbnailLqipUrl ?? fromPool.thumbnailLqipUrl,
+        };
+      }
+      return fromEvent ?? fromPool;
+    });
     const resultAssets = eventAssets
       .filter(Boolean)
       .map(assetToEntry);
+    const imageOnly =
+      resultAssets.length > 0 &&
+      resultAssets.every((entry) => String(entry.kind ?? "").toLowerCase() === "image");
+    if (resultAssets.length) {
+      return (
+        <div className={`studio-chat-result-grid${imageOnly ? " is-image-only" : ""}`}>
+          {resultAssets.map((entry) => (
+            <StudioChatResultCard
+              key={entry.studioId ?? entry.path}
+              entry={entry}
+              onOpen={onOpenEntry}
+              onTrash={onTrash}
+              onGenerateVideo={onGenerateVideoFromImage}
+              generateBusy={assistBusy}
+            />
+          ))}
+        </div>
+      );
+    }
     return (
       <article className="studio-chat-bubble is-result">
-        {resultAssets.length ? (
-          <div className="studio-chat-result-grid">
-            {resultAssets.map((entry) => (
-              <StudioChatResultCard
-                key={entry.studioId ?? entry.path}
-                entry={entry}
-                onOpen={onOpenEntry}
-              />
-            ))}
-          </div>
-        ) : (
-          <StudioChatMarkdown text={`${event.assetIds?.length ?? 0} result(s) ready. Open the linked folder to view them.`} />
-        )}
+        <StudioChatMarkdown text={`${event.assetIds?.length ?? 0} result(s) ready. Open the linked folder to view them.`} />
       </article>
     );
   }
+    return (
+      <StudioChatSystemNotice>Something happened in this chat</StudioChatSystemNotice>
+    );
+  }
+
+function StudioChatSystemNotice({ children }) {
   return (
-    <article className="studio-chat-bubble is-system">
-      <p className="studio-chat-kicker">Studio</p>
-      <p className="studio-chat-text">Folder changed for this chat.</p>
-    </article>
+    <div className="studio-chat-system-notice" role="status">
+      <span className="studio-chat-system-notice-pill">{children}</span>
+    </div>
   );
 }
 
-function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
+function parseGenerationAspectRatio(aspectRatio) {
+  const fallback = { w: 16, h: 9 };
+  const match = String(aspectRatio ?? "").trim().match(/^(\d+)\s*:\s*(\d+)$/);
+  if (!match) return fallback;
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return fallback;
+  return { w, h };
+}
+
+function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio }) {
   const isFailed = stage === "failed";
   const isCancelled = stage === "cancelled";
   const isExpired = stage === "expired";
   const isProgress = GENERATION_PROGRESS_STAGES.has(stage);
-  const friendly = isFailed ? friendlyGenerationError(error, mode) : null;
+  const isAudio = mode === "audio";
+  const isImage = mode === "image";
+  const isVideo = mode === "video" || (!isAudio && !isImage);
+  const aspect = parseGenerationAspectRatio(aspectRatio);
+  const friendly = isFailed
+    ? friendlyGenerationError(error, mode === "audio" ? "script" : mode)
+    : null;
   const title = isExpired
     ? "Expired"
     : isCancelled
@@ -17272,10 +19056,22 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
       : isFailed
         ? (friendly?.title ?? "Something went wrong")
         : stage === "saving"
-          ? "Saving your render into Studio..."
+          ? isAudio
+            ? "Saving your audio..."
+            : isImage
+              ? "Saving your image into Studio..."
+              : "Saving your render into Studio..."
           : stage === "queued"
-            ? "Queued for render..."
-            : "Rendering...";
+            ? isAudio
+              ? "Queued..."
+              : isImage
+                ? "Queued..."
+                : "Queued for render..."
+            : isAudio
+              ? "Generating audio..."
+              : isImage
+                ? "Generating image..."
+                : "Rendering...";
   const detail = isFailed
     ? (friendly
         ? (friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message)
@@ -17284,16 +19080,34 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
       ? "This render was stopped before it finished."
       : null;
 
+  if (isAudio && isProgress) {
+    return (
+      <div className="studio-chat-audio-progress-wrap">
+        <StudioChatAudioPlayerLoading label={title} />
+      </div>
+    );
+  }
+
+  const frameStyle =
+    isImage || isVideo
+      ? {
+          ["--gen-aspect-ratio"]: `${aspect.w} / ${aspect.h}`,
+          ["--gen-aspect-w"]: aspect.w,
+          ["--gen-aspect-h"]: aspect.h,
+        }
+      : undefined;
+
   return (
     <div
-      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}${isExpired ? " is-expired" : ""}`}
+      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}${isExpired ? " is-expired" : ""}${isAudio ? " is-audio" : ""}${isImage ? " is-image" : ""}${isVideo ? " is-video" : ""}`}
     >
       <div
-        className={`studio-video-progress-frame studio-gen-status-frame${isProgress ? " has-dot-wave" : ""}`}
+        className={`studio-video-progress-frame studio-gen-status-frame${isProgress ? " has-media-loader" : ""}${isAudio ? " is-audio" : ""}`}
+        style={frameStyle}
         aria-live="polite"
         aria-label={isProgress ? "Generating" : undefined}
       >
-        {isProgress ? <StudioDotGridWave /> : null}
+        {isProgress ? <MediaLoadWave /> : null}
         {!isProgress ? (
         <div className="studio-video-progress-content studio-gen-status-content">
           <span className="studio-gen-status-icon" aria-hidden="true">
@@ -17319,16 +19133,34 @@ function StudioGenerationStatusCard({ stage, error, mode = "video" }) {
   );
 }
 
-function StudioChatResultCard({ entry, onOpen }) {
+function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generateBusy = false }) {
   const isVideo = entry.kind === "video";
   const isImage = entry.kind === "image";
+  const isAudio = entry.kind === "audio";
+  const [mediaExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+  const directPlaySrc = playableMediaUrl(entry.mediaUrl, entry.signedReadUrl);
+  const needsSignedMedia =
+    (isVideo || isAudio) && !directPlaySrc && Boolean(entry.studioId);
+  const lazyMediaUrl = useQuery(
+    api.assets.signedReadUrl,
+    needsSignedMedia
+      ? { assetId: entry.studioId, expiresUnix: mediaExpiresUnix }
+      : "skip",
+  );
   const thumbSrc =
     thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl, entry.mediaUrl) ??
     entry.thumbnailUrl ??
     entry.mediaUrl;
-  const poster = isVideoFileUrl(entry.thumbnailUrl) ? undefined : entry.thumbnailUrl;
+  const poster =
+    isVideoFileUrl(entry.thumbnailUrl) || isVideoFileUrl(thumbSrc)
+      ? undefined
+      : (entry.thumbnailUrl ?? thumbSrc);
+  const playSrc = playableMediaUrl(directPlaySrc, lazyMediaUrl);
   const canOpen = Boolean(onOpen && entry.studioId);
+  const canTrash = Boolean(onTrash && entry.studioId && entry.studioKind === "asset");
   const canDrag = Boolean(entry?.path);
+  const canGenerateVideo = Boolean(isImage && onGenerateVideo && entry.studioId);
+  const title = safeEntryTitle(entry);
 
   function openEntry() {
     if (!canOpen) return;
@@ -17342,7 +19174,7 @@ function StudioChatResultCard({ entry, onOpen }) {
     setChipDragImage(event.dataTransfer, {
       label: entry.name ?? "Result",
       thumbnailUrl: thumbSrc,
-      kind: entry.kind ?? (isImage ? "image" : isVideo ? "video" : "file"),
+      kind: entry.kind ?? (isImage ? "image" : isVideo ? "video" : isAudio ? "audio" : "file"),
     });
   }
 
@@ -17352,28 +19184,66 @@ function StudioChatResultCard({ entry, onOpen }) {
 
   if (isImage && thumbSrc) {
     return (
-      <button
-        type="button"
-        className={`studio-chat-result-card is-image-result${canOpen ? " is-openable" : ""}`}
-        onClick={openEntry}
+      <div className={`studio-chat-result-stack${canGenerateVideo ? " has-footer" : ""}`}>
+        <button
+          type="button"
+          className={`studio-chat-result-card is-image-result${canOpen ? " is-openable" : ""}`}
+          onClick={openEntry}
+          draggable={canDrag}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          aria-label={entry.name ? `Open ${title}` : "Open image"}
+          title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
+        >
+          <MediaLoadFrame kind="image" src={thumbSrc} ratio="image" className="studio-chat-result-media">
+            {({ onLoad, onError }) => (
+              <img src={thumbSrc} alt="" loading="lazy" draggable={false} onLoad={onLoad} onError={onError} />
+            )}
+          </MediaLoadFrame>
+        </button>
+        {canGenerateVideo ? (
+          <button
+            type="button"
+            className="studio-chat-result-gen-video"
+            disabled={generateBusy}
+            onClick={(event) => {
+              event.stopPropagation();
+              onGenerateVideo(entry);
+            }}
+          >
+            Generate video
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (isAudio) {
+    return (
+      <div
+        className="studio-chat-audio-result-wrap"
         draggable={canDrag}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        aria-label={entry.name ? `Open ${safeEntryTitle(entry)}` : "Open image"}
-        title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
+        title={canDrag ? "Drag into composer to attach" : undefined}
       >
-        <MediaLoadFrame kind="image" src={thumbSrc} ratio="image" className="studio-chat-result-media">
-          {({ onLoad, onError }) => (
-            <img src={thumbSrc} alt="" loading="lazy" draggable={false} onLoad={onLoad} onError={onError} />
-          )}
-        </MediaLoadFrame>
-      </button>
+        {playSrc ? (
+          <StudioChatAudioPlayer
+            src={playSrc}
+            title={title}
+          />
+        ) : needsSignedMedia ? (
+          <StudioChatAudioPlayerLoading label="Loading audio" />
+        ) : (
+          <div className="studio-chat-audio-loading">Audio unavailable</div>
+        )}
+      </div>
     );
   }
 
   return (
     <div
-      className={`studio-chat-result-card${canOpen && !isVideo ? " is-openable" : ""}`}
+      className={`studio-chat-result-card${isVideo ? " is-video-result" : ""}${canOpen && !isVideo ? " is-openable" : ""}`}
       role={canOpen && !isVideo ? "button" : undefined}
       tabIndex={canOpen && !isVideo ? 0 : undefined}
       draggable={canDrag}
@@ -17392,26 +19262,13 @@ function StudioChatResultCard({ entry, onOpen }) {
       }
       title={canDrag ? "Drag into composer to attach" : undefined}
     >
-      {isVideo && (entry.mediaUrl || thumbSrc) ? (
+      {isVideo && playSrc ? (
         <>
-          <MediaLoadFrame
-            kind="video"
-            src={entry.mediaUrl ?? thumbSrc}
-            ratio="video"
+          <StudioChatVideoPlayer
+            src={playSrc}
+            poster={poster}
             className="studio-chat-result-media"
-          >
-            {({ onLoad, onError }) => (
-              <video
-                src={entry.mediaUrl ?? thumbSrc}
-                poster={poster}
-                controls
-                playsInline
-                preload="metadata"
-                onLoadedData={onLoad}
-                onError={onError}
-              />
-            )}
-          </MediaLoadFrame>
+          />
           {canOpen ? (
             <button
               type="button"
@@ -17421,10 +19278,18 @@ function StudioChatResultCard({ entry, onOpen }) {
                 openEntry();
               }}
             >
-              Open in tab
+              Open
             </button>
           ) : null}
         </>
+      ) : isVideo && needsSignedMedia ? (
+        <div
+          className="studio-composer-preview-fallback is-media-loading"
+          aria-busy="true"
+          aria-label="Loading video"
+        >
+          <MediaLoadWave />
+        </div>
       ) : (
         <div className="studio-composer-preview-fallback">{entry.kindLabel ?? "Result"}</div>
       )}
@@ -17473,6 +19338,7 @@ function ActivePane({
   onUploadElementFiles,
   onOpenElementCreate,
   onOpenEntry,
+  onGenerateVideoFromImage,
   onCloseTab,
   activeFolderId,
   onOpenEditTab,
@@ -17482,11 +19348,12 @@ function ActivePane({
   activeEditTab,
   onOpenPublicProfile,
   onOpenProfilePost,
+  onOpenFeedTab,
   openTabs = [],
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
-    ? activeTab.slice("feed:".length)
+    ? parseFeedTabKey(activeTab)?.seed ?? "home"
     : null;
   const profileUsername = activeTab.startsWith("profile:")
     ? activeTab.slice("profile:".length)
@@ -17526,8 +19393,11 @@ function ActivePane({
       {keptFeedTabs.map((tabKey) => {
         let postId = "home";
         let username;
+        let feedMode = "forYou";
         if (tabKey.startsWith("feed:")) {
-          postId = tabKey.slice("feed:".length) || "home";
+          const parsed = parseFeedTabKey(tabKey);
+          postId = parsed?.seed || "home";
+          feedMode = parsed?.mode || "forYou";
         } else {
           const match = tabKey.match(/^profilePost:([^:]+):(.+)$/);
           username = match?.[1];
@@ -17546,6 +19416,17 @@ function ActivePane({
               <ProfilePostViewer
                 postId={postId}
                 username={username}
+                mode={feedMode}
+                onModeChange={
+                  tabKey.startsWith("feed:")
+                    ? (next) => {
+                        const parsed = parseFeedTabKey(tabKey);
+                        const seed =
+                          next === "forYou" ? parsed?.seed || "home" : "home";
+                        onOpenFeedTab?.(seed, next);
+                      }
+                    : undefined
+                }
                 tabActive={isActive}
                 onOpenProfile={onOpenPublicProfile}
               />
@@ -17651,6 +19532,12 @@ function ActivePane({
     }
     return wrapPane(
       <StudioVideoEditor
+        key={
+          videoEditContext.sourceAssetId ||
+          videoEditContext.projectId ||
+          videoEditContext.tabKey ||
+          activeTab
+        }
         folderId={folderId}
         projectId={videoEditContext.projectId}
         sourceAssetId={videoEditContext.sourceAssetId}
@@ -17700,6 +19587,8 @@ function ActivePane({
         assets={assets}
         elements={elements}
         onOpenEntry={onOpenEntry}
+        onTrash={onTrash}
+        onGenerateVideoFromImage={onGenerateVideoFromImage}
         guidedBrief={guidedBrief}
         onApproveGuidedBrief={onApproveGuidedBrief}
         onPatchGuidedProduction={onPatchGuidedProduction}
@@ -17744,17 +19633,6 @@ function ActivePane({
     return wrapPane(
       <StudioAssetPreview
         entry={activeEntry}
-        folderId={activeFolderId}
-        onEditVideo={
-          onOpenEditTab && activeFolderId
-            ? (item) =>
-                onOpenEditTab({
-                  assetId: item.studioId,
-                  folderId: activeFolderId,
-                  assetName: item.name,
-                })
-            : undefined
-        }
       />,
     );
   }
@@ -18133,7 +20011,7 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   );
 }
 
-function StudioAssetPreview({ entry, folderId, onEditVideo }) {
+function StudioAssetPreview({ entry }) {
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const needsFullSignedRead =
@@ -18158,14 +20036,6 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
   };
   return (
     <div className="studio-asset-preview">
-      {kind === "video" && onEditVideo ? (
-        <div className="studio-asset-preview-actions">
-          <button type="button" className="is-accent" onClick={() => onEditVideo(entry)}>
-            <Scissors aria-hidden="true" />
-            Edit video
-          </button>
-        </div>
-      ) : null}
       <div className="studio-asset-lightbox">
         {kind === "image" && mediaUrl ? (
           <ImageZoomViewer thumbUrl={thumbUrl} fullUrl={mediaUrl} name={entry.name} onDownload={downloadAsset} />
@@ -18180,13 +20050,10 @@ function StudioAssetPreview({ entry, folderId, onEditVideo }) {
             onDownload={downloadAsset}
           />
         ) : kind === "audio" && mediaUrl ? (
-          <DeskMediaPlayer
-            kind="audio"
-            layout="studio-preview"
+          <StudioChatAudioPlayer
+            variant="pane"
             src={mediaUrl}
-            name={entry.name}
-            fileSize={entry.byteSize ?? null}
-            onDownload={downloadAsset}
+            title={safeEntryTitle(entry)}
           />
         ) : (
           <div className="studio-asset-empty">
@@ -18551,7 +20418,7 @@ function AdminWorkspacePane({
                 <div className="studio-credit-cost"><span>Image 4K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits4K ?? 5, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
                 <div className="studio-credit-cost"><span>Image high</span><strong>prices scale with quality</strong><em>low / medium / high</em></div>
                 <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 14, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
-                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>Seedance</em></div>
+                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>default</em></div>
                 <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits1080p ?? 69, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
                 <div className="studio-credit-cost"><span>Script / Assistance</span><strong>2× usage · from {formatTtdFromCredits(TEXT_GENERATION_BASE_CREDITS, pricing?.creditPriceCents)}</strong><em>per turn</em></div>
               </div>
@@ -18684,6 +20551,8 @@ function paymentCustomerName(payment) {
 function StudioFilesExplorerBody({
   search,
   setSearch,
+  typeFilter = "all",
+  setTypeFilter,
   breadcrumbPath,
   onBreadcrumbNavigate,
   onBreadcrumbDrop,
@@ -18706,9 +20575,10 @@ function StudioFilesExplorerBody({
   showSearch = true,
   showPathbar = true,
 }) {
+  const filterActive = typeFilter !== "all";
   const tree = (
       <FileTree
-        viewMode={isMobile ? "grid" : viewMode}
+        viewMode={isMobile ? "grid" : filterActive ? "grid" : viewMode}
         workspaceId={WORKSPACE_ID}
         rootEntries={displayRootEntries}
         flatEntries={displayCurrentEntries}
@@ -18750,13 +20620,24 @@ function StudioFilesExplorerBody({
           })
         }
         onEntryDrop={onEntryDrop}
+        emptyHint={filterActive ? "No matching files" : undefined}
       />
   );
 
   return (
     <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
       {showSearch ? (
-        <PanelSearchBar value={search} onChange={setSearch} placeholder="Search your content" aria-label="Search your content" />
+        <PanelSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search your content"
+          aria-label="Search your content"
+          end={
+            setTypeFilter ? (
+              <ExplorerTypeFilter value={typeFilter} onChange={setTypeFilter} />
+            ) : null
+          }
+        />
       ) : null}
       {showPathbar ? (
         <div className="studio-folder-pathbar shrink-0">
@@ -18889,8 +20770,8 @@ function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, chi
   }
   if (settingsOpen && !isMobile) {
     return (
-      <PanelGroup direction="horizontal" autoSaveId="studio-settings-h" className="studio-workspace-panels h-full min-w-0">
-        <Panel id="studio-settings-main" order={1} defaultSize={72} minSize={42}>
+      <PanelGroup direction="horizontal" autoSaveId="studio-settings-h" className="studio-workspace-panels h-full min-h-0 min-w-0 overflow-hidden">
+        <Panel id="studio-settings-main" order={1} defaultSize={72} minSize={42} className="min-h-0 min-w-0">
           {children}
         </Panel>
         <PanelResizeHandle className="cursor-resize" />
@@ -19746,6 +21627,10 @@ function composerCreditCost({
   referenceInputs,
   elementType,
   elementReferenceCounts,
+  audioType = "voiceover",
+  characterCount = 0,
+  sfxDurationAuto = true,
+  sfxDurationSeconds = 5,
 }) {
   if (mode === "element") {
     return elementSheetCreditCost({
@@ -19760,6 +21645,18 @@ function composerCreditCost({
       imageReferenceCount: referenceInputs?.filter((reference) => reference.kind === "image").length ?? 0,
       audioReferenceCount: referenceInputs?.filter((reference) => reference.kind === "audio").length ?? 0,
       videoReferenceCount: referenceInputs?.filter((reference) => reference.kind === "video").length ?? 0,
+    });
+  }
+  if (mode === "audio") {
+    return audioCreditCost({
+      audioType: audioType === "music" ? "sfx" : audioType,
+      characterCount: audioType === "voiceover" ? characterCount : undefined,
+      durationSeconds:
+        audioType === "sfx"
+          ? sfxDurationAuto
+            ? undefined
+            : sfxDurationSeconds
+          : undefined,
     });
   }
   return creditCostForGeneration({
@@ -19987,12 +21884,29 @@ function documentToEntry(doc) {
     ext: ".md",
     studioKind: "document",
     studioId: doc._id,
+    folderId: doc.folderId,
     kindLabel: "Ad copy",
     description: doc.contentMarkdown,
   };
 }
 
 function videoEditToEntry(project) {
+  const thumbnailUrl = thumbnailDisplayUrl(
+    project.signedThumbnailUrl,
+    project.thumbnailUrl,
+  );
+  const mediaUrl =
+    fullQualityUrl(project.signedMediaUrl, project.mediaUrl) ??
+    project.signedMediaUrl ??
+    project.mediaUrl;
+  const previewKind =
+    project.previewKind === "image" || project.previewKind === "video"
+      ? project.previewKind
+      : thumbnailUrl && !isVideoFileUrl(thumbnailUrl)
+        ? "image"
+        : mediaUrl
+          ? "video"
+          : undefined;
   return {
     type: "file",
     name: `${project.name}.edit`,
@@ -20004,7 +21918,14 @@ function videoEditToEntry(project) {
     studioKind: "videoEdit",
     studioId: project._id,
     folderId: project.folderId,
+    kind: previewKind === "image" ? "image" : "video",
     kindLabel: "Video edit",
+    sourceAssetId: project.sourceAssetId,
+    outputAssetId: project.outputAssetId,
+    thumbnailUrl,
+    thumbnailLqipUrl: project.signedThumbnailLqipUrl ?? project.thumbnailLqipUrl,
+    mediaUrl,
+    previewKind,
   };
 }
 
@@ -20036,6 +21957,7 @@ function assetToEntry(asset) {
     ext,
     studioKind: "asset",
     studioId: assetId,
+    folderId: asset.folderId,
     kind: asset.kind,
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
     description: asset.mimeType,
@@ -20044,6 +21966,7 @@ function assetToEntry(asset) {
     thumbnailLqipUrl: asset.signedThumbnailLqipUrl ?? asset.thumbnailLqipUrl,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
+    durationSeconds: asset.durationSeconds,
   };
 }
 
@@ -20087,10 +22010,6 @@ async function downloadStudioEntry(entry, convex, expiresUnix) {
       entry.thumbnailUrl;
   }
   if (url) await downloadMediaUrl(url, entry.name ?? "download");
-}
-
-function isVideoFileUrl(url) {
-  return typeof url === "string" && /\.(mp4|webm|mov)(\?|#|$)/i.test(url);
 }
 
 function elementToEntry(element, assets = []) {
@@ -20176,6 +22095,7 @@ function tabDescriptor({
   profileMetaByUsername,
   myProfile,
   currentUser,
+  composerAttachments,
 }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
@@ -20244,12 +22164,14 @@ function tabDescriptor({
     };
   }
   if (key.startsWith("feed:")) {
+    const parsed = parseFeedTabKey(key);
     return {
       key,
       kind: "file",
-      title: "Feed",
+      title: feedModeTabTitle(parsed?.mode),
       status: "ready",
       studioKind: "feed",
+      hasMenu: true,
     };
   }
   if (key.startsWith("admin:")) {
@@ -20287,19 +22209,100 @@ function tabDescriptor({
     const snapshot = snapshots?.[key];
     const project = videoEdits?.find((item) => item._id === projectId);
     const title = snapshot?.name?.replace(/\.edit$/i, "") ?? project?.name ?? "Video edit";
-    return { key, kind: "file", title, status: "ready", studioKind: "videoEdit" };
+    const thumbUrl =
+      (typeof project?.signedThumbnailUrl === "string" && project.signedThumbnailUrl) ||
+      (typeof snapshot?.thumbnailUrl === "string" && snapshot.thumbnailUrl) ||
+      undefined;
+    const mediaUrl =
+      (typeof project?.signedMediaUrl === "string" && project.signedMediaUrl) ||
+      (typeof snapshot?.mediaUrl === "string" && snapshot.mediaUrl) ||
+      undefined;
+    const previewUrl = thumbUrl || mediaUrl || undefined;
+    return {
+      key,
+      kind: "file",
+      title,
+      status: "ready",
+      studioKind: "videoEdit",
+      ext: ".edit",
+      previewUrl,
+      // Keep media type for <img> vs <video>; overlay uses studioKind → clapperboard.
+      previewKind: thumbUrl ? "image" : previewUrl ? "video" : undefined,
+    };
   }
   if (key.startsWith("edit:")) {
     if (key.startsWith("edit:project:")) {
       const projectId = key.slice("edit:project:".length);
       const project = videoEdits?.find((item) => item._id === projectId);
-      return { key, kind: "file", title: project?.name ?? "Video edit", status: "ready", studioKind: "videoEdit" };
+      const thumbUrl =
+        typeof project?.signedThumbnailUrl === "string" ? project.signedThumbnailUrl : undefined;
+      const mediaUrl =
+        typeof project?.signedMediaUrl === "string" ? project.signedMediaUrl : undefined;
+      const previewUrl = thumbUrl || mediaUrl || undefined;
+      return {
+        key,
+        kind: "file",
+        title: project?.name ?? "Video edit",
+        status: "ready",
+        studioKind: "videoEdit",
+        ext: ".edit",
+        previewUrl,
+        previewKind: thumbUrl ? "image" : previewUrl ? "video" : undefined,
+      };
     }
-    return { key, kind: "file", title: "Edit video", status: "ready", studioKind: "videoEdit" };
+    const assetMatch = key.match(/^edit:asset:([^:]+):(.+)$/);
+    if (assetMatch) {
+      const assetId = assetMatch[1];
+      const asset = assets?.find((item) => item._id === assetId || item.studioId === assetId);
+      const entry = asset ? assetToEntry(asset) : snapshots?.[`asset:${assetId}`] ?? null;
+      const previewUrl =
+        (typeof entry?.thumbnailUrl === "string" && entry.thumbnailUrl) ||
+        (typeof entry?.mediaUrl === "string" && entry.mediaUrl) ||
+        undefined;
+      return {
+        key,
+        kind: "file",
+        title: entry ? safeEntryTitle(entry) : "Edit video",
+        status: "ready",
+        studioKind: "videoEdit",
+        ext: ".edit",
+        previewUrl,
+        previewKind:
+          entry?.kind === "video" && previewUrl && !entry?.thumbnailUrl
+            ? "video"
+            : previewUrl
+              ? "image"
+              : undefined,
+      };
+    }
+    return { key, kind: "file", title: "Edit video", status: "ready", studioKind: "videoEdit", ext: ".edit" };
   }
   if (key.startsWith("thread:")) {
     const thread = threads?.find((item) => item._id === key.slice("thread:".length));
-    return { key, kind: "chat", title: thread?.title ?? "Generation", status: "ready" };
+    const title = threadTitleFromPrompt(thread?.title, [], "Generation");
+    const previewAttachment = (composerAttachments ?? []).find(
+      (item) => item?.thumbnailUrl || item?.mediaUrl,
+    );
+    const previewUrl =
+      (typeof previewAttachment?.thumbnailUrl === "string" &&
+        previewAttachment.thumbnailUrl) ||
+      (typeof previewAttachment?.mediaUrl === "string" &&
+      (previewAttachment.kind === "image" || previewAttachment.kind === "video")
+        ? previewAttachment.mediaUrl
+        : undefined);
+    return {
+      key,
+      kind: "chat",
+      title,
+      status: "ready",
+      ...(previewUrl
+        ? {
+            previewUrl,
+            previewKind:
+              previewAttachment?.kind === "video" ? "video" : "image",
+          }
+        : {}),
+    };
   }
   const entry = findEntryByTab(key, { assets, documents, videoEdits, elements, snapshots });
   if (entry) {
@@ -20320,7 +22323,14 @@ function tabDescriptor({
       studioKind: entry.studioKind,
       elementType: entry.elementType,
       previewUrl,
-      previewKind: entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
+      previewKind:
+        entry.studioKind === "videoEdit"
+          ? entry.previewKind === "video"
+            ? "video"
+            : previewUrl
+              ? "image"
+              : undefined
+          : entry.kind ?? (entry.studioKind === "element" ? "image" : undefined),
       status: "ready",
     };
   }
@@ -20481,20 +22491,9 @@ function buildPromptWithAttachments(prompt, attachments) {
   return `${prompt.trim()}\n\nReferences:\n${refs}`;
 }
 
-function splitVideoGenerationInputs(attachments, signedUrls = {}, startFrameAttachmentId = "") {
-  let startFrameUrl;
+function splitVideoGenerationInputs(attachments, signedUrls = {}) {
   const referenceInputs = [];
   for (const attachment of attachments) {
-    if (attachment.id === startFrameAttachmentId) {
-      const url =
-        attachment.mediaUrl ??
-        signedUrls[`attachment:${attachment.id}`] ??
-        attachment.thumbnailUrl;
-      if (url && /^https?:\/\//i.test(url)) {
-        startFrameUrl = url;
-      }
-      continue;
-    }
     if (attachment.studioKind === "element") {
       if (attachment.elementType === "character") {
         continue;
@@ -20524,7 +22523,7 @@ function splitVideoGenerationInputs(attachments, signedUrls = {}, startFrameAtta
       referenceInputs.push(direct);
     }
   }
-  return { startFrameUrl, referenceInputs };
+  return { referenceInputs };
 }
 
 function generationReferenceInputs(attachments, signedUrls = {}) {

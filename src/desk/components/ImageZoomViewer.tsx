@@ -6,18 +6,19 @@ import { Icon } from "./Icons";
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 8;
+const DEFAULT_SCALE = 0.75;
 
 function clampScale(value) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, +(value).toFixed(2)));
 }
 
-export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
+export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) {
   const [displayUrl, setDisplayUrl] = useState(thumbUrl || fullUrl);
   const [fullLoaded, setFullLoaded] = useState(false);
-  const [scale, setScale] = useState(1);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [editingScale, setEditingScale] = useState(false);
-  const [scaleDraft, setScaleDraft] = useState("100");
+  const [scaleDraft, setScaleDraft] = useState(String(Math.round(DEFAULT_SCALE * 100)));
   const stageRef = useRef(null);
   const scaleInputRef = useRef(null);
   const dragRef = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 });
@@ -27,10 +28,10 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
   useEffect(() => {
     setDisplayUrl(thumbUrl || fullUrl);
     setFullLoaded(false);
-    setScale(1);
+    setScale(DEFAULT_SCALE);
     setPan({ x: 0, y: 0 });
     setEditingScale(false);
-    setScaleDraft("100");
+    setScaleDraft(String(Math.round(DEFAULT_SCALE * 100)));
   }, [thumbUrl, fullUrl]);
 
   useEffect(() => {
@@ -105,10 +106,10 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
   );
 
   const fit = useCallback(() => {
-    setScale(1);
+    setScale(DEFAULT_SCALE);
     setPan({ x: 0, y: 0 });
     setEditingScale(false);
-    setScaleDraft("100");
+    setScaleDraft(String(Math.round(DEFAULT_SCALE * 100)));
   }, []);
 
   useEffect(() => {
@@ -171,23 +172,10 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
     setEditingScale(false);
   }, [scaleDraft, scale, applyScale]);
 
-  const statusLabel = !fullLoaded
-    ? "Loading full…"
-    : fullUrl !== thumbUrl
-      ? "Full quality"
-      : null;
-
   return (
     <div className="desk-image-viewer">
       <div className="desk-image-viewer-toolbar">
-        <div className="desk-image-viewer-toolbar-left">
-          {name ? (
-            <span className="desk-image-viewer-name truncate" title={name}>
-              {name}
-            </span>
-          ) : null}
-          {statusLabel ? <span className="desk-image-viewer-status">{statusLabel}</span> : null}
-        </div>
+        <div className="desk-image-viewer-toolbar-left" />
         <div className="desk-image-viewer-toolbar-center">
           <button type="button" className="cursor-icon-btn" title="Zoom out" onClick={() => zoom(-0.25)}>
             <Icon name="zoomOut" size={14} />
@@ -250,7 +238,7 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name, onDownload }) {
       >
         <img
           src={displayUrl}
-          alt={name}
+          alt=""
           className="desk-image-viewer-img"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,

@@ -25,7 +25,7 @@ export function errorResponse(message: string, status = 400) {
 export function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
   };
 }

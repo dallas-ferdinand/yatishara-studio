@@ -64,11 +64,55 @@ function peekItemIcon(item) {
   if (item.kind === "element" && item.elementType) {
     return elementBadgeIcon(item.elementType);
   }
+  if (item.icon === "scissors") return "clapperboard";
   if (item.icon) return item.icon;
   if (item.kind === "document") return "fileText";
-  if (item.kind === "video") return "film";
+  if (item.kind === "video") return "play";
+  if (item.kind === "videoEdit") return "clapperboard";
   if (item.kind === "image") return "image";
+  if (item.kind === "audio") return "music";
   return "file";
+}
+
+function seedFromId(id) {
+  let seed = 2166136261;
+  const text = String(id || "audio");
+  for (let i = 0; i < text.length; i += 1) {
+    seed ^= text.charCodeAt(i);
+    seed = Math.imul(seed, 16777619);
+  }
+  return seed >>> 0;
+}
+
+function nextRand(seed) {
+  let x = seed || 1;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
+}
+
+/** Dense pseudo-waveform tile — no decode required. */
+function AudioWaveThumb({ seedKey = "audio", barCount = 28, className = "" }) {
+  const bars = [];
+  let seed = seedFromId(seedKey);
+  for (let i = 0; i < barCount; i += 1) {
+    seed = nextRand(seed);
+    const a = (seed % 1000) / 1000;
+    seed = nextRand(seed);
+    const b = (seed % 1000) / 1000;
+    const envelope = 0.32 + 0.68 * Math.abs(Math.sin(i * 0.37 + a * 4));
+    bars.push(Math.max(0.16, Math.min(1, envelope * (0.42 + b * 0.58))));
+  }
+  return (
+    <div className={`desk-file-thumb-audio ${className}`.trim()} aria-hidden="true">
+      <div className="desk-file-thumb-audio-wave">
+        {bars.map((h, i) => (
+          <span key={i} style={{ height: `${Math.round(h * 100)}%` }} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function peekDisplayName(label) {
@@ -178,7 +222,7 @@ function ProgressiveThumb({
   );
 }
 
-function VideoThumb({ src, className = "" }) {
+function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -190,7 +234,7 @@ function VideoThumb({ src, className = "" }) {
   if (!src || failed) {
     return (
       <div className="desk-file-thumb-fallback">
-        <Icon name="film" size={26} className="text-cursor-muted" />
+        <Icon name={fallbackIcon} size={26} className="text-cursor-muted" />
       </div>
     );
   }
@@ -230,6 +274,12 @@ function FolderPeekStack({ items, size = "grid" }) {
                 src={item.thumbnailUrl}
                 lqipSrc={item.thumbnailLqipUrl}
                 eager={eager && index === 0}
+              />
+            ) : item.kind === "audio" || item.icon === "music" ? (
+              <AudioWaveThumb
+                seedKey={item.label ?? `peek-audio-${index}`}
+                barCount={size === "preview" ? 22 : 16}
+                className="desk-file-thumb-audio--peek"
               />
             ) : (
               <span className="desk-folder-peek-icon">
@@ -318,17 +368,24 @@ export function FileEntryThumb({
   pinned = false,
 }) {
   const name = entry?.name ?? entry?.path?.split("/").pop() ?? "?";
-  const label = entry?.type === "parent" ? ".." : name;
+  const label = name;
   const kind = entryKind(entry);
   const icon = entry?.type === "parent" ? "chevL" : explorerEntryIcon(entry);
   const mediaUrl =
     entry?.mediaUrl ??
-    (entry?.path && kind !== "dir" && kind !== "parent"
+    (entry?.path &&
+    kind !== "dir" &&
+    kind !== "parent" &&
+    entry?.studioKind !== "videoEdit" &&
+    entry?.studioKind !== "document" &&
+    entry?.studioKind !== "element"
       ? workspaceFileRawUrl(entry.path, workspaceId, entry.mtimeMs ?? null)
       : null);
   const thumbUrl =
     entry?.thumbnailUrl ??
-    (entry?.path && (kind === "image" || kind === "video")
+    (entry?.path &&
+    (kind === "image" || kind === "video") &&
+    entry?.studioKind !== "videoEdit"
       ? workspaceFileThumbUrl(entry.path, workspaceId, size === "preview" ? 640 : 420)
       : null);
   const lqipUrl = entry?.thumbnailLqipUrl ?? null;
@@ -360,6 +417,7 @@ export function FileEntryThumb({
       );
     } else {
       const hasFolderPeek = entry?.type === "dir" && (entry?.peekItems ?? []).length > 0;
+      const isParent = entry?.type === "parent";
       visual = (
         <div
           className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${hasFolderPeek ? " desk-file-thumb-peek-wrap--folder-peek" : ""}`}
@@ -370,13 +428,15 @@ export function FileEntryThumb({
             folderIconClass={folderIconClass}
             size={size}
           />
-          <span className="desk-file-thumb-badge" aria-hidden="true">
-            <Icon
-              name={icon}
-              size={14}
-              className={folderIconClass === "desk-file-entry-icon--pinned" ? folderIconClass : undefined}
-            />
-          </span>
+          {!isParent ? (
+            <span className="desk-file-thumb-badge" aria-hidden="true">
+              <Icon
+                name={icon}
+                size={14}
+                className={folderIconClass === "desk-file-entry-icon--pinned" ? folderIconClass : undefined}
+              />
+            </span>
+          ) : null}
           <ThumbPeekLabel name={label} />
         </div>
       );
@@ -426,7 +486,7 @@ export function FileEntryThumb({
       inlinePeekLabel = true;
     } else if (isVideo) {
       visual = (
-        <ThumbWithPeek name={label} badge="film">
+        <ThumbWithPeek name={label} badge="play">
           {videoPosterUrl ? (
             <ProgressiveThumb
               src={videoPosterUrl}
@@ -438,7 +498,7 @@ export function FileEntryThumb({
             <VideoThumb src={mediaUrl ?? thumbUrl} className="desk-file-thumb-video" />
           ) : (
             <div className="desk-file-thumb-fallback">
-              <Icon name="film" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+              <Icon name="play" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
             </div>
           )}
         </ThumbWithPeek>
@@ -458,20 +518,41 @@ export function FileEntryThumb({
       );
       inlinePeekLabel = true;
     } else if (isVideoEdit) {
+      const editPosterUrl =
+        thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined;
       visual = (
-        <ThumbWithPeek name={label} badge="film">
-          <div className="desk-file-thumb-fallback">
-            <Icon name="film" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
-          </div>
+        <ThumbWithPeek name={label} badge="clapperboard">
+          {editPosterUrl ? (
+            <ProgressiveThumb
+              src={editPosterUrl}
+              lqipSrc={lqipUrl}
+              className="desk-file-thumb-video"
+              eager={eagerFirst}
+            />
+          ) : mediaUrl || (thumbUrl && isVideoFileUrl(thumbUrl)) ? (
+            <VideoThumb
+              src={mediaUrl ?? thumbUrl}
+              className="desk-file-thumb-video"
+              fallbackIcon="clapperboard"
+            />
+          ) : (
+            <div className="desk-file-thumb-fallback">
+              <Icon name="clapperboard" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+            </div>
+          )}
         </ThumbWithPeek>
       );
       inlinePeekLabel = true;
-    } else if (kind === "audio" && mediaUrl) {
+    } else if (kind === "audio") {
       visual = (
-        <div className="desk-file-thumb-audio">
-          <Icon name="music" size={32} className="text-cursor-muted" />
-        </div>
+        <ThumbWithPeek name={label} badge="music">
+          <AudioWaveThumb
+            seedKey={entry?.path ?? entry?._id ?? label}
+            barCount={size === "preview" ? 36 : 28}
+          />
+        </ThumbWithPeek>
       );
+      inlinePeekLabel = true;
     } else if (kind === "pdf" && previewUrl) {
       visual = <iframe title={label} src={previewUrl} className="desk-file-thumb-iframe" />;
     } else if (TEXT_KINDS.has(kind) && entry?.path && size === "preview") {

@@ -13,6 +13,14 @@
     "workspaceReadyMsP75": 3500,
     "longTaskMs": 200
   },
+  "editor": {
+    "transitionStartMsP95": 100,
+    "seekReadyMsP95": 150,
+    "maxDroppedFrameRate": 0.05,
+    "maxBufferingMsPerMinute": 500,
+    "maxDecoderCacheMb": 384,
+    "maxAudioCacheMb": 128
+  },
   "assets": {
     "maxPublicFileKb": 500,
     "forbidGlobs": [

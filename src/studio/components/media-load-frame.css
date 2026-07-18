@@ -2,7 +2,7 @@
   position: relative;
   display: block;
   overflow: hidden;
-  background: color-mix(in srgb, #000 28%, transparent);
+  background: transparent;
 }
 
 .media-load-frame.ratio-fill {
@@ -50,14 +50,15 @@
   display: grid;
   place-items: center;
   pointer-events: none;
-  background: color-mix(in srgb, #000 22%, transparent);
+  overflow: hidden;
+  background: transparent;
 }
 
-.media-load-frame-spinner {
-  width: 22px;
-  height: 22px;
-  color: color-mix(in srgb, #fff 62%, transparent);
-  animation: media-load-frame-spin 0.85s linear infinite;
+.media-load-frame-wave {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
 }
 
 .media-load-frame-failure {
@@ -99,17 +100,7 @@
   object-fit: contain;
 }
 
-@keyframes media-load-frame-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .media-load-frame-spinner {
-    animation: none;
-  }
-
   .media-load-frame img,
   .media-load-frame video {
     transition: none;

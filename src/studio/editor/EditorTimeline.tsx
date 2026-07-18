@@ -1,9 +1,8 @@
 // @ts-nocheck
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Film,
   Pause,
   Play,
   Scissors,
@@ -15,8 +14,6 @@ import {
   VolumeX,
   ZoomIn,
   ZoomOut,
-  Sunrise,
-  Sunset,
   Sparkles,
 } from "lucide-react";
 import { transitionLabel } from "./editorEffects";
@@ -38,6 +35,7 @@ import {
   readTimelineDropPayload,
   trackAcceptsMediaKind,
 } from "./editorDnd";
+import { ClipAudioWaveform } from "./ClipAudioWaveform";
 import { ClipFilmstrip } from "./ClipFilmstrip";
 import {
   AUDIO_TRACK_HEIGHT,
@@ -56,25 +54,6 @@ function trackHeightForKind(kind) {
   return VIDEO_TRACK_HEIGHT;
 }
 
-function FadeOverlay({ fadeIn, fadeOut, duration, pps }) {
-  const fadeInPx = (fadeIn ?? 0) * pps;
-  const fadeOutPx = (fadeOut ?? 0) * pps;
-  return (
-    <>
-      {fadeInPx > 2 ? (
-        <span className="studio-editor-clip-fade is-in" style={{ width: fadeInPx }} aria-hidden="true" />
-      ) : null}
-      {fadeOutPx > 2 ? (
-        <span
-          className="studio-editor-clip-fade is-out"
-          style={{ width: fadeOutPx, right: 0 }}
-          aria-hidden="true"
-        />
-      ) : null}
-    </>
-  );
-}
-
 function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
   const width = Math.max(clipDuration(clip) * pps, 28);
   const isVideo = clip.kind === "video";
@@ -87,11 +66,17 @@ function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
     >
       {isText ? (
         <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
-      ) : isVideo && media ? (
-        <ClipFilmstrip media={media} label={clip.label} widthPx={width} />
-      ) : (
-        <span className="studio-editor-clip-label">{clip.label}</span>
-      )}
+      ) : isVideo ? (
+        <ClipFilmstrip
+          media={media}
+          label={clip.label}
+          widthPx={width}
+          trimIn={clip.trimIn}
+          trimOut={clip.trimOut}
+        />
+      ) : clip.kind === "audio" ? (
+        <ClipAudioWaveform clipId={clip.id} widthPx={width} />
+      ) : null}
     </div>
   );
 }
@@ -121,9 +106,11 @@ function TimelineClipBlock({
   const isText = clip.kind === "text";
   const thresholdSec = snapThresholdSec(pps);
   const widthPx = Math.max(width, 28);
-  const duration = clipDuration(clip);
 
   const onPointerDown = (event, mode) => {
+    // Let middle-click / Alt+drag bubble for timeline pan.
+    if (event.button === 1 || event.altKey) return;
+    if (event.button !== 0) return;
     event.stopPropagation();
     onSelect(clip.id);
     const startX = event.clientX;
@@ -180,7 +167,7 @@ function TimelineClipBlock({
           lastStart = startTime;
           lastTrackId = allowedTrackId;
           onSnapGuide?.(guide);
-          if (!lastInsertAt) {
+          if (lastInsertAt == null) {
             onMove(clip.id, startTime, lastTrackId !== originTrackId ? lastTrackId : undefined, true);
           }
         } else {
@@ -267,29 +254,21 @@ function TimelineClipBlock({
       onPointerDown={(event) => onPointerDown(event, "move")}
       title={clip.label}
     >
-      {isText ? (
-        <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
-      ) : isVideo ? (
-        <ClipFilmstrip media={media} label={clip.label} widthPx={widthPx} />
-      ) : (
-        <span className="studio-editor-clip-label">{clip.label}</span>
-      )}
-      <FadeOverlay fadeIn={clip.effects?.fadeIn} fadeOut={clip.effects?.fadeOut} duration={duration} pps={pps} />
-      {(clip.effects?.fadeIn ?? 0) > 0 ? (
-        <span className="studio-editor-clip-edge-icon is-in" title="Fade in">
-          <Sunrise size={10} aria-hidden="true" />
-        </span>
-      ) : null}
-      {(clip.effects?.fadeOut ?? 0) > 0 ? (
-        <span className="studio-editor-clip-edge-icon is-out" title="Fade out">
-          <Sunset size={10} aria-hidden="true" />
-        </span>
-      ) : null}
-      {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
-        <span className="studio-editor-clip-transition-badge" title={`${clip.transitionOut.type} out`}>
-          {clip.transitionOut.type === "crossfade" ? "×" : "→"}
-        </span>
-      ) : null}
+      <div className="studio-editor-clip-body">
+        {isText ? (
+          <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
+        ) : isVideo ? (
+          <ClipFilmstrip
+            media={media}
+            label={clip.label}
+            widthPx={widthPx}
+            trimIn={clip.trimIn}
+            trimOut={clip.trimOut}
+          />
+        ) : (
+          <ClipAudioWaveform clipId={clip.id} widthPx={widthPx} />
+        )}
+      </div>
       {!isText ? (
         <>
           <span
@@ -328,36 +307,129 @@ function DropGhost({ preview, pps, mediaById }) {
   if (!preview) return null;
   const width = Math.max(preview.duration * pps, 28);
   const media = preview.assetId ? mediaById?.get(preview.assetId) : null;
+  const isAudio = media?.kind === "audio";
   return (
     <div
-      className="studio-editor-drop-ghost"
+      className={`studio-editor-drop-ghost${isAudio ? " is-audio" : ""}`}
       style={{ left: preview.startTime * pps, width }}
       aria-hidden="true"
     >
-      {media ? (
-        <ClipFilmstrip media={media} label={preview.name} widthPx={width} />
+      {isAudio ? (
+        <ClipAudioWaveform clipId={preview.assetId || preview.name} widthPx={width} />
       ) : (
-        <span className="studio-editor-drop-ghost-label">{preview.name}</span>
+        <ClipFilmstrip
+          media={media}
+          label={preview.name}
+          widthPx={width}
+          trimIn={0}
+          trimOut={preview.duration ?? 4}
+        />
       )}
     </div>
   );
 }
 
-function TransitionJointMarker({ joint, leftClip, pps, selected, onSelect }) {
-  const left = joint.time * pps - 10;
+const MIN_TRANSITION_DURATION = 0.1;
+const MAX_TRANSITION_DURATION = 2;
+
+function maxTransitionDurationForJoint(leftClip, rightClip) {
+  const leftDur = leftClip ? clipDuration(leftClip) : MAX_TRANSITION_DURATION;
+  const rightDur = rightClip ? clipDuration(rightClip) : MAX_TRANSITION_DURATION;
+  return Math.max(
+    MIN_TRANSITION_DURATION,
+    Math.min(MAX_TRANSITION_DURATION, leftDur * 0.45, rightDur * 0.45),
+  );
+}
+
+function TransitionJointMarker({
+  joint,
+  leftClip,
+  rightClip,
+  pps,
+  selected,
+  onSelect,
+  onSetTransition,
+}) {
   const hasTransition = leftClip?.transitionOut?.type && leftClip.transitionOut.type !== "none";
+  const duration = Number(leftClip?.transitionOut?.duration) || 0.5;
+  const widthPx = hasTransition ? Math.max(28, duration * pps) : 18;
+  const left = joint.time * pps - widthPx / 2;
+
+  const onHandlePointerDown = (event, side) => {
+    if (!hasTransition || !leftClip?.transitionOut) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect(joint.key);
+
+    const startX = event.clientX;
+    const originDuration = Number(leftClip.transitionOut.duration) || 0.5;
+    const type = leftClip.transitionOut.type;
+    const maxDuration = maxTransitionDurationForJoint(leftClip, rightClip);
+    let lastDuration = originDuration;
+    const targetEl = event.currentTarget;
+    targetEl.setPointerCapture?.(event.pointerId);
+
+    const onMoveEvent = (moveEvent) => {
+      const dx = moveEvent.clientX - startX;
+      // Left handle: drag outward (left) increases duration; right handle opposite.
+      const deltaSec = (side === "left" ? -dx : dx) / pps;
+      const next = Math.min(
+        maxDuration,
+        Math.max(MIN_TRANSITION_DURATION, originDuration + deltaSec),
+      );
+      const rounded = Math.round(next * 100) / 100;
+      if (rounded === lastDuration) return;
+      lastDuration = rounded;
+      onSetTransition?.(joint.key, { type, duration: rounded }, true);
+    };
+
+    const onUp = (upEvent) => {
+      try {
+        targetEl.releasePointerCapture?.(upEvent.pointerId);
+      } catch {
+        /* ignore */
+      }
+      window.removeEventListener("pointermove", onMoveEvent);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      onSetTransition?.(joint.key, { type, duration: lastDuration }, false);
+    };
+
+    window.addEventListener("pointermove", onMoveEvent);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
   return (
     <button
       type="button"
-      className={`studio-editor-joint${selected ? " is-selected" : ""}${hasTransition ? " has-transition" : ""}`}
-      style={{ left: Math.max(0, left) }}
-      title={hasTransition ? transitionLabel(leftClip.transitionOut.type) : "Add transition"}
+      className={`studio-editor-joint${hasTransition ? " has-transition" : " is-adder"}${selected ? " is-selected" : ""}`}
+      style={{ left: Math.max(0, left), width: widthPx }}
+      title={
+        hasTransition
+          ? `${transitionLabel(leftClip.transitionOut.type)} · ${duration.toFixed(2)}s — drag edges to resize`
+          : "Add transition"
+      }
       onClick={(event) => {
         event.stopPropagation();
         onSelect(joint.key);
       }}
     >
-      <Sparkles size={11} aria-hidden="true" />
+      {hasTransition ? (
+        <>
+          <span
+            className="studio-editor-joint-handle is-left"
+            onPointerDown={(event) => onHandlePointerDown(event, "left")}
+          />
+          <span
+            className="studio-editor-joint-handle is-right"
+            onPointerDown={(event) => onHandlePointerDown(event, "right")}
+          />
+        </>
+      ) : (
+        <Sparkles size={11} aria-hidden="true" />
+      )}
     </button>
   );
 }
@@ -366,7 +438,6 @@ function TrackRailButton({ track, onToggleMute }) {
   if (track.kind === "audio") {
     return (
       <div className="studio-editor-track-rail-inner">
-        <span className="studio-editor-track-label">{track.label}</span>
         <button
           type="button"
           className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
@@ -382,19 +453,65 @@ function TrackRailButton({ track, onToggleMute }) {
 
   if (track.kind === "text") {
     return (
-      <div className="studio-editor-track-rail-inner" title="Text layer">
-        <span className="studio-editor-track-label">{track.label}</span>
+      <div className="studio-editor-track-rail-inner" title="Text">
         <Type size={ICON} aria-hidden="true" />
       </div>
     );
   }
 
   return (
-    <div className="studio-editor-track-rail-inner" title={track.label}>
-      <span className="studio-editor-track-label">{track.label}</span>
-      <Film size={ICON} aria-hidden="true" />
+    <div className="studio-editor-track-rail-inner" title="Video">
+      <button
+        type="button"
+        className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
+        aria-label={track.muted ? "Unmute track" : "Mute track"}
+        title={track.muted ? "Unmute" : "Mute"}
+        onClick={() => onToggleMute?.(track.id)}
+      >
+        {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
+      </button>
     </div>
   );
+}
+
+/** Nice time steps (seconds) for ruler marks — denser as zoom (pps) increases. */
+const RULER_NICE_STEPS = [
+  1 / 30, // 1 frame @ 30fps
+  1 / 15,
+  0.1,
+  0.2,
+  0.5,
+  1,
+  2,
+  5,
+  10,
+  15,
+  30,
+  60,
+  120,
+  300,
+];
+
+function pickNiceStep(pps, minPx) {
+  for (const step of RULER_NICE_STEPS) {
+    if (step * pps >= minPx) return step;
+  }
+  return RULER_NICE_STEPS[RULER_NICE_STEPS.length - 1];
+}
+
+/** Minor ≈ 8px apart, major ≈ 72px — more lines the more you zoom in. */
+function rulerScale(pps) {
+  const minor = pickNiceStep(pps, 8);
+  let major = pickNiceStep(pps, 72);
+  if (major < minor * 2) {
+    major = minor * 5;
+  }
+  // Keep an even subdivision count (5 or 10) so the grid reads cleanly.
+  const ratio = Math.round(major / minor);
+  if (ratio >= 8) major = minor * 10;
+  else if (ratio >= 4) major = minor * 5;
+  else major = minor * Math.max(2, ratio);
+  return { major, minor };
 }
 
 const ICON = 14;
@@ -427,7 +544,13 @@ export function EditorTransportBar({
         <button type="button" disabled={!canSplit} onClick={onSplit} title="Split at playhead (S)" aria-label="Split">
           <Scissors size={ICON} aria-hidden="true" />
         </button>
-        <button type="button" disabled={!hasSelection} onClick={onDelete} title="Delete clip (Del)" aria-label="Delete">
+        <button
+          type="button"
+          disabled={!hasSelection}
+          onClick={onDelete}
+          title="Delete selection (Del)"
+          aria-label="Delete"
+        >
           <Trash2 size={ICON} aria-hidden="true" />
         </button>
       </div>
@@ -478,18 +601,121 @@ export function EditorTimeline({
   onApplyTrackLayout,
   onRippleAddClip,
   onMoveToTrack,
+  onZoom,
+  onSetJointTransition,
 }) {
   const scrollRef = useRef(null);
   const trackRowRefs = useRef(new Map());
   const insertZoneRefs = useRef(new Map());
+  const zoomAnchorRef = useRef(null);
   const timelineWidth = Math.max(project.duration * pixelsPerSecond + 240, 720);
   const [dropPreview, setDropPreview] = useState(null);
   const [ripplePreview, setRipplePreview] = useState(null);
   const [snapGuideTime, setSnapGuideTime] = useState(null);
   const [activeInsert, setActiveInsert] = useState(null);
   const [externalDrag, setExternalDrag] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
   const displayTracks = useMemo(() => visibleTracks(project), [project.tracks, project.clips]);
   const snapThreshold = snapThresholdSec(pixelsPerSecond);
+
+  useLayoutEffect(() => {
+    const scroll = scrollRef.current;
+    const anchor = zoomAnchorRef.current;
+    if (!scroll || !anchor) return;
+    scroll.scrollLeft = Math.max(
+      0,
+      anchor.time * pixelsPerSecond + TRACK_RAIL_WIDTH - anchor.xInView,
+    );
+    zoomAnchorRef.current = null;
+  }, [pixelsPerSecond]);
+
+  const zoomAtClientX = useCallback(
+    (clientX, deltaY) => {
+      if (!onZoom) return;
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      const rect = scroll.getBoundingClientRect();
+      const xInView = clientX - rect.left;
+      const time = Math.max(
+        0,
+        (scroll.scrollLeft + xInView - TRACK_RAIL_WIDTH) / Math.max(pixelsPerSecond, 1),
+      );
+      const factor = deltaY > 0 ? 0.9 : 1.12;
+      const next = Math.max(MIN_PPS, Math.min(MAX_PPS, Math.round(pixelsPerSecond * factor)));
+      if (next === pixelsPerSecond) return;
+      zoomAnchorRef.current = { time, xInView };
+      onZoom(next);
+    },
+    [onZoom, pixelsPerSecond],
+  );
+
+  const beginTimelinePan = useCallback((event) => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const originLeft = scroll.scrollLeft;
+    const originTop = scroll.scrollTop;
+    setPanning(true);
+    document.body.classList.add("is-timeline-panning");
+
+    const onMove = (moveEvent) => {
+      scroll.scrollLeft = originLeft - (moveEvent.clientX - startX);
+      scroll.scrollTop = originTop - (moveEvent.clientY - startY);
+    };
+    const onUp = () => {
+      setPanning(false);
+      document.body.classList.remove("is-timeline-panning");
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }, []);
+
+  const onTimelineWheel = useCallback(
+    (event) => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+
+      // Pinch / Ctrl/Cmd + wheel → zoom toward cursor.
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        zoomAtClientX(event.clientX, event.deltaY);
+        return;
+      }
+
+      // Shift + wheel → horizontal pan in time.
+      if (event.shiftKey) {
+        event.preventDefault();
+        scroll.scrollLeft += event.deltaY;
+        return;
+      }
+
+      // Horizontal trackpad swipe → pan in time.
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+        event.preventDefault();
+        scroll.scrollLeft += event.deltaX;
+        return;
+      }
+
+      // Plain vertical scroll moves the timeline space up/down (native).
+    },
+    [zoomAtClientX],
+  );
+
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    // Non-passive so we can preventDefault for zoom/pan.
+    scroll.addEventListener("wheel", onTimelineWheel, { passive: false });
+    return () => scroll.removeEventListener("wheel", onTimelineWheel);
+  }, [onTimelineWheel]);
 
   const resolveDropTarget = useCallback(
     (clientY, clipKind) => {
@@ -544,9 +770,65 @@ export function EditorTimeline({
       if (!scroll || !laneEl) return 0;
       const rect = laneEl.getBoundingClientRect();
       const x = clientX - rect.left + scroll.scrollLeft;
-      return Math.max(0, x / pixelsPerSecond);
+      return Math.max(0, Math.min(project.duration, x / pixelsPerSecond));
     },
-    [pixelsPerSecond],
+    [pixelsPerSecond, project.duration],
+  );
+
+  /** Click-drag scrub on the ruler, empty lanes, or playhead. */
+  const beginPlayheadScrub = useCallback(
+    (event, source) => {
+      if (event.button === 1 || event.altKey) {
+        beginTimelinePan(event);
+        return;
+      }
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const el = event.currentTarget;
+      const apply = (clientX) => {
+        if (source === "ruler") {
+          const rect = el.getBoundingClientRect();
+          const x = clientX - rect.left + (scrollRef.current?.scrollLeft ?? 0);
+          onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
+          return;
+        }
+        if (source === "playhead") {
+          const canvas = el.closest(".studio-editor-timeline-canvas");
+          const scroll = scrollRef.current;
+          if (!canvas || !scroll) return;
+          const canvasRect = canvas.getBoundingClientRect();
+          const x = clientX - canvasRect.left + scroll.scrollLeft - TRACK_RAIL_WIDTH;
+          onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
+          return;
+        }
+        onSetPlayhead(timeFromClientX(clientX, el));
+      };
+
+      apply(event.clientX);
+      setScrubbing(true);
+      el.setPointerCapture?.(event.pointerId);
+
+      const onMove = (moveEvent) => {
+        apply(moveEvent.clientX);
+      };
+      const onUp = (upEvent) => {
+        try {
+          el.releasePointerCapture?.(upEvent.pointerId);
+        } catch {
+          /* already released */
+        }
+        setScrubbing(false);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [beginTimelinePan, onSetPlayhead, pixelsPerSecond, project.duration, timeFromClientX],
   );
 
   const onTrackDragOver = useCallback(
@@ -724,32 +1006,55 @@ export function EditorTimeline({
     };
   }, []);
 
-  const ticks = [];
-  const step = pixelsPerSecond >= 120 ? 5 : 10;
-  for (let t = 0; t <= project.duration; t += step) {
-    ticks.push(t);
+  const { major: majorStep, minor: minorStep } = rulerScale(pixelsPerSecond);
+  const majorTicks = [];
+  const minorTicks = [];
+  const majorsEvery = Math.max(1, Math.round(majorStep / minorStep));
+  const tickCount = Math.floor(project.duration / minorStep + 1e-9) + 1;
+  for (let i = 0; i < tickCount; i += 1) {
+    const t = Number((i * minorStep).toFixed(4));
+    if (t > project.duration + 1e-6) break;
+    if (i % majorsEvery === 0) majorTicks.push(t);
+    else minorTicks.push(t);
   }
 
   return (
-    <div className="studio-editor-timeline-wrap">
-      <div className="studio-editor-timeline-scroll" ref={scrollRef}>
+    <div className={`studio-editor-timeline-wrap${panning ? " is-panning" : ""}`}>
+      <div
+        className="studio-editor-timeline-scroll"
+        ref={scrollRef}
+        onPointerDown={(event) => {
+          if (event.button === 1 || (event.button === 0 && event.altKey)) {
+            beginTimelinePan(event);
+          }
+        }}
+        onAuxClick={(event) => {
+          // Prevent middle-click autoscroll chrome.
+          if (event.button === 1) event.preventDefault();
+        }}
+      >
         <div className="studio-editor-timeline-canvas" style={{ width: timelineWidth }}>
           <div
             className="studio-editor-ruler"
             style={{ height: RULER_HEIGHT, marginLeft: TRACK_RAIL_WIDTH }}
-            onPointerDown={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              const x = event.clientX - rect.left + (scrollRef.current?.scrollLeft ?? 0);
-              onSetPlayhead(x / pixelsPerSecond);
-            }}
+            onPointerDown={(event) => beginPlayheadScrub(event, "ruler")}
+            title="Click or drag to seek · Ctrl+scroll to zoom"
           >
-            {ticks.map((tick) => (
+            {minorTicks.map((tick) => (
               <span
-                key={tick}
-                className="studio-editor-ruler-tick"
+                key={`m-${tick}`}
+                className="studio-editor-ruler-mark is-minor"
+                style={{ left: tick * pixelsPerSecond }}
+                aria-hidden="true"
+              />
+            ))}
+            {majorTicks.map((tick) => (
+              <span
+                key={`M-${tick}`}
+                className="studio-editor-ruler-mark is-major"
                 style={{ left: tick * pixelsPerSecond }}
               >
-                {formatTimecodeRuler(tick)}
+                <span className="studio-editor-ruler-label">{formatTimecodeRuler(tick)}</span>
               </span>
             ))}
           </div>
@@ -793,11 +1098,10 @@ export function EditorTimeline({
                 <div
                   className="studio-editor-track-lane"
                   onPointerDown={(event) => {
-                    if (event.target === event.currentTarget) {
-                      onSelectClip(null);
-                      onSelectJoint?.(null);
-                      onSetPlayhead(timeFromClientX(event.clientX, event.currentTarget));
-                    }
+                    if (event.target !== event.currentTarget) return;
+                    onSelectClip(null);
+                    onSelectJoint?.(null);
+                    beginPlayheadScrub(event, "lane");
                   }}
                 >
                   {trackRipple ? (
@@ -868,9 +1172,11 @@ export function EditorTimeline({
                           key={joint.key}
                           joint={joint}
                           leftClip={project.clips.find((c) => c.id === joint.leftClipId)}
+                          rightClip={project.clips.find((c) => c.id === joint.rightClipId)}
                           pps={pixelsPerSecond}
                           selected={selectedJointKey === joint.key}
                           onSelect={onSelectJoint}
+                          onSetTransition={onSetJointTransition}
                         />
                       ))
                     : null}
@@ -896,8 +1202,9 @@ export function EditorTimeline({
             />
           </div>
           <div
-            className="studio-editor-playhead"
+            className={`studio-editor-playhead${scrubbing ? " is-scrubbing" : ""}`}
             style={{ left: TRACK_RAIL_WIDTH + playhead * pixelsPerSecond }}
+            onPointerDown={(event) => beginPlayheadScrub(event, "playhead")}
           />
           {snapGuideTime !== null ? (
             <div

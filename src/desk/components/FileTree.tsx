@@ -264,7 +264,7 @@ function startFileDragPreview(event, entry, workspaceId) {
             ? "mapPin"
             : "fileText"
       : isVideo
-        ? "film"
+        ? "play"
         : "image";
     const iconHtml = svgIcon(badgeIcon, 14);
     if (iconHtml) {
@@ -712,7 +712,7 @@ function renderEntryRows({
                 key={entryRowKey(e, index)}
                 entry={e}
                 className={rowClass(e, "desk-file-grid-item")}
-                label=".."
+                label={label}
                 onOpen={() => onEntry(e)}
                 enableLongPress={enableLongPress}
                 onLongPress={onEntryLongPress}
@@ -807,6 +807,7 @@ export function FileTree({
   onEntryContextMenu,
   onBlankContextMenu,
   onEntryDrop,
+  emptyHint,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -829,7 +830,11 @@ export function FileTree({
         {...treeScrollProps(onBlankContextMenu)}
       >
         <div className="cursor-tree-empty">
-          {q ? (searchBusy ? "Searching…" : "No matching files") : "Empty folder"}
+          {q
+            ? searchBusy
+              ? "Searching…"
+              : "No matching files"
+            : emptyHint || "Empty folder"}
         </div>
       </div>
     );

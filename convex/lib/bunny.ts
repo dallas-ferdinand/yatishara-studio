@@ -42,18 +42,31 @@ export function buildReceiptPath(args: {
   return `users/${args.userId}/payments/${args.paymentId}/${filename}`;
 }
 
+/** Max signed CDN URL lifetime clients may request (24h). */
+export const MAX_SIGNED_URL_TTL_SEC = 60 * 60 * 24;
+
+/**
+ * Clamp a client-requested expiry. Never returns past-now + TTL beyond the max,
+ * and never signs a URL that is already expired.
+ */
+export function clampExpiresUnix(
+  requestedUnix: number,
+  nowUnix = Math.floor(Date.now() / 1000),
+): number {
+  const max = nowUnix + MAX_SIGNED_URL_TTL_SEC;
+  const min = nowUnix + 60;
+  if (!Number.isFinite(requestedUnix)) return max;
+  return Math.max(min, Math.min(Math.floor(requestedUnix), max));
+}
+
+/**
+ * @deprecated Do not expose Bunny zone credentials to browsers or API clients.
+ * Prefer Convex staging upload + server-side putObject.
+ */
 export function getStorageUploadCredentials(path: string): {
-  putUrl: string;
-  storageAccessKey: string;
   bunnyPath: string;
 } {
-  const config = getBunnyConfig();
-  const bunnyPath = normalizeStoragePath(path);
-  return {
-    putUrl: `https://${config.storageHost}/${config.zone}/${bunnyPath}`,
-    storageAccessKey: config.accessKey,
-    bunnyPath,
-  };
+  return { bunnyPath: normalizeStoragePath(path) };
 }
 
 export async function putObject(args: {
@@ -173,13 +186,14 @@ export async function signBunnyCdnUrl(
   transform?: BunnyImageTransform,
 ): Promise<string> {
   const config = getBunnyConfig();
+  const expires = clampExpiresUnix(expiresUnix);
   const tokenPath = path.startsWith("/") ? path : `/${path}`;
   const extra = transformToQuery(transform);
   const parameterData = Object.keys(extra)
     .sort()
     .map((key) => `${key}=${extra[key]}`)
     .join("&");
-  const hashable = `${config.cdnTokenKey}${tokenPath}${expiresUnix}${parameterData}`;
+  const hashable = `${config.cdnTokenKey}${tokenPath}${expires}${parameterData}`;
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(hashable),
@@ -188,7 +202,7 @@ export async function signBunnyCdnUrl(
   const host = config.cdnHostname.replace(/\/$/, "");
   const params = new URLSearchParams({
     token,
-    expires: String(expiresUnix),
+    expires: String(expires),
     ...extra,
   });
   return `https://${host}${tokenPath}?${params.toString()}`;

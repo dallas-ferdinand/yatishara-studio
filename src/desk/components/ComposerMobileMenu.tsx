@@ -97,7 +97,7 @@ export function ComposerMobileMenu({
       ? {
           id: "speak-pause",
           label: transport.paused ? "Resume speech" : "Pause speech",
-          icon: transport.paused ? "play" : "pause",
+          icon: transport.paused ? "playFilled" : "pause",
           onPress: () => {
             if (transport.paused) resumeSpeaking();
             else pauseSpeaking();

@@ -55,6 +55,38 @@ function tokenizeInlineMentions(text, skipLabels = new Set()) {
   return segments.length ? segments : [{ type: "text", value: source }];
 }
 
+/**
+ * Tab / thread titles must never include composer object placeholders (\uFFFC),
+ * which browsers render as a dashed "OBJ" box instead of an attachment chip.
+ */
+export function threadTitleFromPrompt(prompt, attachments = [], fallback = "New generation") {
+  const raw = String(prompt ?? "");
+  const splitIdx = raw.indexOf(REFERENCES_MARKER);
+  const body = (splitIdx === -1 ? raw : raw.slice(0, splitIdx))
+    .replace(/\uFFFC/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (body) return body.slice(0, 64);
+
+  const first = attachments[0];
+  const label = String(first?.label || first?.filename || "")
+    .replace(/^@/, "")
+    .trim();
+  if (label) return label.slice(0, 64);
+
+  if (splitIdx !== -1) {
+    for (const line of raw.slice(splitIdx + REFERENCES_MARKER.length).split("\n")) {
+      const parsed = parseReferenceLine(line);
+      const refLabel = String(parsed?.label || "")
+        .replace(/^@/, "")
+        .trim();
+      if (refLabel) return refLabel.slice(0, 64);
+    }
+  }
+
+  return String(fallback || "New generation").slice(0, 64);
+}
+
 /** Split stored generation prompt into markdown body + reference chips. */
 export function parseStudioPrompt(prompt) {
   const raw = String(prompt ?? "");

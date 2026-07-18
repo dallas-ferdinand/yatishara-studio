@@ -13,7 +13,7 @@ export function registerAssetTools(server: McpServer) {
 
   server.tool(
     "studio_upload_asset",
-    "Upload a reference photo or media file to a folder. For element sheets: upload multiple angles first (see studio_element_sheet_guide). Requires write scope.",
+    "Upload a reference photo or media file to a folder (inline base64, max 50MB). For larger files use studio_reserve_upload + studio_complete_upload. Requires write scope.",
     {
       folderId: z.string().optional(),
       name: z.string(),
@@ -26,6 +26,41 @@ export function registerAssetTools(server: McpServer) {
         await studioFetch("/assets/upload-inline", {
           method: "POST",
           body: JSON.stringify({ folderId, name, kind, mimeType, dataBase64 }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_reserve_upload",
+    "Step 1 of two-step upload for large files. Returns { assetId, uploadUrl }. PUT/POST file bytes to uploadUrl, then call studio_complete_upload with the storageId from the upload response.",
+    {
+      folderId: z.string().optional(),
+      name: z.string(),
+      kind: z.enum(["image", "video", "audio", "document"]),
+      mimeType: z.string(),
+    },
+    async ({ folderId, name, kind, mimeType }) =>
+      jsonResult(
+        await studioFetch("/assets/upload", {
+          method: "POST",
+          body: JSON.stringify({ folderId, name, kind, mimeType }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_complete_upload",
+    "Step 2 of two-step upload. Pass assetId from studio_reserve_upload and storageId from the uploadUrl response.",
+    {
+      assetId: z.string(),
+      storageId: z.string(),
+      byteSize: z.number().optional(),
+    },
+    async ({ assetId, storageId, byteSize }) =>
+      jsonResult(
+        await studioFetch("/assets/upload", {
+          method: "POST",
+          body: JSON.stringify({ complete: true, assetId, storageId, byteSize }),
         }),
       ),
   );

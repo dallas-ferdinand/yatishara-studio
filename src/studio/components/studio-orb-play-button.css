@@ -1,0 +1,147 @@
+/* Frame matches ElevenLabs Orb demo + VoicePicker. */
+
+.studio-orb-play {
+  position: relative;
+  flex: 0 0 auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+span.studio-orb-play {
+  cursor: inherit;
+}
+
+.studio-orb-play.is-sm {
+  width: 32px;
+  height: 32px;
+}
+
+.studio-orb-play.is-md {
+  width: 36px;
+  height: 36px;
+}
+
+.studio-orb-play.is-lg {
+  width: 96px;
+  height: 96px;
+}
+
+.studio-orb-play:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Outer muted ring — Orb demo: bg-muted rounded-full p-1 inset shadow */
+.studio-orb-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: #e5e7eb;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+:root:not([data-appearance="light"]) .studio-orb-frame {
+  background: color-mix(in srgb, var(--mos-surface, #111c2f) 85%, #fff 15%);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.studio-orb-well {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--mos-bg, #020617);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-appearance="light"] .studio-orb-frame {
+  background: #e5e7eb;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+[data-appearance="light"] .studio-orb-well {
+  background: #fff;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.05);
+}
+
+.studio-orb-canvas {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.studio-orb-canvas canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Clean EL-style pastel stand-in only while WebGL boots — no grain */
+.studio-orb-fallback {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      rgba(255, 255, 255, 0.72) 0%,
+      transparent 46%
+    ),
+    radial-gradient(
+      circle at 50% 55%,
+      var(--orb-c1, #cadcfc) 0%,
+      var(--orb-c2, #a0b9d1) 100%
+    );
+}
+
+.studio-orb-play-glyph {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.45));
+}
+
+.studio-orb-play:hover .studio-orb-play-glyph,
+.studio-orb-play:focus-visible .studio-orb-play-glyph,
+.studio-orb-play-glyph.is-visible {
+  opacity: 1;
+}
+
+.studio-orb-play-glyph svg {
+  margin-left: 1px;
+}
+
+.studio-orb-play-spinner {
+  width: 34%;
+  height: 34%;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, #fff 40%, transparent);
+  border-top-color: #fff;
+  animation: studio-orb-play-spin 0.7s linear infinite;
+}
+
+@keyframes studio-orb-play-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

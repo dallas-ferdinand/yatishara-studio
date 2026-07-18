@@ -142,13 +142,13 @@ export function buildCreativeSystemPrompt(
     const base = context.hasVideoReference
       ? [
           narrative,
-          "Rewrite into Seedance 2.0 footage VFX prompt.",
+          "Rewrite into a footage VFX video prompt.",
           "Lock unchanged elements. Name exact frame the effect begins.",
           "One primary camera move per beat.",
         ]
       : [
           narrative,
-          "Rewrite into Seedance 2.0 text-to-video prompt.",
+          "Rewrite into a text-to-video prompt.",
           "Short style header, then timed beats when duration is known.",
           "One primary camera move per beat. Specify light, environment, observable action, SFX.",
         ];
@@ -238,11 +238,32 @@ export function buildCreativeUserPrompt(context: CreativeDirectionContext): stri
     );
   }
 
+  const mediaHints: string[] = [];
+  if (context.hasImageReference) {
+    mediaHints.push("image attachments (and any start frame) that follow");
+  }
+  if (context.hasVideoReference) {
+    mediaHints.push("video attachments that follow");
+  }
+  if (context.hasAudioReference) {
+    mediaHints.push("audio attachments that follow");
+  }
+  if (mediaHints.length && context.outputKind !== "script") {
+    sections.push(
+      `Multimodal context: inspect every ${mediaHints.join(", ")}. Ground the rewrite in what you actually see and hear — subject, product, branding, motion, pacing, voice, and environment. Do not invent details that contradict the media.`,
+    );
+  }
+
   if (context.outputKind === "script") {
     sections.push(`Brief:\n${context.userPrompt.trim()}`);
     if (context.hasAudioReference) {
       sections.push(
         "Voice brief: one or more audio attachments follow this text. Listen to them as the creator's spoken direction — honor their intent, tone, product details, and any specific lines they mention.",
+      );
+    }
+    if (context.hasImageReference || context.hasVideoReference) {
+      sections.push(
+        "Visual references follow this text. Watch/inspect them and fold observable product, cast, setting, and style into the script.",
       );
     }
     const scriptType = normalizeScriptType(context.scriptType);

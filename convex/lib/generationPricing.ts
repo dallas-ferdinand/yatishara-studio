@@ -11,8 +11,8 @@
  *
  * Kling 3.0 I2V (MCP, `mode: "pro"`): $0.224/s silent · $0.336/s with audio.
  *
- * Text / Assistance (`google/gemini-3-flash`): $0.50/M input (text/image/video),
- * $1.00/M audio input, $3.00/M output — customer price is 2× measured provider
+ * Text / Assistance (`google/gemini-3.1-pro-preview`): $2/M input (text/image/video),
+ * $4/M audio input (2× text), $12/M output — customer price is 2× measured provider
  * COGS, rounded up to TT$0.01 (Assistance settles after the turn from usage).
  */
 
@@ -131,20 +131,20 @@ export const VIDEO_VIDEO_REFERENCE_SURCHARGE_PER_BLOCK = 0;
  * Kept for billing UI field compatibility.
  */
 export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
-/** @deprecated Text uses 2× Gemini 3 Flash COGS — see textCreditCost. */
+/** @deprecated Text uses 2× Gemini 3.1 Pro COGS — see textCreditCost. */
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Gemini 3 Flash (GATEWAY_ASSISTANT_MODEL_ID / text ledger) — USD per million tokens.
- * Text / image / video input share the $0.50 rate; audio input is $1.00; output $3.00.
+ * Gemini 3.1 Pro (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
+ * USD per million tokens. Text / image / video input share $2.00; audio $4.00; output $12.00.
  */
-export const TEXT_USD_PER_M_INPUT = 0.5;
-export const TEXT_USD_PER_M_OUTPUT = 3.0;
-export const TEXT_USD_PER_M_AUDIO_INPUT = 1.0;
+export const TEXT_USD_PER_M_INPUT = 2.0;
+export const TEXT_USD_PER_M_OUTPUT = 12.0;
+export const TEXT_USD_PER_M_AUDIO_INPUT = 4.0;
 
 /**
- * Typical Assistance / script / element-notes turn on Gemini 3 Flash
- * (calibrated from live Gateway token usage; ~1.5–3k in / ~0.5–0.7k out).
+ * Typical Assistance / script / element-notes turn on Gemini 3.1 Pro
+ * (calibrated from prior Flash usage shape; re-measure after cutover).
  */
 export const TEXT_BASE_INPUT_TOKENS = 2_000;
 export const TEXT_BASE_OUTPUT_TOKENS = 600;
@@ -156,7 +156,7 @@ export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
  * Text / Assistance floor + step: TT$0.01 (0.02 credits at TT$0.50 each).
- * Customer charge = 2× Gemini 3 Flash provider COGS, rounded up to this cent.
+ * Customer charge = 2× Gemini 3.1 Pro provider COGS, rounded up to this cent.
  */
 export const TEXT_MIN_SELL_TTD = 0.01;
 
@@ -397,7 +397,7 @@ export type MeasuredTextUsage = {
   outputTokens?: number;
 };
 
-/** Provider USD for Gemini 3 Flash text tokens. */
+/** Provider USD for Gemini 3.1 Pro text tokens. */
 export function textProviderCostUsd(usage: MeasuredTextUsage): number {
   const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
   const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
@@ -438,7 +438,7 @@ export function measuredTextUsageFromGateway(usage: {
   };
 }
 
-/** Customer TT$ for script / Assistance / element text = 2× Gemini 3 Flash COGS, min / step TT$0.01. */
+/** Customer TT$ for script / Assistance / element text = 2× Gemini 3.1 Pro COGS, min / step TT$0.01. */
 export function textSellPriceTtd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;
@@ -470,9 +470,65 @@ export function textCreditCost(args: {
 export type GenerationCreditTier =
   | "image"
   | "pro_video"
+  | "audio"
   | "low"
   | "medium"
   | "high";
+
+export type AudioGenType = "voiceover" | "sfx" | "music";
+
+/** ElevenLabs Multilingual v2/v3 TTS — USD per 1K characters. */
+export const ELEVEN_V3_USD_PER_1K_CHARS = 0.1;
+/** ElevenLabs Sound Effects — USD per minute of output. */
+export const ELEVEN_SFX_USD_PER_MINUTE = 0.12;
+/** Default estimate length when SFX duration is Auto. */
+export const ELEVEN_SFX_AUTO_DURATION_SECONDS = 5;
+/** Stub for later Music API — not billed in v1. */
+export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.3;
+
+export function estimateVoiceoverUsd(characterCount: number): number {
+  const chars = Math.max(0, Math.ceil(Number(characterCount) || 0));
+  return (chars / 1000) * ELEVEN_V3_USD_PER_1K_CHARS;
+}
+
+export function estimateSfxUsd(durationSeconds?: number | null): number {
+  const seconds =
+    durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0
+      ? ELEVEN_SFX_AUTO_DURATION_SECONDS
+      : Math.max(0.5, Math.min(30, Number(durationSeconds)));
+  return (seconds / 60) * ELEVEN_SFX_USD_PER_MINUTE;
+}
+
+export function estimateMusicUsd(durationSeconds?: number | null): number {
+  const seconds =
+    durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0
+      ? 60
+      : Math.max(1, Math.min(180, Number(durationSeconds)));
+  return (seconds / 60) * ELEVEN_MUSIC_USD_PER_MINUTE;
+}
+
+export function audioSellPriceTtd(args: {
+  audioType: AudioGenType;
+  characterCount?: number;
+  durationSeconds?: number | null;
+}): number {
+  const usd =
+    args.audioType === "voiceover"
+      ? estimateVoiceoverUsd(args.characterCount ?? 0)
+      : args.audioType === "sfx"
+        ? estimateSfxUsd(args.durationSeconds)
+        : estimateMusicUsd(args.durationSeconds);
+  return roundUpToHalfTtd(usd * USD_TO_TTD * 2);
+}
+
+export function audioCreditCost(args: {
+  audioType: AudioGenType;
+  characterCount?: number;
+  durationSeconds?: number | null;
+}): number {
+  const sellTtd = audioSellPriceTtd(args);
+  return Math.max(1, Math.round(sellTtd / CREDIT_PRICE_TTD));
+}
 
 export function creditCostForGeneration(args: {
   tier: GenerationCreditTier;
@@ -485,9 +541,18 @@ export function creditCostForGeneration(args: {
   hasNonVideoReferenceInput?: boolean;
   audioEnabled?: boolean;
   videoModel?: VideoPricingModel;
+  audioType?: AudioGenType;
+  characterCount?: number;
 }): number {
   if (args.tier === "pro_video") {
     return videoCreditCost(args);
+  }
+  if (args.tier === "audio") {
+    return audioCreditCost({
+      audioType: args.audioType ?? "voiceover",
+      characterCount: args.characterCount,
+      durationSeconds: args.durationSeconds,
+    });
   }
   return imageCreditCost({
     resolution: args.resolution,

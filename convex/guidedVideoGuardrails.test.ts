@@ -504,9 +504,11 @@ describe("Assistance guardrails", () => {
         .collect();
       expect(events.filter((event) => event.kind === "question")).toHaveLength(0);
       expect(events.filter((event) => event.kind === "assistant")).toHaveLength(1);
-      expect(events.find((event) => event.kind === "assistant")?.message).toContain(
-        "What should this image show?",
-      );
+      const assistantMessage = events.find(
+        (event) => event.kind === "assistant",
+      )?.message;
+      expect(assistantMessage).toContain("What should the flyer feature?");
+      expect(assistantMessage).toMatch(/What should .*(?:flyer|image).*\?/i);
     });
   });
 
@@ -572,6 +574,7 @@ describe("Assistance guardrails", () => {
     const failed = await t.mutation(internal.guidedVideo.failAssistanceTurn, {
       turnId: begun.turnId,
       error: "model timeout",
+      userPrompt: "change color",
       assistantMessage: "I hit a snag analyzing that — try again.",
     });
     expect(failed.alreadyFailed).toBe(false);
@@ -585,6 +588,14 @@ describe("Assistance guardrails", () => {
       expect(brief?.revision).toBe(1);
       expect(brief?.status).toBe("review_ready");
       expect(brief?.generationPlanFingerprint).toBe("fp-1");
+      const events = await ctx.db
+        .query("generationEvents")
+        .withIndex("by_thread_and_order", (q) =>
+          q.eq("threadId", workspace.threadId),
+        )
+        .collect();
+      expect(events.filter((event) => event.kind === "prompt")).toHaveLength(1);
+      expect(events.filter((event) => event.kind === "assistant")).toHaveLength(1);
     });
   });
 
@@ -860,5 +871,95 @@ describe("Assistance guardrails", () => {
         },
       ),
     ).rejects.toThrow("Folder not found");
+  });
+
+  it("patches Seedance video review settings and rebuilds the generation plan", async () => {
+    const t = convexTest(schema, modules);
+    const workspace = await seedWorkspace(t);
+    const payload = emptyBriefPayload({
+      durationSeconds: 4,
+      aspectRatio: "9:16",
+      resolution: "1280x720",
+    });
+    payload.subject = "Banana bread loaf";
+    payload.objective = "Promote weekend bakery pickup";
+    payload.keyMessage = "Fresh loaves Saturday morning";
+    payload.visualDirection = "Warm bakery counter, soft window light";
+    payload.audio = {
+      voiceover: "none",
+      sfx: "none",
+      music: "none",
+    };
+    const priorPlan = buildAssistanceGenerationPlan({
+      mode: "video",
+      videoType: "standard",
+      payload,
+      compiledPrompt:
+        "4s Seedance clip of banana bread on a bakery counter with one slow push-in.",
+      references: [],
+      resolvedModel: "bytedance/seedance-2.0",
+      videoModel: "seedance-2.0",
+      videoCapabilities: {
+        requiresStartFrame: false,
+        supportsMultimodalRefs: true,
+        maxDurationSeconds: 15,
+      },
+      stylePresetId: String(workspace.stylePresetId),
+    });
+    const briefId = await insertBrief(t, workspace, {
+      mode: "video",
+      videoType: "standard",
+      status: "review_ready",
+      payload,
+      generationPlanJson: JSON.stringify(priorPlan),
+      generationPlanFingerprint: priorPlan.fingerprint,
+      estimatedCredits: priorPlan.estimate.credits,
+    });
+
+    const asUser = t.withIdentity({ subject: workspace.userId });
+    const updated = await asUser.mutation(api.guidedVideo.patchBriefProduction, {
+      briefId,
+      expectedRevision: 1,
+      production: {
+        videoType: "hypermotion_ad",
+        durationSeconds: 8,
+        resolution: "1920x1080",
+        aspectRatio: "9:16",
+        audioEnabled: true,
+      },
+    });
+
+    expect(updated.videoType).toBe("hypermotion_ad");
+    expect(updated.payload.production.durationSeconds).toBe(8);
+    expect(updated.payload.production.resolution).toBe("1920x1080");
+    expect(updated.payload.audio.music).toBe("include");
+    expect(updated.status).toBe("review_ready");
+    expect(updated.estimatedCredits).toBeGreaterThan(0);
+    expect(updated.generationPlanFingerprint).toBeTruthy();
+    expect(updated.generationPlanFingerprint).not.toBe(priorPlan.fingerprint);
+    expect(updated.lockedFields).toEqual(
+      expect.arrayContaining([
+        "videoType",
+        "production.durationSeconds",
+        "production.resolution",
+        "audio.music",
+      ]),
+    );
+
+    await expect(
+      asUser.mutation(api.guidedVideo.patchBriefProduction, {
+        briefId,
+        expectedRevision: 1,
+        production: { durationSeconds: 30 },
+      }),
+    ).rejects.toThrow(/duration/i);
+
+    await expect(
+      asUser.mutation(api.guidedVideo.patchBriefProduction, {
+        briefId,
+        expectedRevision: 1,
+        production: { resolution: "4K" },
+      }),
+    ).rejects.toThrow(/720p|1080p|resolution/i);
   });
 });

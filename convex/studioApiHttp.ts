@@ -17,6 +17,8 @@ import {
   resolvePublicVideoModel,
   validateVideoModelCapabilities,
 } from "./lib/videoModels";
+import { COMPOSER_SCRIPT_TYPES } from "./lib/composerScriptTypes";
+import { REFERENCE_INTENT_SLUGS } from "./lib/referenceIntent";
 import { STUDIO_API_OPENAPI, STUDIO_API_ROOT } from "./lib/studioApi/openapi";
 import {
   errorResponse,
@@ -404,18 +406,28 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         byteSize?: number;
         complete?: boolean;
         assetId?: Id<"assets">;
+        storageId?: Id<"_storage">;
       }>(request);
 
       if (body.complete && body.assetId) {
-        await ctx.runMutation(internal.studioApiInternal.completeAssetUpload, {
-          userId: auth.userId,
-        sandboxFolderId: auth.sandboxFolderId,
-          assetId: body.assetId,
-          byteSize: body.byteSize,
-        });
+        if (body.storageId) {
+          await ctx.runAction(internal.assetActions.commitStagingUploadForUser, {
+            userId: auth.userId,
+            assetId: body.assetId,
+            storageId: body.storageId,
+            byteSize: body.byteSize,
+          });
+        } else {
+          await ctx.runMutation(internal.studioApiInternal.completeAssetUpload, {
+            userId: auth.userId,
+            sandboxFolderId: auth.sandboxFolderId,
+            assetId: body.assetId,
+            byteSize: body.byteSize,
+          });
+        }
         const asset = await ctx.runQuery(internal.studioApiInternal.getAsset, {
           userId: auth.userId,
-        sandboxFolderId: auth.sandboxFolderId,
+          sandboxFolderId: auth.sandboxFolderId,
           assetId: body.assetId,
           expiresUnix,
         });
@@ -829,6 +841,136 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse({ presets }));
     }
 
+    if (request.method === "GET" && route === "catalog/script-types") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      return finish(
+        jsonResponse({
+          scriptTypes: COMPOSER_SCRIPT_TYPES.map((item) => ({
+            slug: item.slug,
+            label: item.label,
+            description: item.description,
+            includesGenerationPrompt: item.includesGenerationPrompt,
+            includesStoryboardPrompt: item.includesStoryboardPrompt,
+          })),
+        }),
+      );
+    }
+
+    if (request.method === "GET" && route === "catalog/reference-intents") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const descriptions: Record<(typeof REFERENCE_INTENT_SLUGS)[number], string> = {
+        auto: "Infer from style and attachments — stylize for premade styles, match for Direct.",
+        stylize: "Use uploads for identity cues; render in the active style.",
+        match_reference: "Preserve photographic fidelity from uploads — no restyle.",
+        element_lock: "Built element sheets and bibles are canonical; honor them without drift.",
+      };
+      return finish(
+        jsonResponse({
+          referenceIntents: REFERENCE_INTENT_SLUGS.map((slug) => ({
+            slug,
+            description: descriptions[slug],
+          })),
+        }),
+      );
+    }
+
+    if (request.method === "GET" && route === "voices") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const optionalNumber = (key: string) => {
+        const raw = url.searchParams.get(key);
+        if (raw == null || raw === "") return undefined;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : undefined;
+      };
+      const optionalBool = (key: string) => {
+        const raw = url.searchParams.get(key);
+        if (raw == null || raw === "") return undefined;
+        if (raw === "true" || raw === "1") return true;
+        if (raw === "false" || raw === "0") return false;
+        return undefined;
+      };
+      const result = await ctx.runAction(internal.audioActions.exploreVoicesForApi, {
+        userId: auth.userId,
+        search: url.searchParams.get("search") ?? undefined,
+        language: url.searchParams.get("language") ?? undefined,
+        accent: url.searchParams.get("accent") ?? undefined,
+        gender: url.searchParams.get("gender") ?? undefined,
+        age: url.searchParams.get("age") ?? undefined,
+        category: url.searchParams.get("category") ?? undefined,
+        sort: url.searchParams.get("sort") ?? undefined,
+        page: optionalNumber("page"),
+        pageSize: optionalNumber("pageSize"),
+        minNoticePeriodDays: optionalNumber("minNoticePeriodDays") ?? null,
+        includeCustomRates: optionalBool("includeCustomRates") ?? null,
+        includeLiveModerated: optionalBool("includeLiveModerated") ?? null,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    if (request.method === "GET" && route === "voices/saved") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const voices = await ctx.runQuery(internal.studioApiInternal.listSavedVoicesForApi, {
+        userId: auth.userId,
+      });
+      return finish(jsonResponse({ voices }));
+    }
+
+    if (request.method === "POST" && route === "voices/saved") {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        voiceId?: string;
+        publicOwnerId?: string;
+        name?: string;
+        description?: string;
+        previewUrl?: string;
+        imageUrl?: string;
+        language?: string;
+        accent?: string;
+        gender?: string;
+        age?: string;
+        useCase?: string;
+        category?: string;
+      }>(request);
+      if (!body.voiceId?.trim() || !body.publicOwnerId?.trim()) {
+        return finish(errorResponse("voiceId and publicOwnerId are required"));
+      }
+      if (!body.name?.trim()) {
+        return finish(errorResponse("name is required"));
+      }
+      const id = await ctx.runMutation(internal.studioApiInternal.saveVoiceForApi, {
+        userId: auth.userId,
+        voiceId: body.voiceId,
+        publicOwnerId: body.publicOwnerId,
+        name: body.name,
+        description: body.description,
+        previewUrl: body.previewUrl,
+        imageUrl: body.imageUrl,
+        language: body.language,
+        accent: body.accent,
+        gender: body.gender,
+        age: body.age,
+        useCase: body.useCase,
+        category: body.category,
+      });
+      return finish(jsonResponse({ id }, 201));
+    }
+
+    const savedVoiceMatch = route.match(/^voices\/saved\/([^/]+)$/);
+    if (request.method === "DELETE" && savedVoiceMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      await ctx.runMutation(internal.studioApiInternal.removeSavedVoiceForApi, {
+        userId: auth.userId,
+        voiceId: decodeURIComponent(savedVoiceMatch[1]!),
+      });
+      return finish(jsonResponse({ ok: true }));
+    }
+
     if (request.method === "GET" && route === "video-models") {
       const auth = await authFor("read", "read");
       if (auth instanceof Response) return finish(auth);
@@ -877,10 +1019,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const body = await readJsonBody<{
         items?: Array<{
           label: string;
-          mode: "image" | "video" | "script";
+          mode: "image" | "video" | "script" | "audio";
           resolution?: string;
           durationSeconds?: number;
           audioEnabled?: boolean;
+          audioType?: "voiceover" | "sfx";
+          characterCount?: number;
           hasReferenceInput?: boolean;
           referenceAssetIds?: Id<"assets">[];
           maxRounds: number;
@@ -890,6 +1034,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
 
       if (!body.items?.length) {
         return finish(errorResponse("items array is required"));
+      }
+
+      for (const item of body.items) {
+        if (item.mode === "audio" && (item as { audioType?: string }).audioType === "music") {
+          return finish(errorResponse("Music generation is not available yet"));
+        }
       }
 
       const estimate = await ctx.runQuery(internal.studioApiInternal.estimateBatchProduction, {
@@ -906,10 +1056,13 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       if (auth instanceof Response) return finish(auth);
 
       const body = await readJsonBody<{
-        mode?: "image" | "video" | "script";
+        mode?: "image" | "video" | "script" | "audio";
         resolution?: string;
         durationSeconds?: number;
         audioEnabled?: boolean;
+        audioType?: "voiceover" | "sfx" | "music";
+        characterCount?: number;
+        prompt?: string;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
         startFrameAssetId?: Id<"assets">;
@@ -917,8 +1070,26 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }>(request);
 
       const mode = body.mode ?? "image";
-      if (mode !== "image" && mode !== "video" && mode !== "script") {
-        return finish(errorResponse("mode must be image, video, or script"));
+      if (mode !== "image" && mode !== "video" && mode !== "script" && mode !== "audio") {
+        return finish(errorResponse("mode must be image, video, script, or audio"));
+      }
+
+      if (mode === "audio") {
+        if (body.audioType === "music") {
+          return finish(errorResponse("Music generation is not available yet"));
+        }
+        const audioType = body.audioType === "sfx" ? "sfx" : "voiceover";
+        const characterCount =
+          body.characterCount ?? (typeof body.prompt === "string" ? body.prompt.length : 0);
+        const estimate = await ctx.runQuery(internal.studioApiInternal.estimateGenerationCost, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          mode: "audio",
+          audioType,
+          characterCount,
+          durationSeconds: body.durationSeconds,
+        });
+        return finish(jsonResponse(estimate));
       }
 
       let estimateAssetIds = body.referenceAssetIds ?? [];
@@ -972,7 +1143,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       if (auth instanceof Response) return finish(auth);
 
       const body = await readJsonBody<{
-        mode?: "image" | "video" | "script";
+        mode?: "image" | "video" | "script" | "audio";
         prompt?: string;
         folderId?: Id<"folders">;
         stylePreset?: string;
@@ -982,6 +1153,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         quality?: string;
         durationSeconds?: number;
         audioEnabled?: boolean;
+        audioType?: "voiceover" | "sfx" | "music";
+        elevenVoiceId?: string;
+        elevenVoiceName?: string;
+        elevenPublicOwnerId?: string;
+        audioLoop?: boolean;
+        promptInfluence?: number;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
         /** Storyboard / opening still for video — Seedance first_frame. Characters live here, not in face-sheet refs. */
@@ -997,11 +1174,85 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         return finish(errorResponse("prompt is required"));
       }
       const mode = body.mode ?? "image";
-      if (mode !== "image" && mode !== "video" && mode !== "script") {
-        return finish(errorResponse("mode must be image, video, or script"));
+      if (mode !== "image" && mode !== "video" && mode !== "script" && mode !== "audio") {
+        return finish(errorResponse("mode must be image, video, script, or audio"));
       }
 
       const folderId = await resolveFolderId(ctx, auth, body.folderId);
+
+      if (mode === "audio") {
+        if (body.audioType === "music") {
+          return finish(errorResponse("Music generation is not available yet"));
+        }
+        const audioType = body.audioType === "sfx" ? "sfx" : "voiceover";
+        if (audioType === "voiceover" && !body.elevenVoiceId?.trim()) {
+          return finish(errorResponse("elevenVoiceId is required for voiceover"));
+        }
+
+        const activeJobs = await ctx.runQuery(internal.studioApiInternal.countActiveApiGenerations, {
+          apiKeyId: auth.apiKeyId,
+        });
+        if (activeJobs >= 10) {
+          return finish(errorResponse("Too many concurrent generations for this API key", 429));
+        }
+
+        const wait = body.wait !== false;
+        const result = await ctx.runAction(internal.audioActions.runAudioForApi, {
+          userId: auth.userId,
+          folderId,
+          apiKeyId: auth.apiKeyId,
+          prompt: body.prompt.trim(),
+          audioType,
+          elevenVoiceId: body.elevenVoiceId,
+          elevenVoiceName: body.elevenVoiceName,
+          elevenPublicOwnerId: body.elevenPublicOwnerId,
+          durationSeconds: body.durationSeconds,
+          audioLoop: body.audioLoop,
+          promptInfluence: body.promptInfluence,
+          wait,
+        });
+
+        if (!wait) {
+          return finish(
+            jsonResponse(
+              {
+                id: result.jobId,
+                threadId: result.threadId,
+                status: "queued",
+                folderId,
+                mode: "audio",
+                audioType,
+              },
+              202,
+            ),
+          );
+        }
+
+        const job = await ctx.runQuery(internal.studioApiInternal.getGenerationJob, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          jobId: result.jobId,
+          expiresUnix,
+        });
+
+        return finish(
+          jsonResponse(
+            {
+              id: result.jobId,
+              threadId: result.threadId,
+              status: job?.status ?? "done",
+              mode: "audio",
+              audioType,
+              folderId,
+              creditsSpent: job?.creditsSpent,
+              assets: job?.assets ?? [],
+              error: job?.error ?? null,
+            },
+            201,
+          ),
+        );
+      }
+
       const LEGACY_CARTOON_PRESETS = new Set([
         "toon-prime",
         "toon-adult",
@@ -1394,6 +1645,328 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           201,
         ),
       );
+    }
+
+    // ── Assistance ──────────────────────────────────────────────────────────
+    if (request.method === "POST" && route === "assistance/briefs") {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        threadId?: Id<"generationThreads">;
+        folderId?: Id<"folders">;
+        mode?: "image" | "video" | "script" | "element";
+        videoType?: string;
+        styleSheetElementId?: Id<"elements">;
+        production?: Record<string, unknown>;
+      }>(request);
+      if (!body.mode || !["image", "video", "script", "element"].includes(body.mode)) {
+        return finish(errorResponse("mode must be image, video, script, or element"));
+      }
+      const brief = await ctx.runMutation(internal.guidedVideo.ensureBriefForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        threadId: body.threadId,
+        folderId: body.folderId,
+        mode: body.mode,
+        videoType: body.videoType as "standard" | "hypermotion_ad" | undefined,
+        styleSheetElementId: body.styleSheetElementId,
+        production: body.production as
+          | {
+              durationSeconds?: number;
+              aspectRatio?: string;
+              resolution?: string;
+              quality?: string;
+              scriptType?: string;
+              elementType?: string;
+              referenceIntent?: string;
+              skipPromptEnhancement?: boolean;
+            }
+          | undefined,
+      });
+      return finish(jsonResponse({ brief }, 201));
+    }
+
+    const assistanceBriefMatch = route.match(/^assistance\/briefs\/([^/]+)$/);
+    if (assistanceBriefMatch) {
+      const briefId = assistanceBriefMatch[1] as Id<"guidedBriefs">;
+      if (request.method === "GET") {
+        const auth = await authFor("read", "read");
+        if (auth instanceof Response) return finish(auth);
+        const brief = await ctx.runQuery(internal.guidedVideo.getBriefForApi, {
+          userId: auth.userId,
+          briefId,
+        });
+        if (!brief) return finish(errorResponse("Brief not found", 404));
+        return finish(jsonResponse({ brief }));
+      }
+      if (request.method === "PATCH") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          expectedRevision?: number;
+          patch?: Record<string, unknown>;
+          lockFields?: string[];
+        }>(request);
+        if (typeof body.expectedRevision !== "number") {
+          return finish(errorResponse("expectedRevision is required"));
+        }
+        if (!body.patch || typeof body.patch !== "object") {
+          return finish(errorResponse("patch is required"));
+        }
+        const brief = await ctx.runMutation(internal.guidedVideo.editBriefForApi, {
+          userId: auth.userId,
+          briefId,
+          expectedRevision: body.expectedRevision,
+          patch: body.patch as never,
+          lockFields: body.lockFields,
+        });
+        return finish(jsonResponse({ brief }));
+      }
+    }
+
+    const assistanceBriefProductionMatch = route.match(
+      /^assistance\/briefs\/([^/]+)\/production$/,
+    );
+    if (request.method === "PATCH" && assistanceBriefProductionMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const briefId = assistanceBriefProductionMatch[1] as Id<"guidedBriefs">;
+      const body = await readJsonBody<{
+        expectedRevision?: number;
+        production?: Record<string, unknown>;
+      }>(request);
+      if (typeof body.expectedRevision !== "number") {
+        return finish(errorResponse("expectedRevision is required"));
+      }
+      if (!body.production || typeof body.production !== "object") {
+        return finish(errorResponse("production is required"));
+      }
+      const brief = await ctx.runMutation(internal.guidedVideo.patchBriefProductionForApi, {
+        userId: auth.userId,
+        briefId,
+        expectedRevision: body.expectedRevision,
+        production: body.production as {
+          aspectRatio?: string;
+          resolution?: string;
+          quality?: string;
+          durationSeconds?: number;
+          videoType?: "standard" | "hypermotion_ad";
+          audioEnabled?: boolean;
+        },
+      });
+      return finish(jsonResponse({ brief }));
+    }
+
+    const assistanceBriefApproveMatch = route.match(/^assistance\/briefs\/([^/]+)\/approve$/);
+    if (request.method === "POST" && assistanceBriefApproveMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const briefId = assistanceBriefApproveMatch[1] as Id<"guidedBriefs">;
+      const body = await readJsonBody<{
+        expectedRevision?: number;
+        folderId?: Id<"folders">;
+        stylePresetSlug?: string;
+      }>(request);
+      if (typeof body.expectedRevision !== "number") {
+        return finish(errorResponse("expectedRevision is required"));
+      }
+      const folderId = await resolveFolderId(ctx, auth, body.folderId);
+      const result = await ctx.runAction(internal.guidedVideoActions.approveAndGenerateForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        briefId,
+        expectedRevision: body.expectedRevision,
+        folderId,
+        stylePresetSlug: body.stylePresetSlug,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const assistanceBriefRejectMatch = route.match(/^assistance\/briefs\/([^/]+)\/reject$/);
+    if (request.method === "POST" && assistanceBriefRejectMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const briefId = assistanceBriefRejectMatch[1] as Id<"guidedBriefs">;
+      const body = await readJsonBody<{
+        expectedRevision?: number;
+        reason?: string;
+        status?: "abandoned" | "failed";
+      }>(request);
+      if (typeof body.expectedRevision !== "number") {
+        return finish(errorResponse("expectedRevision is required"));
+      }
+      const brief = await ctx.runMutation(internal.guidedVideo.rejectBriefForApi, {
+        userId: auth.userId,
+        briefId,
+        expectedRevision: body.expectedRevision,
+        reason: body.reason,
+        status: body.status,
+      });
+      return finish(jsonResponse({ brief }));
+    }
+
+    const assistanceThreadBriefMatch = route.match(/^assistance\/threads\/([^/]+)\/brief$/);
+    if (request.method === "GET" && assistanceThreadBriefMatch) {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const threadId = assistanceThreadBriefMatch[1] as Id<"generationThreads">;
+      const brief = await ctx.runQuery(internal.guidedVideo.getBriefForThreadForApi, {
+        userId: auth.userId,
+        threadId,
+      });
+      return finish(jsonResponse({ brief }));
+    }
+
+    if (request.method === "GET" && route === "assistance/approvals") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const status = (url.searchParams.get("status") ?? "pending") as
+        | "pending"
+        | "approved"
+        | "denied"
+        | "executing"
+        | "completed"
+        | "failed";
+      const threadId = parseOptionalId(url.searchParams.get("threadId")) as
+        | Id<"generationThreads">
+        | undefined;
+      const [briefs, approvals] = await Promise.all([
+        status === "pending"
+          ? ctx.runQuery(internal.guidedVideo.listReviewReadyBriefsForApi, {
+              userId: auth.userId,
+              threadId,
+            })
+          : Promise.resolve([]),
+        ctx.runQuery(internal.assistanceApprovals.listPendingForApi, {
+          userId: auth.userId,
+          threadId,
+          status,
+        }),
+      ]);
+      return finish(jsonResponse({ briefs, approvals }));
+    }
+
+    const assistanceDecideMatch = route.match(/^assistance\/approvals\/([^/]+)\/decide$/);
+    if (request.method === "POST" && assistanceDecideMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const approvalId = assistanceDecideMatch[1] as Id<"assistanceApprovals">;
+      const body = await readJsonBody<{ decision?: "approve" | "deny" }>(request);
+      if (body.decision !== "approve" && body.decision !== "deny") {
+        return finish(errorResponse("decision must be approve or deny"));
+      }
+      await ctx.runMutation(internal.assistanceApprovals.decideForApi, {
+        userId: auth.userId,
+        approvalId,
+        decision: body.decision,
+      });
+      return finish(jsonResponse({ ok: true }));
+    }
+
+    // ── Video edits ─────────────────────────────────────────────────────────
+    if (route === "edits") {
+      if (request.method === "GET") {
+        const auth = await authFor("read", "read");
+        if (auth instanceof Response) return finish(auth);
+        const folderIdRaw = url.searchParams.get("folderId");
+        const folderId = folderIdRaw
+          ? (folderIdRaw as Id<"folders">)
+          : auth.sandboxFolderId;
+        const edits = await ctx.runQuery(internal.videoEdits.listForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          folderId,
+        });
+        return finish(jsonResponse({ edits }));
+      }
+      if (request.method === "POST") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          folderId?: Id<"folders">;
+          name?: string;
+          sourceAssetId?: Id<"assets">;
+          assetIds?: Id<"assets">[];
+          frameRatio?: string;
+        }>(request);
+        const folderId = await resolveFolderId(ctx, auth, body.folderId);
+        const edit = await ctx.runMutation(internal.videoEdits.createForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          folderId,
+          name: body.name,
+          sourceAssetId: body.sourceAssetId,
+          assetIds: body.assetIds,
+          frameRatio: body.frameRatio,
+        });
+        return finish(jsonResponse({ edit }, 201));
+      }
+    }
+
+    const editExportMatch = route.match(/^edits\/([^/]+)\/export$/);
+    if (request.method === "POST" && editExportMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editExportMatch[1] as Id<"videoEditProjects">;
+      const result = await ctx.runAction(internal.videoEditActions.exportVideoForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editMatch = route.match(/^edits\/([^/]+)$/);
+    if (editMatch) {
+      const projectId = editMatch[1] as Id<"videoEditProjects">;
+      if (request.method === "GET") {
+        const auth = await authFor("read", "read");
+        if (auth instanceof Response) return finish(auth);
+        const edit = await ctx.runQuery(internal.videoEdits.getForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+        });
+        if (!edit) return finish(errorResponse("Edit project not found", 404));
+        return finish(jsonResponse({ edit }));
+      }
+      if (request.method === "PUT") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          name?: string;
+          project?: Record<string, unknown>;
+          folderId?: Id<"folders">;
+        }>(request);
+        if (!body.project || typeof body.project !== "object") {
+          return finish(errorResponse("project is required"));
+        }
+        const edit = await ctx.runMutation(internal.videoEdits.saveForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          name: body.name,
+          project: body.project,
+          folderId: body.folderId,
+        });
+        return finish(jsonResponse({ edit }));
+      }
+      if (request.method === "PATCH") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          name?: string;
+          folderId?: Id<"folders">;
+        }>(request);
+        const edit = await ctx.runMutation(internal.videoEdits.updateForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          name: body.name,
+          folderId: body.folderId,
+        });
+        return finish(jsonResponse({ edit }));
+      }
     }
 
     return finish(errorResponse("Not found", 404));

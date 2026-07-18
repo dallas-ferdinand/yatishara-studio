@@ -28,6 +28,7 @@ const folderPeekItem = v.object({
   kind: v.union(
     v.literal("image"),
     v.literal("video"),
+    v.literal("audio"),
     v.literal("document"),
     v.literal("element"),
     v.literal("file"),
@@ -59,7 +60,7 @@ const MAX_PEEK_FOLDER_VISITS = 8;
 const MAX_SIGNED_PEEK_FOLDERS = 10;
 
 type PeekCandidate = {
-  kind: "image" | "video" | "document" | "element" | "file";
+  kind: "image" | "video" | "audio" | "document" | "element" | "file";
   priority: number;
   updatedAt: number;
   thumbnailUrl?: string;
@@ -150,7 +151,11 @@ async function collectDirectFolderPeekCandidates(
       .query("assets")
       .withIndex("by_folder", (q) => q.eq("folderId", folderId))
       .take(PEEK_COLLECT_CAP)
-  ).filter((asset) => !asset.deletedAt);
+  ).filter(
+    (asset) =>
+      !asset.deletedAt &&
+      (asset.storageStatus === undefined || asset.storageStatus === "ready"),
+  );
 
   for (const asset of assets) {
     if (asset.kind === "image" || asset.kind === "video") {
@@ -163,12 +168,22 @@ async function collectDirectFolderPeekCandidates(
       });
       continue;
     }
+    if (asset.kind === "audio") {
+      candidates.push({
+        kind: "audio",
+        priority: 55,
+        updatedAt: asset.updatedAt,
+        label: asset.name,
+        icon: "music",
+      });
+      continue;
+    }
     candidates.push({
       kind: "file",
-      priority: asset.kind === "audio" ? 40 : 35,
+      priority: 35,
       updatedAt: asset.updatedAt,
       label: asset.name,
-      icon: asset.kind === "audio" ? "music" : "file",
+      icon: "file",
     });
   }
 
@@ -197,12 +212,47 @@ async function collectDirectFolderPeekCandidates(
   ).filter((project) => !project.deletedAt);
 
   for (const project of videoEdits) {
+    let thumbnailAsset: Doc<"assets"> | undefined;
+    const clipAssetId = (() => {
+      try {
+        const parsed = JSON.parse(project.projectJson) as {
+          clips?: Array<{ assetId?: string; kind?: string; startTime?: number; trackId?: string }>;
+          tracks?: Array<{ id?: string; kind?: string }>;
+        };
+        const videoTrackIds = new Set(
+          (parsed.tracks ?? [])
+            .filter((track) => track.kind === "video" && typeof track.id === "string")
+            .map((track) => track.id as string),
+        );
+        const first = (parsed.clips ?? [])
+          .filter((clip) => {
+            if (!clip?.assetId) return false;
+            if (clip.kind !== "image" && clip.kind !== "video") return false;
+            if (videoTrackIds.size > 0 && clip.trackId && !videoTrackIds.has(clip.trackId)) {
+              return false;
+            }
+            return true;
+          })
+          .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0))[0];
+        return first?.assetId;
+      } catch {
+        return undefined;
+      }
+    })();
+    const previewId = project.outputAssetId ?? clipAssetId ?? project.sourceAssetId;
+    if (previewId) {
+      const asset = await ctx.db.get("assets", previewId as Id<"assets">);
+      if (asset && !asset.deletedAt && assetThumbnailPath(asset)) {
+        thumbnailAsset = asset;
+      }
+    }
     candidates.push({
       kind: "file",
-      priority: 70,
+      priority: thumbnailAsset ? 78 : 70,
       updatedAt: project.updatedAt,
+      thumbnailAsset,
       label: project.name,
-      icon: "scissors",
+      icon: "clapperboard",
     });
   }
 

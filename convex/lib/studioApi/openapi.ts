@@ -2,9 +2,9 @@ export const STUDIO_API_OPENAPI = {
   openapi: "3.1.0",
   info: {
     title: "Yatishara Studio API",
-    version: "1.0.0",
+    version: "1.1.0",
     description:
-      "REST API for folders, assets, documents, elements, and AI generation. Authenticate with Bearer ysk_live_… keys.",
+      "REST API for folders, assets, documents, elements, audio, assistance, video edits, and AI generation. Authenticate with Bearer ysk_live_… keys.",
   },
   servers: [{ url: "/api/v1" }],
   security: [{ bearerAuth: [] }],
@@ -21,6 +21,7 @@ export const STUDIO_API_OPENAPI = {
     "/": {
       get: { summary: "API root and capability list" },
     },
+    "/openapi.json": { get: { summary: "OpenAPI 3.1 document" } },
     "/account": { get: { summary: "Credit balance and subscription" } },
     "/trash": { get: { summary: "List trashed items (?kind=folder|asset|document|element)" } },
     "/folders": {
@@ -40,7 +41,7 @@ export const STUDIO_API_OPENAPI = {
       delete: { summary: "Move asset to trash" },
     },
     "/assets/{id}/restore": { post: { summary: "Restore asset from trash" } },
-    "/assets/upload": { post: { summary: "Reserve upload URL (two-step)" } },
+    "/assets/upload": { post: { summary: "Reserve or complete upload URL (two-step)" } },
     "/assets/upload-inline": { post: { summary: "Upload base64 file in one step" } },
     "/documents": {
       post: { summary: "Create document" },
@@ -55,6 +56,9 @@ export const STUDIO_API_OPENAPI = {
       get: { summary: "List elements" },
       post: { summary: "Create element" },
     },
+    "/elements/production-guide": {
+      get: { summary: "Build states and generation rules for elements" },
+    },
     "/elements/sheet-guide": {
       get: { summary: "Agent guide: ref counts, fidelity rules, sheet workflow" },
     },
@@ -64,19 +68,69 @@ export const STUDIO_API_OPENAPI = {
       delete: { summary: "Move element to trash" },
     },
     "/elements/{id}/restore": { post: { summary: "Restore element from trash" } },
-    "/style-presets": { get: { summary: "List style presets" } },
+    "/elements/{id}/generate-text-sheet": {
+      post: { summary: "Generate element markdown description from refs" },
+    },
+    "/elements/{id}/generate-sheet": {
+      post: { summary: "Generate element reference sheet image" },
+    },
+    "/style-sheets": { get: { summary: "List Style Sheet elements" } },
+    "/style-presets": { get: { summary: "List style presets (Direct/unstyled)" } },
+    "/video-models": { get: { summary: "List video models (?scope=mcp for MCP catalog)" } },
+    "/catalog/script-types": { get: { summary: "List scriptType values" } },
+    "/catalog/reference-intents": { get: { summary: "List referenceIntent values" } },
+    "/voices": { get: { summary: "Explore ElevenLabs voices" } },
+    "/voices/saved": {
+      get: { summary: "List saved voices" },
+      post: { summary: "Save a voice favorite" },
+    },
+    "/voices/saved/{voiceId}": { delete: { summary: "Remove a saved voice" } },
     "/generations": {
       get: { summary: "List generation jobs" },
-      post: { summary: "Generate image, video, or script" },
+      post: { summary: "Generate image, video, script, or audio" },
     },
     "/generations/estimate": { post: { summary: "Estimate credit cost" } },
+    "/generations/estimate-batch": { post: { summary: "Estimate multi-item production budget" } },
     "/generations/{id}": { get: { summary: "Get generation job" } },
+    "/assistance/briefs": { post: { summary: "Ensure assisted brief (+ thread)" } },
+    "/assistance/briefs/{briefId}": {
+      get: { summary: "Get assisted brief" },
+      patch: { summary: "Edit assisted brief payload" },
+    },
+    "/assistance/briefs/{briefId}/production": {
+      patch: { summary: "Patch brief production knobs" },
+    },
+    "/assistance/briefs/{briefId}/approve": {
+      post: { summary: "Approve brief and start generation" },
+    },
+    "/assistance/briefs/{briefId}/reject": {
+      post: { summary: "Reject / abandon brief" },
+    },
+    "/assistance/threads/{threadId}/brief": {
+      get: { summary: "Get brief for thread" },
+    },
+    "/assistance/approvals": {
+      get: { summary: "List pending approvals (?status=pending)" },
+    },
+    "/assistance/approvals/{id}/decide": {
+      post: { summary: "Approve or deny workspace side-effect approval" },
+    },
+    "/edits": {
+      get: { summary: "List video edits (?folderId=)" },
+      post: { summary: "Create video edit project" },
+    },
+    "/edits/{id}": {
+      get: { summary: "Get video edit project" },
+      put: { summary: "Save full project JSON" },
+      patch: { summary: "Rename or move edit" },
+    },
+    "/edits/{id}/export": { post: { summary: "Export edit to a video asset" } },
   },
 } as const;
 
 export const STUDIO_API_ROOT = {
   name: "Yatishara Studio API",
-  version: "1.0.0",
+  version: "1.1.0",
   documentation: "/api/v1/openapi.json",
   scopes: ["read", "write", "generate"],
   endpoints: [
@@ -90,16 +144,39 @@ export const STUDIO_API_ROOT = {
     "POST /assets/:id/restore",
     "POST /assets/upload",
     "POST /assets/upload-inline",
-    "GET|POST /documents",
+    "POST /documents",
     "GET|PATCH|DELETE /documents/:id",
     "POST /documents/:id/restore",
     "GET|POST /elements",
+    "GET /elements/production-guide",
     "GET /elements/sheet-guide",
     "GET|PATCH|DELETE /elements/:id",
     "POST /elements/:id/restore",
+    "POST /elements/:id/generate-text-sheet",
+    "POST /elements/:id/generate-sheet",
+    "GET /style-sheets",
     "GET /style-presets",
+    "GET /video-models",
+    "GET /catalog/script-types",
+    "GET /catalog/reference-intents",
+    "GET /voices",
+    "GET|POST /voices/saved",
+    "DELETE /voices/saved/:voiceId",
     "GET|POST /generations",
     "POST /generations/estimate",
+    "POST /generations/estimate-batch",
     "GET /generations/:id",
+    "POST /assistance/briefs",
+    "GET /assistance/briefs/:briefId",
+    "PATCH /assistance/briefs/:briefId",
+    "PATCH /assistance/briefs/:briefId/production",
+    "POST /assistance/briefs/:briefId/approve",
+    "POST /assistance/briefs/:briefId/reject",
+    "GET /assistance/threads/:threadId/brief",
+    "GET /assistance/approvals",
+    "POST /assistance/approvals/:id/decide",
+    "GET|POST /edits",
+    "GET|PUT|PATCH /edits/:id",
+    "POST /edits/:id/export",
   ],
 };

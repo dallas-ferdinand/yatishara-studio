@@ -13,7 +13,10 @@ import {
   generateVideo,
   imageModelForRequest,
 } from "./lib/aiGateway";
-import { referenceInputValidator } from "./lib/referenceInput";
+import {
+  referenceInputValidator,
+  type ReferenceInput,
+} from "./lib/referenceInput";
 import { isDirectPromptMode, shouldSkipPromptEnhancement } from "./lib/skipPromptEnhancement";
 import {
   normalizeScriptType,
@@ -58,12 +61,33 @@ function finalizeVideoPrompt(
   });
 }
 
+function referenceOnlyVideoInputs(
+  mode: "image" | "video",
+  references: ReferenceInput[] | undefined,
+  legacyStartFrameUrl?: string,
+): ReferenceInput[] {
+  const next = [...(references ?? [])];
+  if (mode === "video" && legacyStartFrameUrl?.trim()) {
+    next.push({
+      kind: "image",
+      url: legacyStartFrameUrl.trim(),
+    });
+  }
+  return next.filter(
+    (reference, index, all) =>
+      all.findIndex(
+        (candidate) =>
+          candidate.kind === reference.kind && candidate.url === reference.url,
+      ) === index,
+  );
+}
+
 const createQueuedJobRef = makeFunctionReference<
   "mutation",
   {
     threadId: Id<"generationThreads">;
     mode: "image" | "video";
-    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
     resolvedModel: string;
     stylePresetId: Id<"stylePresets">;
     styleSheetElementId?: Id<"elements">;
@@ -78,6 +102,7 @@ const createQueuedJobRef = makeFunctionReference<
     hasNonVideoReferenceInput?: boolean;
     hasStartFrame?: boolean;
     skipPromptEnhancement?: boolean;
+    folderId?: Id<"folders">;
   },
   Id<"generationJobs">
 >("generation:createQueuedJob");
@@ -145,6 +170,16 @@ const createGeneratedAssetRef = internalMutationRef<
   },
   { assetId: Id<"assets">; bunnyPath: string }
 >("generation:createGeneratedAsset");
+
+const setGeneratedAssetStorageStatusRef = internalMutationRef<
+  {
+    jobId: Id<"generationJobs">;
+    assetId: Id<"assets">;
+    status: "ready" | "failed";
+    byteSize?: number;
+  },
+  null
+>("generation:setGeneratedAssetStorageStatus");
 
 const completeWithOutputsRef = internalMutationRef<
   {
@@ -279,6 +314,7 @@ const prepareApiGenerationRef = internalMutationRef<
 const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
+  v.literal("audio"),
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
@@ -403,6 +439,7 @@ export const runFlow = action({
     referenceIntent: v.optional(v.string()),
     hasRawImageReference: v.optional(v.boolean()),
     hasElementReference: v.optional(v.boolean()),
+    folderId: v.optional(v.id("folders")),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -417,19 +454,23 @@ export const runFlow = action({
     assetIds?: Id<"assets">[];
     externalTaskId?: string;
   }> => {
-    const referenceInputs = args.referenceInputs ?? [];
+    const referenceInputs = referenceOnlyVideoInputs(
+      args.mode,
+      args.referenceInputs,
+      args.startFrameUrl,
+    );
     const videoModel =
       args.mode === "video"
         ? validateVideoModelCapabilities(args.videoModel, {
             durationSeconds: args.durationSeconds,
-            hasStartFrame: Boolean(args.startFrameUrl),
+            hasStartFrame: false,
             referenceKinds: referenceInputs.map((input) => input.kind),
             surface: "studio",
           })
         : undefined;
     const resolvedModel =
       videoModel?.gatewayModelId ?? modelForRequest(args.mode, args.videoModel);
-    const billingTier = billingTierForMode(args.mode);
+    const billingTier = billingTierForMode(args.mode) as "image" | "pro_video";
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
       mode: args.mode,
@@ -444,16 +485,17 @@ export const runFlow = action({
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
-          ? Boolean(referenceInputs.length || args.startFrameUrl)
+          ? referenceInputs.length > 0
           : Boolean(args.referenceUrls?.length),
       hasVideoReferenceInput:
         args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
-      hasStartFrame: args.mode === "video" && Boolean(args.startFrameUrl),
+      hasStartFrame: false,
       skipPromptEnhancement: args.skipPromptEnhancement,
       styleSheetElementId: args.styleSheetElementId,
+      folderId: args.folderId,
     });
 
     try {
@@ -493,6 +535,9 @@ export const runFlow = action({
             hasElementReference: args.hasElementReference,
             attachedScriptMarkdown: args.attachedScriptMarkdown,
             referenceSummaries: args.referenceSummaries,
+            referenceInputs,
+            referenceUrls: args.referenceUrls,
+            startFrameUrl: undefined,
           });
       await ctx.runMutation(setEnhancedPromptRef, {
         jobId,
@@ -505,7 +550,7 @@ export const runFlow = action({
           .filter((input) => input.kind === "image")
           .map((input) => input.url);
         const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
-          startFrameUrl: args.startFrameUrl,
+          startFrameUrl: undefined,
           referenceImageCount: referenceImageUrls.length,
           gatewayModelId: job.resolvedModel,
           skipPromptEnhancement: job.skipPromptEnhancement,
@@ -519,7 +564,7 @@ export const runFlow = action({
           durationSeconds: args.durationSeconds,
           generateAudio: args.audioEnabled ?? false,
           modelId: job.resolvedModel,
-          startFrameUrl: args.startFrameUrl,
+          startFrameUrl: undefined,
           referenceImageUrls,
           referenceVideoUrls: referenceInputs
             .filter((input) => input.kind === "video")
@@ -629,7 +674,11 @@ async function executeQueuedApiJob(
     referenceSummaries?: string[];
   },
 ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> {
-  const referenceInputs = args.referenceInputs ?? [];
+  const referenceInputs = referenceOnlyVideoInputs(
+    args.mode,
+    args.referenceInputs,
+    args.startFrameUrl,
+  );
   const attemptId = `api_${args.jobId}_${Date.now()}`;
   const claim = await ctx.runMutation(claimJobExecutionRef, {
     jobId: args.jobId,
@@ -643,7 +692,7 @@ async function executeQueuedApiJob(
     if (args.mode === "video") {
       validateVideoModelCapabilities(job.resolvedModel, {
         durationSeconds: args.durationSeconds ?? job.durationSeconds,
-        hasStartFrame: Boolean(args.startFrameUrl),
+        hasStartFrame: false,
         referenceKinds: referenceInputs.map((input) => input.kind),
         surface: "internal",
       });
@@ -678,6 +727,9 @@ async function executeQueuedApiJob(
           hasElementReference: args.hasElementReference,
           attachedScriptMarkdown: args.attachedScriptMarkdown,
           referenceSummaries: args.referenceSummaries,
+          referenceInputs,
+          referenceUrls: args.referenceUrls,
+          startFrameUrl: undefined,
         });
     await ctx.runMutation(setEnhancedPromptRef, {
       jobId: args.jobId,
@@ -690,7 +742,7 @@ async function executeQueuedApiJob(
         .filter((input) => input.kind === "image")
         .map((input) => input.url);
       const videoPrompt = finalizeVideoPrompt(enhancedPrompt, {
-        startFrameUrl: args.startFrameUrl,
+        startFrameUrl: undefined,
         referenceImageCount: referenceImageUrls.length,
         gatewayModelId: job.resolvedModel,
         skipPromptEnhancement: job.skipPromptEnhancement,
@@ -704,7 +756,7 @@ async function executeQueuedApiJob(
         durationSeconds: args.durationSeconds,
         generateAudio: args.audioEnabled ?? false,
         modelId: job.resolvedModel,
-        startFrameUrl: args.startFrameUrl,
+        startFrameUrl: undefined,
         referenceImageUrls,
         referenceVideoUrls: referenceInputs
           .filter((input) => input.kind === "video")
@@ -785,12 +837,16 @@ export const runGenerationForApi = internalAction({
     assetIds: v.optional(v.array(v.id("assets"))),
   }),
   handler: async (ctx, args) => {
-    const referenceInputs = args.referenceInputs ?? [];
+    const referenceInputs = referenceOnlyVideoInputs(
+      args.mode,
+      args.referenceInputs,
+      args.startFrameUrl,
+    );
     const videoModel =
       args.mode === "video"
         ? validateVideoModelCapabilities(args.videoModel, {
             durationSeconds: args.durationSeconds,
-            hasStartFrame: Boolean(args.startFrameUrl),
+            hasStartFrame: false,
             referenceKinds: referenceInputs.map((input) => input.kind),
             surface: "api",
           })
@@ -802,12 +858,17 @@ export const runGenerationForApi = internalAction({
       folderId: args.folderId,
       apiKeyId: args.apiKeyId,
       mode: args.mode,
-      tier: billingTierForMode(args.mode),
+      tier: billingTierForMode(args.mode) as "image" | "pro_video",
       resolvedModel,
       stylePresetId: args.stylePresetId,
       styleSheetElementId: args.styleSheetElementId,
       userPrompt: args.userPrompt,
-      title: args.userPrompt.trim().slice(0, 64) || "API generation",
+      title:
+        args.userPrompt
+          .replace(/\uFFFC/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 64) || "API generation",
       audioEnabled: args.audioEnabled,
       aspectRatio: args.aspectRatio,
       resolution: args.resolution,
@@ -815,14 +876,14 @@ export const runGenerationForApi = internalAction({
       durationSeconds: args.durationSeconds,
       hasReferenceInput:
         args.mode === "video"
-          ? Boolean(referenceInputs.length || args.startFrameUrl)
+          ? referenceInputs.length > 0
           : Boolean(args.referenceUrls?.length),
       hasVideoReferenceInput:
         args.mode === "video" && referenceInputs.some((input) => input.kind === "video"),
       hasNonVideoReferenceInput:
         args.mode === "video" &&
         referenceInputs.some((input) => input.kind === "image" || input.kind === "audio"),
-      hasStartFrame: args.mode === "video" && Boolean(args.startFrameUrl),
+      hasStartFrame: false,
       skipPromptEnhancement: args.skipPromptEnhancement,
     });
     const executed = await executeQueuedApiJob(ctx, {
@@ -835,7 +896,7 @@ export const runGenerationForApi = internalAction({
       audioEnabled: args.audioEnabled,
       referenceUrls: args.referenceUrls,
       referenceInputs,
-      startFrameUrl: args.startFrameUrl,
+      startFrameUrl: undefined,
       referenceIntent: args.referenceIntent,
       hasRawImageReference: args.hasRawImageReference,
       hasElementReference: args.hasElementReference,
@@ -984,12 +1045,27 @@ async function saveGeneratedMedia(
       mimeType: args.mediaType,
     },
   );
-  await putObject({
-    path: asset.bunnyPath,
-    body: args.body,
-    contentType: args.mediaType,
-  });
-  return asset.assetId;
+  try {
+    await putObject({
+      path: asset.bunnyPath,
+      body: args.body,
+      contentType: args.mediaType,
+    });
+    await ctx.runMutation(setGeneratedAssetStorageStatusRef, {
+      jobId: args.jobId,
+      assetId: asset.assetId,
+      status: "ready",
+      byteSize: args.body.byteLength,
+    });
+    return asset.assetId;
+  } catch (error) {
+    await ctx.runMutation(setGeneratedAssetStorageStatusRef, {
+      jobId: args.jobId,
+      assetId: asset.assetId,
+      status: "failed",
+    });
+    throw error;
+  }
 }
 
 function internalMutationRef<Args extends Record<string, unknown>, Return>(
@@ -1062,8 +1138,31 @@ async function enhancePromptWithFallback(args: {
   hasElementReference?: boolean;
   attachedScriptMarkdown?: string[];
   referenceSummaries?: string[];
+  referenceInputs?: Array<{ kind: "image" | "video" | "audio"; url: string; mimeType?: string }>;
+  referenceUrls?: string[];
+  startFrameUrl?: string;
 }): Promise<string> {
   try {
+    const seen = new Set<string>();
+    const referenceInputs: Array<{
+      kind: "image" | "video" | "audio";
+      url: string;
+      mimeType?: string;
+    }> = [];
+    for (const input of args.referenceInputs ?? []) {
+      const key = `${input.kind}:${input.url}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      referenceInputs.push(input);
+    }
+    for (const url of args.referenceUrls ?? []) {
+      const trimmed = url.trim();
+      if (!trimmed) continue;
+      const key = `image:${trimmed}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      referenceInputs.push({ kind: "image", url: trimmed });
+    }
     return await enhancePrompt({
       userPrompt: args.userPrompt,
       presetName: args.presetName,
@@ -1082,8 +1181,11 @@ async function enhancePromptWithFallback(args: {
       hasImageReference: args.hasImageReference,
       hasRawImageReference: args.hasRawImageReference,
       hasElementReference: args.hasElementReference,
+      hasAudioReference: referenceInputs.some((input) => input.kind === "audio"),
       attachedScriptMarkdown: args.attachedScriptMarkdown,
       referenceSummaries: args.referenceSummaries ?? [],
+      referenceInputs,
+      startFrameUrl: args.startFrameUrl,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown enhancement error";

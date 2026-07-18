@@ -14,14 +14,17 @@ Create keys in Studio → Settings → API keys. Scopes:
 
 | Scope | Allows |
 |-------|--------|
-| `read` | Account, folders, assets, documents, elements, presets, list/get generations |
-| `write` | Create/update folders, assets, documents, elements; trash/restore |
-| `generate` | Image, video, and script generation (uses credits) |
+| `read` | Account, folders, assets, documents, elements, presets, catalogs, voices browse, list/get generations, briefs, edits |
+| `write` | Create/update folders, assets, documents, elements, edits, briefs, saved voices; trash/restore |
+| `generate` | Image, video, script, audio generation; brief approve; edit export (uses credits / compute) |
 
 ## Discovery
 
 - `GET /api/v1` — API name, version, scope list, endpoint index
 - `GET /api/v1/openapi.json` — OpenAPI 3.1 document
+- `GET /api/v1/catalog/script-types` — scriptType values for script generation
+- `GET /api/v1/catalog/reference-intents` — referenceIntent values (`auto`, `stylize`, `match_reference`, `element_lock`)
+- `GET /api/v1/video-models?scope=mcp` — video model catalog (includes MCP-only models)
 
 ## Account
 
@@ -60,9 +63,11 @@ POST /api/v1/assets/upload-inline
 
 **Two-step upload** (`/assets/upload`):
 
-1. `POST` with `{ folderId?, name, kind, mimeType }` → `{ assetId, putUrl, storageAccessKey, bunnyPath }`
-2. `PUT` bytes to `putUrl` with header `AccessKey: storageAccessKey`
-3. `POST` with `{ complete: true, assetId, byteSize? }` → `{ asset }`
+1. `POST` with `{ folderId?, name, kind, mimeType }` → `{ assetId, uploadUrl, bunnyPath }`
+2. `POST` the file bytes to `uploadUrl` (Convex staging; response includes `storageId`)
+3. `POST` with `{ complete: true, assetId, storageId, byteSize? }` → `{ asset }`
+
+The Bunny storage zone key is never returned to clients.
 
 **Inline upload** (`/assets/upload-inline`): `{ folderId?, name, kind, mimeType, dataBase64 }` (max 50 MB).
 
@@ -95,6 +100,7 @@ POST /api/v1/elements/:id/generate-sheet
 DELETE /api/v1/elements/:id
 POST /api/v1/elements/:id/restore
 GET /api/v1/elements/production-guide
+GET /api/v1/style-sheets
 ```
 
 Element responses include `buildStatus` (`unbuilt`|`built`), `referenceAssetIds`, `referenceAssets`, `sheetAssetId`, `sheetAsset`, `sheetUrl`.
@@ -152,7 +158,22 @@ POST /api/v1/elements/:id/restore
 GET /api/v1/style-presets?kind=image|video|any
 ```
 
-Use the `slug` field as `stylePreset` when generating. Use `raw` with `skipPromptEnhancement: true` to pass prompts directly to the model without preset rewrite.
+Use the `slug` field as `stylePreset` when generating. Prefer **Style Sheet elements** (`styleSheetElementId`) for styled work. Use `unstyled`/`raw` with `skipPromptEnhancement: true` for Direct (verbatim) prompts.
+
+## Voices (audio)
+
+```http
+GET /api/v1/voices
+GET /api/v1/voices/saved
+POST /api/v1/voices/saved
+DELETE /api/v1/voices/saved/:voiceId
+```
+
+`GET /voices` explores ElevenLabs voices (query: `search`, `language`, `accent`, `gender`, `age`, `category`, `sort`, `page`, `pageSize`).
+
+`POST /voices/saved` body: `{ "voiceId", "name", "publicOwnerId?", …metadata }`.
+
+Use `voice_id` / saved `voiceId` as `elevenVoiceId` when generating voiceover.
 
 ## Generation
 
@@ -162,7 +183,25 @@ Use the `slug` field as `stylePreset` when generating. Use `raw` with `skipPromp
 POST /api/v1/generations/estimate
 ```
 
-Body: `{ mode: "image"|"video"|"script", resolution?, durationSeconds?, audioEnabled?, referenceAssetIds? }`
+Body:
+
+```json
+{
+  "mode": "image|video|script|audio",
+  "resolution": "2K",
+  "durationSeconds": 6,
+  "audioEnabled": true,
+  "audioType": "voiceover",
+  "characterCount": 120,
+  "prompt": "…",
+  "referenceAssetIds": [],
+  "referenceElementIds": [],
+  "startFrameAssetId": null,
+  "videoModel": "seedance-2.0"
+}
+```
+
+For `mode: "audio"`: set `audioType` to `voiceover` or `sfx` (music blocked). Voiceover cost uses `characterCount` or `prompt` length. SFX uses `durationSeconds` (omit = Auto ~5s).
 
 ### Estimate batch (production budget)
 
@@ -174,7 +213,8 @@ POST /api/v1/generations/estimate-batch
 {
   "items": [
     { "label": "prop_honey_jar", "mode": "image", "resolution": "2K", "hasReferenceInput": true, "maxRounds": 3 },
-    { "label": "shot_S01", "mode": "video", "resolution": "1280x720", "durationSeconds": 6, "maxRounds": 3 }
+    { "label": "shot_S01", "mode": "video", "resolution": "1280x720", "durationSeconds": 6, "maxRounds": 3 },
+    { "label": "vo_hook", "mode": "audio", "audioType": "voiceover", "characterCount": 180, "maxRounds": 1 }
   ],
   "contingencyPercent": 15
 }
@@ -196,11 +236,15 @@ GET /api/v1/generations/:id
 {
   "mode": "image",
   "prompt": "…",
-  "stylePreset": "raw",
+  "stylePreset": "unstyled",
   "skipPromptEnhancement": true,
   "resolution": "2K",
+  "quality": "high",
   "aspectRatio": "16:9",
+  "styleSheetElementId": null,
   "referenceAssetIds": [],
+  "referenceElementIds": [],
+  "referenceIntent": "auto",
   "wait": true
 }
 ```
@@ -211,9 +255,15 @@ GET /api/v1/generations/:id
 {
   "mode": "video",
   "prompt": "…",
-  "stylePreset": "raw",
+  "stylePreset": "unstyled",
   "skipPromptEnhancement": true,
   "durationSeconds": 6,
+  "resolution": "1280x720",
+  "aspectRatio": "16:9",
+  "audioEnabled": true,
+  "videoModel": "seedance-2.0",
+  "startFrameAssetId": null,
+  "referenceElementIds": [],
   "wait": false
 }
 ```
@@ -224,23 +274,74 @@ GET /api/v1/generations/:id
 {
   "mode": "script",
   "prompt": "Write a 30s ad script for…",
-  "stylePreset": "raw",
+  "scriptType": "production",
+  "stylePreset": "unstyled",
   "skipPromptEnhancement": true
 }
 ```
 
+**Audio** (voiceover / SFX; music not available):
+
+```json
+{
+  "mode": "audio",
+  "audioType": "voiceover",
+  "prompt": "Spoken copy here…",
+  "elevenVoiceId": "…",
+  "elevenVoiceName": "Rachel",
+  "wait": false
+}
+```
+
+SFX example: `{ "mode": "audio", "audioType": "sfx", "prompt": "Soft whoosh", "durationSeconds": 2 }`.
+
 Job responses include `threadId`, `stylePresetSlug`, and `creditsSpent` when available.
+
+## Assisted production
+
+Agent-friendly brief workflow (no chat streaming). Optimistic concurrency via `expectedRevision`.
+
+```http
+POST /api/v1/assistance/briefs
+GET /api/v1/assistance/briefs/:briefId
+GET /api/v1/assistance/threads/:threadId/brief
+PATCH /api/v1/assistance/briefs/:briefId
+PATCH /api/v1/assistance/briefs/:briefId/production
+POST /api/v1/assistance/briefs/:briefId/approve
+POST /api/v1/assistance/briefs/:briefId/reject
+GET /api/v1/assistance/approvals?status=pending
+POST /api/v1/assistance/approvals/:id/decide
+```
+
+Typical loop: `POST /assistance/briefs` → patch production until `status` is `review_ready` → `POST .../approve` → poll `GET /generations/:id`.
+
+Approve requires `generate` scope. Reject / decide require `write`.
+
+## Video edits
+
+```http
+POST /api/v1/edits
+GET /api/v1/edits?folderId=
+GET /api/v1/edits/:id
+PUT /api/v1/edits/:id
+PATCH /api/v1/edits/:id
+POST /api/v1/edits/:id/export
+```
+
+`POST /edits` body: `{ "folderId?", "name?", "sourceAssetId?", "assetIds?", "frameRatio?" }`. When `assetIds` is set, clips are seeded on `track-v1` (video/image) and audio tracks.
+
+`PUT` replaces full `project` JSON. `POST .../export` renders with ffmpeg and returns `{ "assetId" }` (`generate` scope).
 
 ## Rate limits
 
 **Disabled** for VPS agent / cinema batch operations (folder organize, multi-asset moves). Audit logging via `apiRequestLog` still runs.
 
-Concurrent in-flight image/video generation jobs: 10 per API key.
+Concurrent in-flight generation jobs (image/video/audio): **10 per API key**.
 
 ## MCP
 
-Use the `@yatishara/studio-mcp` package (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL` env vars. See Settings → API keys for a copy-paste config.
+Use `@yatishara/studio-mcp` **v0.3+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md).
 
 ## Errors
 
-JSON body: `{ "error": "message" }` with HTTP status `400`, `401`, `403`, `404`, or `429`.
+JSON body: `{ "error": "message" }` with HTTP status `400`, `401`, `403`, `404`, `409`, or `429`.

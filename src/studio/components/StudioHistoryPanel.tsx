@@ -8,7 +8,7 @@ import {
   ChevronDown,
   Clock3,
   FileText,
-  Film,
+  Play,
   Image as ImageIcon,
   Loader2,
   MessageSquare,
@@ -71,7 +71,7 @@ function HistoryChip({ chip }) {
   const isImagey = Boolean(thumb) && (kind === "image" || kind === "video" || Boolean(chip?.elementType));
   const Icon =
     kind === "video"
-      ? Film
+      ? Play
       : kind === "audio"
         ? Music
         : kind === "image" || chip?.elementType
@@ -113,7 +113,11 @@ function HistoryChip({ chip }) {
           <img src={thumb} alt="" className="studio-history-chip-media is-inline" loading="lazy" decoding="async" />
         )
       ) : (
-        <Icon className="studio-history-chip-icon" aria-hidden="true" />
+        <Icon
+          className="studio-history-chip-icon"
+          aria-hidden="true"
+          {...(kind === "video" ? { strokeWidth: 2.85 } : {})}
+        />
       )}
       <span className="studio-history-chip-label">{chip.label}</span>
     </span>

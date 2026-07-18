@@ -77,9 +77,15 @@
 }
 
 [data-appearance="light"] .public-profile-shell {
+  --pp-ink: var(--color-cursor-text, #1b1f24);
+  --pp-muted: var(--color-cursor-muted, color-mix(in srgb, #1b1f24 58%, transparent));
+  --pp-line: color-mix(in srgb, #1b1f24 14%, transparent);
   --pp-accent-ink: #10140a;
-  --pp-glass: color-mix(in srgb, #ffffff 46%, transparent);
-  --pp-glass-muted: color-mix(in srgb, #ffffff 34%, transparent);
+  --pp-glass: color-mix(in srgb, #ffffff 72%, transparent);
+  --pp-glass-muted: color-mix(in srgb, #ffffff 58%, transparent);
+  --pp-glass-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 [data-appearance="light"] .public-profile-shell:not(.is-embedded)::before {
@@ -89,11 +95,26 @@
 }
 
 [data-appearance="light"] .public-profile-blur {
-  background: color-mix(in srgb, #ffffff 52%, transparent);
+  background: color-mix(in srgb, #e8ecf2 70%, transparent);
 }
 
 [data-appearance="light"] .public-profile-shell.is-embedded .public-profile-blur {
-  background: color-mix(in srgb, #ffffff 48%, transparent);
+  background: color-mix(in srgb, #eef1f5 62%, transparent);
+}
+
+[data-appearance="light"] .public-profile-error {
+  color: #b42318;
+}
+
+[data-appearance="light"] .public-profile-follow.is-following {
+  background: color-mix(in srgb, #ffffff 88%, transparent);
+}
+
+[data-appearance="light"] .public-profile-empty-posts,
+[data-appearance="light"] .public-profile-loading,
+[data-appearance="light"] .public-profile-empty,
+[data-appearance="light"] .public-profile-tile-fallback {
+  color: var(--pp-muted);
 }
 
 .public-profile-main {
@@ -139,33 +160,7 @@
   padding: 4px 4px 8px;
 }
 
-.public-profile-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: var(--pp-glass);
-  border: 1px solid var(--pp-line);
-  box-shadow: var(--pp-glass-shadow);
-  font-family: var(--font-bricolage), sans-serif;
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #fff;
-  -webkit-backdrop-filter: var(--pp-glass-blur);
-  backdrop-filter: var(--pp-glass-blur);
-  transform: none;
-  filter: none;
-  isolation: auto;
-}
-
-.public-profile-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+/* Hero avatar uses shared StudioProfileAvatar. */
 
 .public-profile-identity {
   display: grid;
@@ -337,24 +332,41 @@
 }
 
 .public-profile-tabs-wrap {
+  position: relative;
   display: grid;
   gap: 0;
+  width: calc(100% + (2 * var(--pp-pad-x)));
+  margin-inline: calc(-1 * var(--pp-pad-x));
+  margin-top: var(--pp-posts-gap);
+  padding: 10px var(--pp-pad-x);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 4%, transparent) 18%,
+    color-mix(in srgb, #ffffff 9%, transparent) 38%,
+    color-mix(in srgb, #ffffff 11%, transparent) 50%,
+    color-mix(in srgb, #ffffff 9%, transparent) 62%,
+    color-mix(in srgb, #ffffff 4%, transparent) 82%,
+    transparent 100%
+  );
+  border: 0;
+  box-shadow: none;
 }
 
 .public-profile-tabs-wrap .public-profile-posts-rule {
-  margin-block: 0;
-}
-
-.public-profile-tabs-wrap .public-profile-posts-rule:first-child {
-  margin-top: var(--pp-posts-gap);
+  display: none;
 }
 
 .public-profile-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
   gap: 6px;
-  margin-inline: calc(-1 * var(--pp-pad-x));
-  padding: 10px var(--pp-pad-x);
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
 }
 
 .public-profile-tab {
@@ -364,28 +376,36 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: 28px;
   height: 28px;
-  border: 1px solid var(--pp-line);
+  border: 1px solid var(
+    --studio-composer-glass-border,
+    var(--pp-line, rgba(255, 255, 255, 0.14))
+  );
   border-radius: 999px;
-  background: var(--pp-glass-muted);
-  color: color-mix(in srgb, var(--pp-ink) 76%, transparent);
+  background: var(
+    --studio-composer-glass-muted,
+    var(--pp-glass-muted, color-mix(in srgb, #07111f 44%, transparent))
+  );
+  color: color-mix(in srgb, var(--pp-ink) 72%, transparent);
   font: inherit;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.01em;
   line-height: 1;
   text-transform: none;
   cursor: pointer;
-  padding: 0 6px;
-  -webkit-backdrop-filter: var(--pp-glass-blur);
-  backdrop-filter: var(--pp-glass-blur);
+  padding: 0 12px;
+  box-shadow: none;
+  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   transition:
-    border-color 0.16s ease,
     color 0.16s ease,
-    background 0.16s ease;
+    background 0.16s ease,
+    border-color 0.16s ease;
 }
 
 .public-profile-tab > * {
@@ -401,42 +421,79 @@
 
 .public-profile-tab:hover {
   color: var(--pp-ink);
-  background: var(--pp-glass);
+  border-color: color-mix(
+    in srgb,
+    var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) 72%,
+    transparent
+  );
+  background: color-mix(
+    in srgb,
+    var(--studio-composer-glass-muted, color-mix(in srgb, #07111f 44%, transparent)) 88%,
+    #fff 8%
+  );
 }
 
 .public-profile-tab.is-active {
-  border-color: transparent;
-  background: var(
-    --studio-chrome-glow-bg-active,
-    color-mix(in srgb, var(--pp-accent) 14%, transparent)
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--pp-accent, #d8ff3e)) 78%,
+    #fff 12%
   );
-  color: var(--pp-ink);
-  box-shadow: none;
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--pp-accent, #d8ff3e)) 22%,
+    var(--studio-composer-glass-muted, color-mix(in srgb, #07111f 44%, transparent))
+  );
+  color: var(--color-cursor-text-bright, var(--pp-ink));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--pp-accent, #d8ff3e)) 28%, transparent),
+    0 0 14px color-mix(in srgb, var(--cursor-accent, var(--pp-accent, #d8ff3e)) 18%, transparent);
 }
 
 .public-profile-tab.is-active::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: var(
-    --studio-chrome-glow-border-fade,
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--pp-accent) 70%, transparent) 50%,
-      transparent 100%
-    )
+  content: none;
+  display: none;
+}
+
+[data-appearance="light"] .public-profile-tabs-wrap {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 28%, transparent) 18%,
+    color-mix(in srgb, #ffffff 48%, transparent) 38%,
+    color-mix(in srgb, #ffffff 56%, transparent) 50%,
+    color-mix(in srgb, #ffffff 48%, transparent) 62%,
+    color-mix(in srgb, #ffffff 28%, transparent) 82%,
+    transparent 100%
   );
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  box-shadow: none;
+}
+
+[data-appearance="light"] .public-profile-tab {
+  border-color: color-mix(in srgb, #1b1f24 10%, transparent);
+  background: color-mix(in srgb, #ffffff 62%, transparent);
+  color: color-mix(in srgb, var(--pp-ink) 68%, transparent);
+}
+
+[data-appearance="light"] .public-profile-tab:hover {
+  background: color-mix(in srgb, #ffffff 78%, transparent);
+  color: var(--pp-ink);
+}
+
+[data-appearance="light"] .public-profile-tab.is-active {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--pp-accent, #d8ff3e)) 72%,
+    rgba(15, 23, 42, 0.18)
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--pp-accent, #d8ff3e)) 18%,
+    #ffffff
+  );
+  color: var(--pp-ink);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--pp-accent, #d8ff3e)) 22%, transparent),
+    0 0 12px color-mix(in srgb, var(--cursor-accent, var(--pp-accent, #d8ff3e)) 14%, transparent);
 }
 
 .public-profile-grid-section {
@@ -487,12 +544,7 @@
 }
 
 .public-profile-tile .media-load-frame-placeholder {
-  background: color-mix(in srgb, #000 24%, transparent);
-}
-
-.public-profile-tile .media-load-frame-spinner {
-  width: 18px;
-  height: 18px;
+  background: transparent;
 }
 
 .public-profile-tile::after {
@@ -756,12 +808,6 @@
     --pp-pad-top: 14px;
     --pp-posts-pad-x: var(--pp-posts-gap);
     padding: var(--pp-pad-top) var(--pp-pad-x) 28px;
-  }
-
-  .public-profile-avatar {
-    width: 64px;
-    height: 64px;
-    font-size: 20px;
   }
 
   .public-profile-hero {

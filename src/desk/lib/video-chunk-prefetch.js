@@ -8,6 +8,7 @@ const MIN_FILE_FOR_TAIL = 8 * 1024 * 1024;
 const MAX_IN_FLIGHT = 6;
 const HIGH_PRIORITY_CHUNKS = 4;
 const PROGRESS_THROTTLE_MS = 350;
+const MAX_PREFETCHERS = 24;
 
 const prefetchers = new Map();
 
@@ -36,6 +37,8 @@ export class VideoChunkPrefetcher {
     this.chunksCompleted = 0;
     this.initialWarmDone = false;
     this._warmWaiters = [];
+    this._controllers = new Set();
+    this.supportsRange = true;
   }
 
   _resolveWarmWaiters() {
@@ -65,11 +68,14 @@ export class VideoChunkPrefetcher {
 
   async probeSize() {
     if (this.fileSize > 0) return this.fileSize;
+    const controller = new AbortController();
+    this._controllers.add(controller);
     try {
       const res = await fetch(this.url, {
         method: "GET",
         headers: { Range: "bytes=0-0" },
         credentials: this.credentials,
+        signal: controller.signal,
       });
       if (res.status === 206) {
         const cr = res.headers.get("Content-Range") || "";
@@ -77,25 +83,37 @@ export class VideoChunkPrefetcher {
         if (m) {
           this.fileSize = parseInt(m[1], 10);
           this.fetched.add(chunkKey(0, 0));
+          // Drain the tiny body so the connection can close cleanly.
+          try {
+            await res.arrayBuffer();
+          } catch {
+            /* ignore */
+          }
           return this.fileSize;
         }
       }
+      // Server ignored Range — do not download the full file as "chunks".
       if (res.status === 200) {
+        this.supportsRange = false;
         const len = res.headers.get("Content-Length");
         if (len) this.fileSize = parseInt(len, 10);
-        else {
-          const buf = await res.arrayBuffer();
-          this.fileSize = buf.byteLength;
+        // Cancel the body without buffering the entire asset into JS memory.
+        try {
+          await res.body?.cancel();
+        } catch {
+          /* ignore */
         }
       }
     } catch {
       /* ignore probe errors — video element will still try */
+    } finally {
+      this._controllers.delete(controller);
     }
     return this.fileSize;
   }
 
   enqueueRange(start, end) {
-    if (this.aborted || !this.fileSize) return;
+    if (this.aborted || !this.fileSize || !this.supportsRange) return;
     let s = Math.max(0, Math.floor(start));
     const e = Math.min(this.fileSize - 1, Math.floor(end));
     if (s > e) return;
@@ -114,6 +132,11 @@ export class VideoChunkPrefetcher {
   }
 
   enqueueInitial() {
+    if (!this.supportsRange) {
+      this.initialWarmDone = true;
+      this._resolveWarmWaiters();
+      return;
+    }
     const size = this.fileSize;
     if (!size) return;
     this.enqueueRange(0, Math.min(size - 1, INITIAL_BYTES - 1));
@@ -124,7 +147,9 @@ export class VideoChunkPrefetcher {
   }
 
   onPlaybackSample(currentTime, duration) {
-    if (this.aborted || !this.fileSize || !duration || duration <= 0) return;
+    if (this.aborted || !this.supportsRange || !this.fileSize || !duration || duration <= 0) {
+      return;
+    }
     const now = Date.now();
     if (now - this.lastPlaybackSample < PROGRESS_THROTTLE_MS) return;
     this.lastPlaybackSample = now;
@@ -141,7 +166,7 @@ export class VideoChunkPrefetcher {
   }
 
   pump() {
-    if (this.aborted) return;
+    if (this.aborted || !this.supportsRange) return;
     while (this.inFlight < MAX_IN_FLIGHT && this.queue.length > 0) {
       const item = this.queue.shift();
       this.inFlight += 1;
@@ -153,18 +178,39 @@ export class VideoChunkPrefetcher {
   }
 
   async fetchRange({ start, end, key }) {
-    const priority =
-      this.chunksCompleted < HIGH_PRIORITY_CHUNKS ? "high" : "low";
+    if (!this.supportsRange || this.aborted) {
+      this.fetched.delete(key);
+      return;
+    }
+    const priority = this.chunksCompleted < HIGH_PRIORITY_CHUNKS ? "high" : "low";
+    const controller = new AbortController();
+    this._controllers.add(controller);
     try {
       const init = {
         headers: { Range: `bytes=${start}-${end}` },
         credentials: this.credentials,
+        signal: controller.signal,
       };
       if (typeof Request !== "undefined" && "priority" in Request.prototype) {
         init.priority = priority;
       }
       const res = await fetch(this.url, init);
-      if (!res.ok && res.status !== 206) {
+      // Only Partial Content counts as a successful range warm.
+      // A 200 would be the entire file — abort that path immediately.
+      if (res.status === 200) {
+        this.supportsRange = false;
+        this.queue = [];
+        this.fetched.delete(key);
+        try {
+          await res.body?.cancel();
+        } catch {
+          /* ignore */
+        }
+        this.initialWarmDone = true;
+        this._resolveWarmWaiters();
+        return;
+      }
+      if (res.status !== 206) {
         this.fetched.delete(key);
         return;
       }
@@ -176,6 +222,8 @@ export class VideoChunkPrefetcher {
       }
     } catch {
       this.fetched.delete(key);
+    } finally {
+      this._controllers.delete(controller);
     }
   }
 
@@ -202,7 +250,26 @@ export class VideoChunkPrefetcher {
   destroy() {
     this.aborted = true;
     this.queue = [];
+    for (const controller of this._controllers) {
+      try {
+        controller.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+    this._controllers.clear();
     this._resolveWarmWaiters();
+  }
+}
+
+function evictIdlePrefetchers() {
+  if (prefetchers.size <= MAX_PREFETCHERS) return;
+  for (const [url, p] of prefetchers) {
+    if (prefetchers.size <= MAX_PREFETCHERS) break;
+    if (p.inFlight === 0 && p.initialWarmDone) {
+      p.destroy();
+      prefetchers.delete(url);
+    }
   }
 }
 
@@ -210,6 +277,7 @@ export function getOrCreatePrefetcher(url, options = {}) {
   if (!isPrefetchableUrl(url)) return null;
   let p = prefetchers.get(url);
   if (!p) {
+    evictIdlePrefetchers();
     p = new VideoChunkPrefetcher(url, options);
     prefetchers.set(url, p);
   } else if (options.fileSize > 0 && !p.fileSize) {

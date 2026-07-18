@@ -1,11 +1,7 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- first paint must not depend on the Next image runtime */
-
 import { useEffect, useState } from "react";
-import { mercuryLogoAssets } from "@/lib/brand-assets";
-
-const PAINT_BOOT_LOGO = mercuryLogoAssets(48, "light");
+import { LogoLoader } from "@/studio/components/logo-loader";
 
 /**
  * Server-rendered first-paint boot that remains React-owned through hydration.
@@ -29,20 +25,7 @@ export function PaintBoot() {
     >
       <main className="ys-boot" data-ys-boot="boot">
         <div className="ys-boot-stack">
-          <div className="ys-boot-logo" aria-hidden="true">
-            <img
-              src={PAINT_BOOT_LOGO.src}
-              alt=""
-              width={48}
-              height={48}
-              decoding="sync"
-              fetchPriority="high"
-            />
-          </div>
-          <p className="ys-boot-wordmark">Yatishara Studio</p>
-          <div className="ys-boot-track" aria-hidden="true">
-            <div className="ys-boot-bar" />
-          </div>
+          <LogoLoader size="lg" appearance="light" />
         </div>
       </main>
     </div>

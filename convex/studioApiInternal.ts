@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, getStorageUploadCredentials, signBunnyCdnUrl, signBunnyFullUrl } from "./lib/bunny";
+import { buildAssetPath, signBunnyCdnUrl, signBunnyFullUrl } from "./lib/bunny";
 import {
   assertReferenceCount,
   referenceAssetIdsFromInput,
@@ -13,7 +13,12 @@ import {
   inferElementSourceMode,
   type ElementSourceMode,
 } from "./lib/elementSheetGuides";
-import { creditCostForGeneration, CREDIT_PRICE_TTD, textCreditCost } from "./lib/generationPricing";
+import {
+  audioCreditCost,
+  creditCostForGeneration,
+  CREDIT_PRICE_TTD,
+  textCreditCost,
+} from "./lib/generationPricing";
 import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 
 const folderShape = v.object({
@@ -460,8 +465,7 @@ export const reserveAssetUpload = internalMutation({
   },
   returns: v.object({
     assetId: v.id("assets"),
-    putUrl: v.string(),
-    storageAccessKey: v.string(),
+    uploadUrl: v.string(),
     bunnyPath: v.string(),
   }),
   handler: async (ctx, args) => {
@@ -483,7 +487,8 @@ export const reserveAssetUpload = internalMutation({
       filename: args.name,
     });
     await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
-    return { assetId, ...getStorageUploadCredentials(bunnyPath) };
+    const uploadUrl = await ctx.storage.generateUploadUrl();
+    return { assetId, uploadUrl, bunnyPath };
   },
 });
 
@@ -503,8 +508,11 @@ export const completeAssetUpload = internalMutation({
     if (!(await isFolderInSandbox(ctx, asset.folderId, args.sandboxFolderId))) {
       throw new Error("Asset not found");
     }
+    // Metadata-only updates after server-side Bunny commit. Do not invent byteSize.
+    if (args.byteSize != null && (asset.byteSize == null || asset.byteSize <= 0)) {
+      throw new Error("Upload is not finalized. Pass storageId to complete the staging commit.");
+    }
     await ctx.db.patch(asset._id, {
-      byteSize: args.byteSize,
       updatedAt: Date.now(),
     });
     return null;
@@ -548,19 +556,32 @@ export const estimateGenerationCost = internalQuery({
   args: {
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
-    mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
+    mode: v.union(
+      v.literal("image"),
+      v.literal("video"),
+      v.literal("script"),
+      v.literal("audio"),
+    ),
     resolution: v.optional(v.string()),
     quality: v.optional(v.string()),
     aspectRatio: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioEnabled: v.optional(v.boolean()),
+    audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
+    characterCount: v.optional(v.number()),
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     videoModel: v.optional(v.string()),
   },
   returns: v.object({
-    mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
+    mode: v.union(
+      v.literal("image"),
+      v.literal("video"),
+      v.literal("script"),
+      v.literal("audio"),
+    ),
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
+    audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
     cost: v.number(),
     creditBalance: v.number(),
     canGenerate: v.boolean(),
@@ -599,6 +620,39 @@ export const estimateGenerationCost = internalQuery({
       };
     }
 
+    if (args.mode === "audio") {
+      const audioType = args.audioType ?? "voiceover";
+      const characterCount = Math.max(0, Math.ceil(args.characterCount ?? 0));
+      if (audioType === "voiceover" && characterCount <= 0) {
+        return {
+          mode: args.mode,
+          audioType,
+          durationSeconds: args.durationSeconds,
+          cost: 0,
+          creditBalance,
+          canGenerate: false,
+          hasActiveSubscription,
+          reason: "Voiceover estimate needs characterCount or prompt text.",
+        };
+      }
+      const cost = audioCreditCost({
+        audioType,
+        characterCount: audioType === "voiceover" ? characterCount : undefined,
+        durationSeconds: args.durationSeconds,
+      });
+      const canGenerate = creditBalance >= cost;
+      return {
+        mode: args.mode,
+        audioType,
+        durationSeconds: args.durationSeconds,
+        cost,
+        creditBalance,
+        canGenerate,
+        hasActiveSubscription,
+        reason: canGenerate ? undefined : `Generation needs ${cost} credits. Top up to continue.`,
+      };
+    }
+
     const resolution =
       args.resolution ?? (args.mode === "image" ? "2K" : "1280x720");
     const tier = args.mode === "video" ? ("pro_video" as const) : ("image" as const);
@@ -612,7 +666,7 @@ export const estimateGenerationCost = internalQuery({
         creditBalance,
         canGenerate: false,
         hasActiveSubscription,
-        reason: "4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.",
+        reason: "4K video is not available yet. Video generation supports up to 1080p.",
       };
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
@@ -673,10 +727,17 @@ export const estimateBatchProduction = internalQuery({
     items: v.array(
       v.object({
         label: v.string(),
-        mode: v.union(v.literal("image"), v.literal("video"), v.literal("script")),
+        mode: v.union(
+          v.literal("image"),
+          v.literal("video"),
+          v.literal("script"),
+          v.literal("audio"),
+        ),
         resolution: v.optional(v.string()),
         durationSeconds: v.optional(v.number()),
         audioEnabled: v.optional(v.boolean()),
+        audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
+        characterCount: v.optional(v.number()),
         hasReferenceInput: v.optional(v.boolean()),
         referenceAssetIds: v.optional(v.array(v.id("assets"))),
         maxRounds: v.number(),
@@ -727,6 +788,14 @@ export const estimateBatchProduction = internalQuery({
           imageReferenceCount: refs.filter((k) => k === "image").length,
           videoReferenceCount: refs.filter((k) => k === "video").length,
           audioReferenceCount: refs.filter((k) => k === "audio").length,
+        });
+      } else if (item.mode === "audio") {
+        const audioType = item.audioType ?? "voiceover";
+        unitCost = audioCreditCost({
+          audioType,
+          characterCount:
+            audioType === "voiceover" ? Math.max(0, Math.ceil(item.characterCount ?? 0)) : undefined,
+          durationSeconds: item.durationSeconds,
         });
       } else {
         const resolution =
@@ -850,7 +919,7 @@ export const getGenerationJob = internalQuery({
       id: v.id("generationJobs"),
       threadId: v.optional(v.string()),
       status: v.string(),
-      mode: v.union(v.literal("image"), v.literal("video")),
+      mode: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
       folderId: v.id("folders"),
       prompt: v.string(),
       error: v.optional(v.string()),
@@ -888,7 +957,7 @@ export const listGenerationJobs = internalQuery({
       id: v.id("generationJobs"),
       threadId: v.optional(v.string()),
       status: v.string(),
-      mode: v.union(v.literal("image"), v.literal("video")),
+      mode: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
       folderId: v.id("folders"),
       prompt: v.string(),
       error: v.optional(v.string()),
@@ -1123,7 +1192,7 @@ export const resolveReferenceElementIds = internalQuery({
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
     elementIds: v.array(v.id("elements")),
-    /** video: attach prop/location sheets only (Seedance real-person filter). image: attach all sheets. */
+    /** video: attach prop/location sheets only (skip character sheets). image: attach all sheets. */
     generationMode: v.optional(v.union(v.literal("image"), v.literal("video"))),
     /** full = element bibles on job prompt. gateway_kling = compact stubs (shot packet keeps full definition). */
     promptAppendStyle: v.optional(v.union(v.literal("full"), v.literal("gateway_kling"))),
@@ -1204,7 +1273,7 @@ export const resolveReferenceElementIds = internalQuery({
         promptLines.push(`${element.type} @${element.name} (built sheet attached)`);
       } else {
         promptLines.push(
-          `${element.type} @${element.name} (identity via prompt — sheet not attached for video; Seedance real-person filter)`,
+          `${element.type} @${element.name} (identity via prompt — sheet not attached for video)`,
         );
       }
     }
@@ -1836,6 +1905,136 @@ export const countActiveApiGenerations = internalQuery({
   },
 });
 
+const savedVoiceReturn = v.object({
+  _id: v.id("savedVoices"),
+  voiceId: v.string(),
+  publicOwnerId: v.string(),
+  name: v.string(),
+  description: v.optional(v.string()),
+  previewUrl: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  language: v.optional(v.string()),
+  accent: v.optional(v.string()),
+  gender: v.optional(v.string()),
+  age: v.optional(v.string()),
+  useCase: v.optional(v.string()),
+  category: v.optional(v.string()),
+  addedAt: v.number(),
+});
+
+export const listSavedVoicesForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(savedVoiceReturn),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("savedVoices")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.userId))
+      .collect();
+    return rows
+      .sort((a, b) => b.addedAt - a.addedAt)
+      .map((row) => ({
+        _id: row._id,
+        voiceId: row.voiceId,
+        publicOwnerId: row.publicOwnerId,
+        name: row.name,
+        description: row.description,
+        previewUrl: row.previewUrl,
+        imageUrl: row.imageUrl,
+        language: row.language,
+        accent: row.accent,
+        gender: row.gender,
+        age: row.age,
+        useCase: row.useCase,
+        category: row.category,
+        addedAt: row.addedAt,
+      }));
+  },
+});
+
+export const saveVoiceForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    voiceId: v.string(),
+    publicOwnerId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    previewUrl: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    language: v.optional(v.string()),
+    accent: v.optional(v.string()),
+    gender: v.optional(v.string()),
+    age: v.optional(v.string()),
+    useCase: v.optional(v.string()),
+    category: v.optional(v.string()),
+  },
+  returns: v.id("savedVoices"),
+  handler: async (ctx, args) => {
+    const voiceId = args.voiceId.trim();
+    const publicOwnerId = args.publicOwnerId.trim();
+    if (!voiceId || !publicOwnerId) {
+      throw new Error("Voice id is required.");
+    }
+    const existing = await ctx.db
+      .query("savedVoices")
+      .withIndex("by_owner_and_voice", (q) =>
+        q.eq("ownerId", args.userId).eq("voiceId", voiceId),
+      )
+      .unique();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        publicOwnerId,
+        name: args.name.trim() || existing.name,
+        description: args.description,
+        previewUrl: args.previewUrl,
+        imageUrl: args.imageUrl,
+        language: args.language,
+        accent: args.accent,
+        gender: args.gender,
+        age: args.age,
+        useCase: args.useCase,
+        category: args.category,
+      });
+      return existing._id;
+    }
+    return await ctx.db.insert("savedVoices", {
+      ownerId: args.userId,
+      voiceId,
+      publicOwnerId,
+      name: args.name.trim() || "Voice",
+      description: args.description,
+      previewUrl: args.previewUrl,
+      imageUrl: args.imageUrl,
+      language: args.language,
+      accent: args.accent,
+      gender: args.gender,
+      age: args.age,
+      useCase: args.useCase,
+      category: args.category,
+      addedAt: now,
+    });
+  },
+});
+
+export const removeSavedVoiceForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    voiceId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const voiceId = args.voiceId.trim();
+    const existing = await ctx.db
+      .query("savedVoices")
+      .withIndex("by_owner_and_voice", (q) =>
+        q.eq("ownerId", args.userId).eq("voiceId", voiceId),
+      )
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
+    return null;
+  },
+});
+
 export const refundTextGenerationForApi = internalMutation({
   args: {
     userId: v.id("users"),
@@ -2019,7 +2218,9 @@ async function formatGenerationJob(
       return await formatAsset(ctx, asset, expiresUnix);
     }),
   );
-  const preset = await ctx.db.get("stylePresets", job.stylePresetId);
+  const preset = job.stylePresetId
+    ? await ctx.db.get("stylePresets", job.stylePresetId)
+    : null;
   let creditsSpent: number | undefined;
   const txId = job.spentCreditTransactionId ?? job.reservedCreditTransactionId;
   if (txId) {

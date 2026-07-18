@@ -32,6 +32,7 @@ export function writeExplorerDragData(dataTransfer, entry) {
   const name = entry.name ?? entry.path.split("/").pop() ?? entry.path;
   const type = entry.type === "dir" ? "dir" : "file";
   const mediaKind = inferMediaKind(entry);
+  const durationSeconds = Number(entry.durationSeconds ?? entry.duration);
   const payload = {
     path: entry.path,
     name,
@@ -49,6 +50,9 @@ export function writeExplorerDragData(dataTransfer, entry) {
     mimeType: entry.mimeType,
     byteSize: entry.byteSize,
     mediaKind,
+    ...(Number.isFinite(durationSeconds) && durationSeconds > 0.1
+      ? { durationSeconds }
+      : {}),
   };
   activeExplorerDrag = payload;
   dataTransfer.setData(EXPLORER_DND_TYPE, JSON.stringify(payload));

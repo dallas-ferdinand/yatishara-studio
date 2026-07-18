@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
   FastForward,
@@ -13,18 +13,11 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useVideoChunkPrefetch } from "@/desk/lib/use-video-chunk-prefetch.js";
-
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const total = Math.floor(seconds);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  }
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
+import {
+  createSeekHandlers,
+  formatMediaTime,
+} from "@/studio/lib/mediaPlayback";
+import { MediaLoadWave } from "@/studio/components/media-load-frame";
 
 const mediaIcon = (size = 14) => ({
   size,
@@ -43,16 +36,18 @@ export function DeskMediaPlayer({
   layout = "default",
 }) {
   const mediaRef = useRef(null);
+  const pointerSeekingRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
-  const [seeking, setSeeking] = useState(false);
+  const [, setSeeking] = useState(false);
   const [seekValue, setSeekValue] = useState(0);
   const [ready, setReady] = useState(false);
   const [aspect, setAspect] = useState(null);
   const [buffering, setBuffering] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   const isVideo = kind === "video";
   const Tag = isVideo ? "video" : "audio";
@@ -70,9 +65,12 @@ export function DeskMediaPlayer({
     setCurrent(0);
     setDuration(0);
     setSeekValue(0);
+    setSeeking(false);
+    pointerSeekingRef.current = false;
     setReady(false);
     setAspect(null);
     setBuffering(false);
+    setFailed(false);
   }, [src]);
 
   useEffect(() => {
@@ -80,7 +78,7 @@ export function DeskMediaPlayer({
     if (!el) return undefined;
 
     const onTime = () => {
-      if (!seeking) {
+      if (!pointerSeekingRef.current) {
         setCurrent(el.currentTime);
         setSeekValue(el.currentTime);
       }
@@ -88,6 +86,7 @@ export function DeskMediaPlayer({
     const onMeta = () => {
       setDuration(el.duration || 0);
       setReady(true);
+      setFailed(false);
       if (isVideo && el.videoWidth > 0 && el.videoHeight > 0) {
         setAspect(el.videoWidth / el.videoHeight);
       }
@@ -98,6 +97,13 @@ export function DeskMediaPlayer({
     const onWaiting = () => setBuffering(true);
     const onCanPlay = () => setBuffering(false);
     const onPlaying = () => setBuffering(false);
+    const onStalled = () => setBuffering(true);
+    const onError = () => {
+      setFailed(true);
+      setReady(false);
+      setPlaying(false);
+      setBuffering(false);
+    };
 
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onMeta);
@@ -108,6 +114,8 @@ export function DeskMediaPlayer({
     el.addEventListener("waiting", onWaiting);
     el.addEventListener("canplay", onCanPlay);
     el.addEventListener("playing", onPlaying);
+    el.addEventListener("stalled", onStalled);
+    el.addEventListener("error", onError);
 
     return () => {
       el.removeEventListener("timeupdate", onTime);
@@ -119,15 +127,17 @@ export function DeskMediaPlayer({
       el.removeEventListener("waiting", onWaiting);
       el.removeEventListener("canplay", onCanPlay);
       el.removeEventListener("playing", onPlaying);
+      el.removeEventListener("stalled", onStalled);
+      el.removeEventListener("error", onError);
     };
-  }, [isVideo, seeking, src]);
+  }, [isVideo, src]);
 
   const togglePlay = useCallback(() => {
     const el = mediaRef.current;
-    if (!el) return;
-    if (el.paused) void el.play().catch(() => {});
+    if (!el || failed) return;
+    if (el.paused) void el.play().catch(() => setPlaying(false));
     else el.pause();
-  }, []);
+  }, [failed]);
 
   const skip = useCallback((delta) => {
     const el = mediaRef.current;
@@ -138,21 +148,15 @@ export function DeskMediaPlayer({
     setSeekValue(next);
   }, []);
 
-  const onSeekStart = useCallback(() => setSeeking(true), []);
-
-  const onSeek = useCallback((e) => {
-    const v = Number(e.target.value);
-    setSeekValue(v);
-  }, []);
-
-  const onSeekEnd = useCallback(
-    (e) => {
-      const el = mediaRef.current;
-      const v = Number(e.target.value);
-      if (el && Number.isFinite(v)) el.currentTime = v;
-      setCurrent(v);
-      setSeeking(false);
-    },
+  const seekHandlers = useMemo(
+    () =>
+      createSeekHandlers({
+        getMedia: () => mediaRef.current,
+        setSeekValue,
+        setSeeking,
+        setCurrent,
+        pointerSeekingRef,
+      }),
     [],
   );
 
@@ -205,9 +209,9 @@ export function DeskMediaPlayer({
         <FastForward {...mediaIcon(14)} />
       </button>
       <span className="desk-media-player-time">
-        {formatTime(current)}
+        {formatMediaTime(current)}
         <span className="desk-media-player-time-sep">/</span>
-        {ready ? formatTime(duration) : "—"}
+        {ready ? formatMediaTime(duration) : "—"}
       </span>
     </>
   );
@@ -243,11 +247,12 @@ export function DeskMediaPlayer({
           max={duration || 0}
           step={0.05}
           value={seekValue}
-          disabled={!duration}
-          onPointerDown={onSeekStart}
-          onChange={onSeek}
-          onPointerUp={onSeekEnd}
-          onBlur={onSeekEnd}
+          disabled={!duration || failed}
+          onPointerDown={seekHandlers.onPointerDown}
+          onChange={seekHandlers.onChange}
+          onPointerUp={seekHandlers.onPointerUp}
+          onPointerCancel={seekHandlers.onPointerCancel}
+          onBlur={seekHandlers.onBlur}
           aria-label="Seek"
         />
       </div>
@@ -298,12 +303,17 @@ export function DeskMediaPlayer({
         preload={shouldPrefetch ? "auto" : "metadata"}
         className="desk-media-player-video"
       />
-      {buffering && playing ? (
-        <div className="desk-media-player-buffering" aria-hidden>
-          <span className="desk-media-player-buffering-spin" />
+      {(buffering && playing) || (!ready && !failed) ? (
+        <div className="desk-media-player-buffering" aria-busy="true" aria-label="Loading">
+          <MediaLoadWave size="sm" />
         </div>
       ) : null}
-      {!playing ? (
+      {failed ? (
+        <div className="desk-media-player-buffering is-error" role="status">
+          Media unavailable
+        </div>
+      ) : null}
+      {!playing && !failed && ready && !buffering ? (
         <button
           type="button"
           className="desk-media-player-overlay-play"
@@ -313,7 +323,7 @@ export function DeskMediaPlayer({
             togglePlay();
           }}
         >
-          <Play size={28} strokeWidth={2} aria-hidden />
+          <Play size={28} strokeWidth={2.75} aria-hidden />
         </button>
       ) : null}
     </div>

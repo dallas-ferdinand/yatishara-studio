@@ -60,3 +60,4 @@ mobile/*.jks
 mobile/android/app/*.keystore
 mobile/android/app/*.jks
 mobile/dist-apk/
+yatishara-studio-native-debug.apk

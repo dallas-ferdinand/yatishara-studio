@@ -1,12 +1,9 @@
-import type { ClipEffects, TextAnimation, TextClipContent, TransitionType } from "./types";
-
-export const FADE_PRESETS = [
-  { id: "none", label: "None", fadeIn: 0, fadeOut: 0, icon: "circle" },
-  { id: "soft", label: "Soft", fadeIn: 0.4, fadeOut: 0.4, icon: "sun" },
-  { id: "cinematic", label: "Cinematic", fadeIn: 0.8, fadeOut: 1.0, icon: "film" },
-  { id: "flash", label: "Flash", fadeIn: 0.15, fadeOut: 0.6, icon: "zap" },
-  { id: "audio-out", label: "Audio tail", fadeIn: 0, fadeOut: 1.2, icon: "volume" },
-] as const;
+import type {
+  ClipEffects,
+  TextAnimation,
+  TextClipContent,
+  TransitionType,
+} from "./types";
 
 export const TRANSITION_LIBRARY: Array<{
   id: TransitionType;
@@ -46,10 +43,8 @@ export const TEXT_ANIMATION_TEMPLATES: Array<{
 
 export const EDITOR_MODES = [
   { id: "select", label: "Edit", icon: "mouse-pointer" },
-  { id: "fade", label: "Fade", icon: "sun" },
   { id: "transition", label: "Transitions", icon: "blend" },
   { id: "text", label: "Text", icon: "type" },
-  { id: "layers", label: "Layers", icon: "layers" },
 ] as const;
 
 export const DEFAULT_TEXT_STYLE: TextClipContent = {
@@ -61,44 +56,16 @@ export const DEFAULT_TEXT_STYLE: TextClipContent = {
   animationDuration: 0.5,
 };
 
+/** Clip edge fades were removed — transitions handle dissolves. Kept for call sites. */
 export function clipOpacityAtLocalTime(
   effects: ClipEffects | undefined,
   clipDurationSec: number,
   localTime: number,
 ): number {
-  const fadeIn = Math.max(0, effects?.fadeIn ?? 0);
-  const fadeOut = Math.max(0, effects?.fadeOut ?? 0);
-  let opacity = 1;
-  if (fadeIn > 0 && localTime < fadeIn) {
-    opacity = Math.min(opacity, localTime / fadeIn);
-  }
-  const fadeOutStart = clipDurationSec - fadeOut;
-  if (fadeOut > 0 && localTime > fadeOutStart) {
-    opacity = Math.min(opacity, Math.max(0, (clipDurationSec - localTime) / fadeOut));
-  }
-  return Math.max(0, Math.min(1, opacity));
-}
-
-export function applyFadePreset(effects: ClipEffects | undefined, presetId: string): ClipEffects {
-  const preset = FADE_PRESETS.find((item) => item.id === presetId);
-  if (!preset || preset.id === "none") {
-    return { ...effects, fadeIn: 0, fadeOut: 0 };
-  }
-  return { ...effects, fadeIn: preset.fadeIn, fadeOut: preset.fadeOut };
-}
-
-export function toggleFadeEdge(
-  effects: ClipEffects | undefined,
-  edge: "in" | "out",
-  duration = 0.5,
-): ClipEffects {
-  const current = effects ?? {};
-  if (edge === "in") {
-    const on = (current.fadeIn ?? 0) > 0;
-    return { ...current, fadeIn: on ? 0 : duration };
-  }
-  const on = (current.fadeOut ?? 0) > 0;
-  return { ...current, fadeOut: on ? 0 : duration };
+  void effects;
+  void clipDurationSec;
+  void localTime;
+  return 1;
 }
 
 export function textAnimationStyle(

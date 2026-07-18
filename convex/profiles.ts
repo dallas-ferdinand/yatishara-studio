@@ -12,6 +12,11 @@ import {
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import {
+  forYouCandidateCap,
+  scoreFeedPost,
+  type FeedMode,
+} from "./lib/feedRanking";
+import {
   contactHref,
   sanitizeBio,
   sanitizeContactLinks,
@@ -97,6 +102,7 @@ const publicPostReturn = v.object({
 const feedPostReturn = v.object({
   _id: v.id("profilePosts"),
   assetId: v.id("assets"),
+  profileId: v.id("profiles"),
   kind: v.union(v.literal("image"), v.literal("video")),
   name: v.string(),
   caption: v.optional(v.string()),
@@ -116,6 +122,8 @@ const feedPostReturn = v.object({
   lastName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
   fromFollowing: v.boolean(),
+  isFollowing: v.boolean(),
+  isOwner: v.boolean(),
   score: v.number(),
 });
 
@@ -778,8 +786,9 @@ export const listMyCollection = authedQuery({
 });
 
 /**
- * Simple TikTok-style ranked feed.
- * Score boosts: followed authors >> engagement >> recency.
+ * TikTok-style ranked feed.
+ * For You: followed authors dominate, with a discovery mix.
+ * Following: only people you follow (chronology + light engagement).
  * Optional seedPostId is pinned first so opening a grid tile lands on that post.
  */
 export const listFeed = query({
@@ -787,9 +796,11 @@ export const listFeed = query({
     expiresUnix: v.optional(v.number()),
     limit: v.optional(v.number()),
     seedPostId: v.optional(v.id("profilePosts")),
+    mode: v.optional(v.union(v.literal("forYou"), v.literal("following"))),
   },
   returns: v.array(feedPostReturn),
   handler: async (ctx, args) => {
+    const mode: FeedMode = args.mode === "following" ? "following" : "forYou";
     const limit = Math.min(Math.max(args.limit ?? 24, 1), 40);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
@@ -801,45 +812,87 @@ export const listFeed = query({
       const follows = await ctx.db
         .query("profileFollows")
         .withIndex("by_follower", (q) => q.eq("followerUserId", viewerId))
-        .take(80);
+        .take(200);
       for (const follow of follows) followingIds.add(follow.followingProfileId);
     }
 
-    const recent = await ctx.db
-      .query("profilePosts")
-      .withIndex("by_published")
-      .order("desc")
-      .take(120);
+    // Following mode with nobody followed (or logged out) → empty feed.
+    if (mode === "following" && followingIds.size === 0) {
+      return [];
+    }
 
-    const candidates: Doc<"profilePosts">[] = [];
-    const seen = new Set<string>();
-
-    // Prefer a few posts from followed profiles first.
+    const followingPosts: Doc<"profilePosts">[] = [];
+    const followingSeen = new Set<string>();
     for (const profileId of followingIds) {
       const theirs = await ctx.db
         .query("profilePosts")
         .withIndex("by_profile_and_published", (q) => q.eq("profileId", profileId))
         .order("desc")
-        .take(6);
+        .take(10);
       for (const post of theirs) {
-        if (post.unpublishedAt || seen.has(post._id)) continue;
-        seen.add(post._id);
-        candidates.push(post);
+        if (post.unpublishedAt || followingSeen.has(post._id)) continue;
+        followingSeen.add(post._id);
+        followingPosts.push(post);
       }
     }
 
-    for (const post of recent) {
-      if (post.unpublishedAt || seen.has(post._id)) continue;
-      seen.add(post._id);
-      candidates.push(post);
-      if (candidates.length >= 90) break;
+    const candidates: Doc<"profilePosts">[] = [];
+    const seen = new Set<string>();
+    const totalCap = 90;
+
+    if (mode === "following") {
+      followingPosts.sort((a, b) => b.publishedAt - a.publishedAt);
+      for (const post of followingPosts) {
+        if (seen.has(post._id)) continue;
+        seen.add(post._id);
+        candidates.push(post);
+        if (candidates.length >= totalCap) break;
+      }
+    } else {
+      const caps = forYouCandidateCap({
+        followingCandidateCount: followingPosts.length,
+        totalCap,
+      });
+      for (const post of followingPosts) {
+        if (seen.has(post._id)) continue;
+        seen.add(post._id);
+        candidates.push(post);
+        if (candidates.length >= caps.followingCap) break;
+      }
+
+      if (caps.discoveryCap > 0) {
+        const recent = await ctx.db
+          .query("profilePosts")
+          .withIndex("by_published")
+          .order("desc")
+          .take(120);
+        let discoveryAdded = 0;
+        for (const post of recent) {
+          if (post.unpublishedAt || seen.has(post._id)) continue;
+          seen.add(post._id);
+          candidates.push(post);
+          discoveryAdded += 1;
+          if (discoveryAdded >= caps.discoveryCap) break;
+        }
+      }
     }
 
     if (args.seedPostId) {
       const seed = await ctx.db.get("profilePosts", args.seedPostId);
-      if (seed && !seed.unpublishedAt && !seen.has(seed._id)) {
-        candidates.unshift(seed);
-        seen.add(seed._id);
+      if (seed && !seed.unpublishedAt) {
+        // Following mode: only pin seed when that author is followed.
+        const seedAllowed =
+          mode === "forYou" || followingIds.has(seed.profileId);
+        if (seedAllowed && !seen.has(seed._id)) {
+          candidates.unshift(seed);
+          seen.add(seed._id);
+        } else if (seedAllowed && seen.has(seed._id)) {
+          const idx = candidates.findIndex((post) => post._id === seed._id);
+          if (idx > 0) {
+            candidates.splice(idx, 1);
+            candidates.unshift(seed);
+          }
+        }
       }
     }
 
@@ -862,32 +915,36 @@ export const listFeed = query({
       const profile = await profileOf(post.profileId);
       if (!profile || !profile.isPublic) continue;
       const fromFollowing = followingIds.has(profile._id);
-      const ageHours = Math.max(0, (now - post.publishedAt) / (1000 * 60 * 60));
-      const recency = Math.max(0, 72 - ageHours) * 4;
-      const engagement = post.likeCount * 8 + (post.viewCount ?? 0) * 1.2;
-      const followBoost = fromFollowing ? 1400 : 0;
-      const seedBoost = args.seedPostId && post._id === args.seedPostId ? 100000 : 0;
+      if (mode === "following" && !fromFollowing) continue;
       scored.push({
         post,
         profile,
         fromFollowing,
-        score: seedBoost + followBoost + engagement + recency,
+        score: scoreFeedPost({
+          mode,
+          fromFollowing,
+          isSeed: Boolean(args.seedPostId && post._id === args.seedPostId),
+          publishedAt: post.publishedAt,
+          now,
+          engagement: {
+            likeCount: post.likeCount,
+            viewCount: post.viewCount,
+            commentCount: post.commentCount,
+            saveCount: post.saveCount,
+          },
+        }),
       });
     }
 
     scored.sort((a, b) => b.score - a.score || b.post.publishedAt - a.post.publishedAt);
 
-    // Keep seed first if present, then uniqueness by author streak soft-shuffle:
-    // avoid more than 2 consecutive posts from same author in the feed axis.
+    // Soft anti-streak: avoid more than 2 consecutive posts from same author.
     const ordered: Scored[] = [];
     const leftover = [...scored];
     while (leftover.length && ordered.length < limit) {
       let pickIdx = 0;
       const lastTwo = ordered.slice(-2).map((item) => item.profile._id);
-      if (
-        lastTwo.length === 2 &&
-        lastTwo[0] === lastTwo[1]
-      ) {
+      if (lastTwo.length === 2 && lastTwo[0] === lastTwo[1]) {
         const alt = leftover.findIndex((item) => item.profile._id !== lastTwo[0]);
         if (alt >= 0) pickIdx = alt;
       }
@@ -956,6 +1013,7 @@ export const listFeed = query({
     const results: Array<{
       _id: Id<"profilePosts">;
       assetId: Id<"assets">;
+      profileId: Id<"profiles">;
       kind: "image" | "video";
       name: string;
       caption?: string;
@@ -975,6 +1033,8 @@ export const listFeed = query({
       lastName?: string;
       avatarUrl?: string;
       fromFollowing: boolean;
+      isFollowing: boolean;
+      isOwner: boolean;
       score: number;
     }> = [];
 
@@ -990,9 +1050,11 @@ export const listFeed = query({
       const owner = ownerUsers[i];
       const firstName = owner?.firstName?.trim() || undefined;
       const lastName = owner?.lastName?.trim() || undefined;
+      const isOwner = Boolean(viewerId && item.profile.userId === viewerId);
       results.push({
         _id: item.post._id,
         assetId: item.post.assetId,
+        profileId: item.profile._id,
         kind: asset.kind,
         name: asset.name,
         caption: item.post.caption,
@@ -1012,6 +1074,8 @@ export const listFeed = query({
         lastName,
         avatarUrl: avatarPath ? signed.get(avatarPath) : undefined,
         fromFollowing: item.fromFollowing,
+        isFollowing: item.fromFollowing,
+        isOwner,
         score: item.score,
       });
     }

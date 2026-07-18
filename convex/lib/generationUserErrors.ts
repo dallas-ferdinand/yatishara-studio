@@ -75,10 +75,33 @@ export function friendlyGenerationError(
     };
   }
 
-  if (/duration must be|between 4 and 15|invalid resolution|unsupported resolution/i.test(lower)) {
+  if (/duration must be|between 4 and 15/i.test(lower)) {
     return {
       title: "Check your settings",
-      message: text,
+      message: "Video length must be between 4 and 15 seconds. Adjust duration, then retry.",
+    };
+  }
+
+  if (
+    /invalid resolution|unsupported resolution|resolution(?:\s+\w+){0,6}\s+is not valid|parameter resolution|not valid for model.*seedance|not valid for model.*dreamina/i.test(
+      lower,
+    )
+  ) {
+    return {
+      title: "Check your settings",
+      message:
+        "That resolution isn't supported for this video model. Try 720p or 1080p, then retry.",
+    };
+  }
+
+  if (
+    /voice is unavailable|library voice|paid.?plan|free users cannot use library|upgrade.*elevenlabs|elevenlabs plan/i.test(
+      lower,
+    )
+  ) {
+    return {
+      title: "Voice unavailable",
+      message: "This voice is unavailable. We'll notify you when it's available.",
     };
   }
 

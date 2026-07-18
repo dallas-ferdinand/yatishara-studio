@@ -22,10 +22,20 @@ import {
   parseAssistanceGenerationPlan,
 } from "./lib/assistanceGenerationPlan";
 
-const generationMode = v.union(v.literal("image"), v.literal("video"));
+const generationMode = v.union(
+  v.literal("image"),
+  v.literal("video"),
+  v.literal("audio"),
+);
+const audioGenType = v.union(
+  v.literal("voiceover"),
+  v.literal("sfx"),
+  v.literal("music"),
+);
 const generationTier = v.union(
   v.literal("image"),
   v.literal("pro_video"),
+  v.literal("audio"),
   v.literal("low"),
   v.literal("medium"),
   v.literal("high"),
@@ -109,6 +119,17 @@ function parseHistoryReferenceLine(line: string) {
     ...(elementType ? { elementType } : {}),
     ...(thumb ? { thumbnailUrl: thumb } : {}),
   };
+}
+
+/** Strip composer object placeholders so tab titles never show a dashed "OBJ". */
+function sanitizeThreadTitle(title?: string, fallback = "New generation") {
+  const cleaned = String(title ?? "")
+    .replace(/\uFFFC/g, " ")
+    .replace(/\n\nReferences:\n[\s\S]*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 64);
+  return cleaned || fallback;
 }
 
 function historyPromptSummary(prompt?: string) {
@@ -225,7 +246,7 @@ async function enrichHistoryThread(
 
   const cleanedTitle =
     thread.title?.trim() && thread.title.trim() !== "[object Object]"
-      ? thread.title.trim()
+      ? sanitizeThreadTitle(thread.title, "")
       : undefined;
 
   return {
@@ -258,7 +279,7 @@ export const listThreads = authedQuery({
     return threads.map((thread) => {
       const cleanedTitle =
         thread.title?.trim() && thread.title.trim() !== "[object Object]"
-          ? thread.title.trim()
+          ? sanitizeThreadTitle(thread.title, "Untitled")
           : "Untitled";
       return {
         ...thread,
@@ -353,6 +374,8 @@ const eventReturn = v.object({
   assetIds: v.optional(v.array(v.id("assets"))),
   fromFolderId: v.optional(v.id("folders")),
   toFolderId: v.optional(v.id("folders")),
+  fromFolderName: v.optional(v.string()),
+  toFolderName: v.optional(v.string()),
   briefId: v.optional(v.id("guidedBriefs")),
   briefRevision: v.optional(v.number()),
   message: v.optional(v.string()),
@@ -362,12 +385,23 @@ const eventReturn = v.object({
   createdAt: v.number(),
   error: v.optional(v.string()),
   jobMode: v.optional(generationMode),
+  aspectRatio: v.optional(v.string()),
   resultAssets: v.optional(v.array(v.object({
     _id: v.id("assets"),
     name: v.string(),
     kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio"), v.literal("document")),
     mimeType: v.string(),
     byteSize: v.optional(v.number()),
+    folderId: v.optional(v.id("folders")),
+    storageStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("ready"),
+        v.literal("failed"),
+      ),
+    ),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     signedReadUrl: v.optional(v.string()),
     signedThumbnailUrl: v.optional(v.string()),
     signedThumbnailLqipUrl: v.optional(v.string()),
@@ -406,14 +440,40 @@ export const listEvents = authedQuery({
       (job): job is Doc<"generationJobs"> => job !== null,
     );
     const jobsById = new Map(jobs.map((job) => [job._id, job]));
+    const folderIds = Array.from(
+      new Set(
+        events.flatMap((event) =>
+          event.kind === "folder_switched"
+            ? [event.fromFolderId, event.toFolderId].filter(
+                (folderId): folderId is Id<"folders"> => folderId !== undefined,
+              )
+            : [],
+        ),
+      ),
+    );
+    const folders = (
+      await Promise.all(folderIds.map((folderId) => ctx.db.get("folders", folderId)))
+    ).filter((folder): folder is Doc<"folders"> => folder !== null);
+    const foldersById = new Map(folders.map((folder) => [folder._id, folder]));
     return await Promise.all(events.map(async (event) => {
       const job = event.generationJobId ? jobsById.get(event.generationJobId) : null;
+      const fromFolder =
+        event.kind === "folder_switched" && event.fromFolderId
+          ? foldersById.get(event.fromFolderId)
+          : null;
+      const toFolder =
+        event.kind === "folder_switched" && event.toFolderId
+          ? foldersById.get(event.toFolderId)
+          : null;
       return {
         ...event,
         ...(job?.mode ? { jobMode: job.mode } : {}),
+        ...(job?.aspectRatio ? { aspectRatio: job.aspectRatio } : {}),
         ...(event.kind === "stage" && event.stage === "failed" && job?.error
           ? { error: job.error }
           : {}),
+        ...(fromFolder?.name ? { fromFolderName: fromFolder.name } : {}),
+        ...(toFolder?.name ? { toFolderName: toFolder.name } : {}),
         resultAssets: event.assetIds?.length
         ? await Promise.all(
             event.assetIds
@@ -429,14 +489,28 @@ export const listEvents = authedQuery({
                       signBunnyCdnUrl(thumbPath, args.expiresUnix, LQIP_TRANSFORM),
                     ])
                   : [undefined, undefined];
+                // Chat result cards need a full playable URL for video/audio even
+                // when a poster thumbnail exists (posters must not become <video src>).
+                // Folder grid also reuses this for video first-frame thumbs.
+                let signedReadUrl: string | undefined;
+                if (
+                  (asset.kind === "video" || asset.kind === "audio" || !signedThumbnailUrl) &&
+                  asset.bunnyPath &&
+                  args.expiresUnix
+                ) {
+                  signedReadUrl = await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix);
+                }
                 return {
                   _id: asset._id,
                   name: asset.name,
                   kind: asset.kind,
                   mimeType: asset.mimeType,
                   byteSize: asset.byteSize,
-                  // List rows only ship thumbnails; full media is lazy-loaded on open.
-                  signedReadUrl: undefined,
+                  folderId: asset.folderId,
+                  storageStatus: asset.storageStatus,
+                  createdAt: asset.createdAt,
+                  updatedAt: asset.updatedAt,
+                  signedReadUrl,
                   signedThumbnailUrl,
                   signedThumbnailLqipUrl,
                 };
@@ -464,7 +538,7 @@ export const createThread = authedMutation({
     return await ctx.db.insert("generationThreads", {
       ownerId: ctx.user._id,
       linkedFolderId: args.folderId,
-      title: args.title ?? "New generation",
+      title: sanitizeThreadTitle(args.title, "New generation"),
       sortOrder: now,
       assistanceEnabled,
       createdAt: now,
@@ -546,6 +620,8 @@ export const canGenerate = authedQuery({
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     audioEnabled: v.optional(v.boolean()),
     videoModel: v.optional(v.string()),
+    audioType: v.optional(audioGenType),
+    characterCount: v.optional(v.number()),
   },
   returns: v.object({
     canGenerate: v.boolean(),
@@ -588,6 +664,8 @@ export const canGenerate = authedQuery({
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
       videoModel: args.videoModel,
+      audioType: args.audioType,
+      characterCount: args.characterCount,
     });
     const creditBalance = account?.creditBalance ?? 0;
     const hasActiveSubscription = await hasActiveSubscriptionForUser(
@@ -612,7 +690,7 @@ export const createQueuedJob = authedMutation({
     mode: generationMode,
     tier: generationTier,
     resolvedModel: v.string(),
-    stylePresetId: v.id("stylePresets"),
+    stylePresetId: v.optional(v.id("stylePresets")),
     styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     audioEnabled: v.optional(v.boolean()),
@@ -625,13 +703,28 @@ export const createQueuedJob = authedMutation({
     hasNonVideoReferenceInput: v.optional(v.boolean()),
     hasStartFrame: v.optional(v.boolean()),
     skipPromptEnhancement: v.optional(v.boolean()),
+    audioType: v.optional(audioGenType),
+    elevenVoiceId: v.optional(v.string()),
+    elevenVoiceName: v.optional(v.string()),
+    elevenPublicOwnerId: v.optional(v.string()),
+    audioLoop: v.optional(v.boolean()),
+    promptInfluence: v.optional(v.number()),
+    /** Current Studio folder — overrides stale thread.linkedFolderId for this job. */
+    folderId: v.optional(v.id("folders")),
   },
   returns: v.id("generationJobs"),
   handler: async (ctx, args) => {
     const thread = await requireThreadOwner(ctx, args.threadId);
-    await requireFolderOwner(ctx, thread.linkedFolderId);
+    const saveFolderId = args.folderId ?? thread.linkedFolderId;
+    await requireFolderOwner(ctx, saveFolderId);
+    if (args.folderId && args.folderId !== thread.linkedFolderId) {
+      await ctx.db.patch(thread._id, {
+        linkedFolderId: args.folderId,
+        updatedAt: Date.now(),
+      });
+    }
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
+      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -645,9 +738,29 @@ export const createQueuedJob = authedMutation({
         surface: "studio",
       });
     }
-    const preset = await ctx.db.get("stylePresets", args.stylePresetId);
-    if (!preset || !preset.enabled) {
-      throw new Error("Style preset not available");
+    if (args.mode === "audio") {
+      if (args.audioType === "music") {
+        throw new Error("Music generation is coming soon.");
+      }
+      if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
+        throw new Error("Select a voice for the voiceover.");
+      }
+      if (!args.userPrompt.trim()) {
+        throw new Error(
+          args.audioType === "sfx"
+            ? "Describe the sound effect to generate."
+            : "Enter voiceover text.",
+        );
+      }
+    }
+    if (args.mode !== "audio") {
+      if (!args.stylePresetId) {
+        throw new Error("Style preset not available");
+      }
+      const preset = await ctx.db.get("stylePresets", args.stylePresetId);
+      if (!preset || !preset.enabled) {
+        throw new Error("Style preset not available");
+      }
     }
     if (args.styleSheetElementId) {
       const sheet = await ctx.db.get("elements", args.styleSheetElementId);
@@ -671,11 +784,16 @@ export const createQueuedJob = authedMutation({
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
       audioEnabled: args.audioEnabled,
       resolvedModel: args.resolvedModel,
+      audioType: args.audioType,
+      characterCount:
+        args.mode === "audio" && args.audioType === "voiceover"
+          ? args.userPrompt.trim().length
+          : undefined,
     });
     const jobId = await ctx.db.insert("generationJobs", {
       ownerId: ctx.user._id,
       threadId: args.threadId,
-      saveFolderId: thread.linkedFolderId,
+      saveFolderId,
       mode: args.mode,
       tier: billingTier,
       resolvedModel: args.resolvedModel,
@@ -691,6 +809,12 @@ export const createQueuedJob = authedMutation({
       hasReferenceInput: args.hasReferenceInput,
       hasVideoReferenceInput: args.hasVideoReferenceInput,
       hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
+      audioType: args.audioType,
+      elevenVoiceId: args.elevenVoiceId,
+      elevenVoiceName: args.elevenVoiceName,
+      elevenPublicOwnerId: args.elevenPublicOwnerId,
+      audioLoop: args.audioLoop,
+      promptInfluence: args.promptInfluence,
       reservedCreditTransactionId,
       skipPromptEnhancement: args.skipPromptEnhancement,
       source: "ui",
@@ -730,6 +854,8 @@ export const approveAssistedMedia = internalMutation({
     briefId: v.id("guidedBriefs"),
     expectedRevision: v.number(),
     planFingerprint: v.string(),
+    /** Current Studio folder — overrides stale thread.linkedFolderId for this job. */
+    folderId: v.optional(v.id("folders")),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -769,7 +895,14 @@ export const approveAssistedMedia = internalMutation({
     }
 
     const thread = await requireThreadForUser(ctx, args.userId, brief.threadId);
-    await requireFolderForUser(ctx, args.userId, thread.linkedFolderId);
+    const saveFolderId = args.folderId ?? thread.linkedFolderId;
+    await requireFolderForUser(ctx, args.userId, saveFolderId);
+    if (args.folderId && args.folderId !== thread.linkedFolderId) {
+      await ctx.db.patch(thread._id, {
+        linkedFolderId: args.folderId,
+        updatedAt: Date.now(),
+      });
+    }
     const stylePresetId = plan.settings.stylePresetId as Id<"stylePresets"> | undefined;
     if (!stylePresetId) throw new Error("Select a style before approving.");
     const preset = await ctx.db.get("stylePresets", stylePresetId);
@@ -881,7 +1014,7 @@ export const approveAssistedMedia = internalMutation({
     const jobId = await ctx.db.insert("generationJobs", {
       ownerId: args.userId,
       threadId: brief.threadId,
-      saveFolderId: thread.linkedFolderId,
+      saveFolderId,
       mode: plan.mode,
       tier,
       resolvedModel: plan.settings.resolvedModel,
@@ -984,7 +1117,7 @@ export const internalCreateThread = internalMutation({
     return await ctx.db.insert("generationThreads", {
       ownerId: args.userId,
       linkedFolderId: args.folderId,
-      title: args.title ?? "API generation",
+      title: sanitizeThreadTitle(args.title, "API generation"),
       sortOrder: now,
       createdAt: now,
       updatedAt: now,
@@ -1017,7 +1150,7 @@ export const internalCreateQueuedJob = internalMutation({
     const thread = await requireThreadForUser(ctx, args.userId, args.threadId);
     await requireFolderForUser(ctx, args.userId, thread.linkedFolderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
+      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -1122,7 +1255,7 @@ export const prepareApiGeneration = internalMutation({
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId);
     if (args.mode === "video" && args.resolution === "3840x2160") {
-      throw new Error("4K video is not available yet. Seedance 2.0 supports up to 1080p through AI Gateway.");
+      throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
     }
     if (args.mode === "video" && !isSupportedVideoDuration(args.durationSeconds)) {
       throw new Error("Video duration must be between 4 and 15 seconds");
@@ -1140,7 +1273,7 @@ export const prepareApiGeneration = internalMutation({
     const threadId = await ctx.db.insert("generationThreads", {
       ownerId: args.userId,
       linkedFolderId: args.folderId,
-      title: args.title ?? "API generation",
+      title: sanitizeThreadTitle(args.title, "API generation"),
       sortOrder: now,
       createdAt: now,
       updatedAt: now,
@@ -1220,6 +1353,108 @@ export const prepareApiGeneration = internalMutation({
   },
 });
 
+/** API audio generation — no style preset / style sheet. */
+export const prepareApiAudioGeneration = internalMutation({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    apiKeyId: v.optional(v.id("apiKeys")),
+    userPrompt: v.string(),
+    title: v.optional(v.string()),
+    audioType: v.union(v.literal("voiceover"), v.literal("sfx")),
+    elevenVoiceId: v.optional(v.string()),
+    elevenVoiceName: v.optional(v.string()),
+    elevenPublicOwnerId: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    audioLoop: v.optional(v.boolean()),
+    promptInfluence: v.optional(v.number()),
+  },
+  returns: v.object({
+    threadId: v.id("generationThreads"),
+    jobId: v.id("generationJobs"),
+  }),
+  handler: async (ctx, args) => {
+    await requireFolderForUser(ctx, args.userId, args.folderId);
+    const prompt = args.userPrompt.trim();
+    if (!prompt) {
+      throw new Error(
+        args.audioType === "sfx"
+          ? "Describe the sound effect to generate."
+          : "Enter voiceover text.",
+      );
+    }
+    if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
+      throw new Error("Select a voice for the voiceover.");
+    }
+
+    const now = Date.now();
+    const threadId = await ctx.db.insert("generationThreads", {
+      ownerId: args.userId,
+      linkedFolderId: args.folderId,
+      title: sanitizeThreadTitle(args.title, "API audio"),
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const thread = await requireThreadForUser(ctx, args.userId, threadId);
+
+    const resolvedModel =
+      args.audioType === "sfx"
+        ? "elevenlabs/eleven_text_to_sound_v2"
+        : "elevenlabs/eleven_v3";
+    const billingTier = billingTierForMode("audio");
+    const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
+      tier: billingTier,
+      durationSeconds: args.durationSeconds,
+      audioType: args.audioType,
+      characterCount: args.audioType === "voiceover" ? prompt.length : undefined,
+      resolvedModel,
+    });
+
+    const jobId = await ctx.db.insert("generationJobs", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      saveFolderId: thread.linkedFolderId,
+      mode: "audio",
+      tier: billingTier,
+      resolvedModel,
+      userPrompt: prompt,
+      stage: "queued",
+      durationSeconds: args.durationSeconds,
+      audioType: args.audioType,
+      elevenVoiceId: args.elevenVoiceId,
+      elevenVoiceName: args.elevenVoiceName,
+      elevenPublicOwnerId: args.elevenPublicOwnerId,
+      audioLoop: args.audioLoop,
+      promptInfluence: args.promptInfluence,
+      reservedCreditTransactionId,
+      source: "api",
+      apiKeyId: args.apiKeyId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      kind: "prompt",
+      order: now,
+      prompt,
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    await ctx.db.insert("generationEvents", {
+      ownerId: args.userId,
+      threadId: thread._id,
+      kind: "stage",
+      order: now + 1,
+      stage: "queued",
+      generationJobId: jobId,
+      createdAt: now,
+    });
+    return { threadId, jobId };
+  },
+});
+
 export const getJobRunContext = internalQuery({
   args: { jobId: v.id("generationJobs") },
   returns: v.object({
@@ -1231,7 +1466,7 @@ export const getJobRunContext = internalQuery({
       mode: generationMode,
       tier: generationTier,
       resolvedModel: v.string(),
-      stylePresetId: v.id("stylePresets"),
+      stylePresetId: v.optional(v.id("stylePresets")),
       userPrompt: v.string(),
       enhancedPrompt: v.optional(v.string()),
       negativePrompt: v.optional(v.string()),
@@ -1273,6 +1508,9 @@ export const getJobRunContext = internalQuery({
     const job = await ctx.db.get("generationJobs", args.jobId);
     if (!job) {
       throw new Error("Generation job not found");
+    }
+    if (!job.stylePresetId) {
+      throw new Error("Style preset not found");
     }
     const preset = await ctx.db.get("stylePresets", job.stylePresetId);
     if (!preset) {
@@ -1349,7 +1587,7 @@ export const adminGetJobDebug = adminQuery({
     mode: generationMode,
     tier: generationTier,
     resolvedModel: v.string(),
-    stylePresetId: v.id("stylePresets"),
+    stylePresetId: v.optional(v.id("stylePresets")),
     styleSheetElementId: v.optional(v.id("elements")),
     userPrompt: v.string(),
     enhancedPrompt: v.optional(v.string()),
@@ -1381,6 +1619,98 @@ export const adminGetJobDebug = adminQuery({
       externalTaskId: job.externalTaskId,
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
+    };
+  },
+});
+
+export const getJobForAudio = internalQuery({
+  args: { jobId: v.id("generationJobs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("generationJobs"),
+      stage: generationStage,
+      error: v.optional(v.string()),
+      userPrompt: v.string(),
+      audioType: v.optional(audioGenType),
+      elevenVoiceId: v.optional(v.string()),
+      elevenVoiceName: v.optional(v.string()),
+      elevenPublicOwnerId: v.optional(v.string()),
+      durationSeconds: v.optional(v.number()),
+      audioLoop: v.optional(v.boolean()),
+      promptInfluence: v.optional(v.number()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("generationJobs", args.jobId);
+    if (!job || job.mode !== "audio") return null;
+    return {
+      _id: job._id,
+      stage: job.stage,
+      error: job.error,
+      userPrompt: job.userPrompt,
+      audioType: job.audioType,
+      elevenVoiceId: job.elevenVoiceId,
+      elevenVoiceName: job.elevenVoiceName,
+      elevenPublicOwnerId: job.elevenPublicOwnerId,
+      durationSeconds: job.durationSeconds,
+      audioLoop: job.audioLoop,
+      promptInfluence: job.promptInfluence,
+    };
+  },
+});
+
+/** Remove a failed job and its prompt/stage events from the chat thread. */
+export const removeFailedJobFromChat = internalMutation({
+  args: { jobId: v.id("generationJobs") },
+  returns: v.object({
+    deletedEvents: v.number(),
+    deletedJob: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("generationJobs", args.jobId);
+    if (!job) return { deletedEvents: 0, deletedJob: false };
+    if (job.stage !== "failed") {
+      throw new Error("Only failed jobs can be removed from chat.");
+    }
+    const events = await ctx.db
+      .query("generationEvents")
+      .withIndex("by_job", (q) => q.eq("generationJobId", args.jobId))
+      .collect();
+    for (const event of events) {
+      await ctx.db.delete(event._id);
+    }
+    await ctx.db.delete(job._id);
+    return { deletedEvents: events.length, deletedJob: true };
+  },
+});
+
+/** Admin/dev: remove a terminal job's chat turn so the prompt can be sent again. */
+export const removeJobTurnFromChat = internalMutation({
+  args: { jobId: v.id("generationJobs") },
+  returns: v.object({
+    deletedEvents: v.number(),
+    deletedJob: v.boolean(),
+    stage: v.optional(generationStage),
+  }),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("generationJobs", args.jobId);
+    if (!job) return { deletedEvents: 0, deletedJob: false };
+    if (job.stage !== "failed" && job.stage !== "done") {
+      throw new Error("Only terminal jobs can be removed from chat.");
+    }
+    const events = await ctx.db
+      .query("generationEvents")
+      .withIndex("by_job", (q) => q.eq("generationJobId", args.jobId))
+      .collect();
+    for (const event of events) {
+      await ctx.db.delete(event._id);
+    }
+    await ctx.db.delete(job._id);
+    return {
+      deletedEvents: events.length,
+      deletedJob: true,
+      stage: job.stage,
     };
   },
 });
@@ -1630,7 +1960,7 @@ export const createGeneratedAsset = internalMutation({
   args: {
     jobId: v.id("generationJobs"),
     name: v.string(),
-    kind: v.union(v.literal("image"), v.literal("video")),
+    kind: v.union(v.literal("image"), v.literal("video"), v.literal("audio")),
     mimeType: v.string(),
   },
   returns: v.object({
@@ -1646,6 +1976,7 @@ export const createGeneratedAsset = internalMutation({
       name: args.name,
       kind: args.kind,
       mimeType: args.mimeType,
+      storageStatus: "pending",
       sourceGenerationJobId: job._id,
       createdAt: now,
       updatedAt: now,
@@ -1658,6 +1989,33 @@ export const createGeneratedAsset = internalMutation({
     });
     await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
     return { assetId, bunnyPath };
+  },
+});
+
+export const setGeneratedAssetStorageStatus = internalMutation({
+  args: {
+    jobId: v.id("generationJobs"),
+    assetId: v.id("assets"),
+    status: v.union(v.literal("ready"), v.literal("failed")),
+    byteSize: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId);
+    const asset = await ctx.db.get("assets", args.assetId);
+    if (
+      !asset ||
+      asset.ownerId !== job.ownerId ||
+      asset.sourceGenerationJobId !== job._id
+    ) {
+      throw new Error("Generated asset not found");
+    }
+    await ctx.db.patch(asset._id, {
+      storageStatus: args.status,
+      byteSize: args.status === "ready" ? args.byteSize : asset.byteSize,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 
@@ -1818,7 +2176,7 @@ function insufficientCreditsMessage(cost: number): string {
 }
 
 function resolveVideoPricingModel(args: {
-  tier: "image" | "pro_video" | "low" | "medium" | "high";
+  tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
   videoModel?: string;
   resolvedModel?: string;
 }): "seedance-2.0" | "google-omni-flash" | "kling-3.0-i2v" | undefined {
@@ -1839,7 +2197,7 @@ function resolveVideoPricingModel(args: {
 }
 
 function generationCreditCost(args: {
-  tier: "image" | "pro_video" | "low" | "medium" | "high";
+  tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
   resolution?: string;
   quality?: string;
   aspectRatio?: string;
@@ -1850,6 +2208,8 @@ function generationCreditCost(args: {
   audioEnabled?: boolean;
   videoModel?: string;
   resolvedModel?: string;
+  audioType?: "voiceover" | "sfx" | "music";
+  characterCount?: number;
 }): number {
   return creditCostForGeneration({
     tier: args.tier,
@@ -1862,13 +2222,15 @@ function generationCreditCost(args: {
     hasNonVideoReferenceInput: args.hasNonVideoReferenceInput,
     audioEnabled: args.audioEnabled,
     videoModel: resolveVideoPricingModel(args),
+    audioType: args.audioType,
+    characterCount: args.characterCount,
   });
 }
 
 async function reserveCreditsForJob(
   ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
   args: {
-    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
     resolution?: string;
     quality?: string;
     aspectRatio?: string;
@@ -1879,6 +2241,8 @@ async function reserveCreditsForJob(
     audioEnabled?: boolean;
     videoModel?: string;
     resolvedModel?: string;
+    audioType?: "voiceover" | "sfx" | "music";
+    characterCount?: number;
   },
 ): Promise<Id<"creditTransactions">> {
   return await reserveCreditsForUser(ctx, ctx.user._id, args);
@@ -1888,7 +2252,7 @@ async function reserveCreditsForUser(
   ctx: MutationCtx,
   userId: Id<"users">,
   args: {
-    tier: "image" | "pro_video" | "low" | "medium" | "high";
+    tier: "image" | "pro_video" | "audio" | "low" | "medium" | "high";
     resolution?: string;
     quality?: string;
     aspectRatio?: string;
@@ -1899,6 +2263,8 @@ async function reserveCreditsForUser(
     audioEnabled?: boolean;
     videoModel?: string;
     resolvedModel?: string;
+    audioType?: "voiceover" | "sfx" | "music";
+    characterCount?: number;
   },
 ): Promise<Id<"creditTransactions">> {
   const account = await ctx.db

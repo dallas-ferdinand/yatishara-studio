@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Check,
   ChevronDown,
@@ -20,6 +20,8 @@ import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 
 type ContactLinkType = "website" | "phone" | "email" | "other";
 
@@ -167,7 +169,7 @@ export function ProfileSettingsCard({
   const claimUsername = useMutation(api.profiles.claimUsername);
   const updateMine = useMutation(api.profiles.updateMine);
   const reserveUpload = useMutation(api.assets.reserveUpload);
-  const completeUpload = useMutation(api.assets.completeUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
 
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -213,24 +215,16 @@ export function ProfileSettingsCard({
     if (!rootFolderId) {
       throw new Error("Studio folder not ready yet — try again in a moment");
     }
-    const reserved = await reserveUpload({
+    const assetId = await uploadStudioAsset({
+      file,
       folderId: rootFolderId,
-      name: file.name || "avatar.png",
       kind: "image",
-      mimeType: file.type || "image/png",
+      name: file.name || "avatar.png",
+      reserveUpload,
+      commitStagingUpload,
     });
-    const res = await fetch(reserved.putUrl, {
-      method: "PUT",
-      headers: {
-        AccessKey: reserved.storageAccessKey,
-        "Content-Type": file.type || "image/png",
-      },
-      body: file,
-    });
-    if (!res.ok) throw new Error("Avatar upload failed");
-    await completeUpload({ assetId: reserved.assetId, byteSize: file.size });
-    await updateMine({ avatarAssetId: reserved.assetId });
-    return reserved.assetId;
+    await updateMine({ avatarAssetId: assetId });
+    return assetId;
   }
 
   async function handleClaim(event: FormEvent) {
@@ -355,31 +349,27 @@ export function ProfileSettingsCard({
 
   const avatarButton = (
     <div className="studio-profile-photo">
-      <button
-        type="button"
+      <StudioProfileAvatar
+        as="button"
         className="studio-profile-photo-drop"
+        size="xl"
+        src={avatarPreview}
         onClick={() => fileInputRef.current?.click()}
         disabled={avatarBusy || (!!profile && !rootFolderId)}
         aria-label={avatarPreview ? "Change photo" : "Add photo"}
-      >
-        {avatarPreview ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatarPreview} alt="" className="studio-profile-avatar-img" />
-        ) : (
-          <span className="studio-profile-photo-empty">
-            {avatarBusy ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : (
-              <ImagePlus className="h-5 w-5" aria-hidden="true" />
-            )}
-          </span>
-        )}
-        {avatarPreview && avatarBusy ? (
-          <span className="studio-profile-avatar-overlay is-busy">
+        placeholder={
+          avatarBusy ? (
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          ) : (
+            <ImagePlus className="h-5 w-5" aria-hidden="true" />
+          )
+        }
+        overlay={
+          avatarPreview && avatarBusy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
-          </span>
-        ) : null}
-      </button>
+          ) : null
+        }
+      />
       {avatarPreview ? (
         <button
           type="button"

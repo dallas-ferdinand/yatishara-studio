@@ -1,11 +1,10 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   assetThumbnailPath,
   buildAssetPath,
-  FULL_QUALITY_TRANSFORM,
-  getStorageUploadCredentials,
   LQIP_TRANSFORM,
   PREVIEW_TRANSFORM,
   signBunnyCdnUrls,
@@ -30,14 +29,46 @@ const assetReturn = v.object({
   kind: assetKind,
   mimeType: v.string(),
   byteSize: v.optional(v.number()),
+  storageStatus: v.optional(
+    v.union(
+      v.literal("pending"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+  ),
   bunnyPath: v.optional(v.string()),
   bunnyStreamVideoId: v.optional(v.string()),
   thumbnailPath: v.optional(v.string()),
+  durationSeconds: v.optional(v.number()),
+  width: v.optional(v.number()),
+  height: v.optional(v.number()),
+  frameRate: v.optional(v.number()),
+  videoCodec: v.optional(v.string()),
+  videoProfile: v.optional(v.string()),
+  audioCodec: v.optional(v.string()),
+  proxyKeyframeIntervalSeconds: v.optional(v.number()),
+  rotation: v.optional(v.number()),
+  editProxyStatus: v.optional(
+    v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("failed"),
+    ),
+  ),
+  editProxyPath: v.optional(v.string()),
+  editProxyByteSize: v.optional(v.number()),
+  editProxy1080Path: v.optional(v.string()),
+  editProxy1080ByteSize: v.optional(v.number()),
+  editProxyError: v.optional(v.string()),
+  editProxyUpdatedAt: v.optional(v.number()),
   sourceGenerationJobId: v.optional(v.id("generationJobs")),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   signedReadUrl: v.optional(v.string()),
+  signedEditProxyUrl: v.optional(v.string()),
+  signedEditProxy1080Url: v.optional(v.string()),
   signedThumbnailUrl: v.optional(v.string()),
   signedThumbnailLqipUrl: v.optional(v.string()),
 });
@@ -52,23 +83,48 @@ async function withSignedThumbnails(
   const paths = assets.map((asset) => assetThumbnailPath(asset));
   const thumbTransform = quality === "preview" ? PREVIEW_TRANSFORM : THUMB_TRANSFORM;
   const signFullReads = quality === "preview";
-  const [signed, lqip, fullReads] = await Promise.all([
+  const [signed, lqip, proxyUrls, proxy1080Urls, fullReadEntries] = await Promise.all([
     signBunnyCdnUrls(paths, expiresUnix, thumbTransform),
     signBunnyCdnUrls(paths, expiresUnix, LQIP_TRANSFORM),
+    signBunnyCdnUrls(
+      assets.map((asset) =>
+        asset.editProxyStatus === "ready" ? asset.editProxyPath : undefined,
+      ),
+      expiresUnix,
+    ),
+    signBunnyCdnUrls(
+      assets.map((asset) =>
+        asset.editProxyStatus === "ready" ? asset.editProxy1080Path : undefined,
+      ),
+      expiresUnix,
+    ),
     signFullReads
-      ? signBunnyCdnUrls(
-          assets.map((asset) => (asset.kind === "image" ? asset.bunnyPath : undefined)),
-          expiresUnix,
-          FULL_QUALITY_TRANSFORM,
+      ? Promise.all(
+          assets.map(async (asset) => {
+            if (!asset.bunnyPath) return null;
+            const url = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+            return [asset.bunnyPath, url] as const;
+          }),
         )
-      : Promise.resolve(new Map<string, string>()),
+      : Promise.resolve([] as Array<readonly [string, string] | null>),
   ]);
+  const fullReads = new Map(
+    fullReadEntries.filter((entry): entry is readonly [string, string] => entry !== null),
+  );
   return assets.map((asset) => {
     const thumbPath = assetThumbnailPath(asset);
     return {
       ...asset,
       signedReadUrl:
         (asset.bunnyPath ? fullReads.get(asset.bunnyPath) : undefined) ?? undefined,
+      signedEditProxyUrl:
+        asset.editProxyStatus === "ready" && asset.editProxyPath
+          ? proxyUrls.get(asset.editProxyPath)
+          : undefined,
+      signedEditProxy1080Url:
+        asset.editProxyStatus === "ready" && asset.editProxy1080Path
+          ? proxy1080Urls.get(asset.editProxy1080Path)
+          : undefined,
       signedThumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
       signedThumbnailLqipUrl: thumbPath ? lqip.get(thumbPath) : undefined,
     };
@@ -80,6 +136,7 @@ export const listByFolder = authedQuery({
     folderId: v.id("folders"),
     includeDeleted: v.optional(v.boolean()),
     expiresUnix: v.optional(v.number()),
+    quality: v.optional(v.union(v.literal("thumb"), v.literal("preview"))),
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
@@ -88,11 +145,20 @@ export const listByFolder = authedQuery({
       .query("assets")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
-    const visibleAssets = args.includeDeleted ? assets : assets.filter((asset) => !asset.deletedAt);
-    return await withSignedThumbnails(visibleAssets, args.expiresUnix);
+    const storageReady = (asset: Doc<"assets">) =>
+      asset.storageStatus === undefined || asset.storageStatus === "ready";
+    const visibleAssets = args.includeDeleted
+      ? assets.filter(storageReady)
+      : assets.filter((asset) => !asset.deletedAt && storageReady(asset));
+    return await withSignedThumbnails(visibleAssets, args.expiresUnix, args.quality ?? "thumb");
   },
 });
 
+/**
+ * Reserve an asset row and return a short-lived Convex staging upload URL.
+ * Bytes go to Convex storage; `assetActions.commitStagingUpload` copies them
+ * into Bunny with the server-side AccessKey (never sent to browsers).
+ */
 export const reserveUpload = authedMutation({
   args: {
     folderId: v.id("folders"),
@@ -102,8 +168,7 @@ export const reserveUpload = authedMutation({
   },
   returns: v.object({
     assetId: v.id("assets"),
-    putUrl: v.string(),
-    storageAccessKey: v.string(),
+    uploadUrl: v.string(),
     bunnyPath: v.string(),
   }),
   handler: async (ctx, args) => {
@@ -125,10 +190,12 @@ export const reserveUpload = authedMutation({
       filename: args.name,
     });
     await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
-    return { assetId, ...getStorageUploadCredentials(bunnyPath) };
+    const uploadUrl = await ctx.storage.generateUploadUrl();
+    return { assetId, uploadUrl, bunnyPath };
   },
 });
 
+/** @deprecated Prefer assetActions.commitStagingUpload after staging POST. */
 export const completeUpload = authedMutation({
   args: {
     assetId: v.id("assets"),
@@ -138,9 +205,16 @@ export const completeUpload = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
+    if (!asset.bunnyPath) {
+      throw new Error("Asset has no Bunny path");
+    }
+    // Guard: do not mark complete without a prior server-side Bunny put.
+    // Staging uploads must call commitStagingUpload, which finalizes byteSize.
+    if (args.byteSize != null && (asset.byteSize == null || asset.byteSize <= 0)) {
+      throw new Error("Upload is not finalized. Use the staging commit flow.");
+    }
     await ctx.db.patch(asset._id, {
-      byteSize: args.byteSize,
-      thumbnailPath: args.thumbnailPath,
+      ...(args.thumbnailPath !== undefined ? { thumbnailPath: args.thumbnailPath } : {}),
       updatedAt: Date.now(),
     });
     return null;
@@ -162,6 +236,20 @@ export const signedReadUrl = authedQuery({
   },
 });
 
+/** Idempotently request an edit-friendly proxy for an existing video asset. */
+export const ensureEditProxy = authedMutation({
+  args: { assetId: v.id("assets") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const asset = await requireAssetOwner(ctx, args.assetId);
+    if (asset.kind !== "video" || asset.editProxyStatus === "ready") return null;
+    await ctx.scheduler.runAfter(0, internal.assetsInternal.enqueueMediaProxy, {
+      assetId: asset._id,
+    });
+    return null;
+  },
+});
+
 /** Resolve assets by ID regardless of folder — for element sheet/ref lookups after reorganize. */
 export const listByIds = authedQuery({
   args: {
@@ -175,7 +263,12 @@ export const listByIds = authedQuery({
     const results: Doc<"assets">[] = [];
     for (const assetId of uniqueIds) {
       const asset = await ctx.db.get("assets", assetId);
-      if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) {
+      if (
+        !asset ||
+        asset.ownerId !== ctx.user._id ||
+        asset.deletedAt ||
+        (asset.storageStatus !== undefined && asset.storageStatus !== "ready")
+      ) {
         continue;
       }
       results.push(asset);
@@ -224,9 +317,26 @@ export const duplicate = authedMutation({
       kind: asset.kind,
       mimeType: asset.mimeType,
       byteSize: asset.byteSize,
+      storageStatus: asset.storageStatus,
       bunnyPath: asset.bunnyPath,
       bunnyStreamVideoId: asset.bunnyStreamVideoId,
       thumbnailPath: asset.thumbnailPath,
+      durationSeconds: asset.durationSeconds,
+      width: asset.width,
+      height: asset.height,
+      frameRate: asset.frameRate,
+      videoCodec: asset.videoCodec,
+      videoProfile: asset.videoProfile,
+      audioCodec: asset.audioCodec,
+      proxyKeyframeIntervalSeconds: asset.proxyKeyframeIntervalSeconds,
+      rotation: asset.rotation,
+      editProxyStatus: asset.editProxyStatus,
+      editProxyPath: asset.editProxyPath,
+      editProxyByteSize: asset.editProxyByteSize,
+      editProxy1080Path: asset.editProxy1080Path,
+      editProxy1080ByteSize: asset.editProxy1080ByteSize,
+      editProxyError: asset.editProxyError,
+      editProxyUpdatedAt: asset.editProxyUpdatedAt,
       sourceGenerationJobId: asset.sourceGenerationJobId,
       createdAt: now,
       updatedAt: now,

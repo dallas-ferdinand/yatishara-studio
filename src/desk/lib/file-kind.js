@@ -26,6 +26,7 @@ export function fileExt(nameOrPath = "") {
 export function fileViewerKind(ext) {
   const e = ext?.startsWith(".") ? ext.toLowerCase() : fileExt(ext);
   if (!e) return "binary";
+  if (e === ".edit") return "videoEdit";
   if (IMAGE.has(e)) return "image";
   if (VIDEO.has(e)) return "video";
   if (AUDIO.has(e)) return "audio";
@@ -63,7 +64,8 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
   const ext = fileExt(nameOrPath);
   const kind = fileViewerKind(ext);
   if (kind === "image") return "image";
-  if (kind === "video") return "film";
+  if (kind === "video") return "play";
+  if (kind === "videoEdit") return "clapperboard";
   if (kind === "audio") return "music";
   if (kind === "pdf") return "filePdf";
   if (kind === "csv") return "table";
@@ -82,13 +84,46 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
 export function explorerEntryIcon(entry) {
   if (entry?.studioKind === "trash") return "trash";
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
+  if (entry?.studioKind === "videoEdit") return "clapperboard";
   if (entry?.studioKind === "element") {
     if (entry.elementType === "character") return "user";
     if (entry.elementType === "prop") return "package";
     if (entry.elementType === "location") return "mapPin";
     return "fileText";
   }
+  if (entry?.kind === "video") return "play";
+  if (entry?.kind === "image") return "image";
+  if (entry?.kind === "audio") return "music";
+  if (entry?.ext) {
+    const ext = entry.ext.startsWith(".") ? entry.ext : `.${entry.ext}`;
+    return fileIconName(`file${ext}`);
+  }
   return fileIconName(entry?.name ?? entry?.path ?? "");
+}
+
+/** Sidebar type filter: hide folders and keep matching content only. */
+export function matchesExplorerTypeFilter(entry, filterId) {
+  if (!filterId || filterId === "all") return true;
+  if (!entry || entry.type === "parent" || entry.type === "search-divider" || entry.type === "dir") {
+    return false;
+  }
+  const viewerKind = fileViewerKind(entry.ext || entry.name);
+  switch (filterId) {
+    case "image":
+      return entry.kind === "image" || (entry.studioKind !== "videoEdit" && viewerKind === "image");
+    case "video":
+      return entry.kind === "video" || (entry.studioKind !== "videoEdit" && viewerKind === "video");
+    case "videoEdit":
+      return entry.studioKind === "videoEdit" || viewerKind === "videoEdit";
+    case "document":
+      return entry.studioKind === "document" || viewerKind === "markdown";
+    case "element":
+      return entry.studioKind === "element";
+    case "audio":
+      return entry.kind === "audio" || viewerKind === "audio";
+    default:
+      return true;
+  }
 }
 
 /** Icon for unified workspace file tab. */
@@ -100,6 +135,7 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "settings") return "settings";
   if (tab.studioKind === "feed") return "cloud";
   if (tab.studioKind === "profile") return "user";
+  if (tab.studioKind === "videoEdit") return "clapperboard";
   if (tab.studioKind === "element") {
     if (tab.elementType === "character") return "user";
     if (tab.elementType === "prop") return "package";
@@ -108,6 +144,9 @@ export function workspaceTabIcon(tab) {
   }
   if (tab.studioKind === "document") return "fileText";
   if (tab.studioKind === "folder") return "folder";
+  if (tab.kind === "video") return "play";
+  if (tab.kind === "image") return "image";
+  if (tab.kind === "audio") return "music";
   const path = tab.path ?? tab.title ?? "";
   if (tab.ext) return fileIconName(`file${tab.ext.startsWith(".") ? tab.ext : `.${tab.ext}`}`);
   return fileIconName(path);
@@ -126,5 +165,8 @@ export function refPickerIcon(item) {
   if (item.kind === "tab") return "file";
   if (item.kind === "dir" || item.isDir) return "folder";
   if (item.kind === "mcp") return "mcp";
+  if (item.kind === "video") return "play";
+  if (item.kind === "image") return "image";
+  if (item.kind === "audio") return "music";
   return fileIconName(item.path ?? item.name ?? "");
 }

@@ -87,6 +87,104 @@
   will-change: transform;
 }
 
+/* Desktop-only floating feed nav — ghosted until you hover the edge. */
+.profile-post-nav-rail {
+  position: absolute;
+  z-index: 7;
+  display: none;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+@media (min-width: 900px) {
+  .profile-post-nav-rail {
+    display: flex;
+  }
+}
+
+.profile-post-nav-rail.is-vertical {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 56px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.profile-post-nav-rail.is-horizontal {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 52px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 72px 10px;
+}
+
+.profile-post-nav-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, #ffffff 14%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, #050608 28%, transparent);
+  color: #fff;
+  opacity: 0.18;
+  cursor: pointer;
+  padding: 0;
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
+  backdrop-filter: saturate(140%) blur(8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  transition:
+    opacity 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 160ms ease;
+}
+
+.profile-post-nav-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-post-nav-rail:hover .profile-post-nav-btn:not(:disabled),
+.profile-post-nav-btn:focus-visible:not(:disabled) {
+  opacity: 0.92;
+  background: color-mix(in srgb, #050608 52%, transparent);
+  border-color: color-mix(in srgb, #ffffff 28%, transparent);
+}
+
+.profile-post-nav-btn:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.profile-post-nav-btn:disabled {
+  opacity: 0.08;
+  cursor: default;
+}
+
+.profile-post-nav-rail:hover .profile-post-nav-btn:disabled {
+  opacity: 0.22;
+}
+
+[data-appearance="light"] .profile-post-nav-btn {
+  background: color-mix(in srgb, #ffffff 42%, transparent);
+  border-color: color-mix(in srgb, #1b1f24 10%, transparent);
+  color: #1b1f24;
+}
+
+[data-appearance="light"] .profile-post-nav-rail:hover .profile-post-nav-btn:not(:disabled),
+[data-appearance="light"] .profile-post-nav-btn:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, #ffffff 82%, transparent);
+  border-color: color-mix(in srgb, #1b1f24 16%, transparent);
+}
+
 .profile-post-like-burst {
   position: absolute;
   inset: 0;
@@ -470,35 +568,62 @@
   pointer-events: auto;
 }
 
-.profile-post-rail-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  overflow: hidden;
+.profile-post-rail-avatar-wrap {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  /* Reserve room for the follow chip that hangs below the avatar. */
+  padding-bottom: 8px;
+}
+
+.profile-post-rail-follow {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
   border: 0;
+  border-radius: 50%;
   padding: 0;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, #fff 14%, transparent);
+  background: #ff3b5c;
   color: #fff;
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.02em;
-  line-height: 1;
   cursor: pointer;
+  pointer-events: auto;
   box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.45),
-    0 4px 12px rgba(0, 0, 0, 0.4);
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 3px 8px rgba(0, 0, 0, 0.35);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.profile-post-rail-follow svg {
+  width: 10px;
+  height: 10px;
+}
+
+.profile-post-rail-follow .profile-post-rail-spin {
+  width: 10px;
+  height: 10px;
+  filter: none;
+}
+
+.profile-post-rail-follow.is-following {
+  background: color-mix(in srgb, #fff 22%, #1a2230);
+  color: #9df2b0;
+}
+
+.profile-post-rail-follow:disabled {
+  opacity: 0.75;
+  cursor: default;
+}
+
+.profile-post-rail-avatar {
+  /* Glass border from StudioProfileAvatar; keep drop shadow for feed rail. */
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
     drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
-}
-
-.profile-post-rail-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
 }
 
 .profile-post-rail-btn {
@@ -859,22 +984,11 @@
 }
 
 .profile-comments-thread-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 750;
-  background: color-mix(in srgb, #fff 10%, transparent);
 }
 
-.profile-comments-thread-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.profile-comment-avatar {
+  flex-shrink: 0;
 }
 
 .profile-comments-thread-preview {
@@ -1129,24 +1243,6 @@
   border-bottom: 0;
 }
 
-.profile-comment-avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  font-size: 9px;
-  font-weight: 750;
-  background: color-mix(in srgb, #fff 10%, transparent);
-}
-
-.profile-comment-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .profile-comment-body {
   display: grid;
   gap: 4px;
@@ -1387,7 +1483,7 @@
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: color-mix(in srgb, #fff 8%, transparent);
-  color: color-mix(in srgb, #fff 82%, transparent);
+  color: #fff;
   cursor: pointer;
 }
 
@@ -1404,7 +1500,7 @@
 .profile-comments-circle-btn.is-on {
   border-color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 48%, transparent);
   background: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 16%, transparent);
-  color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 90%, #fff);
+  color: #fff;
 }
 
 .profile-comments-attach-preview {
@@ -1454,7 +1550,7 @@
     inset 0 -2px 0 color-mix(in srgb, #000 22%, transparent),
     0 2px 3px color-mix(in srgb, #000 22%, transparent),
     0 4px 10px color-mix(in srgb, var(--cursor-accent, #d8ff3e) 18%, transparent);
-  color: #10140a;
+  color: #fff;
 }
 
 .profile-comments-circle-btn.is-send:disabled {
@@ -1486,7 +1582,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   background: color-mix(in srgb, #fff 8%, transparent);
-  color: color-mix(in srgb, #fff 82%, transparent);
+  color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1495,7 +1591,7 @@
 .profile-comments-attach-btn.is-on {
   border-color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 48%, transparent);
   background: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 16%, transparent);
-  color: color-mix(in srgb, var(--cursor-accent, #d8ff3e) 90%, #fff);
+  color: #fff;
 }
 
 .profile-comments-attach-btn:disabled {
@@ -1522,7 +1618,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--cursor-accent, #d8ff3e);
-  color: #10140a;
+  color: #fff;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -1626,6 +1722,15 @@
 [data-appearance="light"] .profile-comments-circle-btn {
   border-color: rgba(15, 23, 42, 0.12);
   background: color-mix(in srgb, #0f172a 5%, transparent);
+  color: color-mix(in srgb, #0f172a 78%, transparent);
+}
+
+[data-appearance="light"] .profile-comments-circle-btn.is-send,
+[data-appearance="light"] .profile-comments-input-row button {
+  color: #10140a;
+}
+
+[data-appearance="light"] .profile-comments-attach-btn {
   color: color-mix(in srgb, #0f172a 78%, transparent);
 }
 

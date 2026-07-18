@@ -5,6 +5,8 @@ import {
   compileBriefPrompt,
   detectExplicitStyleConflict,
   evaluateBrief,
+  extractContactFromText,
+  formatNanpContactNumbers,
   mergeBriefPayload,
   normalizeAssistanceAspectRatio,
   normalizeBriefPatch,
@@ -14,6 +16,28 @@ import {
 import { emptyBriefPayload } from "./guidedVideoTypes";
 
 describe("hypermotion workflow", () => {
+  it("formats compact NANP contact numbers for on-screen copy", () => {
+    expect(formatNanpContactNumbers("18683034621")).toBe(
+      "+1 (868) 303-4621",
+    );
+    expect(
+      formatNanpContactNumbers("Call or WhatsApp 8683034621 for size and price"),
+    ).toBe("Call or WhatsApp +1 (868) 303-4621 for size and price");
+    expect(formatNanpContactNumbers("+44 20 7946 0958")).toBe(
+      "+44 20 7946 0958",
+    );
+  });
+
+  it("extracts WhatsApp / NANP contacts from free text", () => {
+    expect(extractContactFromText("whatsapp 18683034621 please")).toBe(
+      "WhatsApp +1 (868) 303-4621",
+    );
+    expect(extractContactFromText("call 868-303-4621")).toBe(
+      "+1 (868) 303-4621",
+    );
+    expect(extractContactFromText("no number here")).toBeUndefined();
+  });
+
   it("resolves hypermotion vs standard video workflows", () => {
     expect(resolveWorkflow("video", "hypermotion_ad").slug).toBe(
       "video_hypermotion_ad",
@@ -277,6 +301,49 @@ describe("hypermotion workflow", () => {
     expect(script.lockedFields).toEqual(["subject", "production.scriptType"]);
   });
 
+  it("clears image resolution tiers when switching into video mode", () => {
+    const payload = emptyBriefPayload();
+    payload.production.resolution = "2K";
+    const next = transitionAssistedMode({
+      currentMode: "image",
+      nextMode: "video",
+      nextVideoType: "hypermotion_ad",
+      payload,
+    });
+    expect(next.payload.production.resolution).toBe("1280x720");
+    expect(next.resetFields).toContain("production.resolution");
+  });
+
+  it("clears hypermotion beats but keeps brand when switching to standard video", () => {
+    const payload = emptyBriefPayload();
+    payload.timedBeats = [{ startSec: 0, endSec: 2, action: "Hook" }];
+    payload.brand.logo = "include";
+    payload.brand.ctaMode = "custom";
+    payload.brand.ctaText = "Shop";
+    payload.brand.contactValue = "+1 (868) 303-4621";
+    const next = transitionAssistedMode({
+      currentMode: "video",
+      nextMode: "video",
+      currentVideoType: "hypermotion_ad",
+      nextVideoType: "standard",
+      payload,
+      lockedFields: ["videoType", "brand.logo", "production.durationSeconds"],
+    });
+    expect(next.videoType).toBe("standard");
+    expect(next.payload.timedBeats).toBeUndefined();
+    expect(next.payload.brand.logo).toBe("include");
+    expect(next.payload.brand.ctaMode).toBe("custom");
+    expect(next.payload.brand.ctaText).toBe("Shop");
+    expect(next.payload.brand.contactValue).toBe("+1 (868) 303-4621");
+    expect(next.lockedFields).toEqual(
+      expect.arrayContaining([
+        "videoType",
+        "brand.logo",
+        "production.durationSeconds",
+      ]),
+    );
+  });
+
   it("compiles hypermotion prompt with audio include/none lines", () => {
     const payload = emptyBriefPayload({
       durationSeconds: 8,
@@ -307,6 +374,53 @@ describe("hypermotion workflow", () => {
     expect(prompt).toContain("Music: include");
     expect(prompt).toContain('On-screen CTA: "Shop now"');
     expect(prompt).toMatch(/Timed beats/);
+    expect(prompt).toMatch(/8s hypermotion/);
+    expect(prompt).toMatch(/one-flow speed ramp/i);
+    expect(prompt).toContain("elliptical action/graphic match");
+    expect(prompt).toContain("ramp-to-cut");
+    expect(prompt).toContain("stable hero/CTA lock");
+    expect(prompt).toContain("vary velocity");
+    expect(prompt).toContain("720p");
+  });
+
+  it("scales default hypermotion beats with duration", () => {
+    const short = emptyBriefPayload({
+      durationSeconds: 5,
+      aspectRatio: "9:16",
+      resolution: "1280x720",
+    });
+    short.subject = "Bottle";
+    short.brand.productFidelity = "conceptual";
+    short.brand.logo = "omit";
+    short.brand.ctaMode = "omit";
+    short.audio = { voiceover: "none", sfx: "include", music: "include" };
+    const shortPrompt = compileBriefPrompt(
+      "video",
+      "hypermotion_ad",
+      short,
+      attachmentPresenceFromRoles(["product"]),
+    );
+    expect(shortPrompt).toMatch(/5s hypermotion · 3 beats/);
+    expect(shortPrompt.match(/^\d+\. /gm)?.length).toBe(3);
+
+    const long = emptyBriefPayload({
+      durationSeconds: 15,
+      aspectRatio: "9:16",
+      resolution: "1280x720",
+    });
+    long.subject = "Bottle";
+    long.brand.productFidelity = "conceptual";
+    long.brand.logo = "omit";
+    long.brand.ctaMode = "omit";
+    long.audio = { voiceover: "none", sfx: "include", music: "include" };
+    const longPrompt = compileBriefPrompt(
+      "video",
+      "hypermotion_ad",
+      long,
+      attachmentPresenceFromRoles(["product"]),
+    );
+    expect(longPrompt).toMatch(/15s hypermotion · 7 beats/);
+    expect(longPrompt.match(/^\d+\. /gm)?.length).toBe(7);
   });
 
   it("requires the user to confirm a promotional layout format", () => {

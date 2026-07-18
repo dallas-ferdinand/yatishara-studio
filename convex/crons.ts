@@ -15,4 +15,10 @@ crons.interval(
   internal.generation.reclaimStaleJobExecutions,
 );
 
+crons.interval(
+  "reclaim stale media proxy jobs",
+  { minutes: 5 },
+  internal.assetsInternal.reclaimStaleMediaProxyJobs,
+);
+
 export default crons;

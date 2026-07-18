@@ -48,6 +48,14 @@ Do not run production deploy commands from local development unless intentionall
 - Convex Auth server env must also be set on the Studio Convex deployment when used by Convex functions.
 - Keep `yatishara-studio-preview` **stopped** during deploys so the VPS is not CPU-starved.
 
+## Convex backend (ffmpeg for video export)
+
+Self-hosted Convex runs at `/opt/convex-studio-self-hosted` as
+`convex-studio-backend`. Export requires `ffmpeg`/`ffprobe` in that container —
+see [convex-backend-ffmpeg.md](./convex-backend-ffmpeg.md). Rebuild with
+`docker compose build backend && docker compose up -d backend` after changing
+[`deploy/convex-backend/Dockerfile`](../deploy/convex-backend/Dockerfile).
+
 ## Production Env Groups
 
 Use `docs/coolify-env.example` as the production shape. Values in that file are placeholders or public endpoints; keep real secrets in Coolify/Convex.
@@ -98,7 +106,15 @@ Repo files involved:
 External VPS pieces, documented here but not committed:
 
 - systemd service: `/etc/systemd/system/yatishara-studio-preview.service`
+- recycle oneshot + timer: `/etc/systemd/system/yatishara-studio-preview-restart.{service,timer}`
+- recycle script: `/usr/local/sbin/yatishara-studio-preview-recycle.sh` (wipes `.next` + `node_modules/.cache`, prunes stopped containers/dangling images, restarts preview every 6h and 5m after boot)
 - Traefik dynamic route: `/data/coolify/proxy/dynamic/yatishara-studio-preview.yaml`
+
+Manual recycle:
+
+```bash
+sudo /usr/local/sbin/yatishara-studio-preview-recycle.sh
+```
 
 Preview architecture:
 

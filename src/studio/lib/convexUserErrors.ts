@@ -99,6 +99,10 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     message: "PayWise didn't return a card checkout link. Try again.",
   },
   {
+    match: /connection lost while action|connection lost/i,
+    message: "Connection blipped. Try again.",
+  },
+  {
     match: /network|failed to fetch|timed out|timeout/i,
     message: "Connection problem. Check your network and try again.",
   },

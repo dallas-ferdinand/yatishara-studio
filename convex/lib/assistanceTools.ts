@@ -12,18 +12,22 @@ import type {
   GuidedQuestion,
   VideoType,
 } from "./guidedVideoTypes";
-import { emptyAgentState } from "./guidedVideoTypes";
+import { emptyAgentState, normalizeVideoType } from "./guidedVideoTypes";
 import {
   attachmentPresenceFromRoles,
   evaluateBrief,
+  formatNanpContactNumbers,
   mergeBriefPayload,
   normalizeAssistanceAspectRatio,
   normalizeBriefPatch,
+  transitionAssistedMode,
 } from "./hypermotionWorkflow";
 import { MAX_GENERATION_REFERENCE_ASSETS } from "./elementAssetModel";
 import { resolveVideoModel } from "./videoModels";
 import { creditCostForGeneration, type MeasuredTextUsage } from "./generationPricing";
 import type { ReferenceInput } from "./referenceInput";
+import { planVideoDuration } from "./videoDurationPlan";
+import { assessFinalPromptForReview } from "./seedancePromptCraft";
 
 export type AssistanceWorkingReference = {
   assetId?: Id<"assets">;
@@ -77,6 +81,7 @@ export type AssistanceAgentSession = {
   folderId: Id<"folders">;
   mode: AssistedMode;
   videoType?: VideoType;
+  entryPoint?: "image_to_video";
   draft: AssistedBriefPayload;
   lockedFields: string[];
   inferredFields: string[];
@@ -84,6 +89,21 @@ export type AssistanceAgentSession = {
   assumptions: string[];
   warnings: string[];
   attachmentSummaries: string[];
+  /** Descriptions from inspect_media this turn — critic ground truth for on-image copy. */
+  mediaInspectionNotes: Array<{
+    assetId?: Id<"assets">;
+    name?: string;
+    kind?: string;
+    description: string;
+  }>;
+  offeredOptionalIds: string[];
+  skippedOptionalIds: string[];
+  /** True after any failed prepare_review this turn — unlocks recovery steps. */
+  prepareReviewFailedThisTurn: boolean;
+  /** Restrict tools to terminal/fixers after the free step budget. */
+  recoveryMode: boolean;
+  criticCallsThisTurn: number;
+  lastCriticInputHash?: string;
   references: AssistanceWorkingReference[];
   conversationContext: string[];
   toolTrace: AssistanceToolTraceEntry[];
@@ -105,7 +125,121 @@ export type AssistanceAgentSession = {
   inspectMedia: (
     reference: ReferenceInput,
   ) => Promise<{ description: string; usage: MeasuredTextUsage }>;
+  /**
+   * Independent creative-director critic. Must not be the same tool-loop
+   * decision that proposed review; used inside prepare_review as a gate.
+   */
+  critiqueCreativeReadiness: (input: {
+    finalPrompt: string;
+    claimedReadiness: CreativeReadinessAssessment;
+  }) => Promise<CreativeReadinessCritique>;
+  lastReadinessCritique?: CreativeReadinessCritique;
 };
+
+export const ASSISTANCE_RECOVERY_TOOLS = new Set([
+  "prepare_review",
+  "ask_user",
+  "set_audio_plan",
+  "set_brand_requirements",
+  "update_brief",
+  "set_video_type",
+  "evaluate_brief",
+  "get_brief",
+]);
+
+type CreativeReadinessInput = {
+  intendedOutcome?: string;
+  successCriteria?: string[];
+  criticalUnknowns?: string[];
+  safeAssumptions?: string[];
+  rationale?: string;
+};
+
+export type CreativeReadinessAssessment = {
+  ok: boolean;
+  error?: "readiness_assessment_incomplete" | "outcome_not_ready";
+  hint?: string;
+  blockers: string[];
+  intendedOutcome: string;
+  successCriteria: string[];
+  safeAssumptions: string[];
+  rationale: string;
+};
+
+export type CreativeReadinessCritique = {
+  decision: "ready" | "revise" | "ask";
+  rationale: string;
+  criticalGaps: string[];
+  revisionInstructions: string[];
+  suggestedQuestion?: string;
+  assumptions: string[];
+  usage?: MeasuredTextUsage;
+};
+
+function readinessLines(value: unknown, limit: number): string[] {
+  return Array.isArray(value)
+    ? value
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+        .slice(0, limit)
+    : [];
+}
+
+/**
+ * Generic semantic readiness contract supplied by the agent for the current
+ * job. The criteria are intentionally outcome-derived rather than mode- or
+ * deliverable-specific.
+ */
+export function assessCreativeReadiness(
+  input: CreativeReadinessInput | undefined,
+): CreativeReadinessAssessment {
+  const intendedOutcome = String(input?.intendedOutcome ?? "").trim().slice(0, 500);
+  const successCriteria = readinessLines(input?.successCriteria, 8);
+  const blockers = readinessLines(input?.criticalUnknowns, 8);
+  const safeAssumptions = readinessLines(input?.safeAssumptions, 8);
+  const rationale = String(input?.rationale ?? "").trim().slice(0, 1_000);
+
+  if (
+    intendedOutcome.length < 12 ||
+    successCriteria.length < 2 ||
+    rationale.length < 20
+  ) {
+    return {
+      ok: false,
+      error: "readiness_assessment_incomplete",
+      hint:
+        "Reassess this specific outcome: state what success means, give at least two job-derived success criteria, separate critical unknowns from safe creative assumptions, and explain why generation is or is not ready.",
+      blockers,
+      intendedOutcome,
+      successCriteria,
+      safeAssumptions,
+      rationale,
+    };
+  }
+
+  if (blockers.length > 0) {
+    return {
+      ok: false,
+      error: "outcome_not_ready",
+      hint:
+        "Do not prepare review yet. Ask the single highest-leverage question needed to resolve these material unknowns; make noncritical creative choices yourself.",
+      blockers,
+      intendedOutcome,
+      successCriteria,
+      safeAssumptions,
+      rationale,
+    };
+  }
+
+  return {
+    ok: true,
+    blockers,
+    intendedOutcome,
+    successCriteria,
+    safeAssumptions,
+    rationale,
+  };
+}
 
 async function mutateSession<T>(
   session: AssistanceAgentSession,
@@ -138,7 +272,7 @@ function valueAtPath(value: unknown, path: string): unknown {
   }, value);
 }
 
-function policyForSession(session: AssistanceAgentSession) {
+export function policyForSession(session: AssistanceAgentSession) {
   return evaluateBrief({
     mode: session.mode,
     videoType: session.videoType,
@@ -146,10 +280,60 @@ function policyForSession(session: AssistanceAgentSession) {
     attachments: attachmentPresenceFromRoles(
       session.references.map((reference) => reference.role),
     ),
-    offeredOptionalIds: [],
-    skippedOptionalIds: [],
+    offeredOptionalIds: session.offeredOptionalIds,
+    skippedOptionalIds: session.skippedOptionalIds,
     lockedFields: session.lockedFields,
   });
+}
+
+function markOptionalOffered(session: AssistanceAgentSession, optionalId: string) {
+  if (!session.offeredOptionalIds.includes(optionalId)) {
+    session.offeredOptionalIds = [...session.offeredOptionalIds, optionalId];
+  }
+}
+
+function markOptionalSkipped(session: AssistanceAgentSession, optionalId: string) {
+  markOptionalOffered(session, optionalId);
+  if (!session.skippedOptionalIds.includes(optionalId)) {
+    session.skippedOptionalIds = [...session.skippedOptionalIds, optionalId];
+  }
+}
+
+function syncBrandOptionalMemory(session: AssistanceAgentSession) {
+  const brand = session.draft.brand;
+  if (brand.logo !== "undecided") {
+    if (brand.logo === "omit") markOptionalSkipped(session, "logo");
+    else markOptionalOffered(session, "logo");
+  }
+  if (brand.ctaMode !== "undecided") {
+    if (brand.ctaMode === "omit") markOptionalSkipped(session, "cta");
+    else markOptionalOffered(session, "cta");
+  }
+  if (brand.offerText?.trim()) {
+    markOptionalOffered(session, "offer");
+  }
+}
+
+/** True when ask_user should not re-ask for this brief field. */
+export function isAssistanceFieldAlreadyAnswered(
+  session: Pick<
+    AssistanceAgentSession,
+    "draft" | "lockedFields" | "inferredFields"
+  >,
+  field: string,
+): boolean {
+  if (session.lockedFields.includes(field)) return true;
+  if (session.inferredFields.includes(field)) return true;
+  const value = valueAtPath(session.draft, field);
+  if (value === undefined || value === null) return false;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+    if (field.startsWith("audio.") && trimmed === "none") return false;
+    if (field.startsWith("brand.") && trimmed === "undecided") return false;
+    return true;
+  }
+  return true;
 }
 
 function referenceCapabilityError(session: AssistanceAgentSession): string | undefined {
@@ -160,40 +344,126 @@ function referenceCapabilityError(session: AssistanceAgentSession): string | und
   ) {
     return "Image jobs accept image references only. Remove video/audio references before review.";
   }
-  const startFrames = mediaReferences.filter((reference) => reference.role === "start_frame");
-  if (
-    startFrames.some((reference) => reference.mediaKind !== "image") ||
-    (startFrames.length > 0 && session.mode !== "video")
-  ) {
-    return "A start frame must be one image on a video job.";
-  }
   if (
     session.mode === "video" &&
     !resolveVideoModel().supportsMultimodalRefs &&
-    mediaReferences.some((reference) => reference.role !== "start_frame")
+    mediaReferences.length > 0
   ) {
-    return "The selected video model does not support multimodal references other than its start frame.";
+    return "The selected video model does not support multimodal references.";
   }
   return undefined;
 }
 
+const ARTWORK_REFERENCE_HINT =
+  /\b(?:flyer|poster|end[\s-]?card|artwork|graphic|layout|design|promo(?:tional)?)\b/i;
+
+export function hasUploadedArtworkReference(
+  session: AssistanceAgentSession,
+): boolean {
+  const conversationBlob = [
+    session.draft.subject,
+    session.draft.objective,
+    ...session.conversationContext,
+    ...session.mediaInspectionNotes.map((note) => note.description),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const blobLooksLikeArtwork = ARTWORK_REFERENCE_HINT.test(conversationBlob);
+  return session.references.some((reference) => {
+    if (reference.mediaKind !== "image") return false;
+    if (ARTWORK_REFERENCE_HINT.test(reference.label ?? "")) return true;
+    if (
+      blobLooksLikeArtwork &&
+      (reference.role === "reference" ||
+        reference.role === "product" ||
+        reference.role === "supporting")
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
 function authoritativePromptLayer(session: AssistanceAgentSession): string {
   const payload = session.draft;
+  const artworkReference = hasUploadedArtworkReference(session);
+  const durationPlan =
+    session.mode === "video"
+      ? planVideoDuration(payload.production.durationSeconds, session.videoType)
+      : null;
   const facts = [
     payload.subject ? `Subject: ${payload.subject}` : undefined,
     payload.objective ? `Objective: ${payload.objective}` : undefined,
     payload.keyMessage ? `Key message: ${payload.keyMessage}` : undefined,
     payload.offer ? `Offer/copy: ${payload.offer}` : undefined,
-    payload.brand.offerText ? `Exact offer text: ${payload.brand.offerText}` : undefined,
-    payload.brand.ctaText ? `Exact CTA text: ${payload.brand.ctaText}` : undefined,
-    payload.brand.contactValue ? `Exact contact value: ${payload.brand.contactValue}` : undefined,
+    payload.brand.offerText
+      ? artworkReference
+        ? `Offer intent: ${payload.brand.offerText}; preserve the existing flyer wording and typography from the uploaded artwork reference`
+        : `Exact offer text: ${payload.brand.offerText}`
+      : undefined,
+    payload.brand.ctaText
+      ? artworkReference
+        ? `CTA intent: ${payload.brand.ctaText}; do not re-typeset it over the uploaded flyer`
+        : `Exact CTA text: ${payload.brand.ctaText}`
+      : undefined,
+    payload.brand.contactValue
+      ? artworkReference
+        ? `Contact value for voiceover/CTA intent: ${payload.brand.contactValue}; preserve the contact text already baked into the uploaded flyer and do not redraw it`
+        : `Exact on-screen contact copy (render verbatim, including +, spaces, parentheses, and hyphen): ${payload.brand.contactValue}`
+      : undefined,
     payload.production.aspectRatio
       ? `Output aspect ratio: ${payload.production.aspectRatio}`
       : undefined,
     payload.production.resolution
-      ? `Output resolution: ${payload.production.resolution}`
+      ? `Output resolution: ${
+          session.mode === "video"
+            ? String(payload.production.resolution).includes("1920")
+              ? "1080p"
+              : "720p"
+            : payload.production.resolution
+        }${session.mode === "video" ? " quality; aspect ratio controls orientation" : ""}`
+      : undefined,
+    durationPlan
+      ? `Output duration: ${durationPlan.durationSeconds}s (${durationPlan.pacing}; target ${durationPlan.beatCount} beats)`
       : undefined,
   ].filter((fact): fact is string => Boolean(fact));
+  const audioFacts: string[] = [];
+  if (session.mode === "video") {
+    const rawVoiceover = payload.audio.voiceoverCopy?.trim() ?? "";
+    const directionMatch = rawVoiceover.match(/^\[([^\]]+)\]\s*/);
+    const voiceoverDirection = directionMatch?.[1]?.trim();
+    const spokenVoiceover = directionMatch
+      ? rawVoiceover.slice(directionMatch[0].length).trim()
+      : rawVoiceover;
+    if (payload.audio.voiceover === "include") {
+      if (voiceoverDirection) {
+        audioFacts.push(`Voiceover performance: ${voiceoverDirection}.`);
+      }
+      if (spokenVoiceover) {
+        const wordCount = spokenVoiceover.split(/\s+/).filter(Boolean).length;
+        audioFacts.push(
+          `Exact spoken voiceover script (${wordCount} words; speak verbatim): “${spokenVoiceover}”`,
+        );
+        if (durationPlan) {
+          audioFacts.push(
+            `Voiceover timing: deliver naturally within ${durationPlan.durationSeconds}s, synchronized to the visual beats, with enough breathing room for intelligibility.`,
+          );
+        }
+      }
+    } else {
+      audioFacts.push("Voiceover: none.");
+    }
+    audioFacts.push(
+      payload.audio.music === "include"
+        ? `Music: include${payload.audio.musicMood?.trim() ? ` — ${payload.audio.musicMood.trim()}` : ""}.`
+        : "Music: none.",
+    );
+    audioFacts.push(
+      payload.audio.sfx === "include"
+        ? `Sound effects: include${payload.audio.sfxNotes?.trim() ? ` — ${payload.audio.sfxNotes.trim()}` : ""}.`
+        : "Sound effects: none.",
+    );
+  }
   const references = [...session.references]
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map(
@@ -203,6 +473,26 @@ function authoritativePromptLayer(session: AssistanceAgentSession): string {
   return [
     "AUTHORITATIVE REVIEWED REQUIREMENTS — do not contradict, omit, or rewrite exact copy:",
     ...facts.map((fact) => `- ${fact}`),
+    ...(durationPlan
+      ? [
+          "DURATION STRUCTURE — fit the prompt to this length:",
+          `- ${durationPlan.agentGuidance}`,
+        ]
+      : []),
+    ...(audioFacts.length
+      ? [
+          "AUDIO DIRECTION — generate and synchronize this audio with the finished video:",
+          ...audioFacts.map((fact) => `- ${fact}`),
+        ]
+      : []),
+    ...(artworkReference
+      ? [
+          "UPLOADED ARTWORK REFERENCE FIDELITY — treat the supplied flyer/poster as finished artwork:",
+          "- Preserve its existing text, prices, dates, contact details, logos, and layout when it appears in the generated video.",
+          "- Use the uploaded artwork as a numbered multimodal reference; do not convert it into a start frame or unnecessarily redraw, replace, re-typeset, correct, or morph its baked-in text.",
+          "- Spoken voiceover may express the CTA without reading a long phone number when that number remains visible in the flyer.",
+        ]
+      : []),
     ...(references.length
       ? [
           "ORDERED REFERENCE ASSIGNMENTS — use each input only for its stated role:",
@@ -212,12 +502,116 @@ function authoritativePromptLayer(session: AssistanceAgentSession): string {
   ].join("\n");
 }
 
+function voiceoverReviewIssue(
+  session: AssistanceAgentSession,
+): { error: string; hint: string } | undefined {
+  if (
+    session.mode !== "video" ||
+    session.draft.audio.voiceover !== "include"
+  ) {
+    return undefined;
+  }
+  const rawCopy = session.draft.audio.voiceoverCopy?.trim() ?? "";
+  const spokenCopy = rawCopy.replace(/^\[[^\]]+\]\s*/, "").trim();
+  if (!spokenCopy) {
+    return {
+      error: "voiceover_script_missing",
+      hint:
+        "Voiceover is enabled. Write polished exact spoken copy in set_audio_plan before review; use the known goal, offer, brand, CTA, and conversation context.",
+    };
+  }
+  const duration = planVideoDuration(
+    session.draft.production.durationSeconds,
+    session.videoType,
+  ).durationSeconds;
+  const wordCount = spokenCopy.split(/\s+/).filter(Boolean).length;
+  const maxWords = Math.max(8, Math.floor(duration * 2.5));
+  if (wordCount > maxWords) {
+    return {
+      error: "voiceover_script_too_long",
+      hint: `The ${wordCount}-word voiceover is too dense for ${duration}s. Keep it at or below ${maxWords} words (about 2–2.5 spoken words/second), preserve exact user-provided facts, and leave room for natural delivery. If the user supplied exact copy, ask whether to shorten it or increase duration.`,
+    };
+  }
+  return undefined;
+}
+
+function videoStructureReviewIssue(
+  session: AssistanceAgentSession,
+  finalPrompt: string,
+): {
+  error: string;
+  hint: string;
+  durationPlan?: {
+    beatCount: number;
+    minBeats: number;
+    maxBeats: number;
+    durationSeconds: number;
+  };
+  timedBeatCount?: number;
+} | undefined {
+  if (session.mode !== "video") return undefined;
+  const durationPlan = planVideoDuration(
+    session.draft.production.durationSeconds,
+    session.videoType,
+  );
+  if (durationPlan.kind !== "hypermotion_ad") return undefined;
+
+  if (/\bsingle[\s-]+continuous(?:\s+shot|\s+take|\s+moment)?\b/i.test(finalPrompt)) {
+    return {
+      error: "video_structure_conflict",
+      hint: `This is a Hypermotion ad, so a single continuous shot conflicts with its ${durationPlan.beatCount}-beat pacing. Keep Hypermotion and rewrite the creative prompt as ${durationPlan.beatCount} timed beats, or call set_video_type with standard before using a single continuous shot. Resolve this yourself; do not show this diagnostic to the user.`,
+    };
+  }
+
+  const timedBeatCount = countTimedBeatRanges(finalPrompt);
+  if (timedBeatCount < durationPlan.minBeats) {
+    return {
+      error: "video_timed_beats_missing",
+      hint: `Hypermotion at ${durationPlan.durationSeconds}s needs ${durationPlan.beatCount} concrete timed beats (${durationPlan.minBeats}–${durationPlan.maxBeats} allowed), each with action and one camera move. The current prompt has ${timedBeatCount}. Rewrite the full creative prompt with start–end timestamps that cover the clip; do not ask the user or expose this diagnostic.`,
+      durationPlan: {
+        beatCount: durationPlan.beatCount,
+        minBeats: durationPlan.minBeats,
+        maxBeats: durationPlan.maxBeats,
+        durationSeconds: durationPlan.durationSeconds,
+      },
+      timedBeatCount,
+    };
+  }
+  return undefined;
+}
+
+/** Count unique timed beat ranges in a video prompt (Hypermotion structure). */
+export function countTimedBeatRanges(finalPrompt: string): number {
+  const patterns = [
+    /\b\d+(?:\.\d+)?\s*s?\s*[–—-]\s*\d+(?:\.\d+)?\s*s\b/gi,
+    /\b\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}\b/g,
+    /\b(?:shot|beat)\s*\d+\s*\(\s*\d+(?:\.\d+)?\s*s?\s*[–—-]\s*\d+(?:\.\d+)?\s*s?\s*\)/gi,
+    /\b\d+(?:\.\d+)?\s*(?:to|thru|through)\s*\d+(?:\.\d+)?\s*s\b/gi,
+  ];
+  const starts = new Set<string>();
+  for (const pattern of patterns) {
+    for (const match of finalPrompt.matchAll(pattern)) {
+      const token = match[0].toLowerCase().replace(/\s+/g, " ").slice(0, 40);
+      starts.add(token);
+    }
+  }
+  return starts.size;
+}
+
 function recordTool(
   session: AssistanceAgentSession,
   name: string,
   input: unknown,
   output: unknown,
 ) {
+  if (
+    name === "prepare_review" &&
+    output &&
+    typeof output === "object" &&
+    (output as { ok?: boolean }).ok === false
+  ) {
+    session.prepareReviewFailedThisTurn = true;
+  }
   session.toolTrace.push({
     name,
     input: sanitizeTraceValue(input),
@@ -302,7 +696,7 @@ function lockPath(
 }
 
 export function createAssistanceTools(session: AssistanceAgentSession) {
-  return {
+  const tools = {
     get_brief: tool({
       description:
         "Read the current working brief, mode, locked fields, and agent state for this job.",
@@ -539,12 +933,26 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           url: asset.url,
           mimeType: asset.mimeType,
         });
+        const description = inspected.description.trim();
+        if (description) {
+          session.mediaInspectionNotes = [
+            ...session.mediaInspectionNotes.filter(
+              (note) => note.assetId !== assetId,
+            ),
+            {
+              assetId,
+              name: asset.name,
+              kind: asset.kind,
+              description,
+            },
+          ].slice(-8);
+        }
         return recordTool(session, "inspect_media", input, {
           ok: true,
           assetId,
           name: asset.name,
           kind: asset.kind,
-          description: inspected.description,
+          description,
           usage: inspected.usage,
         });
       },
@@ -883,7 +1291,6 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             style: "Borrow visual language, palette, typography, or layout—not subject identity.",
             motion: "Video motion, camera, pacing, or choreography reference.",
             audio: "Audio, music, ambience, or timing reference.",
-            start_frame: "Exact opening image for a video; only one should be selected.",
             supporting: "Secondary visual context.",
             reference: "General-purpose reference when a more precise role is not known.",
           },
@@ -1030,6 +1437,8 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           ).references;
           const next = [...session.references];
           for (const item of requested) {
+            const role: AttachmentRole =
+              item.role === "start_frame" ? "reference" : item.role;
             const ids = [item.assetId, item.documentId, item.elementId].filter(Boolean);
             if (ids.length !== 1) {
               return recordTool(session, "set_references", input, {
@@ -1062,14 +1471,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
                   id: item.assetId,
                 });
               }
-              if (item.role === "start_frame" && (session.mode !== "video" || asset.kind !== "image")) {
-                return recordTool(session, "set_references", input, {
-                  ok: false,
-                  error: "start_frame_requires_image_for_video_job",
-                  id: item.assetId,
-                });
-              }
-              if (item.role === "audio" && asset.kind !== "audio") {
+              if (role === "audio" && asset.kind !== "audio") {
                 return recordTool(session, "set_references", input, {
                   ok: false,
                   error: "audio_role_requires_audio_asset",
@@ -1078,7 +1480,6 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               }
               if (
                 session.mode === "video" &&
-                item.role !== "start_frame" &&
                 !resolveVideoModel().supportsMultimodalRefs
               ) {
                 return recordTool(session, "set_references", input, {
@@ -1088,7 +1489,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               }
               reference = {
                 assetId,
-                role: item.role,
+                role,
                 mediaKind:
                   asset.kind === "image" || asset.kind === "video" || asset.kind === "audio"
                     ? asset.kind
@@ -1115,7 +1516,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               }
               reference = {
                 elementId,
-                role: item.role,
+                role,
                 label: item.label?.trim() || element.name,
                 sortOrder: next.length,
               };
@@ -1137,7 +1538,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               }
               reference = {
                 documentId,
-                role: item.role,
+                role,
                 label: item.label?.trim() || document.title,
                 sortOrder: next.length,
               };
@@ -1156,15 +1557,6 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               ok: false,
               error: "too_many_reference_assets",
               max: MAX_GENERATION_REFERENCE_ASSETS,
-            });
-          }
-          const startFrameCount = next.filter(
-            (reference) => reference.role === "start_frame",
-          ).length;
-          if (startFrameCount > 1) {
-            return recordTool(session, "set_references", input, {
-              ok: false,
-              error: "only_one_start_frame_allowed",
             });
           }
           session.references = next.map((reference, index) => ({
@@ -1195,15 +1587,24 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
       }),
       execute: async (input) =>
         mutateSession(session, async () => {
-          const ids = new Set((input as { ids: string[] }).ids.map(String));
+          const ids = new Set(
+            (input as { ids: string[] }).ids
+              .map(String)
+              .map((id) => id.trim())
+              .filter(Boolean),
+          );
           const before = session.references.length;
           session.references = session.references
-            .filter(
-              (reference) =>
-                !ids.has(String(reference.assetId ?? "")) &&
-                !ids.has(String(reference.documentId ?? "")) &&
-                !ids.has(String(reference.elementId ?? "")),
-            )
+            .filter((reference) => {
+              const referenceIds = [
+                reference.assetId,
+                reference.documentId,
+                reference.elementId,
+              ]
+                .filter(Boolean)
+                .map(String);
+              return !referenceIds.some((id) => ids.has(id));
+            })
             .map((reference, sortOrder) => ({ ...reference, sortOrder }));
           return recordTool(session, "remove_references", input, {
             ok: true,
@@ -1290,6 +1691,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         session.draft = merged.payload;
         const inferred = (input as { source?: string }).source !== "user_explicit";
         for (const path of merged.newlyInferred) lockPath(session, path, inferred);
+        syncBrandOptionalMemory(session);
         const known = new Set(session.agentState.knownFacts);
         if (patch.subject) known.add(`Subject: ${patch.subject}`);
         if (patch.offer) known.add(`Offer: ${patch.offer}`);
@@ -1333,6 +1735,94 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
       },
     }),
 
+    set_video_type: tool({
+      description:
+        "Set the video workflow type for this job: standard (general Seedance clip) or hypermotion_ad (fast promotional/product ad with denser beats and brand/CTA structure). Use when the user asks for an ad, promo, product spot, or hypermotion treatment — or explicitly asks for standard/cinematic. Do not switch providers; Studio video stays on Seedance.",
+      inputSchema: jsonSchema<object>({
+        type: "object",
+        properties: {
+          source: {
+            type: "string",
+            enum: ["user_explicit", "inferred"],
+            description:
+              "Use user_explicit when the current message clearly chooses the workflow; otherwise inferred.",
+          },
+          videoType: {
+            type: "string",
+            enum: ["standard", "hypermotion_ad"],
+          },
+        },
+        required: ["source", "videoType"],
+        additionalProperties: false,
+      }),
+      execute: async (input) =>
+        mutateSession(session, async () => {
+          if (session.mode !== "video") {
+            return recordTool(session, "set_video_type", input, {
+              ok: false,
+              error: "video_mode_required",
+              mode: session.mode,
+            });
+          }
+          const raw = input as {
+            source: "user_explicit" | "inferred";
+            videoType: VideoType;
+          };
+          const nextVideoType = normalizeVideoType(raw.videoType);
+          const currentVideoType = session.videoType ?? "standard";
+          if (
+            raw.source !== "user_explicit" &&
+            session.lockedFields.includes("videoType") &&
+            currentVideoType !== nextVideoType
+          ) {
+            return recordTool(session, "set_video_type", input, {
+              ok: false,
+              error: "video_type_locked",
+              videoType: currentVideoType,
+            });
+          }
+          if (currentVideoType === nextVideoType) {
+            lockPath(session, "videoType", raw.source !== "user_explicit");
+            return recordTool(session, "set_video_type", input, {
+              ok: true,
+              videoType: currentVideoType,
+              unchanged: true,
+            });
+          }
+          const transitioned = transitionAssistedMode({
+            currentMode: "video",
+            nextMode: "video",
+            currentVideoType,
+            nextVideoType,
+            payload: session.draft,
+            lockedFields: session.lockedFields,
+          });
+          session.videoType = transitioned.videoType;
+          session.draft = transitioned.payload;
+          session.lockedFields = transitioned.lockedFields;
+          lockPath(session, "videoType", raw.source !== "user_explicit");
+          const known = new Set(session.agentState.knownFacts);
+          known.add(
+            nextVideoType === "hypermotion_ad"
+              ? "Video workflow: hypermotion ad"
+              : "Video workflow: standard",
+          );
+          session.agentState = {
+            ...session.agentState,
+            knownFacts: [...known].slice(0, 40),
+            nextFocus:
+              nextVideoType === "hypermotion_ad"
+                ? "Shape a dense product/ad beat plan"
+                : "Shape a standard Seedance clip",
+          };
+          return recordTool(session, "set_video_type", input, {
+            ok: true,
+            videoType: session.videoType,
+            resetFields: transitioned.resetFields,
+          });
+        }),
+    }),
+
     set_brand_requirements: tool({
       description:
         "Set exact brand, offer, CTA, contact, logo, and product-fidelity requirements.",
@@ -1373,6 +1863,9 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
                 (typeof value !== "string" || value.trim()),
             ),
           ) as Partial<AssistedBriefPayload["brand"]>;
+          if (typeof brand.contactValue === "string") {
+            brand.contactValue = formatNanpContactNumbers(brand.contactValue);
+          }
           if (!Object.keys(brand).length) {
             return recordTool(session, "set_brand_requirements", input, {
               ok: false,
@@ -1392,6 +1885,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
               lockPath(session, path, source !== "user_explicit");
             }
           }
+          syncBrandOptionalMemory(session);
           return recordTool(session, "set_brand_requirements", input, {
             ok: true,
             brand: session.draft.brand,
@@ -1401,7 +1895,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     set_audio_plan: tool({
       description:
-        "Set voiceover, music, sound effects, exact voiceover copy, and audio notes for the current job.",
+        "Set voiceover, music, sound effects, exact voiceover copy, and audio notes for the current job. When voiceover is included, write polished spoken copy from the full conversation and brief context—not a placeholder. Fit it to production.durationSeconds at roughly 2–2.5 spoken words/second maximum, preserve all exact user facts, and coordinate its emphasis with the visual beats. For short ads, do not spend the script reading a long phone number unless the user explicitly asks; when the number is already visible in an uploaded flyer/end card, use a natural spoken CTA such as “WhatsApp us to reserve” and preserve the number visually. Put performance direction such as [warm female voice] before the spoken copy; it will be separated from the words to speak.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1411,15 +1905,15 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           },
           voiceover: {
             type: "string",
-            enum: ["include", "omit", "undecided"],
+            enum: ["include", "none"],
           },
           sfx: {
             type: "string",
-            enum: ["include", "omit", "undecided"],
+            enum: ["include", "none"],
           },
           music: {
             type: "string",
-            enum: ["include", "omit", "undecided"],
+            enum: ["include", "none"],
           },
           voiceoverCopy: { type: "string" },
           musicMood: { type: "string" },
@@ -1467,7 +1961,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     set_production_settings: tool({
       description:
-        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 854x480, 1280x720, or 1920x1080. Image quality must be low, medium, or high. Use canonical ratios like 9:16.",
+        "Update production settings for the current mode (aspect ratio, resolution, quality, duration, script/element type). When the user asks to change resolution/quality/format, ALWAYS call this with source=user_explicit. Image resolution must be exactly 1K, 2K, or 4K. Video resolution must be 1280x720 (720p) or 1920x1080 (1080p) — Seedance 2.0 on Vercel AI Gateway. Image quality must be low, medium, or high. Video aspect ratio must be one of 16:9, 9:16, 1:1, 4:3, 3:4, 21:9. Duration 4–15s.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1493,7 +1987,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         const allowedResolutions =
           session.mode === "image"
             ? new Set(["1K", "2K", "4K"])
-            : new Set(["854x480", "1280x720", "1920x1080"]);
+            : new Set(["1280x720", "1920x1080"]);
         const normalizeResolution = (value: string): string | null => {
           const compact = value.trim().toUpperCase().replace(/\s+/g, "");
           if (session.mode === "image") {
@@ -1504,8 +1998,18 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             return null;
           }
           const lower = value.trim().toLowerCase();
-          if (lower === "480p" || lower === "480") return "854x480";
-          if (lower === "720p" || lower === "720" || lower === "hd") return "1280x720";
+          // Seedance 2.0 (Vercel catalog): 720p / 1080p only. Draft 480p upgrades to 720p.
+          if (
+            lower === "480p" ||
+            lower === "480" ||
+            lower === "854x480" ||
+            lower === "864x480" ||
+            lower === "720p" ||
+            lower === "720" ||
+            lower === "hd"
+          ) {
+            return "1280x720";
+          }
           if (lower === "1080p" || lower === "1080" || lower === "fhd") return "1920x1080";
           if (allowedResolutions.has(value.trim())) return value.trim();
           return null;
@@ -1584,9 +2088,22 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           production.quality = raw.quality.trim().toLowerCase();
           lockPath(session, "production.quality", inferred);
         }
+        let durationPlanHint: ReturnType<typeof planVideoDuration> | undefined;
         if (canSet("production.durationSeconds") && typeof raw.durationSeconds === "number") {
+          const previousDuration = session.draft.production.durationSeconds;
           production.durationSeconds = raw.durationSeconds;
           lockPath(session, "production.durationSeconds", inferred);
+          if (
+            session.mode === "video" &&
+            previousDuration !== raw.durationSeconds
+          ) {
+            // Old beat timings no longer match — replan from the new length.
+            session.draft = { ...session.draft, timedBeats: undefined };
+            durationPlanHint = planVideoDuration(
+              raw.durationSeconds,
+              session.videoType,
+            );
+          }
         }
         if (
           canSet("production.scriptType") &&
@@ -1616,6 +2133,16 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         return recordTool(session, "set_production_settings", input, {
           ok: true,
           production: session.draft.production,
+          ...(durationPlanHint
+            ? {
+                durationPlan: {
+                  durationSeconds: durationPlanHint.durationSeconds,
+                  beatCount: durationPlanHint.beatCount,
+                  pacing: durationPlanHint.pacing,
+                  guidance: durationPlanHint.agentGuidance,
+                },
+              }
+            : {}),
         });
       }),
     }),
@@ -1836,17 +2363,16 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
         const questions = (raw.questions ?? [])
           .filter((question) => question?.id && question?.prompt)
           .slice(0, 1);
-        // Drop questions whose field is already filled.
+        // Drop questions whose field is already answered in the brief.
         const filtered = questions.filter((question) => {
           if (!question.field) return true;
-          const value = valueAtPath(session.draft, question.field);
-          return value === undefined || value === "";
+          return !isAssistanceFieldAlreadyAnswered(session, question.field);
         });
         if (!filtered.length) {
           return recordTool(session, "ask_user", input, {
             ok: false,
             error: "no_unanswered_question",
-            hint: "Evaluate the brief and prepare review if it is ready.",
+            hint: "That field is already set. Call evaluate_brief and prepare_review if ready.",
           });
         }
         session.terminal = {
@@ -1870,20 +2396,67 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     prepare_review: tool({
       description:
-        "End this turn with a ready-to-generate review. Put ALL production detail in finalPrompt. The chat message must stay short and casual — never dump the prompt into chat.",
+        "End this turn with a genuinely ready-to-generate review. First provide an adaptive outcome-readiness assessment derived from this specific job, not a generic mode checklist. Any factual/identity/usability unknown that could materially weaken or mislead the result belongs in criticalUnknowns and blocks review. Put ALL production detail in finalPrompt. For video, write a Seedance-ready director brief sized to durationSeconds (Shot beats, concrete action, one camera move each). The chat message must stay short and casual.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
           message: {
             type: "string",
             description:
-              "Brief friendly chat note only (e.g. \"ready when you are 🙂\"). Details belong in finalPrompt, not here.",
+              "Short casual chat note for the review bubble — the real reply the user sees (e.g. \"nice — sushi wraps flyer ready\"). Never a generic ready filler. Details belong in finalPrompt, not here.",
           },
-          finalPrompt: { type: "string" },
+          finalPrompt: {
+            type: "string",
+            description:
+              "Full production prompt. Video: subject/traits, scene/light, Shot list or timed beats with verbs + one camera move each, audio if needed, constraints, and explicit numbered reference mapping. Not vibe-only copy.",
+          },
           negativePrompt: { type: "string" },
           rationale: { type: "string" },
+          readiness: {
+            type: "object",
+            description:
+              "Fresh semantic self-review of whether this exact deliverable will accomplish the user's intended outcome. Derive criteria from the job; do not copy a fixed checklist.",
+            properties: {
+              intendedOutcome: {
+                type: "string",
+                description:
+                  "What the finished deliverable must accomplish for the user or audience.",
+              },
+              successCriteria: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Two to eight concrete, job-specific tests the output must pass.",
+              },
+              criticalUnknowns: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Unresolved facts or decisions that affect truth, identity, usability, or the core outcome. Must be empty to review; never hide a blocker as an assumption.",
+              },
+              safeAssumptions: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Noncritical creative decisions Studio can make confidently without interrogating the user.",
+              },
+              rationale: {
+                type: "string",
+                description:
+                  "Short public-safe explanation of why generation is ready now.",
+              },
+            },
+            required: [
+              "intendedOutcome",
+              "successCriteria",
+              "criticalUnknowns",
+              "safeAssumptions",
+              "rationale",
+            ],
+            additionalProperties: false,
+          },
         },
-        required: ["message", "finalPrompt"],
+        required: ["message", "finalPrompt", "readiness"],
         additionalProperties: false,
       }),
       execute: async (input) => mutateSession(session, async () => {
@@ -1893,42 +2466,247 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             error: "terminal_already_selected",
           });
         }
+        if (session.entryPoint === "image_to_video") {
+          return recordTool(session, "prepare_review", input, {
+            ok: false,
+            error: "image_to_video_discovery_required",
+            hint:
+              "Inspect the source image and use ask_user to clarify the intended video treatment before preparing a review.",
+          });
+        }
         const raw = input as {
           message: string;
           finalPrompt: string;
           negativePrompt?: string;
           rationale?: string;
+          readiness?: CreativeReadinessInput;
         };
         const finalPrompt = String(raw.finalPrompt || "").trim();
-        if (finalPrompt.length < 80) {
-          return recordTool(session, "prepare_review", input, {
-            ok: false,
-            error: "final_prompt_too_thin",
-            hint: "Expand into a detailed production prompt before review.",
-          });
-        }
+        const readiness = assessCreativeReadiness(raw.readiness);
+        const voiceoverIssue = voiceoverReviewIssue(session);
+        const structureIssue = videoStructureReviewIssue(session, finalPrompt);
+        const craft = assessFinalPromptForReview({
+          mode: session.mode,
+          finalPrompt,
+          hasStartFrame: false,
+          videoType: session.videoType,
+        });
         const policy = policyForSession(session);
         const capabilityError = referenceCapabilityError(session);
-        if (capabilityError) {
-          return recordTool(session, "prepare_review", input, {
-            ok: false,
-            error: "incompatible_references",
-            hint: capabilityError,
-          });
+
+        const blockerLines: string[] = [];
+        if (!readiness.ok) {
+          if (readiness.blockers.length) {
+            blockerLines.push(...readiness.blockers);
+          } else {
+            blockerLines.push(
+              readiness.hint ||
+                readiness.error ||
+                "Complete the readiness assessment.",
+            );
+          }
         }
+        if (voiceoverIssue) blockerLines.push(voiceoverIssue.hint);
+        if (structureIssue) blockerLines.push(structureIssue.hint);
+        if (!craft.ok) {
+          blockerLines.push(
+            craft.hint || craft.error || "Strengthen the production prompt.",
+          );
+        }
+        if (capabilityError) blockerLines.push(capabilityError);
         if (!policy.complete) {
+          blockerLines.push(
+            ...policy.blockers,
+            ...policy.questions
+              .filter((question) => question.required)
+              .map((question) => question.prompt),
+          );
+        }
+
+        if (blockerLines.length > 0) {
+          const primaryError = !readiness.ok
+            ? readiness.error
+            : voiceoverIssue?.error
+              ? voiceoverIssue.error
+              : structureIssue?.error
+                ? structureIssue.error
+                : !craft.ok
+                  ? craft.error ?? "final_prompt_too_thin"
+                  : capabilityError
+                    ? "incompatible_references"
+                    : "brief_not_ready";
+          const durationPlan =
+            session.mode === "video"
+              ? planVideoDuration(
+                  session.draft.production.durationSeconds,
+                  session.videoType,
+                )
+              : null;
           return recordTool(session, "prepare_review", input, {
             ok: false,
-            error: "brief_not_ready",
-            blockers: policy.questions,
+            error: primaryError,
+            reviewError: "review_not_ready",
+            blockers: blockerLines.slice(0, 12),
+            policyBlockers: policy.blockers,
+            policyQuestions: policy.questions,
+            ...(structureIssue
+              ? {
+                  structure: {
+                    error: structureIssue.error,
+                    hint: structureIssue.hint,
+                  },
+                }
+              : {}),
+            ...(!craft.ok
+              ? {
+                  craft: {
+                    error: craft.error ?? "final_prompt_too_thin",
+                    hint: craft.hint,
+                  },
+                }
+              : {}),
+            ...(voiceoverIssue
+              ? {
+                  voiceover: {
+                    error: voiceoverIssue.error,
+                    hint: voiceoverIssue.hint,
+                  },
+                }
+              : {}),
+            ...(durationPlan
+              ? {
+                  durationPlan: {
+                    beatCount: durationPlan.beatCount,
+                    minBeats: durationPlan.minBeats,
+                    maxBeats: durationPlan.maxBeats,
+                    durationSeconds: durationPlan.durationSeconds,
+                  },
+                }
+              : {}),
             warnings: policy.warnings,
-            hint: "Resolve a blocker with tools, or ask the user one unresolved critical question.",
+            hint: `Fix all listed issues in one rewrite, then retry prepare_review once. Issues: ${blockerLines.slice(0, 6).join(" | ")}`,
           });
         }
-        const negativePrompt = raw.negativePrompt?.trim().slice(0, 2_000);
-        const compiledFinalPrompt = [
+
+        const reviewedFinalPrompt = [
           authoritativePromptLayer(session),
           finalPrompt,
+        ]
+          .filter(Boolean)
+          .join("\n\n")
+          .slice(0, 12_000);
+
+        const criticHash = JSON.stringify({
+          finalPrompt: reviewedFinalPrompt,
+          brand: session.draft.brand,
+          audio: session.draft.audio,
+          production: session.draft.production,
+          readiness,
+        });
+        let critique: CreativeReadinessCritique;
+        if (
+          session.lastReadinessCritique &&
+          session.lastCriticInputHash === criticHash
+        ) {
+          critique = session.lastReadinessCritique;
+        } else if (session.criticCallsThisTurn >= 1) {
+          // Critic is called at most once per turn for cost. A hard "revise"
+          // replay on every later attempt made prepare_review unreachable and
+          // forced the useless "what's still missing?" fallback. After one
+          // revise pass, accept a rewritten candidate that already cleared
+          // deterministic gates. Sticky "ask" stays sticky.
+          if (session.lastReadinessCritique?.decision === "ask") {
+            critique = session.lastReadinessCritique;
+          } else {
+            critique = {
+              decision: "ready",
+              rationale:
+                "Accepted after one critic revision pass — prompt was rewritten under prior instructions.",
+              criticalGaps: [],
+              revisionInstructions: [],
+              assumptions: [
+                "Creative polish applied from the prior readiness revision pass.",
+              ],
+            };
+            session.lastCriticInputHash = criticHash;
+          }
+        } else {
+          try {
+            session.criticCallsThisTurn += 1;
+            critique = await session.critiqueCreativeReadiness({
+              finalPrompt: reviewedFinalPrompt,
+              claimedReadiness: readiness,
+            });
+            session.lastCriticInputHash = criticHash;
+          } catch {
+            session.agentState = {
+              ...session.agentState,
+              readyForReview: false,
+              turnStrategy: "clarify",
+              nextFocus: "Recover readiness judgment",
+              readinessRationale: "Independent readiness critic failed",
+            };
+            return recordTool(session, "prepare_review", input, {
+              ok: false,
+              error: "readiness_critic_failed",
+              hint: "Ask the highest-leverage clarifying question, then try review again.",
+            });
+          }
+        }
+        session.lastReadinessCritique = critique;
+        if (critique.decision === "ask") {
+          const gaps = critique.criticalGaps.slice(0, 8);
+          session.agentState = {
+            ...session.agentState,
+            readyForReview: false,
+            missingCritical: gaps.length
+              ? gaps
+              : ["One material decision still needs the user"],
+            turnStrategy: "clarify",
+            nextFocus:
+              critique.suggestedQuestion?.trim() ||
+              gaps[0] ||
+              "Resolve a material unknown",
+            readinessRationale: critique.rationale.slice(0, 1_000),
+          };
+          return recordTool(session, "prepare_review", input, {
+            ok: false,
+            error: "brief_needs_user_input",
+            blockers: gaps,
+            suggestedQuestion: critique.suggestedQuestion,
+            hint:
+              critique.suggestedQuestion?.trim() ||
+              "Ask the single highest-leverage question for the remaining material unknown.",
+          });
+        }
+        if (critique.decision === "revise") {
+          session.agentState = {
+            ...session.agentState,
+            readyForReview: false,
+            turnStrategy: "deepen",
+            nextFocus: "Strengthen the production prompt",
+            readinessRationale: critique.rationale.slice(0, 1_000),
+          };
+          return recordTool(session, "prepare_review", input, {
+            ok: false,
+            error: "review_candidate_needs_revision",
+            revisionInstructions: critique.revisionInstructions,
+            hint:
+              critique.revisionInstructions[0] ||
+              "Improve the finalPrompt yourself — do not ask the user for optional polish.",
+          });
+        }
+
+        const negativePrompt = raw.negativePrompt?.trim().slice(0, 2_000);
+        session.assumptions = Array.from(
+          new Set([
+            ...session.assumptions,
+            ...readiness.safeAssumptions,
+            ...critique.assumptions,
+          ]),
+        ).slice(0, 20);
+        const compiledFinalPrompt = [
+          reviewedFinalPrompt,
           negativePrompt ? `Negative constraints: ${negativePrompt}` : undefined,
         ]
           .filter(Boolean)
@@ -1938,10 +2716,11 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           kind: "review",
           message:
             String(raw.message || "").trim().slice(0, 280) ||
-            "ready when you are 🙂",
+            "looks set — hit generate when you want",
           finalPrompt: compiledFinalPrompt,
           negativePrompt,
-          rationale: raw.rationale?.trim().slice(0, 1_000),
+          rationale:
+            raw.rationale?.trim().slice(0, 1_000) || readiness.rationale,
         };
         session.agentState = {
           ...session.agentState,
@@ -1950,17 +2729,45 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
           unresolvedDecisions: [],
           turnStrategy: "review",
           readinessRationale:
+            critique.rationale ||
             session.terminal.rationale ||
-            "Critical requirements captured; ready for user approval.",
+            readiness.rationale,
         };
         return recordTool(session, "prepare_review", input, {
           ok: true,
           terminal: "review",
           finalPromptLength: compiledFinalPrompt.length,
+          ...(craft.warnings?.length ? { craftWarnings: craft.warnings } : {}),
         });
       }),
     }),
   };
+
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, definition]) => {
+      const originalExecute = definition.execute;
+      if (!originalExecute) return [name, definition];
+      return [
+        name,
+        {
+          ...definition,
+          execute: async (input: never, options: never) => {
+            if (
+              session.recoveryMode &&
+              !ASSISTANCE_RECOVERY_TOOLS.has(name)
+            ) {
+              return recordTool(session, name, input, {
+                ok: false,
+                error: "recovery_tools_only",
+                hint: "Recovery mode: use prepare_review, ask_user, set_audio_plan, set_brand_requirements, update_brief, set_video_type, or evaluate_brief.",
+              });
+            }
+            return originalExecute(input, options);
+          },
+        },
+      ];
+    }),
+  ) as typeof tools;
 }
 
 export type AssistanceToolSet = ReturnType<typeof createAssistanceTools>;
@@ -1972,7 +2779,6 @@ export const ASSISTANCE_ATTACHMENT_ROLES: AttachmentRole[] = [
   "style",
   "motion",
   "audio",
-  "start_frame",
   "supporting",
   "reference",
 ];

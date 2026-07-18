@@ -21,8 +21,9 @@ import { useMemo, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
+import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { MediaLoadFrame } from "./media-load-frame";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./public-profile.css";
 
 type PublicPost = {
@@ -152,7 +153,6 @@ export function PublicProfileView({
     name: ownerName?.name,
     displayName: profile?.displayName,
   });
-  const avatarStyle = profile?.avatarUrl ? undefined : profileAvatarStyle(initials);
 
   const emptyCopy =
     activeTab === "saved"
@@ -192,14 +192,16 @@ export function PublicProfileView({
       <div className="public-profile-blur" aria-hidden="true" />
       <main className="public-profile-main">
         <section className="public-profile-hero">
-          <div className="public-profile-avatar" style={avatarStyle}>
-            {profile.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={profile.avatarUrl} alt="" />
-            ) : (
-              <span>{initials}</span>
-            )}
-          </div>
+          <StudioProfileAvatar
+            className="public-profile-avatar"
+            size="lg"
+            src={profile.avatarUrl}
+            initials={initials}
+            displayName={profile.displayName}
+            firstName={ownerName?.firstName}
+            lastName={ownerName?.lastName}
+            name={ownerName?.name}
+          />
 
           <div className="public-profile-identity">
             <div className="public-profile-title-row">
@@ -329,7 +331,7 @@ export function PublicProfileView({
                         : undefined;
                     if (imageThumb) {
                       return (
-                        <MediaLoadFrame kind="image" src={imageThumb} ratio="fill">
+                        <MediaLoadFrame kind="image" src={imageThumb} ratio="fill" loaderSize="md">
                           {({ onLoad, onError }) => (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -345,7 +347,7 @@ export function PublicProfileView({
                     }
                     if (videoSrc) {
                       return (
-                        <MediaLoadFrame kind="video" src={videoSrc} ratio="fill">
+                        <MediaLoadFrame kind="video" src={videoSrc} ratio="fill" loaderSize="md">
                           {({ onLoad, onError }) => (
                             <video
                               className="public-profile-tile-video"
@@ -353,6 +355,7 @@ export function PublicProfileView({
                               muted
                               playsInline
                               preload="metadata"
+                              onLoadedMetadata={onLoad}
                               onLoadedData={onLoad}
                               onError={onError}
                             />
@@ -375,7 +378,8 @@ export function PublicProfileView({
                     {post.kind === "video" ? (
                       <Play
                         className="public-profile-tile-kind-icon is-play"
-                        fill="currentColor"
+                        strokeWidth={2.85}
+                        aria-hidden="true"
                       />
                     ) : (
                       <ImageIcon className="public-profile-tile-kind-icon" />

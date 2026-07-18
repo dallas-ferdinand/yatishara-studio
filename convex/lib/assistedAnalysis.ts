@@ -1,5 +1,5 @@
 /**
- * Multimodal Assistance agent via Gemini (GATEWAY_ASSISTANT_MODEL_ID).
+ * Multimodal Assistance agent via Gemini 3.1 Pro (GATEWAY_ASSISTANT_MODEL_ID).
  * Multi-turn plan → one chat reply. Never starts generation.
  */
 import { generateObject, jsonSchema } from "ai";
@@ -193,7 +193,7 @@ function assistantModelId(): string {
   // Assistance is multimodal (vision over product/refs). Never fall back to a
   // text-only lite model — that silently breaks image understanding.
   return (
-    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || "google/gemini-3-flash"
+    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || "google/gemini-3.1-pro-preview"
   );
 }
 
@@ -594,6 +594,7 @@ const AGENT_SYSTEM_RULES = [
   "Classify intent. Propose mode/style changes as typed proposedMode/proposedStyle commands.",
   "Unresolved mode/style conflicts stay decision=ask with proposed*.decision=ask.",
   "When the user confirms a mode/style change in chat, set proposed*.decision=change.",
+  "For video: plan to production.durationSeconds. Short clips = one continuous moment; longer clips may use more beats. Never invent an arc that needs more screen time than the clip.",
 ].join("\n");
 
 export async function analyzeAssistedTurn(input: {
@@ -634,7 +635,11 @@ export async function analyzeAssistedTurn(input: {
     : "User did not explicitly ask to skip interviewing.";
 
   const system = [
-    workflowSystemContext(input.mode, input.videoType),
+    workflowSystemContext(
+      input.mode,
+      input.videoType,
+      input.currentPayload.production?.durationSeconds,
+    ),
     AGENT_SYSTEM_RULES,
     "Respond with a single JSON object matching the schema.",
   ].join("\n");

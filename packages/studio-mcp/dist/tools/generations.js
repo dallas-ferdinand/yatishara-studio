@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { jsonResult, pollGeneration, studioFetch } from "../client.js";
 const estimateSchema = {
-  mode: z.enum(["image", "video", "script"]).optional(),
+  mode: z.enum(["image", "video", "script", "audio"]).optional(),
   resolution: z.string().optional(),
   durationSeconds: z.number().optional(),
   audioEnabled: z.boolean().optional(),
+  audioType: z.enum(["voiceover", "sfx"]).optional(),
+  characterCount: z.number().optional(),
+  prompt: z.string().optional().describe("For mode=audio voiceover: character count is taken from prompt length when characterCount is omitted"),
   referenceAssetIds: z.array(z.string()).optional(),
   referenceElementIds: z.array(z.string()).optional().describe("Built elements \u2014 video: prop/location sheets as [Image N] refs; characters prompt-only"),
   startFrameAssetId: z.string().optional().describe(
@@ -35,7 +38,7 @@ const REFERENCE_INTENT_ENUM = ["auto", "stylize", "match_reference", "element_lo
 function registerGenerationTools(server) {
   server.tool(
     "studio_estimate_generation",
-    "Estimate credit cost before generating. Call this before studio_generate_image, studio_generate_video, or studio_generate_script. Returns cost, creditBalance, and canGenerate.",
+    "Estimate credit cost before generating. Call this before studio_generate_image, studio_generate_video, studio_generate_script, or audio generation. Returns cost, creditBalance, and canGenerate.",
     estimateSchema,
     async (args) => jsonResult(
       await studioFetch("/generations/estimate", {
@@ -44,6 +47,9 @@ function registerGenerationTools(server) {
           resolution: args.resolution,
           durationSeconds: args.durationSeconds,
           audioEnabled: args.audioEnabled,
+          audioType: args.audioType,
+          characterCount: args.characterCount,
+          prompt: args.prompt,
           referenceAssetIds: args.referenceAssetIds,
           referenceElementIds: args.referenceElementIds,
           startFrameAssetId: args.startFrameAssetId,
@@ -60,15 +66,18 @@ function registerGenerationTools(server) {
     async () => jsonResult(await studioFetch("/video-models?scope=mcp"))
   );
   server.tool(
-    "Estimate total production budget for multiple generation items (props, shots, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cartoon-ad-production budget approval.",
+    "studio_estimate_batch",
+    "Estimate total production budget for multiple generation items (props, shots, audio, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cartoon-ad-production budget approval.",
     {
       items: z.array(
         z.object({
           label: z.string(),
-          mode: z.enum(["image", "video", "script"]),
+          mode: z.enum(["image", "video", "script", "audio"]),
           resolution: z.string().optional(),
           durationSeconds: z.number().optional(),
           audioEnabled: z.boolean().optional(),
+          audioType: z.enum(["voiceover", "sfx"]).optional(),
+          characterCount: z.number().optional(),
           hasReferenceInput: z.boolean().optional(),
           referenceAssetIds: z.array(z.string()).optional(),
           maxRounds: z.number()
@@ -82,6 +91,18 @@ function registerGenerationTools(server) {
         body: JSON.stringify(args)
       })
     )
+  );
+  server.tool(
+    "studio_list_script_types",
+    "List script output types for studio_generate_script (production, storyboard, vo_script, etc.).",
+    {},
+    async () => jsonResult(await studioFetch("/catalog/script-types"))
+  );
+  server.tool(
+    "studio_list_reference_intents",
+    "List referenceIntent values for styled/Direct generation (auto, stylize, match_reference, element_lock).",
+    {},
+    async () => jsonResult(await studioFetch("/catalog/reference-intents"))
   );
   server.tool(
     "studio_list_presets",
@@ -169,7 +190,7 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
       styleSheetElementId: z.string().optional().describe(styleSheetFieldDesc),
       stylePreset: z.string().optional().describe(stylePresetFieldDesc),
       aspectRatio: z.string().optional(),
-      resolution: z.string().optional().describe("854x480, 1280x720, or 1920x1080"),
+      resolution: z.string().optional().describe("1280x720 (720p) or 1920x1080 (1080p)"),
       durationSeconds: z.number().optional().describe("4-15 seconds"),
       audioEnabled: z.boolean().optional(),
       referenceAssetIds: z.array(z.string()).optional(),
@@ -239,6 +260,52 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
         })
       })
     )
+  );
+  server.tool(
+    "studio_generate_audio",
+    `Generate voiceover (TTS) or SFX and save to a folder. Call studio_estimate_generation with mode=audio first.
+
+Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
+SFX: prompt = sound description; optional durationSeconds 0.5\u201330 (omit = Auto ~5s).
+Music is not available. Async by default (wait=false) then polls up to 3 min.`,
+    {
+      prompt: z.string(),
+      audioType: z.enum(["voiceover", "sfx"]),
+      folderId: z.string().optional(),
+      elevenVoiceId: z.string().optional().describe("Required for voiceover"),
+      elevenVoiceName: z.string().optional(),
+      elevenPublicOwnerId: z.string().optional().describe("Library owner id; omit for account/premade voices"),
+      durationSeconds: z.number().optional().describe("SFX only: 0.5\u201330"),
+      audioLoop: z.boolean().optional(),
+      promptInfluence: z.number().optional().describe("SFX only: 0\u20131"),
+      wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server.")
+    },
+    async (args) => {
+      if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
+        throw new Error("elevenVoiceId is required for voiceover");
+      }
+      const wait = args.wait === true;
+      const queued = await studioFetch("/generations", {
+        method: "POST",
+        body: JSON.stringify({
+          mode: "audio",
+          wait,
+          prompt: args.prompt,
+          folderId: args.folderId,
+          audioType: args.audioType,
+          elevenVoiceId: args.elevenVoiceId,
+          elevenVoiceName: args.elevenVoiceName,
+          elevenPublicOwnerId: args.elevenPublicOwnerId,
+          durationSeconds: args.durationSeconds,
+          audioLoop: args.audioLoop,
+          promptInfluence: args.promptInfluence
+        })
+      });
+      if (wait) return jsonResult(queued);
+      const jobId = queued.id;
+      const result = await pollGeneration(jobId, { timeoutMs: 18e4 });
+      return jsonResult({ ...queued, ...result });
+    }
   );
 }
 export {
