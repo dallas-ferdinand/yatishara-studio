@@ -4,17 +4,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { action, internalAction } from "./_generated/server";
+import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { putObject } from "./lib/bunny";
 
 const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
 async function promoteStagingToBunny(
-  ctx: {
-    runQuery: Function;
-    runMutation: Function;
-    storage: { get: (id: Id<"_storage">) => Promise<Blob | null>; delete: (id: Id<"_storage">) => Promise<void> };
-  },
+  ctx: Pick<ActionCtx, "runQuery" | "runMutation" | "storage">,
   args: {
     userId: Id<"users">;
     assetId: Id<"assets">;

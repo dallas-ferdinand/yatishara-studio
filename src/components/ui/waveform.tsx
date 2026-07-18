@@ -199,7 +199,8 @@ export const ScrollingWaveform = ({
   const barsRef = useRef<Array<{ x: number; height: number }>>([])
   const animationRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
-  const seedRef = useRef(Math.random())
+  const [seed] = useState(() => Math.random())
+  const seedRef = useRef(seed)
   const dataIndexRef = useRef(0)
   const heightStyle = typeof height === "number" ? `${height}px` : height
 
@@ -405,10 +406,10 @@ export const AudioScrubber = ({
   const [localProgress, setLocalProgress] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const waveformData =
-    data.length > 0
-      ? data
-      : Array.from({ length: 100 }, () => 0.2 + Math.random() * 0.6)
+  const [fallbackWaveform] = useState(() =>
+    Array.from({ length: 100 }, () => 0.2 + Math.random() * 0.6),
+  )
+  const waveformData = data.length > 0 ? data : fallbackWaveform
 
   useEffect(() => {
     if (!isDragging && duration > 0) {

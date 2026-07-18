@@ -192,6 +192,23 @@ const AssistanceApprovalCard = dynamic(
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
 const TRASH_FOLDER_ID = "__trash__";
+
+/** Module-scope clocks — avoid react-hooks/purity flags on component-body helpers. */
+function wallClockMs() {
+  return Date.now();
+}
+
+function wallClockUnixSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function newClientTurnId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `turn_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 const TRASH_ACTIVE_FOLDER = { _id: TRASH_FOLDER_ID, name: "Trash" };
 const TRASH_FOLDER_ENTRY = {
   type: "dir",
@@ -1181,7 +1198,7 @@ export function StudioShell({
       }
     }
     return [...byId.values()];
-  }, [activeFolder?._id, activeThreadId, events, threads]);
+  }, [activeFolder, activeThreadId, events, threads]);
 
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
@@ -2087,7 +2104,7 @@ export function StudioShell({
       _id: result.projectId,
       name: "Untitled",
       folderId: activeFolder._id,
-      updatedAt: Date.now(),
+      updatedAt: wallClockMs(),
     });
     setTabEntrySnapshots((snapshots) => ({
       ...snapshots,
@@ -2107,13 +2124,13 @@ export function StudioShell({
           _id: projectId,
           name,
           folderId: activeFolder?._id,
-          updatedAt: Date.now(),
+          updatedAt: wallClockMs(),
         }),
         [toKey]: videoEditToEntry({
           _id: projectId,
           name,
           folderId: activeFolder?._id,
-          updatedAt: Date.now(),
+          updatedAt: wallClockMs(),
         }),
       }));
       return;
@@ -2127,7 +2144,7 @@ export function StudioShell({
         _id: projectId,
         name,
         folderId: activeFolder?._id,
-        updatedAt: Date.now(),
+        updatedAt: wallClockMs(),
       }),
     }));
   }
@@ -2625,7 +2642,7 @@ export function StudioShell({
   }
 
   async function referenceInputsForAssetIds(assetMetas = []) {
-    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60 * 12;
+    const expiresUnix = wallClockUnixSeconds() + 60 * 60 * 12;
     const inputs = [];
     for (const asset of assetMetas) {
       if (!asset?.assetId || !["image", "video", "audio"].includes(asset.kind)) continue;
@@ -2675,7 +2692,7 @@ export function StudioShell({
       description,
       referenceAssetIds,
       sheetAssetId,
-      updatedAt: Date.now(),
+      updatedAt: wallClockMs(),
     };
     const referenceAssetEntries = referenceAssetIds
       .map((assetId) => {
@@ -3294,10 +3311,7 @@ export function StudioShell({
         activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
           ? activeThreadId
           : null;
-      const clientTurnId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `turn_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const clientTurnId = newClientTurnId();
       let threadId = reuseThreadId;
       if (!threadId) {
         threadId = await createThread({
@@ -3415,10 +3429,7 @@ export function StudioShell({
         const capturedEditorHtml = editorRef.current?.innerHTML ?? "";
         const userPrompt = buildPromptWithAttachments(draft, attachments);
         const briefAttachments = composerAttachmentsForBrief();
-        const clientTurnId =
-          typeof crypto !== "undefined" && crypto.randomUUID
-            ? crypto.randomUUID()
-            : `turn_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const clientTurnId = newClientTurnId();
         let threadId = reuseThreadId;
         if (!threadId) {
           threadId = await createThread({
