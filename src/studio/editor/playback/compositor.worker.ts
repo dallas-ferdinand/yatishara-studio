@@ -63,7 +63,16 @@ type RenderMessage = {
   transition: TransitionName;
   progress: number;
   background: [number, number, number, number];
-  texts: Array<{
+  textsUnder: Array<{
+    text: string;
+    fontSize: number;
+    color: string;
+    align: "left" | "center" | "right";
+    opacity: number;
+    translateY: number;
+    scale: number;
+  }>;
+  textsOver: Array<{
     text: string;
     fontSize: number;
     color: string;
@@ -94,7 +103,8 @@ const fragmentSource = `#version 300 es
 precision highp float;
 uniform sampler2D u_a;
 uniform sampler2D u_b;
-uniform sampler2D u_text;
+uniform sampler2D u_textUnder;
+uniform sampler2D u_textOver;
 uniform vec2 u_aSize;
 uniform vec2 u_bSize;
 uniform vec2 u_canvasSize;
@@ -132,7 +142,8 @@ vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform) {
   rotated.x /= aspect;
   vec2 local = (rotated + objectSize * 0.5) / objectSize;
   if (local.x < 0.0 || local.x > 1.0 || local.y < 0.0 || local.y > 1.0) {
-    return u_background;
+    // Transparent outside so under-lane text can show in letterbox / around PiP.
+    return vec4(0.0);
   }
   return texture(tex, local);
 }
@@ -152,13 +163,15 @@ vec4 blurFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float ra
 }
 
 void main() {
-  vec4 base;
-  if (!u_hasA && !u_hasB) {
-    base = u_background;
-  } else {
-    vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform) : u_background;
+  vec4 layer = u_background;
+  vec4 underText = texture(u_textUnder, v_uv);
+  layer = underText + layer * (1.0 - underText.a);
+
+  if (u_hasA || u_hasB) {
+    vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform) : vec4(0.0);
     vec4 b = u_hasB ? sampleFrame(u_b, v_uv, u_bSize, u_bTransform) : a;
     float p = clamp(u_progress, 0.0, 1.0);
+    vec4 base;
 
     if (u_effect == 1) {
       base = mix(a, b, p);
@@ -192,9 +205,11 @@ void main() {
     } else {
       base = a;
     }
+    layer = base + layer * (1.0 - base.a);
   }
-  vec4 textColor = texture(u_text, v_uv);
-  outColor = textColor + base * (1.0 - textColor.a);
+
+  vec4 overText = texture(u_textOver, v_uv);
+  outColor = overText + layer * (1.0 - overText.a);
 }`;
 
 let canvas: OffscreenCanvas | null = null;
@@ -202,7 +217,8 @@ let gl: WebGL2RenderingContext | null = null;
 let program: WebGLProgram | null = null;
 let textureA: WebGLTexture | null = null;
 let textureB: WebGLTexture | null = null;
-let textureText: WebGLTexture | null = null;
+let textureTextUnder: WebGLTexture | null = null;
+let textureTextOver: WebGLTexture | null = null;
 let textCanvas: OffscreenCanvas | null = null;
 let textContext: OffscreenCanvasRenderingContext2D | null = null;
 
@@ -268,12 +284,14 @@ function initialize(message: InitMessage): void {
   gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
   textureA = createTexture(gl);
   textureB = createTexture(gl);
-  textureText = createTexture(gl);
+  textureTextUnder = createTexture(gl);
+  textureTextOver = createTexture(gl);
   textCanvas = new OffscreenCanvas(canvas.width, canvas.height);
   textContext = textCanvas.getContext("2d");
   gl.uniform1i(gl.getUniformLocation(program, "u_a"), 0);
   gl.uniform1i(gl.getUniformLocation(program, "u_b"), 1);
-  gl.uniform1i(gl.getUniformLocation(program, "u_text"), 2);
+  gl.uniform1i(gl.getUniformLocation(program, "u_textUnder"), 2);
+  gl.uniform1i(gl.getUniformLocation(program, "u_textOver"), 3);
   gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
@@ -301,8 +319,63 @@ function uniform(name: string): WebGLUniformLocation | null {
   return gl && program ? gl.getUniformLocation(program, name) : null;
 }
 
+type TextItem = RenderMessage["textsOver"][number];
+
+function uploadTextLayer(
+  texture: WebGLTexture,
+  unit: number,
+  items: TextItem[],
+): void {
+  if (!gl || !canvas || !textCanvas || !textContext) return;
+  if (textCanvas.width !== canvas.width || textCanvas.height !== canvas.height) {
+    textCanvas.width = canvas.width;
+    textCanvas.height = canvas.height;
+  }
+  textContext.clearRect(0, 0, textCanvas.width, textCanvas.height);
+  textContext.textBaseline = "middle";
+  for (const item of items) {
+    textContext.save();
+    textContext.globalAlpha = item.opacity;
+    textContext.fillStyle = item.color;
+    textContext.font = `600 ${item.fontSize}px system-ui, sans-serif`;
+    textContext.textAlign = item.align;
+    const x =
+      item.align === "left"
+        ? textCanvas.width * 0.08
+        : item.align === "right"
+          ? textCanvas.width * 0.92
+          : textCanvas.width * 0.5;
+    const y = textCanvas.height * 0.82 + item.translateY;
+    textContext.translate(x, y);
+    textContext.scale(item.scale, item.scale);
+    textContext.fillText(item.text, 0, 0);
+    textContext.restore();
+  }
+  gl.activeTexture(unit);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    textCanvas,
+  );
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+}
+
 function render(message: RenderMessage): void {
-  if (!gl || !program || !canvas || !textureA || !textureB || !textureText) {
+  if (
+    !gl ||
+    !program ||
+    !canvas ||
+    !textureA ||
+    !textureB ||
+    !textureTextUnder ||
+    !textureTextOver
+  ) {
     throw new Error("Compositor is not initialized.");
   }
   const a = message.frameA;
@@ -310,45 +383,8 @@ function render(message: RenderMessage): void {
   try {
     upload(gl, textureA, gl.TEXTURE0, a);
     upload(gl, textureB, gl.TEXTURE1, b);
-    if (textCanvas && textContext) {
-      if (textCanvas.width !== canvas.width || textCanvas.height !== canvas.height) {
-        textCanvas.width = canvas.width;
-        textCanvas.height = canvas.height;
-      }
-      textContext.clearRect(0, 0, textCanvas.width, textCanvas.height);
-      textContext.textBaseline = "middle";
-      for (const item of message.texts) {
-        textContext.save();
-        textContext.globalAlpha = item.opacity;
-        textContext.fillStyle = item.color;
-        textContext.font = `600 ${item.fontSize}px system-ui, sans-serif`;
-        textContext.textAlign = item.align;
-        const x =
-          item.align === "left"
-            ? textCanvas.width * 0.08
-            : item.align === "right"
-              ? textCanvas.width * 0.92
-              : textCanvas.width * 0.5;
-        const y = textCanvas.height * 0.82 + item.translateY;
-        textContext.translate(x, y);
-        textContext.scale(item.scale, item.scale);
-        textContext.fillText(item.text, 0, 0);
-        textContext.restore();
-      }
-      gl.activeTexture(gl.TEXTURE2);
-      gl.bindTexture(gl.TEXTURE_2D, textureText);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        textCanvas,
-      );
-      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    }
+    uploadTextLayer(textureTextUnder, gl.TEXTURE2, message.textsUnder);
+    uploadTextLayer(textureTextOver, gl.TEXTURE3, message.textsOver);
     gl.useProgram(program);
     gl.uniform2f(uniform("u_aSize"), a?.displayWidth ?? 1, a?.displayHeight ?? 1);
     gl.uniform2f(uniform("u_bSize"), b?.displayWidth ?? 1, b?.displayHeight ?? 1);

@@ -19,6 +19,39 @@ const productionSchema = z
 
 export function registerAssistanceTools(server: McpServer) {
   server.tool(
+    "studio_list_threads",
+    "List recent generation/assistance threads (id, title, folderId, updatedAt). Use before studio_get_thread_history.",
+    { limit: z.number().optional() },
+    async ({ limit }) => {
+      const params = new URLSearchParams();
+      if (limit != null) params.set("limit", String(limit));
+      const query = params.toString() ? `?${params}` : "";
+      return jsonResult(await studioFetch(`/assistance/threads${query}`));
+    },
+  );
+
+  server.tool(
+    "studio_get_thread_history",
+    "Get chat/generation event history for a thread (prompts, stages, job/asset ids). Paginate with beforeOrder from nextBeforeOrder.",
+    {
+      threadId: z.string(),
+      limit: z.number().optional(),
+      beforeOrder: z.number().optional(),
+    },
+    async ({ threadId, limit, beforeOrder }) => {
+      const params = new URLSearchParams();
+      if (limit != null) params.set("limit", String(limit));
+      if (beforeOrder != null) params.set("beforeOrder", String(beforeOrder));
+      const query = params.toString() ? `?${params}` : "";
+      return jsonResult(
+        await studioFetch(
+          `/assistance/threads/${encodeURIComponent(threadId)}/history${query}`,
+        ),
+      );
+    },
+  );
+
+  server.tool(
     "studio_ensure_brief",
     "Ensure an assisted production brief (creates a thread if needed). Does not run the chat co-pilot — set production knobs then approve when review_ready.",
     {

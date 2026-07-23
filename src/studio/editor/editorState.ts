@@ -10,11 +10,13 @@ import {
 } from "./types";
 import {
   defaultInsertIndex,
+  ensureMainTextTrackAboveVideo,
   insertTrackAt,
-  nextTrackId,
+  pinAudioTracksBelow,
   pruneEmptyTracks,
 } from "./editorTimelineUtils";
-import { computeRippleInsertForNewClip } from "./editorRipple";
+import { computeRippleInsertForNewClip, arrangeTrackForDrop, resolveTrackOverlaps, collapseTrackLeft, isMainStoryTrack } from "./editorRipple";
+import { labelsForSplit } from "./clipNaming";
 import { normalizeFrameRatio } from "./projectContract";
 
 export function newClipId(): string {
@@ -202,9 +204,9 @@ export type EditorAction =
   | { type: "duplicate_selected" }
   | { type: "split_at_playhead" }
   | { type: "add_clip"; clip: Omit<EditorClip, "id"> }
-  | { type: "add_text_clip"; startTime?: number; trackId?: string }
+  | { type: "add_text_clip"; startTime?: number; trackId?: string; newLane?: boolean; insertTrackAt?: number }
   | { type: "add_track_layer"; kind: "video" | "text" }
-  | { type: "update_clip"; clipId: string; patch: Partial<EditorClip> }
+  | { type: "update_clip"; clipId: string; patch: Partial<EditorClip>; live?: boolean }
   | { type: "update_project"; patch: Partial<Pick<EditorProject, "frameRatio" | "name" | "duration">> }
   | {
       type: "set_joint_transition";
@@ -229,6 +231,8 @@ export type EditorAction =
     }
   | { type: "trim_clip"; clipId: string; trimIn: number; trimOut: number; startTime?: number; live?: boolean }
   | { type: "toggle_track_mute"; trackId: string }
+  | { type: "reorder_tracks"; trackId: string; toIndex: number }
+  | { type: "detach_audio"; clipId?: string }
   | { type: "replace_project"; project: EditorProject };
 
 function trackForClip(tracks: EditorTrack[], clip: Omit<EditorClip, "id">): EditorTrack {
@@ -239,19 +243,63 @@ function trackForClip(tracks: EditorTrack[], clip: Omit<EditorClip, "id">): Edit
   return tracks.find((track) => track.kind === clip.kind) ?? tracks[0]!;
 }
 
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd - 0.001 && bStart < aEnd - 0.001;
+}
+
+function audioTrackBusyAt(
+  project: EditorProject,
+  trackId: string,
+  startTime: number,
+  duration: number,
+): boolean {
+  const end = startTime + duration;
+  return project.clips.some((clip) => {
+    if (clip.trackId !== trackId) return false;
+    return rangesOverlap(startTime, end, clip.startTime, clip.startTime + clipDuration(clip));
+  });
+}
+
+/**
+ * Find (or create) an audio lane for a detached bed kept in place:
+ * main audio → next audio below → new lane under the audio stack.
+ */
+function placeDetachedAudioInLane(
+  project: EditorProject,
+  range: { startTime: number; duration: number },
+): { project: EditorProject; trackId: string } {
+  const audioTracks = project.tracks.filter((track) => track.kind === "audio");
+
+  if (audioTracks.length === 0) {
+    const inserted = insertTrackAt(
+      project,
+      "audio",
+      defaultInsertIndex(project.tracks, "audio"),
+    );
+    return { project: inserted.project, trackId: inserted.trackId };
+  }
+
+  for (const track of audioTracks) {
+    if (!audioTrackBusyAt(project, track.id, range.startTime, range.duration)) {
+      return { project, trackId: track.id };
+    }
+  }
+
+  const lastAudioId = audioTracks[audioTracks.length - 1]!.id;
+  const lastAudioIdx = project.tracks.findIndex((track) => track.id === lastAudioId);
+  const inserted = insertTrackAt(project, "audio", lastAudioIdx + 1);
+  return { project: inserted.project, trackId: inserted.trackId };
+}
+
 function targetTextTrack(state: EditorState, trackId?: string): EditorTrack | null {
   if (trackId) {
     return state.project.tracks.find((track) => track.id === trackId && track.kind === "text") ?? null;
   }
-  return state.project.tracks.find((track) => track.kind === "text") ?? null;
+  return mainTextTrack(state.project);
 }
 
 function ensureTextTrack(state: EditorState): { project: EditorProject; track: EditorTrack } {
-  const existing = targetTextTrack(state);
-  if (existing) return { project: state.project, track: existing };
-  const inserted = insertTrackAt(state.project, "text", defaultInsertIndex(state.project.tracks, "text"));
-  const track = inserted.project.tracks.find((item) => item.id === inserted.trackId)!;
-  return { project: inserted.project, track };
+  return ensureMainTextTrackAboveVideo(state.project);
 }
 
 export function reducer(state: EditorState, action: EditorAction): EditorState {
@@ -296,16 +344,21 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           inspectorOpen: action.jointKey ? true : state.ui.inspectorOpen,
         },
       };
-    case "set_playhead":
+    case "set_playhead": {
+      const playhead = Math.max(0, Math.min(action.time, state.project.duration));
+      if (playhead === state.ui.playhead) return state;
       return {
         ...state,
         ui: {
           ...state.ui,
-          playhead: Math.max(0, Math.min(action.time, state.project.duration)),
+          playhead,
         },
       };
+    }
     case "set_playing":
-      return { ...state, ui: { ...state.ui, playing: action.playing } };
+      return state.ui.playing === action.playing
+        ? state
+        : { ...state, ui: { ...state.ui, playing: action.playing } };
     case "set_zoom":
       return { ...state, ui: { ...state.ui, pixelsPerSecond: action.pixelsPerSecond } };
     case "set_inspector_open":
@@ -339,9 +392,12 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       if (!state.ui.selectedClipId) return state;
       const deleted = state.project.clips.find((clip) => clip.id === state.ui.selectedClipId);
       const prev = deleted ? previousAdjacentClip(state.project.clips, deleted) : null;
-      const clips = state.project.clips
+      let clips = state.project.clips
         .filter((clip) => clip.id !== state.ui.selectedClipId)
         .map((clip) => (prev && clip.id === prev.id ? clearTransitionOut(clip) : clip));
+      if (deleted && isMainStoryTrack(state.project, deleted.trackId)) {
+        clips = collapseTrackLeft(clips, deleted.trackId);
+      }
       return {
         ...withEdit(state, { ...state.project, clips }),
         ui: { ...state.ui, selectedClipId: null, playing: false },
@@ -363,17 +419,25 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       });
     }
     case "add_text_clip": {
-      const { project: textProject, track: textTrack } = action.trackId
-        ? {
-            project: state.project,
-            track: targetTextTrack(state, action.trackId) ?? ensureTextTrack(state).track,
-          }
-        : ensureTextTrack(state);
-      const startTime = action.startTime ?? state.ui.playhead;
+      let resolved: { project: EditorProject; track: EditorTrack };
+      if (action.trackId) {
+        const existing = targetTextTrack(state, action.trackId);
+        resolved = existing
+          ? { project: state.project, track: existing }
+          : ensureTextTrack(state);
+      } else if (action.newLane && action.insertTrackAt !== undefined) {
+        // Explicit overlay lane — only from drag-to-gap, not Add text / insert clicks.
+        const inserted = insertTrackAt(state.project, "text", action.insertTrackAt);
+        const track = inserted.project.tracks.find((item) => item.id === inserted.trackId)!;
+        resolved = { project: inserted.project, track };
+      } else {
+        resolved = ensureTextTrack(state);
+      }
+      const startTime = Math.max(0, action.startTime ?? state.ui.playhead);
       const clip: EditorClip = {
         id: newClipId(),
-        trackId: textTrack.id,
-        startTime: Math.max(0, startTime),
+        trackId: resolved.track.id,
+        startTime,
         trimIn: 0,
         trimOut: 3,
         label: "Text",
@@ -387,13 +451,24 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           animationDuration: 0.5,
         },
       };
-      return withHistory(
-        { ...state, project: textProject },
-        {
-          ...textProject,
-          clips: [...textProject.clips, clip],
-        },
-      );
+      const withClip = {
+        ...resolved.project,
+        clips: [...resolved.project.clips, clip],
+      };
+      const clips = arrangeTrackForDrop({
+        project: withClip,
+        trackId: resolved.track.id,
+        focusClip: clip,
+        preferredStart: startTime,
+      });
+      return {
+        ...withHistory(state, {
+          ...withClip,
+          clips,
+          duration: Math.max(withClip.duration, projectEndTime({ ...withClip, clips })),
+        }),
+        ui: { ...state.ui, selectedClipId: clip.id, playing: false },
+      };
     }
     case "add_track_layer": {
       // Multi-layer export is not supported yet — keep a single video/text stack.
@@ -403,7 +478,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       const clips = state.project.clips.map((clip) =>
         clip.id === action.clipId ? { ...clip, ...action.patch, id: clip.id } : clip,
       );
-      return withHistory(state, { ...state.project, clips });
+      const nextProject = { ...state.project, clips };
+      return action.live ? withLive(state, nextProject) : withHistory(state, nextProject);
     }
     case "update_project": {
       const next = normalizeProject({
@@ -431,12 +507,14 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       if (t <= clip.startTime + 0.05 || t >= clipEnd - 0.05) return state;
       const offset = t - clip.startTime;
       const splitPoint = clip.trimIn + offset;
-      const left: EditorClip = { ...clip, trimOut: splitPoint };
+      const [leftLabel, rightLabel] = labelsForSplit(clip.label);
+      const left: EditorClip = { ...clip, trimOut: splitPoint, label: leftLabel };
       const right: EditorClip = {
         ...clip,
         id: newClipId(),
         startTime: t,
         trimIn: splitPoint,
+        label: rightLabel,
       };
       const clips = state.project.clips
         .filter((item) => item.id !== clip.id)
@@ -454,18 +532,35 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         trackId: track.id,
         kind: track.kind,
       };
-      return withHistory(state, {
+      const withClip = {
         ...state.project,
         clips: [...state.project.clips, clip],
+      };
+      const clips = arrangeTrackForDrop({
+        project: withClip,
+        trackId: track.id,
+        focusClip: clip,
+        preferredStart: clip.startTime,
+      });
+      return withHistory(state, {
+        ...withClip,
+        clips,
+        duration: Math.max(withClip.duration, projectEndTime({ ...withClip, clips })),
       });
     }
     case "move_clip": {
       const before = state.project.clips.find((clip) => clip.id === action.clipId);
+      if (!before) return state;
+
+      const nextTrackId = action.trackId ?? before.trackId;
+      const track = state.project.tracks.find((item) => item.id === nextTrackId);
+      // Reject kind mismatch — keep clip where it is.
+      if (track && track.kind !== before.kind && action.trackId) {
+        return state;
+      }
+
       let clips = state.project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
-        const nextTrackId = action.trackId ?? clip.trackId;
-        const track = state.project.tracks.find((item) => item.id === nextTrackId);
-        if (track && track.kind !== clip.kind) return { ...clip, startTime: Math.max(0, action.startTime) };
         return {
           ...clip,
           startTime: Math.max(0, action.startTime),
@@ -473,15 +568,32 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           kind: track?.kind ?? clip.kind,
         };
       });
-      if (!action.live && before) {
-        const after = clips.find((clip) => clip.id === action.clipId);
+
+      if (!action.live) {
+        const focus = clips.find((clip) => clip.id === action.clipId);
+        if (focus) {
+          clips = arrangeTrackForDrop({
+            project: { ...state.project, clips },
+            trackId: focus.trackId,
+            focusClip: focus,
+            preferredStart: action.startTime,
+          });
+        }
         if (
-          after &&
-          (after.startTime !== before.startTime || after.trackId !== before.trackId)
+          before.startTime !== action.startTime ||
+          before.trackId !== nextTrackId
         ) {
           clips = stripTransitionsForMovedClips(state.project.clips, clips, [action.clipId]);
         }
+        // If the clip left the main storyline, pack that lane tight again.
+        if (
+          before.trackId !== nextTrackId &&
+          isMainStoryTrack(state.project, before.trackId)
+        ) {
+          clips = collapseTrackLeft(clips, before.trackId);
+        }
       }
+
       const nextProject = {
         ...state.project,
         clips,
@@ -534,6 +646,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         trackId = inserted.trackId;
       }
 
+      const leftMain =
+        moving.trackId !== trackId && isMainStoryTrack(state.project, moving.trackId);
+
       if (action.ripplePlacements?.length) {
         const positionById = new Map(action.ripplePlacements.map((p) => [p.clipId, p]));
         let clips = project.clips.map((clip) => {
@@ -547,16 +662,31 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
             kind: track?.kind ?? clip.kind,
           };
         });
+        // Ensure the moved clip landed on the destination even if placements omitted it.
+        clips = clips.map((clip) => {
+          if (clip.id !== action.clipId) return clip;
+          const track = project.tracks.find((item) => item.id === trackId);
+          return {
+            ...clip,
+            startTime: Math.max(0, action.startTime),
+            trackId,
+            kind: track?.kind ?? clip.kind,
+          };
+        });
         const movedIds = action.ripplePlacements
           .filter((placement) => {
-            const before = project.clips.find((clip) => clip.id === placement.clipId);
+            const before = state.project.clips.find((clip) => clip.id === placement.clipId);
             if (!before) return false;
             return (
               before.startTime !== placement.startTime || before.trackId !== placement.trackId
             );
           })
           .map((placement) => placement.clipId);
-        clips = stripTransitionsForMovedClips(project.clips, clips, movedIds);
+        if (!movedIds.includes(action.clipId)) movedIds.push(action.clipId);
+        clips = stripTransitionsForMovedClips(state.project.clips, clips, movedIds);
+        if (leftMain) {
+          clips = collapseTrackLeft(clips, moving.trackId);
+        }
         return withEdit(state, { ...project, clips });
       }
 
@@ -570,11 +700,20 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           kind: track?.kind ?? clip.kind,
         };
       });
-      if (
-        action.startTime !== moving.startTime ||
-        trackId !== moving.trackId
-      ) {
-        clips = stripTransitionsForMovedClips(project.clips, clips, [action.clipId]);
+      const focus = clips.find((clip) => clip.id === action.clipId);
+      if (focus) {
+        clips = arrangeTrackForDrop({
+          project: { ...project, clips },
+          trackId,
+          focusClip: focus,
+          preferredStart: action.startTime,
+        });
+      }
+      if (action.startTime !== moving.startTime || trackId !== moving.trackId) {
+        clips = stripTransitionsForMovedClips(state.project.clips, clips, [action.clipId]);
+      }
+      if (leftMain) {
+        clips = collapseTrackLeft(clips, moving.trackId);
       }
       return withEdit(state, { ...project, clips });
     }
@@ -613,7 +752,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return withEdit(state, { ...project, clips });
     }
     case "trim_clip": {
-      const clips = state.project.clips.map((clip) => {
+      const before = state.project.clips.find((clip) => clip.id === action.clipId);
+      let clips = state.project.clips.map((clip) => {
         if (clip.id !== action.clipId) return clip;
         const sourceMax =
           clip.sourceDuration != null && clip.sourceDuration > 0
@@ -634,6 +774,9 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         }
         return next;
       });
+      if (!action.live && before) {
+        clips = resolveTrackOverlaps(clips, before.trackId, action.clipId);
+      }
       const nextProject = {
         ...state.project,
         clips,
@@ -646,6 +789,82 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         track.id === action.trackId ? { ...track, muted: !track.muted } : track,
       );
       return { ...state, project: { ...state.project, tracks } };
+    }
+    case "detach_audio": {
+      const clipId = action.clipId ?? state.ui.selectedClipId;
+      const clip = state.project.clips.find((item) => item.id === clipId);
+      if (!clip || clip.kind !== "video" || !clip.assetId) return state;
+
+      const priorVolume = clip.effects?.volume ?? 1;
+      let project: EditorProject = {
+        ...state.project,
+        clips: state.project.clips.map((item) =>
+          item.id === clip.id
+            ? {
+                ...item,
+                effects: { ...item.effects, volume: 0 },
+              }
+            : item,
+        ),
+      };
+
+      // CapCut-style: park the bed in place on the main audio lane; if that
+      // range is busy, try the next audio lane below; otherwise insert a new one.
+      const placed = placeDetachedAudioInLane(project, {
+        startTime: clip.startTime,
+        duration: clipDuration(clip),
+      });
+      project = placed.project;
+      const audioTrackId = placed.trackId;
+
+      const audioClip: EditorClip = {
+        id: newClipId(),
+        assetId: clip.assetId,
+        trackId: audioTrackId,
+        startTime: clip.startTime,
+        trimIn: clip.trimIn,
+        trimOut: clip.trimOut,
+        sourceDuration: clip.sourceDuration,
+        label: `${clip.label} audio`,
+        kind: "audio",
+        effects: {
+          fadeIn: clip.effects?.fadeIn,
+          fadeOut: clip.effects?.fadeOut,
+          volume: priorVolume > 0.0005 ? priorVolume : 1,
+        },
+      };
+      const clips = [...project.clips, audioClip];
+      return {
+        ...withEdit(state, {
+          ...project,
+          clips,
+          duration: Math.max(project.duration, projectEndTime({ ...project, clips })),
+        }),
+        ui: { ...state.ui, selectedClipId: audioClip.id, playing: false },
+      };
+    }
+    case "reorder_tracks": {
+      const from = state.project.tracks.findIndex((track) => track.id === action.trackId);
+      if (from < 0) return state;
+      const tracks = [...state.project.tracks];
+      const [moved] = tracks.splice(from, 1);
+      if (!moved) return state;
+      let to = Math.max(0, Math.min(action.toIndex, tracks.length));
+      // After removal, indices at/after `from` shift left.
+      if (action.toIndex > from) to = Math.max(0, Math.min(action.toIndex - 1, tracks.length));
+      // Non-audio cannot be dropped into the audio block; audio stays among audio at bottom.
+      if (moved.kind !== "audio") {
+        const firstAudio = tracks.findIndex((track) => track.kind === "audio");
+        if (firstAudio !== -1) to = Math.min(to, firstAudio);
+      } else {
+        const firstAudio = tracks.findIndex((track) => track.kind === "audio");
+        to = firstAudio === -1 ? tracks.length : Math.max(to, firstAudio);
+      }
+      tracks.splice(to, 0, moved);
+      return withHistory(state, {
+        ...state.project,
+        tracks: pinAudioTracksBelow(tracks),
+      });
     }
     case "replace_project":
       return {

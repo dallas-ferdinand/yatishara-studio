@@ -4,6 +4,7 @@ import { requireConfig } from "./client.js";
 import { registerAccountTools } from "./tools/account.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
 import { registerAssetTools } from "./tools/assets.js";
+import { registerContextTools } from "./tools/context.js";
 import { registerDocumentTools } from "./tools/documents.js";
 import { registerEditTools } from "./tools/edits.js";
 import { registerElementTools } from "./tools/elements.js";
@@ -15,9 +16,10 @@ import { registerVoiceTools } from "./tools/voices.js";
 requireConfig();
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.3.0"
+  version: "0.5.0"
 });
 registerAccountTools(server);
+registerContextTools(server);
 registerFolderTools(server);
 registerAssetTools(server);
 registerDocumentTools(server);

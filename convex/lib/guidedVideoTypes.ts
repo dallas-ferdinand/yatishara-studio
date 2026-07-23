@@ -507,3 +507,23 @@ export function isGuidedVideoAssistanceEnabled(): boolean {
   if (raw === undefined || raw === "") return true;
   return !["0", "false", "off", "no"].includes(raw.trim().toLowerCase());
 }
+
+/** Static catalog for Studio UI — keep out of heavy guidedVideo.ts isolate. */
+export function listVideoTypesForUi(): Array<{
+  slug: VideoType;
+  label: string;
+  description: string;
+}> {
+  return [
+    {
+      slug: "hypermotion_ad",
+      label: "Hypermotion ad",
+      description: "Rapid-cut product ad with macro texture and timed beats",
+    },
+    {
+      slug: "standard",
+      label: "Standard video",
+      description: "General guided video clip",
+    },
+  ];
+}

@@ -1058,8 +1058,46 @@
   margin: 0;
 }
 
-/* Text overlay in preview */
+/* Text hit targets — over sits above video transform; under sits below it. */
+.studio-editor-text-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 
+.studio-editor-text-layer.is-under {
+  z-index: 5;
+}
+
+.studio-editor-text-layer.is-over {
+  z-index: 15;
+}
+
+.studio-editor-text-hit {
+  position: absolute;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.studio-editor-text-hit.is-selected {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px rgb(15 23 42 / 0.35);
+}
+
+.studio-editor-text-hit:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+}
+
+/* Legacy unused text chrome (compositor draws text into the canvas). */
 .studio-editor-text-overlay {
   position: absolute;
   left: 8%;
@@ -1564,7 +1602,8 @@
   z-index: 6;
   border-bottom: none;
   cursor: default;
-  touch-action: none;
+  /* Allow vertical timeline scroll; pointer scrub still handles seek. */
+  touch-action: pan-y;
   user-select: none;
   background: #ffffff;
 }
@@ -1691,7 +1730,44 @@
   border-radius: 8px;
   background: #f0f2f5;
   cursor: default;
-  touch-action: none;
+  /* pan-y keeps wheel/touch scrolling the timeline; scrub uses pointer events. */
+  touch-action: pan-y;
+}
+
+/* Text rows are short — clip must fill the lane exactly (never taller). */
+.studio-editor-track-row.is-text {
+  overflow: hidden;
+}
+
+.studio-editor-track-row.is-text .studio-editor-track-rail-inner {
+  padding: 0;
+  gap: 0;
+}
+
+.studio-editor-track-row.is-text .studio-editor-track-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.studio-editor-track-row.is-text .studio-editor-track-lane {
+  margin: 0 6px 0 0;
+  height: 100%;
+  min-height: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.studio-editor-track-row.is-text .studio-editor-clip,
+.studio-editor-track-row.is-text .studio-editor-slot-ghost,
+.studio-editor-track-row.is-text .studio-editor-ripple-ghost {
+  border-radius: 6px;
+  overflow: hidden;
+  top: 0;
+  bottom: auto;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
 }
 
 .studio-editor-track-row.is-video .studio-editor-track-lane,
@@ -1760,15 +1836,18 @@ body.is-drag-cursor .studio-editor-clip {
 
 .studio-editor-clip.is-text {
   background: transparent;
+  overflow: hidden;
 }
 
 .studio-editor-clip.is-text .studio-editor-clip-body {
   background: color-mix(in srgb, #a855f7 22%, #f5f3ff);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-.studio-editor-clip.is-text .studio-editor-clip-label.is-text {
-  color: color-mix(in srgb, #6b21a8 70%, var(--mos-text));
-  font-weight: 600;
+.studio-editor-clip.is-text.is-selected .studio-editor-clip-handle {
+  top: 18%;
+  bottom: 18%;
 }
 
 .studio-editor-clip.is-ripple-dimmed {
@@ -1818,40 +1897,169 @@ body.is-drag-cursor .studio-editor-clip {
 
 .studio-editor-track-insert-wrap {
   position: relative;
-  z-index: 3;
+  /* Below clips so thin text rows receive clicks; raised only while media/lane DnD is active. */
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  /* Tall hit band for drops; the line itself stays 1px and centered. */
+  margin: -6px 0;
+  pointer-events: none;
 }
 
-.studio-editor-track-insert-wrap.is-visible {
-  margin: 1px 0;
-}
-
-.studio-editor-track-insert-wrap.is-visible .studio-editor-track-insert {
-  opacity: 1;
+body.is-timeline-media-drag .studio-editor-track-insert-wrap,
+body.is-clip-pickup .studio-editor-track-insert-wrap,
+.studio-editor-track-insert-wrap.is-active {
+  pointer-events: auto;
+  z-index: 5;
 }
 
 .studio-editor-track-insert {
-  border-radius: 999px;
+  flex: 1;
+  height: 1px;
+  border-radius: 0;
   background: transparent;
-  border: 1px dashed transparent;
   opacity: 0;
-  transition: opacity 0.12s ease, background 0.12s ease, height 0.12s ease;
+  pointer-events: none;
+  transition: opacity 0.1s ease, background 0.1s ease;
+  box-shadow: none;
 }
 
-.studio-editor-track-insert-wrap.is-visible .studio-editor-track-insert,
-.studio-editor-track-insert.is-active {
+.studio-editor-track-insert-wrap.is-active .studio-editor-track-insert {
   opacity: 1;
-  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 18%, transparent);
-  border-color: color-mix(in srgb, var(--cursor-accent, #2563eb) 45%, transparent);
+  height: 1px;
+  background: var(--studio-edit-accent, #00c2c7);
+  box-shadow: none;
 }
 
-.studio-editor-track-insert.is-active {
-  height: 12px !important;
+.studio-editor-track-row.is-reordering {
+  opacity: 0.35;
+}
+
+.studio-editor-track-btn.is-grip {
+  width: 22px;
+  height: 16px;
+  cursor: grab;
+  color: #b0b6c0;
+}
+
+.studio-editor-track-btn.is-grip:active {
+  cursor: grabbing;
+}
+
+.studio-editor-track-rail-inner .studio-editor-track-btn:not(.is-grip) {
+  width: 24px;
+  height: 24px;
+}
+
+.studio-editor-track-rail-inner.is-reordering .studio-editor-track-btn.is-grip {
+  color: var(--cursor-accent, #2563eb);
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 12%, #fff);
 }
 
 .studio-editor-clip.is-dragging {
   cursor: grabbing;
   z-index: 4;
-  opacity: 0.92;
+}
+
+.studio-editor-clip.is-picked-up {
+  /* Must not keep layout width — otherwise leaving-main collapse looks like a stuck gap. */
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+.studio-editor-clip.is-picked-up::after {
+  display: none !important;
+}
+
+/* Pickup float: identical clip chrome, above studio chrome (shell uses ~99999). */
+.studio-editor-clip.is-pickup-float {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000001 !important;
+  pointer-events: none;
+  cursor: grabbing;
+  will-change: transform;
+  filter: drop-shadow(0 10px 22px rgba(15, 23, 42, 0.28));
+}
+
+.studio-editor-clip.is-pickup-float.is-text {
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.studio-editor-clip.is-pickup-float.is-text .studio-editor-clip-body {
+  border-radius: 6px;
+}
+
+.studio-editor-clip.is-pickup-float.is-not-viable {
+  opacity: 0.55;
+  filter: grayscale(0.2) drop-shadow(0 8px 16px rgba(15, 23, 42, 0.2));
+}
+
+.studio-editor-clip.is-ripple-shifting {
+  transition: left 0.16s ease;
+}
+
+/* Arm left transitions for the whole pickup drag so first rightward shifts interpolate. */
+body.is-clip-pickup .studio-editor-track-row .studio-editor-clip:not(.is-picked-up),
+.studio-editor-track-row.is-ripple-active .studio-editor-clip:not(.is-picked-up) {
+  transition: left 0.16s ease;
+}
+
+.studio-editor-slot-ghost {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 2;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: left 0.16s ease, width 0.16s ease;
+}
+
+.studio-editor-slot-ghost.is-video,
+.studio-editor-slot-ghost.is-image {
+  background: color-mix(in srgb, var(--studio-edit-accent, #00c2c7) 22%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--studio-edit-accent, #00c2c7) 65%, transparent);
+}
+
+.studio-editor-slot-ghost.is-audio {
+  background: color-mix(in srgb, var(--color-cursor-composer, #07111f) 28%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, #9ca3af 55%, transparent);
+}
+
+.studio-editor-slot-ghost.is-text {
+  background: color-mix(in srgb, #a855f7 20%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, #a855f7 55%, transparent);
+}
+
+.studio-editor-slot-ghost.is-media-drop {
+  opacity: 0.85;
+}
+
+.studio-editor-slot-ghost.is-media-drop .studio-editor-filmstrip,
+.studio-editor-slot-ghost.is-media-drop .studio-editor-audio-waveform {
+  opacity: 0.55;
+}
+
+body.is-clip-pickup,
+body.is-clip-pickup * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track-lane {
+  background: color-mix(in srgb, #00c2c7 8%, #ffffff);
 }
 
 .studio-editor-clip.is-selected {
@@ -1876,6 +2084,13 @@ body.is-drag-cursor .studio-editor-clip {
   box-sizing: border-box;
   pointer-events: none;
   z-index: 10;
+}
+
+/* Text lanes are short — keep selection chrome inside the row. */
+.studio-editor-clip.is-text.is-selected::after {
+  inset: 0;
+  border-radius: 6px;
+  border-width: 1.5px;
 }
 
 .studio-editor-filmstrip,
@@ -1956,6 +2171,86 @@ body.is-drag-cursor .studio-editor-clip {
   height: 100% !important;
 }
 
+/* CapCut-style curved audio fade wedges (SVG quarter-ellipse). */
+.studio-editor-clip-fade-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none !important;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.studio-editor-clip-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  pointer-events: none !important;
+}
+
+.studio-editor-clip-fade.is-in {
+  left: 0;
+}
+
+.studio-editor-clip-fade.is-out {
+  right: 0;
+}
+
+.studio-editor-clip-fade path {
+  fill: rgb(0 0 0 / 0.55);
+}
+
+/* Diamond sits centered on the curve endpoint (top of fade edge). */
+.studio-editor-clip-fade-handle {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  z-index: 12;
+  cursor: ew-resize;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  user-select: none;
+}
+
+.studio-editor-clip.is-selected .studio-editor-clip-fade-handle,
+.studio-editor-clip-fade-handle.is-active {
+  opacity: 1;
+  /* Active diamonds must capture drags even before the clip is selected,
+     otherwise the event falls through and starts clip pickup. */
+  pointer-events: auto;
+}
+
+.studio-editor-clip-fade-handle.is-in {
+  z-index: 12;
+}
+
+.studio-editor-clip-fade-handle.is-out {
+  z-index: 13;
+}
+
+.studio-editor-clip-fade-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  border-radius: 1px;
+  background: #111314;
+  border: 1.5px solid var(--studio-clip-accent, #00c2c7);
+  box-sizing: border-box;
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+
 .studio-editor-drop-ghost {
   position: absolute;
   top: 0;
@@ -1990,6 +2285,133 @@ body.is-drag-cursor .studio-editor-clip {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--mos-text-soft);
+}
+
+/* After generic .clip-label so padding/line-height cannot blow past the text lane. */
+.studio-editor-clip.is-text .studio-editor-clip-label.is-text {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  max-height: 100%;
+  padding: 0 0.4rem;
+  margin: 0;
+  font-size: 0.58rem;
+  font-weight: 600;
+  line-height: 1;
+  color: color-mix(in srgb, #6b21a8 70%, var(--mos-text));
+}
+
+/* Dark bottom name mask — clipped by rounded clip-body; fades to 0 in trailing pad. */
+.studio-editor-clip-name {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: auto;
+  z-index: 4;
+  box-sizing: content-box;
+  width: max-content;
+  max-width: calc(100% - 8px);
+  /* Trailing pad = soft fade zone after a short gutter past the last letter */
+  padding: 8px 46px 1px 8px;
+  border: none;
+  border-radius: 0 0 0 8px;
+  isolation: isolate;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  pointer-events: none;
+  text-shadow: none;
+}
+
+.studio-editor-clip-name::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  /* Vertical fade to 0; horizontal fade to 0 only in the trailing pad. */
+  background: linear-gradient(
+    to top,
+    rgba(8, 10, 12, 0.62) 0%,
+    rgba(8, 10, 12, 0.38) 40%,
+    rgba(8, 10, 12, 0.12) 72%,
+    rgba(8, 10, 12, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.55) calc(100% - 22px),
+    rgba(0, 0, 0, 0.2) calc(100% - 8px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.55) calc(100% - 22px),
+    rgba(0, 0, 0, 0.2) calc(100% - 8px),
+    transparent 100%
+  );
+}
+
+.studio-editor-clip-name.is-editable {
+  /* Let single-clicks fall through to the clip for select/drag; double-click still renames. */
+  pointer-events: auto;
+  cursor: inherit;
+}
+
+.studio-editor-clip-name.is-editing {
+  pointer-events: auto;
+  box-sizing: content-box;
+  width: max-content;
+  min-width: 4ch;
+  max-width: calc(100% - 48px);
+  padding: 8px 46px 1px 8px;
+  outline: none;
+  box-shadow: none;
+  overflow: hidden;
+  background: linear-gradient(
+    to top,
+    rgba(8, 10, 12, 0.62) 0%,
+    rgba(8, 10, 12, 0.38) 40%,
+    rgba(8, 10, 12, 0.12) 72%,
+    rgba(8, 10, 12, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.55) calc(100% - 22px),
+    rgba(0, 0, 0, 0.2) calc(100% - 8px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0%,
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.55) calc(100% - 22px),
+    rgba(0, 0, 0, 0.2) calc(100% - 8px),
+    transparent 100%
+  );
+  font: inherit;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: none;
+}
+
+.studio-editor-clip-name.is-editing::before {
+  display: none;
 }
 
 .studio-editor-clip-handle {

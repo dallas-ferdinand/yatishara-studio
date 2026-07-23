@@ -47,6 +47,8 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  /* Keep nested scrollports bounded; floating menus should portal out. */
+  overflow: hidden;
 }
 
 /* ── Unified compact panel headers (32px) ── */
@@ -680,11 +682,13 @@
 }
 
 .desk-file-tree-scroll {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   scrollbar-gutter: stable;
 }
 
@@ -7444,6 +7448,11 @@
 }
 .cursor-tab-context-item:hover {
   background: var(--cursor-overlay-hover);
+}
+.cursor-tab-context-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
 }
 .cursor-tab-context-item.is-danger {
   color: #f08080;

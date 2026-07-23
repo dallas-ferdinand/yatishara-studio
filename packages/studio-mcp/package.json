@@ -1,7 +1,7 @@
 {
   "name": "@yatishara/studio-mcp",
-  "version": "0.3.0",
-  "description": "MCP server for Yatishara Studio — folders, generation, audio, assistance, edits, documents, and elements",
+  "version": "0.6.0",
+  "description": "MCP server for Yatishara Studio — bootstrap, workspace, generation (incl. batch), audio, assistance, timeline edits (append/trim/reorder/frame/export), documents, and elements",
   "type": "module",
   "bin": {
     "studio-mcp": "./dist/index.js"

@@ -228,6 +228,146 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       return finish(jsonResponse({ folders }));
     }
 
+    if (request.method === "GET" && route === "workspace/tree") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const folderId = parseOptionalId(url.searchParams.get("folderId")) as
+        | Id<"folders">
+        | undefined;
+      const maxDepth = Number(url.searchParams.get("maxDepth") ?? undefined);
+      const maxNodes = Number(url.searchParams.get("maxNodes") ?? undefined);
+      const tree = await ctx.runQuery(internal.studioApiContext.getWorkspaceTree, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        folderId,
+        maxDepth: Number.isFinite(maxDepth) ? maxDepth : undefined,
+        maxNodes: Number.isFinite(maxNodes) ? maxNodes : undefined,
+      });
+      return finish(jsonResponse(tree));
+    }
+
+    if (request.method === "GET" && route === "workspace/resolve-path") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const path = url.searchParams.get("path") ?? "";
+      const rootFolderId = parseOptionalId(url.searchParams.get("rootFolderId")) as
+        | Id<"folders">
+        | undefined;
+      const resolved = await ctx.runQuery(internal.studioApiContext.resolveFolderPath, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        path,
+        rootFolderId,
+      });
+      if (!resolved) {
+        return finish(errorResponse("Path not found", 404));
+      }
+      return finish(jsonResponse(resolved));
+    }
+
+    if (request.method === "GET" && route === "workspace/search") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const query = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
+      const folderId = parseOptionalId(url.searchParams.get("folderId")) as
+        | Id<"folders">
+        | undefined;
+      const limit = Number(url.searchParams.get("limit") ?? undefined);
+      const kindsRaw = url.searchParams.get("kinds");
+      const kinds = kindsRaw
+        ? (kindsRaw
+            .split(",")
+            .map((k) => k.trim())
+            .filter(Boolean) as Array<"folder" | "asset" | "document" | "element">)
+        : undefined;
+      const results = await ctx.runQuery(internal.studioApiContext.searchWorkspace, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        query,
+        kinds,
+        folderId,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      return finish(jsonResponse(results));
+    }
+
+    if (request.method === "GET" && route === "workspace/project-context") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const folderId = parseOptionalId(url.searchParams.get("folderId")) as
+        | Id<"folders">
+        | undefined;
+      if (!folderId) {
+        return finish(errorResponse("folderId is required"));
+      }
+      const recentGenerationLimit = Number(
+        url.searchParams.get("recentGenerationLimit") ?? undefined,
+      );
+      const context = await ctx.runQuery(internal.studioApiContext.getProjectContext, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        folderId,
+        expiresUnix,
+        recentGenerationLimit: Number.isFinite(recentGenerationLimit)
+          ? recentGenerationLimit
+          : undefined,
+      });
+      return finish(jsonResponse(context));
+    }
+
+    if (request.method === "POST" && route === "workspace/ensure-path") {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        path?: string;
+        rootFolderId?: Id<"folders">;
+      }>(request);
+      if (!body.path?.trim()) {
+        return finish(errorResponse("path is required"));
+      }
+      try {
+        const result = await ctx.runMutation(internal.studioApiContext.ensureFolderPath, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          path: body.path.trim(),
+          rootFolderId: body.rootFolderId,
+        });
+        return finish(jsonResponse(result));
+      } catch (error) {
+        return finish(
+          errorResponse(error instanceof Error ? error.message : "ensure path failed", 400),
+        );
+      }
+    }
+
+    if (request.method === "POST" && route === "workspace/bulk-move") {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const body = await readJsonBody<{
+        targetFolderId?: Id<"folders">;
+        items?: Array<{ kind: "asset" | "document" | "element" | "folder"; id: string }>;
+      }>(request);
+      if (!body.targetFolderId) {
+        return finish(errorResponse("targetFolderId is required"));
+      }
+      if (!body.items?.length) {
+        return finish(errorResponse("items is required"));
+      }
+      try {
+        const result = await ctx.runMutation(internal.studioApiContext.bulkMoveForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          targetFolderId: body.targetFolderId,
+          items: body.items,
+        });
+        return finish(jsonResponse(result));
+      } catch (error) {
+        return finish(
+          errorResponse(error instanceof Error ? error.message : "bulk move failed", 400),
+        );
+      }
+    }
+
     if (request.method === "POST" && route === "folders") {
       const auth = await authFor("write", "write");
       if (auth instanceof Response) return finish(auth);
@@ -329,6 +469,54 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         expiresUnix,
       });
       return finish(jsonResponse(contents));
+    }
+
+    const assetMediaMatch = route.match(/^assets\/([^/]+)\/media$/);
+    if (request.method === "GET" && assetMediaMatch) {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const assetId = assetMediaMatch[1] as Id<"assets">;
+      const media = await ctx.runQuery(internal.studioApiContext.viewAssetMedia, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        assetId,
+        expiresUnix,
+      });
+      if (!media) {
+        return finish(errorResponse("Asset not found", 404));
+      }
+      return finish(jsonResponse(media));
+    }
+
+    const assetDuplicateMatch = route.match(/^assets\/([^/]+)\/duplicate$/);
+    if (request.method === "POST" && assetDuplicateMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const assetId = assetDuplicateMatch[1] as Id<"assets">;
+      const body = await readJsonBody<{
+        folderId?: Id<"folders">;
+        name?: string;
+      }>(request);
+      try {
+        const newAssetId = await ctx.runMutation(internal.studioApiContext.duplicateAssetForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          assetId,
+          folderId: body.folderId,
+          name: body.name,
+        });
+        const asset = await ctx.runQuery(internal.studioApiInternal.getAsset, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          assetId: newAssetId,
+          expiresUnix,
+        });
+        return finish(jsonResponse({ assetId: newAssetId, asset }));
+      } catch (error) {
+        return finish(
+          errorResponse(error instanceof Error ? error.message : "Duplicate failed", 404),
+        );
+      }
     }
 
     const assetMatch = route.match(/^assets\/([^/]+)$/);
@@ -1648,6 +1836,39 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
     }
 
     // ── Assistance ──────────────────────────────────────────────────────────
+    if (request.method === "GET" && route === "assistance/threads") {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const limit = Number(url.searchParams.get("limit") ?? undefined);
+      const threads = await ctx.runQuery(internal.studioApiContext.listThreadsForApi, {
+        userId: auth.userId,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      return finish(jsonResponse({ threads }));
+    }
+
+    const assistanceThreadHistoryMatch = route.match(
+      /^assistance\/threads\/([^/]+)\/history$/,
+    );
+    if (request.method === "GET" && assistanceThreadHistoryMatch) {
+      const auth = await authFor("read", "read");
+      if (auth instanceof Response) return finish(auth);
+      const threadId = assistanceThreadHistoryMatch[1] as Id<"generationThreads">;
+      const limit = Number(url.searchParams.get("limit") ?? undefined);
+      const beforeOrder = Number(url.searchParams.get("beforeOrder") ?? undefined);
+      try {
+        const history = await ctx.runQuery(internal.studioApiContext.getThreadHistoryForApi, {
+          userId: auth.userId,
+          threadId,
+          limit: Number.isFinite(limit) ? limit : undefined,
+          beforeOrder: Number.isFinite(beforeOrder) ? beforeOrder : undefined,
+        });
+        return finish(jsonResponse(history));
+      } catch {
+        return finish(errorResponse("Thread not found", 404));
+      }
+    }
+
     if (request.method === "POST" && route === "assistance/briefs") {
       const auth = await authFor("write", "write");
       if (auth instanceof Response) return finish(auth);
@@ -1908,12 +2129,191 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const auth = await authFor("generate", "write");
       if (auth instanceof Response) return finish(auth);
       const projectId = editExportMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{ name?: string }>(request).catch(() => ({} as { name?: string }));
       const result = await ctx.runAction(internal.videoEditActions.exportVideoForApi, {
         userId: auth.userId,
         sandboxFolderId: auth.sandboxFolderId,
         projectId,
+        name: body.name,
       });
       return finish(jsonResponse(result));
+    }
+
+    const editFrameMatch = route.match(/^edits\/([^/]+)\/frame$/);
+    if (request.method === "POST" && editFrameMatch) {
+      const auth = await authFor("generate", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editFrameMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        timeSec?: number;
+        assetId?: Id<"assets">;
+        localTimeSec?: number;
+      }>(request);
+      const result = await ctx.runAction(internal.videoEditActions.pullFrameForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        timeSec: body.timeSec,
+        assetId: body.assetId,
+        localTimeSec: body.localTimeSec,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editClipsReorderMatch = route.match(/^edits\/([^/]+)\/clips\/reorder$/);
+    if (request.method === "POST" && editClipsReorderMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editClipsReorderMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        trackId: string;
+        clipIds: string[];
+        compact?: boolean;
+      }>(request);
+      if (!body.trackId || !Array.isArray(body.clipIds)) {
+        return finish(errorResponse("trackId and clipIds are required"));
+      }
+      const result = await ctx.runMutation(internal.videoEdits.reorderClipsForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        trackId: body.trackId,
+        clipIds: body.clipIds,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editClipsSplitMatch = route.match(/^edits\/([^/]+)\/clips\/split$/);
+    if (request.method === "POST" && editClipsSplitMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editClipsSplitMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        clipId: string;
+        timeSec: number;
+        compact?: boolean;
+      }>(request);
+      if (!body.clipId || typeof body.timeSec !== "number") {
+        return finish(errorResponse("clipId and timeSec are required"));
+      }
+      const result = await ctx.runMutation(internal.videoEdits.splitClipForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        clipId: body.clipId,
+        timeSec: body.timeSec,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editTransitionMatch = route.match(/^edits\/([^/]+)\/clips\/transition$/);
+    if (request.method === "POST" && editTransitionMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editTransitionMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        clipId: string;
+        type?: string;
+        duration?: number;
+        clear?: boolean;
+        compact?: boolean;
+      }>(request);
+      if (!body.clipId) return finish(errorResponse("clipId is required"));
+      const result = await ctx.runMutation(internal.videoEdits.setTransitionForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        clipId: body.clipId,
+        type: body.type,
+        duration: body.duration,
+        clear: body.clear,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editClipsMatch = route.match(/^edits\/([^/]+)\/clips$/);
+    if (editClipsMatch) {
+      const projectId = editClipsMatch[1] as Id<"videoEditProjects">;
+      if (request.method === "POST") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          assetIds?: string[];
+          clips?: Array<{
+            assetId: string;
+            trackId?: string;
+            startTime?: number;
+            trimIn?: number;
+            trimOut?: number;
+            label?: string;
+            duration?: number;
+          }>;
+          atTime?: number;
+          compact?: boolean;
+        }>(request);
+        const result = await ctx.runMutation(internal.videoEdits.appendClipsForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          assetIds: body.assetIds,
+          clips: body.clips,
+          atTime: body.atTime,
+          compact: body.compact,
+        });
+        return finish(jsonResponse(result));
+      }
+      if (request.method === "PATCH") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          clips: Array<{
+            clipId: string;
+            startTime?: number;
+            trimIn?: number;
+            trimOut?: number;
+            trackId?: string;
+            label?: string;
+            effects?: unknown;
+            transitionOut?: unknown;
+          }>;
+          compact?: boolean;
+        }>(request);
+        if (!Array.isArray(body.clips) || !body.clips.length) {
+          return finish(errorResponse("clips array is required"));
+        }
+        const result = await ctx.runMutation(internal.videoEdits.patchClipsForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          clips: body.clips,
+          compact: body.compact,
+        });
+        return finish(jsonResponse(result));
+      }
+      if (request.method === "DELETE") {
+        const auth = await authFor("write", "write");
+        if (auth instanceof Response) return finish(auth);
+        const body = await readJsonBody<{
+          clipIds: string[];
+          ripple?: boolean;
+          compact?: boolean;
+        }>(request);
+        if (!Array.isArray(body.clipIds) || !body.clipIds.length) {
+          return finish(errorResponse("clipIds array is required"));
+        }
+        const result = await ctx.runMutation(internal.videoEdits.removeClipsForApi, {
+          userId: auth.userId,
+          sandboxFolderId: auth.sandboxFolderId,
+          projectId,
+          clipIds: body.clipIds,
+          ripple: body.ripple,
+          compact: body.compact,
+        });
+        return finish(jsonResponse(result));
+      }
     }
 
     const editMatch = route.match(/^edits\/([^/]+)$/);

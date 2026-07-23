@@ -16,6 +16,11 @@ const exactGetPost = [
   "/api/v1/account",
   "/api/v1/trash",
   "/api/v1/folders",
+  "/api/v1/workspace/tree",
+  "/api/v1/workspace/resolve-path",
+  "/api/v1/workspace/search",
+  "/api/v1/workspace/project-context",
+  "/api/v1/workspace/bulk-move",
   "/api/v1/assets/upload",
   "/api/v1/assets/upload-inline",
   "/api/v1/documents",
@@ -30,6 +35,7 @@ const exactGetPost = [
   "/api/v1/generations/estimate",
   "/api/v1/generations/estimate-batch",
   "/api/v1/generations",
+  "/api/v1/assistance/threads",
   "/api/v1/assistance/briefs",
   "/api/v1/assistance/approvals",
   "/api/v1/edits",
@@ -42,6 +48,7 @@ for (const path of exactGetPost) {
 
 const prefixMethods = [
   ["GET", "POST", "PATCH", "DELETE"],
+  ["GET", "POST"],
   ["GET", "POST", "PATCH", "DELETE"],
   ["GET", "PATCH", "POST", "DELETE"],
   ["GET", "POST", "PATCH", "DELETE"],
@@ -49,11 +56,12 @@ const prefixMethods = [
   ["GET", "POST", "DELETE"],
   ["GET", "POST", "PATCH"],
   ["GET", "POST"],
-  ["GET", "POST", "PUT", "PATCH"],
+  ["GET", "POST", "PUT", "PATCH", "DELETE"],
 ] as const;
 
 const prefixes = [
   "/api/v1/folders/",
+  "/api/v1/workspace/",
   "/api/v1/assets/",
   "/api/v1/documents/",
   "/api/v1/elements/",

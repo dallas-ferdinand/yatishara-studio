@@ -5,6 +5,7 @@ import { Minus, Plus } from "lucide-react";
 import { clipAtPlayhead } from "./editorState";
 import { exportSizeForRatio } from "./projectContract";
 import { PreviewTransformOverlay } from "./PreviewTransformOverlay";
+import { PreviewTextOverlays } from "./PreviewTextOverlays";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 import { usePlaybackEngine } from "./playback/use-playback-engine";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
@@ -42,10 +43,16 @@ export function EditorPreview({
     panY: number;
   } | null>(null);
   const frame = exportSizeForRatio(project.frameRatio);
-  const videoTrack = project.tracks.find((track) => track.kind === "video");
-  const activeClip = videoTrack
-    ? clipAtPlayhead(project, videoTrack.id, playhead)
-    : null;
+  // Top timeline video lane (lowest track index) at the playhead.
+  let activeClip: EditorClip | null = null;
+  for (const track of project.tracks) {
+    if (track.kind !== "video") continue;
+    const clip = clipAtPlayhead(project, track.id, playhead);
+    if (clip) {
+      activeClip = clip;
+      break;
+    }
+  }
   const posterUrl = activeClip?.assetId
     ? mediaById.get(activeClip.assetId)?.thumbnailUrl
     : undefined;
@@ -173,6 +180,20 @@ export function EditorPreview({
             ref={engine.canvasRef}
             className="studio-editor-preview-video studio-editor-preview-layer studio-editor-preview-canvas"
           />
+          <PreviewTextOverlays
+            layer="under"
+            project={project}
+            playhead={playhead}
+            canvasWidth={frame.width}
+            canvasHeight={frame.height}
+            selectedClipId={selectedClipId}
+            playing={playing}
+            onSelect={(clipId) => {
+              onSelectClip(clipId);
+              if (playing) onPlayingChange(false);
+            }}
+            onTogglePlay={() => onPlayingChange(!playing)}
+          />
           {activeClip ? (
             <PreviewTransformOverlay
               clip={activeClip}
@@ -199,6 +220,20 @@ export function EditorPreview({
               onClick={() => onPlayingChange(!playing)}
             />
           )}
+          <PreviewTextOverlays
+            layer="over"
+            project={project}
+            playhead={playhead}
+            canvasWidth={frame.width}
+            canvasHeight={frame.height}
+            selectedClipId={selectedClipId}
+            playing={playing}
+            onSelect={(clipId) => {
+              onSelectClip(clipId);
+              if (playing) onPlayingChange(false);
+            }}
+            onTogglePlay={() => onPlayingChange(!playing)}
+          />
           {engine.buffering ? (
             <div className="studio-editor-preview-buffering" aria-busy="true" aria-label="Loading preview">
               <MediaLoadWave size="sm" />

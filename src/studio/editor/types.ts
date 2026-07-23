@@ -141,7 +141,9 @@ export const DEFAULT_TRACKS: EditorTrack[] = [
   { id: "track-audio", kind: "audio", label: "Audio" },
 ];
 
-export const TRACK_INSERT_HEIGHT = 8;
+/** Hairline insert indicator; hit target is larger (TRACK_INSERT_HIT_PX). */
+export const TRACK_INSERT_HEIGHT = 1;
+export const TRACK_INSERT_HIT_PX = 16;
 
 export const MIN_PPS = 24;
 export const MAX_PPS = 240;

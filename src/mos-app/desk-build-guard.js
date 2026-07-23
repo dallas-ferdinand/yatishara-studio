@@ -38,7 +38,42 @@ export function getDeskBuildGuardInlineScript() {
       }
     };
 
+    const clearStudioLocalState = () => {
+      try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i);
+          if (!key) continue;
+          if (
+            key.startsWith("yatishara-studio") ||
+            key.startsWith("mercuryos-studio") ||
+            key.startsWith("mercuryos-desk") ||
+            key.startsWith("mos-desk") ||
+            key.startsWith("react-resizable-panels:studio") ||
+            key.includes("studio-main")
+          ) {
+            keys.push(key);
+          }
+        }
+        keys.push(
+          "yatishara-studio-open-tabs-v1",
+          "yatishara-studio-main-panel-sizes",
+          "yatishara-studio-custom-cursor",
+          "yatishara-studio-build",
+          "mercuryos-studio-composer-style-mode-v1",
+          "mercuryos-studio-active-style-sheet-v1",
+        );
+        for (const key of new Set(keys)) {
+          try { localStorage.removeItem(key); } catch {}
+        }
+        sessionStorage.removeItem("yatishara-studio-reloaded-build");
+        sessionStorage.removeItem("mercuryos-desk-reloaded-build");
+        sessionStorage.removeItem("mos-desk-purged-build");
+      } catch {}
+    };
+
     const purge = () => {
+      if (wantsReset) clearStudioLocalState();
       try {
         localStorage.removeItem("yatishara-studio-build");
         localStorage.removeItem("mercuryos-desk-build");

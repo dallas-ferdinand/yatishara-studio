@@ -4,7 +4,7 @@
 
 ## What this means
 
-MCP defaults (and production runs) send **your finished prompt text straight to the image/video model** — **no secondary pass** through `GATEWAY_TEXT_MODEL_ID` (Gemini 3.1 Pro).
+MCP defaults (and production runs) send **your finished prompt text straight to the image/video model** — **no secondary pass** through `GATEWAY_TEXT_MODEL_ID` (Gemini 3.5 Flash).
 
 | Step | Runs? |
 |------|-------|

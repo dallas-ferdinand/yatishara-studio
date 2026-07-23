@@ -10,7 +10,7 @@ import { resolveCompilerKind } from "./hypermotionWorkflow";
 import type { VideoModelDef, VideoModelSlug } from "./videoModels";
 
 export const ASSISTANCE_PLAN_VERSION = 1 as const;
-export const ASSISTANCE_PRICING_VERSION = "generation-pricing-v3-gemini-3.1-pro";
+export const ASSISTANCE_PRICING_VERSION = "generation-pricing-v4-gemini-3.5-flash";
 
 export function canReuseAssistanceMediaJob(
   stage: "queued" | "generating" | "saving" | "done" | "failed" | undefined,

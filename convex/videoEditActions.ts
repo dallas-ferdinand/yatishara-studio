@@ -13,6 +13,7 @@ import { internal } from "./_generated/api";
 import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import { videoClipAudioFilter } from "./lib/editorExportAudio";
+import { clipAtPlayhead } from "./lib/editorProjectOps";
 
 const execFileAsync = promisify(execFile);
 
@@ -77,12 +78,8 @@ function xfadeTransition(type: string): string {
 
 function buildSegmentVideoFilters(clip: EditorClip, duration: number, textClips: EditorClip[]): string {
   const parts: string[] = [];
-  const fadeIn = Math.max(0, clip.effects?.fadeIn ?? 0);
-  const fadeOut = Math.max(0, clip.effects?.fadeOut ?? 0);
-  if (fadeIn > 0) parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}`);
-  if (fadeOut > 0) {
-    parts.push(`fade=t=out:st=${Math.max(0, duration - fadeOut).toFixed(3)}:d=${fadeOut.toFixed(3)}`);
-  }
+  // Picture edge fades removed — effects.fadeIn/fadeOut are audio-only (afade).
+  // Transitions handle visual dissolves between clips.
 
   const clipStart = clip.startTime;
   const clipEnd = clip.startTime + duration;
@@ -272,7 +269,7 @@ async function renderClipSegment(args: {
     args.dest,
   ];
 
-  const audioFilter = videoClipAudioFilter(args.clip, Boolean(args.muteAudio));
+  const audioFilter = videoClipAudioFilter(args.clip, Boolean(args.muteAudio), args.duration);
   // ffmpeg silently emits a video-only file when `-af` matches no audio, so
   // probe first: silent / muted sources must get anullsrc or concat/xfade
   // graphs fail with "Stream specifier ':a' matches no streams".
@@ -558,8 +555,8 @@ async function mixAudioTrack(args: {
     const fadeIn = clip.effects?.fadeIn ?? 0;
     const fadeOut = clip.effects?.fadeOut ?? 0;
     let chain = `[${inputIndex}:a]atrim=start=${clip.trimIn}:end=${clip.trimOut},asetpts=PTS-STARTPTS`;
-    if (fadeIn > 0) chain += `,afade=t=in:st=0:d=${fadeIn}`;
-    if (fadeOut > 0) chain += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}`;
+    if (fadeIn > 0) chain += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
+    if (fadeOut > 0) chain += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
     if (volume !== 1) chain += `,volume=${volume}`;
     chain += `,adelay=${delayMs}|${delayMs}[a${index}]`;
     filterParts.push(chain);
@@ -758,6 +755,7 @@ export const exportVideoForApi = internalAction({
     userId: v.id("users"),
     sandboxFolderId: v.id("folders"),
     projectId: v.id("videoEditProjects"),
+    name: v.optional(v.string()),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -771,11 +769,328 @@ export const exportVideoForApi = internalAction({
     if (!row) {
       throw new Error("Edit project not found.");
     }
+    const exportName = args.name?.trim() || row.name;
     return await runExportVideo(ctx, args.userId, {
       projectId: args.projectId,
       folderId: row.folderId,
-      name: row.name,
+      name: exportName,
       project: row.project as EditorProject,
     });
+  },
+});
+
+/**
+ * Cut a single asset to [trimIn, trimOut] and return a short-lived download URL.
+ * Used by the editor clip context menu (Save as video / Save as audio).
+ */
+export const downloadClipSegment = action({
+  args: {
+    assetId: v.id("assets"),
+    trimIn: v.number(),
+    trimOut: v.number(),
+    mode: v.union(v.literal("video"), v.literal("audio")),
+    filename: v.optional(v.string()),
+  },
+  returns: v.object({
+    url: v.string(),
+    filename: v.string(),
+    contentType: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ url: string; filename: string; contentType: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to download.");
+    }
+    try {
+      await execFileAsync("ffmpeg", ["-version"]);
+    } catch {
+      throw new Error(
+        "Clip download requires ffmpeg on the Convex action runtime.",
+      );
+    }
+
+    const trimIn = Math.max(0, args.trimIn);
+    const trimOut = Math.max(trimIn + 0.05, args.trimOut);
+    const duration = trimOut - trimIn;
+
+    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId,
+      assetId: args.assetId,
+    });
+    if (!source?.bunnyPath) {
+      throw new Error("Source media not found.");
+    }
+
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
+    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+    const tempDir = await mkdtemp(join(tmpdir(), "studio-clip-dl-"));
+    try {
+      const sourcePath = join(tempDir, "source.bin");
+      await downloadToFile(signedSource, sourcePath);
+
+      const audioOnly = args.mode === "audio";
+      const baseName = (args.filename ?? source.name ?? "clip")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^\w.\- ]+/g, " ")
+        .trim()
+        .slice(0, 80) || "clip";
+      const filename = audioOnly ? `${baseName}.wav` : `${baseName}.mp4`;
+      const contentType = audioOnly ? "audio/wav" : "video/mp4";
+      const outPath = join(tempDir, audioOnly ? "clip.wav" : "clip.mp4");
+
+      if (audioOnly) {
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-i",
+          sourcePath,
+          "-t",
+          String(duration),
+          "-vn",
+          "-acodec",
+          "pcm_s16le",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          outPath,
+        ]);
+      } else if (await hasAudioStream(sourcePath)) {
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-i",
+          sourcePath,
+          "-t",
+          String(duration),
+          "-c:v",
+          "libx264",
+          "-preset",
+          "fast",
+          "-crf",
+          "22",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          "-movflags",
+          "+faststart",
+          outPath,
+        ]);
+      } else {
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-i",
+          sourcePath,
+          "-f",
+          "lavfi",
+          "-i",
+          "anullsrc=channel_layout=stereo:sample_rate=44100",
+          "-t",
+          String(duration),
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "fast",
+          "-crf",
+          "22",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          "-shortest",
+          "-movflags",
+          "+faststart",
+          outPath,
+        ]);
+      }
+
+      const body = await readFile(outPath);
+      if (body.byteLength < 64) {
+        throw new Error("Clipped media is empty.");
+      }
+      const bunnyPath = `users/${userId}/clip-downloads/${Date.now()}-${Math.random().toString(36).slice(2, 10)}/${filename}`;
+      await putObject({
+        path: bunnyPath,
+        body,
+        contentType,
+      });
+      const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
+      return { url, filename, contentType };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  },
+});
+
+export const pullFrameForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    timeSec: v.optional(v.number()),
+    assetId: v.optional(v.id("assets")),
+    localTimeSec: v.optional(v.number()),
+  },
+  returns: v.object({
+    assetId: v.id("assets"),
+    name: v.string(),
+    folderId: v.id("folders"),
+    timeSec: v.number(),
+    sourceAssetId: v.id("assets"),
+    url: v.string(),
+    thumbnailUrl: v.string(),
+    preferredViewUrl: v.string(),
+    expiresUnix: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    assetId: Id<"assets">;
+    name: string;
+    folderId: Id<"folders">;
+    timeSec: number;
+    sourceAssetId: Id<"assets">;
+    url: string;
+    thumbnailUrl: string;
+    preferredViewUrl: string;
+    expiresUnix: number;
+  }> => {
+    try {
+      await execFileAsync("ffmpeg", ["-version"]);
+    } catch {
+      throw new Error(
+        "Frame pull requires ffmpeg on the Convex action runtime. Install ffmpeg on the action host, then retry.",
+      );
+    }
+
+    const row = await ctx.runQuery(internal.videoEdits.getForApi, {
+      userId: args.userId,
+      sandboxFolderId: args.sandboxFolderId,
+      projectId: args.projectId,
+    });
+    if (!row) throw new Error("Edit project not found.");
+
+    const project = row.project as EditorProject;
+    let sourceAssetId: Id<"assets">;
+    let seekTime: number;
+    const timelineTime = Math.max(0, args.timeSec ?? 0);
+
+    if (args.assetId) {
+      sourceAssetId = args.assetId;
+      seekTime = Math.max(0, args.localTimeSec ?? args.timeSec ?? 0);
+    } else {
+      const hit = clipAtPlayhead(
+        {
+          name: row.name,
+          folderId: String(row.folderId),
+          duration:
+            typeof (row.project as { duration?: number }).duration === "number"
+              ? (row.project as { duration: number }).duration
+              : 30,
+          frameRatio: project.frameRatio,
+          tracks: project.tracks.map((t) => ({
+            id: t.id,
+            kind: t.kind,
+            label: t.kind === "video" ? "V1" : t.kind === "audio" ? "Audio" : "Text",
+            muted: t.muted,
+          })),
+          // Local EditorClip.transitionOut.type is string; ops uses union — cast for lookup only.
+          clips: project.clips as unknown as Parameters<typeof clipAtPlayhead>[0]["clips"],
+        },
+        timelineTime,
+      );
+      if (!hit?.clip.assetId) {
+        throw new Error("No video clip covers that playhead time. Pass assetId + localTimeSec instead.");
+      }
+      sourceAssetId = hit.clip.assetId as Id<"assets">;
+      seekTime = Math.max(0, hit.localTime);
+    }
+
+    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId: args.userId,
+      assetId: sourceAssetId,
+    });
+    if (!source?.bunnyPath) {
+      throw new Error("Source media not found.");
+    }
+
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
+    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+    const tempDir = await mkdtemp(join(tmpdir(), "studio-frame-"));
+    try {
+      const sourcePath = join(tempDir, "source.bin");
+      const framePath = join(tempDir, "frame.jpg");
+      await downloadToFile(signedSource, sourcePath);
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-ss",
+        String(seekTime),
+        "-i",
+        sourcePath,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        framePath,
+      ]);
+      const body = await readFile(framePath);
+      const timeLabel = seekTime.toFixed(2).replace(".", "s");
+      const safeEdit = (row.name || "edit").replace(/[^\w.-]+/g, " ").trim().slice(0, 40) || "Edit";
+      const filename = `Frame · ${safeEdit} · ${timeLabel}.jpg`;
+      const prepared: { assetId: Id<"assets">; bunnyPath: string } = await ctx.runMutation(
+        internal.videoEditInternal.createFrameAsset,
+        {
+          userId: args.userId,
+          folderId: row.folderId,
+          name: filename,
+        },
+      );
+      await putObject({
+        path: prepared.bunnyPath,
+        body,
+        contentType: "image/jpeg",
+      });
+      await ctx.runMutation(internal.videoEditInternal.finalizeExportAsset, {
+        assetId: prepared.assetId,
+        byteSize: body.byteLength,
+      });
+
+      const viewExpires = Math.floor(Date.now() / 1000) + 60 * 60;
+      const url = await signBunnyCdnUrl(prepared.bunnyPath, viewExpires);
+      return {
+        assetId: prepared.assetId,
+        name: filename,
+        folderId: row.folderId,
+        timeSec: args.assetId ? seekTime : timelineTime,
+        sourceAssetId,
+        url,
+        thumbnailUrl: url,
+        preferredViewUrl: url,
+        expiresUnix: viewExpires,
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   },
 });

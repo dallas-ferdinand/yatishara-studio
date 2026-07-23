@@ -30,6 +30,7 @@ import {
 } from "./lib/guidedVideoTypes";
 import type { ReferenceInput } from "./lib/referenceInput";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
+import { generationAssetFileName } from "./lib/generationAssetNames";
 import { explicitVideoDurationSeconds } from "./lib/videoDurationPlan";
 import {
   extractCreativeVideoPrompt,
@@ -1420,6 +1421,7 @@ export const approveAndGenerate = action({
           scriptType,
           claim.payload.subject ?? plan.finalPrompt,
           markdown,
+          `${claim.briefId}_${Date.now()}`,
         );
         const documentId = await ctx.runMutation(completeScriptApprovalRef, {
           briefId: claim.briefId,
@@ -1689,6 +1691,7 @@ export const approveAndGenerateForApi = internalAction({
           scriptType,
           claim.payload.subject ?? plan.finalPrompt,
           markdown,
+          `${claim.briefId}_${Date.now()}`,
         );
         const documentId = await ctx.runMutation(completeScriptApprovalForApiRef, {
           userId,
@@ -1977,7 +1980,12 @@ export const executeApprovedJob = internalAction({
         const assetId = await saveGeneratedMedia(ctx, {
           jobId: args.jobId,
           kind: "video",
-          name: `assisted-video-${args.jobId.slice(-6)}.${extensionForContentType(video.mediaType)}`,
+          name: generationAssetFileName({
+            kind: "video",
+            prompt: job.userPrompt,
+            uniqueId: args.jobId,
+            extension: extensionForContentType(video.mediaType),
+          }),
           mediaType: video.mediaType,
           body: video.data,
         });
@@ -2010,7 +2018,13 @@ export const executeApprovedJob = internalAction({
         const assetId = await saveGeneratedMedia(ctx, {
           jobId: args.jobId,
           kind: "image",
-          name: `assisted-image-${index + 1}.${extensionForContentType(image.mediaType)}`,
+          name: generationAssetFileName({
+            kind: "image",
+            prompt: job.userPrompt,
+            index: index + 1,
+            uniqueId: `${args.jobId}-${index + 1}`,
+            extension: extensionForContentType(image.mediaType),
+          }),
           mediaType: image.mediaType,
           body: image.data,
         });

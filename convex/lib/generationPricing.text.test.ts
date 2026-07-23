@@ -16,20 +16,20 @@ describe("measured text usage pricing", () => {
   });
 
   it("applies 2× provider COGS and rounds up to TT$0.01", () => {
-    // 10k input @ $2.00/M + 2k output @ $12.00/M = $0.044 USD
-    // ×10 FX ×2 markup = TT$0.88 exactly
+    // 10k input @ $1.50/M + 2k output @ $9.00/M = $0.033 USD
+    // ×10 FX ×2 markup = TT$0.66 exactly
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(0.88);
+    ).toBe(0.66);
     expect(
       textCreditsFromMeasuredUsage({
         inputTokens: 10_000,
         outputTokens: 2_000,
       }),
-    ).toBe(1.76);
+    ).toBe(1.32);
   });
 
   it("rounds fractional TT$ up to the next cent", () => {
@@ -42,8 +42,8 @@ describe("measured text usage pricing", () => {
     ).toBe(TEXT_MIN_SELL_TTD);
 
     // Enough tokens that 2× COGS is between cents
-    // 100 input @ $2/M = $0.0002; 50 output @ $12/M = $0.0006; total $0.0008
-    // ×10 ×2 = TT$0.016 → ceil to TT$0.02
+    // 100 input @ $1.50/M = $0.00015; 50 output @ $9/M = $0.00045; total $0.0006
+    // ×10 ×2 = TT$0.012 → ceil to TT$0.02
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 100,
@@ -52,13 +52,13 @@ describe("measured text usage pricing", () => {
     ).toBe(0.02);
 
     // 5_000 input + 500 output:
-    // (5000*2 + 500*12)/1e6 = 0.016 USD → ×20 = TT$0.32 exact
+    // (5000*1.5 + 500*9)/1e6 = 0.012 USD → ×20 = TT$0.24 exact
     expect(
       textSellPriceFromUsageTtd({
         inputTokens: 5_000,
         outputTokens: 500,
       }),
-    ).toBe(0.32);
+    ).toBe(0.24);
   });
 
   it("textCreditCost prefers measured tokens over reference estimates", () => {
@@ -67,7 +67,7 @@ describe("measured text usage pricing", () => {
       inputTokens: 10_000,
       outputTokens: 2_000,
     });
-    expect(measured).toBe(1.76);
+    expect(measured).toBe(1.32);
     expect(
       textCreditCost({
         imageReferenceCount: 99,

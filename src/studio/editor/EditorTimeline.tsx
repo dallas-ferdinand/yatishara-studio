@@ -2,12 +2,13 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
+  GripVertical,
   Pause,
   Play,
   Scissors,
   Trash2,
-  Type,
   Undo2,
   Redo2,
   Volume2,
@@ -16,14 +17,13 @@ import {
   ZoomOut,
   Sparkles,
 } from "lucide-react";
-import { transitionLabel } from "./editorEffects";
+import { transitionLabel, clampAudioFadePair, clampAudioFadeSec } from "./editorEffects";
 import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
-import { computeRippleLayout, computeRippleInsertForNewClip } from "./editorRipple";
+import { computeRippleLayout, isMainStoryTrack, collapsePlacementsForTrack } from "./editorRipple";
 import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
 import {
   collectSnapTimes,
   snapClipMove,
-  snapDropStart,
   snapThresholdSec,
   snapTrimLeft,
   snapTrimRight,
@@ -44,6 +44,7 @@ import {
   RULER_HEIGHT,
   TEXT_TRACK_HEIGHT,
   TRACK_INSERT_HEIGHT,
+  TRACK_INSERT_HIT_PX,
   TRACK_RAIL_WIDTH,
   VIDEO_TRACK_HEIGHT,
 } from "./types";
@@ -54,9 +55,156 @@ function trackHeightForKind(kind) {
   return VIDEO_TRACK_HEIGHT;
 }
 
+/** Dark bottom mask + white name; double-click to rename. */
+function ClipNameBadge({ label, editable = false, onRename, renameToken }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(label);
+  }, [label, editing]);
+
+  useEffect(() => {
+    if (renameToken == null || !editable || !onRename) return;
+    setEditing(true);
+  }, [renameToken, editable, onRename]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing]);
+
+  const commit = () => {
+    const next = draft.trim();
+    setEditing(false);
+    if (next && next !== label) onRename?.(next);
+    else setDraft(label);
+  };
+
+  const stopWhileEditing = (event) => {
+    event.stopPropagation();
+  };
+
+  if (editing && editable) {
+    return (
+      <input
+        ref={inputRef}
+        className="studio-editor-clip-name is-editing"
+        value={draft}
+        size={Math.max(draft.length || 1, 4)}
+        aria-label="Clip name"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            setDraft(label);
+            setEditing(false);
+          }
+          event.stopPropagation();
+        }}
+        onPointerDown={stopWhileEditing}
+        onClick={stopWhileEditing}
+        onDoubleClick={stopWhileEditing}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`studio-editor-clip-name${editable ? " is-editable" : ""}`}
+      title={editable ? `${label} — double-click to rename` : label}
+      onDoubleClick={(event) => {
+        if (!editable || !onRename) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setEditing(true);
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** CapCut-style soft scooped fade wedges — stronger early curve, eases into the handle. */
+function ClipAudioFadeMask({ fadeInSec, fadeOutSec, clipDurationSec, pps }) {
+  const duration = Math.max(0.05, clipDurationSec);
+  const { fadeIn, fadeOut } = clampAudioFadePair(fadeInSec, fadeOutSec, duration);
+  if (fadeIn <= 0 && fadeOut <= 0) return null;
+  const inPx = Math.max(0, fadeIn * pps);
+  const outPx = Math.max(0, fadeOut * pps);
+  return (
+    <div className="studio-editor-clip-fade-mask" aria-hidden="true">
+      {inPx > 0 ? (
+        <svg
+          className="studio-editor-clip-fade is-in"
+          width={inPx}
+          height="100%"
+          viewBox="0 0 1 1"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          {/* Cubic: drops faster near the clip start, flatter into the diamond. */}
+          <path d="M0 0 H1 C 0.72 0.06, 0.22 0.48, 0 1 Z" />
+        </svg>
+      ) : null}
+      {outPx > 0 ? (
+        <svg
+          className="studio-editor-clip-fade is-out"
+          width={outPx}
+          height="100%"
+          viewBox="0 0 1 1"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M1 0 H0 C 0.28 0.06, 0.78 0.48, 1 1 Z" />
+        </svg>
+      ) : null}
+    </div>
+  );
+}
+
+/** Hit size of .studio-editor-clip-fade-handle — centers must stay ≥ this apart. */
+const FADE_HANDLE_HIT_PX = 14;
+
+/**
+ * Place fade diamonds so they never overlap (edge-to-edge when fades meet).
+ * Returns x positions for the handle centers within the clip width.
+ */
+function fadeHandleCentersPx(fadeInSec, fadeOutSec, widthPx, pps) {
+  const minGap = FADE_HANDLE_HIT_PX;
+  let inX = Math.max(0, fadeInSec * pps);
+  let outX = Math.max(0, widthPx - fadeOutSec * pps);
+  if (outX - inX < minGap) {
+    const mid = (inX + outX) / 2;
+    inX = mid - minGap / 2;
+    outX = mid + minGap / 2;
+  }
+  const half = minGap / 2;
+  inX = Math.max(half, Math.min(widthPx - half, inX));
+  outX = Math.max(half, Math.min(widthPx - half, outX));
+  if (outX - inX < minGap) {
+    if (inX <= half + 0.5) {
+      inX = half;
+      outX = Math.min(widthPx - half, inX + minGap);
+    } else {
+      outX = widthPx - half;
+      inX = Math.max(half, outX - minGap);
+    }
+  }
+  return { inX, outX };
+}
+
 function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
   const width = Math.max(clipDuration(clip) * pps, 28);
-  const isVideo = clip.kind === "video";
+  const isVideo = clip.kind === "video" || clip.kind === "image";
   const isText = clip.kind === "text";
   return (
     <div
@@ -67,16 +215,131 @@ function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
       {isText ? (
         <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
       ) : isVideo ? (
+        <>
+          <ClipFilmstrip
+            media={media}
+            label={clip.label}
+            widthPx={width}
+            trimIn={clip.trimIn}
+            trimOut={clip.trimOut}
+          />
+          <ClipAudioFadeMask
+            fadeInSec={clip.effects?.fadeIn ?? 0}
+            fadeOutSec={clip.effects?.fadeOut ?? 0}
+            clipDurationSec={clipDuration(clip)}
+            pps={pps}
+          />
+          <ClipNameBadge label={clip.label} />
+        </>
+      ) : clip.kind === "audio" ? (
+        <>
+          <ClipAudioWaveform clipId={clip.id} widthPx={width} />
+          <ClipAudioFadeMask
+            fadeInSec={clip.effects?.fadeIn ?? 0}
+            fadeOutSec={clip.effects?.fadeOut ?? 0}
+            clipDurationSec={clipDuration(clip)}
+            pps={pps}
+          />
+          <ClipNameBadge label={clip.label} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function FloatingPickupClip({ pickup }) {
+  if (!pickup || typeof document === "undefined") return null;
+  const { clip, media, widthPx, heightPx, clientX, clientY, grabX, grabY, viable } = pickup;
+  const isVideo = clip.kind === "video" || clip.kind === "image";
+  const isText = clip.kind === "text";
+  const height =
+    heightPx ??
+    trackHeightForKind(isText ? "text" : clip.kind === "audio" ? "audio" : "video");
+  const durationSec = clipDuration(clip);
+  const pps = widthPx / Math.max(0.05, durationSec);
+  return createPortal(
+    <div
+      className={`studio-editor-clip is-${clip.kind} is-pickup-float${viable ? "" : " is-not-viable"}`}
+      style={{
+        width: widthPx,
+        height,
+        transform: `translate(${clientX - grabX}px, ${clientY - grabY}px)`,
+        zIndex: 1000001,
+      }}
+      aria-hidden="true"
+    >
+      <div className="studio-editor-clip-body">
+        {isText ? (
+          <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
+        ) : isVideo ? (
+          <>
+            <ClipFilmstrip
+              media={media}
+              label={clip.label}
+              widthPx={widthPx}
+              trimIn={clip.trimIn}
+              trimOut={clip.trimOut}
+            />
+            <ClipAudioFadeMask
+              fadeInSec={clip.effects?.fadeIn ?? 0}
+              fadeOutSec={clip.effects?.fadeOut ?? 0}
+              clipDurationSec={durationSec}
+              pps={pps}
+            />
+            <ClipNameBadge label={clip.label} />
+          </>
+        ) : (
+          <>
+            <ClipAudioWaveform clipId={clip.id} widthPx={widthPx} />
+            <ClipAudioFadeMask
+              fadeInSec={clip.effects?.fadeIn ?? 0}
+              fadeOutSec={clip.effects?.fadeOut ?? 0}
+              clipDurationSec={durationSec}
+              pps={pps}
+            />
+            <ClipNameBadge label={clip.label} />
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Themed landing-slot ghost — same width as the clip, accent tint (not a second filmstrip). */
+function SlotDropGhost({ kind, startTime, widthPx, pps }) {
+  if (startTime == null || !widthPx) return null;
+  return (
+    <div
+      className={`studio-editor-slot-ghost is-${kind}`}
+      style={{ left: startTime * pps, width: widthPx }}
+      aria-hidden="true"
+    />
+  );
+}
+
+function DropGhost({ preview, pps, mediaById }) {
+  if (!preview) return null;
+  const width = Math.max(preview.duration * pps, 28);
+  const media = preview.assetId ? mediaById?.get(preview.assetId) : null;
+  const kind = media?.kind === "audio" ? "audio" : "video";
+  return (
+    <div
+      className={`studio-editor-slot-ghost is-${kind} is-media-drop`}
+      style={{ left: preview.startTime * pps, width }}
+      aria-hidden="true"
+    >
+      {kind === "audio" ? (
+        <ClipAudioWaveform clipId={preview.assetId || preview.name} widthPx={width} />
+      ) : (
         <ClipFilmstrip
           media={media}
-          label={clip.label}
+          label={preview.name}
           widthPx={width}
-          trimIn={clip.trimIn}
-          trimOut={clip.trimOut}
+          trimIn={0}
+          trimOut={preview.duration ?? 4}
         />
-      ) : clip.kind === "audio" ? (
-        <ClipAudioWaveform clipId={clip.id} widthPx={width} />
-      ) : null}
+      )}
     </div>
   );
 }
@@ -92,25 +355,53 @@ function TimelineClipBlock({
   onMove,
   onMoveToTrack,
   onTrim,
+  onUpdateClip,
+  onRename,
+  onContextMenu,
+  renameToken,
   onSnapGuide,
   resolveDropTarget,
+  timeFromPointerX,
   onHighlightInsert,
   onRipplePreview,
-  onApplyRippleLayout,
+  onPickupChange,
   rippleActive,
+  rippleStartTime,
+  isPickedUp,
 }) {
-  const width = clipDuration(clip) * pps;
-  const left = clip.startTime * pps;
+  const durationSec = clipDuration(clip);
+  const width = durationSec * pps;
+  const left = (rippleStartTime != null ? rippleStartTime : clip.startTime) * pps;
   const [dragging, setDragging] = useState(null);
-  const isVideo = clip.kind === "video";
+  const [lifted, setLifted] = useState(false);
+  const isVideo = clip.kind === "video" || clip.kind === "image";
   const isText = clip.kind === "text";
+  const supportsAudioFade = clip.kind === "audio" || clip.kind === "video";
   const thresholdSec = snapThresholdSec(pps);
   const widthPx = Math.max(width, 28);
+  const fadePair = clampAudioFadePair(
+    clip.effects?.fadeIn ?? 0,
+    clip.effects?.fadeOut ?? 0,
+    durationSec,
+  );
+  const fadeInSec = fadePair.fadeIn;
+  const fadeOutSec = fadePair.fadeOut;
+  const fadeHandles = fadeHandleCentersPx(fadeInSec, fadeOutSec, widthPx, pps);
 
   const onPointerDown = (event, mode) => {
     // Let middle-click / Alt+drag bubble for timeline pan.
     if (event.button === 1 || event.altKey) return;
     if (event.button !== 0) return;
+    // Fade/trim handles sit on the clip — never start a move/pickup from them.
+    if (
+      mode === "move" &&
+      event.target?.closest?.(
+        ".studio-editor-clip-fade-handle, .studio-editor-clip-handle",
+      )
+    ) {
+      return;
+    }
+    event.preventDefault();
     event.stopPropagation();
     onSelect(clip.id);
     const startX = event.clientX;
@@ -119,15 +410,32 @@ function TimelineClipBlock({
     const originTrackId = clip.trackId;
     const originTrimIn = clip.trimIn;
     const originTrimOut = clip.trimOut;
+    const originEffects = { ...(clip.effects ?? {}) };
+    const originFadePair = clampAudioFadePair(
+      originEffects.fadeIn ?? 0,
+      originEffects.fadeOut ?? 0,
+      durationSec,
+    );
+    const originFadeIn = originFadePair.fadeIn;
+    const originFadeOut = originFadePair.fadeOut;
     const snapTimes = collectSnapTimes(project, clip.trackId, clip.id, playhead);
+    const clipEl = event.currentTarget.closest?.(".studio-editor-clip") ?? event.currentTarget;
+    const clipRect = clipEl.getBoundingClientRect();
+    const grabX = event.clientX - clipRect.left;
+    const grabY = event.clientY - clipRect.top;
+    const pickupHeightPx = Math.max(1, clipRect.height);
     let lastStart = originStart;
     let lastTrackId = originTrackId;
     let lastTrimIn = originTrimIn;
     let lastTrimOut = originTrimOut;
-    let lastRipplePlacements = null;
+    let lastFadeIn = originFadeIn;
+    let lastFadeOut = originFadeOut;
     let lastInsertAt = null;
-    let freeMove = false;
+    let lastViable = false;
+    let lastDropStart = originStart;
+    let lastArrangeProbe = originStart;
     let moved = mode !== "move";
+    let pickedUp = false;
     setDragging(mode);
 
     const targetEl = event.currentTarget;
@@ -139,57 +447,131 @@ function TimelineClipBlock({
       if (!moved && Math.hypot(dx, dy) < 4) return;
       moved = true;
 
-      const disableSnap = moveEvent.altKey;
-      const deltaPx = dx;
-      const deltaSec = deltaPx / pps;
+      const deltaSec = dx / pps;
 
       if (mode === "move") {
+        if (!pickedUp) {
+          pickedUp = true;
+          setLifted(true);
+          document.body.classList.add("is-clip-pickup");
+        }
+
         const target = resolveDropTarget?.(moveEvent.clientY, clip.kind);
-        let allowedTrackId = originTrackId;
         lastInsertAt = null;
-        onHighlightInsert?.(null);
+        let allowedTrackId = null;
+        lastViable = false;
 
         if (target?.type === "insert") {
           lastInsertAt = target.index;
-          onHighlightInsert?.(target.index);
+          lastViable = true;
+          onHighlightInsert?.({
+            index: lastInsertAt,
+            kind: clip.kind,
+            mode: "insert",
+          });
         } else if (target?.type === "track") {
           allowedTrackId = target.trackId;
+          lastViable = true;
+          onHighlightInsert?.(null);
+        } else {
+          onHighlightInsert?.(null);
         }
 
-        const rawStart = Math.max(0, originStart + deltaSec);
-        freeMove = disableSnap;
+        const leftEdgeX = moveEvent.clientX - grabX;
+        const rawStart = timeFromPointerX
+          ? timeFromPointerX(leftEdgeX)
+          : Math.max(0, originStart + deltaSec);
+        const pointerTime = timeFromPointerX
+          ? Math.max(0, timeFromPointerX(moveEvent.clientX))
+          : Math.max(0, originStart + deltaSec);
 
-        if (disableSnap || lastInsertAt !== null) {
-          onRipplePreview?.(null);
-          const trackForSnap = allowedTrackId || originTrackId;
-          const moveSnapTimes = collectSnapTimes(project, trackForSnap, clip.id, playhead);
-          const { startTime, guide } = snapClipMove(clip, rawStart, moveSnapTimes, thresholdSec, true);
-          lastStart = startTime;
-          lastTrackId = allowedTrackId;
-          onSnapGuide?.(guide);
-          if (lastInsertAt == null) {
-            onMove(clip.id, startTime, lastTrackId !== originTrackId ? lastTrackId : undefined, true);
-          }
-        } else {
-          const centerTime = rawStart + clipDuration(clip) / 2;
-          const placements = computeRippleLayout({
+        // Magnetic snap by default (vertical guides); Alt disables — same as trim.
+        const disableSnap = moveEvent.altKey || !lastViable;
+        if (!disableSnap) {
+          const moveSnapTimes = collectSnapTimes(
             project,
-            trackId: allowedTrackId,
-            draggedClip: clip,
-            centerTime,
-          });
-          lastRipplePlacements = placements;
-          lastTrackId = allowedTrackId;
-          const draggedPlacement = placements.find((p) => p.clipId === clip.id);
-          lastStart = draggedPlacement?.startTime ?? rawStart;
+            allowedTrackId ?? clip.trackId,
+            clip.id,
+            playhead,
+          );
+          const { startTime, guide } = snapClipMove(
+            clip,
+            rawStart,
+            moveSnapTimes,
+            thresholdSec,
+            false,
+          );
+          lastStart = startTime;
+          onSnapGuide?.(guide);
+        } else {
+          lastStart = Math.max(0, rawStart);
           onSnapGuide?.(null);
+        }
+        lastTrackId = allowedTrackId;
+
+        // Main line: probe insert with the pointer (aim between clips).
+        // Overlay lanes: probe with the clip left edge (free placement).
+        const arrangeProbe =
+          allowedTrackId && isMainStoryTrack(project, allowedTrackId)
+            ? pointerTime
+            : lastStart;
+        lastArrangeProbe = arrangeProbe;
+
+        lastDropStart = lastStart;
+        if (allowedTrackId || lastInsertAt !== null) {
+          const destTrackId = allowedTrackId;
+          let placements = destTrackId
+            ? computeRippleLayout({
+                project,
+                trackId: destTrackId,
+                draggedClip: clip,
+                centerTime: arrangeProbe,
+              })
+            : [];
+          if (destTrackId) {
+            // Free lanes: ghost stays at the pointer left-edge. Main: packed slot.
+            lastDropStart = isMainStoryTrack(project, destTrackId)
+              ? (placements.find((p) => p.clipId === clip.id)?.startTime ?? lastStart)
+              : lastStart;
+          }
+
+          // Leaving the main storyline — live-collapse the gap it leaves behind.
+          const leavingMain =
+            isMainStoryTrack(project, originTrackId) &&
+            (lastInsertAt !== null ||
+              (destTrackId !== null && destTrackId !== originTrackId));
+          if (leavingMain) {
+            placements = [
+              ...placements,
+              ...collapsePlacementsForTrack(project, originTrackId, clip.id),
+            ];
+          }
+
           onRipplePreview?.({
-            trackId: allowedTrackId,
+            trackId: destTrackId ?? originTrackId,
             draggedClipId: clip.id,
             placements,
           });
+        } else {
+          onRipplePreview?.(null);
         }
+
+        onPickupChange?.({
+          clipId: clip.id,
+          clip,
+          media,
+          widthPx,
+          heightPx: pickupHeightPx,
+          clientX: moveEvent.clientX,
+          clientY: moveEvent.clientY,
+          grabX,
+          grabY,
+          viable: lastViable,
+          hoverTrackId: allowedTrackId,
+          dropStartTime: allowedTrackId ? lastDropStart : null,
+        });
       } else if (mode === "trim-left") {
+        const disableSnap = moveEvent.altKey;
         const rawTrimIn = Math.min(originTrimOut - 0.05, Math.max(0, originTrimIn + deltaSec));
         const trimDelta = rawTrimIn - originTrimIn;
         const rawStart = Math.max(0, originStart + trimDelta);
@@ -199,11 +581,26 @@ function TimelineClipBlock({
         onSnapGuide?.(snapped.guide);
         onTrim(clip.id, snapped.trimIn, originTrimOut, snapped.startTime, true);
       } else if (mode === "trim-right") {
+        const disableSnap = moveEvent.altKey;
         const rawTrimOut = Math.max(originTrimIn + 0.05, originTrimOut + deltaSec);
         const snapped = snapTrimRight(clip, rawTrimOut, snapTimes, thresholdSec, disableSnap);
         lastTrimOut = snapped.trimOut;
         onSnapGuide?.(snapped.guide);
         onTrim(clip.id, originTrimIn, snapped.trimOut, undefined, true);
+      } else if (mode === "fade-in") {
+        lastFadeIn = clampAudioFadeSec(originFadeIn + deltaSec, durationSec, originFadeOut);
+        onUpdateClip?.(
+          clip.id,
+          { effects: { ...originEffects, fadeIn: lastFadeIn, fadeOut: originFadeOut } },
+          true,
+        );
+      } else if (mode === "fade-out") {
+        lastFadeOut = clampAudioFadeSec(originFadeOut - deltaSec, durationSec, originFadeIn);
+        onUpdateClip?.(
+          clip.id,
+          { effects: { ...originEffects, fadeIn: originFadeIn, fadeOut: lastFadeOut } },
+          true,
+        );
       }
     };
 
@@ -214,31 +611,61 @@ function TimelineClipBlock({
         /* ignore */
       }
       setDragging(null);
+      setLifted(false);
       onSnapGuide?.(null);
       onRipplePreview?.(null);
       onHighlightInsert?.(null);
+      onPickupChange?.(null);
+      document.body.classList.remove("is-clip-pickup");
       window.removeEventListener("pointermove", onMoveEvent);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
 
       if (mode === "move") {
         if (!moved) return;
-        if (lastInsertAt !== null) {
+        // Re-resolve at release so a thin insert band isn't lost to the last hover jitter.
+        const releaseTarget = resolveDropTarget?.(upEvent.clientY, clip.kind);
+        let commitInsertAt = lastInsertAt;
+        let commitTrackId = lastTrackId;
+        if (releaseTarget?.type === "insert") {
+          commitInsertAt = releaseTarget.index;
+          commitTrackId = null;
+        } else if (releaseTarget?.type === "track") {
+          commitInsertAt = null;
+          commitTrackId = releaseTarget.trackId;
+        }
+        if (commitInsertAt === null && !commitTrackId) return;
+
+        if (commitInsertAt !== null) {
           onMoveToTrack?.({
             clipId: clip.id,
-            startTime: lastStart,
-            insertTrackAt: lastInsertAt,
-            ripplePlacements: !freeMove ? lastRipplePlacements : undefined,
+            startTime: lastArrangeProbe,
+            insertTrackAt: commitInsertAt,
           });
-        } else if (!freeMove && lastRipplePlacements?.length) {
-          onApplyRippleLayout?.(lastRipplePlacements);
-        } else {
-          onMove(clip.id, lastStart, lastTrackId !== originTrackId ? lastTrackId : undefined, false);
+        } else if (commitTrackId) {
+          onMove(
+            clip.id,
+            lastArrangeProbe,
+            commitTrackId !== originTrackId ? commitTrackId : undefined,
+            false,
+          );
         }
       } else if (mode === "trim-left") {
         onTrim(clip.id, lastTrimIn, lastTrimOut, lastStart, false);
       } else if (mode === "trim-right") {
         onTrim(clip.id, lastTrimIn, lastTrimOut, undefined, false);
+      } else if (mode === "fade-in") {
+        onUpdateClip?.(
+          clip.id,
+          { effects: { ...originEffects, fadeIn: lastFadeIn, fadeOut: originFadeOut } },
+          false,
+        );
+      } else if (mode === "fade-out") {
+        onUpdateClip?.(
+          clip.id,
+          { effects: { ...originEffects, fadeIn: originFadeIn, fadeOut: lastFadeOut } },
+          false,
+        );
       }
     };
 
@@ -249,82 +676,139 @@ function TimelineClipBlock({
 
   return (
     <div
-      className={`studio-editor-clip is-${clip.kind}${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}${rippleActive ? " is-ripple-dimmed" : ""}`}
-      style={{ left, width: widthPx }}
+      className={`studio-editor-clip is-${clip.kind}${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}${lifted || isPickedUp ? " is-picked-up" : ""}${rippleActive ? " is-ripple-shifting" : ""}`}
+      style={{ left: isPickedUp ? 0 : Math.max(0, left), width: isPickedUp ? 0 : widthPx }}
       onPointerDown={(event) => onPointerDown(event, "move")}
+      onContextMenu={(event) => {
+        if (isPickedUp) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect(clip.id);
+        onContextMenu?.(clip.id, event.clientX, event.clientY);
+      }}
       title={clip.label}
+      aria-hidden={isPickedUp || undefined}
     >
       <div className="studio-editor-clip-body">
         {isText ? (
           <span className="studio-editor-clip-label is-text">{clip.text?.text || clip.label}</span>
         ) : isVideo ? (
-          <ClipFilmstrip
-            media={media}
-            label={clip.label}
-            widthPx={widthPx}
-            trimIn={clip.trimIn}
-            trimOut={clip.trimOut}
-          />
+          <>
+            <ClipFilmstrip
+              media={media}
+              label={clip.label}
+              widthPx={widthPx}
+              trimIn={clip.trimIn}
+              trimOut={clip.trimOut}
+            />
+            <ClipAudioFadeMask
+              fadeInSec={fadeInSec}
+              fadeOutSec={fadeOutSec}
+              clipDurationSec={durationSec}
+              pps={pps}
+            />
+            <ClipNameBadge
+              label={clip.label}
+              editable={!isPickedUp}
+              renameToken={renameToken}
+              onRename={(next) => onRename?.(clip.id, next)}
+            />
+          </>
         ) : (
-          <ClipAudioWaveform clipId={clip.id} widthPx={widthPx} />
+          <>
+            <ClipAudioWaveform clipId={clip.id} widthPx={widthPx} />
+            <ClipAudioFadeMask
+              fadeInSec={fadeInSec}
+              fadeOutSec={fadeOutSec}
+              clipDurationSec={durationSec}
+              pps={pps}
+            />
+            <ClipNameBadge
+              label={clip.label}
+              editable={!isPickedUp}
+              renameToken={renameToken}
+              onRename={(next) => onRename?.(clip.id, next)}
+            />
+          </>
         )}
       </div>
       {!isText ? (
         <>
           <span
             className="studio-editor-clip-handle is-left"
-            onPointerDown={(event) => onPointerDown(event, "trim-left")}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onPointerDown(event, "trim-left");
+            }}
           />
           <span
             className="studio-editor-clip-handle is-right"
-            onPointerDown={(event) => onPointerDown(event, "trim-right")}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onPointerDown(event, "trim-right");
+            }}
           />
+          {supportsAudioFade && !isPickedUp ? (
+            <>
+              <span
+                className={`studio-editor-clip-fade-handle is-in${fadeInSec > 0 ? " is-active" : ""}`}
+                style={{ left: fadeHandles.inX }}
+                title="Fade in"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onPointerDown(event, "fade-in");
+                }}
+              />
+              <span
+                className={`studio-editor-clip-fade-handle is-out${fadeOutSec > 0 ? " is-active" : ""}`}
+                style={{ left: fadeHandles.outX }}
+                title="Fade out"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onPointerDown(event, "fade-out");
+                }}
+              />
+            </>
+          ) : null}
         </>
       ) : (
         <span
           className="studio-editor-clip-handle is-right"
-          onPointerDown={(event) => onPointerDown(event, "trim-right")}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onPointerDown(event, "trim-right");
+          }}
         />
       )}
     </div>
   );
 }
 
-function TrackInsertZone({ index, active, onDragOver, onDragLeave, onDrop }) {
+function LaneInsertSlot({ index, active, onDragOver, onDragLeave, onDrop, onClick }) {
   return (
     <div
-      className={`studio-editor-track-insert${active ? " is-active" : ""}`}
-      style={{ height: TRACK_INSERT_HEIGHT, marginLeft: TRACK_RAIL_WIDTH }}
-      onDragOver={(event) => onDragOver(event, index)}
-      onDragLeave={(event) => onDragLeave(event, index)}
-      onDrop={(event) => onDrop(event, index)}
-      aria-hidden="true"
-    />
-  );
-}
-
-function DropGhost({ preview, pps, mediaById }) {
-  if (!preview) return null;
-  const width = Math.max(preview.duration * pps, 28);
-  const media = preview.assetId ? mediaById?.get(preview.assetId) : null;
-  const isAudio = media?.kind === "audio";
-  return (
-    <div
-      className={`studio-editor-drop-ghost${isAudio ? " is-audio" : ""}`}
-      style={{ left: preview.startTime * pps, width }}
+      className={`studio-editor-track-insert-wrap${active ? " is-active" : ""}`}
+      style={{ height: TRACK_INSERT_HIT_PX }}
+      onDragOver={(event) => onDragOver?.(event, index)}
+      onDragLeave={(event) => onDragLeave?.(event, index)}
+      onDrop={(event) => onDrop?.(event, index)}
+      onPointerDown={(event) => {
+        if (!onClick || event.button !== 0 || event.altKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClick(index);
+      }}
       aria-hidden="true"
     >
-      {isAudio ? (
-        <ClipAudioWaveform clipId={preview.assetId || preview.name} widthPx={width} />
-      ) : (
-        <ClipFilmstrip
-          media={media}
-          label={preview.name}
-          widthPx={width}
-          trimIn={0}
-          trimOut={preview.duration ?? 4}
-        />
-      )}
+      <div
+        className={`studio-editor-track-insert${active ? " is-active" : ""}`}
+        style={{ marginLeft: TRACK_RAIL_WIDTH, height: TRACK_INSERT_HEIGHT }}
+      />
     </div>
   );
 }
@@ -434,10 +918,19 @@ function TransitionJointMarker({
   );
 }
 
-function TrackRailButton({ track, onToggleMute }) {
-  if (track.kind === "audio") {
-    return (
-      <div className="studio-editor-track-rail-inner">
+function TrackRailButton({ track, onToggleMute, onReorderPointerDown, reordering }) {
+  return (
+    <div className={`studio-editor-track-rail-inner${reordering ? " is-reordering" : ""}`}>
+      <button
+        type="button"
+        className="studio-editor-track-btn is-grip"
+        aria-label="Reorder lane"
+        title="Drag to reorder lane"
+        onPointerDown={(event) => onReorderPointerDown?.(event, track)}
+      >
+        <GripVertical size={track.kind === "text" ? 10 : 12} aria-hidden="true" />
+      </button>
+      {track.kind === "audio" ? (
         <button
           type="button"
           className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
@@ -447,29 +940,17 @@ function TrackRailButton({ track, onToggleMute }) {
         >
           {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
         </button>
-      </div>
-    );
-  }
-
-  if (track.kind === "text") {
-    return (
-      <div className="studio-editor-track-rail-inner" title="Text">
-        <Type size={ICON} aria-hidden="true" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="studio-editor-track-rail-inner" title="Video">
-      <button
-        type="button"
-        className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
-        aria-label={track.muted ? "Unmute track" : "Mute track"}
-        title={track.muted ? "Unmute" : "Mute"}
-        onClick={() => onToggleMute?.(track.id)}
-      >
-        {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
-      </button>
+      ) : track.kind === "text" ? null : (
+        <button
+          type="button"
+          className={`studio-editor-track-btn${track.muted ? " is-active" : ""}`}
+          aria-label={track.muted ? "Unmute track" : "Mute track"}
+          title={track.muted ? "Unmute" : "Mute"}
+          onClick={() => onToggleMute?.(track.id)}
+        >
+          {track.muted ? <VolumeX size={ICON} aria-hidden="true" /> : <Volume2 size={ICON} aria-hidden="true" />}
+        </button>
+      )}
     </div>
   );
 }
@@ -589,7 +1070,7 @@ export function EditorTimeline({
   pixelsPerSecond,
   selectedClipId,
   selectedJointKey,
-  editorMode,
+  editorMode: _editorMode,
   mediaById,
   onSelectClip,
   onSelectJoint,
@@ -597,12 +1078,18 @@ export function EditorTimeline({
   onAddClip,
   onMoveClip,
   onTrimClip,
+  onUpdateClip,
+  onRenameClip,
+  onClipContextMenu,
+  renameRequest,
   onToggleTrackMute,
   onApplyTrackLayout,
   onRippleAddClip,
   onMoveToTrack,
+  onReorderTracks,
   onZoom,
   onSetJointTransition,
+  onAddTextClip: _onAddTextClip,
 }) {
   const scrollRef = useRef(null);
   const trackRowRefs = useRef(new Map());
@@ -612,12 +1099,14 @@ export function EditorTimeline({
   const [dropPreview, setDropPreview] = useState(null);
   const [ripplePreview, setRipplePreview] = useState(null);
   const [snapGuideTime, setSnapGuideTime] = useState(null);
-  const [activeInsert, setActiveInsert] = useState(null);
+  /** Full-height lane slot preview: insert new lane or reorder existing lane. */
+  const [lanePreview, setLanePreview] = useState(null);
+  const [pickup, setPickup] = useState(null);
   const [externalDrag, setExternalDrag] = useState(false);
   const [panning, setPanning] = useState(false);
   const [scrubbing, setScrubbing] = useState(false);
+  const [reorderingTrackId, setReorderingTrackId] = useState(null);
   const displayTracks = useMemo(() => visibleTracks(project), [project.tracks, project.clips]);
-  const snapThreshold = snapThresholdSec(pixelsPerSecond);
 
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
@@ -717,11 +1206,21 @@ export function EditorTimeline({
     return () => scroll.removeEventListener("wheel", onTimelineWheel);
   }, [onTimelineWheel]);
 
-  const resolveDropTarget = useCallback(
-    (clientY, clipKind) => {
-      const gapPx = 7;
+  const resolveInsertIndexAtY = useCallback(
+    (clientY, options = {}) => {
+      const allowMidRow = Boolean(options.allowMidRow);
       const tracks = visibleTracks(project);
 
+      // Prefer the expanded insert-slot hit bands (taller than the thin line).
+      const slotKeys = [...insertZoneRefs.current.keys()].sort((a, b) => a - b);
+      for (const key of slotKeys) {
+        const el = insertZoneRefs.current.get(key);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (clientY >= rect.top && clientY <= rect.bottom) return key;
+      }
+
+      const gapPx = TRACK_INSERT_HIT_PX;
       for (let index = 0; index <= tracks.length; index += 1) {
         let boundaryY = null;
         if (index === 0) {
@@ -742,26 +1241,119 @@ export function EditorTimeline({
           }
         }
         if (boundaryY !== null && Math.abs(clientY - boundaryY) <= gapPx) {
-          const insertAt =
-            index >= tracks.length
-              ? project.tracks.length
-              : project.tracks.findIndex((t) => t.id === tracks[index]!.id);
-          return { type: "insert", index: insertAt };
+          return index >= tracks.length
+            ? project.tracks.length
+            : project.tracks.findIndex((t) => t.id === tracks[index]!.id);
         }
       }
 
-      for (const track of tracks) {
-        const row = trackRowRefs.current.get(track.id);
-        if (!row) continue;
-        const rect = row.getBoundingClientRect();
-        if (clientY >= rect.top && clientY <= rect.bottom) {
-          if (track.kind === clipKind) return { type: "track", trackId: track.id };
-          return null;
+      // Rail reorder: treat top/bottom half of a row as insert before/after.
+      if (allowMidRow) {
+        for (let i = 0; i < tracks.length; i += 1) {
+          const row = trackRowRefs.current.get(tracks[i]!.id);
+          if (!row) continue;
+          const rect = row.getBoundingClientRect();
+          if (clientY < rect.top || clientY > rect.bottom) continue;
+          const mid = (rect.top + rect.bottom) / 2;
+          if (clientY < mid) {
+            return project.tracks.findIndex((t) => t.id === tracks[i]!.id);
+          }
+          if (i + 1 < tracks.length) {
+            return project.tracks.findIndex((t) => t.id === tracks[i + 1]!.id);
+          }
+          return project.tracks.length;
         }
       }
       return null;
     },
     [project],
+  );
+
+  const resolveDropTarget = useCallback(
+    (clientY, clipKind) => {
+      const tracks = visibleTracks(project);
+      // Prefer landing on a same-kind lane (critical for thin text rows where
+      // insert hit-bands otherwise swallow the whole track).
+      for (const track of tracks) {
+        const row = trackRowRefs.current.get(track.id);
+        if (!row) continue;
+        const rect = row.getBoundingClientRect();
+        if (clientY < rect.top || clientY > rect.bottom) continue;
+        if (track.kind === clipKind) {
+          return { type: "track", trackId: track.id };
+        }
+      }
+
+      const insertAt = resolveInsertIndexAtY(clientY);
+      if (insertAt !== null) return { type: "insert", index: insertAt };
+
+      return null;
+    },
+    [project, resolveInsertIndexAtY],
+  );
+
+  const timeFromPointerX = useCallback(
+    (clientX) => {
+      const scroll = scrollRef.current;
+      if (!scroll) return 0;
+      const canvas = scroll.querySelector(".studio-editor-timeline-canvas");
+      if (!canvas) return 0;
+      const canvasRect = canvas.getBoundingClientRect();
+      const x = clientX - canvasRect.left + scroll.scrollLeft - TRACK_RAIL_WIDTH;
+      return Math.max(0, Math.min(project.duration, x / Math.max(pixelsPerSecond, 1)));
+    },
+    [pixelsPerSecond, project.duration],
+  );
+
+  const beginTrackReorder = useCallback(
+    (event, track) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const originIndex = project.tracks.findIndex((item) => item.id === track.id);
+      if (originIndex < 0) return;
+
+      setReorderingTrackId(track.id);
+      setRipplePreview(null);
+      setDropPreview(null);
+      let lastIndex = originIndex;
+      setLanePreview({
+        index: originIndex,
+        kind: track.kind,
+        mode: "reorder",
+        trackId: track.id,
+        name: track.label,
+      });
+
+      const onMoveEvent = (moveEvent) => {
+        const nextIndex = resolveInsertIndexAtY(moveEvent.clientY, { allowMidRow: true });
+        if (nextIndex === null) return;
+        lastIndex = nextIndex;
+        setLanePreview({
+          index: nextIndex,
+          kind: track.kind,
+          mode: "reorder",
+          trackId: track.id,
+          name: track.label,
+        });
+      };
+
+      const onUp = () => {
+        setReorderingTrackId(null);
+        setLanePreview(null);
+        window.removeEventListener("pointermove", onMoveEvent);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        if (lastIndex !== originIndex && lastIndex !== originIndex + 1) {
+          onReorderTracks?.(track.id, lastIndex);
+        }
+      };
+
+      window.addEventListener("pointermove", onMoveEvent);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [project.tracks, resolveInsertIndexAtY, onReorderTracks],
   );
 
   const timeFromClientX = useCallback(
@@ -846,39 +1438,19 @@ export function EditorTimeline({
 
       const lane = event.currentTarget.querySelector(".studio-editor-track-lane");
       const rawStart = timeFromClientX(event.clientX, lane);
-      const centerTime = rawStart + payload.duration / 2;
-      const tempClip = {
-        id: "__drop-preview__",
-        trackId: track.id,
-        startTime: rawStart,
-        trimIn: 0,
-        trimOut: payload.duration,
-        label: payload.name,
-        kind: clipKindForTrack(track.kind, payload.mediaKind),
-        assetId: payload.assetId,
-      };
-      const placements = computeRippleInsertForNewClip({
-        project,
-        trackId: track.id,
-        clip: tempClip,
-        centerTime,
-      });
-      setRipplePreview({
-        trackId: track.id,
-        draggedClipId: tempClip.id,
-        placements,
-      });
+      setLanePreview(null);
+      setRipplePreview(null);
       setSnapGuideTime(null);
       setDropPreview({
         trackId: track.id,
         assetId: payload.assetId,
-        startTime: placements.find((p) => p.clipId === tempClip.id)?.startTime ?? rawStart,
+        startTime: rawStart,
         duration: payload.duration,
         name: payload.name,
         thumbnailUrl: payload.thumbnailUrl,
       });
     },
-    [timeFromClientX, project, playhead, snapThreshold],
+    [timeFromClientX],
   );
 
   const onTrackDragLeave = useCallback((event, track) => {
@@ -901,29 +1473,10 @@ export function EditorTimeline({
 
       const lane = event.currentTarget.querySelector(".studio-editor-track-lane");
       const rawStart = timeFromClientX(event.clientX, lane);
-      const centerTime = rawStart + payload.duration / 2;
-
-      if (onRippleAddClip) {
-        onRippleAddClip({
-          assetId: payload.assetId,
-          trackId: track.id,
-          startTime: rawStart,
-          trimIn: 0,
-          trimOut: payload.duration,
-          sourceDuration: payload.duration,
-          label: payload.name,
-          kind: clipKindForTrack(track.kind, payload.mediaKind),
-          centerTime,
-        });
-        return;
-      }
-
-      const snapTimes = collectSnapTimes(project, track.id, null, playhead);
-      const { startTime } = snapDropStart(rawStart, payload.duration, snapTimes, snapThreshold);
       onAddClip({
         assetId: payload.assetId,
         trackId: track.id,
-        startTime,
+        startTime: rawStart,
         trimIn: 0,
         trimOut: payload.duration,
         sourceDuration: payload.duration,
@@ -931,32 +1484,35 @@ export function EditorTimeline({
         kind: clipKindForTrack(track.kind, payload.mediaKind),
       });
     },
-    [onAddClip, onRippleAddClip, timeFromClientX, project, playhead, snapThreshold],
+    [onAddClip, timeFromClientX],
   );
 
-  const onInsertDragOver = useCallback(
-    (event, index) => {
-      if (!isTimelineDropDrag(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "copy";
-      setActiveInsert(index);
-      setDropPreview(null);
-      setRipplePreview(null);
-    },
-    [],
-  );
+  const onInsertDragOver = useCallback((event, index) => {
+    if (!isTimelineDropDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+    const payload = peekTimelineDragPayload();
+    const kind = payload?.mediaKind === "audio" ? "audio" : "video";
+    setLanePreview({
+      index,
+      kind,
+      mode: "insert",
+    });
+    setDropPreview(null);
+    setRipplePreview(null);
+  }, []);
 
   const onInsertDragLeave = useCallback((event, index) => {
     if (event.currentTarget.contains(event.relatedTarget)) return;
-    setActiveInsert((prev) => (prev === index ? null : prev));
+    setLanePreview((prev) => (prev?.index === index && prev?.mode === "insert" ? null : prev));
   }, []);
 
   const onInsertDrop = useCallback(
     (event, index) => {
       event.preventDefault();
       event.stopPropagation();
-      setActiveInsert(null);
+      setLanePreview(null);
       setDropPreview(null);
       setRipplePreview(null);
       setSnapGuideTime(null);
@@ -966,7 +1522,6 @@ export function EditorTimeline({
 
       const lane = scrollRef.current?.querySelector(".studio-editor-track-row .studio-editor-track-lane");
       const rawStart = lane ? timeFromClientX(event.clientX, lane) : 0;
-      const centerTime = rawStart + payload.duration / 2;
       const kind = payload.mediaKind === "audio" ? "audio" : "video";
 
       onRippleAddClip?.({
@@ -978,7 +1533,8 @@ export function EditorTimeline({
         sourceDuration: payload.duration,
         label: payload.name,
         kind,
-        centerTime,
+        // Left edge — freeform place (gaps ok); overlaps push neighbors right.
+        centerTime: Math.max(0, rawStart),
         insertTrackAt: index,
       });
     },
@@ -993,7 +1549,7 @@ export function EditorTimeline({
       setDropPreview(null);
       setRipplePreview(null);
       setSnapGuideTime(null);
-      setActiveInsert(null);
+      setLanePreview(null);
       setExternalDrag(false);
     };
     document.addEventListener("dragenter", onDragEnter);
@@ -1005,6 +1561,11 @@ export function EditorTimeline({
       document.removeEventListener("drop", clearPreview);
     };
   }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("is-timeline-media-drag", externalDrag);
+    return () => document.body.classList.remove("is-timeline-media-drag");
+  }, [externalDrag]);
 
   const { major: majorStep, minor: minorStep } = rulerScale(pixelsPerSecond);
   const majorTicks = [];
@@ -1063,7 +1624,13 @@ export function EditorTimeline({
             const trackHeight = trackHeightForKind(track.kind);
             const preview = dropPreview?.trackId === track.id ? dropPreview : null;
             const trackRipple = ripplePreview?.trackId === track.id ? ripplePreview : null;
-            const rippleClipIds = new Set(trackRipple?.placements.map((p) => p.clipId) ?? []);
+            const trackHasRippleShift = Boolean(
+              ripplePreview?.placements.some((placement) => {
+                const owned = project.clips.find((c) => c.id === placement.clipId);
+                return owned?.trackId === track.id && placement.clipId !== ripplePreview.draggedClipId;
+              }),
+            );
+            const insertActive = lanePreview?.index === trackIndex;
             return (
               <div key={track.id}>
                 <div
@@ -1071,11 +1638,10 @@ export function EditorTimeline({
                     if (node) insertZoneRefs.current.set(trackIndex, node);
                     else insertZoneRefs.current.delete(trackIndex);
                   }}
-                  className={`studio-editor-track-insert-wrap${externalDrag || activeInsert !== null ? " is-visible" : ""}`}
                 >
-                  <TrackInsertZone
+                  <LaneInsertSlot
                     index={trackIndex}
-                    active={activeInsert === trackIndex}
+                    active={insertActive}
                     onDragOver={onInsertDragOver}
                     onDragLeave={onInsertDragLeave}
                     onDrop={onInsertDrop}
@@ -1086,17 +1652,27 @@ export function EditorTimeline({
                     if (node) trackRowRefs.current.set(track.id, node);
                     else trackRowRefs.current.delete(track.id);
                   }}
-                  className={`studio-editor-track-row is-${track.kind}${preview ? " is-drop-target" : ""}${trackRipple ? " is-ripple-active" : ""}`}
-                  style={{ height: trackHeight }}
+                  className={`studio-editor-track-row is-${track.kind}${preview || pickup?.hoverTrackId === track.id ? " is-drop-target" : ""}${trackRipple || trackHasRippleShift ? " is-ripple-active" : ""}${reorderingTrackId === track.id ? " is-reordering" : ""}`}
+                  style={
+                    track.kind === "text"
+                      ? { height: trackHeight, maxHeight: trackHeight, minHeight: 0, overflow: "hidden" }
+                      : { height: trackHeight }
+                  }
                   onDragOver={(event) => onTrackDragOver(event, track)}
                   onDragLeave={(event) => onTrackDragLeave(event, track)}
                   onDrop={(event) => onTrackDrop(event, track)}
                 >
-                <div className="studio-editor-track-rail" style={{ width: TRACK_RAIL_WIDTH }}>
-                  <TrackRailButton track={track} onToggleMute={onToggleTrackMute} />
+                <div className="studio-editor-track-rail" style={{ width: TRACK_RAIL_WIDTH, minHeight: 0 }}>
+                  <TrackRailButton
+                    track={track}
+                    onToggleMute={onToggleTrackMute}
+                    onReorderPointerDown={beginTrackReorder}
+                    reordering={reorderingTrackId === track.id}
+                  />
                 </div>
                 <div
                   className="studio-editor-track-lane"
+                  style={track.kind === "text" ? { minHeight: 0 } : undefined}
                   onPointerDown={(event) => {
                     if (event.target !== event.currentTarget) return;
                     onSelectClip(null);
@@ -1104,7 +1680,7 @@ export function EditorTimeline({
                     beginPlayheadScrub(event, "lane");
                   }}
                 >
-                  {trackRipple ? (
+                  {trackRipple && !pickup ? (
                     <div className="studio-editor-ripple-layer" aria-hidden="true">
                       {trackRipple.placements.map((placement) => {
                         const ghostClip =
@@ -1139,6 +1715,12 @@ export function EditorTimeline({
                     .filter((clip) => clip.trackId === track.id)
                     .map((clip) => {
                       const media = mediaById?.get(clip.assetId);
+                      const placement = ripplePreview?.placements.find((p) => p.clipId === clip.id);
+                      const shifting =
+                        Boolean(pickup) &&
+                        pickup.clipId !== clip.id &&
+                        placement != null &&
+                        placement.startTime !== clip.startTime;
                       return (
                         <TimelineClipBlock
                           key={clip.id}
@@ -1148,20 +1730,48 @@ export function EditorTimeline({
                           media={media}
                           project={project}
                           playhead={playhead}
-                          rippleActive={Boolean(trackRipple && rippleClipIds.has(clip.id))}
+                          rippleActive={shifting || Boolean(
+                            pickup && trackRipple && pickup.clipId !== clip.id && placement,
+                          )}
+                          rippleStartTime={
+                            pickup && pickup.clipId !== clip.id && placement
+                              ? placement.startTime
+                              : undefined
+                          }
+                          isPickedUp={pickup?.clipId === clip.id}
+                          renameToken={
+                            renameRequest?.clipId === clip.id ? renameRequest.token : undefined
+                          }
                           onSelect={(id) => {
                             onSelectJoint?.(null);
                             onSelectClip(id);
+                            // Text rows are thin and sat under insert hit bands — selecting a
+                            // text clip must not invent a new one at the playhead. Keep the
+                            // playhead on the clip so canvas preview stays in sync.
+                            if (clip.kind === "text") {
+                              const end = clip.startTime + clipDuration(clip);
+                              if (playhead < clip.startTime || playhead >= end) {
+                                onSetPlayhead(
+                                  clip.startTime + Math.min(0.05, clipDuration(clip) * 0.25),
+                                );
+                              }
+                            }
                           }}
                           onMove={onMoveClip}
                           onMoveToTrack={onMoveToTrack}
+                          onRename={onRenameClip}
+                          onContextMenu={onClipContextMenu}
                           onSnapGuide={setSnapGuideTime}
-                          onHighlightInsert={setActiveInsert}
+                          onHighlightInsert={setLanePreview}
                           onRipplePreview={setRipplePreview}
-                          onApplyRippleLayout={onApplyTrackLayout}
+                          onPickupChange={setPickup}
                           resolveDropTarget={resolveDropTarget}
+                          timeFromPointerX={timeFromPointerX}
                           onTrim={(clipId, trimIn, trimOut, startTime, live) => {
                             onTrimClip(clipId, trimIn, trimOut, startTime, live);
+                          }}
+                          onUpdateClip={(clipId, patch, live) => {
+                            onUpdateClip?.(clipId, patch, live);
                           }}
                         />
                       );
@@ -1180,7 +1790,15 @@ export function EditorTimeline({
                         />
                       ))
                     : null}
-                  <DropGhost preview={trackRipple ? null : preview} pps={pixelsPerSecond} mediaById={mediaById} />
+                  <DropGhost preview={trackRipple && !pickup ? null : preview} pps={pixelsPerSecond} mediaById={mediaById} />
+                  {pickup?.hoverTrackId === track.id && pickup.dropStartTime != null ? (
+                    <SlotDropGhost
+                      kind={pickup.clip.kind}
+                      startTime={pickup.dropStartTime}
+                      widthPx={pickup.widthPx}
+                      pps={pixelsPerSecond}
+                    />
+                  ) : null}
                 </div>
               </div>
               </div>
@@ -1191,11 +1809,10 @@ export function EditorTimeline({
               if (node) insertZoneRefs.current.set(project.tracks.length, node);
               else insertZoneRefs.current.delete(project.tracks.length);
             }}
-            className={`studio-editor-track-insert-wrap${externalDrag || activeInsert !== null ? " is-visible" : ""}`}
           >
-            <TrackInsertZone
+            <LaneInsertSlot
               index={project.tracks.length}
-              active={activeInsert === project.tracks.length}
+              active={lanePreview?.index === project.tracks.length}
               onDragOver={onInsertDragOver}
               onDragLeave={onInsertDragLeave}
               onDrop={onInsertDrop}
@@ -1215,6 +1832,7 @@ export function EditorTimeline({
           ) : null}
         </div>
       </div>
+      <FloatingPickupClip pickup={pickup} />
     </div>
   );
 }

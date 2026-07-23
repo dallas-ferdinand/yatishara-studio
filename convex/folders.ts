@@ -408,11 +408,17 @@ export const listWithPeeks = authedQuery({
 });
 
 export const get = authedQuery({
-  args: { folderId: v.id("folders") },
+  args: {
+    folderId: v.id("folders"),
+    includeDeleted: v.optional(v.boolean()),
+  },
   returns: v.union(folderReturn, v.null()),
   handler: async (ctx, args) => {
     const folder = await ctx.db.get("folders", args.folderId);
-    if (!folder || folder.ownerId !== ctx.user._id || folder.deletedAt) {
+    if (!folder || folder.ownerId !== ctx.user._id) {
+      return null;
+    }
+    if (folder.deletedAt && !args.includeDeleted) {
       return null;
     }
     return folder;

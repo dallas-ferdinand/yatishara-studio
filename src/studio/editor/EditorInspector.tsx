@@ -26,6 +26,8 @@ import {
 import {
   EDITOR_MODES,
   TRANSITION_LIBRARY,
+  clampAudioFadePair,
+  clampAudioFadeSec,
   transitionLabel,
 } from "./editorEffects";
 import {
@@ -408,7 +410,7 @@ export function EditorInspector({
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
   const showTransition = Boolean(joint) && (editorMode === "transition" || editorMode === "select");
-  const showAudio = Boolean(clip) && clip.kind === "audio";
+  const showAudio = Boolean(clip) && (clip.kind === "audio" || clip.kind === "video");
   const showVideo = Boolean(clip) && clip.kind === "video";
   const showText = editorMode === "text" || clip?.kind === "text";
   const frameRatio = normalizeFrameRatio(project.frameRatio);
@@ -617,10 +619,35 @@ function TransformPanel({ clip, onUpdateClip }) {
 function AudioPanel({ clip, onUpdateClip }) {
   const effects = clip.effects ?? {};
   const volume = effects.volume ?? 1;
+  const duration = clipDuration(clip);
+  const { fadeIn, fadeOut } = clampAudioFadePair(
+    effects.fadeIn ?? 0,
+    effects.fadeOut ?? 0,
+    duration,
+  );
+  const fadeInMax = Math.max(0, duration - fadeOut);
+  const fadeOutMax = Math.max(0, duration - fadeIn);
+  const fadeStep = Math.min(0.05, Math.max(0.05, duration));
+
+  const patchEffects = (next) => {
+    onUpdateClip(clip.id, {
+      effects: {
+        ...effects,
+        ...next,
+      },
+    });
+  };
+
   return (
     <InspectorSection
       title="Audio"
-      onReset={() => onUpdateClip(clip.id, { effects: { ...effects, volume: 1 } })}
+      onReset={() =>
+        patchEffects({
+          volume: 1,
+          fadeIn: 0,
+          fadeOut: 0,
+        })
+      }
     >
       <SliderRow
         label={
@@ -635,8 +662,32 @@ function AudioPanel({ clip, onUpdateClip }) {
         defaultValue={1}
         formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
         parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+        onValueChange={(next) => patchEffects({ volume: next })}
+      />
+      <SliderRow
+        label="Fade in"
+        min={0}
+        max={Math.max(0.05, fadeInMax)}
+        step={fadeStep}
+        value={fadeIn}
+        defaultValue={0}
+        formatValue={(v) => `${Number(v).toFixed(2)}s`}
+        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
         onValueChange={(next) =>
-          onUpdateClip(clip.id, { effects: { ...effects, volume: next } })
+          patchEffects({ fadeIn: clampAudioFadeSec(next, duration, fadeOut) })
+        }
+      />
+      <SliderRow
+        label="Fade out"
+        min={0}
+        max={Math.max(0.05, fadeOutMax)}
+        step={fadeStep}
+        value={fadeOut}
+        defaultValue={0}
+        formatValue={(v) => `${Number(v).toFixed(2)}s`}
+        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
+        onValueChange={(next) =>
+          patchEffects({ fadeOut: clampAudioFadeSec(next, duration, fadeIn) })
         }
       />
     </InspectorSection>

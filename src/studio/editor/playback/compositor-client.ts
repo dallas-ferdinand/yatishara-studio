@@ -77,7 +77,16 @@ export class CompositorClient {
     transition?: TransitionType;
     progress?: number;
     background?: [number, number, number, number];
-    texts?: Array<{
+    textsUnder?: Array<{
+      text: string;
+      fontSize: number;
+      color: string;
+      align: "left" | "center" | "right";
+      opacity: number;
+      translateY: number;
+      scale: number;
+    }>;
+    textsOver?: Array<{
       text: string;
       fontSize: number;
       color: string;
@@ -110,7 +119,8 @@ export class CompositorClient {
           transition: args.transition ?? "none",
           progress: args.progress ?? 0,
           background: args.background ?? [0, 0, 0, 1],
-          texts: args.texts ?? [],
+          textsUnder: args.textsUnder ?? [],
+          textsOver: args.textsOver ?? [],
         },
         transfer,
       );

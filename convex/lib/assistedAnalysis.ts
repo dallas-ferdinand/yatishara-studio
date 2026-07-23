@@ -1,5 +1,5 @@
 /**
- * Multimodal Assistance agent via Gemini 3.1 Pro (GATEWAY_ASSISTANT_MODEL_ID).
+ * Multimodal Assistance agent via Gemini 3.5 Flash (GATEWAY_ASSISTANT_MODEL_ID).
  * Multi-turn plan → one chat reply. Never starts generation.
  */
 import { generateObject, jsonSchema } from "ai";
@@ -193,7 +193,7 @@ function assistantModelId(): string {
   // Assistance is multimodal (vision over product/refs). Never fall back to a
   // text-only lite model — that silently breaks image understanding.
   return (
-    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || "google/gemini-3.1-pro-preview"
+    process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() || "google/gemini-3.5-flash"
   );
 }
 

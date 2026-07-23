@@ -915,14 +915,28 @@ export function StudioShell({
     hasCurrentUser ? {} : "skip",
   );
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
+  const isTrashNav = navTrail.some((crumb) => crumb.id === TRASH_FOLDER_ID);
+  const isTrashBrowse = isTrashNav && !isTrashView;
+  // Keep trash folder rows subscribed while browsing inside a deleted folder so
+  // activeFolder can resolve from cache before folders.get returns.
+  const trashedFolders = useQuery(
+    api.folders.listTrash,
+    hasCurrentUser && isTrashNav ? {} : "skip",
+  );
   const selectedFolder = useQuery(
     api.folders.get,
-    hasCurrentUser && activeFolderId && !isTrashView ? { folderId: activeFolderId } : "skip",
+    hasCurrentUser && activeFolderId && !isTrashView
+      ? { folderId: activeFolderId, includeDeleted: isTrashBrowse }
+      : "skip",
   );
   const activeFolder = isTrashView
     ? TRASH_ACTIVE_FOLDER
     : activeFolderId
-      ? (selectedFolder ?? folderByIdRef.current.get(activeFolderId) ?? topFolders?.find((folder) => folder._id === activeFolderId) ?? null)
+      ? (selectedFolder ??
+          folderByIdRef.current.get(activeFolderId) ??
+          trashedFolders?.find((folder) => folder._id === activeFolderId) ??
+          topFolders?.find((folder) => folder._id === activeFolderId) ??
+          null)
       : (topFolders?.[0] ?? null);
 
   useEffect(() => {
@@ -1042,10 +1056,13 @@ export function StudioShell({
   const childFolders = useQuery(
     api.folders.listWithPeeks,
     hasCurrentUser && activeFolder && !isTrashView
-      ? { parentId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
+      ? {
+          parentId: activeFolder._id,
+          expiresUnix: assetUrlExpiresUnix,
+          includeDeleted: isTrashBrowse,
+        }
       : "skip",
   );
-  const trashedFolders = useQuery(api.folders.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
   const trashedAssets = useQuery(
     api.assets.listTrash,
     hasCurrentUser && isTrashView ? { expiresUnix: assetUrlExpiresUnix } : "skip",
@@ -1062,18 +1079,28 @@ export function StudioShell({
   const assets = useQuery(
     api.assets.listByFolder,
     hasCurrentUser && activeFolder && !isTrashView
-      ? { folderId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
+      ? {
+          folderId: activeFolder._id,
+          expiresUnix: assetUrlExpiresUnix,
+          includeDeleted: isTrashBrowse,
+        }
       : "skip",
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    hasCurrentUser && activeFolder && !isTrashView ? { folderId: activeFolder._id } : "skip",
+    hasCurrentUser && activeFolder && !isTrashView
+      ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
+      : "skip",
   );
   const videoEditorEnabled = isVideoEditorPreviewEnabled();
   const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
     hasCurrentUser && activeFolder && !isTrashView && videoEditorEnabled
-      ? { folderId: activeFolder._id, expiresUnix: assetUrlExpiresUnix }
+      ? {
+          folderId: activeFolder._id,
+          expiresUnix: assetUrlExpiresUnix,
+          includeDeleted: isTrashBrowse,
+        }
       : "skip",
   );
   const trashedVideoEditsRaw = useQuery(
@@ -1084,7 +1111,10 @@ export function StudioShell({
   );
   const videoEdits = videoEditorEnabled ? videoEditsRaw : [];
   const trashedVideoEdits = videoEditorEnabled ? trashedVideoEditsRaw : [];
-  const elements = useQuery(api.elements.list, hasCurrentUser ? {} : "skip");
+  const elements = useQuery(
+    api.elements.list,
+    hasCurrentUser ? (isTrashBrowse ? { includeDeleted: true } : {}) : "skip",
+  );
   const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
   const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
@@ -1102,11 +1132,11 @@ export function StudioShell({
       : "skip",
   );
   const assistanceFeatureEnabled = useQuery(
-    api.guidedVideo.featureEnabled,
+    api.guidedVideoLite.featureEnabled,
     hasCurrentUser ? {} : "skip",
   );
   const guidedVideoTypes = useQuery(
-    api.guidedVideo.listVideoTypes,
+    api.guidedVideoLite.listVideoTypes,
     hasCurrentUser && assistanceEnabled ? {} : "skip",
   );
   const activeGuidedBrief = useQuery(
@@ -1147,19 +1177,23 @@ export function StudioShell({
 
   useEffect(() => {
     // Assistance stays on unless the thread/user explicitly opted out (stored false).
+    // Never fight the audio-mode force-off effect — that ping-pong can update-depth crash.
+    if (mode === "audio") return;
     if (activeThreadId && threads) {
       const thread = threads.find((item) => item._id === activeThreadId);
       if (thread) {
-        setAssistanceEnabled(thread.assistanceEnabled !== false);
+        const next = thread.assistanceEnabled !== false;
+        setAssistanceEnabled((current) => (current === next ? current : next));
         return;
       }
     }
     if (currentUser) {
-      setAssistanceEnabled(currentUser.assistanceDefaultEnabled !== false);
+      const next = currentUser.assistanceDefaultEnabled !== false;
+      setAssistanceEnabled((current) => (current === next ? current : next));
     } else {
-      setAssistanceEnabled(true);
+      setAssistanceEnabled((current) => (current === true ? current : true));
     }
-  }, [activeThreadId, threads, currentUser]);
+  }, [activeThreadId, threads, currentUser, mode]);
 
   useEffect(() => {
     if (!activeThreadId || !events?.length) return;
@@ -1773,10 +1807,10 @@ export function StudioShell({
   }, [activeFolderId, topFolders]);
 
   useEffect(() => {
-    for (const folder of [...(topFolders ?? []), ...(childFolders ?? [])]) {
+    for (const folder of [...(topFolders ?? []), ...(childFolders ?? []), ...(trashedFolders ?? [])]) {
       folderByIdRef.current.set(folder._id, folder);
     }
-  }, [topFolders, childFolders]);
+  }, [topFolders, childFolders, trashedFolders]);
 
   useEffect(() => {
     window.localStorage.setItem(STUDIO_CUSTOM_CURSOR_KEY, customCursorEnabled ? "on" : "off");
@@ -2095,7 +2129,7 @@ export function StudioShell({
 
   async function createNewVideoEdit() {
     if (!isVideoEditorPreviewEnabled()) return;
-    if (!activeFolder || isTrashView) return;
+    if (!activeFolder || isTrashNav) return;
     const result = await createVideoEdit({
       folderId: activeFolder._id,
       name: "Untitled",
@@ -2251,7 +2285,7 @@ export function StudioShell({
   }
 
   function runCreateAction(action) {
-    if (isTrashView) return;
+    if (isTrashNav) return;
     if (action === "upload") {
       fileInputRef.current?.click();
       return;
@@ -2433,15 +2467,16 @@ export function StudioShell({
 
   const handleFeedTabReselect = useCallback((key) => {
     if (!String(key).startsWith("feed:")) return;
-    setFeedModeMenuOpen((open) => {
-      if (open && feedModeMenuKey === key) {
-        setFeedModeMenuKey(null);
-        return false;
-      }
-      setFeedModeMenuKey(key);
-      return true;
-    });
-  }, [feedModeMenuKey]);
+    // Never nest setState inside another updater — Strict Mode can double-run
+    // updaters and trip React #301 (too many re-renders).
+    if (feedModeMenuOpen && feedModeMenuKey === key) {
+      setFeedModeMenuOpen(false);
+      setFeedModeMenuKey(null);
+      return;
+    }
+    setFeedModeMenuKey(key);
+    setFeedModeMenuOpen(true);
+  }, [feedModeMenuKey, feedModeMenuOpen]);
 
   useLayoutEffect(() => {
     if (!feedModeMenuOpen || !feedModeMenuKey) {
@@ -2512,12 +2547,15 @@ export function StudioShell({
     }
     setOpenTabs((tabs) => {
       const remaining = tabs.filter((tab) => tab !== key);
-      const next = remaining.length ? remaining : [COMPOSER_TAB];
-      if (activeTab === key) {
-        setActiveTab(next[next.length - 1]);
-      }
-      return next;
+      return remaining.length ? remaining : [COMPOSER_TAB];
     });
+    if (activeTab === key) {
+      setActiveTab((tab) => {
+        if (tab !== key) return tab;
+        const remaining = openTabs.filter((item) => item !== key);
+        return remaining.length ? remaining[remaining.length - 1] : COMPOSER_TAB;
+      });
+    }
   }
 
   function handleEntryOpen(entry) {
@@ -2532,7 +2570,6 @@ export function StudioShell({
       return;
     }
     if (entry.type === "dir") {
-      if (isTrashView) return;
       setActiveFolderId(entry.studioId);
       setNavTrail((trail) => {
         const existing = trail.findIndex((crumb) => crumb.id === entry.studioId);
@@ -2759,7 +2796,7 @@ export function StudioShell({
   }
 
   function renameEntry(entry) {
-    if (!entry || isTrashView) return;
+    if (!entry || isTrashNav) return;
     setRenameTarget(entry);
   }
 
@@ -2814,7 +2851,7 @@ export function StudioShell({
   }
 
   async function commitTabRename(tab, nextName) {
-    if (!tab?.key || isTrashView) return;
+    if (!tab?.key || isTrashNav) return;
     const key = String(tab.key);
     if (key.startsWith("edit:project:")) {
       const projectId = key.slice("edit:project:".length);
@@ -2941,7 +2978,7 @@ export function StudioShell({
   }
 
   async function trashEntry(entry) {
-    if (!entry || isTrashView || entry.studioKind === "trash") return;
+    if (!entry || isTrashNav || entry.studioKind === "trash") return;
     const ok = window.confirm(`Move "${entry.name}" to trash?`);
     if (!ok) return;
     if (entry.studioKind === "folder") {
@@ -2976,7 +3013,7 @@ export function StudioShell({
   }
 
   function handleEntryDrop(event, targetEntry) {
-    if (isTrashView || targetEntry?.studioKind === "trash") return;
+    if (isTrashNav || targetEntry?.studioKind === "trash") return;
     if (!targetEntry?.studioId) return;
     const raw = event.dataTransfer?.getData(EXPLORER_DND_TYPE);
     if (!raw) return;
@@ -13278,9 +13315,13 @@ export function StudioShell({
           flex: 0 0 auto;
         }
         .studio-history-mobile-sheet .studio-history-list {
-          flex: 0 0 auto;
+          flex: 1 1 0%;
           min-height: 0;
-          overflow: visible;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          touch-action: pan-y;
+          -webkit-overflow-scrolling: touch;
           padding: 0 0 8px;
           scrollbar-gutter: auto;
         }
@@ -13651,8 +13692,9 @@ export function StudioShell({
         }
         .studio-chat-stream {
           min-height: 0;
-          flex: 1 1 auto;
-          height: 100%;
+          /* flex-basis 0 (not auto) — auto + height:100% lets content grow the
+             pane past the viewport so the stream never becomes a scrollport. */
+          flex: 1 1 0;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -15273,20 +15315,20 @@ export function StudioShell({
           entry={contextMenu.entry}
           x={contextMenu.x}
           y={contextMenu.y}
-          canCreateFile={!isTrashView}
-          canCreateFolder={!isTrashView}
-          inTrashView={isTrashView}
+          canCreateFile={!isTrashNav}
+          canCreateFolder={!isTrashNav}
+          inTrashView={isTrashNav}
           createItems={getCreateMenuItems()}
           sharedAssetIds={sharedAssetIds}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
-            if (isTrashView) return;
+            if (isTrashNav) return;
             setContextMenu(null);
             renameEntry(entry);
           }}
           onRequestDelete={(entry) => {
             setContextMenu(null);
-            if (isTrashView) void restoreEntry(entry);
+            if (isTrashNav) void restoreEntry(entry);
             else void trashEntry(entry);
           }}
           onAction={(action, entry) => {
@@ -19536,7 +19578,7 @@ function ActivePane({
       );
     }
     const folderId = videoEditContext.folderId ?? activeFolderId;
-    if (!folderId) {
+    if (!folderId || folderId === TRASH_FOLDER_ID) {
       return wrapPane(
         <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>,
       );

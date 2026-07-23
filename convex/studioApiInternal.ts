@@ -2,7 +2,14 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { buildAssetPath, signBunnyCdnUrl, signBunnyFullUrl } from "./lib/bunny";
+import {
+  assetThumbnailPath,
+  buildAssetPath,
+  signBunnyCdnUrl,
+  signBunnyFullUrl,
+  signBunnyThumbUrl,
+  THUMB_TRANSFORM,
+} from "./lib/bunny";
 import {
   assertReferenceCount,
   referenceAssetIdsFromInput,
@@ -45,6 +52,7 @@ const assetShape = v.object({
   mimeType: v.string(),
   byteSize: v.optional(v.number()),
   url: v.optional(v.string()),
+  thumbnailUrl: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -261,6 +269,12 @@ export const getFolderContents = internalQuery({
   },
   returns: v.object({
     folder: folderShape,
+    breadcrumb: v.array(
+      v.object({
+        id: v.id("folders"),
+        name: v.string(),
+      }),
+    ),
     folders: v.array(folderShape),
     assets: v.array(assetShape),
     documents: v.array(
@@ -272,6 +286,17 @@ export const getFolderContents = internalQuery({
         updatedAt: v.number(),
       }),
     ),
+    elements: v.array(
+      v.object({
+        id: v.id("elements"),
+        type: v.string(),
+        name: v.string(),
+        folderId: v.optional(v.id("folders")),
+        buildStatus: v.string(),
+        sheetAssetId: v.optional(v.id("assets")),
+        descriptionPreview: v.optional(v.string()),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     const folder = await requireFolderForUser(
@@ -280,6 +305,17 @@ export const getFolderContents = internalQuery({
       args.folderId,
       args.sandboxFolderId,
     );
+    const breadcrumb: Array<{ id: Id<"folders">; name: string }> = [];
+    let currentId: Id<"folders"> | undefined = args.folderId;
+    const seen = new Set<string>();
+    while (currentId && !seen.has(currentId)) {
+      seen.add(currentId);
+      const crumb: Doc<"folders"> | null = await ctx.db.get("folders", currentId);
+      if (!crumb || crumb.ownerId !== args.userId || crumb.deletedAt) break;
+      breadcrumb.unshift({ id: crumb._id, name: crumb.name });
+      if (args.sandboxFolderId && crumb._id === args.sandboxFolderId) break;
+      currentId = crumb.parentId;
+    }
     const subfolders = await ctx.db
       .query("folders")
       .withIndex("by_owner_and_parent", (q) =>
@@ -294,8 +330,29 @@ export const getFolderContents = internalQuery({
       .query("documents")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
       .collect();
+    const allElements = await ctx.db
+      .query("elements")
+      .withIndex("by_owner", (q) => q.eq("ownerId", args.userId))
+      .collect();
+    const elements = await Promise.all(
+      allElements
+        .filter((item) => !item.deletedAt && item.folderId === args.folderId)
+        .map(async (element) => {
+          const resolved = await resolveElementAssets(ctx, element);
+          return {
+            id: element._id,
+            type: element.type,
+            name: element.name,
+            folderId: element.folderId,
+            buildStatus: resolved.buildStatus,
+            sheetAssetId: resolved.sheetAssetId,
+            descriptionPreview: element.description?.slice(0, 160),
+          };
+        }),
+    );
     return {
       folder: formatFolder(folder),
+      breadcrumb,
       folders: subfolders.filter((item) => !item.deletedAt).map(formatFolder),
       assets: await Promise.all(
         assets
@@ -311,6 +368,7 @@ export const getFolderContents = internalQuery({
           createdAt: doc.createdAt,
           updatedAt: doc.updatedAt,
         })),
+      elements,
     };
   },
 });
@@ -2102,6 +2160,7 @@ async function formatAsset(
   asset: Doc<"assets">,
   expiresUnix: number,
 ) {
+  const thumbPath = assetThumbnailPath(asset);
   return {
     id: asset._id,
     folderId: asset.folderId,
@@ -2109,7 +2168,12 @@ async function formatAsset(
     kind: asset.kind,
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
-    url: asset.bunnyPath ? await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind) : undefined,
+    url: asset.bunnyPath
+      ? await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
+      : undefined,
+    thumbnailUrl: thumbPath
+      ? await signBunnyThumbUrl(thumbPath, expiresUnix, THUMB_TRANSFORM)
+      : undefined,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
   };
@@ -2236,10 +2300,20 @@ async function formatGenerationJob(
     mode: job.mode,
     folderId: job.saveFolderId,
     prompt: job.userPrompt,
+    enhancedPrompt: job.enhancedPrompt,
+    negativePrompt: job.negativePrompt,
+    skipPromptEnhancement: job.skipPromptEnhancement,
+    styleSheetElementId: job.styleSheetElementId,
     error: job.error,
     source: job.source,
     stylePresetSlug: preset?.slug,
     resolvedModel: job.resolvedModel,
+    resolution: job.resolution,
+    aspectRatio: job.aspectRatio,
+    quality: job.quality,
+    durationSeconds: job.durationSeconds,
+    audioEnabled: job.audioEnabled,
+    audioType: job.audioType,
     creditsSpent,
     assets,
     createdAt: job.createdAt,

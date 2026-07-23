@@ -48,7 +48,7 @@ export const finalizeCommittedUpload = internalMutation({
       byteSize: args.byteSize,
       updatedAt: Date.now(),
     });
-    if (asset.kind === "video") {
+    if (asset.kind === "video" || asset.kind === "audio") {
       await ctx.scheduler.runAfter(0, internal.assetsInternal.enqueueMediaProxy, {
         assetId: args.assetId,
       });
@@ -62,7 +62,12 @@ export const enqueueMediaProxy = internalMutation({
   returns: v.union(v.null(), v.id("mediaProxyJobs")),
   handler: async (ctx, args) => {
     const asset = await ctx.db.get(args.assetId);
-    if (!asset || asset.deletedAt || asset.kind !== "video" || !asset.bunnyPath) {
+    if (
+      !asset ||
+      asset.deletedAt ||
+      (asset.kind !== "video" && asset.kind !== "audio") ||
+      !asset.bunnyPath
+    ) {
       return null;
     }
     const existing = await ctx.db
@@ -108,6 +113,7 @@ export const claimMediaProxyJob = internalMutation({
       ownerId: v.id("users"),
       folderId: v.id("folders"),
       attemptCount: v.number(),
+      kind: v.union(v.literal("video"), v.literal("audio")),
     }),
   ),
   handler: async (ctx, args) => {
@@ -117,7 +123,13 @@ export const claimMediaProxyJob = internalMutation({
     if (job.status === "processing" && (job.leaseUntil ?? 0) > now) return null;
     if (job.attemptCount >= 3) return null;
     const asset = await ctx.db.get(job.assetId);
-    if (!asset?.bunnyPath || asset.deletedAt || asset.kind !== "video") return null;
+    if (
+      !asset?.bunnyPath ||
+      asset.deletedAt ||
+      (asset.kind !== "video" && asset.kind !== "audio")
+    ) {
+      return null;
+    }
     const attemptCount = job.attemptCount + 1;
     await ctx.db.patch(job._id, {
       status: "processing",
@@ -138,6 +150,7 @@ export const claimMediaProxyJob = internalMutation({
       ownerId: asset.ownerId,
       folderId: asset.folderId,
       attemptCount,
+      kind: asset.kind,
     };
   },
 });
@@ -147,8 +160,8 @@ export const completeMediaProxyJob = internalMutation({
     jobId: v.id("mediaProxyJobs"),
     proxyPath: v.string(),
     proxyByteSize: v.number(),
-    proxy1080Path: v.string(),
-    proxy1080ByteSize: v.number(),
+    proxy1080Path: v.optional(v.string()),
+    proxy1080ByteSize: v.optional(v.number()),
     durationSeconds: v.optional(v.number()),
     width: v.optional(v.number()),
     height: v.optional(v.number()),

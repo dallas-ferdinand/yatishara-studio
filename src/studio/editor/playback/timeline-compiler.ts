@@ -3,12 +3,15 @@ import type {
   EditorProject,
   TransitionType,
 } from "../types";
+import { audioFadeGainAtLocalTime } from "../editorEffects";
 import { clipDurationSec, sortedClipsOnTrack } from "../projectContract";
 
 export type CompiledClip = {
   clipId: string;
   assetId?: string;
   trackId: string;
+  /** Index in project.tracks — lower = higher on the timeline = higher preview z. */
+  trackIndex: number;
   kind: EditorClip["kind"];
   timelineStart: number;
   timelineEnd: number;
@@ -50,18 +53,30 @@ export type RenderSlice = {
   video: VideoSample[];
   transition: (CompiledTransition & { progress: number }) | null;
   audio: Array<{ clip: CompiledClip; sourceTime: number; gain: number }>;
+  /** Upcoming audio beds to warm (same horizon as video preload). */
+  preloadAudio: Array<{ clip: CompiledClip; sourceTime: number; gain: number }>;
+  /** @deprecated Prefer textOver / textUnder — kept as over+under concat for callers. */
   text: CompiledClip[];
+  /** Text lanes above the top active video (drawn on top of video). */
+  textOver: CompiledClip[];
+  /** Text lanes below the top active video (drawn under video). */
+  textUnder: CompiledClip[];
   preload: VideoSample[];
 };
 
 const JOINT_TOLERANCE_SEC = 0.04;
 
-function compileClip(clip: EditorClip, muted: boolean): CompiledClip {
+function compileClip(
+  clip: EditorClip,
+  muted: boolean,
+  trackIndex: number,
+): CompiledClip {
   const duration = clipDurationSec(clip);
   return {
     clipId: clip.id,
     assetId: clip.assetId,
     trackId: clip.trackId,
+    trackIndex,
     kind: clip.kind,
     timelineStart: clip.startTime,
     timelineEnd: clip.startTime + duration,
@@ -77,8 +92,15 @@ export function compileTimeline(project: EditorProject): PlaybackPlan {
   const mutedTracks = new Set(
     project.tracks.filter((track) => track.muted).map((track) => track.id),
   );
+  const trackIndexById = new Map(
+    project.tracks.map((track, index) => [track.id, index]),
+  );
   const compiled = project.clips.map((clip) =>
-    compileClip(clip, mutedTracks.has(clip.trackId)),
+    compileClip(
+      clip,
+      mutedTracks.has(clip.trackId),
+      trackIndexById.get(clip.trackId) ?? 0,
+    ),
   );
   const clipsById = new Map(compiled.map((clip) => [clip.clipId, clip]));
   const video = compiled
@@ -179,9 +201,10 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
       });
     }
   } else {
+    // Top of timeline (lowest trackIndex) wins when video lanes overlap.
     const active = plan.video
       .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
-      .at(-1);
+      .sort((a, b) => a.trackIndex - b.trackIndex || a.timelineStart - b.timelineStart)[0];
     if (active) {
       video.push({ clip: active, sourceTime: sourceAt(active, time), role: "single" });
     }
@@ -189,14 +212,42 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
 
   const audio = plan.audio
     .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
+    .map((clip) => {
+      const local = time - clip.timelineStart;
+      const duration = clip.timelineEnd - clip.timelineStart;
+      return {
+        clip,
+        sourceTime: sourceAt(clip, time),
+        gain:
+          clip.volume *
+          audioFadeGainAtLocalTime(clip.clip.effects, duration, local),
+      };
+    });
+  const activeAudioIds = new Set(audio.map((item) => item.clip.clipId));
+  const preloadAudio = plan.audio
+    .filter(
+      (clip) =>
+        !activeAudioIds.has(clip.clipId) &&
+        clip.timelineStart > time &&
+        clip.timelineStart <= time + 2,
+    )
     .map((clip) => ({
       clip,
-      sourceTime: sourceAt(clip, time),
-      gain: clip.volume,
+      sourceTime: clip.sourceStart,
+      gain:
+        clip.volume *
+        audioFadeGainAtLocalTime(clip.clip.effects, clip.timelineEnd - clip.timelineStart, 0),
     }));
-  const activeText = plan.text.filter((clip) =>
-    contains(clip.timelineStart, clip.timelineEnd, time),
+  const activeText = plan.text
+    .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))
+    .sort((a, b) => b.trackIndex - a.trackIndex);
+  // Text above the topmost active video draws over; text below draws under.
+  const topVideoIndex = video.reduce(
+    (min, sample) => Math.min(min, sample.clip.trackIndex),
+    Number.POSITIVE_INFINITY,
   );
+  const textOver = activeText.filter((clip) => clip.trackIndex < topVideoIndex);
+  const textUnder = activeText.filter((clip) => clip.trackIndex > topVideoIndex);
   const currentIds = new Set(video.map((sample) => sample.clip.clipId));
   const preloadIds = new Set<string>();
   const preload: VideoSample[] = [];
@@ -232,7 +283,10 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
         }
       : null,
     audio,
-    text: activeText,
+    preloadAudio,
+    text: [...textUnder, ...textOver],
+    textOver,
+    textUnder,
     preload,
   };
 }

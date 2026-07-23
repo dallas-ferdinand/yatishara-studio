@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { jsonResult, pollGeneration, studioFetch } from "../client.js";
+import { jsonResult, pollGeneration, pollGenerations, studioFetch } from "../client.js";
 const estimateSchema = {
   mode: z.enum(["image", "video", "script", "audio"]).optional(),
   resolution: z.string().optional(),
@@ -35,10 +35,70 @@ const COMPOSER_SCRIPT_TYPE_ENUM = [
   "vo_script"
 ];
 const REFERENCE_INTENT_ENUM = ["auto", "stylize", "match_reference", "element_lock"];
+const batchItemSchema = z.object({
+  label: z.string().optional().describe("Human label for this item in the batch result"),
+  mode: z.enum(["image", "video", "script", "audio"]),
+  prompt: z.string(),
+  folderId: z.string().optional(),
+  styleSheetElementId: z.string().optional(),
+  stylePreset: z.string().optional(),
+  aspectRatio: z.string().optional(),
+  resolution: z.string().optional(),
+  quality: z.enum(["low", "medium", "high"]).optional(),
+  durationSeconds: z.number().optional(),
+  audioEnabled: z.boolean().optional(),
+  audioType: z.enum(["voiceover", "sfx"]).optional(),
+  elevenVoiceId: z.string().optional(),
+  elevenVoiceName: z.string().optional(),
+  elevenPublicOwnerId: z.string().optional(),
+  audioLoop: z.boolean().optional(),
+  promptInfluence: z.number().optional(),
+  referenceAssetIds: z.array(z.string()).optional(),
+  referenceElementIds: z.array(z.string()).optional(),
+  startFrameAssetId: z.string().optional(),
+  skipPromptEnhancement: z.boolean().optional(),
+  referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional(),
+  videoModel: z.string().optional(),
+  scriptType: z.enum(COMPOSER_SCRIPT_TYPE_ENUM).optional()
+});
+function generationBody(item, wait) {
+  const skip = item.skipPromptEnhancement ?? (item.styleSheetElementId ? false : true);
+  const body = {
+    mode: item.mode,
+    wait,
+    prompt: item.prompt,
+    folderId: item.folderId,
+    styleSheetElementId: item.styleSheetElementId,
+    stylePreset: item.stylePreset ?? "unstyled",
+    aspectRatio: item.aspectRatio,
+    resolution: item.resolution,
+    quality: item.quality,
+    durationSeconds: item.durationSeconds,
+    audioEnabled: item.audioEnabled,
+    referenceAssetIds: item.referenceAssetIds,
+    referenceElementIds: item.referenceElementIds,
+    startFrameAssetId: item.startFrameAssetId,
+    skipPromptEnhancement: skip,
+    referenceIntent: item.referenceIntent,
+    videoModel: item.videoModel
+  };
+  if (item.mode === "script") {
+    body.scriptType = item.scriptType ?? "production";
+  }
+  if (item.mode === "audio") {
+    body.audioType = item.audioType ?? "voiceover";
+    body.elevenVoiceId = item.elevenVoiceId;
+    body.elevenVoiceName = item.elevenVoiceName;
+    body.elevenPublicOwnerId = item.elevenPublicOwnerId;
+    body.audioLoop = item.audioLoop;
+    body.promptInfluence = item.promptInfluence;
+  }
+  return body;
+}
 function registerGenerationTools(server) {
   server.tool(
     "studio_estimate_generation",
-    "Estimate credit cost before generating. Call this before studio_generate_image, studio_generate_video, studio_generate_script, or audio generation. Returns cost, creditBalance, and canGenerate.",
+    "[preferred] Estimate credit cost before generating. Call before studio_generate_* or studio_generate_batch.",
     estimateSchema,
     async (args) => jsonResult(
       await studioFetch("/generations/estimate", {
@@ -67,7 +127,7 @@ function registerGenerationTools(server) {
   );
   server.tool(
     "studio_estimate_batch",
-    "Estimate total production budget for multiple generation items (props, shots, audio, etc.) with contingency. Returns credits, TT$, and creditBalance. Call before cartoon-ad-production budget approval.",
+    "[preferred] Estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval.",
     {
       items: z.array(
         z.object({
@@ -106,7 +166,7 @@ function registerGenerationTools(server) {
   );
   server.tool(
     "studio_list_presets",
-    "Deprecated \u2014 Studio composer uses Style Sheet elements. Returns Direct/unstyled preset only.",
+    "[deprecated] Style Sheets replaced presets. Returns Direct/unstyled only \u2014 use studio_list_style_sheets for styled work.",
     { kind: z.enum(["image", "video", "any"]).optional() },
     async ({ kind }) => {
       const query = kind ? `?kind=${encodeURIComponent(kind)}` : "";
@@ -115,28 +175,126 @@ function registerGenerationTools(server) {
   );
   server.tool(
     "studio_list_style_sheets",
-    "List Style Sheet elements for this API key (drafts + built). Each has buildStatus; styled generation requires styleRules and/or a built sheet (sheetAssetId).",
+    "[preferred] List Style Sheet elements (drafts + built). Styled generation needs styleRules and/or built sheetAssetId.",
     {},
     async () => jsonResult(await studioFetch("/style-sheets"))
   );
   server.tool(
     "studio_list_generations",
     "List recent generation jobs with status and output assets.",
-    { limit: z.number().optional().describe("Max jobs, default 20") },
-    async ({ limit }) => {
+    {
+      limit: z.number().optional().describe("Max jobs, default 20"),
+      compact: z.boolean().optional()
+    },
+    async ({ limit, compact }) => {
       const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
-      return jsonResult(await studioFetch(`/generations${query}`));
+      return jsonResult(await studioFetch(`/generations${query}`), compact);
     }
   );
   server.tool(
     "studio_get_generation",
-    "Poll a generation job by ID. Status: queued | generating | saving | done | failed.",
-    { jobId: z.string() },
-    async ({ jobId }) => jsonResult(await studioFetch(`/generations/${encodeURIComponent(jobId)}`))
+    "Poll a generation job by ID. Returns status, prompts, model, settings, creditsSpent, and output assets.",
+    { jobId: z.string(), compact: z.boolean().optional() },
+    async ({ jobId, compact }) => jsonResult(await studioFetch(`/generations/${encodeURIComponent(jobId)}`), compact)
+  );
+  server.tool(
+    "studio_generate_batch",
+    `[preferred] Queue multiple generations then poll until done. Prefer for props/shots packs after studio_estimate_batch.
+
+Rules:
+- Max 8 items per call.
+- Images/scripts/audio can run in parallel.
+- Videos are queued with \u226565s spacing (gateway 1 req/min).
+- Call studio_estimate_batch first for budget.
+- Inspect outputs with studio_view_media before another round. ${directHandoffHint}`,
+    {
+      items: z.array(batchItemSchema).min(1).max(8),
+      poll: z.boolean().optional().describe("Default true \u2014 wait for all jobs. false returns queued jobIds only."),
+      videoGapMs: z.number().optional().describe("Delay between video queue calls. Default 65000."),
+      timeoutMs: z.number().optional().describe("Poll timeout for the whole batch. Default 600000."),
+      compact: z.boolean().optional()
+    },
+    async (args) => {
+      const poll = args.poll !== false;
+      const videoGapMs = args.videoGapMs ?? 65e3;
+      const queued = [];
+      let lastVideoAt = 0;
+      for (const [index, item] of args.items.entries()) {
+        const label = item.label ?? `${item.mode}-${index + 1}`;
+        try {
+          if (item.mode === "audio" && item.audioType !== "sfx" && !item.elevenVoiceId?.trim()) {
+            throw new Error("elevenVoiceId is required for voiceover");
+          }
+          if (item.mode === "video") {
+            const wait = Date.now() - lastVideoAt;
+            if (lastVideoAt > 0 && wait < videoGapMs) {
+              await new Promise((r) => setTimeout(r, videoGapMs - wait));
+            }
+          }
+          const waitSync = item.mode === "image" || item.mode === "script";
+          const result = await studioFetch("/generations", {
+            method: "POST",
+            body: JSON.stringify(generationBody(item, waitSync))
+          });
+          if (item.mode === "video") lastVideoAt = Date.now();
+          const jobId = result.id ?? result.jobId;
+          queued.push({
+            label,
+            mode: item.mode,
+            jobId,
+            documentId: result.documentId,
+            ok: true,
+            raw: waitSync ? result : void 0
+          });
+        } catch (error) {
+          queued.push({
+            label,
+            mode: item.mode,
+            ok: false,
+            error: error instanceof Error ? error.message : "queue failed"
+          });
+        }
+      }
+      if (!poll) {
+        return jsonResult({ queued, polled: false }, args.compact);
+      }
+      const toPoll = queued.filter((q) => q.ok && q.jobId && !q.raw).map((q) => q.jobId);
+      const polled = toPoll.length ? await pollGenerations(toPoll, { timeoutMs: args.timeoutMs ?? 6e5 }) : [];
+      const byId = new Map(polled.map((p) => [p.jobId, p]));
+      const results = queued.map((q) => {
+        if (!q.ok) return q;
+        if (q.raw) {
+          return { ...q, status: "done", result: q.raw };
+        }
+        if (!q.jobId) return q;
+        const p = byId.get(q.jobId);
+        if (!p) return { ...q, status: "unknown" };
+        return {
+          label: q.label,
+          mode: q.mode,
+          jobId: q.jobId,
+          ok: p.ok,
+          status: p.job?.status ?? (p.ok ? "done" : "failed"),
+          error: p.error,
+          result: p.job
+        };
+      });
+      return jsonResult(
+        {
+          results,
+          summary: {
+            total: results.length,
+            ok: results.filter((r) => r.ok).length,
+            failed: results.filter((r) => !r.ok).length
+          }
+        },
+        args.compact
+      );
+    }
   );
   server.tool(
     "studio_generate_image",
-    `Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds).
+    `[preferred] Generate an image and save it to a Studio folder. Call studio_estimate_generation first. Uses wait=true (usually completes in seconds).
 
 DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer. ${directHandoffHint}`,
     {
@@ -150,7 +308,8 @@ DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable th
       referenceAssetIds: z.array(z.string()).optional().describe("Direct asset IDs (e.g. sheetAssetId)"),
       referenceElementIds: z.array(z.string()).optional().describe("Built element IDs \u2014 uses sheet image + description, not upload refs"),
       skipPromptEnhancement: z.boolean().optional().describe("Override. Default: true for Direct, false when styleSheetElementId is set."),
-      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc)
+      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
+      compact: z.boolean().optional()
     },
     async (args) => jsonResult(
       await studioFetch("/generations", {
@@ -170,12 +329,13 @@ DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable th
           skipPromptEnhancement: args.skipPromptEnhancement ?? (args.styleSheetElementId ? false : true),
           referenceIntent: args.referenceIntent
         })
-      })
+      }),
+      args.compact
     )
   );
   server.tool(
     "studio_generate_video",
-    `Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Async + poll (up to 5 min).
+    `[preferred] Generate a video and save it to a Studio folder. Call studio_estimate_generation first. Async + poll (up to 5 min).
 
 DEFAULT: Direct handoff (verbatim prompt). Pass styleSheetElementId to enable the enhancement sticking layer.
 
@@ -183,7 +343,7 @@ VIDEO WITH PEOPLE (required workflow):
 1. studio_generate_image \u2014 storyboard still with referenceElementIds
 2. studio_generate_video \u2014 pass startFrameAssetId from step 1 + referenceElementIds for prop/location lock.
 
-Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHint}`,
+Wait \u226565s between video calls (1 req/min gateway quota). For packs use studio_generate_batch. ${directHandoffHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
@@ -200,7 +360,8 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
       referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
       videoModel: z.string().optional().describe(
         "Explicit model slug from studio_list_video_models. Omit = seedance-2.0 (Studio default)."
-      )
+      ),
+      compact: z.boolean().optional()
     },
     async (args) => {
       const queued = await studioFetch("/generations", {
@@ -226,12 +387,12 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
       });
       const jobId = queued.id;
       const result = await pollGeneration(jobId);
-      return jsonResult({ ...queued, ...result });
+      return jsonResult({ ...queued, ...result }, args.compact);
     }
   );
   server.tool(
     "studio_generate_script",
-    `Generate a script document in a folder. Call studio_estimate_generation with mode=script first. ${directHandoffHint}`,
+    `[preferred] Generate a script document in a folder. Call studio_estimate_generation with mode=script first. ${directHandoffHint}`,
     {
       prompt: z.string(),
       folderId: z.string().optional(),
@@ -241,7 +402,8 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
       referenceElementIds: z.array(z.string()).optional(),
       skipPromptEnhancement: z.boolean().optional(),
       scriptType: z.enum(COMPOSER_SCRIPT_TYPE_ENUM).optional().describe(scriptTypeFieldDesc),
-      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc)
+      referenceIntent: z.enum(REFERENCE_INTENT_ENUM).optional().describe(referenceIntentFieldDesc),
+      compact: z.boolean().optional()
     },
     async (args) => jsonResult(
       await studioFetch("/generations", {
@@ -258,12 +420,13 @@ Wait \u226565s between video calls (1 req/min gateway quota). ${directHandoffHin
           scriptType: args.scriptType ?? "production",
           referenceIntent: args.referenceIntent
         })
-      })
+      }),
+      args.compact
     )
   );
   server.tool(
     "studio_generate_audio",
-    `Generate voiceover (TTS) or SFX and save to a folder. Call studio_estimate_generation with mode=audio first.
+    `[preferred] Generate voiceover (TTS) or SFX and save to a folder. Call studio_estimate_generation with mode=audio first.
 
 Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
 SFX: prompt = sound description; optional durationSeconds 0.5\u201330 (omit = Auto ~5s).
@@ -278,7 +441,8 @@ Music is not available. Async by default (wait=false) then polls up to 3 min.`,
       durationSeconds: z.number().optional().describe("SFX only: 0.5\u201330"),
       audioLoop: z.boolean().optional(),
       promptInfluence: z.number().optional().describe("SFX only: 0\u20131"),
-      wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server.")
+      wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server."),
+      compact: z.boolean().optional()
     },
     async (args) => {
       if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
@@ -301,10 +465,10 @@ Music is not available. Async by default (wait=false) then polls up to 3 min.`,
           promptInfluence: args.promptInfluence
         })
       });
-      if (wait) return jsonResult(queued);
+      if (wait) return jsonResult(queued, args.compact);
       const jobId = queued.id;
       const result = await pollGeneration(jobId, { timeoutMs: 18e4 });
-      return jsonResult({ ...queued, ...result });
+      return jsonResult({ ...queued, ...result }, args.compact);
     }
   );
 }

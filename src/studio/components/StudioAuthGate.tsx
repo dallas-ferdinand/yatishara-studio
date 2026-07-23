@@ -40,12 +40,15 @@ type StudioShellBootProps = {
 
 class StudioShellErrorBoundary extends Component<
   { children: ReactNode },
-  { failed: boolean }
+  { failed: boolean; message: string }
 > {
-  state = { failed: false };
+  state = { failed: false, message: "" };
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error: Error) {
+    return {
+      failed: true,
+      message: error?.message ? String(error.message).slice(0, 280) : "Studio crashed while loading.",
+    };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -77,15 +80,42 @@ class StudioShellErrorBoundary extends Component<
     return (
       <StudioBootLoader
         recovery={
-          <button
-            type="button"
-            className="mt-6 rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
-            onClick={() => {
-              window.location.href = "/?resetStudio=1&clearStudioCache=1";
-            }}
-          >
-            Reset Studio
-          </button>
+          <div className="mt-6 flex max-w-sm flex-col items-center gap-3 px-4 text-center">
+            <p className="text-xs font-medium text-slate-900/70">
+              Studio hit a load error and stopped here.
+            </p>
+            {this.state.message ? (
+              <p className="rounded-lg bg-slate-900/5 px-3 py-2 font-mono text-[11px] leading-snug text-slate-900/55 break-words">
+                {this.state.message}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
+              onClick={() => {
+                try {
+                  const keys: string[] = [];
+                  for (let i = 0; i < localStorage.length; i += 1) {
+                    const key = localStorage.key(i);
+                    if (
+                      key &&
+                      (key.startsWith("yatishara-studio") ||
+                        key.startsWith("mercuryos-studio") ||
+                        key.startsWith("react-resizable-panels:studio"))
+                    ) {
+                      keys.push(key);
+                    }
+                  }
+                  for (const key of keys) localStorage.removeItem(key);
+                } catch {
+                  /* ignore */
+                }
+                window.location.href = "/?resetStudio=1&clearStudioCache=1";
+              }}
+            >
+              Reset Studio
+            </button>
+          </div>
         }
       />
     );

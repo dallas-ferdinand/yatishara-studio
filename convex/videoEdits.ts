@@ -10,6 +10,21 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { isFolderInSandbox } from "./lib/studioApi/folderScope";
+import {
+  appendClips,
+  clipsSummary,
+  parseEditorProject,
+  patchClips,
+  removeClips,
+  reorderTrackClips,
+  setClipTransition,
+  splitClipAtTime,
+  type AppendClipSpec,
+  type ClipPatch,
+  type EditorClipTransition,
+  type EditorProject,
+  type SeedAsset,
+} from "./lib/editorProjectOps";
 
 const projectReturn = v.object({
   _id: v.id("videoEditProjects"),
@@ -68,9 +83,17 @@ function newClipId(): string {
   return `clip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function requireFolderOwner(ctx: QueryCtx | MutationCtx, folderId: Id<"folders">, ownerId: Id<"users">) {
+async function requireFolderOwner(
+  ctx: QueryCtx | MutationCtx,
+  folderId: Id<"folders">,
+  ownerId: Id<"users">,
+  options?: { allowDeleted?: boolean },
+) {
   const folder = await ctx.db.get(folderId);
-  if (!folder || folder.ownerId !== ownerId || folder.deletedAt) {
+  if (!folder || folder.ownerId !== ownerId) {
+    throw new Error("Folder not found.");
+  }
+  if (folder.deletedAt && !options?.allowDeleted) {
     throw new Error("Folder not found.");
   }
   return folder;
@@ -240,7 +263,9 @@ export const listByFolder = authedQuery({
   },
   returns: v.array(listRowReturn),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId, ctx.user._id);
+    await requireFolderOwner(ctx, args.folderId, ctx.user._id, {
+      allowDeleted: Boolean(args.includeDeleted),
+    });
     const rows = await ctx.db
       .query("videoEditProjects")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
@@ -727,5 +752,271 @@ export const updateForApi = internalMutation({
     const updated = await ctx.db.get("videoEditProjects", args.projectId);
     if (!updated) throw new Error("Edit project missing after update");
     return toProjectReturn(updated);
+  },
+});
+
+const clipOpsReturn = v.object({
+  projectId: v.id("videoEditProjects"),
+  name: v.string(),
+  folderId: v.id("folders"),
+  duration: v.number(),
+  frameRatio: v.optional(v.string()),
+  changedClipIds: v.array(v.string()),
+  clipsSummary: v.array(v.any()),
+  project: v.optional(v.any()),
+});
+
+async function requireEditForApi(
+  ctx: MutationCtx,
+  args: {
+    userId: Id<"users">;
+    sandboxFolderId: Id<"folders">;
+    projectId: Id<"videoEditProjects">;
+  },
+) {
+  const row = await ctx.db.get("videoEditProjects", args.projectId);
+  if (!row || row.ownerId !== args.userId || row.deletedAt) {
+    throw new Error("Edit project not found.");
+  }
+  if (!(await isFolderInSandbox(ctx, row.folderId, args.sandboxFolderId))) {
+    throw new Error("Edit project not found.");
+  }
+  return row;
+}
+
+async function loadAssetsForAppend(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  sandboxFolderId: Id<"folders">,
+  assetIds: string[],
+): Promise<Map<string, SeedAsset>> {
+  const map = new Map<string, SeedAsset>();
+  for (const assetId of assetIds) {
+    const asset = await ctx.db.get("assets", assetId as Id<"assets">);
+    if (!asset || asset.ownerId !== userId || asset.deletedAt) {
+      throw new Error("Asset not found");
+    }
+    if (!(await isFolderInSandbox(ctx, asset.folderId, sandboxFolderId))) {
+      throw new Error("Asset not found");
+    }
+    map.set(assetId, {
+      id: asset._id,
+      name: asset.name,
+      kind: asset.kind,
+      durationSeconds: asset.durationSeconds,
+    });
+  }
+  return map;
+}
+
+function toClipOpsReturn(
+  row: {
+    _id: Id<"videoEditProjects">;
+    name: string;
+    folderId: Id<"folders">;
+    projectJson: string;
+  },
+  changedClipIds: string[],
+  compact: boolean,
+) {
+  const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+  return {
+    projectId: row._id,
+    name: row.name,
+    folderId: row.folderId,
+    duration: project.duration,
+    frameRatio: project.frameRatio,
+    changedClipIds,
+    clipsSummary: clipsSummary(project),
+    ...(compact ? {} : { project }),
+  };
+}
+
+async function saveProjectJson(
+  ctx: MutationCtx,
+  projectId: Id<"videoEditProjects">,
+  project: EditorProject,
+  name: string,
+) {
+  const payload = { ...project, name, folderId: project.folderId };
+  await ctx.db.patch(projectId, {
+    name,
+    projectJson: JSON.stringify(payload),
+    updatedAt: Date.now(),
+  });
+}
+
+export const appendClipsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    assetIds: v.optional(v.array(v.string())),
+    clips: v.optional(
+      v.array(
+        v.object({
+          assetId: v.string(),
+          trackId: v.optional(v.string()),
+          startTime: v.optional(v.number()),
+          trimIn: v.optional(v.number()),
+          trimOut: v.optional(v.number()),
+          label: v.optional(v.string()),
+          duration: v.optional(v.number()),
+        }),
+      ),
+    ),
+    atTime: v.optional(v.number()),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const specs: AppendClipSpec[] =
+      args.clips?.length
+        ? args.clips
+        : (args.assetIds ?? []).map((assetId) => ({ assetId }));
+    if (!specs.length) throw new Error("Provide assetIds or clips.");
+    const assetsById = await loadAssetsForAppend(
+      ctx,
+      args.userId,
+      args.sandboxFolderId,
+      specs.map((spec) => spec.assetId),
+    );
+    const result = appendClips(project, specs, assetsById, { atTime: args.atTime });
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after append");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const patchClipsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clips: v.array(
+      v.object({
+        clipId: v.string(),
+        startTime: v.optional(v.number()),
+        trimIn: v.optional(v.number()),
+        trimOut: v.optional(v.number()),
+        trackId: v.optional(v.string()),
+        label: v.optional(v.string()),
+        effects: v.optional(v.any()),
+        transitionOut: v.optional(v.any()),
+      }),
+    ),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const patches = args.clips as ClipPatch[];
+    const result = patchClips(project, patches);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after patch");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const removeClipsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clipIds: v.array(v.string()),
+    ripple: v.optional(v.boolean()),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = removeClips(project, args.clipIds, { ripple: args.ripple === true });
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after remove");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const reorderClipsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    trackId: v.string(),
+    clipIds: v.array(v.string()),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = reorderTrackClips(project, args.trackId, args.clipIds);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after reorder");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const splitClipForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clipId: v.string(),
+    timeSec: v.number(),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = splitClipAtTime(project, args.clipId, args.timeSec);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after split");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const setTransitionForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clipId: v.string(),
+    type: v.optional(v.string()),
+    duration: v.optional(v.number()),
+    clear: v.optional(v.boolean()),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const transition: EditorClipTransition | null = args.clear
+      ? null
+      : {
+          type: (args.type ?? "crossfade") as EditorClipTransition["type"],
+          duration: args.duration ?? 0.5,
+        };
+    const result = setClipTransition(project, args.clipId, transition);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after transition");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
   },
 });

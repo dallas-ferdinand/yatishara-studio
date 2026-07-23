@@ -44,7 +44,7 @@ const RECOVERY_AGENT_STEPS = 2;
 function assistantModelId(): string {
   return (
     process.env.GATEWAY_ASSISTANT_MODEL_ID?.trim() ||
-    "google/gemini-3.1-pro-preview"
+    "google/gemini-3.5-flash"
   );
 }
 

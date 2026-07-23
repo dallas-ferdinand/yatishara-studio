@@ -60,6 +60,42 @@ export const createExportAsset = internalMutation({
   },
 });
 
+export const createFrameAsset = internalMutation({
+  args: {
+    userId: v.id("users"),
+    folderId: v.id("folders"),
+    name: v.string(),
+  },
+  returns: v.object({
+    assetId: v.id("assets"),
+    bunnyPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const folder = await ctx.db.get(args.folderId);
+    if (!folder || folder.ownerId !== args.userId || folder.deletedAt) {
+      throw new Error("Folder not found.");
+    }
+    const now = Date.now();
+    const assetId = await ctx.db.insert("assets", {
+      ownerId: args.userId,
+      folderId: args.folderId,
+      name: args.name,
+      kind: "image",
+      mimeType: "image/jpeg",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const bunnyPath = buildAssetPath({
+      userId: args.userId,
+      folderId: args.folderId,
+      assetId,
+      filename: args.name,
+    });
+    await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+    return { assetId, bunnyPath };
+  },
+});
+
 export const finalizeExportAsset = internalMutation({
   args: {
     assetId: v.id("assets"),

@@ -24,6 +24,15 @@ STUDIO_API_KEY=ysk_live_...
 
 `STUDIO_API_URL` is optional; the launcher reads `CONVEX_SITE_URL` from `.env.local` automatically.
 
+## Agent start here
+
+1. `studio_bootstrap` — credits + tree + hints (optional `path` / `folderId` / `ensurePath`)
+2. `studio_ensure_path` — nested folders in one call
+3. `studio_estimate_*` → `studio_generate_*` or `studio_generate_batch`
+4. `studio_view_media` before the next round
+
+Prefer `studio_workspace_tree` / `studio_search` / `studio_project_context` over BFS `studio_list_folders`.
+
 ## Element sheet playbook (agents)
 
 **Call `studio_production_guide` and `studio_element_sheet_guide` before any character/prop/location sheet work.**
@@ -47,18 +56,22 @@ Elements have two states — **unbuilt** (upload refs only) and **built** (`shee
 
 Never pass raw upload refs to video/image generation for a built element — use `referenceElementIds` or the `sheetAssetId`.
 
-## Tools (33)
+## Tools (highlights)
 
 | Tool | Purpose |
 |------|---------|
+| `studio_bootstrap` | **Start here** — account + tree + hints |
+| `studio_ensure_path` | Create nested folders (`Clients/X/refs`) |
+| `studio_workspace_tree` / `studio_search` / `studio_project_context` | Orient without BFS |
+| `studio_bulk_move` | Move up to 50 items |
 | `studio_health` | Verify key + credit balance |
-| `studio_credit_balance` | Same as health |
-| `studio_list_folders` | Browse folders |
+| `studio_list_folders` | One-level browse (prefer tree/search) |
 | `studio_get_folder` | Single folder by ID |
 | `studio_folder_contents` | Assets/docs in a folder |
-| `studio_create_folder` | New folder |
+| `studio_create_folder` | New folder (prefer `ensure_path` for nests) |
 | `studio_update_folder` | Rename or move folder |
 | `studio_get_asset` | Asset + signed URL |
+| `studio_view_media` | Signed URLs for host viewing |
 | `studio_upload_asset` | Base64 upload |
 | `studio_update_asset` | Rename or move image/video/audio |
 | `studio_get_document` | Read markdown doc |
@@ -80,14 +93,16 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_build_style_sheet` | Build visual style board |
 | `studio_set_active_style_sheet` | Doc-only — pass `styleSheetElementId` on generate |
 | `studio_list_presets` | Deprecated — Direct/unstyled only |
-| `studio_estimate_generation` | Single-call credit cost check (accepts `referenceElementIds`) |
-| `studio_estimate_production` | Batch budget with credits + TT$ |
+| `studio_estimate_generation` | Single-call credit cost check |
+| `studio_estimate_batch` | Batch budget with credits + TT$ |
+| `studio_generate_batch` | Queue ≤8 gens + poll (videos spaced ≥65s) |
 | `studio_list_generations` | Recent jobs |
 | `studio_get_generation` | Poll job status |
-| `studio_generate_image` | Sync image gen — **storyboard stills** with full `referenceElementIds` (characters included) |
-| `studio_list_video_models` | **seedance-2.0** (default) + **kling-3.0-i2v** (MCP-only choice) |
-| `studio_generate_video` | Async video + poll — pass **`startFrameAssetId`** when people on camera; `referenceElementIds` for prop/location refs; **`videoModel`** explicit choice (`seedance-2.0` or `kling-3.0-i2v`) |
-| `studio_validate_production_gates` | Pre-flight cartoon gate check — pass `production-state.json` body before `studio_generate_*` |
+| `studio_generate_image` | Sync image gen |
+| `studio_list_video_models` | seedance-2.0 + MCP-only models |
+| `studio_generate_video` | Async video + poll |
+| `studio_generate_audio` | Voiceover / SFX |
+| `studio_validate_production_gates` | Pre-flight cartoon gate check |
 | `studio_generate_script` | Script → document |
 
 ## Style Sheets + direct handoff

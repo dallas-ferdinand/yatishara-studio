@@ -11,8 +11,8 @@
  *
  * Kling 3.0 I2V (MCP, `mode: "pro"`): $0.224/s silent · $0.336/s with audio.
  *
- * Text / Assistance (`google/gemini-3.1-pro-preview`): $2/M input (text/image/video),
- * $4/M audio input (2× text), $12/M output — customer price is 2× measured provider
+ * Text / Assistance (`google/gemini-3.5-flash`): $1.50/M input (text/image/video),
+ * $3/M audio input (2× text), $9/M output — customer price is 2× measured provider
  * COGS, rounded up to TT$0.01 (Assistance settles after the turn from usage).
  */
 
@@ -131,20 +131,20 @@ export const VIDEO_VIDEO_REFERENCE_SURCHARGE_PER_BLOCK = 0;
  * Kept for billing UI field compatibility.
  */
 export const PLATFORM_OVERHEAD_CREDITS_MEDIA = 0;
-/** @deprecated Text uses 2× Gemini 3.1 Pro COGS — see textCreditCost. */
+/** @deprecated Text uses 2× Gemini 3.5 Flash COGS — see textCreditCost. */
 export const PLATFORM_OVERHEAD_CREDITS_TEXT = 0;
 
 /**
- * Gemini 3.1 Pro (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
- * USD per million tokens. Text / image / video input share $2.00; audio $4.00; output $12.00.
+ * Gemini 3.5 Flash (GATEWAY_TEXT_MODEL_ID + GATEWAY_ASSISTANT_MODEL_ID) —
+ * USD per million tokens. Text / image / video input share $1.50; audio $3.00; output $9.00.
  */
-export const TEXT_USD_PER_M_INPUT = 2.0;
-export const TEXT_USD_PER_M_OUTPUT = 12.0;
-export const TEXT_USD_PER_M_AUDIO_INPUT = 4.0;
+export const TEXT_USD_PER_M_INPUT = 1.5;
+export const TEXT_USD_PER_M_OUTPUT = 9.0;
+export const TEXT_USD_PER_M_AUDIO_INPUT = 3.0;
 
 /**
- * Typical Assistance / script / element-notes turn on Gemini 3.1 Pro
- * (calibrated from prior Flash usage shape; re-measure after cutover).
+ * Typical Assistance / script / element-notes turn on Gemini 3.5 Flash
+ * (calibrated from prior usage shape; re-measure after cutover).
  */
 export const TEXT_BASE_INPUT_TOKENS = 2_000;
 export const TEXT_BASE_OUTPUT_TOKENS = 600;
@@ -156,7 +156,7 @@ export const TEXT_AUDIO_REF_INPUT_TOKENS = 5_000;
 
 /**
  * Text / Assistance floor + step: TT$0.01 (0.02 credits at TT$0.50 each).
- * Customer charge = 2× Gemini 3.1 Pro provider COGS, rounded up to this cent.
+ * Customer charge = 2× Gemini 3.5 Flash provider COGS, rounded up to this cent.
  */
 export const TEXT_MIN_SELL_TTD = 0.01;
 
@@ -397,7 +397,7 @@ export type MeasuredTextUsage = {
   outputTokens?: number;
 };
 
-/** Provider USD for Gemini 3.1 Pro text tokens. */
+/** Provider USD for Gemini 3.5 Flash text tokens. */
 export function textProviderCostUsd(usage: MeasuredTextUsage): number {
   const inputTokens = Math.max(0, Math.floor(usage.inputTokens ?? 0));
   const outputTokens = Math.max(0, Math.floor(usage.outputTokens ?? 0));
@@ -438,7 +438,7 @@ export function measuredTextUsageFromGateway(usage: {
   };
 }
 
-/** Customer TT$ for script / Assistance / element text = 2× Gemini 3.1 Pro COGS, min / step TT$0.01. */
+/** Customer TT$ for script / Assistance / element text = 2× Gemini 3.5 Flash COGS, min / step TT$0.01. */
 export function textSellPriceTtd(args: {
   imageReferenceCount?: number;
   videoReferenceCount?: number;

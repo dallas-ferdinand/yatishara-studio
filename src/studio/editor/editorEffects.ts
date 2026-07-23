@@ -56,7 +56,7 @@ export const DEFAULT_TEXT_STYLE: TextClipContent = {
   animationDuration: 0.5,
 };
 
-/** Clip edge fades were removed — transitions handle dissolves. Kept for call sites. */
+/** Clip picture edge fades were removed — transitions handle dissolves. Kept for call sites. */
 export function clipOpacityAtLocalTime(
   effects: ClipEffects | undefined,
   clipDurationSec: number,
@@ -66,6 +66,73 @@ export function clipOpacityAtLocalTime(
   void clipDurationSec;
   void localTime;
   return 1;
+}
+
+/**
+ * Smooth audio volume envelope for clip-local time.
+ * Ease-out (fast early, settles late). Fade-in and fade-out do not overlap
+ * (sum is clamped to clip duration).
+ */
+export function audioFadeGainAtLocalTime(
+  effects: ClipEffects | undefined,
+  clipDurationSec: number,
+  localTime: number,
+): number {
+  const duration = Math.max(0.05, clipDurationSec);
+  const t = Math.max(0, Math.min(duration, localTime));
+  const { fadeIn, fadeOut } = clampAudioFadePair(
+    effects?.fadeIn ?? 0,
+    effects?.fadeOut ?? 0,
+    duration,
+  );
+  let gain = 1;
+  if (fadeIn > 0 && t < fadeIn) {
+    gain *= fadeEaseOut(t / fadeIn);
+  }
+  if (fadeOut > 0 && t > duration - fadeOut) {
+    gain *= fadeEaseOut(Math.max(0, (duration - t) / fadeOut));
+  }
+  return Math.max(0, Math.min(1, gain));
+}
+
+/** Ease-out 0→1: steeper early, gentler into full level (quarter-sine). */
+function fadeEaseOut(unit: number): number {
+  const u = Math.max(0, Math.min(1, unit));
+  return Math.sin((Math.PI / 2) * u);
+}
+
+/**
+ * Clamp one fade duration so it cannot overlap the other side.
+ * `otherFadeSec` is reserved for the opposite fade (fadeIn↔fadeOut).
+ */
+export function clampAudioFadeSec(
+  fadeSec: number,
+  clipDurationSec: number,
+  otherFadeSec = 0,
+): number {
+  const duration = Math.max(0.05, clipDurationSec);
+  const other = Math.max(0, Number.isFinite(otherFadeSec) ? otherFadeSec : 0);
+  const max = Math.max(0, duration - Math.min(duration, other));
+  if (!Number.isFinite(fadeSec) || fadeSec <= 0) return 0;
+  return Math.min(max, fadeSec);
+}
+
+/** Normalize a fade-in/out pair so they never overlap inside the clip. */
+export function clampAudioFadePair(
+  fadeInSec: number,
+  fadeOutSec: number,
+  clipDurationSec: number,
+): { fadeIn: number; fadeOut: number } {
+  const duration = Math.max(0.05, clipDurationSec);
+  let fadeIn = Math.max(0, Number.isFinite(fadeInSec) ? fadeInSec : 0);
+  let fadeOut = Math.max(0, Number.isFinite(fadeOutSec) ? fadeOutSec : 0);
+  fadeIn = Math.min(duration, fadeIn);
+  fadeOut = Math.min(duration, fadeOut);
+  if (fadeIn + fadeOut <= duration) return { fadeIn, fadeOut };
+  const total = fadeIn + fadeOut;
+  if (total <= 0) return { fadeIn: 0, fadeOut: 0 };
+  const scale = duration / total;
+  return { fadeIn: fadeIn * scale, fadeOut: fadeOut * scale };
 }
 
 export function textAnimationStyle(

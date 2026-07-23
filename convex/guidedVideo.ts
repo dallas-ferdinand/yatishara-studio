@@ -35,7 +35,6 @@ import {
   attachmentPresenceFromRoles,
   compileBriefPrompt,
   evaluateBrief,
-  listVideoTypesForUi,
   mergeBriefPayload,
   normalizeAssistanceAspectRatio,
   transitionAssistedMode,
@@ -433,24 +432,6 @@ function toBriefReturn(
     updatedAt: brief.updatedAt,
   };
 }
-
-export const featureEnabled = authedQuery({
-  args: {},
-  returns: v.boolean(),
-  handler: async () => isGuidedVideoAssistanceEnabled(),
-});
-
-export const listVideoTypes = authedQuery({
-  args: {},
-  returns: v.array(
-    v.object({
-      slug: videoTypeValidator,
-      label: v.string(),
-      description: v.string(),
-    }),
-  ),
-  handler: async () => listVideoTypesForUi(),
-});
 
 export const getBriefForThread = authedQuery({
   args: { threadId: v.id("generationThreads") },

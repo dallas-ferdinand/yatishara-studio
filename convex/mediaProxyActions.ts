@@ -53,6 +53,12 @@ function proxyPathFor(sourcePath: string, height: 720 | 1080): string {
   return `${base}/edit-proxy-${height}p.mp4`;
 }
 
+function audioProxyPathFor(sourcePath: string): string {
+  const slash = sourcePath.lastIndexOf("/");
+  const base = slash >= 0 ? sourcePath.slice(0, slash) : sourcePath;
+  return `${base}/edit-proxy-audio.m4a`;
+}
+
 async function downloadToFile(url: string, path: string): Promise<void> {
   const response = await fetch(url);
   if (!response.ok || !response.body) {
@@ -79,6 +85,30 @@ async function probe(path: string): Promise<ProbeResult> {
     { maxBuffer: 4 * 1024 * 1024, timeout: 120_000 },
   );
   return JSON.parse(stdout) as ProbeResult;
+}
+
+async function transcodeAudioProxy(source: string, destination: string): Promise<void> {
+  await execFileAsync(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      source,
+      "-vn",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "96k",
+      "-ac",
+      "1",
+      "-ar",
+      "48000",
+      "-movflags",
+      "+faststart",
+      destination,
+    ],
+    { maxBuffer: 8 * 1024 * 1024, timeout: 10 * 60_000 },
+  );
 }
 
 async function transcodeProxy(
@@ -144,13 +174,39 @@ export const execute = internalAction({
 
     const workDir = await mkdtemp(join(tmpdir(), "yatishara-proxy-"));
     const sourcePath = join(workDir, "source");
-    const outputPath = join(workDir, "proxy-720.mp4");
-    const output1080Path = join(workDir, "proxy-1080.mp4");
     try {
       const expires = Math.floor(Date.now() / 1000) + 30 * 60;
       const sourceUrl = await signBunnyCdnUrl(claimed.bunnyPath, expires);
       await downloadToFile(sourceUrl, sourcePath);
       const sourceProbe = await probe(sourcePath);
+
+      if (claimed.kind === "audio") {
+        const outputPath = join(workDir, "proxy-audio.m4a");
+        await transcodeAudioProxy(sourcePath, outputPath);
+        const proxyProbe = await probe(outputPath);
+        const bytes = new Uint8Array(await readFile(outputPath));
+        const proxyPath = audioProxyPathFor(claimed.bunnyPath);
+        await putObject({
+          path: proxyPath,
+          body: bytes,
+          contentType: "audio/mp4",
+        });
+        const sourceAudio = sourceProbe.streams?.find((stream) => stream.codec_type === "audio");
+        const proxyAudio = proxyProbe.streams?.find((stream) => stream.codec_type === "audio");
+        await ctx.runMutation(internal.assetsInternal.completeMediaProxyJob, {
+          jobId: args.jobId,
+          proxyPath,
+          proxyByteSize: bytes.byteLength,
+          durationSeconds:
+            finitePositive(sourceProbe.format?.duration) ??
+            finitePositive(proxyProbe.format?.duration),
+          audioCodec: proxyAudio?.codec_name ?? sourceAudio?.codec_name ?? "aac",
+        });
+        return null;
+      }
+
+      const outputPath = join(workDir, "proxy-720.mp4");
+      const output1080Path = join(workDir, "proxy-1080.mp4");
       await transcodeProxy(sourcePath, outputPath, 1280, 720);
       await transcodeProxy(sourcePath, output1080Path, 1920, 1080);
       const proxyProbe = await probe(outputPath);

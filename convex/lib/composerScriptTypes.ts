@@ -1,3 +1,5 @@
+import { promptSnippetForName, shortUniqueToken } from "./generationAssetNames";
+
 export const GEN_PROMPT_HEADING = "## Generation prompt";
 
 export const COMPOSER_SCRIPT_TYPE_SLUGS = [
@@ -247,15 +249,19 @@ export function scriptDocumentTitle(
   slug: ComposerScriptTypeSlug,
   userPrompt: string,
   contentMarkdown: string,
+  uniqueId?: string,
 ): string {
+  const token = ` · ${shortUniqueToken(uniqueId ?? String(Date.now()), 5)}`;
   const markdownTitle = contentMarkdown
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.startsWith("# "));
   if (markdownTitle) {
-    return markdownTitle.replace(/^#\s+/, "").trim().slice(0, 80);
+    const heading = markdownTitle.replace(/^#\s+/, "").trim();
+    return `${heading.slice(0, Math.max(12, 80 - token.length))}${token}`.slice(0, 80);
   }
   const def = getScriptTypeDefinition(slug);
-  const brief = userPrompt.trim().slice(0, 40);
-  return `${def.titlePrefix}${brief ? `: ${brief}` : ""}`.slice(0, 80);
+  const brief = promptSnippetForName(userPrompt, 36);
+  const base = `${def.titlePrefix}${brief ? `: ${brief}` : ""}`;
+  return `${base.slice(0, Math.max(12, 80 - token.length))}${token}`.slice(0, 80);
 }

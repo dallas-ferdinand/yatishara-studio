@@ -59,6 +59,12 @@ const sendPushForNotificationRef = makeFunctionReference<
   number
 >;
 
+const enqueueMediaProxyRef = makeFunctionReference<
+  "mutation",
+  { assetId: Id<"assets"> },
+  Id<"mediaProxyJobs"> | null
+>("assetsInternal:enqueueMediaProxy");
+
 const threadPreviewChip = v.object({
   label: v.string(),
   kind: v.string(),
@@ -2015,6 +2021,14 @@ export const setGeneratedAssetStorageStatus = internalMutation({
       byteSize: args.status === "ready" ? args.byteSize : asset.byteSize,
       updatedAt: Date.now(),
     });
+    if (
+      args.status === "ready" &&
+      (asset.kind === "video" || asset.kind === "audio")
+    ) {
+      await ctx.scheduler.runAfter(0, enqueueMediaProxyRef, {
+        assetId: asset._id,
+      });
+    }
     return null;
   },
 });

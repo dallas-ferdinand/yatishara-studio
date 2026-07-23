@@ -5,10 +5,35 @@ import { jsonResult, studioFetch } from "../client.js";
 export function registerAssetTools(server: McpServer) {
   server.tool(
     "studio_get_asset",
-    "Get asset metadata and a signed read URL (1h TTL).",
+    "Get asset metadata and signed read/thumbnail URLs (1h TTL).",
     { assetId: z.string() },
     async ({ assetId }) =>
       jsonResult(await studioFetch(`/assets/${encodeURIComponent(assetId)}`)),
+  );
+
+  server.tool(
+    "studio_view_media",
+    "Return signed media URLs for the host client to view (e.g. Cursor Read on preferredViewUrl). Does NOT call Studio AI and uses no generation credits. Prefer thumbnailUrl/preferredViewUrl for images.",
+    { assetId: z.string() },
+    async ({ assetId }) =>
+      jsonResult(await studioFetch(`/assets/${encodeURIComponent(assetId)}/media`)),
+  );
+
+  server.tool(
+    "studio_duplicate_asset",
+    "Duplicate an asset (same Bunny bytes, new row). Optional target folderId and name. Requires write scope.",
+    {
+      assetId: z.string(),
+      folderId: z.string().optional(),
+      name: z.string().optional(),
+    },
+    async ({ assetId, folderId, name }) =>
+      jsonResult(
+        await studioFetch(`/assets/${encodeURIComponent(assetId)}/duplicate`, {
+          method: "POST",
+          body: JSON.stringify({ folderId, name }),
+        }),
+      ),
   );
 
   server.tool(

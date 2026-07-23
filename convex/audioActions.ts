@@ -25,6 +25,7 @@ import {
   type SharedVoiceSort,
 } from "./lib/elevenlabs";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
+import { generationAssetFileName } from "./lib/generationAssetNames";
 
 function internalMutationRef<Args extends Record<string, unknown>, Return>(
   name: string,
@@ -492,15 +493,25 @@ export const executeAudioJob = internalAction({
       }
 
       await ctx.runMutation(markStageRef, { jobId, stage: "saving" });
-      const voiceLabel = job.elevenVoiceName?.trim();
+      const audioKind =
+        job.audioType === "sfx"
+          ? "sfx"
+          : job.audioType === "music"
+            ? "music"
+            : "audio";
       const assetId = await saveAudioAsset(ctx, {
         jobId,
-        name:
-          job.audioType === "sfx"
-            ? `Sound effect${jobId.slice(-4) ? ` ${jobId.slice(-4)}` : ""}`
-            : voiceLabel
-              ? `${voiceLabel} voiceover`
-              : "Voiceover",
+        name: generationAssetFileName({
+          kind: audioKind,
+          prompt: job.userPrompt,
+          voiceName: job.elevenVoiceName,
+          uniqueId: jobId,
+          extension: audio.mediaType.includes("wav")
+            ? "wav"
+            : audio.mediaType.includes("ogg")
+              ? "ogg"
+              : "mp3",
+        }),
         mediaType: audio.mediaType,
         body: audio.data,
       });

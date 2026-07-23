@@ -17,6 +17,7 @@ import {
   emptyBriefPayload,
   emptyAudioPlan,
   emptyBrandDecisions,
+  listVideoTypesForUi,
 } from "./guidedVideoTypes";
 import {
   clampBeatsToDurationPlan,
@@ -1488,21 +1489,4 @@ export function attachmentPresenceFromRoles(
   };
 }
 
-export function listVideoTypesForUi(): Array<{
-  slug: VideoType;
-  label: string;
-  description: string;
-}> {
-  return [
-    {
-      slug: "hypermotion_ad",
-      label: "Hypermotion ad",
-      description: "Rapid-cut product ad with macro texture and timed beats",
-    },
-    {
-      slug: "standard",
-      label: "Standard video",
-      description: "General guided video clip",
-    },
-  ];
-}
+export { listVideoTypesForUi };

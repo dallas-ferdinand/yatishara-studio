@@ -236,13 +236,18 @@ export const signedReadUrl = authedQuery({
   },
 });
 
-/** Idempotently request an edit-friendly proxy for an existing video asset. */
+/** Idempotently request an edit-friendly proxy for an existing video or audio asset. */
 export const ensureEditProxy = authedMutation({
   args: { assetId: v.id("assets") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
-    if (asset.kind !== "video" || asset.editProxyStatus === "ready") return null;
+    if (
+      (asset.kind !== "video" && asset.kind !== "audio") ||
+      asset.editProxyStatus === "ready"
+    ) {
+      return null;
+    }
     await ctx.scheduler.runAfter(0, internal.assetsInternal.enqueueMediaProxy, {
       assetId: asset._id,
     });

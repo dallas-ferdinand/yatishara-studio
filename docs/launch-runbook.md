@@ -18,8 +18,8 @@ For broader architecture, local setup, production deployment, and preview hot re
 
 1. Keep `/opt/yatishara-studio` pushed to the dedicated GitHub repo before deploys.
 2. Confirm AI Gateway model IDs on Convex:
-   - text: `GATEWAY_TEXT_MODEL_ID` (`google/gemini-3.1-pro-preview`)
-   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`google/gemini-3.1-pro-preview`)
+   - text: `GATEWAY_TEXT_MODEL_ID` (`google/gemini-3.5-flash`)
+   - assistant: `GATEWAY_ASSISTANT_MODEL_ID` (`google/gemini-3.5-flash`)
    - image: `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`)
    - video: `GATEWAY_VIDEO_MODEL_ID` (`bytedance/seedance-2.0`)
 3. Trigger Coolify deploy for app `y2po9nswpdem975f1zo47u19`.

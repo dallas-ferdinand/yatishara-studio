@@ -33,6 +33,7 @@ import {
   validateVideoModelCapabilities,
 } from "./lib/videoModels";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
+import { generationAssetFileName } from "./lib/generationAssetNames";
 import { styleSheetSystemInstructions } from "./lib/styleSheetGuides";
 
 function finalizeVideoPrompt(
@@ -401,6 +402,7 @@ export const generateScript = action({
           normalizeScriptType(args.scriptType),
           args.userPrompt,
           contentMarkdown,
+          String(transactionId),
         ),
         contentMarkdown,
       });
@@ -580,7 +582,12 @@ export const runFlow = action({
         const assetId = await saveGeneratedMedia(ctx, {
           jobId,
           kind: "video",
-          name: `generated-video-${jobId.slice(-6)}.${extensionForContentType(video.mediaType)}`,
+          name: generationAssetFileName({
+            kind: "video",
+            prompt: job.userPrompt,
+            uniqueId: jobId,
+            extension: extensionForContentType(video.mediaType),
+          }),
           mediaType: video.mediaType,
           body: video.data,
         });
@@ -607,7 +614,13 @@ export const runFlow = action({
         const assetId = await saveGeneratedMedia(ctx, {
           jobId,
           kind: "image",
-          name: `generated-image-${index + 1}.${extensionForContentType(image.mediaType)}`,
+          name: generationAssetFileName({
+            kind: "image",
+            prompt: job.userPrompt,
+            index: index + 1,
+            uniqueId: `${jobId}-${index + 1}`,
+            extension: extensionForContentType(image.mediaType),
+          }),
           mediaType: image.mediaType,
           body: image.data,
         });
@@ -769,7 +782,12 @@ async function executeQueuedApiJob(
       const assetId = await saveGeneratedMedia(ctx, {
         jobId: args.jobId,
         kind: "video",
-        name: `generated-video-${args.jobId.slice(-6)}.${extensionForContentType(video.mediaType)}`,
+        name: generationAssetFileName({
+          kind: "video",
+          prompt: job.userPrompt,
+          uniqueId: args.jobId,
+          extension: extensionForContentType(video.mediaType),
+        }),
         mediaType: video.mediaType,
         body: video.data,
       });
@@ -790,7 +808,13 @@ async function executeQueuedApiJob(
       const assetId = await saveGeneratedMedia(ctx, {
         jobId: args.jobId,
         kind: "image",
-        name: `generated-image-${index + 1}.${extensionForContentType(image.mediaType)}`,
+        name: generationAssetFileName({
+          kind: "image",
+          prompt: job.userPrompt,
+          index: index + 1,
+          uniqueId: `${args.jobId}-${index + 1}`,
+          extension: extensionForContentType(image.mediaType),
+        }),
         mediaType: image.mediaType,
         body: image.data,
       });
@@ -995,6 +1019,7 @@ export const runScriptForApi = internalAction({
         normalizeScriptType(args.scriptType),
         args.userPrompt,
         contentMarkdown,
+        String(charged.transactionId ?? Date.now()),
       );
       const documentId = await ctx.runMutation(createDocumentForApiRef, {
         userId: args.userId,

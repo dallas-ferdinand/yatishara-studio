@@ -34,6 +34,28 @@ GET /api/v1/account
 
 Returns credit balance, subscription status, and plan info.
 
+## Workspace context (agent-oriented)
+
+```http
+GET /api/v1/workspace/tree?folderId=&maxDepth=&maxNodes=
+GET /api/v1/workspace/resolve-path?path=&rootFolderId=
+GET /api/v1/workspace/search?q=&kinds=folder,asset,document,element&folderId=&limit=
+GET /api/v1/workspace/project-context?folderId=&recentGenerationLimit=
+POST /api/v1/workspace/ensure-path
+POST /api/v1/workspace/bulk-move
+```
+
+`ensure-path` body: `{ "path": "Clients/JAV/refs", "rootFolderId?" }` — creates missing segments (case-insensitive reuse).
+`bulk-move` body: `{ "targetFolderId", "items": [{ "kind": "asset"|"document"|"element"|"folder", "id" }] }` (max 50).
+
+`GET /api/v1/assets/:id/media` returns signed `url` / `thumbnailUrl` / `preferredViewUrl` for the **host client** to view (no Studio AI credits).
+
+```http
+GET /api/v1/assistance/threads?limit=
+GET /api/v1/assistance/threads/:id/history?limit=&beforeOrder=
+POST /api/v1/assets/:id/duplicate
+```
+
 ## Folders
 
 ```http
@@ -43,6 +65,8 @@ GET /api/v1/folders/:id/contents
 POST /api/v1/folders
 PATCH /api/v1/folders/:id
 ```
+
+`contents` includes `breadcrumb`, `folders`, `assets`, `documents`, and `elements` (buildStatus / sheetAssetId).
 
 `POST` body: `{ "name", "parentId?", "icon?", "color?" }`
 
@@ -325,12 +349,30 @@ GET /api/v1/edits?folderId=
 GET /api/v1/edits/:id
 PUT /api/v1/edits/:id
 PATCH /api/v1/edits/:id
+POST /api/v1/edits/:id/clips
+PATCH /api/v1/edits/:id/clips
+DELETE /api/v1/edits/:id/clips
+POST /api/v1/edits/:id/clips/reorder
+POST /api/v1/edits/:id/clips/split
+POST /api/v1/edits/:id/clips/transition
+POST /api/v1/edits/:id/frame
 POST /api/v1/edits/:id/export
 ```
 
 `POST /edits` body: `{ "folderId?", "name?", "sourceAssetId?", "assetIds?", "frameRatio?" }`. When `assetIds` is set, clips are seeded on `track-v1` (video/image) and audio tracks.
 
-`PUT` replaces full `project` JSON. `POST .../export` renders with ffmpeg and returns `{ "assetId" }` (`generate` scope).
+`PUT` replaces full `project` JSON (escape hatch). Prefer clip routes for agent edits:
+
+- `POST .../clips` — append (`assetIds` or `clips[]`, optional `atTime`)
+- `PATCH .../clips` — `{ "clips": [{ "clipId", "trimIn?", "trimOut?", "startTime?", "transitionOut?", ... }] }`
+- `DELETE .../clips` — `{ "clipIds", "ripple?" }`
+- `POST .../clips/reorder` — `{ "trackId", "clipIds" }` (full track order)
+- `POST .../clips/split` — `{ "clipId", "timeSec" }`
+- `POST .../clips/transition` — `{ "clipId", "type?", "duration?", "clear?" }`
+- `POST .../frame` — ffmpeg still → image asset (`timeSec` playhead, or `assetId` + `localTimeSec`); `generate` scope
+- `POST .../export` — ffmpeg render → `{ "assetId" }` (`generate` scope); optional `{ "name" }`
+
+Clip ops return compact timeline summaries by default (`compact: false` includes full `project`).
 
 ## Rate limits
 
@@ -340,7 +382,7 @@ Concurrent in-flight generation jobs (image/video/audio): **10 per API key**.
 
 ## MCP
 
-Use `@yatishara/studio-mcp` **v0.3+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md).
+Use `@yatishara/studio-mcp` **v0.6+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md). Preferred agent entry: `studio_bootstrap`, `studio_ensure_path`, `studio_generate_batch`, timeline edit tools (`studio_edit_*`, `studio_pull_frame`).
 
 ## Errors
 

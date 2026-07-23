@@ -80,4 +80,136 @@ describe("timeline compiler", () => {
       }
     }
   });
+
+  it("includes dedicated audio beds and preloads upcoming ones", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.clips = [
+      clip("v", 0, 5),
+      {
+        id: "bed",
+        assetId: "asset-bed",
+        trackId: "track-audio",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        label: "bed",
+        kind: "audio",
+      },
+      {
+        id: "bed2",
+        assetId: "asset-bed2",
+        trackId: "track-audio",
+        startTime: 1.5,
+        trimIn: 0,
+        trimOut: 2,
+        label: "bed2",
+        kind: "audio",
+      },
+    ];
+    const plan = compileTimeline(project);
+    expect(plan.audio.map((item) => item.clipId)).toEqual(["bed", "bed2"]);
+    const atZero = sliceAt(plan, 0);
+    expect(atZero.audio.map((item) => item.clip.clipId)).toEqual(["bed"]);
+    expect(atZero.preloadAudio.map((item) => item.clip.clipId)).toContain("bed2");
+    const atBed2 = sliceAt(plan, 1.6);
+    expect(atBed2.audio.map((item) => item.clip.clipId).sort()).toEqual(["bed", "bed2"]);
+  });
+
+  it("marks muted audio tracks as muted in the plan", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    const audioTrack = project.tracks.find((track) => track.kind === "audio")!;
+    audioTrack.muted = true;
+    project.clips = [
+      {
+        id: "bed",
+        assetId: "asset-bed",
+        trackId: "track-audio",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        label: "bed",
+        kind: "audio",
+      },
+    ];
+    const plan = compileTimeline(project);
+    expect(plan.audio[0]?.muted).toBe(true);
+    expect(sliceAt(plan, 0.5).audio[0]?.clip.muted).toBe(true);
+  });
+
+  it("applies fade-in and fade-out to audio bed gain", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.clips = [
+      {
+        id: "bed",
+        assetId: "asset-bed",
+        trackId: "track-audio",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 4,
+        label: "bed",
+        kind: "audio",
+        effects: { volume: 1, fadeIn: 1, fadeOut: 1 },
+      },
+    ];
+    const plan = compileTimeline(project);
+    expect(sliceAt(plan, 0).audio[0]?.gain).toBeCloseTo(0);
+    expect(sliceAt(plan, 0.5).audio[0]?.gain).toBeCloseTo(Math.sin(Math.PI / 4));
+    expect(sliceAt(plan, 2).audio[0]?.gain).toBeCloseTo(1);
+    expect(sliceAt(plan, 3.5).audio[0]?.gain).toBeCloseTo(Math.sin(Math.PI / 4));
+    expect(sliceAt(plan, 3.999).audio[0]?.gain).toBeLessThan(0.05);
+  });
+
+  it("splits text above video as over and text below video as under", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-t-over", kind: "text", label: "Over" },
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-t-under", kind: "text", label: "Under" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      {
+        id: "over",
+        trackId: "track-t-over",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        label: "Over",
+        kind: "text",
+        text: { text: "ON TOP" },
+      },
+      clip("v", 0, 2),
+      {
+        id: "under",
+        trackId: "track-t-under",
+        startTime: 0,
+        trimIn: 0,
+        trimOut: 2,
+        label: "Under",
+        kind: "text",
+        text: { text: "UNDER" },
+      },
+    ];
+    const plan = compileTimeline(project);
+    const slice = sliceAt(plan, 0.5);
+    expect(slice.textOver.map((item) => item.clipId)).toEqual(["over"]);
+    expect(slice.textUnder.map((item) => item.clipId)).toEqual(["under"]);
+  });
+
+  it("prefers the top timeline video lane when clips overlap", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.tracks = [
+      { id: "track-v1", kind: "video", label: "V1" },
+      { id: "track-v2", kind: "video", label: "V2" },
+      { id: "track-audio", kind: "audio", label: "Audio" },
+    ];
+    project.clips = [
+      { ...clip("top", 0, 3), trackId: "track-v1" },
+      { ...clip("bottom", 0, 3), trackId: "track-v2" },
+    ];
+    const plan = compileTimeline(project);
+    expect(sliceAt(plan, 1).video.map((sample) => sample.clip.clipId)).toEqual([
+      "top",
+    ]);
+  });
 });

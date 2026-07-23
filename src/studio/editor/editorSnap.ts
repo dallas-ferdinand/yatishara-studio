@@ -9,7 +9,7 @@ export function snapThresholdSec(pixelsPerSecond: number): number {
 
 export function collectSnapTimes(
   project: EditorProject,
-  trackId: string,
+  _trackId: string,
   excludeClipId: string | null,
   playhead: number,
 ): number[] {
@@ -17,8 +17,9 @@ export function collectSnapTimes(
   if (Number.isFinite(playhead) && playhead >= 0) {
     times.add(playhead);
   }
+  // Every clip edge — drops can align vertically with clips on other lanes.
   for (const clip of project.clips) {
-    if (clip.trackId !== trackId || clip.id === excludeClipId) continue;
+    if (clip.id === excludeClipId) continue;
     times.add(clip.startTime);
     times.add(clip.startTime + clipDuration(clip));
   }
