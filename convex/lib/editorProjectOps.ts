@@ -211,7 +211,7 @@ export function seedClipsFromAssets(
   project: EditorProject,
   assets: SeedAsset[],
 ): { project: EditorProject; changedClipIds: string[] } {
-  let next = { ...project, clips: [...project.clips] };
+  const next = { ...project, clips: [...project.clips] };
   const changedClipIds: string[] = [];
   let videoCursor = trackEndTime(next, resolveVideoTrackId(next));
   let audioCursor = trackEndTime(next, resolveAudioTrackId(next));
@@ -267,7 +267,7 @@ export function appendClips(
   options?: { atTime?: number },
 ): { project: EditorProject; changedClipIds: string[] } {
   if (!specs.length) throw new Error("At least one clip spec is required.");
-  let next = { ...project, clips: [...project.clips] };
+  const next = { ...project, clips: [...project.clips] };
   const changedClipIds: string[] = [];
 
   for (const spec of specs) {

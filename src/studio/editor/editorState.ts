@@ -12,6 +12,7 @@ import {
   defaultInsertIndex,
   ensureMainTextTrackAboveVideo,
   insertTrackAt,
+  mainTextTrack,
   pinAudioTracksBelow,
   pruneEmptyTracks,
 } from "./editorTimelineUtils";
