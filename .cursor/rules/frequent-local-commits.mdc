@@ -1,33 +1,44 @@
 ---
-description: Commit locally after every small step (no push) so UI iteration can be undone
+description: MANDATORY local micro-commits after every slice (no push). Supersedes wait-for-ask commit rules in this repo.
 alwaysApply: true
 ---
 
-# Frequent local commits (mandatory)
+# Frequent local commits — MANDATORY (this repo)
 
-Treat this like MercuryOS `memory_recall` every turn: **after each meaningful slice of work, commit locally**. Do not wait for the user to ask.
+**Hard requirement for `/opt/yatishara-studio`.** Same weight as MercuryOS `memory_recall` every turn.
 
-## When to commit
+This **supersedes** any generic agent rule that says “only commit when the user asks.” In this repo you **must** commit without waiting. Still **never push** unless Dallas explicitly asks.
 
-Commit after each of these (separate commits preferred):
+## Must commit after each slice
+
+Separate commits preferred. Do it **before** ending your turn when the working tree has real changes from this turn:
 
 - One UX/UI pass or wizard step polish
 - One CSS/token pass
-- One pane or form rewrite
-- One bugfix or backend slice that works on its own
-- Before starting a risky restyle / delete / large rewrite
+- One pane/form/component rewrite
+- One bugfix or backend slice that stands alone
+- Before a risky restyle, delete, or large rewrite
+- After adding/updating a Cursor rule or agent SOP in this repo
 
-Prefer **many tiny commits** over one mega commit. Experimental or ugly work still gets committed so restore is `git checkout` / `git revert`, not transcript archaeology.
+Prefer **many tiny commits** over one mega commit. Experimental or ugly work **still gets committed** so undo is `git checkout` / `git revert` / `git log`, not transcript archaeology.
+
+Leaving a large uncommitted batch after a turn is a **policy failure**.
 
 ## How
 
-- `git add` only relevant files; write a short why-focused message (1–2 sentences)
-- HEREDOC for the message (repo convention)
-- Never update git config; never `--no-verify` unless asked
-- **Do not push** unless the user explicitly asks
-- Never force-push to main/master
-- Never commit secrets (`.env`, keys, credentials)
+1. `git status` / `git diff` — stage only relevant files
+2. Commit with HEREDOC; message = why (1–2 sentences)
+3. Never update git config; never `--no-verify` unless asked
+4. **Do not push** unless explicitly asked
+5. Never force-push to main/master
+6. Never commit secrets (`.env`, keys, credentials)
 
-## Why
+## Conflict resolution
 
-Dallas iterates heavily on Studio. Large uncommitted batches (e.g. Offers platform restyle) made undo painful when files were still untracked.
+| Rule source | This repo |
+|---|---|
+| User rule “only commit when asked” | **Overridden** — commit anyway |
+| MercuryOS “do not commit unless asked” | **Does not apply** to yatishara-studio |
+| Push / force-push / secrets | Still forbidden without ask |
+
+Memory: pinned decision **670** (`Commit locally after every small step — no push`).
