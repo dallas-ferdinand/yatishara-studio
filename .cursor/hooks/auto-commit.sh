@@ -48,8 +48,9 @@ if [[ ${#staged[@]} -eq 0 ]]; then
 fi
 
 # Name the commit after the areas it touches so the log stays scannable.
-areas="$(printf '%s\n' "${staged[@]}" | awk -F/ '{ print ($1 == "src" || $1 == "convex") && NF > 1 ? $1 "/" $2 : $1 }' \
-  | sort -u | head -3 | paste -sd ', ')"
+areas="$(printf '%s\n' "${staged[@]}" \
+  | awk '{ n = split($0, p, "/"); if (n > 1 && (p[1] == "src" || p[1] == "convex")) print p[1] "/" p[2]; else print p[1] }' \
+  | sort -u | head -3 | tr '\n' ' ' | sed 's/ *$//; s/ /, /g')"
 [[ -z "$areas" ]] && areas="repo"
 subject="wip(auto): ${areas} (${#staged[@]} files)"
 
