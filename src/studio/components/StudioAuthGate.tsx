@@ -89,6 +89,9 @@ class StudioShellErrorBoundary extends Component<
                 {this.state.message}
               </p>
             ) : null}
+            <p className="text-[11px] leading-snug text-slate-900/45">
+              If preview works but this page fails, tap Reset Studio (clears sticky tabs/cache), then hard-refresh.
+            </p>
             <button
               type="button"
               className="rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
