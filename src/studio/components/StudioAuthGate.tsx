@@ -32,6 +32,10 @@ import { SCHEMES } from "@/mos-app/theme.js";
 import { useAppearanceMode } from "@/lib/use-appearance-mode";
 import type { AppearanceMode } from "@/lib/brand-assets";
 import { markPerfMilestone } from "@/lib/performance";
+import {
+  resetStudioClient,
+  studioResetHref,
+} from "@/studio/lib/studio-client-reset";
 
 type StudioShellBootProps = {
   initialProfileUsername?: string;
@@ -39,7 +43,7 @@ type StudioShellBootProps = {
 };
 
 class StudioShellErrorBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; onFailed?: () => void },
   { failed: boolean; message: string }
 > {
   state = { failed: false, message: "" };
@@ -52,6 +56,7 @@ class StudioShellErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    this.props.onFailed?.();
     const payload = {
       message: error.message,
       stack: error.stack ?? "",
@@ -77,50 +82,42 @@ class StudioShellErrorBoundary extends Component<
 
   render() {
     if (!this.state.failed) return this.props.children;
+    // Fixed overlay above PaintBoot / AuthGate boot (z-index 2147483000) so
+    // Reset is always visible and clickable — previously the boot layer ate clicks.
     return (
-      <StudioBootLoader
-        recovery={
-          <div className="mt-6 flex max-w-sm flex-col items-center gap-3 px-4 text-center">
-            <p className="text-xs font-medium text-slate-900/70">
-              Studio hit a load error and stopped here.
-            </p>
-            {this.state.message ? (
-              <p className="rounded-lg bg-slate-900/5 px-3 py-2 font-mono text-[11px] leading-snug text-slate-900/55 break-words">
-                {this.state.message}
+      <div
+        className="ys-boot-overlay"
+        style={{ zIndex: 2147483001 }}
+        data-ys-boot="recovery"
+      >
+        <StudioBootLoader
+          recovery={
+            <div className="mt-6 flex max-w-sm flex-col items-center gap-3 px-4 text-center">
+              <p className="text-xs font-medium text-slate-900/70">
+                Studio hit a load error and stopped here.
               </p>
-            ) : null}
-            <p className="text-[11px] leading-snug text-slate-900/45">
-              If preview works but this page fails, tap Reset Studio (clears sticky tabs/cache), then hard-refresh.
-            </p>
-            <button
-              type="button"
-              className="rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
-              onClick={() => {
-                try {
-                  const keys: string[] = [];
-                  for (let i = 0; i < localStorage.length; i += 1) {
-                    const key = localStorage.key(i);
-                    if (
-                      key &&
-                      (key.startsWith("yatishara-studio") ||
-                        key.startsWith("mercuryos-studio") ||
-                        key.startsWith("react-resizable-panels:studio"))
-                    ) {
-                      keys.push(key);
-                    }
-                  }
-                  for (const key of keys) localStorage.removeItem(key);
-                } catch {
-                  /* ignore */
-                }
-                window.location.href = "/?resetStudio=1&clearStudioCache=1";
-              }}
-            >
-              Reset Studio
-            </button>
-          </div>
-        }
-      />
+              {this.state.message ? (
+                <p className="rounded-lg bg-slate-900/5 px-3 py-2 font-mono text-[11px] leading-snug text-slate-900/55 break-words">
+                  {this.state.message}
+                </p>
+              ) : null}
+              <p className="text-[11px] leading-snug text-slate-900/45">
+                Tap Reset Studio to clear sticky tabs/cache, then reload. If this keeps happening, hard-refresh after reset.
+              </p>
+              <a
+                href={studioResetHref()}
+                className="rounded-xl border border-slate-900/15 px-4 py-2 text-xs font-semibold text-slate-900/70"
+                onClick={(event) => {
+                  event.preventDefault();
+                  resetStudioClient("error-boundary");
+                }}
+              >
+                Reset Studio
+              </a>
+            </div>
+          }
+        />
+      </div>
     );
   }
 }
@@ -199,6 +196,7 @@ export function StudioAuthGate({
   const currentUser = useQuery(api.users.current, auth?.isAuthenticated ? {} : "skip");
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
   const [shellReady, setShellReady] = useState(false);
+  const [shellFailed, setShellFailed] = useState(false);
   // Boot overlay is client-only — never SSR it (avoids HMR/SW class-prefix hydration fights).
   const [bootMountReady, setBootMountReady] = useState(false);
   const shellReadyRef = useRef(false);
@@ -207,6 +205,10 @@ export function StudioAuthGate({
     if (shellReadyRef.current) return;
     shellReadyRef.current = true;
     setShellReady(true);
+  }, []);
+
+  const markShellFailed = useCallback(() => {
+    setShellFailed(true);
   }, []);
 
   useEffect(() => {
@@ -235,6 +237,7 @@ export function StudioAuthGate({
     if (!auth?.isAuthenticated || currentUser === null) {
       shellReadyRef.current = false;
       setShellReady(false);
+      setShellFailed(false);
     }
   }, [auth?.isAuthenticated, currentUser]);
 
@@ -252,8 +255,10 @@ export function StudioAuthGate({
     Boolean(currentUser.accountComplete);
 
   // One continuous white boot overlay across auth → user → shell-chunk gates.
+  // Hide it once the shell error boundary owns the screen so Reset stays clickable.
   const showBoot =
     bootMountReady &&
+    !shellFailed &&
     !showSignInScreen &&
     !showCompleteAccount &&
     (authPending || userPending || (showShell && !shellReady));
@@ -268,7 +273,7 @@ export function StudioAuthGate({
       {showSignInScreen ? <StudioSignIn /> : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
       {showShell ? (
-        <StudioShellErrorBoundary>
+        <StudioShellErrorBoundary onFailed={markShellFailed}>
           <StudioShell
             initialProfileUsername={initialProfileUsername}
             onReady={markShellReady}

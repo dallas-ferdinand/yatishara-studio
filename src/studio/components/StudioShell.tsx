@@ -20951,13 +20951,6 @@ function ActivePane({
     );
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
-    if (!isVideoEditorPreviewEnabled()) {
-      return wrapPane(
-        <div className="p-6 text-sm text-cursor-muted">
-          Video editor is available on preview only.
-        </div>,
-      );
-    }
     const folderId = videoEditContext.folderId ?? activeFolderId;
     if (!folderId || folderId === TRASH_FOLDER_ID) {
       return wrapPane(

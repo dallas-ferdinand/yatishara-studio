@@ -126,6 +126,10 @@ export function getDeskBuildGuardInlineScript() {
 
     // Production: one-shot reload when the HTML build stamp changes so a tab
     // cannot keep running an older StudioShell chunk graph after deploy.
+    // Explicit Reset always clears sticky tabs/panels first — including when a
+    // build mismatch would otherwise take the early reload path.
+    if (wantsReset) clearStudioLocalState();
+
     if (metaBuild) {
       let prev = "";
       let alreadyReloaded = "";
@@ -139,6 +143,8 @@ export function getDeskBuildGuardInlineScript() {
         } catch {}
         void purgeCaches().finally(() => {
           rememberBuild(metaBuild);
+          // Keep reset query params through this reload so the next pass also
+          // runs the full purge + cleanUrl path below.
           location.reload();
         });
         return;

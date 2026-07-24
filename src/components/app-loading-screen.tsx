@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  resetStudioClient,
+  studioResetHref,
+} from "@/studio/lib/studio-client-reset";
 import { StudioBootLoader } from "./studio-boot-loader";
 
 type Props = {
@@ -15,11 +19,6 @@ export function AppLoadingScreen({ message: _message }: Props) {
     return () => window.clearTimeout(timeout);
   }, []);
 
-  const resetHref =
-    typeof window === "undefined"
-      ? "/?resetStudio=1"
-      : `${window.location.origin}${window.location.pathname}?resetStudio=1&clearStudioCache=1`;
-
   return (
     <StudioBootLoader
       recovery={
@@ -30,7 +29,11 @@ export function AppLoadingScreen({ message: _message }: Props) {
             </p>
             <a
               className="rounded-xl border border-current/15 px-4 py-2 text-[12px] font-semibold opacity-80 transition hover:opacity-100"
-              href={resetHref}
+              href={studioResetHref()}
+              onClick={(event) => {
+                event.preventDefault();
+                resetStudioClient("loading-screen");
+              }}
             >
               Reset Studio cache
             </a>

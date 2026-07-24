@@ -11,7 +11,10 @@ export function isStudioPreviewHost(hostname?: string | null): boolean {
   );
 }
 
-/** Video editor UI + .edit projects — preview only for now. */
+/**
+ * Video editor UI + .edit projects.
+ * Enabled in production and preview — keep the helper so call sites stay explicit.
+ */
 export function isVideoEditorPreviewEnabled(): boolean {
-  return isStudioPreviewHost();
+  return true;
 }
