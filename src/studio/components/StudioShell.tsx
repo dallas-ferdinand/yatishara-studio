@@ -777,7 +777,7 @@ export function StudioShell({
 } = {}) {
   const { isMobile } = useMobileLayout();
   const { signOut } = useAuthActions();
-  const [mainPanelSizes, setMainPanelSizes] = useState(readStudioMainPanelSizes);
+  const [mainPanelSizes] = useState(readStudioMainPanelSizes);
   const mainPanelSizesRef = useRef(mainPanelSizes);
   const handleMainPanelLayout = useCallback(
     (sizes) => {
@@ -794,7 +794,9 @@ export function StudioShell({
       }
       mainPanelSizesRef.current = next;
       writeStudioMainPanelSizes(next);
-      setMainPanelSizes(next);
+      // Persist only — do not setState. defaultSize is mount-only; feeding
+      // sizes back into state re-renders the shell and can re-fire onLayout
+      // (React #301 too-many-re-renders on authenticated boot).
     },
     [isMobile]
   );

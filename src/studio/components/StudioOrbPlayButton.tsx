@@ -2,8 +2,10 @@
 
 import {
   Suspense,
+  useCallback,
   useEffect,
   useId,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
@@ -95,12 +97,25 @@ export function orbSeedForVoice(voiceId: string, name?: string): number {
 }
 
 function useVisibleInViewport(enabled: boolean) {
-  const [node, setNode] = useState<HTMLElement | null>(null);
+  const nodeRef = useRef<HTMLElement | null>(null);
+  // Bump only when the observed node identity changes — never put the DOM node
+  // in React state (ref cleanup ↔ setState loops = React #301).
+  const [attachEpoch, setAttachEpoch] = useState(0);
   const [visible, setVisible] = useState(!enabled);
 
+  const setNode = useCallback((el: HTMLElement | null) => {
+    if (nodeRef.current === el) return;
+    nodeRef.current = el;
+    queueMicrotask(() => setAttachEpoch((n) => n + 1));
+  }, []);
+
   useEffect(() => {
+    const node = nodeRef.current;
     if (!enabled || !node) {
-      setVisible(!enabled);
+      setVisible((prev) => {
+        const next = !enabled;
+        return prev === next ? prev : next;
+      });
       return undefined;
     }
     const observer = new IntersectionObserver(
@@ -109,7 +124,7 @@ function useVisibleInViewport(enabled: boolean) {
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [enabled, node]);
+  }, [enabled, attachEpoch]);
 
   return { setNode, visible };
 }

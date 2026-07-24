@@ -22,15 +22,18 @@ export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
     const index = NAV_ITEMS.findIndex((item) => item.id === section);
     const button = itemRefs.current[index];
     if (!nav || !sections || !button || index < 0) {
-      setIndicator({ width: 0, x: 0 });
+      setIndicator((prev) =>
+        prev.width === 0 && prev.x === 0 ? prev : { width: 0, x: 0 },
+      );
       return;
     }
     const navRect = nav.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
-    setIndicator({
-      width: buttonRect.width,
-      x: buttonRect.left - navRect.left,
-    });
+    const width = buttonRect.width;
+    const x = buttonRect.left - navRect.left;
+    setIndicator((prev) =>
+      prev.width === width && prev.x === x ? prev : { width, x },
+    );
   }, [section]);
 
   useLayoutEffect(() => {

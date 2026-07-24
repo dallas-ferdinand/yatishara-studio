@@ -163,9 +163,9 @@ function ProgressiveThumb({
     window.clearTimeout(retryTimerRef.current);
 
     if (!src) {
-      setFailed(false);
-      setHiLoaded(false);
-      setShowUnderlay(true);
+      setFailed((prev) => (prev ? false : prev));
+      setHiLoaded((prev) => (prev ? false : prev));
+      setShowUnderlay((prev) => (prev ? prev : true));
       return;
     }
 

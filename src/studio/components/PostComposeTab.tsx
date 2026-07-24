@@ -364,8 +364,10 @@ function getCaretMenuPosition(wrap: HTMLElement): { top: number; left: number } 
   const wrapRect = wrap.getBoundingClientRect();
   const menuWidth = Math.min(280, wrap.clientWidth - 16);
   const rawLeft = rect.left - wrapRect.left;
-  const left = Math.max(8, Math.min(rawLeft, Math.max(8, wrap.clientWidth - menuWidth - 8)));
-  const top = Math.max(8, rect.bottom - wrapRect.top + 4);
+  const left = Math.round(
+    Math.max(8, Math.min(rawLeft, Math.max(8, wrap.clientWidth - menuWidth - 8))),
+  );
+  const top = Math.round(Math.max(8, rect.bottom - wrapRect.top + 4));
   return { top, left };
 }
 
