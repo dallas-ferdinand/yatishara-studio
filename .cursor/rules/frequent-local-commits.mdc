@@ -1,0 +1,33 @@
+---
+description: Commit locally after every small step (no push) so UI iteration can be undone
+alwaysApply: true
+---
+
+# Frequent local commits (mandatory)
+
+Treat this like MercuryOS `memory_recall` every turn: **after each meaningful slice of work, commit locally**. Do not wait for the user to ask.
+
+## When to commit
+
+Commit after each of these (separate commits preferred):
+
+- One UX/UI pass or wizard step polish
+- One CSS/token pass
+- One pane or form rewrite
+- One bugfix or backend slice that works on its own
+- Before starting a risky restyle / delete / large rewrite
+
+Prefer **many tiny commits** over one mega commit. Experimental or ugly work still gets committed so restore is `git checkout` / `git revert`, not transcript archaeology.
+
+## How
+
+- `git add` only relevant files; write a short why-focused message (1–2 sentences)
+- HEREDOC for the message (repo convention)
+- Never update git config; never `--no-verify` unless asked
+- **Do not push** unless the user explicitly asks
+- Never force-push to main/master
+- Never commit secrets (`.env`, keys, credentials)
+
+## Why
+
+Dallas iterates heavily on Studio. Large uncommitted batches (e.g. Offers platform restyle) made undo painful when files were still untracked.
