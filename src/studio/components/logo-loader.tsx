@@ -2,10 +2,11 @@
 
 import type { AppearanceMode } from "@/lib/brand-assets";
 import { mercuryLogoAssets } from "@/lib/brand-assets";
-import { useMercuryLogoAssets } from "@/lib/use-appearance-mode";
+import { useAppearanceMode, useMercuryLogoAssets } from "@/lib/use-appearance-mode";
 import "./logo-loader.css";
 
 export type LogoLoaderSize = "sm" | "md" | "lg";
+export type LogoLoaderVariant = "default" | "bare";
 
 const MARK_PX: Record<LogoLoaderSize, number> = {
   sm: 24,
@@ -18,11 +19,24 @@ type LogoLoaderProps = {
   className?: string;
   /** Lock logo ink / glass to a canvas appearance (e.g. white boot → light). */
   appearance?: AppearanceMode;
+  /** `bare` hides the glass plate (parent already provides a plate). */
+  variant?: LogoLoaderVariant;
 };
 
-/** Shared Yatishara logo loader — slow spin + synced fade/scale breath. */
-export function LogoLoader({ size = "lg", className = "", appearance }: LogoLoaderProps) {
+/**
+ * Shared Yatishara logo loader — global spinner for Studio + profile.
+ * Plate/aura stay put (breathe); only the mark spins.
+ * Aura carries the grow/shrink shadow (clip-path on glass would kill box-shadow).
+ */
+export function LogoLoader({
+  size = "lg",
+  className = "",
+  appearance,
+  variant = "default",
+}: LogoLoaderProps) {
   const markPx = MARK_PX[size];
+  const themeAppearance = useAppearanceMode();
+  const resolvedAppearance = appearance ?? themeAppearance;
   const themed = useMercuryLogoAssets(markPx);
   const logo = appearance ? mercuryLogoAssets(markPx, appearance) : themed;
 
@@ -30,12 +44,14 @@ export function LogoLoader({ size = "lg", className = "", appearance }: LogoLoad
     <span
       className={["logo-loader", className].filter(Boolean).join(" ")}
       data-size={size}
-      data-appearance={appearance}
+      data-appearance={resolvedAppearance}
+      data-variant={variant}
       aria-hidden="true"
     >
-      <span className="logo-loader-spin">
-        <span className="logo-loader-breathe">
-          <span className="logo-loader-glass" />
+      <span className="logo-loader-breathe">
+        <span className="logo-loader-aura" />
+        <span className="logo-loader-glass" />
+        <span className="logo-loader-spin">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             className="logo-loader-mark"

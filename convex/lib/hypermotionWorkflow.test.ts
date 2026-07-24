@@ -7,6 +7,7 @@ import {
   evaluateBrief,
   extractContactFromText,
   formatNanpContactNumbers,
+  stripHttpUrlQueryParams,
   mergeBriefPayload,
   normalizeAssistanceAspectRatio,
   normalizeBriefPatch,
@@ -36,6 +37,18 @@ describe("hypermotion workflow", () => {
       "+1 (868) 303-4621",
     );
     expect(extractContactFromText("no number here")).toBeUndefined();
+  });
+
+  it("does not treat CDN expires= query params as a phone number", () => {
+    const poisoned =
+      "Use my logo\n\nReferences:\n- @logo.png | thumb: https://cdn.example/logo.png?token=abc&expires=1784871973&width=640";
+    expect(stripHttpUrlQueryParams(poisoned)).not.toContain("expires=");
+    expect(extractContactFromText(poisoned)).toBeUndefined();
+    expect(
+      extractContactFromText(
+        `${poisoned}\nWhatsApp 868-303-4621`,
+      ),
+    ).toBe("WhatsApp +1 (868) 303-4621");
   });
 
   it("resolves hypermotion vs standard video workflows", () => {

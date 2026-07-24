@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   AudioPlayerDuration,
   AudioPlayerProvider,
@@ -219,18 +219,23 @@ export function StudioChatAudioPlayer({
 /** Same chat-player footprint while generating or resolving a signed URL (no time). */
 export function StudioChatAudioPlayerLoading({
   label = "Loading audio",
+  ariaLabel,
 }: {
-  label?: string;
+  label?: ReactNode;
+  ariaLabel?: string;
 }) {
+  const a11y =
+    ariaLabel ?? (typeof label === "string" ? label : "Generating audio");
   return (
     <div
       className="studio-chat-audio-player is-loading"
       role="status"
       aria-busy="true"
-      aria-label={label}
+      aria-label={a11y}
     >
       <div className="studio-chat-audio-load-body">
         <MediaLoadWave size="sm" />
+        {label ? <p className="studio-chat-audio-load-label">{label}</p> : null}
       </div>
     </div>
   );

@@ -632,7 +632,7 @@ async function ensureBriefHandler(
     });
     return existing._id;
   }
-  const payload = emptyBriefPayload(args.production);
+  const payload = emptyBriefPayload(args.production, { mode: args.mode });
   return await ctx.db.insert("guidedBriefs", {
     ownerId: ctx.user._id,
     threadId: args.threadId,
@@ -1704,23 +1704,67 @@ export const applyAnalysisResult = internalMutation({
     const warnings = [
       ...new Set([...brief.warnings, ...args.warnings, ...policy.warnings]),
     ];
-    const plan =
-      complete && compiled
-        ? await buildPlanForBrief(
-            ctx,
-            {
-              ...brief,
-              mode: resolvedMode,
-              videoType: resolvedVideoType,
-              styleSheetElementId,
-            },
-            payload,
-            compiled,
-            warnings,
-          )
-        : undefined;
+    let plan: Awaited<ReturnType<typeof buildPlanForBrief>> | undefined;
+    let reviewComplete = complete;
+    let reviewCompiled = compiled;
+    let reviewChatMessage = chatMessage;
+    let reviewAgentState = agentState;
+    if (complete && compiled) {
+      try {
+        plan = await buildPlanForBrief(
+          ctx,
+          {
+            ...brief,
+            mode: resolvedMode,
+            videoType: resolvedVideoType,
+            styleSheetElementId,
+          },
+          payload,
+          compiled,
+          warnings,
+        );
+      } catch (error) {
+        reviewComplete = false;
+        reviewCompiled = undefined;
+        plan = undefined;
+        reviewAgentState = {
+          ...agentState,
+          readyForReview: false,
+          turnStrategy: "clarify",
+          nextFocus:
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : "Could not build the generation plan",
+          missingCritical: [
+            error instanceof Error
+              ? error.message.slice(0, 200)
+              : "Could not build the generation plan",
+          ],
+        };
+        reviewChatMessage = formatAssistanceChatMessage(
+          "I couldn’t lock a generate sheet for that — what should we change?",
+          [],
+        );
+      }
+    } else if (complete && !compiled) {
+      reviewComplete = false;
+      reviewAgentState = {
+        ...agentState,
+        readyForReview: false,
+        turnStrategy: "clarify",
+        nextFocus: "Need a stronger prompt before generate",
+        missingCritical: ["Need a stronger prompt before generate"],
+      };
+      reviewChatMessage = formatAssistanceChatMessage(
+        "I couldn’t lock a generate sheet for that — what should we change?",
+        [],
+      );
+    }
     const now = Date.now();
     const nextRevision = brief.revision + 1;
+    const finalStatus: BriefStatus = reviewComplete
+      ? "review_ready"
+      : "awaiting_input";
     await ctx.db.patch(brief._id, {
       userPrompt: args.userPrompt,
       mode: resolvedMode,
@@ -1736,11 +1780,13 @@ export const applyAnalysisResult = internalMutation({
       warnings,
       offeredOptionalIds: [...offered],
       skippedOptionalIds: [...skipped],
-      status,
-      pendingQuestionsJson: complete ? undefined : serializeQuestions(questions),
-      agentStateJson: JSON.stringify(agentState),
-      agentPlanJson: JSON.stringify(agentState),
-      compiledPrompt: compiled,
+      status: finalStatus,
+      pendingQuestionsJson: reviewComplete
+        ? undefined
+        : serializeQuestions(questions),
+      agentStateJson: JSON.stringify(reviewAgentState),
+      agentPlanJson: JSON.stringify(reviewAgentState),
+      compiledPrompt: reviewCompiled,
       generationPlanJson: plan ? JSON.stringify(plan) : undefined,
       generationPlanFingerprint: plan?.fingerprint,
       estimatedCredits: plan?.estimate.credits,
@@ -1750,7 +1796,7 @@ export const applyAnalysisResult = internalMutation({
 
     // Chat-native: one bubble per turn. Ready turns clip Generate onto the
     // real assistant message — never a separate "ready when you are" row.
-    if (complete) {
+    if (reviewComplete) {
       await ctx.db.insert("generationEvents", {
         ownerId: brief.ownerId,
         threadId: brief.threadId,
@@ -1758,7 +1804,7 @@ export const applyAnalysisResult = internalMutation({
         order: now,
         briefId: brief._id,
         briefRevision: nextRevision,
-        message: chatMessage,
+        message: reviewChatMessage,
         briefSnapshotJson: serializeReviewSnapshot({
           mode: resolvedMode,
           videoType: resolvedVideoType,
@@ -1769,7 +1815,7 @@ export const applyAnalysisResult = internalMutation({
           inferredFields: [
             ...new Set([...brief.inferredFields, ...args.inferredFields, ...newlyInferred]),
           ],
-          compiledPrompt: compiled,
+          compiledPrompt: reviewCompiled,
           plan,
           stylePresetId: brief.stylePresetId,
           styleSheetElementId,
@@ -1784,11 +1830,11 @@ export const applyAnalysisResult = internalMutation({
         order: now,
         briefId: brief._id,
         briefRevision: nextRevision,
-        message: chatMessage,
+        message: reviewChatMessage,
         createdAt: now,
       });
     }
-    return { briefId: brief._id, revision: nextRevision, status };
+    return { briefId: brief._id, revision: nextRevision, status: finalStatus };
   },
 });
 
@@ -1874,6 +1920,9 @@ export const beginAssistanceTurn = internalMutation({
       )
       .unique();
     if (existing) {
+      if (existing.phase === "cancelled") {
+        throw new Error("Assistance turn was cancelled. Send a new message.");
+      }
       if (
         !sameAssistanceRequest(existing, {
           userPrompt: args.userPrompt,
@@ -1962,6 +2011,9 @@ export const chargeAssistanceTurn = internalMutation({
     }
     if (turn.phase !== "begun") {
       throw new Error("Assistance turn is no longer chargeable");
+    }
+    if (turn.error === "cancelled_by_user") {
+      throw new Error("Assistance turn was cancelled");
     }
     if (turn.creditTransactionId) {
       return {
@@ -2080,10 +2132,23 @@ export const commitAssistanceTurn = internalMutation({
     status: briefStatusValidator,
     decision: v.union(v.literal("ask"), v.literal("review_ready")),
     idempotent: v.boolean(),
+    cancelled: v.optional(v.boolean()),
   }),
   handler: async (ctx, args) => {
     const turn = await ctx.db.get("assistanceTurns", args.turnId);
     if (!turn) throw new Error("Assistance turn not found");
+    if (turn.phase === "cancelled") {
+      const brief = await ctx.db.get("guidedBriefs", turn.briefId);
+      return {
+        turnId: turn._id,
+        briefId: turn.briefId,
+        revision: turn.briefRevisionAtBegin,
+        status: (brief?.status ?? "collecting") as BriefStatus,
+        decision: "ask" as const,
+        idempotent: true,
+        cancelled: true,
+      };
+    }
     if (turn.phase === "committed" && turn.resultJson) {
       const cached = JSON.parse(turn.resultJson) as {
         briefId: Id<"guidedBriefs">;
@@ -2315,10 +2380,21 @@ export const failAssistanceTurn = internalMutation({
     revision: v.number(),
     creditTransactionId: v.optional(v.id("creditTransactions")),
     alreadyFailed: v.boolean(),
+    cancelled: v.optional(v.boolean()),
   }),
   handler: async (ctx, args) => {
     const turn = await ctx.db.get("assistanceTurns", args.turnId);
     if (!turn) throw new Error("Assistance turn not found");
+    if (turn.phase === "cancelled") {
+      return {
+        turnId: turn._id,
+        briefId: turn.briefId,
+        revision: turn.briefRevisionAtBegin,
+        creditTransactionId: turn.creditTransactionId,
+        alreadyFailed: true,
+        cancelled: true,
+      };
+    }
     if (turn.phase === "committed") {
       throw new Error("Assistance turn already committed");
     }
@@ -2371,6 +2447,209 @@ export const failAssistanceTurn = internalMutation({
   },
 });
 
+export const getAssistanceTurnPhase = internalQuery({
+  args: { turnId: v.id("assistanceTurns") },
+  returns: v.object({
+    phase: v.string(),
+    creditTransactionId: v.optional(v.id("creditTransactions")),
+    ownerId: v.id("users"),
+  }),
+  handler: async (ctx, args) => {
+    const turn = await ctx.db.get("assistanceTurns", args.turnId);
+    if (!turn) throw new Error("Assistance turn not found");
+    return {
+      phase: turn.phase,
+      creditTransactionId: turn.creditTransactionId,
+      ownerId: turn.ownerId,
+    };
+  },
+});
+
+/**
+ * Cooperative cancel of an in-flight Assistance turn. Blocked while a generation
+ * job is queued/generating/saving on the thread.
+ */
+export const cancelAssistanceTurn = authedMutation({
+  args: {
+    threadId: v.id("generationThreads"),
+    clientTurnId: v.string(),
+  },
+  returns: v.object({
+    cancelled: v.boolean(),
+    turnId: v.optional(v.id("assistanceTurns")),
+    reason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const clientTurnId = args.clientTurnId.trim().slice(0, 128);
+    if (!clientTurnId) throw new Error("clientTurnId is required");
+
+    const recentJobs = await ctx.db
+      .query("generationJobs")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(20);
+    const hasActiveGeneration = recentJobs.some(
+      (job) =>
+        job.ownerId === ctx.user._id &&
+        (job.stage === "queued" ||
+          job.stage === "generating" ||
+          job.stage === "saving"),
+    );
+    if (hasActiveGeneration) {
+      return {
+        cancelled: false,
+        reason: "generation_started",
+      };
+    }
+
+    const recentTurns = await ctx.db
+      .query("assistanceTurns")
+      .withIndex("by_thread", (q) => q.eq("threadId", args.threadId))
+      .order("desc")
+      .take(40);
+    const resolved = recentTurns.find(
+      (row) =>
+        row.ownerId === ctx.user._id && row.clientTurnId === clientTurnId,
+    );
+
+    if (!resolved) {
+      return { cancelled: false, reason: "not_found" };
+    }
+    if (resolved.phase === "cancelled") {
+      return { cancelled: true, turnId: resolved._id };
+    }
+    if (resolved.phase !== "begun") {
+      return {
+        cancelled: false,
+        turnId: resolved._id,
+        reason: resolved.phase,
+      };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(resolved._id, {
+      phase: "cancelled",
+      error: "cancelled_by_user",
+      updatedAt: now,
+    });
+
+    if (resolved.creditTransactionId) {
+      await refundAssistanceCreditTransaction(
+        ctx,
+        ctx.user._id,
+        resolved.creditTransactionId,
+        "Assistance turn cancelled",
+      );
+    }
+
+    return { cancelled: true, turnId: resolved._id };
+  },
+});
+
+/**
+ * Remove trailing Assistance chat events after a user prompt so the user can
+ * edit/resend. Never deletes result or generation stage events.
+ */
+export const truncateAssistanceEventsAfterPrompt = authedMutation({
+  args: {
+    threadId: v.id("generationThreads"),
+    promptEventId: v.id("generationEvents"),
+  },
+  returns: v.object({
+    deleted: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const promptEvent = await ctx.db.get("generationEvents", args.promptEventId);
+    if (
+      !promptEvent ||
+      promptEvent.ownerId !== ctx.user._id ||
+      promptEvent.threadId !== args.threadId ||
+      promptEvent.kind !== "prompt"
+    ) {
+      throw new Error("Prompt not found");
+    }
+
+    const later = await ctx.db
+      .query("generationEvents")
+      .withIndex("by_thread_and_order", (q) =>
+        q.eq("threadId", args.threadId).gt("order", promptEvent.order),
+      )
+      .collect();
+
+    const hasGenerationAfter = later.some(
+      (event) =>
+        event.ownerId === ctx.user._id &&
+        (event.kind === "result" ||
+          (event.kind === "stage" &&
+            (event.stage === "queued" ||
+              event.stage === "generating" ||
+              event.stage === "saving" ||
+              event.stage === "done"))),
+    );
+    if (hasGenerationAfter) {
+      throw new Error("Cannot edit after generation has started.");
+    }
+
+    const removable = new Set([
+      "assistant",
+      "review",
+      "question",
+      "approval",
+    ]);
+    let deleted = 0;
+    for (const event of later) {
+      if (event.ownerId !== ctx.user._id) continue;
+      if (!removable.has(event.kind)) continue;
+      await ctx.db.delete(event._id);
+      deleted += 1;
+    }
+
+    return { deleted };
+  },
+});
+
+async function refundAssistanceCreditTransaction(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  transactionId: Id<"creditTransactions">,
+  reason: string,
+) {
+  const transaction = await ctx.db.get("creditTransactions", transactionId);
+  if (
+    !transaction ||
+    transaction.userId !== userId ||
+    transaction.kind !== "spent" ||
+    transaction.amount >= 0
+  ) {
+    return;
+  }
+  const existingRefund = await ctx.db
+    .query("creditTransactions")
+    .withIndex("by_reversed_transaction", (q) =>
+      q.eq("reversesTransactionId", transaction._id),
+    )
+    .unique();
+  if (existingRefund) return;
+  const account = await ctx.db.get("billingAccounts", transaction.billingAccountId);
+  if (!account || account.userId !== userId) return;
+  const refundAmount = Math.abs(transaction.amount);
+  const now = Date.now();
+  const balanceAfter = account.creditBalance + refundAmount;
+  await ctx.db.patch(account._id, {
+    creditBalance: balanceAfter,
+    updatedAt: now,
+  });
+  await ctx.db.insert("creditTransactions", {
+    userId,
+    billingAccountId: account._id,
+    kind: "refunded",
+    amount: refundAmount,
+    balanceAfter,
+    reversesTransactionId: transaction._id,
+    reason,
+    createdAt: now,
+  });
+}
 /**
  * Migrate legacy question events → assistant prose and refresh incomplete reviews.
  * Additive / idempotent. Safe to re-run.

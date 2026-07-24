@@ -134,14 +134,19 @@ function ProgressiveThumb({
   const [hiLoaded, setHiLoaded] = useState(false);
   const [showUnderlay, setShowUnderlay] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   const hiRef = useRef(null);
   const loadedSrcRef = useRef("");
   const underlayTimerRef = useRef(0);
+  const retryTimerRef = useRef(0);
+  const attemptRef = useRef(0);
 
   const markLoaded = useCallback((url) => {
     if (!url) return;
     loadedSrcRef.current = url;
+    attemptRef.current = 0;
     setHiLoaded(true);
+    setFailed(false);
     window.clearTimeout(underlayTimerRef.current);
     underlayTimerRef.current = window.setTimeout(() => {
       setShowUnderlay(false);
@@ -150,7 +155,9 @@ function ProgressiveThumb({
 
   useLayoutEffect(() => {
     setFailed(false);
+    attemptRef.current = 0;
     window.clearTimeout(underlayTimerRef.current);
+    window.clearTimeout(retryTimerRef.current);
 
     if (!src) {
       setHiLoaded(false);
@@ -179,7 +186,10 @@ function ProgressiveThumb({
   }, [src, lqipSrc, markLoaded]);
 
   useEffect(() => {
-    return () => window.clearTimeout(underlayTimerRef.current);
+    return () => {
+      window.clearTimeout(underlayTimerRef.current);
+      window.clearTimeout(retryTimerRef.current);
+    };
   }, []);
 
   if (!src || failed) return null;
@@ -202,6 +212,7 @@ function ProgressiveThumb({
         </>
       ) : null}
       <img
+        key={`${src}::${retryTick}`}
         ref={hiRef}
         src={src}
         alt=""
@@ -212,10 +223,22 @@ function ProgressiveThumb({
         draggable={false}
         onLoad={() => markLoaded(src)}
         onError={() => {
-          setFailed(true);
-          setHiLoaded(false);
-          setShowUnderlay(true);
-          loadedSrcRef.current = "";
+          // Fresh uploads / generations often 404 once before CDN catches up.
+          // Retry a few times instead of latching blank until folder remount.
+          const attempt = attemptRef.current + 1;
+          attemptRef.current = attempt;
+          if (attempt > 5) {
+            setFailed(true);
+            setHiLoaded(false);
+            setShowUnderlay(true);
+            loadedSrcRef.current = "";
+            return;
+          }
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(
+            () => setRetryTick((tick) => tick + 1),
+            Math.min(4000, 350 * 2 ** (attempt - 1)),
+          );
         }}
       />
     </span>
@@ -225,10 +248,16 @@ function ProgressiveThumb({
 function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const attemptRef = useRef(0);
+  const retryTimerRef = useRef(0);
 
   useEffect(() => {
     setLoaded(false);
     setFailed(false);
+    attemptRef.current = 0;
+    window.clearTimeout(retryTimerRef.current);
+    return () => window.clearTimeout(retryTimerRef.current);
   }, [src]);
 
   if (!src || failed) {
@@ -243,14 +272,30 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
     <span className={`desk-file-thumb-video-wrap${loaded ? " is-ready" : ""}`}>
       {!loaded ? <span className="desk-file-thumb-skeleton desk-file-thumb-skeleton--spinner" aria-hidden /> : null}
       <video
+        key={`${src}::${retryTick}`}
         src={src}
         className={className}
         crossOrigin="anonymous"
         muted
         playsInline
         preload="metadata"
-        onLoadedData={() => setLoaded(true)}
-        onError={() => setFailed(true)}
+        onLoadedData={() => {
+          attemptRef.current = 0;
+          setLoaded(true);
+        }}
+        onError={() => {
+          const attempt = attemptRef.current + 1;
+          attemptRef.current = attempt;
+          if (attempt > 5) {
+            setFailed(true);
+            return;
+          }
+          window.clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = window.setTimeout(
+            () => setRetryTick((tick) => tick + 1),
+            Math.min(4000, 350 * 2 ** (attempt - 1)),
+          );
+        }}
       />
     </span>
   );

@@ -2576,6 +2576,11 @@
   background: color-mix(in srgb, var(--mos-text) 2.5%, var(--mos-bg));
 }
 
+.desk-file-thumb-visual:has(.desk-file-thumb-image),
+[data-appearance="light"] .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+  background: var(--desk-transparency-grid);
+}
+
 .desk-file-thumb-label {
   padding: 6px 8px;
   font-size: 11px;

@@ -418,19 +418,68 @@ export const listEvents = authedQuery({
   args: {
     threadId: v.id("generationThreads"),
     expiresUnix: v.optional(v.number()),
-    /** When set, return only the newest N events (reactive live tail). */
+    /**
+     * Page size for the newest-N live tail (or an older page when beforeOrder is set).
+     * Defaults to 80 (always show the latest window); capped at 200 for query budget.
+     */
     limit: v.optional(v.number()),
+    /** When set, return events strictly older than this order (load-earlier pages). */
+    beforeOrder: v.optional(v.number()),
+    /**
+     * When false, skip playable video/audio CDN signatures (thumbnails only).
+     * Used for older history pages to keep queries fast; live tail keeps playable URLs.
+     */
+    signPlayableUrls: v.optional(v.boolean()),
   },
-  returns: v.array(eventReturn),
+  returns: v.object({
+    events: v.array(eventReturn),
+    hasMore: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     await requireThreadOwner(ctx, args.threadId);
-    const limit = args.limit != null ? Math.min(Math.max(args.limit, 1), 200) : undefined;
-    const eventQuery = ctx.db
-      .query("generationEvents")
-      .withIndex("by_thread_and_order", (q) => q.eq("threadId", args.threadId));
-    const events = limit
-      ? (await eventQuery.order("desc").take(limit)).reverse()
-      : await eventQuery.collect();
+    const limit = Math.min(Math.max(args.limit ?? 80, 1), 200);
+    const signPlayableUrls = args.signPlayableUrls !== false;
+    // Walk older rows until we fill a full chat batch (skip folder_switched thrash).
+    const collected: Doc<"generationEvents">[] = [];
+    let cursor = args.beforeOrder;
+    const batchSize = Math.min(Math.max(limit * 2, 40), 100);
+    const maxScanRows = 8_000;
+    let scannedTotal = 0;
+    let exhausted = false;
+    while (collected.length < limit + 1 && scannedTotal < maxScanRows) {
+      const rows = await ctx.db
+        .query("generationEvents")
+        .withIndex("by_thread_and_order", (q) => {
+          const owned = q.eq("threadId", args.threadId);
+          return cursor !== undefined
+            ? owned.lt("order", cursor)
+            : owned;
+        })
+        .order("desc")
+        .take(batchSize);
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+      scannedTotal += rows.length;
+      for (const row of rows) {
+        if (row.kind === "folder_switched") continue;
+        collected.push(row);
+        if (collected.length >= limit + 1) break;
+      }
+      cursor = rows[rows.length - 1]?.order;
+      if (rows.length < batchSize) {
+        exhausted = true;
+        break;
+      }
+    }
+    // True when we found a spare chat row beyond this page, or hit the scan
+    // ceiling with a full page (more history may still exist further back).
+    const hasMore =
+      collected.length > limit ||
+      (!exhausted && collected.length >= limit);
+    const page = collected.slice(0, limit);
+    const events = page.reverse();
     const resultAssetIds = Array.from(new Set(events.flatMap((event) => event.assetIds ?? [])));
     const assets = (await Promise.all(resultAssetIds.map((assetId) => ctx.db.get("assets", assetId))))
       .filter((asset): asset is Doc<"assets"> => asset !== null);
@@ -461,7 +510,7 @@ export const listEvents = authedQuery({
       await Promise.all(folderIds.map((folderId) => ctx.db.get("folders", folderId)))
     ).filter((folder): folder is Doc<"folders"> => folder !== null);
     const foldersById = new Map(folders.map((folder) => [folder._id, folder]));
-    return await Promise.all(events.map(async (event) => {
+    const enriched = await Promise.all(events.map(async (event) => {
       const job = event.generationJobId ? jobsById.get(event.generationJobId) : null;
       const fromFolder =
         event.kind === "folder_switched" && event.fromFolderId
@@ -498,12 +547,12 @@ export const listEvents = authedQuery({
                 // Chat result cards need a full playable URL for video/audio even
                 // when a poster thumbnail exists (posters must not become <video src>).
                 // Folder grid also reuses this for video first-frame thumbs.
+                // Older history pages skip playable signatures to stay under query limits.
                 let signedReadUrl: string | undefined;
-                if (
-                  (asset.kind === "video" || asset.kind === "audio" || !signedThumbnailUrl) &&
-                  asset.bunnyPath &&
-                  args.expiresUnix
-                ) {
+                const needsPlayable =
+                  signPlayableUrls &&
+                  (asset.kind === "video" || asset.kind === "audio" || !signedThumbnailUrl);
+                if (needsPlayable && asset.bunnyPath && args.expiresUnix) {
                   signedReadUrl = await signBunnyCdnUrl(asset.bunnyPath, args.expiresUnix);
                 }
                 return {
@@ -525,6 +574,7 @@ export const listEvents = authedQuery({
         : undefined,
       };
     }));
+    return { events: enriched, hasMore };
   },
 });
 
@@ -595,6 +645,9 @@ export const switchThreadFolder = authedMutation({
   handler: async (ctx, args) => {
     const thread = await requireThreadOwner(ctx, args.threadId);
     await requireFolderOwner(ctx, args.folderId);
+    if (thread.linkedFolderId === args.folderId) {
+      return null;
+    }
     const now = Date.now();
     await ctx.db.patch(thread._id, {
       linkedFolderId: args.folderId,

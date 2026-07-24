@@ -642,32 +642,65 @@ export const getThreadHistoryForApi = internalQuery({
       throw new Error("Thread not found");
     }
     const limit = Math.min(Math.max(args.limit ?? 24, 1), 50);
-    const rows = await ctx.db
-      .query("generationEvents")
-      .withIndex("by_thread_and_order", (q) => {
-        const owned = q.eq("threadId", args.threadId);
-        return args.beforeOrder !== undefined
-          ? owned.lt("order", args.beforeOrder)
-          : owned;
-      })
-      .order("desc")
-      .take(limit);
-    const events = rows
-      .filter((event) => event.ownerId === args.userId)
-      .reverse()
-      .map((event) => ({
-        order: event.order,
-        kind: event.kind,
-        text: event.prompt ?? event.message,
-        stage: event.stage,
-        generationJobId: event.generationJobId,
-        assetIds: event.assetIds,
-      }));
+    const collected: Array<{
+      order: number;
+      kind: string;
+      text?: string;
+      stage?: string;
+      generationJobId?: Id<"generationJobs">;
+      assetIds?: Id<"assets">[];
+    }> = [];
+    let cursor = args.beforeOrder;
+    const batchSize = Math.min(Math.max(limit * 2, 40), 100);
+    const maxScanRows = 8_000;
+    let scannedTotal = 0;
+    let exhausted = false;
+    while (collected.length < limit + 1 && scannedTotal < maxScanRows) {
+      const rows = await ctx.db
+        .query("generationEvents")
+        .withIndex("by_thread_and_order", (q) => {
+          const owned = q.eq("threadId", args.threadId);
+          return cursor !== undefined
+            ? owned.lt("order", cursor)
+            : owned;
+        })
+        .order("desc")
+        .take(batchSize);
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+      scannedTotal += rows.length;
+      for (const event of rows) {
+        if (event.ownerId !== args.userId || event.kind === "folder_switched") {
+          continue;
+        }
+        collected.push({
+          order: event.order,
+          kind: event.kind,
+          text: event.prompt ?? event.message,
+          stage: event.stage,
+          generationJobId: event.generationJobId,
+          assetIds: event.assetIds,
+        });
+        if (collected.length >= limit + 1) break;
+      }
+      cursor = rows[rows.length - 1]?.order;
+      if (rows.length < batchSize) {
+        exhausted = true;
+        break;
+      }
+    }
+    const page = collected.slice(0, limit);
+    const events = page.reverse();
     return {
       threadId: thread._id,
       title: thread.title,
       events,
-      nextBeforeOrder: rows.length === limit ? rows.at(-1)?.order : undefined,
+      nextBeforeOrder:
+        collected.length > limit || (!exhausted && page.length >= limit)
+          ? page[0]?.order
+          : undefined,
     };
   },
 });

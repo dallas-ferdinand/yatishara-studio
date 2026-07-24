@@ -323,21 +323,20 @@ function UnifiedTabStripInner({
         settling: false,
       });
 
+      // One frame so the browser paints the drop start position before animating in.
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setDragUi({
-            ...baseUi,
-            ghostX: toX,
-            ghostY: toY,
-            settling: true,
-          });
+        setDragUi({
+          ...baseUi,
+          ghostX: toX,
+          ghostY: toY,
+          settling: true,
         });
       });
 
       clearSettleTimer();
       settleTimerRef.current = window.setTimeout(() => {
         completeSettle(drag.order);
-      }, TAB_DRAG_SETTLE_MS + 80);
+      }, TAB_DRAG_SETTLE_MS + 24);
     },
     [clearSettleTimer, completeSettle, releasePointer, tabs]
   );
@@ -713,7 +712,7 @@ function UnifiedTabStripInner({
 
     const frame = window.requestAnimationFrame(() => {
       for (const el of animated) {
-        el.style.transition = "transform 260ms cubic-bezier(0.2, 0.92, 0.28, 1)";
+        el.style.transition = "transform 140ms cubic-bezier(0.22, 1, 0.36, 1)";
         el.style.transform = "";
       }
     });
@@ -724,7 +723,7 @@ function UnifiedTabStripInner({
         el.style.transition = "";
         el.style.transform = "";
       }
-    }, 320);
+    }, 180);
 
     return () => {
       window.cancelAnimationFrame(frame);

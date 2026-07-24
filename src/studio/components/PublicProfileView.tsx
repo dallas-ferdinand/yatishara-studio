@@ -22,9 +22,12 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
+import { LogoLoader } from "./logo-loader";
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import { CaptionChipText } from "./CaptionChipText";
 import "./public-profile.css";
+import "./post-compose-tab.css";
 
 type PublicPost = {
   _id: Id<"profilePosts">;
@@ -32,6 +35,13 @@ type PublicPost = {
   kind: "image" | "video";
   name: string;
   caption?: string;
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  mentions?: Array<{
+    username: string;
+    profileId: Id<"profiles">;
+    displayName?: string;
+    avatarUrl?: string;
+  }>;
   likeCount: number;
   viewCount: number;
   publishedAt: number;
@@ -39,6 +49,7 @@ type PublicPost = {
   mediaUrl?: string;
   likedByViewer: boolean;
   savedByViewer?: boolean;
+  username?: string;
 };
 
 type ProfileTab = "posts" | "saved" | "liked" | "shared";
@@ -168,7 +179,7 @@ export function PublicProfileView({
       <div className={`public-profile-shell${embedded ? " is-embedded" : ""}`}>
         <div className="public-profile-blur" aria-hidden="true" />
         <div className="public-profile-loading">
-          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          <LogoLoader size="lg" />
         </div>
       </div>
     );
@@ -299,7 +310,7 @@ export function PublicProfileView({
         >
           {gridLoading ? (
             <div className="public-profile-loading is-inline">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <LogoLoader size="md" />
             </div>
           ) : resolvedPosts.length === 0 ? (
             <div className="public-profile-empty-posts">
@@ -365,29 +376,48 @@ export function PublicProfileView({
                     }
                     return (
                       <span className="public-profile-tile-fallback">
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        <LogoLoader size="sm" />
                         {post.kind === "video" ? "Video" : "Image"}
                       </span>
                     );
                   })()}
-                  <span
-                    className="public-profile-tile-kind"
-                    aria-hidden="true"
-                    title={post.kind === "video" ? "Video" : "Image"}
-                  >
-                    {post.kind === "video" ? (
-                      <Play
-                        className="public-profile-tile-kind-icon is-play"
-                        strokeWidth={2.85}
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ImageIcon className="public-profile-tile-kind-icon" />
-                    )}
+                  <span className="public-profile-tile-top" aria-hidden="true">
+                    <span className="public-profile-tile-meta">
+                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      {formatCount(post.viewCount ?? 0)}
+                    </span>
+                    <span
+                      className="public-profile-tile-kind"
+                      title={post.kind === "video" ? "Video" : "Image"}
+                    >
+                      {post.kind === "video" ? (
+                        <Play
+                          className="public-profile-tile-kind-icon is-play"
+                          strokeWidth={2.85}
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <ImageIcon className="public-profile-tile-kind-icon" />
+                      )}
+                    </span>
                   </span>
-                  <span className="public-profile-tile-meta">
-                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                    {formatCount(post.viewCount ?? 0)}
+                  <span className="public-profile-tile-caption">
+                    <span className="public-profile-tile-username">
+                      {post.username || profile?.username || username}
+                    </span>
+                    {post.caption?.trim() ? (
+                      <span className="public-profile-tile-description">
+                        <CaptionChipText
+                          caption={post.caption}
+                          mentions={post.mentions}
+                          author={{
+                            username: post.username || profile?.username || username,
+                            avatarUrl: profile?.avatarUrl,
+                            displayName: profile?.displayName,
+                          }}
+                        />
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               ))}

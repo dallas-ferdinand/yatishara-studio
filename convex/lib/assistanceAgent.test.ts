@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   applyAssistanceBootstrap,
   salvageReviewAfterReviseExhaustion,
+  salvageReviewWhenBriefComplete,
   synthesizeForcedTerminalAsk,
+  tryReemitReadyReview,
+  userPromptHasMaterialDeltas,
 } from "./assistanceAgent";
 import type { AssistanceAgentSession } from "./assistanceTools";
 import { emptyAgentState, emptyBriefPayload } from "./guidedVideoTypes";
@@ -198,5 +201,114 @@ describe("assistance bootstrap + forced terminal", () => {
     expect(salvaged?.kind).toBe("review");
     expect(salvaged?.finalPrompt).toMatch(/flyer slam-in/i);
     expect(session.terminal?.kind).toBe("review");
+  });
+
+  it("salvages a review when the brief is complete instead of asking ready", () => {
+    const session = makeSession({
+      draft: {
+        ...emptyBriefPayload({ aspectRatio: "9:16", durationSeconds: 8 }),
+        subject: "Sushi flyer",
+        objective: "Drive WhatsApp bookings",
+        keyMessage: "Order sushi wraps today",
+        visualDirection: "Clean flyer layout",
+        brand: {
+          productFidelity: "conceptual",
+          logo: "omit",
+          ctaMode: "contact",
+          contactValue: "WhatsApp +1 (868) 303-4621",
+          ctaText: "Order now",
+        },
+        production: {
+          ...emptyBriefPayload({ aspectRatio: "1:1" }).production,
+          aspectRatio: "1:1",
+          referenceIntent: "auto",
+          skipPromptEnhancement: true,
+        },
+      },
+      mode: "image",
+      videoType: undefined,
+      lockedFields: [
+        "brand.ctaMode",
+        "brand.contactValue",
+        "subject",
+        "objective",
+      ],
+      offeredOptionalIds: ["cta", "logo"],
+      lastReadinessCritique: {
+        decision: "ready",
+        rationale: "Brief is complete",
+        criticalGaps: [],
+        revisionInstructions: [],
+        assumptions: [],
+      },
+      toolTrace: [
+        {
+          name: "prepare_review",
+          input: {
+            message: "your flyer is ready",
+            finalPrompt: "Clean sushi flyer with offer hierarchy and CTA.",
+          },
+          output: {
+            ok: false,
+            error: "review_not_ready",
+          },
+        },
+      ],
+    });
+    const salvaged = salvageReviewWhenBriefComplete(session);
+    expect(salvaged?.kind).toBe("review");
+    expect(salvaged?.finalPrompt).toMatch(/sushi flyer/i);
+    expect(session.terminal?.kind).toBe("review");
+  });
+
+  it("forced terminal no longer asks ready when nothing is missing", () => {
+    const session = makeSession({
+      draft: {
+        ...emptyBriefPayload({ aspectRatio: "1:1" }),
+        subject: "Sushi flyer",
+        objective: "Drive WhatsApp bookings",
+        brand: {
+          productFidelity: "conceptual",
+          logo: "omit",
+          ctaMode: "contact",
+          contactValue: "WhatsApp +1 (868) 303-4621",
+        },
+      },
+      mode: "image",
+      videoType: undefined,
+      lockedFields: ["brand.ctaMode", "brand.contactValue", "subject"],
+      offeredOptionalIds: ["cta", "logo"],
+    });
+    const forced = synthesizeForcedTerminalAsk(session);
+    expect(forced.message).not.toMatch(/say go/i);
+    expect(forced.questions[0]?.id).not.toBe("forced_resume_review");
+  });
+
+  it("re-emits review when user proceeds without material deltas", () => {
+    const reemit = tryReemitReadyReview({
+      userPrompt: "looks good, go ahead",
+      priorStatus: "review_ready",
+      priorCompiledPrompt: "A".repeat(100),
+      priorReadyForReview: true,
+    });
+    expect(reemit?.finalPrompt.length).toBeGreaterThanOrEqual(80);
+    expect(reemit?.message).toMatch(/generate/i);
+  });
+
+  it("does not re-emit review when proceed includes revise deltas", () => {
+    expect(
+      userPromptHasMaterialDeltas(
+        "Yes this is perfect, just make the mini video look animated",
+      ),
+    ).toBe(true);
+    expect(
+      tryReemitReadyReview({
+        userPrompt:
+          "Yes this is perfect, just make the mini video look animated",
+        priorStatus: "review_ready",
+        priorCompiledPrompt: "A".repeat(100),
+        priorReadyForReview: true,
+      }),
+    ).toBeNull();
   });
 });

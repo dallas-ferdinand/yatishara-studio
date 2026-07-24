@@ -85,6 +85,8 @@ function buildMenuItems(entry, {
     ) {
       items.push({ id: "use-wallpaper", label: "Use as wallpaper" });
       items.push({ id: "set-profile-image", label: "Set as profile image" });
+      items.push({ id: "upscale", label: "Upscale" });
+      items.push({ id: "generate-video", label: "Generate video" });
     }
     if (
       isFile &&
@@ -95,7 +97,7 @@ function buildMenuItems(entry, {
       const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
       items.push({
         id: alreadyShared ? "unshare-profile" : "share-profile",
-        label: alreadyShared ? "Remove from profile" : "Share to profile",
+        label: alreadyShared ? "Remove from profile" : "Create post",
       });
     }
     if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });

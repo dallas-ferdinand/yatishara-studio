@@ -4,13 +4,15 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
   type SyntheticEvent,
 } from "react";
 import "./media-load-frame.css";
-import { LogoLoader, type LogoLoaderSize } from "./logo-loader";
+import type { AppearanceMode } from "@/lib/brand-assets";
+import { LogoLoader, type LogoLoaderSize, type LogoLoaderVariant } from "./logo-loader";
 
-export { LogoLoader, type LogoLoaderSize } from "./logo-loader";
+export { LogoLoader, type LogoLoaderSize, type LogoLoaderVariant } from "./logo-loader";
 export type MediaLoadKind = "image" | "video";
 
 /** Placeholder aspect while media decodes — chat/gen uses landscape video. */
@@ -26,7 +28,11 @@ type MediaLoadFrameProps = {
   cacheKey?: string;
   /** Fill a sized parent (profile tiles) vs reserve intrinsic ratio (chat cards). */
   ratio?: MediaLoadRatio;
+  /** When set (e.g. "9:16"), reserve this aspect while decoding instead of the ratio preset. */
+  aspectRatio?: string | null;
   loaderSize?: LogoLoaderSize;
+  /** Size loader overlay to the logo ring (avoids square paint in tiles). */
+  loaderRing?: boolean;
   className?: string;
   children: (handlers: {
     loaded: boolean;
@@ -42,16 +48,25 @@ const readyCacheKeys = new Set<string>();
 export function MediaLoadWave({
   className = "",
   size = "lg",
+  variant = "default",
+  appearance,
+  /** Size wave to the logo ring instead of stretching inset:0 (profile tiles). */
+  ring = false,
 }: {
   className?: string;
   size?: LogoLoaderSize;
+  variant?: LogoLoaderVariant;
+  appearance?: AppearanceMode;
+  ring?: boolean;
 }) {
   return (
     <span
-      className={["media-load-frame-wave", className].filter(Boolean).join(" ")}
+      className={["media-load-frame-wave", ring ? "is-ring" : "", className]
+        .filter(Boolean)
+        .join(" ")}
       aria-hidden="true"
     >
-      <LogoLoader size={size} />
+      <LogoLoader size={size} variant={variant} appearance={appearance} />
     </span>
   );
 }
@@ -61,7 +76,9 @@ export function MediaLoadFrame({
   src,
   cacheKey,
   ratio,
+  aspectRatio,
   loaderSize = "lg",
+  loaderRing = false,
   className = "",
   children,
 }: MediaLoadFrameProps) {
@@ -99,6 +116,15 @@ export function MediaLoadFrame({
 
   const resolvedRatio = ratio ?? (kind === "video" ? "video" : "image");
   const showLoader = !loaded && !failed;
+  const customAspect = parseCssAspectRatio(aspectRatio);
+  const frameStyle = customAspect && showLoader
+    ? ({
+        ["--media-load-aspect" as string]: customAspect.css,
+        ["--gen-aspect-w" as string]: customAspect.w,
+        ["--gen-aspect-h" as string]: customAspect.h,
+        ["--gen-aspect-ratio" as string]: customAspect.css,
+      } as CSSProperties)
+    : undefined;
 
   function markLoaded() {
     if (src) loadedSrcRef.current = src;
@@ -117,16 +143,18 @@ export function MediaLoadFrame({
         "media-load-frame",
         `is-${kind}`,
         `ratio-${resolvedRatio}`,
+        customAspect && showLoader ? "has-custom-aspect" : "",
         loaded ? "is-ready" : "",
         failed ? "is-failed" : "",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
+      style={frameStyle}
     >
       {showLoader ? (
         <span className="media-load-frame-placeholder" aria-hidden="true">
-          <MediaLoadWave size={loaderSize} />
+          <MediaLoadWave size={loaderSize} ring={loaderRing || ratio === "fill"} />
         </span>
       ) : null}
       {failed ? (
@@ -158,4 +186,15 @@ export function MediaLoadFrame({
       )}
     </span>
   );
+}
+
+function parseCssAspectRatio(
+  value: string | null | undefined,
+): { css: string; w: number; h: number } | null {
+  const match = String(value ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+  return { css: `${w} / ${h}`, w, h };
 }

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   FOR_YOU_FOLLOW_BOOST,
   forYouCandidateCap,
+  identityScore,
   scoreFeedPost,
+  TAG_SIGNAL_CAP,
 } from "./feedRanking";
 
 const now = Date.UTC(2026, 6, 17, 12, 0, 0);
@@ -79,6 +81,71 @@ describe("scoreFeedPost forYou", () => {
       },
     });
     expect(seed).toBeGreaterThan(hotFollowed);
+  });
+
+  it("boosts matching hashtag affinity and creator consistency", () => {
+    const engagement = { likeCount: 5, viewCount: 20 };
+    const baseline = scoreFeedPost({
+      mode: "forYou",
+      fromFollowing: false,
+      isSeed: false,
+      publishedAt: recent,
+      now,
+      engagement,
+    });
+    const withIdentity = scoreFeedPost({
+      mode: "forYou",
+      fromFollowing: false,
+      isSeed: false,
+      publishedAt: recent,
+      now,
+      engagement,
+      identity: {
+        hashtagAffinity: 4,
+        creatorConsistency: 20,
+        keywordAffinity: 2,
+      },
+    });
+    expect(withIdentity).toBeGreaterThan(baseline);
+    expect(withIdentity - baseline).toBe(
+      identityScore({
+        hashtagAffinity: 4,
+        creatorConsistency: 20,
+        keywordAffinity: 2,
+      }),
+    );
+  });
+
+  it("caps identity so it cannot drown follow boost alone", () => {
+    const huge = identityScore({
+      hashtagAffinity: 10_000,
+      creatorConsistency: 10_000,
+      keywordAffinity: 10_000,
+    });
+    expect(huge).toBeLessThanOrEqual(TAG_SIGNAL_CAP);
+    expect(huge).toBeLessThan(FOR_YOU_FOLLOW_BOOST);
+  });
+
+  it("ignores identity signals in following mode", () => {
+    const engagement = { likeCount: 3 };
+    const plain = scoreFeedPost({
+      mode: "following",
+      fromFollowing: true,
+      isSeed: false,
+      publishedAt: recent,
+      now,
+      engagement,
+    });
+    const withIdentity = scoreFeedPost({
+      mode: "following",
+      fromFollowing: true,
+      isSeed: false,
+      publishedAt: recent,
+      now,
+      engagement,
+      identity: { hashtagAffinity: 50, creatorConsistency: 50, keywordAffinity: 50 },
+    });
+    expect(withIdentity).toBe(plain);
   });
 });
 

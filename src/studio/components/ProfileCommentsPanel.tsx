@@ -6,7 +6,6 @@ import {
   ArrowUp,
   Bookmark,
   ChevronLeft,
-  Forward,
   Heart,
   Image as ImageIcon,
   Loader2,
@@ -73,6 +72,21 @@ type PostActionsInfo = {
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
+};
+
+export type CommentsPanelMode = "comments" | "description";
+
+type DescriptionInfo = {
+  caption?: string;
+  username?: string;
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  mentions?: Array<{
+    username: string;
+    profileId: string;
+    displayName?: string;
+    avatarUrl?: string;
+  }>;
+  onOpenProfile?: (username: string) => void;
 };
 
 const MAX_COMMENT_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -637,20 +651,6 @@ function CommentsBody({
                 )}
                 <span>{formatCount(postActions.saveCount)}</span>
               </button>
-              <button
-                type="button"
-                className="profile-comments-post-action"
-                aria-label="Share"
-                disabled={postActions.shareBusy}
-                onClick={postActions.onShare}
-              >
-                {postActions.shareBusy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Forward aria-hidden="true" strokeWidth={2.25} />
-                )}
-                <span>{formatCount(postActions.shareCount)}</span>
-              </button>
             </div>
           ) : null}
           {showClose ? (
@@ -817,9 +817,245 @@ function CommentsBody({
   );
 }
 
+function parseCaptionParts(caption: string | undefined): Array<{
+  type: "text" | "hash" | "mention";
+  value: string;
+}> {
+  const trimmed = caption?.trim() ?? "";
+  const parts: Array<{ type: "text" | "hash" | "mention"; value: string }> = [];
+  if (!trimmed) return parts;
+  const re = /([#@][a-zA-Z0-9._]+)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(trimmed)) !== null) {
+    if (match.index > last) {
+      const collapsed = trimmed.slice(last, match.index).replace(/\s+/g, " ");
+      if (collapsed.length > 0) {
+        parts.push({ type: "text", value: collapsed });
+      }
+    }
+    const token = match[1] ?? "";
+    if (token.startsWith("#") && /^#[a-zA-Z0-9_]{2,32}$/.test(token)) {
+      parts.push({ type: "hash", value: token.slice(1) });
+    } else if (token.startsWith("@") && /^@[a-zA-Z][a-zA-Z0-9._]{2,29}$/.test(token)) {
+      parts.push({ type: "mention", value: token.slice(1).toLowerCase() });
+    } else {
+      parts.push({ type: "text", value: token });
+    }
+    last = match.index + token.length;
+  }
+  if (last < trimmed.length) {
+    const collapsed = trimmed.slice(last).replace(/\s+/g, " ");
+    if (collapsed.length > 0) {
+      parts.push({ type: "text", value: collapsed });
+    }
+  }
+  return parts;
+}
+
+function DescriptionHashChip({ tag }: { tag: string }) {
+  return (
+    <span className="post-compose-inline-chip is-hash profile-description-chip">
+      <span className="post-compose-inline-chip-label">#{tag}</span>
+    </span>
+  );
+}
+
+function DescriptionMentionChip({
+  username,
+  avatarUrl,
+  displayName,
+  onOpen,
+}: {
+  username: string;
+  avatarUrl?: string;
+  displayName?: string;
+  onOpen?: (username: string) => void;
+}) {
+  const initial = (displayName || username).slice(0, 1).toUpperCase();
+  const inner = (
+    <>
+      <span className="post-compose-inline-chip-avatar">
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt="" />
+        ) : (
+          <span className="post-compose-inline-chip-initial">{initial}</span>
+        )}
+      </span>
+      <span className="post-compose-inline-chip-label">{username}</span>
+    </>
+  );
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        className="post-compose-inline-chip is-mention profile-description-chip"
+        onClick={() => onOpen(username)}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <span className="post-compose-inline-chip is-mention profile-description-chip">
+      {inner}
+    </span>
+  );
+}
+
+function DescriptionBody({
+  description,
+  postAuthor,
+  variant,
+  onClose,
+}: {
+  description: DescriptionInfo;
+  postAuthor?: PostAuthorInfo;
+  variant: "sheet" | "dock";
+  onClose: () => void;
+}) {
+  const parts = parseCaptionParts(description.caption);
+  const mentionByUser = new Map(
+    (description.mentions ?? []).map((m) => [m.username.toLowerCase(), m] as const),
+  );
+  const authorUsername = (postAuthor?.username || description.username || "")
+    .replace(/^@/, "")
+    .toLowerCase();
+  if (authorUsername && postAuthor?.avatarUrl && !mentionByUser.get(authorUsername)?.avatarUrl) {
+    const existing = mentionByUser.get(authorUsername);
+    mentionByUser.set(authorUsername, {
+      username: existing?.username || authorUsername,
+      profileId: existing?.profileId || "",
+      displayName: existing?.displayName || postAuthor.displayName,
+      avatarUrl: postAuthor.avatarUrl,
+    });
+  }
+  const shownHashes = new Set(
+    parts.filter((p) => p.type === "hash").map((p) => p.value.toLowerCase()),
+  );
+  const leftoverTags = (description.hashtags ?? []).filter(
+    (t) => !shownHashes.has(t.tag.toLowerCase()),
+  );
+  const empty = parts.length === 0 && leftoverTags.length === 0;
+  const postName = postAuthor ? postAuthorLabel(postAuthor) : "Description";
+  const postInitials = postAuthor
+    ? profileNameInitials({
+        displayName: postAuthor.displayName,
+        firstName: postAuthor.firstName,
+        lastName: postAuthor.lastName,
+        name: postAuthor.username,
+      })
+    : "?";
+
+  return (
+    <>
+      <header className="profile-comments-head is-thread is-description">
+        <div className="profile-comments-thread-head">
+          {postAuthor ? (
+            <>
+              <StudioProfileAvatar
+                className="profile-comments-thread-avatar"
+                size="md"
+                src={postAuthor.avatarUrl}
+                initials={postInitials}
+                displayName={postAuthor.displayName}
+                firstName={postAuthor.firstName}
+                lastName={postAuthor.lastName}
+                name={postAuthor.username}
+              />
+              <div className="profile-comments-thread-preview">
+                <strong>{postName}</strong>
+                <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
+                  {formatWhen(postAuthor.publishedAt)}
+                </time>
+              </div>
+            </>
+          ) : (
+            <div className="profile-comments-thread-preview">
+              <strong>Description</strong>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          className="profile-comments-close"
+          onClick={onClose}
+          aria-label="Close description"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </header>
+
+      <div
+        className={`profile-comments-list profile-description-body${empty ? " is-empty" : ""}`}
+      >
+        {empty ? (
+          <div className="profile-comments-empty">
+            <p>No description</p>
+          </div>
+        ) : (
+          <div className="profile-description-content">
+            {parts.length > 0 ? (
+              <p className="profile-description-text">
+                {parts.map((part, index) => {
+                  if (part.type === "hash") {
+                    return <DescriptionHashChip key={`h-${index}`} tag={part.value} />;
+                  }
+                  if (part.type === "mention") {
+                    const meta = mentionByUser.get(part.value);
+                    return (
+                      <DescriptionMentionChip
+                        key={`m-${index}`}
+                        username={part.value}
+                        avatarUrl={meta?.avatarUrl}
+                        displayName={meta?.displayName}
+                        onOpen={
+                          meta && description.onOpenProfile
+                            ? description.onOpenProfile
+                            : undefined
+                        }
+                      />
+                    );
+                  }
+                  const prev = parts[index - 1];
+                  const next = parts[index + 1];
+                  const betweenChips =
+                    /^\s+$/.test(part.value) &&
+                    prev != null &&
+                    next != null &&
+                    prev.type !== "text" &&
+                    next.type !== "text";
+                  if (betweenChips) {
+                    return <span key={`g-${index}`}>{"\u2009"}</span>;
+                  }
+                  return <span key={`t-${index}`}>{part.value}</span>;
+                })}
+              </p>
+            ) : null}
+            {leftoverTags.length > 0 ? (
+              <div className="profile-description-tags">
+                {leftoverTags.map((tag) => (
+                  <DescriptionHashChip
+                    key={tag.tag}
+                    tag={tag.displayTag || tag.tag}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {variant === "sheet" ? <div className="profile-description-sheet-spacer" /> : null}
+    </>
+  );
+}
+
 /**
  * Desktop: real right column beside the post (feed shrinks to make room).
  * Mobile: glass bottom sheet when `open`.
+ * `mode="description"` swaps the column/sheet into the full post description.
  */
 export function ProfileCommentsPanel({
   postId,
@@ -829,6 +1065,9 @@ export function ProfileCommentsPanel({
   onCommentCountChange,
   postAuthor,
   postActions,
+  mode = "comments",
+  onModeChange,
+  description,
 }: {
   postId: Id<"profilePosts">;
   open: boolean;
@@ -837,9 +1076,13 @@ export function ProfileCommentsPanel({
   onCommentCountChange?: (count: number) => void;
   postAuthor?: PostAuthorInfo;
   postActions?: PostActionsInfo;
+  mode?: CommentsPanelMode;
+  onModeChange?: (mode: CommentsPanelMode) => void;
+  description?: DescriptionInfo;
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const showingDescription = mode === "description";
 
   useEffect(() => {
     // Mount under the studio shell so the bottom nav (z-index 60) stays above the sheet.
@@ -851,25 +1094,54 @@ export function ProfileCommentsPanel({
   useEffect(() => {
     if (!open || !isMobile) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (showingDescription) onModeChange?.("comments");
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, isMobile]);
+  }, [open, onClose, onModeChange, isMobile, showingDescription]);
+
+  function backToComments() {
+    onModeChange?.("comments");
+  }
+
+  function dismissSheet() {
+    if (showingDescription) {
+      onModeChange?.("comments");
+      return;
+    }
+    onClose();
+  }
+
+  const descriptionPanel =
+    showingDescription && description ? (
+      <DescriptionBody
+        description={description}
+        postAuthor={postAuthor}
+        variant={isMobile ? "sheet" : "dock"}
+        onClose={backToComments}
+      />
+    ) : null;
 
   if (!isMobile) {
     return (
-      <aside className="profile-comments-dock" aria-label="Comments">
-        <CommentsBody
-          postId={postId}
-          commentCount={commentCount}
-          onCommentCountChange={onCommentCountChange}
-          showRootHeader={false}
-          showClose={false}
-          variant="dock"
-          postAuthor={postAuthor}
-          postActions={postActions}
-        />
+      <aside
+        className="profile-comments-dock"
+        aria-label={showingDescription ? "Description" : "Comments"}
+      >
+        {descriptionPanel ?? (
+          <CommentsBody
+            postId={postId}
+            commentCount={commentCount}
+            onCommentCountChange={onCommentCountChange}
+            showRootHeader={false}
+            showClose={false}
+            variant="dock"
+            postAuthor={postAuthor}
+            postActions={postActions}
+          />
+        )}
       </aside>
     );
   }
@@ -877,25 +1149,32 @@ export function ProfileCommentsPanel({
   if (!open || !portalRoot) return null;
 
   return createPortal(
-    <div className="profile-comments-sheet" role="dialog" aria-modal="true" aria-label="Comments">
+    <div
+      className="profile-comments-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label={showingDescription ? "Description" : "Comments"}
+    >
       <button
         type="button"
         className="profile-comments-dismiss"
-        aria-label="Close comments"
-        onClick={onClose}
+        aria-label={showingDescription ? "Back to comments" : "Close comments"}
+        onClick={dismissSheet}
       />
       <aside className="profile-comments-panel is-sheet">
-        <CommentsBody
-          postId={postId}
-          commentCount={commentCount}
-          onCommentCountChange={onCommentCountChange}
-          showRootHeader
-          showClose
-          onClose={onClose}
-          variant="sheet"
-          postAuthor={postAuthor}
-          postActions={postActions}
-        />
+        {descriptionPanel ?? (
+          <CommentsBody
+            postId={postId}
+            commentCount={commentCount}
+            onCommentCountChange={onCommentCountChange}
+            showRootHeader
+            showClose
+            onClose={onClose}
+            variant="sheet"
+            postAuthor={postAuthor}
+            postActions={postActions}
+          />
+        )}
       </aside>
     </div>,
     portalRoot,

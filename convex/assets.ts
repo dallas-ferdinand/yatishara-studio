@@ -73,7 +73,8 @@ const assetReturn = v.object({
   signedThumbnailLqipUrl: v.optional(v.string()),
 });
 
-/** List queries only sign thumbnails — full read URLs are lazy via signedReadUrl. */
+/** List queries only sign thumbnails — full read URLs are lazy via signedReadUrl.
+ * Videos/audio without a poster still need a signed media URL for grid <video> thumbs. */
 async function withSignedThumbnails(
   assets: Doc<"assets">[],
   expiresUnix: number | undefined,
@@ -82,7 +83,9 @@ async function withSignedThumbnails(
   if (expiresUnix === undefined) return assets;
   const paths = assets.map((asset) => assetThumbnailPath(asset));
   const thumbTransform = quality === "preview" ? PREVIEW_TRANSFORM : THUMB_TRANSFORM;
-  const signFullReads = quality === "preview";
+  const needsMediaRead = (asset: Doc<"assets">) =>
+    quality === "preview" ||
+    ((asset.kind === "video" || asset.kind === "audio") && !assetThumbnailPath(asset));
   const [signed, lqip, proxyUrls, proxy1080Urls, fullReadEntries] = await Promise.all([
     signBunnyCdnUrls(paths, expiresUnix, thumbTransform),
     signBunnyCdnUrls(paths, expiresUnix, LQIP_TRANSFORM),
@@ -98,15 +101,13 @@ async function withSignedThumbnails(
       ),
       expiresUnix,
     ),
-    signFullReads
-      ? Promise.all(
-          assets.map(async (asset) => {
-            if (!asset.bunnyPath) return null;
-            const url = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
-            return [asset.bunnyPath, url] as const;
-          }),
-        )
-      : Promise.resolve([] as Array<readonly [string, string] | null>),
+    Promise.all(
+      assets.map(async (asset) => {
+        if (!asset.bunnyPath || !needsMediaRead(asset)) return null;
+        const url = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+        return [asset.bunnyPath, url] as const;
+      }),
+    ),
   ]);
   const fullReads = new Map(
     fullReadEntries.filter((entry): entry is readonly [string, string] => entry !== null),
@@ -180,6 +181,8 @@ export const reserveUpload = authedMutation({
       name: args.name,
       kind: args.kind,
       mimeType: args.mimeType,
+      // Hide from explorer until Bunny put + finalize — otherwise thumbs 404 blank.
+      storageStatus: "pending",
       createdAt: now,
       updatedAt: now,
     });

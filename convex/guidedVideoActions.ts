@@ -325,6 +325,7 @@ const commitAssistanceTurnRef = internalMutationRef<
     status: string;
     decision: "ask" | "review_ready";
     idempotent: boolean;
+    cancelled?: boolean;
   }
 >("guidedVideo:commitAssistanceTurn");
 
@@ -341,8 +342,18 @@ const failAssistanceTurnRef = internalMutationRef<
     revision: number;
     creditTransactionId?: Id<"creditTransactions">;
     alreadyFailed: boolean;
+    cancelled?: boolean;
   }
 >("guidedVideo:failAssistanceTurn");
+
+const getAssistanceTurnPhaseRef = internalQueryRef<
+  { turnId: Id<"assistanceTurns"> },
+  {
+    phase: string;
+    creditTransactionId?: Id<"creditTransactions">;
+    ownerId: Id<"users">;
+  }
+>("guidedVideo:getAssistanceTurnPhase");
 
 const claimBriefApprovalRef = publicMutationRef<
   {
@@ -918,6 +929,7 @@ export const submitAssistedTurn = action({
     status: v.string(),
     decision: v.union(v.literal("ask"), v.literal("review_ready")),
     idempotent: v.optional(v.boolean()),
+    cancelled: v.optional(v.boolean()),
   }),
   handler: async (
     ctx,
@@ -929,6 +941,7 @@ export const submitAssistedTurn = action({
     status: string;
     decision: "ask" | "review_ready";
     idempotent?: boolean;
+    cancelled?: boolean;
   }> => {
     if (!isGuidedVideoAssistanceEnabled()) {
       throw new Error("Assistance is disabled on this deployment.");
@@ -1017,6 +1030,9 @@ export const submitAssistedTurn = action({
         idempotent: true,
       };
     }
+    if (begun.idempotent && begun.phase === "cancelled") {
+      throw new Error("Assistance turn was cancelled. Send a new message.");
+    }
     if (begun.idempotent && begun.phase === "failed") {
       throw new Error("Assistance turn previously failed. Send a new message.");
     }
@@ -1027,14 +1043,12 @@ export const submitAssistedTurn = action({
         getAssistanceConversationInternalRef,
         { briefId, limit: 24, expiresUnix: expiresInOneHour() },
       );
-      const persistedMedia = await ctx.runQuery(resolveBriefMediaInternalRef, {
-        briefId,
-        expiresUnix: expiresInOneHour(),
-      });
       const media = await overlayTurnAttachments(
         ctx,
         userId,
-        persistedMedia,
+        // This turn's composer attachments are authoritative — do not merge prior
+        // brief media (that caused ghost refs when the composer looked empty).
+        [],
         attachmentRows,
         expiresInOneHour(),
       );
@@ -1045,24 +1059,10 @@ export const submitAssistedTurn = action({
           media,
           args.entryPoint,
         );
-      const currentReferenceInputs = mediaToReferenceInputs(media).slice(
+      const referenceInputs = mediaToReferenceInputs(media).slice(
         0,
         MAX_GENERATION_REFERENCE_ASSETS,
       );
-      const priorReferenceSlots = Math.max(
-        0,
-        MAX_GENERATION_REFERENCE_ASSETS - currentReferenceInputs.length,
-      );
-      const referenceInputs = [
-        ...currentReferenceInputs,
-        ...(priorReferenceSlots > 0
-          ? conversation.generatedMedia.slice(-priorReferenceSlots).map((item) => ({
-              kind: item.kind,
-              url: item.url,
-              mimeType: item.mimeType,
-            }))
-          : []),
-      ];
       const currentPayload =
         brief.payload && typeof brief.payload === "object"
           ? (brief.payload as AssistedBriefPayload)
@@ -1112,6 +1112,8 @@ export const submitAssistedTurn = action({
           ? [...conversation.context, sourceGenerationContext]
           : conversation.context,
         previousAgentState,
+        priorBriefStatus: brief.status,
+        priorCompiledPrompt: brief.compiledPrompt,
         referenceInputs,
         offeredOptionalIds: brief.offeredOptionalIds ?? [],
         skippedOptionalIds: brief.skippedOptionalIds ?? [],
@@ -1124,30 +1126,115 @@ export const submitAssistedTurn = action({
 
       const tokensUsed =
         (analyzed.usage.inputTokens ?? 0) + (analyzed.usage.outputTokens ?? 0);
-      if (tokensUsed > 0 || !analyzed.failed) {
-        const charged = await ctx.runMutation(chargeAssistanceTurnRef, {
-          turnId: begun.turnId,
-          ownerId: userId,
-          folderId: args.folderId,
-          inputTokens: analyzed.usage.inputTokens,
-          outputTokens: analyzed.usage.outputTokens,
-        });
-        transactionId = charged.creditTransactionId;
-      }
 
-      if (analyzed.failed) {
-        await ctx.runMutation(failAssistanceTurnRef, {
-          turnId: begun.turnId,
-          error: analyzed.failureReason ?? "Assistant unavailable",
-          userPrompt: args.userPrompt,
-          assistantMessage: analyzed.analysis.message,
-        });
+      const phaseBeforeCharge = await ctx.runQuery(getAssistanceTurnPhaseRef, {
+        turnId: begun.turnId,
+      });
+      if (phaseBeforeCharge.phase === "cancelled") {
+        const refundId = phaseBeforeCharge.creditTransactionId ?? transactionId;
+        if (refundId) {
+          await ctx.runMutation(refundTextGenerationRef, {
+            transactionId: refundId,
+            reason: "Assistance turn cancelled",
+          });
+        }
         return {
           turnId: begun.turnId,
           briefId,
           revision: brief.revision,
           status: brief.status,
           decision: "ask" as const,
+          cancelled: true,
+        };
+      }
+
+      if (tokensUsed > 0 || !analyzed.failed) {
+        try {
+          const charged = await ctx.runMutation(chargeAssistanceTurnRef, {
+            turnId: begun.turnId,
+            ownerId: userId,
+            folderId: args.folderId,
+            inputTokens: analyzed.usage.inputTokens,
+            outputTokens: analyzed.usage.outputTokens,
+          });
+          transactionId = charged.creditTransactionId;
+        } catch (chargeError) {
+          const phaseAfterCharge = await ctx.runQuery(getAssistanceTurnPhaseRef, {
+            turnId: begun.turnId,
+          });
+          if (phaseAfterCharge.phase === "cancelled") {
+            const refundId =
+              phaseAfterCharge.creditTransactionId ?? transactionId;
+            if (refundId) {
+              await ctx.runMutation(refundTextGenerationRef, {
+                transactionId: refundId,
+                reason: "Assistance turn cancelled",
+              });
+            }
+            return {
+              turnId: begun.turnId,
+              briefId,
+              revision: brief.revision,
+              status: brief.status,
+              decision: "ask" as const,
+              cancelled: true,
+            };
+          }
+          throw chargeError;
+        }
+      }
+
+      if (analyzed.failed) {
+        const failed = await ctx.runMutation(failAssistanceTurnRef, {
+          turnId: begun.turnId,
+          error: analyzed.failureReason ?? "Assistant unavailable",
+          userPrompt: args.userPrompt,
+          assistantMessage: analyzed.analysis.message,
+        });
+        if (failed.cancelled) {
+          const refundId = failed.creditTransactionId ?? transactionId;
+          if (refundId) {
+            await ctx.runMutation(refundTextGenerationRef, {
+              transactionId: refundId,
+              reason: "Assistance turn cancelled",
+            });
+          }
+          return {
+            turnId: begun.turnId,
+            briefId,
+            revision: brief.revision,
+            status: brief.status,
+            decision: "ask" as const,
+            cancelled: true,
+          };
+        }
+        return {
+          turnId: begun.turnId,
+          briefId,
+          revision: brief.revision,
+          status: brief.status,
+          decision: "ask" as const,
+        };
+      }
+
+      const phaseBeforeCommit = await ctx.runQuery(getAssistanceTurnPhaseRef, {
+        turnId: begun.turnId,
+      });
+      if (phaseBeforeCommit.phase === "cancelled") {
+        const refundId = phaseBeforeCommit.creditTransactionId ?? transactionId;
+        if (refundId) {
+          await ctx.runMutation(refundTextGenerationRef, {
+            transactionId: refundId,
+            reason: "Assistance turn cancelled",
+          });
+        }
+        return {
+          turnId: begun.turnId,
+          briefId,
+          revision: brief.revision,
+          status: brief.status,
+          decision: "ask" as const,
+          cancelled: true,
         };
       }
 
@@ -1214,6 +1301,24 @@ export const submitAssistedTurn = action({
         }),
       });
 
+      if (committed.cancelled) {
+        const refundId = transactionId;
+        if (refundId) {
+          await ctx.runMutation(refundTextGenerationRef, {
+            transactionId: refundId,
+            reason: "Assistance turn cancelled",
+          });
+        }
+        return {
+          turnId: committed.turnId,
+          briefId: committed.briefId,
+          revision: committed.revision,
+          status: committed.status,
+          decision: "ask" as const,
+          cancelled: true,
+        };
+      }
+
       return {
         turnId: committed.turnId,
         briefId: committed.briefId,
@@ -1223,19 +1328,55 @@ export const submitAssistedTurn = action({
         idempotent: committed.idempotent,
       };
     } catch (error) {
+      const payload =
+        brief.payload && typeof brief.payload === "object"
+          ? (brief.payload as AssistedBriefPayload)
+          : null;
+      const softCollecting =
+        briefMode === "video" &&
+        (brief.status === "collecting" ||
+          !String(payload?.subject ?? "").trim());
+      const assistantMessage = softCollecting
+        ? "What should this video be about, and do you want voiceover, music only, or silence?"
+        : "I couldn’t finish that turn. Reply again in the chat and I’ll pick up where we left off.";
       const failed = await ctx.runMutation(failAssistanceTurnRef, {
         turnId: begun.turnId,
         error: error instanceof Error ? error.message : "Assistance turn failed",
         userPrompt: args.userPrompt,
-        assistantMessage:
-          "I couldn’t finish that turn. Reply again in the chat and I’ll pick up where we left off.",
+        assistantMessage,
       });
+      if (failed.cancelled) {
+        const refundId = failed.creditTransactionId ?? transactionId;
+        if (refundId) {
+          await ctx.runMutation(refundTextGenerationRef, {
+            transactionId: refundId,
+            reason: "Assistance turn cancelled",
+          });
+        }
+        return {
+          turnId: begun.turnId,
+          briefId,
+          revision: brief.revision,
+          status: brief.status,
+          decision: "ask" as const,
+          cancelled: true,
+        };
+      }
       const refundId = failed.creditTransactionId ?? transactionId;
       if (refundId) {
         await ctx.runMutation(refundTextGenerationRef, {
           transactionId: refundId,
           reason: "Assistance turn failed",
         });
+      }
+      if (softCollecting) {
+        return {
+          turnId: begun.turnId,
+          briefId,
+          revision: brief.revision,
+          status: brief.status,
+          decision: "ask" as const,
+        };
       }
       throw error;
     }

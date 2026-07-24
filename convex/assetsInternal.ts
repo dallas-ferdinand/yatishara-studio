@@ -46,6 +46,7 @@ export const finalizeCommittedUpload = internalMutation({
     }
     await ctx.db.patch(args.assetId, {
       byteSize: args.byteSize,
+      storageStatus: "ready",
       updatedAt: Date.now(),
     });
     if (asset.kind === "video" || asset.kind === "audio") {
@@ -281,6 +282,7 @@ export const abortIncompleteUpload = internalMutation({
     if (asset.byteSize == null || asset.byteSize <= 0) {
       const now = Date.now();
       await ctx.db.patch(args.assetId, {
+        storageStatus: "failed",
         deletedAt: now,
         updatedAt: now,
       });

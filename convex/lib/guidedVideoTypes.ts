@@ -473,16 +473,31 @@ export function emptyAudioPlan(): AudioPlan {
 
 export function emptyBriefPayload(
   production?: Partial<ProductionSettings>,
+  options?: { mode?: AssistedMode },
 ): AssistedBriefPayload {
+  const mode = options?.mode ?? "video";
+  const defaults: ProductionSettings =
+    mode === "video"
+      ? {
+          durationSeconds: 8,
+          aspectRatio: "9:16",
+          resolution: "1280x720",
+        }
+      : {
+          aspectRatio: "9:16",
+          resolution: "2K",
+        };
+  const merged: ProductionSettings = {
+    ...defaults,
+    ...production,
+  };
+  if (mode !== "video") {
+    delete merged.durationSeconds;
+  }
   return {
     brand: emptyBrandDecisions(),
     audio: emptyAudioPlan(),
-    production: {
-      durationSeconds: 8,
-      aspectRatio: "9:16",
-      resolution: "1280x720",
-      ...production,
-    },
+    production: merged,
   };
 }
 

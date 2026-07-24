@@ -48,6 +48,7 @@ import {
   RectangleHorizontal,
   Settings,
   Sparkles,
+  Square,
   Upload,
   Wand2,
   X,
@@ -59,12 +60,17 @@ import {
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useLongPress } from "@/desk/hooks/use-long-press";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
+import {
+  GenerationStatusPhrase,
+  generationStatusAriaLabel,
+} from "./generation-status-phrase";
 import { StudioChatVideoPlayer } from "./StudioChatVideoPlayer";
 import {
   StudioChatAudioPlayer,
@@ -85,7 +91,7 @@ import {
 } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { threadTitleFromPrompt } from "@/studio/lib/studio-prompt-display.js";
+import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
@@ -105,6 +111,10 @@ import {
 } from "@/studio/lib/mediaUrls";
 import { isVideoFileUrl, playableMediaUrl } from "@/studio/lib/mediaPlayback";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import {
+  IMAGE_UPSCALE_PROMPT,
+  aspectRatioFromDimensions,
+} from "@/studio/lib/imageUpscalePrompt";
 import { UnifiedTabStrip } from "@/desk/components/UnifiedTabStrip";
 import {
   EXPLORER_DND_TYPE,
@@ -135,6 +145,8 @@ import {
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
 import { StudioVoicePicker } from "./StudioVoicePicker";
+import "./post-compose-tab.css";
+import "./profile-post-viewer.css";
 
 const StudioApiKeysSettings = dynamic(
   () => import("./StudioApiKeysSettings").then((m) => m.StudioApiKeysSettings),
@@ -158,6 +170,10 @@ const PublicProfileView = dynamic(
 );
 const ProfilePostViewer = dynamic(
   () => import("./ProfilePostViewer").then((m) => m.ProfilePostViewer),
+  { ssr: false },
+);
+const PostComposeTab = dynamic(
+  () => import("./PostComposeTab").then((m) => m.PostComposeTab),
   { ssr: false },
 );
 const ThemeSettings = dynamic(
@@ -192,6 +208,30 @@ const AssistanceApprovalCard = dynamic(
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
 const TRASH_FOLDER_ID = "__trash__";
+/** Newest-N live chat window — always visible; older turns via "Load earlier". */
+const CHAT_LIVE_EVENT_LIMIT = 80;
+const CHAT_EARLIER_EVENT_LIMIT = 80;
+
+function mergeThreadEventLists(...lists) {
+  const byId = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const event of list) {
+      if (event?._id) byId.set(event._id, event);
+    }
+  }
+  return [...byId.values()].sort(
+    (a, b) => (a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0),
+  );
+}
+
+function sameThreadEventIds(a = [], b = []) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]?._id !== b[i]?._id) return false;
+  }
+  return true;
+}
 
 /** Module-scope clocks — avoid react-hooks/purity flags on component-body helpers. */
 function wallClockMs() {
@@ -256,6 +296,146 @@ const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
 const STUDIO_OPEN_TABS_KEY = "yatishara-studio-open-tabs-v1";
+const STUDIO_COMPOSER_CONTEXTS_KEY = "yatishara-studio-composer-contexts-v1";
+
+function isComposerContextTabKey(key) {
+  return typeof key === "string" && (key.startsWith("composer:") || key.startsWith("thread:"));
+}
+
+function stripBlobMediaUrl(url) {
+  if (typeof url !== "string" || !url) return undefined;
+  if (url.startsWith("blob:")) return undefined;
+  return url;
+}
+
+/** Drop ephemeral blob: thumbs so reload can still restore durable studio refs. */
+function persistableComposerAttachment(attachment) {
+  if (!attachment || typeof attachment !== "object") return null;
+  const thumbnailUrl = stripBlobMediaUrl(attachment.thumbnailUrl);
+  const mediaUrl = stripBlobMediaUrl(attachment.mediaUrl);
+  const sheetAsset = attachment.sheetAsset
+    ? persistableComposerAttachment(attachment.sheetAsset)
+    : undefined;
+  return {
+    ...attachment,
+    ...(thumbnailUrl ? { thumbnailUrl } : { thumbnailUrl: undefined }),
+    ...(mediaUrl ? { mediaUrl } : { mediaUrl: undefined }),
+    ...(sheetAsset ? { sheetAsset } : {}),
+  };
+}
+
+function serializeComposerContextsForStorage(contexts) {
+  const out = {};
+  for (const [key, ctx] of Object.entries(contexts ?? {})) {
+    if (!isComposerContextTabKey(key) || !ctx || typeof ctx !== "object") continue;
+    const attachments = (ctx.attachments ?? [])
+      .map((item) => persistableComposerAttachment(item))
+      .filter(Boolean);
+    const draft = typeof ctx.draft === "string" ? ctx.draft : "";
+    const editorHtml = typeof ctx.editorHtml === "string" ? ctx.editorHtml : undefined;
+    const hasContent = Boolean(draft.trim()) || Boolean(editorHtml) || attachments.length > 0;
+    if (!hasContent && !ctx.mode) continue;
+    out[key] = {
+      draft,
+      ...(editorHtml ? { editorHtml } : {}),
+      attachments,
+      mode: ctx.mode,
+      aspectRatio: ctx.aspectRatio,
+      imageResolution: ctx.imageResolution,
+      imageQuality: ctx.imageQuality,
+      resolution: ctx.resolution,
+      durationSeconds: ctx.durationSeconds,
+      audioEnabled: ctx.audioEnabled,
+      selectedStylePresetId: ctx.selectedStylePresetId ?? null,
+      scriptType: ctx.scriptType,
+      referenceIntent: ctx.referenceIntent,
+      audioType: ctx.audioType,
+      selectedVoice: ctx.selectedVoice ?? null,
+      sfxLoop: ctx.sfxLoop,
+      sfxDurationAuto: ctx.sfxDurationAuto,
+      sfxDurationSeconds: ctx.sfxDurationSeconds,
+      sfxPromptInfluence: ctx.sfxPromptInfluence,
+    };
+  }
+  return out;
+}
+
+function readPersistedComposerContexts() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STUDIO_COMPOSER_CONTEXTS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? serializeComposerContextsForStorage(parsed) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePersistedComposerContexts(contexts) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      STUDIO_COMPOSER_CONTEXTS_KEY,
+      JSON.stringify(serializeComposerContextsForStorage(contexts)),
+    );
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function composerContextKeyForTab(tab) {
+  return isComposerContextTabKey(tab) ? tab : COMPOSER_TAB;
+}
+
+function snapshotComposerContextFields({
+  draft,
+  attachments,
+  editorHtml,
+  mode,
+  aspectRatio,
+  imageResolution,
+  imageQuality,
+  resolution,
+  durationSeconds,
+  audioEnabled,
+  selectedStylePresetId,
+  scriptType,
+  referenceIntent,
+  audioType,
+  selectedVoice,
+  sfxLoop,
+  sfxDurationAuto,
+  sfxDurationSeconds,
+  sfxPromptInfluence,
+  previous,
+}) {
+  return {
+    ...(previous ?? {}),
+    draft: draft ?? "",
+    attachments: attachments ?? [],
+    editorHtml:
+      typeof editorHtml === "string" && editorHtml.length
+        ? editorHtml
+        : previous?.editorHtml,
+    mode,
+    aspectRatio,
+    imageResolution,
+    imageQuality,
+    resolution,
+    durationSeconds,
+    audioEnabled,
+    selectedStylePresetId,
+    scriptType,
+    referenceIntent,
+    audioType,
+    selectedVoice,
+    sfxLoop,
+    sfxDurationAuto,
+    sfxDurationSeconds,
+    sfxPromptInfluence,
+  };
+}
 
 const PERSISTABLE_TAB_PREFIXES = [
   "composer:",
@@ -269,6 +449,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "admin:",
   "billing:",
   "create:",
+  "post:",
   "videoEdit:",
   "edit:",
 ];
@@ -643,7 +824,6 @@ export function StudioShell({
   const createThread = useMutation(api.generation.createThread);
   const switchThreadFolder = useMutation(api.generation.switchThreadFolder);
   const updateAccountDetails = useMutation(api.users.updateAccountDetails);
-  const shareAssetToProfile = useMutation(api.profiles.shareAsset);
   const unshareAssetFromProfile = useMutation(api.profiles.unshareAsset);
   const updateMyProfile = useMutation(api.profiles.updateMine);
   const seedStylePresets = useMutation(api.stylePresets.adminSeedDefaults);
@@ -654,6 +834,10 @@ export function StudioShell({
   const generateElementSheet = useAction(api.elementActions.generateSheet);
   const submitAssistedTurn = useAction(api.guidedVideoActions.submitAssistedTurn);
   const approveAndGenerate = useAction(api.guidedVideoActions.approveAndGenerate);
+  const cancelAssistanceTurn = useMutation(api.guidedVideo.cancelAssistanceTurn);
+  const truncateAssistanceEventsAfterPrompt = useMutation(
+    api.guidedVideo.truncateAssistanceEventsAfterPrompt,
+  );
   const ensureGuidedBrief = useMutation(api.guidedVideo.ensureBrief);
   const patchBriefProduction = useMutation(api.guidedVideo.patchBriefProduction);
   const setThreadAssistance = useMutation(api.generation.setThreadAssistance);
@@ -661,6 +845,8 @@ export function StudioShell({
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
+  const folderSyncTimerRef = useRef(null);
+  const lastFolderSyncKeyRef = useRef("");
 
   const [activeFolderId, setActiveFolderId] = useState(
     () => readPersistedTabSession().activeFolderId,
@@ -675,14 +861,24 @@ export function StudioShell({
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [attachments, setAttachments] = useState([]);
-  const [mode, setMode] = useState("image");
+  const composerContextsRef = useRef(
+    typeof window !== "undefined" ? readPersistedComposerContexts() : {},
+  );
+  const composerPersistTimerRef = useRef(0);
+  const initialComposerKey = composerContextKeyForTab(readPersistedTabSession().activeTab);
+  const initialComposerCtx = composerContextsRef.current[initialComposerKey] ?? {};
+  const [draft, setDraft] = useState(() => initialComposerCtx.draft ?? "");
+  const [attachments, setAttachments] = useState(() => initialComposerCtx.attachments ?? []);
+  const [mode, setMode] = useState(() => initialComposerCtx.mode ?? "image");
   const pendingModeSwitchRef = useRef(null);
   const [videoType, setVideoType] = useState("hypermotion_ad");
   const [assistanceEnabled, setAssistanceEnabled] = useState(true);
   const [assistBusy, setAssistBusy] = useState(false);
   const [assistApproveBusy, setAssistApproveBusy] = useState(false);
+  const activeAssistClientTurnIdRef = useRef(null);
+  const cancelledAssistTurnIdsRef = useRef(new Set());
+  const assistRestoreRef = useRef(null);
+  const [editingPromptEventId, setEditingPromptEventId] = useState(null);
 
   useEffect(() => {
     if (mode === "image" || mode === "video" || mode === "script") {
@@ -716,17 +912,29 @@ export function StudioShell({
     });
   }, [openTabs, activeTab, activeFolderId, navTrail, tabEntrySnapshots]);
 
-  const [aspectRatio, setAspectRatio] = useState("16:9");
-  const [imageResolution, setImageResolution] = useState("2K");
-  const [imageQuality, setImageQuality] = useState("medium");
-  const [resolution, setResolution] = useState("1280x720");
-  const [durationSeconds, setDurationSeconds] = useState("4");
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(() => initialComposerCtx.aspectRatio ?? "16:9");
+  const [imageResolution, setImageResolution] = useState(
+    () => initialComposerCtx.imageResolution ?? "2K",
+  );
+  const [imageQuality, setImageQuality] = useState(
+    () => initialComposerCtx.imageQuality ?? "medium",
+  );
+  const [resolution, setResolution] = useState(
+    () => initialComposerCtx.resolution ?? "1280x720",
+  );
+  const [durationSeconds, setDurationSeconds] = useState(
+    () => initialComposerCtx.durationSeconds ?? "4",
+  );
+  const [audioEnabled, setAudioEnabled] = useState(
+    () => initialComposerCtx.audioEnabled ?? false,
+  );
   const [elementType, setElementType] = useState("character");
   useEffect(() => {
     if (elementType === "style_sheet") setElementType("character");
   }, [elementType]);
-  const [selectedStylePresetId, setSelectedStylePresetId] = useState(null);
+  const [selectedStylePresetId, setSelectedStylePresetId] = useState(
+    () => initialComposerCtx.selectedStylePresetId ?? null,
+  );
   const [composerStyleMode, setComposerStyleMode] = useState(() => {
     if (typeof window === "undefined") return "direct";
     return window.localStorage.getItem(COMPOSER_STYLE_MODE_KEY) === "styled" ? "styled" : "direct";
@@ -735,7 +943,9 @@ export function StudioShell({
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(ACTIVE_STYLE_SHEET_KEY) || null;
   });
-  const [scriptType, setScriptType] = useState("production");
+  const [scriptType, setScriptType] = useState(
+    () => initialComposerCtx.scriptType ?? "production",
+  );
   useEffect(() => {
     if (
       scriptType === "style_guide" ||
@@ -745,15 +955,25 @@ export function StudioShell({
       setScriptType("production");
     }
   }, [scriptType]);
-  const [audioType, setAudioType] = useState("voiceover");
-  const [selectedVoice, setSelectedVoice] = useState(null);
-  const [sfxLoop, setSfxLoop] = useState(false);
-  const [sfxDurationAuto, setSfxDurationAuto] = useState(true);
-  const [sfxDurationSeconds, setSfxDurationSeconds] = useState(5);
-  const [sfxPromptInfluence, setSfxPromptInfluence] = useState(0.3);
+  const [audioType, setAudioType] = useState(() => initialComposerCtx.audioType ?? "voiceover");
+  const [selectedVoice, setSelectedVoice] = useState(
+    () => initialComposerCtx.selectedVoice ?? null,
+  );
+  const [sfxLoop, setSfxLoop] = useState(() => initialComposerCtx.sfxLoop ?? false);
+  const [sfxDurationAuto, setSfxDurationAuto] = useState(
+    () => initialComposerCtx.sfxDurationAuto ?? true,
+  );
+  const [sfxDurationSeconds, setSfxDurationSeconds] = useState(
+    () => initialComposerCtx.sfxDurationSeconds ?? 5,
+  );
+  const [sfxPromptInfluence, setSfxPromptInfluence] = useState(
+    () => initialComposerCtx.sfxPromptInfluence ?? 0.3,
+  );
   /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
   const skipPromptEnhancement = composerStyleMode === "direct";
-  const [referenceIntent, setReferenceIntent] = useState("auto");
+  const [referenceIntent, setReferenceIntent] = useState(
+    () => initialComposerCtx.referenceIntent ?? "auto",
+  );
   const [flowPending, setFlowPending] = useState(false);
 
   useEffect(() => {
@@ -761,6 +981,15 @@ export function StudioShell({
       setAssistanceEnabled(false);
     }
   }, [mode, assistanceEnabled]);
+  /**
+   * Accumulated chat events per thread (live tail + loaded-earlier pages).
+   * Prevents the newest-N live window from dropping older turns as new messages arrive.
+   */
+  const [historyByThread, setHistoryByThread] = useState({});
+  const [historyHasMoreByThread, setHistoryHasMoreByThread] = useState({});
+  /** Threads where the user already fetched an earlier page (hasMore from that page wins). */
+  const [earlierLoadedByThread, setEarlierLoadedByThread] = useState({});
+  const [loadingEarlierChat, setLoadingEarlierChat] = useState(false);
   /** Optimistic prompt + loader bubbles keyed by threadId until Convex events catch up. */
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -787,7 +1016,7 @@ export function StudioShell({
   const composerUploadInputRef = useRef(null);
   const shellRef = useRef(null);
   const editorRef = useRef(null);
-  const composerKeyRef = useRef(COMPOSER_TAB);
+  const composerKeyRef = useRef(initialComposerKey);
   const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
   const lastChatTabRef = useRef(
@@ -796,7 +1025,6 @@ export function StudioShell({
       return tab.startsWith("composer:") || tab.startsWith("thread:") ? tab : COMPOSER_TAB;
     })(),
   );
-  const composerContextsRef = useRef({});
   const folderByIdRef = useRef(new Map());
   const currentEntriesCacheRef = useRef(new Map());
   const lastRootEntriesRef = useRef(null);
@@ -1119,12 +1347,22 @@ export function StudioShell({
   const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
-  const events = useQuery(
+  // Do not gate on listThreads — that capped list can omit older threads and
+  // left chats blank (events skipped → empty logo) when opened from History
+  // or still open across devices.
+  const liveEventsPage = useQuery(
     api.generation.listEvents,
-    hasCurrentUser && activeThreadId && threads?.some((t) => t._id === activeThreadId)
-      ? { threadId: activeThreadId, expiresUnix: assetUrlExpiresUnix, limit: 80 }
+    hasCurrentUser && activeThreadId
+      ? {
+          threadId: activeThreadId,
+          expiresUnix: assetUrlExpiresUnix,
+          limit: CHAT_LIVE_EVENT_LIMIT,
+          signPlayableUrls: true,
+        }
       : "skip",
   );
+  const liveEvents = liveEventsPage?.events;
+  const eventsLoading = Boolean(activeThreadId && liveEventsPage === undefined);
   const assistanceApprovals = useQuery(
     api.assistanceApprovals.listForThread,
     hasCurrentUser && activeThreadId && assistanceEnabled
@@ -1151,21 +1389,135 @@ export function StudioShell({
       ? { briefId: activeGuidedBrief._id }
       : "skip",
   );
+  // Merge every live page into session history so a sliding newest-N window
+  // never erases turns already shown (or loaded earlier).
+  useEffect(() => {
+    if (!activeThreadId || !liveEvents?.length) return;
+    setHistoryByThread((prev) => {
+      const existing = prev[activeThreadId] ?? [];
+      const merged = mergeThreadEventLists(existing, liveEvents);
+      if (sameThreadEventIds(merged, existing)) return prev;
+      return { ...prev, [activeThreadId]: merged };
+    });
+  }, [activeThreadId, liveEvents]);
+
+  // Always show the live newest-N tail even before history state catches up —
+  // never flash an empty chat (with only "Load earlier") when the live page has events.
+  const events = useMemo(() => {
+    if (!activeThreadId) return [];
+    return mergeThreadEventLists(
+      historyByThread[activeThreadId] ?? [],
+      liveEvents ?? [],
+    );
+  }, [activeThreadId, historyByThread, liveEvents]);
+
+  const chatHasMoreEarlier = Boolean(
+    activeThreadId &&
+      (earlierLoadedByThread[activeThreadId]
+        ? historyHasMoreByThread[activeThreadId]
+        : liveEventsPage?.hasMore),
+  );
+
   const chatEvents = useMemo(
-    () => mergeOptimisticThreadEvents(events ?? [], optimisticByThread[activeThreadId] ?? []),
+    () => mergeOptimisticThreadEvents(events, optimisticByThread[activeThreadId] ?? []),
     [activeThreadId, events, optimisticByThread],
   );
 
+  const hasActiveGenerationJob = useMemo(
+    () =>
+      chatEvents.some(
+        (event) =>
+          event.kind === "stage" &&
+          GENERATION_PROGRESS_STAGES.has(event.stage) &&
+          !event.optimistic,
+      ),
+    [chatEvents],
+  );
+
+  const latestEditablePrompt = useMemo(() => {
+    if (assistBusy || hasActiveGenerationJob) return null;
+    const prompts = chatEvents.filter(
+      (event) =>
+        event.kind === "prompt" &&
+        !event.optimistic &&
+        !event.generationJobId &&
+        event._id &&
+        !String(event._id).startsWith("opt-"),
+    );
+    const latest = prompts[prompts.length - 1];
+    if (!latest) return null;
+    const later = chatEvents.filter(
+      (event) => (event.order ?? event.createdAt ?? 0) > (latest.order ?? latest.createdAt ?? 0),
+    );
+    const blocked = later.some(
+      (event) =>
+        event.kind === "result" ||
+        (event.kind === "stage" &&
+          (GENERATION_PROGRESS_STAGES.has(event.stage) || event.stage === "done")),
+    );
+    if (blocked) return null;
+    return latest;
+  }, [assistBusy, chatEvents, hasActiveGenerationJob]);
+
+  async function loadEarlierChatEvents() {
+    if (!activeThreadId || !hasCurrentUser || loadingEarlierChat) return;
+    const oldestOrder = events[0]?.order;
+    if (oldestOrder == null) return;
+    setLoadingEarlierChat(true);
+    try {
+      const page = await convex.query(api.generation.listEvents, {
+        threadId: activeThreadId,
+        beforeOrder: oldestOrder,
+        limit: CHAT_EARLIER_EVENT_LIMIT,
+        expiresUnix: assetUrlExpiresUnix,
+        signPlayableUrls: false,
+      });
+      const incoming = page.events ?? [];
+      setHistoryByThread((prev) => ({
+        ...prev,
+        [activeThreadId]: mergeThreadEventLists(incoming, prev[activeThreadId] ?? []),
+      }));
+      setEarlierLoadedByThread((prev) => ({ ...prev, [activeThreadId]: true }));
+      // If the page was empty but the server says more exists, still keep the
+      // button — next click uses the (possibly unchanged) oldest order after a
+      // refill; hasMore false only when the server exhausted chat history.
+      setHistoryHasMoreByThread((prev) => ({
+        ...prev,
+        [activeThreadId]: Boolean(page.hasMore),
+      }));
+    } catch (error) {
+      console.error("Failed to load earlier chat history", error);
+    } finally {
+      setLoadingEarlierChat(false);
+    }
+  }
+
   // Keep the open chat's save folder in sync with the explorer so generations
-  // land in the folder the user is currently viewing.
+  // land in the folder the user is currently viewing. Debounced + deduped so
+  // multi-tab / reactive thread updates cannot thrash folder_switched events.
   useEffect(() => {
     if (!hasCurrentUser || !activeThreadId || !activeFolder?._id || isTrashView) return;
     const thread = threads?.find((item) => item._id === activeThreadId);
     if (!thread || thread.linkedFolderId === activeFolder._id) return;
-    void switchThreadFolder({
-      threadId: activeThreadId,
-      folderId: activeFolder._id,
-    });
+    const syncKey = `${activeThreadId}:${activeFolder._id}`;
+    if (lastFolderSyncKeyRef.current === syncKey) return;
+    if (folderSyncTimerRef.current) {
+      clearTimeout(folderSyncTimerRef.current);
+    }
+    folderSyncTimerRef.current = setTimeout(() => {
+      folderSyncTimerRef.current = null;
+      lastFolderSyncKeyRef.current = syncKey;
+      void switchThreadFolder({
+        threadId: activeThreadId,
+        folderId: activeFolder._id,
+      });
+    }, 600);
+    return () => {
+      if (folderSyncTimerRef.current) {
+        clearTimeout(folderSyncTimerRef.current);
+        folderSyncTimerRef.current = null;
+      }
+    };
   }, [
     activeFolder?._id,
     activeThreadId,
@@ -1249,8 +1601,9 @@ export function StudioShell({
       const hasThumb = Boolean(asset.signedThumbnailUrl);
       const hasRead = Boolean(asset.signedReadUrl);
       if (asset.kind === "image" && (hasThumb || hasRead)) continue;
-      if (asset.kind === "video" && hasThumb) continue;
-      if (asset.kind === "video" && hasRead) continue;
+      // Videos with a poster thumb are done; videos with a playable URL can
+      // render a first-frame <video> thumb without another signedReadUrl hop.
+      if (asset.kind === "video" && (hasThumb || hasRead)) continue;
       queries[`asset:${asset._id}`] = {
         query: api.assets.signedReadUrl,
         args: { assetId: asset._id, expiresUnix: assetUrlExpiresUnix },
@@ -1387,6 +1740,32 @@ export function StudioShell({
       ? { assetIds: elementLinkedAssetIds, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
+  // Prompt reference chips store durable /Studio/assets/{id} paths — fetch those
+  // even when the asset lives outside the folder currently open in the explorer.
+  const chatReferencedAssetIds = useMemo(() => {
+    const known = new Set((assets ?? []).map((asset) => asset._id));
+    for (const id of elementLinkedAssetIds) known.add(id);
+    // Never pass element table ids into assets.listByIds (Convex rejects them).
+    const elementIds = new Set((elements ?? []).map((el) => String(el._id)));
+    const missing = [];
+    const seen = new Set();
+    for (const event of chatEvents ?? []) {
+      if (event?.kind !== "prompt" || !event.prompt) continue;
+      for (const assetId of collectStudioAssetIdsFromPrompt(event.prompt)) {
+        if (known.has(assetId) || seen.has(assetId) || elementIds.has(assetId)) continue;
+        seen.add(assetId);
+        missing.push(assetId);
+        if (missing.length >= 80) return missing;
+      }
+    }
+    return missing;
+  }, [assets, chatEvents, elementLinkedAssetIds, elements]);
+  const chatReferencedAssets = useQuery(
+    api.assets.listByIds,
+    hasCurrentUser && chatReferencedAssetIds.length
+      ? { assetIds: chatReferencedAssetIds, expiresUnix: assetUrlExpiresUnix }
+      : "skip",
+  );
   /** Folder assets plus element-linked assets in other folders (sheets, upload refs). */
   const assetLookupPool = useMemo(() => {
     const byId = new Map();
@@ -1396,6 +1775,15 @@ export function StudioShell({
     for (const asset of linkedElementAssets ?? []) {
       if (!byId.has(asset._id)) {
         byId.set(asset._id, asset);
+      }
+    }
+    for (const asset of chatReferencedAssets ?? []) {
+      if (!byId.has(asset._id)) {
+        byId.set(asset._id, {
+          ...asset,
+          signedReadUrl: asset.signedReadUrl,
+          signedThumbnailUrl: asset.signedThumbnailUrl,
+        });
       }
     }
     for (const asset of styleSheetPreviewAssets ?? []) {
@@ -1410,7 +1798,12 @@ export function StudioShell({
       });
     }
     return [...byId.values()];
-  }, [assetsWithPreviewUrls, linkedElementAssets, styleSheetPreviewAssets]);
+  }, [
+    assetsWithPreviewUrls,
+    chatReferencedAssets,
+    linkedElementAssets,
+    styleSheetPreviewAssets,
+  ]);
   const trashedAssetsWithPreviewUrls = useMemo(
     () =>
       trashedAssets?.map((asset) => {
@@ -1643,42 +2036,14 @@ export function StudioShell({
     ) {
       return;
     }
-    const synced = activeGuidedBriefAttachments
-      .map((attachment) => {
-        if (attachment.assetId) {
-          const asset = assetLookupPool.find(
-            (item) => item._id === attachment.assetId,
-          );
-          return asset ? entryToAttachment(assetToEntry(asset)) : null;
-        }
-        if (attachment.elementId) {
-          const element = (elements ?? []).find(
-            (item) => item._id === attachment.elementId,
-          );
-          return element
-            ? entryToAttachment(elementToEntry(element, assetLookupPool))
-            : null;
-        }
-        if (attachment.documentId) {
-          const document = (documents ?? []).find(
-            (item) => item._id === attachment.documentId,
-          );
-          return document
-            ? entryToAttachment(documentToEntry(document))
-            : null;
-        }
-        return null;
-      })
-      .filter(Boolean);
-    setAttachments(synced);
+    // Do not copy brief media into composer attachment state. That left "ghost"
+    // refs on later sends when the editor showed no chips. Attachments only come
+    // from explicit user attach (drag / context menu / chip).
     syncedBriefAttachmentsRevisionRef.current =
       `${activeGuidedBrief._id}:${activeGuidedBrief.revision}`;
   }, [
     activeGuidedBrief,
     activeGuidedBriefAttachments,
-    assetLookupPool,
-    documents,
-    elements,
   ]);
   useEffect(() => {
     if (directPreset && !selectedStylePresetId) {
@@ -1726,9 +2091,7 @@ export function StudioShell({
       : "skip",
   );
 
-  const composerContextKey = activeTab.startsWith("composer:") || activeTab.startsWith("thread:")
-    ? activeTab
-    : COMPOSER_TAB;
+  const composerContextKey = composerContextKeyForTab(activeTab);
 
   useEffect(() => {
     if (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) {
@@ -1736,13 +2099,17 @@ export function StudioShell({
     }
   }, [activeTab]);
 
+  // Keep the active chat's composer snapshot hot while typing / attaching.
+  // Composer unmounts when leaving chat tabs, so we cannot rely on reading the
+  // editor DOM during the tab-switch effect.
   useEffect(() => {
-    const prevKey = composerKeyRef.current;
-    const editor = editorRef.current;
-    composerContextsRef.current[prevKey] = {
+    if (!isComposerContextTabKey(activeTab)) return;
+    const key = activeTab;
+    const editorHtml = editorRef.current?.innerHTML;
+    composerContextsRef.current[key] = snapshotComposerContextFields({
       draft,
       attachments,
-      editorHtml: editor?.innerHTML || composerContextsRef.current[prevKey]?.editorHtml,
+      editorHtml,
       mode,
       aspectRatio,
       imageResolution,
@@ -1759,36 +2126,107 @@ export function StudioShell({
       sfxDurationAuto,
       sfxDurationSeconds,
       sfxPromptInfluence,
-    };
-    const next = composerContextsRef.current[composerContextKey];
-    setDraft(next?.draft ?? "");
-    setAttachments(next?.attachments ?? []);
-    setMode(next?.mode ?? "image");
-    setAspectRatio(next?.aspectRatio ?? "16:9");
-    setImageResolution(next?.imageResolution ?? "2K");
-    setImageQuality(next?.imageQuality ?? "medium");
-    setResolution(next?.resolution ?? "1280x720");
-    setDurationSeconds(next?.durationSeconds ?? "4");
-    setAudioEnabled(next?.audioEnabled ?? false);
-    setSelectedStylePresetId(next?.selectedStylePresetId ?? null);
-    setScriptType(next?.scriptType ?? "production");
-    setReferenceIntent(next?.referenceIntent ?? "auto");
-    setAudioType(next?.audioType ?? "voiceover");
-    setSelectedVoice(next?.selectedVoice ?? null);
-    setSfxLoop(next?.sfxLoop ?? false);
-    setSfxDurationAuto(next?.sfxDurationAuto ?? true);
-    setSfxDurationSeconds(next?.sfxDurationSeconds ?? 5);
-    setSfxPromptInfluence(next?.sfxPromptInfluence ?? 0.3);
+      previous: composerContextsRef.current[key],
+    });
+    window.clearTimeout(composerPersistTimerRef.current);
+    composerPersistTimerRef.current = window.setTimeout(() => {
+      writePersistedComposerContexts(composerContextsRef.current);
+    }, 250);
+    return () => window.clearTimeout(composerPersistTimerRef.current);
+  }, [
+    activeTab,
+    draft,
+    attachments,
+    mode,
+    aspectRatio,
+    imageResolution,
+    imageQuality,
+    resolution,
+    durationSeconds,
+    audioEnabled,
+    selectedStylePresetId,
+    scriptType,
+    referenceIntent,
+    audioType,
+    selectedVoice,
+    sfxLoop,
+    sfxDurationAuto,
+    sfxDurationSeconds,
+    sfxPromptInfluence,
+  ]);
+
+  useEffect(() => {
+    const prevKey = composerKeyRef.current;
+    if (prevKey === composerContextKey) {
+      // Same chat tab — remount composer (e.g. mobile files → create) and
+      // re-apply saved HTML once the editor exists again.
+      requestAnimationFrame(() => {
+        const el = editorRef.current;
+        const ctx = composerContextsRef.current[composerContextKey];
+        if (!el || !ctx) return;
+        applyComposerContextToEditor(el, ctx);
+      });
+      return;
+    }
+
+    const liveEditor = editorRef.current;
+    composerContextsRef.current[prevKey] = snapshotComposerContextFields({
+      draft,
+      attachments,
+      editorHtml: liveEditor?.innerHTML,
+      mode,
+      aspectRatio,
+      imageResolution,
+      imageQuality,
+      resolution,
+      durationSeconds,
+      audioEnabled,
+      selectedStylePresetId,
+      scriptType,
+      referenceIntent,
+      audioType,
+      selectedVoice,
+      sfxLoop,
+      sfxDurationAuto,
+      sfxDurationSeconds,
+      sfxPromptInfluence,
+      previous: composerContextsRef.current[prevKey],
+    });
+    writePersistedComposerContexts(composerContextsRef.current);
+
+    const next = composerContextsRef.current[composerContextKey] ?? {};
+    setDraft(next.draft ?? "");
+    setAttachments(Array.isArray(next.attachments) ? next.attachments : []);
+    setMode(next.mode ?? "image");
+    setAspectRatio(next.aspectRatio ?? "16:9");
+    setImageResolution(next.imageResolution ?? "2K");
+    setImageQuality(next.imageQuality ?? "medium");
+    setResolution(next.resolution ?? "1280x720");
+    setDurationSeconds(next.durationSeconds ?? "4");
+    setAudioEnabled(next.audioEnabled ?? false);
+    setSelectedStylePresetId(next.selectedStylePresetId ?? null);
+    setScriptType(next.scriptType ?? "production");
+    setReferenceIntent(next.referenceIntent ?? "auto");
+    setAudioType(next.audioType ?? "voiceover");
+    setSelectedVoice(next.selectedVoice ?? null);
+    setSfxLoop(next.sfxLoop ?? false);
+    setSfxDurationAuto(next.sfxDurationAuto ?? true);
+    setSfxDurationSeconds(next.sfxDurationSeconds ?? 5);
+    setSfxPromptInfluence(next.sfxPromptInfluence ?? 0.3);
     composerKeyRef.current = composerContextKey;
     requestAnimationFrame(() => {
       const el = editorRef.current;
       const ctx = composerContextsRef.current[composerContextKey];
-      if (!el || !ctx?.editorHtml) return;
-      if (el.innerHTML !== ctx.editorHtml) {
-        el.innerHTML = ctx.editorHtml;
-      }
+      if (!el || !ctx) return;
+      applyComposerContextToEditor(el, ctx);
     });
   }, [composerContextKey, mobileSection]);
+
+  useEffect(() => {
+    return () => {
+      writePersistedComposerContexts(composerContextsRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     void ensureDefaults().then((defaults) => {
@@ -2022,7 +2460,9 @@ export function StudioShell({
         myProfile: myPublicProfile,
         currentUser,
         composerAttachments:
-          key === composerContextKey ? attachments : undefined,
+          key === composerContextKey
+            ? attachments
+            : composerContextsRef.current[key]?.attachments,
       }),
     );
     return descriptors.filter(Boolean);
@@ -2420,7 +2860,17 @@ export function StudioShell({
       setHistoryOpen(false);
     }
     setSettingsOpen(true);
-  }, [isMobile, settingsOpen, settingsSection]);
+  }, [
+    isMobile,
+    settingsOpen,
+    settingsSection,
+    setSettingsOpen,
+    setSettingsSection,
+    setOpenTabs,
+    setActiveTab,
+    setMobileAppMenuOpen,
+    setHistoryOpen,
+  ]);
 
   function openAdminTab(tab) {
     if (!isAdminUser) return;
@@ -2542,8 +2992,9 @@ export function StudioShell({
   }, [activeTab]);
 
   function closeTab(key) {
-    if (key.startsWith("composer:")) {
+    if (isComposerContextTabKey(key)) {
       delete composerContextsRef.current[key];
+      writePersistedComposerContexts(composerContextsRef.current);
     }
     setOpenTabs((tabs) => {
       const remaining = tabs.filter((tab) => tab !== key);
@@ -3441,6 +3892,254 @@ export function StudioShell({
     }
   }
 
+  async function handleUpscaleImage(entry) {
+    if (!activeFolder || !entry || assistBusy || flowPending) return;
+    const fullEntry = pathToEntry.get(entry.path) ?? entry;
+    const attachment = entryToAttachment(fullEntry);
+    if (
+      attachment.studioKind !== "asset" ||
+      attachment.kind !== "image" ||
+      !attachment.studioId
+    ) {
+      toast.error("Upscale only works on image assets.");
+      return;
+    }
+
+    const prompt = IMAGE_UPSCALE_PROMPT;
+    const nextAttachments = [attachment];
+    const userPrompt = buildPromptWithAttachments(prompt, nextAttachments);
+    const poolAsset = assetLookupPool?.find(
+      (asset) => asset._id === attachment.studioId || asset.studioId === attachment.studioId,
+    );
+    const nextAspect = aspectRatioFromDimensions(
+      fullEntry.width ?? poolAsset?.width,
+      fullEntry.height ?? poolAsset?.height,
+    );
+
+    setMode("image");
+    setImageQuality("high");
+    setImageResolution("4K");
+    if (nextAspect) setAspectRatio(nextAspect);
+    handleSelectDirect();
+    if (isMobile) setMobileSection("composer");
+
+    setFlowPending(true);
+    try {
+      if (presets === undefined) {
+        throw new Error("Style options are still loading. Try again in a moment.");
+      }
+      const preset = directPreset;
+      if (!preset) {
+        throw new Error("Direct generation preset is not ready yet.");
+      }
+      if (entitlement && !entitlement.canGenerate) {
+        openSettingsTab("billing");
+        throw new Error(entitlement.reason ?? "Content generation is not available right now.");
+      }
+
+      let referenceUrl = fullQualityUrl(
+        fullEntry.mediaUrl,
+        attachment.mediaUrl,
+        poolAsset?.signedReadUrl,
+        poolAsset?.mediaUrl,
+      );
+      if (!referenceUrl || !/^https?:\/\//i.test(referenceUrl)) {
+        referenceUrl = await convex.query(api.assets.signedReadUrl, {
+          assetId: attachment.studioId,
+          expiresUnix: assetUrlExpiresUnix,
+        });
+      }
+      if (!referenceUrl || !/^https?:\/\//i.test(referenceUrl)) {
+        throw new Error("Could not load this image for upscale.");
+      }
+
+      const reuseThreadId =
+        activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
+          ? activeThreadId
+          : null;
+      let threadId = reuseThreadId;
+      if (!threadId) {
+        threadId = await createThread({
+          folderId: activeFolder._id,
+          title: threadTitleFromPrompt(prompt, nextAttachments, "image"),
+        });
+        const composerTab = activeTab;
+        if (composerTab.startsWith("composer:")) {
+          delete composerContextsRef.current[composerTab];
+          setOpenTabs((tabs) =>
+            tabs.map((tab) => (tab === composerTab ? `thread:${threadId}` : tab)),
+          );
+          setActiveTab(`thread:${threadId}`);
+        } else {
+          openTab(`thread:${threadId}`);
+        }
+      }
+
+      const aspectForRun = nextAspect ?? aspectRatio;
+      const optimistic = createOptimisticGenerationEvents({
+        prompt: userPrompt,
+        mode: "image",
+        aspectRatio: aspectForRun,
+      });
+      setOptimisticByThread((prev) => ({
+        ...prev,
+        [threadId]: [...(prev[threadId] ?? []), ...optimistic.events],
+      }));
+      setDraft("");
+      setAttachments([]);
+      if (editorRef.current) editorRef.current.replaceChildren();
+      const chatKey = `thread:${threadId}`;
+      composerContextsRef.current[chatKey] = {
+        ...(composerContextsRef.current[chatKey] ?? {}),
+        draft: "",
+        attachments: [],
+        editorHtml: "",
+        mode: "image",
+        imageQuality: "high",
+        imageResolution: "4K",
+        aspectRatio: aspectForRun,
+      };
+      setFlowPending(false);
+
+      const flowArgs = {
+        threadId,
+        mode: "image",
+        tier: "image",
+        stylePresetId: preset._id,
+        userPrompt,
+        aspectRatio: aspectForRun,
+        resolution: "4K",
+        quality: "high",
+        folderId: activeFolder._id,
+        referenceUrls: [referenceUrl],
+        skipPromptEnhancement: true,
+        referenceIntent: "match_reference",
+        hasRawImageReference: true,
+        hasElementReference: false,
+      };
+      void runFlow(flowArgs).catch((error) => {
+        setOptimisticByThread((prev) => {
+          const current = prev[threadId] ?? [];
+          const next = current.filter((event) => event.clientId !== optimistic.clientId);
+          if (!next.length) {
+            const { [threadId]: _drop, ...rest } = prev;
+            return rest;
+          }
+          return { ...prev, [threadId]: next };
+        });
+        console.error("Upscale image failed", error);
+        toast.error(friendlyConvexError(error, "Could not start upscale."));
+      });
+
+      // Leave composer at high/4K with the source image attachable for follow-ups.
+      composerContextsRef.current[chatKey] = {
+        ...(composerContextsRef.current[chatKey] ?? {}),
+        draft: "",
+        attachments: nextAttachments,
+        editorHtml: "",
+        mode: "image",
+        imageQuality: "high",
+        imageResolution: "4K",
+        aspectRatio: aspectForRun,
+      };
+      appendAttachmentChipToComposerContext(composerContextsRef, chatKey, attachment);
+      setAttachments(nextAttachments);
+      const liveEditor = editorRef.current;
+      if (liveEditor && composerContextKeyForTab(activeTab) === chatKey) {
+        applyComposerContextToEditor(liveEditor, composerContextsRef.current[chatKey]);
+      }
+    } catch (error) {
+      console.error("Upscale image failed", error);
+      toast.error(friendlyConvexError(error, "Could not start upscale."));
+    } finally {
+      setFlowPending(false);
+    }
+  }
+
+  async function handleCancelAssistanceTurn() {
+    const clientTurnId = activeAssistClientTurnIdRef.current;
+    const restore = assistRestoreRef.current;
+    if (!clientTurnId || !activeFolder) return;
+    if (hasActiveGenerationJob) {
+      toast.message("Can't cancel after generation has started.");
+      return;
+    }
+    cancelledAssistTurnIdsRef.current.add(clientTurnId);
+    activeAssistClientTurnIdRef.current = null;
+    setAssistBusy(false);
+    setFlowPending(false);
+
+    const threadId = restore?.threadId ?? activeThreadId;
+    if (threadId) {
+      setOptimisticByThread((prev) => {
+        const current = prev[threadId] ?? [];
+        const next = current.filter((event) => event.clientId !== restore?.optimisticClientId);
+        if (!next.length) {
+          const { [threadId]: _drop, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [threadId]: next };
+      });
+    }
+
+    if (restore) {
+      setDraft(restore.draft);
+      setAttachments(restore.attachments);
+      const chatKey = `thread:${restore.threadId}`;
+      composerContextsRef.current[chatKey] = {
+        ...(composerContextsRef.current[chatKey] ?? {}),
+        draft: restore.draft,
+        attachments: restore.attachments,
+        editorHtml: restore.editorHtml,
+      };
+      requestAnimationFrame(() => {
+        const el = editorRef.current;
+        if (!el) return;
+        applyComposerContextToEditor(el, {
+          draft: restore.draft,
+          attachments: restore.attachments,
+          editorHtml: restore.editorHtml,
+        });
+      });
+    }
+
+    try {
+      const result = await cancelAssistanceTurn({
+        threadId: restore?.threadId ?? activeThreadId,
+        clientTurnId,
+      });
+      if (!result.cancelled && result.reason === "generation_started") {
+        toast.message("Can't cancel after generation has started.");
+      }
+    } catch (error) {
+      console.error("Cancel assistance turn failed", error);
+      toast.error(friendlyConvexError(error, "Could not cancel."));
+    }
+  }
+
+  function handleEditLastPrompt(event) {
+    if (!event?.prompt || !latestEditablePrompt || event._id !== latestEditablePrompt._id) {
+      return;
+    }
+    const rawPrompt = String(event.prompt ?? "");
+    const body = stripPromptReferencesSection(rawPrompt);
+    const restoredAttachments = attachmentsFromPromptReferences(
+      rawPrompt,
+      assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? []),
+      elements ?? [],
+    );
+    setEditingPromptEventId(event._id);
+    setDraft(body);
+    setAttachments(restoredAttachments);
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      applyComposerContextToEditor(el, { draft: body, attachments: restoredAttachments });
+      el.focus();
+    });
+    if (isMobile) setMobileSection("composer");
+  }
+
   async function handleSubmit() {
     if (!activeFolder) return;
     const assistanceOn =
@@ -3467,6 +4166,7 @@ export function StudioShell({
         const userPrompt = buildPromptWithAttachments(draft, attachments);
         const briefAttachments = composerAttachmentsForBrief();
         const clientTurnId = newClientTurnId();
+        const editingEventId = editingPromptEventId;
         let threadId = reuseThreadId;
         if (!threadId) {
           threadId = await createThread({
@@ -3486,6 +4186,13 @@ export function StudioShell({
           } else {
             openTab(`thread:${threadId}`);
           }
+        }
+        if (editingEventId) {
+          await truncateAssistanceEventsAfterPrompt({
+            threadId,
+            promptEventId: editingEventId,
+          });
+          setEditingPromptEventId(null);
         }
         // Show the user message + thinking loader immediately; Convex events replace them.
         const optimistic = createOptimisticAssistanceEvents({
@@ -3507,8 +4214,17 @@ export function StudioShell({
         };
         setFlowPending(false);
         setAssistBusy(true);
+        activeAssistClientTurnIdRef.current = clientTurnId;
+        assistRestoreRef.current = {
+          threadId,
+          clientTurnId,
+          optimisticClientId: optimistic.clientId,
+          draft: capturedDraft,
+          attachments: capturedAttachments,
+          editorHtml: capturedEditorHtml,
+        };
         try {
-          await submitAssistedTurn({
+          const result = await submitAssistedTurn({
             clientTurnId,
             threadId,
             folderId: activeFolder._id,
@@ -3534,6 +4250,13 @@ export function StudioShell({
             },
             attachments: briefAttachments,
           });
+          if (
+            cancelledAssistTurnIdsRef.current.has(clientTurnId) ||
+            result?.cancelled
+          ) {
+            cancelledAssistTurnIdsRef.current.delete(clientTurnId);
+            return;
+          }
           setOptimisticByThread((prev) => {
             const current = prev[threadId] ?? [];
             const next = current.filter(
@@ -3546,6 +4269,10 @@ export function StudioShell({
             return { ...prev, [threadId]: next };
           });
         } catch (error) {
+          if (cancelledAssistTurnIdsRef.current.has(clientTurnId)) {
+            cancelledAssistTurnIdsRef.current.delete(clientTurnId);
+            return;
+          }
           setOptimisticByThread((prev) => {
             const current = prev[threadId] ?? [];
             const next = current.filter((event) => event.clientId !== optimistic.clientId);
@@ -3568,7 +4295,10 @@ export function StudioShell({
           };
           throw error;
         } finally {
-          setAssistBusy(false);
+          if (activeAssistClientTurnIdRef.current === clientTurnId) {
+            activeAssistClientTurnIdRef.current = null;
+            setAssistBusy(false);
+          }
         }
         return;
       }
@@ -4791,7 +5521,7 @@ export function StudioShell({
         }
         .studio-polish aside,
         .studio-polish .studio-settings-sidebar {
-          background: var(--mos-sidebar) !important;
+          background: var(--mos-bg) !important;
         }
         .studio-polish :where(.border-cursor-border-soft) {
           border-color: var(--color-cursor-border-soft) !important;
@@ -4935,31 +5665,49 @@ export function StudioShell({
         }
         .studio-profile-menu-wrap {
           position: relative;
+          display: inline-flex;
+          align-items: center;
+          align-self: center;
           flex: 0 0 auto;
+          height: 24px;
         }
         .studio-profile-menu-trigger,
         .studio-mobile-nav-tools .studio-profile-menu-trigger,
         .cursor-workspace-tools .studio-profile-menu-trigger {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          align-self: center !important;
           padding: 0 !important;
           overflow: hidden;
           border: 0 !important;
           box-shadow: none !important;
           background: transparent !important;
-          width: 22px !important;
-          min-width: 22px !important;
-          height: 22px !important;
-          min-height: 22px !important;
+          /* Match sibling .studio-settings-trigger icon buttons (24px). */
+          width: 24px !important;
+          min-width: 24px !important;
+          height: 24px !important;
+          min-height: 24px !important;
+          line-height: 0 !important;
         }
         .studio-mobile-nav-tools .studio-profile-menu-trigger,
         .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-profile-menu-trigger,
         .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-profile-menu-trigger {
-          width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-          min-width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-          height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-          min-height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+          width: var(--studio-mobile-chrome-control, 30px) !important;
+          min-width: var(--studio-mobile-chrome-control, 30px) !important;
+          height: var(--studio-mobile-chrome-control, 30px) !important;
+          min-height: var(--studio-mobile-chrome-control, 30px) !important;
+        }
+        .studio-polish.is-studio-mobile .studio-profile-menu-wrap,
+        .studio-mobile-nav-tools .studio-profile-menu-wrap {
+          height: var(--studio-mobile-chrome-control, 30px);
         }
         .studio-profile-menu-avatar {
           /* Glass border from StudioProfileAvatar; fills the trigger pill. */
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+        }
+        [data-appearance="light"] .studio-profile-menu-avatar {
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75) !important;
         }
         .studio-profile-menu-popover {
           position: absolute;
@@ -5213,10 +5961,11 @@ export function StudioShell({
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-profile-menu-trigger,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-profile-menu-trigger {
-            width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-            min-width: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-            height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
-            min-height: calc(var(--studio-mobile-chrome-control, 30px) - 2px) !important;
+            width: var(--studio-mobile-chrome-control, 30px) !important;
+            min-width: var(--studio-mobile-chrome-control, 30px) !important;
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
+            align-self: center !important;
           }
           .studio-polish.is-studio-mobile .cursor-workspace-tools .studio-settings-pill svg,
           .studio-polish.is-studio-mobile .studio-mobile-nav-tools .studio-settings-pill svg,
@@ -5571,6 +6320,14 @@ export function StudioShell({
           -webkit-backdrop-filter: saturate(140%) blur(10px);
           box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
         }
+        .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-files-mobile-sheet .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+          background: var(--desk-transparency-grid) !important;
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+        }
         .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
           background: color-mix(in srgb, var(--mos-text-bright) 5%, transparent) !important;
@@ -5768,6 +6525,12 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab.is-active {
           overflow: hidden;
         }
+        .studio-polish .cursor-unified-tab:focus,
+        .studio-polish .cursor-unified-tab:focus-visible,
+        .studio-polish .cursor-unified-tab:focus-within {
+          outline: none !important;
+          box-shadow: none !important;
+        }
         .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active),
         .studio-polish .cursor-unified-tab.is-active {
           border: 1px solid transparent !important;
@@ -5886,18 +6649,36 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab.is-entering {
           animation: none;
         }
-        .studio-polish .cursor-unified-tab-ghost {
-          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--studio-mobile-chrome-border)) !important;
+        /* Ghost portals to body — only use :root tokens (studio-polish vars are undefined there). */
+        .cursor-unified-tab-ghost {
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, rgba(255, 255, 255, 0.16)) !important;
           border-radius: 999px !important;
-          background: color-mix(in srgb, var(--cursor-accent) 12%, var(--studio-mobile-chrome-glass)) !important;
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 12%,
+            color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent)
+          ) !important;
+          backdrop-filter: saturate(160%) blur(14px) !important;
+          -webkit-backdrop-filter: saturate(160%) blur(14px) !important;
           box-shadow: none !important;
           overflow: hidden;
+          opacity: 1 !important;
+          color: var(--mos-text-bright, var(--color-cursor-text, #fff)) !important;
         }
-        .studio-polish .cursor-unified-tab-ghost.is-first-drag {
+        [data-appearance="light"] .cursor-unified-tab-ghost {
+          border-color: color-mix(in srgb, var(--cursor-accent) 24%, rgba(15, 23, 42, 0.12)) !important;
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 10%,
+            color-mix(in srgb, #ffffff 82%, transparent)
+          ) !important;
+          color: var(--mos-text, var(--color-cursor-text, #1c1c1e)) !important;
+        }
+        .cursor-unified-tab-ghost.is-first-drag {
           border-radius: 999px !important;
         }
-        .studio-polish .cursor-unified-tab-ghost svg {
-          color: var(--cursor-accent-hover) !important;
+        .cursor-unified-tab-ghost svg {
+          color: var(--cursor-accent-hover, var(--cursor-accent)) !important;
         }
         .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
           border-color: color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border));
@@ -5980,7 +6761,8 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish aside,
         [data-appearance="light"] .studio-polish .studio-settings-sidebar,
-        [data-appearance="light"] .studio-polish .cursor-explorer-panel {
+        [data-appearance="light"] .studio-polish .cursor-explorer-panel,
+        [data-appearance="light"] .studio-polish .cursor-explorer-body {
           background: #ffffff !important;
           border-right-color: var(--color-cursor-border-soft) !important;
         }
@@ -8519,6 +9301,10 @@ export function StudioShell({
           overflow: hidden;
           transition: background-color var(--studio-motion-fast) var(--studio-motion-ease);
         }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+          background: var(--desk-transparency-grid) !important;
+        }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
@@ -8648,6 +9434,18 @@ export function StudioShell({
           background: var(--studio-grid-tile-hover) !important;
           box-shadow: none !important;
         }
+        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+          background: var(--desk-transparency-grid) !important;
+        }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
@@ -8672,6 +9470,13 @@ export function StudioShell({
           background: var(--studio-grid-tile-selected) !important;
           box-shadow: none;
         }
+        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+          background: var(--desk-transparency-grid) !important;
+          box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent);
+        }
         .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-label,
         .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-label,
@@ -8683,6 +9488,12 @@ export function StudioShell({
         .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual {
           box-shadow: none !important;
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+          box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent) !important;
         }
         .studio-polish .desk-file-list-row[aria-selected="true"],
         .studio-polish .desk-file-list-row.is-selected {
@@ -8712,17 +9523,17 @@ export function StudioShell({
           align-items: center;
           gap: 4px;
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-sidebar);
+          background: var(--mos-bg);
         }
         .studio-polish .cursor-explorer-body {
-          background: var(--mos-sidebar);
+          background: var(--mos-bg);
         }
         .studio-polish .cursor-panel-search {
           min-height: 32px;
           height: 32px;
           padding: 0 8px 0 10px;
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-sidebar);
+          background: var(--mos-bg);
         }
         .studio-polish .cursor-panel-search > .icon-inline {
           display: inline-flex;
@@ -12032,7 +12843,8 @@ export function StudioShell({
         }
         .studio-asset-preview .desk-image-viewer-img {
           border-radius: 0;
-          box-shadow: 0 18px 55px color-mix(in srgb, #000 28%, transparent);
+          box-shadow: none;
+          background: var(--desk-transparency-grid);
         }
         .studio-asset-player {
           flex: 1;
@@ -13735,6 +14547,38 @@ export function StudioShell({
           align-items: stretch;
           gap: 12px;
         }
+        .studio-chat-load-earlier {
+          display: flex;
+          justify-content: center;
+          flex: 0 0 auto;
+          padding: 2px 0 6px;
+        }
+        .studio-chat-load-earlier-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+          background: color-mix(in srgb, Canvas 80%, transparent);
+          color: inherit;
+          opacity: 0.72;
+          border-radius: 999px;
+          padding: 6px 12px;
+          font-size: 12px;
+          line-height: 1.2;
+          cursor: pointer;
+        }
+        .studio-chat-load-earlier-btn:hover:not(:disabled) {
+          opacity: 1;
+        }
+        .studio-chat-load-earlier-btn:disabled {
+          opacity: 0.55;
+          cursor: default;
+        }
+        .studio-chat-loading-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
         /* Pin short threads to the bottom without blocking overflow scroll when tall. */
         .studio-chat-stream-inner > :first-child {
           margin-top: auto;
@@ -13789,6 +14633,48 @@ export function StudioShell({
             0 14px 32px color-mix(in srgb, var(--cursor-accent) 22%, transparent),
             inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
           color: #fff;
+        }
+        .studio-chat-user-prompt-wrap {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 6px;
+          width: 100%;
+          max-width: 100%;
+        }
+        .studio-chat-edit-prompt-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          margin: 0;
+          padding: 3px 8px;
+          border-radius: 999px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+          background: color-mix(in srgb, var(--studio-composer-glass-muted, transparent) 70%, transparent);
+          color: var(--color-cursor-text-muted);
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.2;
+          cursor: pointer;
+          opacity: 0.85;
+          transition:
+            opacity var(--studio-motion-fast) var(--studio-motion-ease),
+            color var(--studio-motion-fast) var(--studio-motion-ease),
+            border-color var(--studio-motion-fast) var(--studio-motion-ease),
+            background var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-chat-edit-prompt-btn:hover,
+        .studio-chat-edit-prompt-btn:focus-visible {
+          opacity: 1;
+          color: var(--color-cursor-text-bright);
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          outline: none;
+        }
+        .studio-composer-circle-btn.studio-composer-send-btn.is-stop {
+          width: 30px;
+          min-width: 30px;
+          padding: 0;
         }
         .studio-chat-bubble.is-user .studio-chat-text,
         .studio-chat-bubble.is-user .studio-chat-markdown,
@@ -14036,36 +14922,39 @@ export function StudioShell({
           -webkit-backdrop-filter: var(--studio-gen-glass-blur);
           box-shadow: var(--studio-gen-card-shadow);
         }
-        /* Match finished chat image/video footprint + expected aspect while generating. */
+        /* Match finished chat image/video footprint + expected aspect while generating.
+           Use a definite calc width (no % of fit-content parent) — cyclic % collapsed to 0. */
         .studio-video-progress-card.is-image,
         .studio-video-progress-card.is-video {
-          width: fit-content;
+          width: auto;
           max-width: 100%;
           border-radius: 8px;
+          align-self: flex-start;
         }
         .studio-video-progress-card.is-image .studio-video-progress-frame {
           --gen-aspect-w: 1;
           --gen-aspect-h: 1;
-          width: min(
-            100%,
-            calc(min(42dvh, 320px) * var(--gen-aspect-w) / var(--gen-aspect-h))
-          );
+          box-sizing: border-box;
+          width: calc(min(42dvh, 320px) * var(--gen-aspect-w) / var(--gen-aspect-h));
+          max-width: 100%;
+          min-width: min(100%, 120px);
           max-height: min(42dvh, 320px);
           aspect-ratio: var(--gen-aspect-ratio, 1 / 1);
           height: auto;
+          min-height: 120px;
           background: color-mix(in srgb, #000 22%, transparent);
         }
         .studio-video-progress-card.is-video .studio-video-progress-frame {
           --gen-aspect-w: 16;
           --gen-aspect-h: 9;
-          width: min(
-            100%,
-            520px,
-            calc(min(52dvh, 420px) * var(--gen-aspect-w) / var(--gen-aspect-h))
-          );
+          box-sizing: border-box;
+          width: calc(min(52dvh, 420px) * var(--gen-aspect-w) / var(--gen-aspect-h));
+          max-width: min(100%, 520px);
+          min-width: min(100%, 160px);
           max-height: min(52dvh, 420px);
           aspect-ratio: var(--gen-aspect-ratio, 16 / 9);
           height: auto;
+          min-height: 100px;
         }
         .studio-chat-audio-progress-wrap {
           width: fit-content;
@@ -14114,7 +15003,56 @@ export function StudioShell({
         }
         .studio-gen-status-frame.has-media-loader::before,
         .studio-gen-status-frame.has-media-loader::after {
-          display: none;
+          display: none !important;
+        }
+        .studio-gen-ghost-loader,
+        .studio-gen-status-frame.has-media-loader > .media-load-frame-wave {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          display: grid;
+          place-items: center;
+          pointer-events: none;
+        }
+        .studio-gen-status-card.is-ghost.is-image .studio-video-progress-frame,
+        .studio-gen-status-card.is-ghost.is-video .studio-video-progress-frame {
+          background:
+            linear-gradient(
+              160deg,
+              color-mix(in srgb, var(--color-cursor-surface, #121212) 88%, #000) 0%,
+              color-mix(in srgb, #000 55%, var(--color-cursor-surface, #121212)) 100%
+            );
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 80%, transparent);
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-ghost.is-image .studio-video-progress-frame,
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-ghost.is-video .studio-video-progress-frame {
+          background:
+            linear-gradient(
+              160deg,
+              color-mix(in srgb, #fff 92%, #0f172a 8%) 0%,
+              color-mix(in srgb, #e8eef7 70%, #cbd5e1 30%) 100%
+            );
+          border-color: color-mix(in srgb, #94a3b8 35%, transparent);
+        }
+        .studio-gen-ghost-caption {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 10px;
+          z-index: 3;
+          margin: 0;
+          padding: 0 10px;
+          text-align: center;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: color-mix(in srgb, #fff 78%, transparent);
+          text-shadow: 0 1px 2px color-mix(in srgb, #000 45%, transparent);
+          pointer-events: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-ghost-caption {
+          color: color-mix(in srgb, #0f172a 72%, transparent);
+          text-shadow: none;
         }
         .studio-dot-grid-wave {
           position: absolute;
@@ -14232,6 +15170,10 @@ export function StudioShell({
         .studio-gen-status-card.is-progress .studio-gen-status-frame::before,
         .studio-gen-status-card.is-progress .studio-gen-status-frame::after {
           display: block;
+        }
+        .studio-gen-status-card.is-progress.is-ghost .studio-gen-status-frame::before,
+        .studio-gen-status-card.is-progress.is-ghost .studio-gen-status-frame::after {
+          display: none !important;
         }
         .studio-gen-status-card:not(.is-progress) .studio-gen-status-frame::before,
         .studio-gen-status-card:not(.is-progress) .studio-gen-status-frame::after {
@@ -14359,10 +15301,46 @@ export function StudioShell({
           -webkit-clip-path: inset(0 round var(--studio-chat-image-radius));
         }
         .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.ratio-image:not(.is-ready) {
-          width: min(100%, 180px) !important;
+          width: min(
+            100%,
+            calc(min(42dvh, 320px) * var(--gen-aspect-w, 1) / var(--gen-aspect-h, 1))
+          ) !important;
           max-height: min(42dvh, 320px) !important;
-          aspect-ratio: 1 / 1 !important;
+          aspect-ratio: var(--media-load-aspect, var(--gen-aspect-ratio, 1 / 1)) !important;
           background: color-mix(in srgb, #000 22%, transparent) !important;
+        }
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.has-custom-aspect:not(.is-ready) {
+          width: min(
+            100%,
+            calc(min(42dvh, 320px) * var(--gen-aspect-w, 1) / var(--gen-aspect-h, 1))
+          ) !important;
+          max-height: min(42dvh, 320px) !important;
+          aspect-ratio: var(--media-load-aspect, 1 / 1) !important;
+        }
+        .studio-chat-result-card.is-video-result .studio-chat-result-media-ghost {
+          --gen-aspect-w: 16;
+          --gen-aspect-h: 9;
+          position: relative;
+          width: min(
+            100%,
+            520px,
+            calc(min(52dvh, 420px) * var(--gen-aspect-w) / var(--gen-aspect-h))
+          );
+          max-height: min(52dvh, 420px);
+          aspect-ratio: var(--gen-aspect-ratio, 16 / 9);
+          border-radius: 8px;
+          overflow: hidden;
+          background: color-mix(in srgb, #000 28%, transparent);
+        }
+        .studio-chat-result-card.is-video-result .studio-chat-result-media-ghost > .media-load-frame-wave {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          display: grid;
+          place-items: center;
+        }
+        .studio-chat-result-card.is-image-result .studio-chat-result-media.media-load-frame.is-ready {
+          background: transparent !important;
         }
         .studio-chat-result-card.is-image-result .media-load-frame-placeholder {
           border-radius: var(--studio-chat-image-radius);
@@ -14374,7 +15352,7 @@ export function StudioShell({
           max-width: 100%;
           max-height: min(42dvh, 320px);
           border-radius: var(--studio-chat-image-radius) !important;
-          background: transparent !important;
+          background: var(--desk-transparency-grid) !important;
           object-fit: contain !important;
         }
         .studio-chat-result-card[draggable="true"] {
@@ -14541,17 +15519,28 @@ export function StudioShell({
           clip-path: none !important;
           -webkit-clip-path: none !important;
         }
+        .studio-chat-result-footer {
+          display: flex;
+          flex-direction: row;
+          align-items: stretch;
+          gap: 2.5px;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          padding: 0 2.5px;
+        }
         .studio-chat-result-gen-video {
           appearance: none;
           -webkit-appearance: none;
           display: flex;
           align-items: center;
           justify-content: center;
-          /* Don't let label min-width widen the stack past the image. */
-          width: 0;
-          min-width: calc(100% - 5px);
-          max-width: calc(100% - 5px);
-          margin: 0 2.5px;
+          flex: 1 1 0;
+          width: auto;
+          min-width: 0;
+          max-width: none;
+          margin: 0;
           box-sizing: border-box;
           min-height: 28px;
           padding: 6px 8px;
@@ -14580,6 +15569,7 @@ export function StudioShell({
           line-height: 1.2;
           white-space: nowrap;
           text-overflow: ellipsis;
+          gap: 5px;
           cursor: pointer;
           transition:
             filter var(--studio-motion-fast) var(--studio-motion-ease),
@@ -14587,6 +15577,11 @@ export function StudioShell({
             box-shadow var(--studio-motion-med) var(--studio-motion-ease),
             background var(--studio-motion-fast) var(--studio-motion-ease),
             border-color var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-chat-result-gen-video svg {
+          flex-shrink: 0;
+          color: currentColor;
+          stroke: currentColor;
         }
         .studio-chat-result-gen-video:hover,
         .studio-chat-result-gen-video:focus-visible {
@@ -15002,6 +15997,10 @@ export function StudioShell({
             assets={assetLookupPool.length ? assetLookupPool : (assetsWithPreviewUrls ?? [])}
             elements={elements ?? []}
             events={chatEvents}
+            eventsLoading={eventsLoading}
+            hasMoreEarlier={chatHasMoreEarlier}
+            loadingEarlier={loadingEarlierChat}
+            onLoadEarlier={loadEarlierChatEvents}
             threads={threads ?? []}
             activeThreadId={activeThreadId}
             assistanceApprovals={assistanceApprovals ?? []}
@@ -15016,6 +16015,37 @@ export function StudioShell({
             onApproveGuidedBrief={async () => {
               if (!activeGuidedBrief || !activeFolder) return;
               setAssistApproveBusy(true);
+              const briefMode = activeGuidedBrief.mode;
+              const briefAspect =
+                activeGuidedBrief.payload?.production?.aspectRatio ??
+                (briefMode === "image" ? "1:1" : aspectRatio);
+              let optimisticClientId = null;
+              if (
+                (briefMode === "image" || briefMode === "video") &&
+                activeThreadId
+              ) {
+                const clientId = `opt-approve-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+                optimisticClientId = clientId;
+                const now = Date.now();
+                setOptimisticByThread((prev) => ({
+                  ...prev,
+                  [activeThreadId]: [
+                    ...(prev[activeThreadId] ?? []),
+                    {
+                      _id: `${clientId}-stage`,
+                      kind: "stage",
+                      stage: "generating",
+                      jobMode: briefMode,
+                      aspectRatio: String(briefAspect || (briefMode === "image" ? "1:1" : "16:9")),
+                      generationJobId: `${clientId}-job`,
+                      optimistic: true,
+                      clientId,
+                      createdAt: now,
+                      order: now,
+                    },
+                  ],
+                }));
+              }
               try {
                 const result = await approveAndGenerate({
                   briefId: activeGuidedBrief._id,
@@ -15027,6 +16057,19 @@ export function StudioShell({
                 if (result.documentId) openTab(`document:${result.documentId}`);
                 if (result.elementId) openTab(`element:${result.elementId}`);
               } catch (error) {
+                if (optimisticClientId && activeThreadId) {
+                  setOptimisticByThread((prev) => {
+                    const current = prev[activeThreadId] ?? [];
+                    const next = current.filter(
+                      (event) => event.clientId !== optimisticClientId,
+                    );
+                    if (!next.length) {
+                      const { [activeThreadId]: _drop, ...rest } = prev;
+                      return rest;
+                    }
+                    return { ...prev, [activeThreadId]: next };
+                  });
+                }
                 console.error("Approval failed", error);
                 throw new Error(friendlyConvexError(error, "Could not start generation."));
               } finally {
@@ -15063,6 +16106,8 @@ export function StudioShell({
             creditPriceCents={pricing?.creditPriceCents}
             assistBusy={assistBusy}
             assistApproveBusy={assistApproveBusy}
+            latestEditablePromptId={latestEditablePrompt?._id ?? null}
+            onEditLastPrompt={handleEditLastPrompt}
             onAttach={attachEntry}
             onDuplicate={duplicateEntry}
             onRename={renameEntry}
@@ -15095,6 +16140,8 @@ export function StudioShell({
             onOpenElementCreate={openElementCreateInComposer}
             onOpenEntry={handleEntryOpen}
             onGenerateVideoFromImage={handleGenerateVideoFromImage}
+            onUpscaleImage={handleUpscaleImage}
+            onChatMediaContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
             onCloseTab={closeTab}
             activeFolderId={activeFolder?._id}
             onOpenEditTab={isVideoEditorPreviewEnabled() ? openEditTab : undefined}
@@ -15176,6 +16223,13 @@ export function StudioShell({
             setVideoType={setVideoType}
             guidedVideoTypes={guidedVideoTypes ?? []}
             assistBusy={assistBusy}
+            canCancelAssist={
+              Boolean(assistanceFeatureEnabled) &&
+              assistanceEnabled &&
+              assistBusy &&
+              !hasActiveGenerationJob
+            }
+            onCancelAssist={() => void handleCancelAssistanceTurn()}
           />
         ) : null}
       </main>
@@ -15353,6 +16407,12 @@ export function StudioShell({
                 }
               })();
             }
+            if (action === "upscale") {
+              void handleUpscaleImage(entry);
+            }
+            if (action === "generate-video") {
+              void handleGenerateVideoFromImage(entry);
+            }
             if (action === "set-profile-image") {
               if (!entry?.studioId || entry.studioKind !== "asset" || entry.kind !== "image") return;
               if (!sharedProfileAssets?.hasProfile) {
@@ -15373,15 +16433,7 @@ export function StudioShell({
                 openSettingsTab("profile");
                 return;
               }
-              void shareAssetToProfile({ assetId: entry.studioId })
-                .then((result) => {
-                  const handle = result.publicUrlPath.replace(/^\/u\//, "");
-                  toast.success(`Shared to @${handle}`);
-                  if (handle) openPublicProfile(handle);
-                })
-                .catch((error) => {
-                  toast.error(friendlyConvexError(error, "Could not share to profile"));
-                });
+              openTab(`post:compose:${entry.studioId}`);
             }
             if (action === "unshare-profile") {
               if (!entry?.studioId || entry.studioKind !== "asset") return;
@@ -15472,6 +16524,8 @@ function StudioComposer({
   setVideoType,
   guidedVideoTypes = [],
   assistBusy = false,
+  canCancelAssist = false,
+  onCancelAssist,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
@@ -15691,11 +16745,11 @@ function StudioComposer({
       if (el.textContent) el.replaceChildren();
       return;
     }
+    if (document.activeElement === el) return;
     const current = readComposerEditorText(el);
-    if (document.activeElement !== el && !attachments.length && current !== draft) {
-      el.replaceChildren(document.createTextNode(draft));
-    }
-  }, [attachments.length, draft, editorRef]);
+    if (current === draft) return;
+    applyComposerContextToEditor(el, { draft, attachments });
+  }, [attachments, draft, editorRef]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -15754,6 +16808,10 @@ function StudioComposer({
   }
 
   function handleGenerateClick() {
+    if (canCancelAssist && onCancelAssist) {
+      onCancelAssist();
+      return;
+    }
     const needsTopUp =
       entitlement &&
       (assistanceOn
@@ -15770,11 +16828,15 @@ function StudioComposer({
 
   const generateDisabled =
     disabled ||
-    assistBusy ||
-    (assistanceOn ? !draft.trim() && !attachments.length : !draft.trim()) ||
+    (!canCancelAssist && assistBusy) ||
+    (assistanceOn
+      ? !canCancelAssist && !draft.trim() && !attachments.length
+      : !draft.trim()) ||
     (isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId) ||
     (isAudioMode && audioType === "music");
-  const generateTitle = assistanceOn
+  const generateTitle = canCancelAssist
+    ? "Stop Assistance"
+    : assistanceOn
     ? "Send Assistance message"
     : isElementMode
       ? `Build ${elementSheetLabel(elementType)}`
@@ -16287,14 +17349,18 @@ function StudioComposer({
           </button>
           <button
             type="button"
-            className={`studio-composer-circle-btn studio-composer-send-btn${assistanceOn ? " is-assist-send" : ""}`}
+            className={`studio-composer-circle-btn studio-composer-send-btn${assistanceOn ? " is-assist-send" : ""}${canCancelAssist ? " is-stop" : ""}`}
             title={generateTitle}
             aria-label={generateTitle}
             disabled={generateDisabled}
             onClick={handleGenerateClick}
           >
-            <ArrowUp size={14} strokeWidth={2.25} aria-hidden="true" />
-            {assistanceOn ? null : (
+            {canCancelAssist ? (
+              <Square size={12} strokeWidth={2.5} fill="currentColor" aria-hidden="true" />
+            ) : (
+              <ArrowUp size={14} strokeWidth={2.25} aria-hidden="true" />
+            )}
+            {assistanceOn || canCancelAssist ? null : (
               <span className="studio-composer-send-cost">
                 {formatTtdFromCredits(cost, pricing?.creditPriceCents)}
               </span>
@@ -17756,6 +18822,57 @@ function createComposerAttachmentToken(attachment) {
   return token;
 }
 
+/** Rebuild contenteditable HTML from draft (\uFFFC markers) + attachment chips. */
+function buildComposerEditorHtmlFromState(draft, attachments = []) {
+  if (typeof document === "undefined") return "";
+  const shell = document.createElement("div");
+  const text = String(draft ?? "");
+  const tokens = Array.isArray(attachments) ? attachments : [];
+  let tokenIndex = 0;
+  let buffer = "";
+  const flush = () => {
+    if (!buffer) return;
+    shell.appendChild(document.createTextNode(buffer));
+    buffer = "";
+  };
+  for (const ch of text) {
+    if (ch === "\uFFFC") {
+      flush();
+      const attachment = tokens[tokenIndex];
+      tokenIndex += 1;
+      if (attachment) {
+        shell.appendChild(document.createTextNode(" "));
+        shell.appendChild(createComposerAttachmentToken(attachment));
+      }
+      continue;
+    }
+    buffer += ch;
+  }
+  flush();
+  while (tokenIndex < tokens.length) {
+    const attachment = tokens[tokenIndex];
+    tokenIndex += 1;
+    if (!attachment) continue;
+    shell.appendChild(document.createTextNode(" "));
+    shell.appendChild(createComposerAttachmentToken(attachment));
+  }
+  return shell.innerHTML;
+}
+
+function applyComposerContextToEditor(editor, ctx) {
+  if (!editor || !ctx) return;
+  const html =
+    (typeof ctx.editorHtml === "string" && ctx.editorHtml) ||
+    buildComposerEditorHtmlFromState(ctx.draft, ctx.attachments);
+  if (!html) {
+    if (editor.textContent) editor.replaceChildren();
+    return;
+  }
+  if (editor.innerHTML !== html) {
+    editor.innerHTML = html;
+  }
+}
+
 function elementTokenIconKind(elementType) {
   if (elementType === "character") return "user";
   if (elementType === "prop") return "package";
@@ -18276,6 +19393,10 @@ function createOptimisticGenerationEvents({ prompt, mode, aspectRatio }) {
   const clientId = `opt-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   const now = Date.now();
   const jobMode = mode === "video" ? "video" : mode === "audio" ? "audio" : "image";
+  const resolvedAspect =
+    jobMode === "audio"
+      ? undefined
+      : String(aspectRatio || (jobMode === "image" ? "1:1" : "16:9"));
   return {
     clientId,
     events: [
@@ -18293,9 +19414,7 @@ function createOptimisticGenerationEvents({ prompt, mode, aspectRatio }) {
         kind: "stage",
         stage: "generating",
         jobMode,
-        ...(jobMode !== "audio" && aspectRatio
-          ? { aspectRatio: String(aspectRatio) }
-          : {}),
+        ...(resolvedAspect ? { aspectRatio: resolvedAspect } : {}),
         generationJobId: `${clientId}-job`,
         optimistic: true,
         clientId,
@@ -18352,7 +19471,31 @@ function reconcileOptimisticThreadEvents(optimisticEvents = [], realEvents = [])
   const keep = [];
   for (const [, group] of byClient) {
     const promptEvent = group.find((event) => event.kind === "prompt");
-    if (!promptEvent) continue;
+    if (!promptEvent) {
+      // Stage-only optimistic ghosts (e.g. Assistance approve) — keep until a real
+      // in-progress stage lands after they were created (not older thread history).
+      const stageOnly = group.filter((event) => event.kind === "stage");
+      if (!stageOnly.length) continue;
+      const createdAt = Math.min(
+        ...stageOnly.map((event) => event.createdAt ?? event.order ?? 0),
+      );
+      const realCatchup = realEvents.some(
+        (event) =>
+          event.kind === "stage" &&
+          GENERATION_PROGRESS_STAGES.has(event.stage) &&
+          event.generationJobId &&
+          !String(event._id).startsWith("opt-") &&
+          !(
+            realEvents.some(
+              (row) =>
+                row.kind === "result" && row.generationJobId === event.generationJobId,
+            )
+          ) &&
+          (event.createdAt ?? 0) >= createdAt - 2_000,
+      );
+      if (!realCatchup) keep.push(...stageOnly);
+      continue;
+    }
     const realPrompt = realEvents.find(
       (event) =>
         event.kind === "prompt" &&
@@ -18381,12 +19524,29 @@ function reconcileOptimisticThreadEvents(optimisticEvents = [], realEvents = [])
       keep.push(...group.filter((event) => event.kind === "thinking"));
       continue;
     }
-    const realCatchup = realEvents.some(
-      (event) =>
-        ((event.kind === "stage" && GENERATION_STATUS_STAGES.has(event.stage)) ||
-          event.kind === "result") &&
-        (event.createdAt ?? 0) >= (realPrompt.createdAt ?? 0),
+    // Match catch-up to this optimistic send time so an older same-text prompt's
+    // prior stage/result doesn't wipe the new generating ghost.
+    const optimisticStartedAt = promptEvent.createdAt ?? promptEvent.order ?? 0;
+    const completedJobIds = new Set(
+      realEvents
+        .filter((event) => event.kind === "result" && event.generationJobId)
+        .map((event) => event.generationJobId),
     );
+    const realCatchup = realEvents.some((event) => {
+      if (!event.generationJobId || String(event._id).startsWith("opt-")) return false;
+      const at = event.createdAt ?? 0;
+      if (event.kind === "result") {
+        return at >= optimisticStartedAt - 500;
+      }
+      if (
+        event.kind === "stage" &&
+        GENERATION_PROGRESS_STAGES.has(event.stage) &&
+        !completedJobIds.has(event.generationJobId)
+      ) {
+        return at >= optimisticStartedAt - 2_000;
+      }
+      return false;
+    });
     if (realCatchup) continue;
     // Prompt landed but loader stage/result not yet — keep optimistic loader only.
     keep.push(...group.filter((event) => event.kind === "stage"));
@@ -18621,6 +19781,10 @@ function StudioEmptyLogoButton() {
 
 function StudioThreadChat({
   events,
+  eventsLoading = false,
+  hasMoreEarlier = false,
+  loadingEarlier = false,
+  onLoadEarlier,
   assistanceApprovals = [],
   onDecideAssistanceApproval,
   assets = [],
@@ -18628,12 +19792,16 @@ function StudioThreadChat({
   onOpenEntry,
   onTrash,
   onGenerateVideoFromImage,
+  onUpscaleImage,
+  onChatMediaContextMenu,
   guidedBrief,
   onApproveGuidedBrief,
   onPatchGuidedProduction,
   creditPriceCents,
   assistBusy,
   assistApproveBusy = false,
+  latestEditablePromptId = null,
+  onEditLastPrompt,
   currentUser,
 }) {
   const safeEvents = events ?? [];
@@ -18642,6 +19810,9 @@ function StudioThreadChat({
   const streamRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const scrolledThreadRef = useRef(null);
+  const prevFirstEventIdRef = useRef(null);
+  const prevScrollHeightRef = useRef(0);
+
   useLayoutEffect(() => {
     const root = streamRef.current;
     if (!root || !displayEvents.length) return undefined;
@@ -18663,10 +19834,30 @@ function StudioThreadChat({
     if (changedThread) {
       scrolledThreadRef.current = threadKey;
       stickToBottomRef.current = true;
+      prevFirstEventIdRef.current = displayEvents[0]?._id ?? null;
+      prevScrollHeightRef.current = 0;
     }
-    if (stickToBottomRef.current) scrollToBottom();
+
+    const firstId = displayEvents[0]?._id ?? null;
+    const prepended =
+      !changedThread &&
+      firstId &&
+      prevFirstEventIdRef.current &&
+      firstId !== prevFirstEventIdRef.current;
+    if (prepended) {
+      // Keep viewport stable when older messages are prepended.
+      const delta = root.scrollHeight - prevScrollHeightRef.current;
+      if (delta > 0) root.scrollTop += delta;
+      stickToBottomRef.current = false;
+    } else if (stickToBottomRef.current) {
+      scrollToBottom();
+    }
+    prevFirstEventIdRef.current = firstId;
+    prevScrollHeightRef.current = root.scrollHeight;
+
     const raf = window.requestAnimationFrame(() => {
       if (stickToBottomRef.current) scrollToBottom();
+      prevScrollHeightRef.current = root.scrollHeight;
     });
 
     // Only observe inner content growth — observing the scrollport itself can
@@ -18681,11 +19872,17 @@ function StudioThreadChat({
       root.removeEventListener("scroll", onScroll);
       observer.disconnect();
     };
-  }, [displayEvents.length, displayEvents.at(-1)?._id]);
+  }, [displayEvents.length, displayEvents[0]?._id, displayEvents.at(-1)?._id]);
 
   return (
     <div className="studio-chat-render-area">
-      {!hasEvents ? (
+      {eventsLoading && !hasEvents ? (
+        <div className="studio-chat-empty-state studio-chat-loading-state" aria-busy="true">
+          <Loader2 className="h-5 w-5 animate-spin opacity-60" aria-hidden="true" />
+          <span className="sr-only">Loading chat history</span>
+        </div>
+      ) : null}
+      {!hasEvents && !eventsLoading ? (
         <div className="studio-chat-empty-state">
           <StudioEmptyLogoButton />
         </div>
@@ -18695,6 +19892,25 @@ function StudioThreadChat({
           <div className="studio-chat-composer-align">
             <div className="studio-chat-composer-gutter" aria-hidden="true" />
             <div className="studio-chat-stream-inner">
+              {hasMoreEarlier ? (
+                <div className="studio-chat-load-earlier">
+                  <button
+                    type="button"
+                    className="studio-chat-load-earlier-btn"
+                    disabled={loadingEarlier || !onLoadEarlier}
+                    onClick={() => onLoadEarlier?.()}
+                  >
+                    {loadingEarlier ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        Loading earlier…
+                      </>
+                    ) : (
+                      "Load earlier messages"
+                    )}
+                  </button>
+                </div>
+              ) : null}
               {displayEvents.map((event) => (
                 <StudioThreadEvent
                   key={event._id}
@@ -18708,12 +19924,19 @@ function StudioThreadChat({
                   onOpenEntry={onOpenEntry}
                   onTrash={onTrash}
                   onGenerateVideoFromImage={onGenerateVideoFromImage}
+                  onUpscaleImage={onUpscaleImage}
+                  onChatMediaContextMenu={onChatMediaContextMenu}
                   guidedBrief={guidedBrief}
                   onApproveGuidedBrief={onApproveGuidedBrief}
                   onPatchGuidedProduction={onPatchGuidedProduction}
                   creditPriceCents={creditPriceCents}
                   assistBusy={assistBusy}
                   assistApproveBusy={assistApproveBusy}
+                  canEditPrompt={
+                    Boolean(latestEditablePromptId) &&
+                    event._id === latestEditablePromptId
+                  }
+                  onEditPrompt={onEditLastPrompt}
                 />
               ))}
             </div>
@@ -18736,24 +19959,42 @@ function StudioThreadEvent({
   onOpenEntry,
   onTrash,
   onGenerateVideoFromImage,
+  onUpscaleImage,
+  onChatMediaContextMenu,
   guidedBrief,
   onApproveGuidedBrief,
   onPatchGuidedProduction,
   creditPriceCents,
   assistBusy = false,
   assistApproveBusy = false,
+  canEditPrompt = false,
+  onEditPrompt,
 }) {
   if (event.kind === "prompt") {
     return (
       <ChatMessageRow role="user">
-        <article className={`studio-chat-bubble is-user${event.optimistic ? " is-optimistic" : ""}`}>
-          <StudioPromptMessage
-            prompt={event.prompt}
-            assets={assets}
-            elements={elements}
-            onOpenEntry={onOpenEntry}
-          />
-        </article>
+        <div className="studio-chat-user-prompt-wrap">
+          <article className={`studio-chat-bubble is-user${event.optimistic ? " is-optimistic" : ""}`}>
+            <StudioPromptMessage
+              prompt={event.prompt}
+              assets={assets}
+              elements={elements}
+              onOpenEntry={onOpenEntry}
+            />
+          </article>
+          {canEditPrompt && onEditPrompt ? (
+            <button
+              type="button"
+              className="studio-chat-edit-prompt-btn"
+              title="Edit message"
+              aria-label="Edit message"
+              onClick={() => onEditPrompt(event)}
+            >
+              <Pencil size={12} strokeWidth={2.25} aria-hidden="true" />
+              Edit
+            </button>
+          ) : null}
+        </div>
       </ChatMessageRow>
     );
   }
@@ -18821,10 +20062,11 @@ function StudioThreadEvent({
       guidedBrief &&
       event.briefId === guidedBrief._id &&
       event.briefRevision === guidedBrief.revision;
-    // Events created before review snapshots were introduced cannot be
-    // reconstructed safely. Hiding them avoids an empty card defaulting to
-    // "video" and falsely appearing approved.
-    if (!isLatest && !reviewSnapshot) return null;
+    // Pre-snapshot review rows: show the assistant text instead of hiding the turn.
+    if (!isLatest && !reviewSnapshot) {
+      const legacyMessage = resolveAssistanceReviewMessage(event, sourceEvents);
+      return legacyMessage ? <AssistantMessage message={legacyMessage} /> : null;
+    }
     const reviewData = isLatest
       ? {
           mode: guidedBrief.mode,
@@ -18980,10 +20222,14 @@ function StudioThreadEvent({
   }
   if (event.kind === "stage") {
     if (GENERATION_STATUS_STAGES.has(event.stage)) {
+      // Only expire an in-flight ghost when a newer *user* prompt appears after it
+      // (user continued chatting). Ignore assisted compiled prompts (filtered from
+      // display) and same-timestamp prompt/stage pairs from job creation.
       const superseded = displayEvents.some(
         (item) =>
           item.kind === "prompt" &&
-          (item.createdAt ?? 0) > (event.createdAt ?? 0),
+          !item.generationJobId &&
+          (item.createdAt ?? 0) > (event.createdAt ?? 0) + 250,
       );
       const expired =
         superseded && GENERATION_PROGRESS_STAGES.has(event.stage);
@@ -18991,7 +20237,7 @@ function StudioThreadEvent({
         <StudioGenerationStatusCard
           stage={expired ? "expired" : event.stage}
           error={event.error}
-          mode={event.jobMode ?? "video"}
+          mode={event.jobMode ?? "image"}
           aspectRatio={event.aspectRatio}
         />
       );
@@ -19055,6 +20301,8 @@ function StudioThreadEvent({
               onOpen={onOpenEntry}
               onTrash={onTrash}
               onGenerateVideo={onGenerateVideoFromImage}
+              onUpscale={onUpscaleImage}
+              onContextMenuEntry={onChatMediaContextMenu}
               generateBusy={assistBusy}
             />
           ))}
@@ -19080,8 +20328,8 @@ function StudioChatSystemNotice({ children }) {
   );
 }
 
-function parseGenerationAspectRatio(aspectRatio) {
-  const fallback = { w: 16, h: 9 };
+function parseGenerationAspectRatio(aspectRatio, mode = "video") {
+  const fallback = mode === "image" ? { w: 1, h: 1 } : { w: 16, h: 9 };
   const match = String(aspectRatio ?? "").trim().match(/^(\d+)\s*:\s*(\d+)$/);
   if (!match) return fallback;
   const w = Number(match[1]);
@@ -19098,7 +20346,11 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
   const isAudio = mode === "audio";
   const isImage = mode === "image";
   const isVideo = mode === "video" || (!isAudio && !isImage);
-  const aspect = parseGenerationAspectRatio(aspectRatio);
+  const statusMode = isAudio ? "audio" : isImage ? "image" : "video";
+  const aspect = parseGenerationAspectRatio(
+    aspectRatio,
+    isImage ? "image" : "video",
+  );
   const friendly = isFailed
     ? friendlyGenerationError(error, mode === "audio" ? "script" : mode)
     : null;
@@ -19108,23 +20360,10 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
       ? "Generation cancelled"
       : isFailed
         ? (friendly?.title ?? "Something went wrong")
-        : stage === "saving"
-          ? isAudio
-            ? "Saving your audio..."
-            : isImage
-              ? "Saving your image into Studio..."
-              : "Saving your render into Studio..."
-          : stage === "queued"
-            ? isAudio
-              ? "Queued..."
-              : isImage
-                ? "Queued..."
-                : "Queued for render..."
-            : isAudio
-              ? "Generating audio..."
-              : isImage
-                ? "Generating image..."
-                : "Rendering...";
+        : null;
+  const progressAria = isProgress
+    ? generationStatusAriaLabel(statusMode, stage)
+    : undefined;
   const detail = isFailed
     ? (friendly
         ? (friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message)
@@ -19136,7 +20375,10 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
   if (isAudio && isProgress) {
     return (
       <div className="studio-chat-audio-progress-wrap">
-        <StudioChatAudioPlayerLoading label={title} />
+        <StudioChatAudioPlayerLoading
+          label={<GenerationStatusPhrase mode="audio" stage={stage} />}
+          ariaLabel={generationStatusAriaLabel("audio", stage)}
+        />
       </div>
     );
   }
@@ -19152,15 +20394,23 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
 
   return (
     <div
-      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}${isExpired ? " is-expired" : ""}${isAudio ? " is-audio" : ""}${isImage ? " is-image" : ""}${isVideo ? " is-video" : ""}`}
+      className={`studio-video-progress-card studio-gen-status-card${isProgress ? " is-progress is-ghost" : ""}${isFailed ? " is-failed" : ""}${isCancelled ? " is-cancelled" : ""}${isExpired ? " is-expired" : ""}${isAudio ? " is-audio" : ""}${isImage ? " is-image" : ""}${isVideo ? " is-video" : ""}`}
     >
       <div
         className={`studio-video-progress-frame studio-gen-status-frame${isProgress ? " has-media-loader" : ""}${isAudio ? " is-audio" : ""}`}
         style={frameStyle}
         aria-live="polite"
-        aria-label={isProgress ? "Generating" : undefined}
+        aria-busy={isProgress || undefined}
+        aria-label={progressAria}
       >
-        {isProgress ? <MediaLoadWave /> : null}
+        {isProgress ? (
+          <MediaLoadWave className="studio-gen-ghost-loader" size="lg" appearance="light" />
+        ) : null}
+        {isProgress ? (
+          <p className="studio-gen-ghost-caption">
+            <GenerationStatusPhrase mode={statusMode} stage={stage} />
+          </p>
+        ) : null}
         {!isProgress ? (
         <div className="studio-video-progress-content studio-gen-status-content">
           <span className="studio-gen-status-icon" aria-hidden="true">
@@ -19186,7 +20436,16 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
   );
 }
 
-function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generateBusy = false }) {
+function StudioChatResultCard({
+  entry,
+  onOpen,
+  onTrash,
+  onGenerateVideo,
+  onUpscale,
+  onContextMenuEntry,
+  generateBusy = false,
+}) {
+  const isMobile = useMobileLayout();
   const isVideo = entry.kind === "video";
   const isImage = entry.kind === "image";
   const isAudio = entry.kind === "audio";
@@ -19213,11 +20472,41 @@ function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generat
   const canTrash = Boolean(onTrash && entry.studioId && entry.studioKind === "asset");
   const canDrag = Boolean(entry?.path);
   const canGenerateVideo = Boolean(isImage && onGenerateVideo && entry.studioId);
+  const canUpscale = Boolean(isImage && onUpscale && entry.studioId);
+  const hasFooter = canGenerateVideo || canUpscale;
   const title = safeEntryTitle(entry);
+
+  const openContextMenu = useCallback(
+    (coords) => {
+      if (!onContextMenuEntry || !entry) return;
+      onContextMenuEntry(entry, coords.x, coords.y);
+    },
+    [entry, onContextMenuEntry],
+  );
+
+  const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
+    isMobile && onContextMenuEntry ? openContextMenu : undefined,
+  );
 
   function openEntry() {
     if (!canOpen) return;
     onOpen(entry);
+  }
+
+  function handleContextMenu(event) {
+    if (!onContextMenuEntry) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openContextMenu({ x: event.clientX, y: event.clientY });
+  }
+
+  function handleOpenClick(event) {
+    if (longPressFired()) {
+      clearLongPressFired();
+      event?.preventDefault?.();
+      return;
+    }
+    openEntry();
   }
 
   function handleDragStart(event) {
@@ -19235,37 +20524,72 @@ function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generat
     clearActiveExplorerDrag();
   }
 
+  const attachHint = onContextMenuEntry
+    ? "Open · drag or long-press / right-click to attach"
+    : canDrag
+      ? "Drag into composer to attach"
+      : undefined;
+
   if (isImage && thumbSrc) {
+    const imageAspect =
+      aspectRatioFromDimensions(entry.width, entry.height) ?? "1:1";
     return (
-      <div className={`studio-chat-result-stack${canGenerateVideo ? " has-footer" : ""}`}>
+      <div className={`studio-chat-result-stack${hasFooter ? " has-footer" : ""}`}>
         <button
           type="button"
           className={`studio-chat-result-card is-image-result${canOpen ? " is-openable" : ""}`}
-          onClick={openEntry}
+          onClick={handleOpenClick}
+          onContextMenu={handleContextMenu}
           draggable={canDrag}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           aria-label={entry.name ? `Open ${title}` : "Open image"}
-          title={canOpen ? "Open in tab · drag into composer to attach" : "Drag into composer to attach"}
+          title={canOpen ? attachHint : attachHint}
+          {...longPressHandlers}
         >
-          <MediaLoadFrame kind="image" src={thumbSrc} ratio="image" className="studio-chat-result-media">
+          <MediaLoadFrame
+            kind="image"
+            src={thumbSrc}
+            ratio="image"
+            aspectRatio={imageAspect}
+            className="studio-chat-result-media"
+          >
             {({ onLoad, onError }) => (
               <img src={thumbSrc} alt="" loading="lazy" draggable={false} onLoad={onLoad} onError={onError} />
             )}
           </MediaLoadFrame>
         </button>
-        {canGenerateVideo ? (
-          <button
-            type="button"
-            className="studio-chat-result-gen-video"
-            disabled={generateBusy}
-            onClick={(event) => {
-              event.stopPropagation();
-              onGenerateVideo(entry);
-            }}
-          >
-            Generate video
-          </button>
+        {hasFooter ? (
+          <div className="studio-chat-result-footer">
+            {canUpscale ? (
+              <button
+                type="button"
+                className="studio-chat-result-gen-video"
+                disabled={generateBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUpscale(entry);
+                }}
+              >
+                <Maximize2 size={12} strokeWidth={2.25} aria-hidden="true" />
+                Upscale
+              </button>
+            ) : null}
+            {canGenerateVideo ? (
+              <button
+                type="button"
+                className="studio-chat-result-gen-video"
+                disabled={generateBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onGenerateVideo(entry);
+                }}
+              >
+                <Video size={12} strokeWidth={2.25} aria-hidden="true" />
+                Generate video
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );
@@ -19278,7 +20602,9 @@ function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generat
         draggable={canDrag}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        title={canDrag ? "Drag into composer to attach" : undefined}
+        onContextMenu={handleContextMenu}
+        title={attachHint}
+        {...longPressHandlers}
       >
         {playSrc ? (
           <StudioChatAudioPlayer
@@ -19302,18 +20628,24 @@ function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generat
       draggable={canDrag}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onClick={canOpen && !isVideo ? openEntry : undefined}
+      onContextMenu={handleContextMenu}
+      onClick={
+        canOpen && !isVideo
+          ? (event) => handleOpenClick(event)
+          : undefined
+      }
       onKeyDown={
         canOpen && !isVideo
           ? (event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                openEntry();
+                handleOpenClick(event);
               }
             }
           : undefined
       }
-      title={canDrag ? "Drag into composer to attach" : undefined}
+      title={attachHint}
+      {...longPressHandlers}
     >
       {isVideo && playSrc ? (
         <>
@@ -19337,11 +20669,21 @@ function StudioChatResultCard({ entry, onOpen, onTrash, onGenerateVideo, generat
         </>
       ) : isVideo && needsSignedMedia ? (
         <div
-          className="studio-composer-preview-fallback is-media-loading"
+          className="studio-chat-result-media-ghost"
+          style={(() => {
+            const videoAspect =
+              aspectRatioFromDimensions(entry.width, entry.height) ?? "16:9";
+            const parsed = parseGenerationAspectRatio(videoAspect, "video");
+            return {
+              ["--gen-aspect-ratio"]: `${parsed.w} / ${parsed.h}`,
+              ["--gen-aspect-w"]: parsed.w,
+              ["--gen-aspect-h"]: parsed.h,
+            };
+          })()}
           aria-busy="true"
           aria-label="Loading video"
         >
-          <MediaLoadWave />
+          <MediaLoadWave className="studio-gen-ghost-loader" appearance="light" />
         </div>
       ) : (
         <div className="studio-composer-preview-fallback">{entry.kindLabel ?? "Result"}</div>
@@ -19356,6 +20698,10 @@ function ActivePane({
   assets,
   elements = [],
   events,
+  eventsLoading = false,
+  hasMoreEarlier = false,
+  loadingEarlier = false,
+  onLoadEarlier,
   threads,
   activeThreadId,
   assistanceApprovals,
@@ -19366,6 +20712,8 @@ function ActivePane({
   creditPriceCents,
   assistBusy,
   assistApproveBusy = false,
+  latestEditablePromptId = null,
+  onEditLastPrompt,
   onAttach,
   onDuplicate,
   onRename,
@@ -19392,6 +20740,8 @@ function ActivePane({
   onOpenElementCreate,
   onOpenEntry,
   onGenerateVideoFromImage,
+  onUpscaleImage,
+  onChatMediaContextMenu,
   onCloseTab,
   activeFolderId,
   onOpenEditTab,
@@ -19569,6 +20919,28 @@ function ActivePane({
       />,
     );
   }
+  if (activeTab.startsWith("post:compose:")) {
+    const composeAssetId = activeTab.slice("post:compose:".length).trim();
+    if (!composeAssetId) {
+      return wrapPane(
+        <div className="p-6 text-sm text-cursor-muted">Missing asset for this post.</div>,
+      );
+    }
+    return wrapPane(
+      <PostComposeTab
+        assetId={composeAssetId}
+        onCancel={() => onCloseTab(activeTab)}
+        onPublished={({ handle, postId }) => {
+          onCloseTab(activeTab);
+          if (handle && postId) {
+            onOpenProfilePost?.(handle, postId);
+          } else if (handle) {
+            onOpenPublicProfile?.(handle);
+          }
+        }}
+      />,
+    );
+  }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
     if (!isVideoEditorPreviewEnabled()) {
       return wrapPane(
@@ -19635,6 +21007,10 @@ function ActivePane({
     return wrapPane(
       <StudioThreadChat
         events={events}
+        eventsLoading={eventsLoading}
+        hasMoreEarlier={hasMoreEarlier}
+        loadingEarlier={loadingEarlier}
+        onLoadEarlier={onLoadEarlier}
         assistanceApprovals={assistanceApprovals}
         onDecideAssistanceApproval={onDecideAssistanceApproval}
         assets={assets}
@@ -19642,12 +21018,16 @@ function ActivePane({
         onOpenEntry={onOpenEntry}
         onTrash={onTrash}
         onGenerateVideoFromImage={onGenerateVideoFromImage}
+        onUpscaleImage={onUpscaleImage}
+        onChatMediaContextMenu={onChatMediaContextMenu}
         guidedBrief={guidedBrief}
         onApproveGuidedBrief={onApproveGuidedBrief}
         onPatchGuidedProduction={onPatchGuidedProduction}
         creditPriceCents={creditPriceCents}
         assistBusy={assistBusy}
         assistApproveBusy={assistApproveBusy}
+        latestEditablePromptId={latestEditablePromptId}
+        onEditLastPrompt={onEditLastPrompt}
         currentUser={currentUser}
       />,
     );
@@ -22020,6 +23400,8 @@ function assetToEntry(asset) {
     mimeType: asset.mimeType,
     byteSize: asset.byteSize,
     durationSeconds: asset.durationSeconds,
+    width: asset.width,
+    height: asset.height,
   };
 }
 
@@ -22152,6 +23534,20 @@ function tabDescriptor({
 }) {
   if (key.startsWith("composer:")) {
     return { key, kind: "chat", title: key === COMPOSER_TAB ? "Generate" : "New request", status: "ready" };
+  }
+  if (key.startsWith("post:compose:")) {
+    const assetId = key.slice("post:compose:".length).trim();
+    const asset = (assets ?? []).find((entry) => entry._id === assetId || entry.studioId === assetId);
+    const title = asset?.name ? `Create · ${asset.name}` : "Create post";
+    return {
+      key,
+      kind: "file",
+      title,
+      status: "ready",
+      studioKind: "postCompose",
+      previewUrl: asset?.signedThumbnailUrl || asset?.thumbnailUrl || asset?.previewUrl,
+      previewKind: asset?.kind === "video" ? "video" : asset?.signedThumbnailUrl || asset?.thumbnailUrl ? "image" : undefined,
+    };
   }
   if (key.startsWith("profile:")) {
     const username = key.slice("profile:".length).trim().replace(/^@/, "").toLowerCase();
@@ -22525,6 +23921,9 @@ function buildPromptWithAttachments(prompt, attachments) {
       const notes = sanitizePromptRefMeta(item.description);
       // Prefer canonical /Studio/assets|elements/{id} paths so chat chips can resolve previews.
       const canonicalPath = item.path || item.displayPath || "";
+      // Never bake thumb/media URLs into the prompt — blob: dies on reload and
+      // signed CDN query strings expire (and can poison contact extraction).
+      // Chips rehydrate from path/studio via assets.listByIds + signed thumbs.
       return [
         `- @${item.label}`,
         item.kind ? `kind: ${item.kind}` : "",
@@ -22534,14 +23933,62 @@ function buildPromptWithAttachments(prompt, attachments) {
         canonicalPath ? `path: ${canonicalPath}` : "",
         item.filename ? `file: ${item.filename}` : "",
         item.studioId ? `studio: ${item.studioId}` : "",
-        item.thumbnailUrl ? `thumb: ${item.thumbnailUrl}` : "",
-        item.mediaUrl ? `media: ${item.mediaUrl}` : "",
       ]
         .filter(Boolean)
         .join(" | ");
     })
     .join("\n");
   return `${prompt.trim()}\n\nReferences:\n${refs}`;
+}
+
+/** Strip the appended "References:" block from a stored user prompt for edit/resend. */
+function stripPromptReferencesSection(prompt) {
+  const text = String(prompt ?? "");
+  const marker = "\n\nReferences:\n";
+  const idx = text.lastIndexOf(marker);
+  if (idx < 0) return text.trim();
+  return text.slice(0, idx).trim();
+}
+
+/** Best-effort restore composer chips from the prompt's References section. */
+function attachmentsFromPromptReferences(prompt, assets = [], elements = []) {
+  const text = String(prompt ?? "");
+  const marker = "\n\nReferences:\n";
+  const idx = text.lastIndexOf(marker);
+  if (idx < 0) return [];
+  const block = text.slice(idx + marker.length);
+  const lines = block.split("\n").map((line) => line.trim()).filter((line) => line.startsWith("- @"));
+  const out = [];
+  const seen = new Set();
+  for (const line of lines) {
+    const studioMatch = line.match(/\bstudio:\s*([^\s|]+)/i);
+    const pathMatch = line.match(/\bpath:\s*([^|]+?)(?:\s*\||$)/i);
+    const studioId = studioMatch?.[1]?.trim();
+    const path = pathMatch?.[1]?.trim();
+    let entry = null;
+    if (studioId) {
+      const asset = assets.find((item) => item._id === studioId);
+      if (asset) entry = assetToEntry(asset);
+      if (!entry) {
+        const element = elements.find((item) => item._id === studioId);
+        if (element) entry = elementToEntry(element, assets);
+      }
+    }
+    if (!entry && path) {
+      const asset = assets.find((item) => item.path === path || item.displayPath === path);
+      if (asset) entry = assetToEntry(asset);
+      if (!entry) {
+        const element = elements.find((item) => item.path === path || item.displayPath === path);
+        if (element) entry = elementToEntry(element, assets);
+      }
+    }
+    if (!entry) continue;
+    const attachment = entryToAttachment(entry);
+    if (!attachment?.id || seen.has(attachment.id)) continue;
+    seen.add(attachment.id);
+    out.push(attachment);
+  }
+  return out;
 }
 
 function splitVideoGenerationInputs(attachments, signedUrls = {}) {

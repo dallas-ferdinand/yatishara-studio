@@ -892,10 +892,23 @@ export function formatNanpContactNumbers(value: string): string {
 }
 
 /**
+ * Strip query/hash from http(s) URLs so CDN `?token=&expires=` never looks like a phone.
+ * Safe for prompt text, attachment lines, and contact extraction.
+ */
+export function stripHttpUrlQueryParams(text: string): string {
+  const source = String(text ?? "");
+  if (!source) return source;
+  return source.replace(/https?:\/\/[^\s|"'<>]+/gi, (url) => {
+    const cut = url.search(/[?&#]/);
+    return cut === -1 ? url : url.slice(0, cut);
+  });
+}
+
+/**
  * Extract the first NANP / WhatsApp contact from free text for CTA prefill.
  */
 export function extractContactFromText(text: string): string | undefined {
-  const source = text?.trim();
+  const source = stripHttpUrlQueryParams(text?.trim() ?? "").trim();
   if (!source) return undefined;
   const match = source.match(
     /(?:whatsapp\s*)?(?:\+?1[\s().-]*)?(?:\(?\d{3}\)?[\s.-]*)\d{3}[\s.-]*\d{4}/i,
@@ -1086,7 +1099,12 @@ export function mergeBriefPayload(args: {
     (next as Record<string, unknown>)[String(key)] = value;
   }
 
-  assignScalar("subject", patch.subject);
+  const rawSubject =
+    patch.subject !== undefined ? String(patch.subject) : undefined;
+  assignScalar(
+    "subject",
+    rawSubject !== undefined ? rawSubject.slice(0, 100) : undefined,
+  );
   assignScalar("objective", patch.objective);
   assignScalar("audience", patch.audience);
   assignScalar("keyMessage", patch.keyMessage);
@@ -1096,6 +1114,17 @@ export function mergeBriefPayload(args: {
   assignScalar("setting", patch.setting);
   assignScalar("visualDirection", patch.visualDirection);
   assignScalar("notes", patch.notes);
+
+  // Scene-length "subjects" belong in visualDirection, not the short subject label.
+  if (
+    rawSubject &&
+    rawSubject.length > 100 &&
+    canWrite("visualDirection") &&
+    !next.visualDirection
+  ) {
+    next.visualDirection = rawSubject.slice(0, 800);
+    newlyInferred.push("visualDirection");
+  }
 
   if (patch.timedBeats && canWrite("timedBeats")) {
     next.timedBeats = patch.timedBeats;

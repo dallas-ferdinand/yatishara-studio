@@ -1,4 +1,5 @@
 const REFERENCES_MARKER = "\n\nReferences:\n";
+const AUTHORITATIVE_HEADER = /^AUTHORITATIVE\s+REVIEWED\s+REQUIREMENTS/i;
 
 const STOPWORDS = new Set([
   "a",
@@ -25,9 +26,39 @@ const STOPWORDS = new Set([
   "a",
 ]);
 
-/** Strip composer refs / placeholders so filenames stay readable. */
-export function promptSnippetForName(prompt?: string, maxLen = 42): string {
+/** Drop the locked-requirements preamble so filenames use the creative body. */
+export function stripAuthoritativePromptHeader(prompt: string): string {
   const raw = String(prompt ?? "");
+  const trimmed = raw.trimStart();
+  if (!AUTHORITATIVE_HEADER.test(trimmed)) return raw;
+  const bodyStart = trimmed.search(/\n\n(?!\s*[-•*]|\s*[A-Za-z][^:\n]{0,40}:)/);
+  if (bodyStart >= 0) {
+    return trimmed.slice(bodyStart + 2).trimStart();
+  }
+  const lines = trimmed.split("\n");
+  const start = lines.findIndex(
+    (line, index) =>
+      index > 2 &&
+      line.trim().length > 0 &&
+      !line.trim().startsWith("-") &&
+      !/^[A-Za-z][^:\n]{0,40}:\s*$/.test(line.trim()) &&
+      !AUTHORITATIVE_HEADER.test(line),
+  );
+  return start > 0 ? lines.slice(start).join("\n").trimStart() : trimmed;
+}
+
+/** Strip composer refs / placeholders so filenames stay readable. */
+export function promptSnippetForName(
+  prompt?: string,
+  maxLen = 42,
+  preferredSubject?: string,
+): string {
+  const preferred = String(preferredSubject ?? "").trim();
+  if (preferred) {
+    const fromSubject = promptSnippetForName(preferred, maxLen);
+    if (fromSubject) return fromSubject;
+  }
+  const raw = stripAuthoritativePromptHeader(String(prompt ?? ""));
   const splitIdx = raw.indexOf(REFERENCES_MARKER);
   const body = (splitIdx === -1 ? raw : raw.slice(0, splitIdx))
     .replace(/\uFFFC/g, " ")
@@ -92,6 +123,8 @@ export type GenerationAssetKind = "image" | "video" | "audio" | "sfx" | "music";
 export function generationAssetFileName(args: {
   kind: GenerationAssetKind;
   prompt?: string;
+  /** Prefer brief subject over the full AUTHORITATIVE prompt when naming. */
+  subject?: string;
   voiceName?: string;
   /** 1-based when a job returns multiple images */
   index?: number;
@@ -100,7 +133,9 @@ export function generationAssetFileName(args: {
 }): string {
   const ext = String(args.extension || "bin").replace(/^\./, "").toLowerCase() || "bin";
   const token = shortUniqueToken(args.uniqueId);
-  const snippet = formatSnippet(promptSnippetForName(args.prompt));
+  const snippet = formatSnippet(
+    promptSnippetForName(args.prompt, 42, args.subject),
+  );
   const indexSuffix =
     typeof args.index === "number" && args.index > 1 ? ` ${args.index}` : "";
 

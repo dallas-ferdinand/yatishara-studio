@@ -33,13 +33,25 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { ProfileCommentsPanel } from "./ProfileCommentsPanel";
+import {
+  ProfileCommentsPanel,
+  type CommentsPanelMode,
+} from "./ProfileCommentsPanel";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
+import { CaptionChipText } from "./CaptionChipText";
 import "./profile-post-viewer.css";
+import "./post-compose-tab.css";
 
 type FeedMode = "forYou" | "following";
+
+type MentionChip = {
+  username: string;
+  profileId: Id<"profiles">;
+  displayName?: string;
+  avatarUrl?: string;
+};
 
 type FeedPost = {
   _id: Id<"profilePosts">;
@@ -48,6 +60,9 @@ type FeedPost = {
   kind: "image" | "video";
   name: string;
   caption?: string;
+  keywords?: string[];
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  mentions?: MentionChip[];
   likeCount: number;
   viewCount: number;
   commentCount?: number;
@@ -75,6 +90,9 @@ type AuthorPost = {
   kind: "image" | "video";
   name: string;
   caption?: string;
+  keywords?: string[];
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  mentions?: MentionChip[];
   likeCount: number;
   viewCount: number;
   commentCount?: number;
@@ -99,6 +117,9 @@ type SlidePost = (AuthorPost | FeedPost) & {
   profileId?: Id<"profiles">;
   isFollowing?: boolean;
   isOwner?: boolean;
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  keywords?: string[];
+  mentions?: MentionChip[];
 };
 
 type SlideRole = "prev" | "current" | "next" | "idle";
@@ -315,39 +336,55 @@ function FeedMedia({
     }
   }, [shouldWarm, playSrc, post.kind]);
 
-  // Pause when leaving the slide/tab; resume from the same position when returning.
+  // Pause when leaving the slide/tab; always autoplay (muted) when scrolled to.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || post.kind !== "video" || !playSrc) return;
-    if (active) {
-      const resumeAt = resumeAtRef.current;
-      if (resumeAt > 0.05) {
-        try {
-          if (Math.abs(video.currentTime - resumeAt) > 0.2) {
-            video.currentTime = resumeAt;
-          }
-        } catch {
-          /* ignore */
-        }
-        setCurrent(resumeAt);
-        setSeekValue(resumeAt);
-      }
-      // Autoplay must stay muted until the user enables sound (browser policy).
-      video.muted = !soundEnabled;
-      if (wasPlayingRef.current || resumeAt <= 0.05) {
-        void video.play().catch(() => {});
-      } else {
-        video.pause();
-      }
-      return;
+    if (!video || post.kind !== "video" || !playSrc) return undefined;
+
+    if (!active) {
+      // Leaving: stash position + pause so we don't burn decode/bandwidth off-slide.
+      resumeAtRef.current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
+      wasPlayingRef.current = !video.paused;
+      setCurrent(resumeAtRef.current);
+      setSeekValue(resumeAtRef.current);
+      video.pause();
+      return undefined;
     }
 
-    // Leaving: stash position + pause so we don't burn decode/bandwidth off-tab.
-    resumeAtRef.current = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    wasPlayingRef.current = !video.paused;
-    setCurrent(resumeAtRef.current);
-    setSeekValue(resumeAtRef.current);
-    video.pause();
+    const resumeAt = resumeAtRef.current;
+    if (resumeAt > 0.05) {
+      try {
+        if (Math.abs(video.currentTime - resumeAt) > 0.2) {
+          video.currentTime = resumeAt;
+        }
+      } catch {
+        /* ignore */
+      }
+      setCurrent(resumeAt);
+      setSeekValue(resumeAt);
+    }
+
+    // Autoplay must stay muted until the user enables sound (browser policy).
+    video.muted = !soundEnabled;
+    wasPlayingRef.current = true;
+
+    let cancelled = false;
+    const tryPlay = () => {
+      if (cancelled) return;
+      video.muted = !soundEnabled;
+      void video.play().catch(() => {
+        /* NotAllowed / not ready — canplay/loadeddata will retry */
+      });
+    };
+
+    tryPlay();
+    video.addEventListener("canplay", tryPlay);
+    video.addEventListener("loadeddata", tryPlay);
+    return () => {
+      cancelled = true;
+      video.removeEventListener("canplay", tryPlay);
+      video.removeEventListener("loadeddata", tryPlay);
+    };
   }, [active, playSrc, post.kind, soundEnabled]);
 
   useEffect(() => {
@@ -469,7 +506,7 @@ function FeedMedia({
           kind="video"
           src={playSrc}
           cacheKey={post._id}
-          ratio="video-portrait"
+          ratio="fill"
           className="profile-post-slide-frame"
         >
           {({ onLoad, onError }) => (
@@ -481,7 +518,8 @@ function FeedMedia({
               }
               playsInline
               loop
-              muted={!active || !soundEnabled}
+              autoPlay={active}
+              muted={!soundEnabled}
               controls={false}
               preload={shouldWarm ? "auto" : "none"}
               onLoadedData={onLoad}
@@ -500,7 +538,7 @@ function FeedMedia({
           kind="image"
           src={displaySrc}
           cacheKey={post._id}
-          ratio="image"
+          ratio="fill"
           className="profile-post-slide-frame"
         >
           {({ onLoad, onError }) => (
@@ -518,10 +556,7 @@ function FeedMedia({
           )}
         </MediaLoadFrame>
       ) : (
-        <div
-          className={`profile-post-slide-loading ${post.kind === "video" ? "is-ratio-video" : "is-ratio-image"}`}
-          aria-busy="true"
-        >
+        <div className="profile-post-slide-loading" aria-busy="true">
           <MediaLoadWave />
         </div>
       )}
@@ -581,6 +616,78 @@ function FeedMedia({
             <span className="profile-post-video-time">{formatVideoTime(duration)}</span>
           </div>
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FeedCaption({
+  username,
+  caption,
+  hashtags,
+  mentions,
+  authorAvatarUrl,
+  authorDisplayName,
+  onOpenDescription,
+}: {
+  username?: string;
+  caption?: string;
+  hashtags?: Array<{ tag: string; displayTag: string }>;
+  mentions?: Array<{
+    username: string;
+    profileId: string;
+    displayName?: string;
+    avatarUrl?: string;
+  }>;
+  authorAvatarUrl?: string;
+  authorDisplayName?: string;
+  onOpenProfile?: (username: string) => void;
+  onOpenDescription?: () => void;
+}) {
+  const trimmed = caption?.trim();
+  if (!trimmed && !(hashtags?.length) && !username) return null;
+
+  return (
+    <div
+      className={`profile-post-caption${onOpenDescription ? " is-tappable" : ""}`}
+      role={onOpenDescription ? "button" : undefined}
+      tabIndex={onOpenDescription ? 0 : undefined}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={
+        onOpenDescription
+          ? (event) => {
+              event.stopPropagation();
+              onOpenDescription();
+            }
+          : undefined
+      }
+      onKeyDown={
+        onOpenDescription
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onOpenDescription();
+            }
+          : undefined
+      }
+    >
+      {username ? <span className="profile-post-caption-user">{username}</span> : null}
+      {trimmed ? (
+        <p className="profile-post-caption-text">
+          <CaptionChipText
+            caption={trimmed}
+            mentions={mentions}
+            author={
+              username
+                ? {
+                    username,
+                    displayName: authorDisplayName,
+                    avatarUrl: authorAvatarUrl,
+                  }
+                : undefined
+            }
+          />
+        </p>
       ) : null}
     </div>
   );
@@ -800,6 +907,7 @@ export function ProfilePostViewer({
   const [saveBusyId, setSaveBusyId] = useState<Id<"profilePosts"> | null>(null);
   const [shareBusyId, setShareBusyId] = useState<Id<"profilePosts"> | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [sidePanelMode, setSidePanelMode] = useState<CommentsPanelMode>("comments");
   const [localLikes, setLocalLikes] = useState<
     Record<string, { liked: boolean; likeCount: number }>
   >({});
@@ -835,6 +943,13 @@ export function ProfilePostViewer({
   const lastFeedIndexRef = useRef(0);
   const sizeRef = useRef({ w: 1, h: 1 });
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const layoutRef = useRef<HTMLDivElement | null>(null);
+  /** Layout node as state so wheel rebinds when loading → feed mounts the card. */
+  const [layoutEl, setLayoutEl] = useState<HTMLDivElement | null>(null);
+  const setLayoutNode = useCallback((node: HTMLDivElement | null) => {
+    layoutRef.current = node;
+    setLayoutEl((prev) => (prev === node ? prev : node));
+  }, []);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const pendingCommitRef = useRef<{ axis: "x" | "y"; delta: -1 | 1 } | null>(null);
   const pendingSnapRef = useRef(false);
@@ -888,6 +1003,7 @@ export function ProfilePostViewer({
     setActivePostId(null);
     setAxis("y");
     setCommentsOpen(false);
+    setSidePanelMode("comments");
   }, [feedMode]);
   const feedIndexExact = activePostId
     ? resolvedFeed.findIndex((post) => post._id === activePostId)
@@ -998,6 +1114,7 @@ export function ProfilePostViewer({
   }, [activePost, recordViewOnce]);
 
   useEffect(() => {
+    setSidePanelMode("comments");
     if (isMobile) setCommentsOpen(false);
   }, [activePost?._id, isMobile]);
 
@@ -1047,7 +1164,10 @@ export function ProfilePostViewer({
           ? feedIdx >= 0 && feedLen > 1
           : authorIdx >= 0 && authorLen > 1;
 
-      if (isMobile) setCommentsOpen(false);
+      if (isMobile) {
+        setCommentsOpen(false);
+        setSidePanelMode("comments");
+      }
 
       if (!canMove) {
         animatingRef.current = true;
@@ -1164,14 +1284,24 @@ export function ProfilePostViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [commitSlide, tabActive]);
 
-  useEffect(() => {
-    const rootNode = rootRef.current;
-    if (!rootNode || !tabActive) return undefined;
-    const node: HTMLDivElement = rootNode;
+  // Attach on the layout node (callback-ref driven) — not window+composedPath.
+  // Video targets often miss composedPath().includes(root) after loading→feed
+  // remounts; element capture + contains() is reliable for image and video.
+  useLayoutEffect(() => {
+    if (!layoutEl || !tabActive || !feed?.length) return undefined;
+    const layout: HTMLElement = layoutEl;
     let wheelLockUntil = 0;
     function onWheel(event: WheelEvent) {
-      const path = event.composedPath();
-      if (!path.includes(node)) return;
+      const target = event.target;
+      if (!(target instanceof Node) || !layout.contains(target)) return;
+      // Drive the feed only when the cursor is over the post card (incl. <video>).
+      // Comments dock keeps native scroll.
+      if (
+        !(target instanceof Element) ||
+        !target.closest(".profile-post-viewer")
+      ) {
+        return;
+      }
       // Shift+wheel → horizontal author axis (desktop trackpads may already
       // emit deltaX; treat shift as an explicit horizontal intent).
       const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode);
@@ -1182,6 +1312,7 @@ export function ProfilePostViewer({
         const delta = shiftHorizontal ? deltaY : deltaX;
         if (Math.abs(delta) < 8) return;
         event.preventDefault();
+        event.stopPropagation();
         if (animatingRef.current || Date.now() < wheelLockUntil) return;
         wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
         commitSlide("x", delta > 0 ? 1 : -1);
@@ -1189,13 +1320,14 @@ export function ProfilePostViewer({
       }
       if (Math.abs(deltaY) < 8) return;
       event.preventDefault();
+      event.stopPropagation();
       if (animatingRef.current || Date.now() < wheelLockUntil) return;
       wheelLockUntil = Date.now() + SLIDE_FALLBACK_MS;
       commitSlide("y", deltaY > 0 ? 1 : -1);
     }
-    window.addEventListener("wheel", onWheel, { capture: true, passive: false });
-    return () => window.removeEventListener("wheel", onWheel, { capture: true });
-  }, [commitSlide, tabActive]);
+    layout.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => layout.removeEventListener("wheel", onWheel, { capture: true });
+  }, [commitSlide, tabActive, layoutEl, feed?.length]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || animatingRef.current) return;
@@ -1576,7 +1708,7 @@ export function ProfilePostViewer({
   })();
 
   return (
-    <div className="profile-post-viewer-layout">
+    <div className="profile-post-viewer-layout" ref={setLayoutNode}>
       <div
         ref={rootRef}
         className="profile-post-viewer is-feed"
@@ -1608,6 +1740,22 @@ export function ProfilePostViewer({
                   active={tabActive && role === "current"}
                   preload={tabActive}
                 />
+                <FeedCaption
+                  username={postUsername}
+                  caption={post.caption}
+                  hashtags={post.hashtags}
+                  mentions={post.mentions}
+                  authorAvatarUrl={post.avatarUrl}
+                  authorDisplayName={post.displayName}
+                  onOpenDescription={
+                    role === "current"
+                      ? () => {
+                          setSidePanelMode("description");
+                          if (isMobile) setCommentsOpen(true);
+                        }
+                      : undefined
+                  }
+                />
                 <FeedActions
                   post={post}
                   username={postUsername}
@@ -1634,7 +1782,9 @@ export function ProfilePostViewer({
                   onSave={() => void handleSave(post)}
                   onShare={() => void handleShare(post)}
                   onOpenComments={() => {
-                    if (role === "current") setCommentsOpen(true);
+                    if (role !== "current") return;
+                    setSidePanelMode("comments");
+                    setCommentsOpen(true);
                   }}
                   onOpenProfile={onOpenProfile}
                   onToggleFollow={() => void handleFollowToggle(post)}
@@ -1702,7 +1852,19 @@ export function ProfilePostViewer({
       <ProfileCommentsPanel
         postId={activePost._id}
         open={commentsOpen && tabActive}
-        onClose={() => setCommentsOpen(false)}
+        onClose={() => {
+          setCommentsOpen(false);
+          setSidePanelMode("comments");
+        }}
+        mode={sidePanelMode}
+        onModeChange={setSidePanelMode}
+        description={{
+          caption: activeSlidePost.caption,
+          username: activeSlidePost.username,
+          hashtags: activeSlidePost.hashtags,
+          mentions: activeSlidePost.mentions,
+          onOpenProfile,
+        }}
         commentCount={
           localComments[activePost._id] ??
           activePost.commentCount ??

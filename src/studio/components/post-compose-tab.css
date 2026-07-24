@@ -1,0 +1,625 @@
+/* Post compose — platform theme tokens (light / dark / accent) */
+
+.post-compose {
+  --pc-ink: var(--color-cursor-text-bright, var(--color-cursor-text, #f4f1ea));
+  --pc-muted: var(--color-cursor-muted, color-mix(in srgb, var(--pc-ink) 58%, transparent));
+  --pc-line: var(--color-cursor-border-soft, rgba(255, 255, 255, 0.14));
+  --pc-line-strong: var(--color-cursor-border, rgba(255, 255, 255, 0.18));
+  /* Solid opaque surfaces — never studio glass (would blur wallpaper behind). */
+  --pc-panel: var(--mos-panel, #0f172a);
+  --pc-bg: var(--mos-bg, #020617);
+  --pc-surface: var(--mos-surface, #111c2f);
+  --pc-input: color-mix(in srgb, var(--pc-panel) 88%, var(--pc-bg));
+  --pc-hover: var(--color-cursor-hover, color-mix(in srgb, var(--pc-ink) 8%, transparent));
+  --pc-accent: var(--cursor-accent, var(--color-cursor-accent, #d8ff3e));
+  --pc-accent-dim: var(--cursor-accent-dim, color-mix(in srgb, var(--pc-accent) 14%, transparent));
+  --pc-accent-border: var(--cursor-accent-border, color-mix(in srgb, var(--pc-accent) 28%, transparent));
+  --pc-radius: var(--cursor-radius-xl, 12px);
+  --pc-radius-sm: var(--cursor-radius-sm, 6px);
+  --pc-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  color: var(--pc-ink);
+  /* Opaque page plate — wallpaper must not show through / get frosted. */
+  background: var(--pc-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  isolation: isolate;
+  font-family: var(--font-onest), system-ui, sans-serif;
+}
+
+[data-appearance="light"] .post-compose {
+  --pc-ink: var(--color-cursor-text, #1b1f24);
+  --pc-muted: var(--color-cursor-muted, color-mix(in srgb, #1b1f24 58%, transparent));
+  --pc-line: var(--color-cursor-border-soft, rgba(27, 31, 36, 0.12));
+  --pc-line-strong: var(--color-cursor-border, rgba(27, 31, 36, 0.18));
+  --pc-hover: var(--color-cursor-hover, color-mix(in srgb, #1b1f24 6%, transparent));
+  --pc-panel: #f4f6f9;
+  --pc-bg: #eef1f5;
+  --pc-surface: #ffffff;
+  --pc-shadow:
+    0 12px 28px rgba(16, 22, 30, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  background: var(--pc-bg);
+}
+
+.post-compose-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--pc-line);
+  background: var(--pc-surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  flex-shrink: 0;
+}
+
+.post-compose-toolbar-title {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pc-ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.post-compose-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.post-compose-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+  gap: 16px;
+  padding: 12px 16px 16px;
+  overflow: hidden;
+  align-items: stretch;
+  justify-content: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 860px) {
+  .post-compose-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(280px, 55%) minmax(180px, 1fr);
+    overflow: auto;
+  }
+}
+
+.post-compose-mock {
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+}
+
+/* Full-bleed preview panel — fills available width like the feed stage */
+.post-compose-mock-slide {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 0;
+  background: #050608;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+@supports not (aspect-ratio: 9 / 16) {
+  .post-compose-mock-slide {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.post-compose-mock-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  background: #050608;
+}
+
+.post-compose-mock-media .media-load-frame,
+.post-compose-mock-frame {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  background: transparent;
+  overflow: visible;
+}
+
+/* Match feed: contain, edge-to-edge on the fitting axis, centered */
+.post-compose-mock-frame.media-load-frame img,
+.post-compose-mock-frame.media-load-frame video,
+.post-compose-mock-media img,
+.post-compose-mock-media video {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  background: transparent;
+}
+
+.post-compose-mock-slide::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: min(48%, 300px);
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, #050608 42%, transparent) 36%,
+    color-mix(in srgb, #050608 78%, transparent) 70%,
+    color-mix(in srgb, #050608 92%, transparent) 100%
+  );
+}
+
+.post-compose-mock-caption {
+  z-index: 3;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.post-compose-mock-caption .profile-post-caption-user,
+.post-compose-mock-caption .profile-post-caption-text,
+.post-compose-mock-caption .profile-post-caption-tag,
+.post-compose-mock-caption .profile-post-caption-mention,
+.post-compose-mock-caption .profile-post-caption-mention.is-plain {
+  color: #fff;
+  text-shadow: inherit;
+}
+
+.post-compose-mock-caption .profile-post-caption-text {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.post-compose-mock-caption-empty {
+  opacity: 0.55;
+  font-style: italic;
+}
+
+.post-compose-mock-rail {
+  pointer-events: none;
+  z-index: 3;
+  right: 10px;
+}
+
+.post-compose-mock-rail .profile-post-rail-avatar-wrap {
+  /* No follow chip in compose preview */
+  padding-bottom: 0;
+}
+
+.post-compose-mock-rail .profile-post-rail-btn,
+.post-compose-mock-rail .profile-post-rail-avatar {
+  pointer-events: none;
+}
+
+.post-compose-preview-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 220px;
+  color: var(--pc-muted);
+  font-size: 13px;
+  background: color-mix(in srgb, var(--pc-bg) 72%, #000);
+}
+
+.post-compose-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-width: none;
+  width: 100%;
+  justify-self: stretch;
+  padding: 0;
+  border-radius: var(--pc-radius);
+  border: 1px solid var(--pc-line);
+  background: var(--pc-panel);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: var(--pc-shadow);
+  overflow: visible;
+}
+
+[data-appearance="light"] .post-compose-form {
+  background: var(--pc-surface);
+}
+
+@media (max-width: 860px) {
+  .post-compose-form {
+    max-width: none;
+    justify-self: stretch;
+  }
+
+  .post-compose-mock-slide {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+  }
+}
+
+.post-compose-field {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0;
+  overflow: visible;
+}
+
+.post-compose-caption,
+.post-compose-input {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 14px 16px;
+  resize: none;
+  box-shadow: none;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+}
+
+.post-compose-caption[contenteditable="true"] {
+  cursor: text;
+}
+
+.post-compose-caption.is-empty::before {
+  content: attr(data-placeholder);
+  color: color-mix(in srgb, var(--pc-muted) 78%, transparent);
+  pointer-events: none;
+}
+
+.post-compose-caption::placeholder,
+.post-compose-input::placeholder {
+  color: color-mix(in srgb, var(--pc-muted) 78%, transparent);
+}
+
+.post-compose-caption:focus,
+.post-compose-input:focus {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Inline chips for #hashtags and @mentions — bordered, no fill (composer + description). */
+.post-compose-inline-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: min(200px, 70%);
+  height: 1.35em;
+  margin: 0;
+  padding: 0 5px;
+  vertical-align: middle;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  background: transparent;
+  color: inherit;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.post-compose-inline-chip.is-hash {
+  padding-inline: 5px;
+}
+
+.post-compose-inline-chip.is-mention {
+  /* Left inset keeps avatar inside the pill curve. */
+  padding: 0 5px 0 2px;
+  gap: 3px;
+  /* Match hash chips on the text line (avatar must not own the baseline). */
+  vertical-align: middle;
+  align-items: center;
+}
+
+.post-compose-inline-chip.is-preview,
+.post-compose-inline-chip.is-on-media {
+  height: 1.15em;
+  font-size: 0.88em;
+  /* Tight chrome so chip-to-chip gap ≈ normal word space (not padding+space). */
+  margin: 0;
+  padding: 0 0.22em;
+  /* middle — not baseline: mention avatars would otherwise shift the chip vs hash labels */
+  vertical-align: middle;
+  text-shadow: none;
+  background: transparent;
+  border-color: color-mix(in srgb, #fff 45%, transparent);
+  color: #fff;
+}
+
+.post-compose-inline-chip.is-preview.is-mention,
+.post-compose-inline-chip.is-on-media.is-mention {
+  padding: 0 0.22em 0 0.06em;
+  gap: 2px;
+  /* Same outer alignment as hash chips (avatar must not change line position). */
+  vertical-align: middle;
+  align-items: center;
+}
+
+.post-compose-inline-chip.is-preview .post-compose-inline-chip-avatar,
+.post-compose-inline-chip.is-on-media .post-compose-inline-chip-avatar {
+  width: 0.85em;
+  height: 0.85em;
+  /* Avoid replaced-element baseline pulling the whole chip off the text line. */
+  align-self: center;
+  flex-shrink: 0;
+  background: color-mix(in srgb, #000 35%, transparent);
+}
+
+.post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
+  color: #fff;
+}
+
+.post-compose-inline-chip.is-on-media .post-compose-inline-chip-label {
+  color: #fff;
+}
+
+.caption-chip-text {
+  min-width: 0;
+}
+
+/* Thin separator between adjacent #/@ chips (replaces a full word-space + padding). */
+.caption-chip-gap {
+  font-size: inherit;
+  letter-spacing: 0;
+}
+
+/* No extra margins when chips sit next to each other without a text node. */
+.caption-chip-text .post-compose-inline-chip + .post-compose-inline-chip {
+  margin-left: 0.2em;
+}
+
+.post-compose-inline-chip.is-menu {
+  max-width: 100%;
+  pointer-events: none;
+  height: 1.45em;
+}
+
+.post-compose-inline-chip-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  align-self: center;
+  /* Keep img/initial from defining the chip's outer baseline. */
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--pc-panel, #111) 55%, #111);
+  box-shadow: none;
+}
+
+.post-compose-inline-chip-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Replaced elements otherwise sit on a different baseline than hash labels. */
+  vertical-align: middle;
+}
+
+.post-compose-inline-chip-initial {
+  font-size: 7px;
+  font-weight: 700;
+  color: color-mix(in srgb, currentColor 90%, transparent);
+  line-height: 1;
+}
+
+.post-compose-inline-chip-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 1em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+/* Keep hash + mention label text identical (buttons must not resize). */
+.post-compose-inline-chip.is-hash .post-compose-inline-chip-label,
+.post-compose-inline-chip.is-mention .post-compose-inline-chip-label {
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.post-compose-chip-ghost {
+  color: color-mix(in srgb, var(--pc-muted) 72%, transparent);
+  font-weight: 500;
+}
+
+.post-compose-mock-caption .post-compose-inline-chip.is-hash .post-compose-inline-chip-label,
+.post-compose-mock-caption .post-compose-inline-chip.is-mention .post-compose-inline-chip-label {
+  color: #fff;
+}
+
+.post-compose-mock-caption .post-compose-chip-ghost {
+  color: color-mix(in srgb, #fff 45%, transparent);
+}
+
+[data-appearance="light"] .post-compose-mock-caption .post-compose-inline-chip {
+  border-color: color-mix(in srgb, #fff 40%, transparent);
+  background: transparent;
+  color: #fff;
+}
+
+.post-compose-suggest-hint {
+  color: color-mix(in srgb, var(--pc-muted) 85%, var(--pc-accent));
+}
+
+.post-compose-suggest {
+  position: absolute;
+  z-index: 8;
+  width: min(300px, calc(100% - 16px));
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 10px;
+  border: 1px solid var(--pc-line-strong);
+  background: var(--pc-panel);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, #000 12%, transparent);
+  max-height: 240px;
+  overflow: auto;
+  color: var(--pc-ink);
+}
+
+[data-appearance="light"] .post-compose-suggest {
+  background: var(--pc-surface);
+  box-shadow:
+    0 12px 28px rgba(16, 22, 30, 0.14),
+    0 0 0 1px color-mix(in srgb, #000 6%, transparent);
+}
+
+.post-compose-suggest button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--cursor-ease, 0.14s ease);
+}
+
+.post-compose-suggest button:hover,
+.post-compose-suggest button:focus-visible,
+.post-compose-suggest button.is-active {
+  background: var(--pc-hover);
+  outline: none;
+}
+
+.post-compose-suggest-meta {
+  font-size: 11px;
+  color: var(--pc-muted);
+  flex-shrink: 0;
+}
+
+.post-compose-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--cursor-head-h, 32px) - 10px);
+  border-radius: var(--cursor-radius-pill, 999px);
+  border: 1px solid var(--pc-line-strong);
+  background: transparent;
+  color: var(--pc-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 0 14px;
+  cursor: pointer;
+  transition:
+    background var(--cursor-ease, 0.14s ease),
+    border-color var(--cursor-ease, 0.14s ease),
+    color var(--cursor-ease, 0.14s ease);
+}
+
+.post-compose-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.post-compose-btn.is-primary {
+  background: var(--pc-accent);
+  border-color: color-mix(in srgb, var(--pc-accent) 70%, transparent);
+  color: var(--color-cursor-on-accent, #10140a);
+}
+
+.post-compose-btn.is-primary:hover:not(:disabled) {
+  background: var(--cursor-accent-hover, var(--pc-accent));
+}
+
+.post-compose-btn.is-ghost:hover:not(:disabled) {
+  background: var(--pc-hover);
+  border-color: var(--pc-line-strong);
+}
+
+.post-compose-spin {
+  width: 14px;
+  height: 14px;
+  animation: post-compose-spin 0.8s linear infinite;
+}
+
+@keyframes post-compose-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

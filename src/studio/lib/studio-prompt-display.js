@@ -114,6 +114,29 @@ export function parseStudioPrompt(prompt) {
   return { refs, segments };
 }
 
+/** Collect durable asset ids referenced by a stored composer prompt. */
+export function collectStudioAssetIdsFromPrompt(prompt) {
+  const { refs } = parseStudioPrompt(prompt);
+  const ids = [];
+  const seen = new Set();
+  for (const ref of refs) {
+    const path = String(ref?.path ?? "");
+    // Element chips use /Studio/elements/{id} + studio:<elementId> — never feed those
+    // into assets.listByIds (Convex rejects foreign table ids).
+    if (/\/Studio\/elements\//i.test(path) || ref?.elementType) continue;
+    const fromPath = path.match(/\/Studio\/assets\/([^/.]+)/i)?.[1];
+    const studioId = String(ref?.studioId || "").trim();
+    // Prefer path-derived asset ids; only use studio: when path is assets or absent.
+    const id = String(
+      fromPath || (/\/Studio\/assets\//i.test(path) ? studioId : path ? "" : studioId) || "",
+    ).trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
 export function composerTokenIconKind(ref) {
   const kind = String(ref?.kind ?? "file").toLowerCase();
   if (kind === "image" || kind === "video" || kind === "audio") return kind;
@@ -193,10 +216,11 @@ export function resolveStudioPromptRefPreview(ref, { assets = [], elements = [] 
     if (assetPreview) return assetPreview;
   }
 
-  // Fall back to URLs baked into the stored reference line (works even if assets aren't in the folder query).
-  if (ref?.thumb || ref?.media) {
+  // Fall back to baked URLs only when durable https (never blob:/data:).
+  const baked = ref?.thumb || ref?.media;
+  if (baked && /^https?:\/\//i.test(baked)) {
     return {
-      thumbnailUrl: ref.thumb || ref.media,
+      thumbnailUrl: baked,
       mediaUrl: ref.media || ref.thumb,
       kind: ref.kind || "image",
       elementType: ref.elementType || undefined,

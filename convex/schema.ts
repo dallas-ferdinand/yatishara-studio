@@ -465,6 +465,7 @@ export default defineSchema({
       v.literal("begun"),
       v.literal("committed"),
       v.literal("failed"),
+      v.literal("cancelled"),
     ),
     briefRevisionAtBegin: v.number(),
     briefRevisionAtCommit: v.optional(v.number()),
@@ -916,6 +917,8 @@ export default defineSchema({
     ownerId: v.id("users"),
     assetId: v.id("assets"),
     caption: v.optional(v.string()),
+    /** Normalized discovery keywords (not shown as #hashtags). */
+    keywords: v.optional(v.array(v.string())),
     likeCount: v.number(),
     /** Total opens/views; optional for posts created before this field existed. */
     viewCount: v.optional(v.number()),
@@ -932,6 +935,81 @@ export default defineSchema({
     .index("by_published", ["publishedAt"])
     .index("by_asset", ["assetId"])
     .index("by_owner", ["ownerId"]),
+
+  /** Global hashtag catalog (normalized tag without #). */
+  hashtags: defineTable({
+    tag: v.string(),
+    displayTag: v.string(),
+    postCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_tag", ["tag"])
+    .index("by_post_count", ["postCount"]),
+
+  /** Links a published profile post to hashtags. */
+  profilePostHashtags: defineTable({
+    postId: v.id("profilePosts"),
+    hashtagId: v.id("hashtags"),
+    profileId: v.id("profiles"),
+    ownerId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_post", ["postId"])
+    .index("by_hashtag", ["hashtagId"])
+    .index("by_owner_and_hashtag", ["ownerId", "hashtagId"])
+    .index("by_profile_and_hashtag", ["profileId", "hashtagId"]),
+
+  /** Per-viewer interest in hashtags from likes/saves/shares/views. */
+  userHashtagAffinity: defineTable({
+    userId: v.id("users"),
+    hashtagId: v.id("hashtags"),
+    score: v.number(),
+    likeCount: v.number(),
+    saveCount: v.number(),
+    shareCount: v.number(),
+    viewCount: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_and_hashtag", ["userId", "hashtagId"])
+    .index("by_user_and_score", ["userId", "score"]),
+
+  /** Per-viewer interest in freeform keywords. */
+  userKeywordAffinity: defineTable({
+    userId: v.id("users"),
+    keyword: v.string(),
+    score: v.number(),
+    likeCount: v.number(),
+    saveCount: v.number(),
+    shareCount: v.number(),
+    viewCount: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_and_keyword", ["userId", "keyword"])
+    .index("by_user_and_score", ["userId", "score"]),
+
+  /** How consistently a creator posts with a given hashtag (identity signal). */
+  creatorHashtagStats: defineTable({
+    profileId: v.id("profiles"),
+    hashtagId: v.id("hashtags"),
+    postCount: v.number(),
+    consistencyScore: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_profile_and_hashtag", ["profileId", "hashtagId"])
+    .index("by_hashtag_and_consistency", ["hashtagId", "consistencyScore"]),
+
+  /** @mentions on a profile post. */
+  profilePostMentions: defineTable({
+    postId: v.id("profilePosts"),
+    mentionedProfileId: v.id("profiles"),
+    mentionedUsername: v.string(),
+    ownerId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_post", ["postId"])
+    .index("by_mentioned", ["mentionedProfileId"])
+    .index("by_post_and_mentioned", ["postId", "mentionedProfileId"]),
 
   profileFollows: defineTable({
     followerUserId: v.id("users"),

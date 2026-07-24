@@ -668,7 +668,7 @@
 
 .cursor-explorer-panel {
   position: relative;
-  background: var(--color-cursor-sidebar);
+  background: var(--mos-bg);
   min-height: 0;
   overflow: hidden;
 }
@@ -781,6 +781,9 @@
   flex: 0 0 auto;
   overflow: hidden;
   background: color-mix(in srgb, var(--mos-text-bright, #fff) 3.5%, var(--mos-bg, var(--color-cursor-bg)));
+}
+.desk-file-thumb-visual:has(.desk-file-thumb-image) {
+  background: var(--desk-transparency-grid);
 }
 
 .desk-file-thumb-badge {
@@ -1631,7 +1634,7 @@
 }
 
 .desk-explorer-panel--fullscreen {
-  background: var(--color-cursor-sidebar);
+  background: var(--mos-bg);
 }
 
 .desk-explorer-collapsed-rail {
@@ -3761,6 +3764,10 @@
   border-radius: 8px;
   overflow: hidden;
   justify-content: center;
+  background: var(--desk-transparency-grid);
+}
+.cursor-attach-tile.is-square .cursor-attach-tile-open:hover {
+  background: var(--desk-transparency-grid);
 }
 .cursor-attach-tile.is-video .cursor-attach-tile-open {
   width: 72px;
@@ -4023,7 +4030,8 @@
   width: 100%;
   max-width: 100%;
   border-radius: 0;
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
+  background: var(--desk-transparency-grid);
 }
 .cursor-attach-preview-iframe {
   width: 100%;
@@ -7256,15 +7264,15 @@
 }
 .cursor-unified-tabs.is-dragging-strip .cursor-unified-tab:not(.cursor-unified-tab-new) {
   transition:
-    transform 260ms cubic-bezier(0.2, 0.92, 0.28, 1),
-    border-color 220ms ease,
-    background 220ms ease,
-    opacity 180ms ease;
+    transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 120ms ease,
+    background 120ms ease,
+    opacity 100ms ease;
   will-change: transform;
   backface-visibility: hidden;
 }
 .cursor-unified-tabs.is-settling-strip .cursor-unified-tab:not(.cursor-unified-tab-new) {
-  transition: transform 460ms cubic-bezier(0.34, 1.12, 0.64, 1);
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .cursor-unified-tab-placeholder {
   width: var(--cursor-unified-tab-width, 168px);
@@ -7303,7 +7311,8 @@
   gap: 6px;
   padding: 0 4px 0 10px;
   border: 1px solid var(--color-cursor-border);
-  border-radius: 0;
+  border-radius: 999px;
+  overflow: hidden;
   background: var(--color-cursor-sidebar);
   color: var(--color-cursor-text);
   font-size: 12px;
@@ -7314,7 +7323,7 @@
   backface-visibility: hidden;
 }
 .cursor-unified-tab-ghost.is-settling {
-  transition: transform 460ms cubic-bezier(0.34, 1.12, 0.64, 1);
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .cursor-unified-tab[draggable="true"]:not(.is-drag-source) {
   cursor: grab;
@@ -7346,6 +7355,10 @@
   max-width: var(--cursor-unified-tab-width, 168px);
   padding: 0 6px;
   position: relative;
+  border: 0;
+  background: transparent;
+}
+.cursor-unified-tab-preview {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -7354,6 +7367,7 @@
   border-radius: 5px;
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
   border: 0;
   background: color-mix(in srgb, var(--color-cursor-panel) 72%, transparent);
 }
@@ -7691,7 +7705,7 @@
   overflow: visible;
 }
 .cursor-unified-tab-new.is-strip-new-during-drag {
-  transition: transform 220ms cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
 .cursor-unified-tabs.is-settling-strip .cursor-unified-tab-new {
@@ -7920,6 +7934,25 @@
   padding: 0 8px 8px;
 }
 
+/* Transparency checkerboard for images with alpha (white logos stay visible). */
+:root {
+  --desk-transparency-cell: 20px;
+  --desk-transparency-a: #f3f5f8;
+  --desk-transparency-b: #dfe3ea;
+  --desk-transparency-grid: repeating-conic-gradient(
+      var(--desk-transparency-a) 0% 25%,
+      var(--desk-transparency-b) 0% 50%
+    )
+    0 0 / var(--desk-transparency-cell) var(--desk-transparency-cell);
+}
+[data-appearance="light"] {
+  --desk-transparency-a: #f3f5f8;
+  --desk-transparency-b: #e0e4eb;
+}
+.desk-transparency-grid {
+  background: var(--desk-transparency-grid) !important;
+}
+
 .desk-image-viewer {
   display: flex;
   flex-direction: column;
@@ -8036,6 +8069,8 @@
   will-change: transform;
   user-select: none;
   -webkit-user-drag: none;
+  /* Checkerboard only under the image bounds (alpha shows through). */
+  background: var(--desk-transparency-grid);
 }
 .desk-media-toolbar {
   display: flex;

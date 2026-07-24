@@ -167,6 +167,7 @@ export function ProfileSettingsCard({
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const profile = useQuery(api.profiles.getMine, { expiresUnix });
   const claimUsername = useMutation(api.profiles.claimUsername);
+  const changeUsername = useMutation(api.profiles.changeUsername);
   const updateMine = useMutation(api.profiles.updateMine);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
@@ -206,9 +207,9 @@ export function ProfileSettingsCard({
 
   const publicUrl =
     typeof window !== "undefined" && profile
-      ? `${window.location.origin}${profile.publicUrlPath}`
+      ? `${window.location.origin}/u/${encodeURIComponent((username || profile.username).replace(/^@/, ""))}`
       : profile
-        ? profile.publicUrlPath
+        ? `/u/${encodeURIComponent((username || profile.username).replace(/^@/, ""))}`
         : "";
 
   async function uploadAvatarFile(file: File) {
@@ -261,6 +262,10 @@ export function ProfileSettingsCard({
     setError("");
     setStatus("");
     try {
+      const nextUsername = username.trim();
+      if (nextUsername && nextUsername.toLowerCase() !== profile.username) {
+        await changeUsername({ username: nextUsername });
+      }
       await updateMine({
         displayName,
         bio,
@@ -454,9 +459,17 @@ export function ProfileSettingsCard({
               />
             </label>
             <div className="studio-profile-handle-row">
-              <div className="studio-profile-username-field is-readonly">
+              <div className="studio-profile-username-field">
                 <span className="studio-profile-username-prefix">@</span>
-                <input value={profile.username} readOnly tabIndex={-1} />
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  maxLength={32}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  aria-label="Username"
+                />
               </div>
               <button
                 type="button"

@@ -168,7 +168,7 @@ export function buildAssistanceGenerationPlan(args: {
             Math.ceil(Number(args.payload.production.durationSeconds) || 4),
           ),
         )
-      : args.payload.production.durationSeconds;
+      : undefined;
   const finalPrompt = [args.style?.instructions, args.compiledPrompt]
     .filter((part): part is string => Boolean(part?.trim()))
     .join("\n\n")
@@ -202,7 +202,7 @@ export function buildAssistanceGenerationPlan(args: {
       aspectRatio: args.payload.production.aspectRatio,
       resolution: args.payload.production.resolution,
       quality: args.payload.production.quality,
-      durationSeconds,
+      ...(durationSeconds !== undefined ? { durationSeconds } : {}),
       audioEnabled,
       skipPromptEnhancement: true,
       stylePresetId: args.stylePresetId,

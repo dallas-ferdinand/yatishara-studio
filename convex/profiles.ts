@@ -5,7 +5,6 @@ import { query, mutation, type MutationCtx, type QueryCtx } from "./_generated/s
 import { getOptionalUser } from "./lib/auth";
 import {
   assetThumbnailPath,
-  PREVIEW_TRANSFORM,
   signBunnyCdnUrls,
   signBunnyFullUrl,
   THUMB_TRANSFORM,
@@ -17,6 +16,24 @@ import {
   type FeedMode,
 } from "./lib/feedRanking";
 import {
+  applyPostAffinity,
+  clearPostHashtags,
+  clearPostMentions,
+  loadCreatorConsistencyForLinks,
+  loadPostHashtagRefs,
+  loadPostMentionRefs,
+  loadViewerAffinityMaps,
+  syncPostHashtags,
+  syncPostMentions,
+} from "./lib/hashtagOps";
+import {
+  extractHashtagsFromCaption,
+  extractKeywordsFromCaption,
+  extractMentionsFromCaption,
+  normalizeHashtagList,
+  normalizeKeywordList,
+} from "./lib/hashtagNormalize";
+import {
   contactHref,
   sanitizeBio,
   sanitizeContactLinks,
@@ -24,6 +41,18 @@ import {
   validateUsername,
   type ContactLinkInput,
 } from "./lib/profileIdentity";
+
+const hashtagChipValidator = v.object({
+  tag: v.string(),
+  displayTag: v.string(),
+});
+
+const mentionChipValidator = v.object({
+  username: v.string(),
+  profileId: v.id("profiles"),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+});
 
 const contactLinkValidator = v.object({
   type: v.union(
@@ -87,6 +116,9 @@ const publicPostReturn = v.object({
   kind: v.union(v.literal("image"), v.literal("video")),
   name: v.string(),
   caption: v.optional(v.string()),
+  keywords: v.optional(v.array(v.string())),
+  hashtags: v.array(hashtagChipValidator),
+  mentions: v.array(mentionChipValidator),
   likeCount: v.number(),
   viewCount: v.number(),
   commentCount: v.number(),
@@ -97,6 +129,7 @@ const publicPostReturn = v.object({
   mediaUrl: v.optional(v.string()),
   likedByViewer: v.boolean(),
   savedByViewer: v.boolean(),
+  username: v.string(),
 });
 
 const feedPostReturn = v.object({
@@ -106,6 +139,9 @@ const feedPostReturn = v.object({
   kind: v.union(v.literal("image"), v.literal("video")),
   name: v.string(),
   caption: v.optional(v.string()),
+  keywords: v.optional(v.array(v.string())),
+  hashtags: v.array(hashtagChipValidator),
+  mentions: v.array(mentionChipValidator),
   likeCount: v.number(),
   viewCount: v.number(),
   commentCount: v.number(),
@@ -133,6 +169,14 @@ type HydratedPublicPost = {
   kind: "image" | "video";
   name: string;
   caption?: string;
+  keywords?: string[];
+  hashtags: Array<{ tag: string; displayTag: string }>;
+  mentions: Array<{
+    username: string;
+    profileId: Id<"profiles">;
+    displayName?: string;
+    avatarUrl?: string;
+  }>;
   likeCount: number;
   viewCount: number;
   commentCount: number;
@@ -143,6 +187,7 @@ type HydratedPublicPost = {
   mediaUrl?: string;
   likedByViewer: boolean;
   savedByViewer: boolean;
+  username: string;
 };
 
 async function hydratePublicPosts(
@@ -153,6 +198,7 @@ async function hydratePublicPosts(
 ): Promise<HydratedPublicPost[]> {
   if (posts.length === 0) return [];
   const assets = await Promise.all(posts.map((post) => ctx.db.get("assets", post.assetId)));
+  const profiles = await Promise.all(posts.map((post) => ctx.db.get("profiles", post.profileId)));
   const thumbPaths = assets.map((asset) => (asset ? assetThumbnailPath(asset) : undefined));
   /** Videos without a poster image still need a signed URL for grid <video> thumbs. */
   const videoPreviewPaths = assets.map((asset) => {
@@ -188,25 +234,38 @@ async function hydratePublicPosts(
         }),
       )
     : posts.map(() => false);
-  const [thumbs, videoUrls] = await Promise.all([
+  const [thumbs, videoUrls, hashtagRefs, mentionRefs] = await Promise.all([
     signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM),
     signBunnyCdnUrls(videoPreviewPaths, expiresUnix),
+    Promise.all(posts.map((post) => loadPostHashtagRefs(ctx, post._id))),
+    Promise.all(posts.map((post) => loadPostMentionRefs(ctx, post._id))),
   ]);
   const results: HydratedPublicPost[] = [];
   for (let i = 0; i < posts.length; i++) {
     const post = posts[i]!;
     const asset = assets[i];
+    const author = profiles[i];
     if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
       continue;
     }
+    if (!author?.username) continue;
     const thumbPath = thumbPaths[i];
     const videoPath = videoPreviewPaths[i];
+    const tags = hashtagRefs[i] ?? [];
+    const mentions = await hydrateMentionChips(
+      ctx,
+      mentionRefs[i] ?? [],
+      expiresUnix,
+    );
     results.push({
       _id: post._id,
       assetId: post.assetId,
       kind: asset.kind,
       name: asset.name,
       caption: post.caption,
+      keywords: post.keywords?.length ? post.keywords : undefined,
+      hashtags: tags.map((t) => ({ tag: t.tag, displayTag: t.displayTag })),
+      mentions,
       likeCount: post.likeCount,
       viewCount: post.viewCount ?? 0,
       commentCount: post.commentCount ?? 0,
@@ -217,6 +276,7 @@ async function hydratePublicPosts(
       mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
       likedByViewer: likedFlags[i] ?? false,
       savedByViewer: savedFlags[i] ?? false,
+      username: author.username,
     });
   }
   return results;
@@ -253,10 +313,85 @@ async function signAvatarUrl(
   expiresUnix: number,
 ): Promise<string | undefined> {
   if (!asset || asset.deletedAt || !asset.bunnyPath) return undefined;
-  const thumbPath = assetThumbnailPath(asset);
+  // Prefer thumbnail; fall back to bunnyPath so avatar images always resolve
+  // (same pattern as feed author thumbs).
+  const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
   if (!thumbPath) return undefined;
-  const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, PREVIEW_TRANSFORM);
+  const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM);
   return signed.get(thumbPath);
+}
+
+type HydratedMentionChip = {
+  username: string;
+  profileId: Id<"profiles">;
+  displayName?: string;
+  avatarUrl?: string;
+};
+
+/** Resolve display names + signed avatar URLs for post @mention chips. */
+async function hydrateMentionChips(
+  ctx: QueryCtx,
+  mentions: Array<{ username: string; profileId: Id<"profiles"> }>,
+  expiresUnix: number,
+): Promise<HydratedMentionChip[]> {
+  if (mentions.length === 0) return [];
+
+  const uniqueIds = [...new Set(mentions.map((m) => m.profileId))];
+  const profiles = await Promise.all(uniqueIds.map((id) => ctx.db.get("profiles", id)));
+  const profileById = new Map<string, Doc<"profiles">>();
+  for (let i = 0; i < uniqueIds.length; i++) {
+    const profile = profiles[i];
+    if (profile) profileById.set(uniqueIds[i]!, profile);
+  }
+
+  const avatarAssetIds = [
+    ...new Set(
+      [...profileById.values()]
+        .map((p) => p.avatarAssetId)
+        .filter((id): id is Id<"assets"> => Boolean(id)),
+    ),
+  ];
+  const avatarAssets = await Promise.all(
+    avatarAssetIds.map((id) => ctx.db.get("assets", id)),
+  );
+  const assetById = new Map<string, Doc<"assets"> | null>();
+  for (let i = 0; i < avatarAssetIds.length; i++) {
+    assetById.set(avatarAssetIds[i]!, avatarAssets[i] ?? null);
+  }
+
+  const thumbPaths = [
+    ...new Set(
+      [...assetById.values()]
+        .map((asset) => {
+          if (!asset || asset.deletedAt || !asset.bunnyPath) return undefined;
+          return assetThumbnailPath(asset) ?? asset.bunnyPath;
+        })
+        .filter((path): path is string => Boolean(path)),
+    ),
+  ];
+  const signed =
+    thumbPaths.length > 0
+      ? await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM)
+      : new Map<string, string>();
+
+  return mentions.map((m) => {
+    const profile = profileById.get(m.profileId);
+    const displayName = profile?.displayName?.trim() || undefined;
+    let avatarUrl: string | undefined;
+    if (profile?.avatarAssetId) {
+      const asset = assetById.get(profile.avatarAssetId) ?? null;
+      if (asset && !asset.deletedAt && asset.bunnyPath) {
+        const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
+        avatarUrl = thumbPath ? signed.get(thumbPath) : undefined;
+      }
+    }
+    return {
+      username: m.username,
+      profileId: m.profileId,
+      displayName,
+      avatarUrl,
+    };
+  });
 }
 
 async function requireOwnedAsset(
@@ -477,6 +612,47 @@ export const updateMine = authedMutation({
   },
 });
 
+export const changeUsername = authedMutation({
+  args: {
+    username: v.string(),
+  },
+  returns: v.object({
+    profileId: v.id("profiles"),
+    username: v.string(),
+    publicUrlPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const profile = await getProfileByUser(ctx, ctx.user._id);
+    if (!profile) {
+      throw new Error("Claim a username before changing it");
+    }
+    const username = validateUsername(args.username);
+    if (username === profile.username) {
+      return {
+        profileId: profile._id,
+        username: profile.username,
+        publicUrlPath: publicUrlPath(profile.username),
+      };
+    }
+    const taken = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (taken && taken.userId !== ctx.user._id) {
+      throw new Error("Username is taken");
+    }
+    await ctx.db.patch(profile._id, {
+      username,
+      updatedAt: Date.now(),
+    });
+    return {
+      profileId: profile._id,
+      username,
+      publicUrlPath: publicUrlPath(username),
+    };
+  },
+});
+
 export const isAssetShared = authedQuery({
   args: { assetId: v.id("assets") },
   returns: v.object({
@@ -535,6 +711,8 @@ export const shareAsset = authedMutation({
   args: {
     assetId: v.id("assets"),
     caption: v.optional(v.string()),
+    hashtags: v.optional(v.array(v.string())),
+    keywords: v.optional(v.array(v.string())),
   },
   returns: v.object({
     postId: v.id("profilePosts"),
@@ -554,14 +732,44 @@ export const shareAsset = authedMutation({
       .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
       .unique();
     const caption = args.caption?.trim() || undefined;
+    const fromCaptionTags = extractHashtagsFromCaption(caption);
+    const fromCaptionKeywords = extractKeywordsFromCaption(caption);
+    const fromCaptionMentions = extractMentionsFromCaption(caption);
+    const hashtags = normalizeHashtagList([
+      ...(args.hashtags ?? []),
+      ...fromCaptionTags,
+    ]);
+    const keywords = normalizeKeywordList([
+      ...(args.keywords ?? []),
+      ...fromCaptionKeywords,
+    ]);
     const now = Date.now();
+
+    async function attachMeta(postId: Id<"profilePosts">) {
+      await syncPostHashtags(ctx, {
+        postId,
+        profileId: profile!._id,
+        ownerId: ctx.user._id,
+        rawTags: hashtags,
+        now,
+      });
+      await syncPostMentions(ctx, {
+        postId,
+        ownerId: ctx.user._id,
+        usernames: fromCaptionMentions,
+        now,
+      });
+    }
+
     if (existing) {
       if (!existing.unpublishedAt && existing.ownerId === ctx.user._id) {
         await ctx.db.patch(existing._id, {
           caption,
+          keywords: keywords.length ? keywords : undefined,
           publishedAt: now,
           unpublishedAt: undefined,
         });
+        await attachMeta(existing._id);
         return {
           postId: existing._id,
           publicUrlPath: publicUrlPath(profile.username),
@@ -573,9 +781,11 @@ export const shareAsset = authedMutation({
       await ctx.db.patch(existing._id, {
         profileId: profile._id,
         caption,
+        keywords: keywords.length ? keywords : undefined,
         publishedAt: now,
         unpublishedAt: undefined,
       });
+      await attachMeta(existing._id);
       await adjustProfileCounts(ctx, profile._id, {
         postCount: profile.postCount + 1,
       });
@@ -589,6 +799,7 @@ export const shareAsset = authedMutation({
       ownerId: ctx.user._id,
       assetId: args.assetId,
       caption,
+      keywords: keywords.length ? keywords : undefined,
       likeCount: 0,
       viewCount: 0,
       commentCount: 0,
@@ -596,6 +807,7 @@ export const shareAsset = authedMutation({
       shareCount: 0,
       publishedAt: now,
     });
+    await attachMeta(postId);
     await adjustProfileCounts(ctx, profile._id, {
       postCount: profile.postCount + 1,
     });
@@ -619,7 +831,10 @@ export const unshareAsset = authedMutation({
     if (!post || post.ownerId !== ctx.user._id || post.unpublishedAt) {
       return null;
     }
-    await ctx.db.patch(post._id, { unpublishedAt: Date.now() });
+    const now = Date.now();
+    await clearPostHashtags(ctx, post, now);
+    await clearPostMentions(ctx, post._id);
+    await ctx.db.patch(post._id, { unpublishedAt: now });
     await adjustProfileCounts(ctx, profile._id, {
       postCount: Math.max(0, profile.postCount - 1),
     });
@@ -904,11 +1119,39 @@ export const listFeed = query({
       return profile;
     }
 
+    const affinity =
+      viewerId && mode === "forYou"
+        ? await loadViewerAffinityMaps(ctx, viewerId)
+        : { hashtagScores: new Map(), keywordScores: new Map() };
+
+    const postHashtagCache = new Map<
+      Id<"profilePosts">,
+      Awaited<ReturnType<typeof loadPostHashtagRefs>>
+    >();
+    async function hashtagsOf(postId: Id<"profilePosts">) {
+      const cached = postHashtagCache.get(postId);
+      if (cached) return cached;
+      const refs = await loadPostHashtagRefs(ctx, postId);
+      postHashtagCache.set(postId, refs);
+      return refs;
+    }
+
+    const consistencyCache = new Map<string, number>();
+    async function consistencyOf(profileId: Id<"profiles">, hashtagId: Id<"hashtags">) {
+      const key = `${profileId}:${hashtagId}`;
+      if (consistencyCache.has(key)) return consistencyCache.get(key)!;
+      const map = await loadCreatorConsistencyForLinks(ctx, profileId, [hashtagId]);
+      const score = map.get(hashtagId) ?? 0;
+      consistencyCache.set(key, score);
+      return score;
+    }
+
     type Scored = {
       post: Doc<"profilePosts">;
       profile: Doc<"profiles">;
       fromFollowing: boolean;
       score: number;
+      hashtags: Awaited<ReturnType<typeof loadPostHashtagRefs>>;
     };
     const scored: Scored[] = [];
     for (const post of candidates) {
@@ -916,10 +1159,28 @@ export const listFeed = query({
       if (!profile || !profile.isPublic) continue;
       const fromFollowing = followingIds.has(profile._id);
       if (mode === "following" && !fromFollowing) continue;
+
+      const hashtags = await hashtagsOf(post._id);
+      let hashtagAffinity = 0;
+      let creatorConsistency = 0;
+      if (mode === "forYou" && hashtags.length) {
+        for (const ref of hashtags) {
+          hashtagAffinity += affinity.hashtagScores.get(ref.hashtagId) ?? 0;
+          creatorConsistency += await consistencyOf(profile._id, ref.hashtagId);
+        }
+      }
+      let keywordAffinity = 0;
+      if (mode === "forYou" && post.keywords?.length) {
+        for (const kw of post.keywords) {
+          keywordAffinity += affinity.keywordScores.get(kw) ?? 0;
+        }
+      }
+
       scored.push({
         post,
         profile,
         fromFollowing,
+        hashtags,
         score: scoreFeedPost({
           mode,
           fromFollowing,
@@ -931,6 +1192,11 @@ export const listFeed = query({
             viewCount: post.viewCount,
             commentCount: post.commentCount,
             saveCount: post.saveCount,
+          },
+          identity: {
+            hashtagAffinity,
+            creatorConsistency,
+            keywordAffinity,
           },
         }),
       });
@@ -1017,6 +1283,14 @@ export const listFeed = query({
       kind: "image" | "video";
       name: string;
       caption?: string;
+      keywords?: string[];
+      hashtags: Array<{ tag: string; displayTag: string }>;
+      mentions: Array<{
+        username: string;
+        profileId: Id<"profiles">;
+        displayName?: string;
+        avatarUrl?: string;
+      }>;
       likeCount: number;
       viewCount: number;
       commentCount: number;
@@ -1038,6 +1312,13 @@ export const listFeed = query({
       score: number;
     }> = [];
 
+    const mentionRefsByPost = await Promise.all(
+      ordered.map((item) => loadPostMentionRefs(ctx, item.post._id)),
+    );
+    const mentionsByPost = await Promise.all(
+      mentionRefsByPost.map((refs) => hydrateMentionChips(ctx, refs, expiresUnix)),
+    );
+
     for (let i = 0; i < ordered.length; i++) {
       const item = ordered[i]!;
       const asset = assets[i];
@@ -1051,6 +1332,7 @@ export const listFeed = query({
       const firstName = owner?.firstName?.trim() || undefined;
       const lastName = owner?.lastName?.trim() || undefined;
       const isOwner = Boolean(viewerId && item.profile.userId === viewerId);
+      const mentions = mentionsByPost[i] ?? [];
       results.push({
         _id: item.post._id,
         assetId: item.post.assetId,
@@ -1058,6 +1340,9 @@ export const listFeed = query({
         kind: asset.kind,
         name: asset.name,
         caption: item.post.caption,
+        keywords: item.post.keywords?.length ? item.post.keywords : undefined,
+        hashtags: item.hashtags.map((t) => ({ tag: t.tag, displayTag: t.displayTag })),
+        mentions,
         likeCount: item.post.likeCount,
         viewCount: item.post.viewCount ?? 0,
         commentCount: item.post.commentCount ?? 0,
@@ -1246,6 +1531,12 @@ export const toggleLike = authedMutation({
       await ctx.db.delete(existing._id);
       const likeCount = Math.max(0, post.likeCount - 1);
       await ctx.db.patch(post._id, { likeCount });
+      await applyPostAffinity(ctx, {
+        userId: ctx.user._id,
+        post,
+        event: "like",
+        direction: -1,
+      });
       return { liked: false, likeCount };
     }
     await ctx.db.insert("profileLikes", {
@@ -1255,6 +1546,12 @@ export const toggleLike = authedMutation({
     });
     const likeCount = post.likeCount + 1;
     await ctx.db.patch(post._id, { likeCount });
+    await applyPostAffinity(ctx, {
+      userId: ctx.user._id,
+      post,
+      event: "like",
+      direction: 1,
+    });
     return { liked: true, likeCount };
   },
 });
@@ -1277,6 +1574,12 @@ export const toggleSave = authedMutation({
       await ctx.db.delete(existing._id);
       const saveCount = Math.max(0, (post.saveCount ?? 1) - 1);
       await ctx.db.patch(post._id, { saveCount });
+      await applyPostAffinity(ctx, {
+        userId: ctx.user._id,
+        post,
+        event: "save",
+        direction: -1,
+      });
       return { saved: false, saveCount };
     }
     await ctx.db.insert("profileSaves", {
@@ -1286,6 +1589,12 @@ export const toggleSave = authedMutation({
     });
     const saveCount = (post.saveCount ?? 0) + 1;
     await ctx.db.patch(post._id, { saveCount });
+    await applyPostAffinity(ctx, {
+      userId: ctx.user._id,
+      post,
+      event: "save",
+      direction: 1,
+    });
     return { saved: true, saveCount };
   },
 });
@@ -1317,6 +1626,14 @@ export const recordShare = authedMutation({
     }
     const shareCount = (post.shareCount ?? 0) + 1;
     await ctx.db.patch(post._id, { shareCount });
+    if (!existing) {
+      await applyPostAffinity(ctx, {
+        userId: ctx.user._id,
+        post,
+        event: "share",
+        direction: 1,
+      });
+    }
     return { shared: true, shareCount };
   },
 });
@@ -1336,6 +1653,15 @@ export const recordPostView = mutation({
     }
     const viewCount = (post.viewCount ?? 0) + 1;
     await ctx.db.patch(post._id, { viewCount });
+    const viewerId = await getAuthUserId(ctx);
+    if (viewerId) {
+      await applyPostAffinity(ctx, {
+        userId: viewerId,
+        post,
+        event: "view",
+        direction: 1,
+      });
+    }
     return { viewCount };
   },
 });

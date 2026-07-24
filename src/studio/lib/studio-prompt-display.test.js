@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { threadTitleFromPrompt } from "./studio-prompt-display.js";
+import {
+  collectStudioAssetIdsFromPrompt,
+  threadTitleFromPrompt,
+} from "./studio-prompt-display.js";
 
 describe("threadTitleFromPrompt", () => {
   it("strips object-replacement placeholders from tab titles", () => {
@@ -23,5 +26,35 @@ describe("threadTitleFromPrompt", () => {
         "\n\nReferences:\n- @flyer.png | kind: image | thumb: https://example.com/t.jpg",
       ),
     ).toBe("flyer.png");
+  });
+});
+
+describe("collectStudioAssetIdsFromPrompt", () => {
+  it("reads studio ids and /Studio/assets paths from reference lines", () => {
+    expect(
+      collectStudioAssetIdsFromPrompt(
+        [
+          "use this logo",
+          "",
+          "References:",
+          "- @logo.png | kind: image | path: /Studio/assets/jd7abc123 | studio: jd7abc123",
+          "- @other.png | kind: image | path: /Studio/assets/jd7other99.png",
+        ].join("\n"),
+      ),
+    ).toEqual(["jd7abc123", "jd7other99"]);
+  });
+
+  it("ignores element reference chips so assets.listByIds is not fed element ids", () => {
+    expect(
+      collectStudioAssetIdsFromPrompt(
+        [
+          "use this character",
+          "",
+          "References:",
+          "- @Maya | kind: context | element: character | path: /Studio/elements/ks75yx14gdxspzh2nsg11xhw2d8ajy70 | studio: ks75yx14gdxspzh2nsg11xhw2d8ajy70",
+          "- @logo.png | kind: image | path: /Studio/assets/jd7abc123 | studio: jd7abc123",
+        ].join("\n"),
+      ),
+    ).toEqual(["jd7abc123"]);
   });
 });

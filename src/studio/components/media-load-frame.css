@@ -27,6 +27,13 @@
   max-height: 100%;
 }
 
+.media-load-frame.has-custom-aspect:not(.is-ready) {
+  aspect-ratio: var(--media-load-aspect, 1 / 1);
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
+
 .media-load-frame.is-ready.ratio-square,
 .media-load-frame.is-ready.ratio-image,
 .media-load-frame.is-ready.ratio-video,
@@ -50,7 +57,6 @@
   display: grid;
   place-items: center;
   pointer-events: none;
-  overflow: hidden;
   background: transparent;
 }
 
@@ -59,6 +65,18 @@
   inset: 0;
   display: grid;
   place-items: center;
+  background: transparent;
+  /* Don't let the full-bleed overlay become a square paint layer. */
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Sized to the logo ring — used in tight tiles/grids so the overlay isn't tile-square. */
+.media-load-frame-wave.is-ring {
+  position: relative;
+  inset: auto;
+  width: var(--logo-loader-ring, 56px);
+  height: var(--logo-loader-ring, 56px);
 }
 
 .media-load-frame-failure {

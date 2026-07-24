@@ -77,4 +77,28 @@ describe("generationAssetNames", () => {
     expect(name).toMatch(/^Image · .+\.png$/);
     expect(shortUniqueToken("abc123xyz")).toBe("123xyz");
   });
+
+  it("strips AUTHORITATIVE headers so filenames use the creative body", () => {
+    const snippet = promptSnippetForName(
+      [
+        "AUTHORITATIVE REVIEWED REQUIREMENTS — do not contradict:",
+        "- Subject: 24-Hour Flash Sale",
+        "- Exact CTA text: WhatsApp +1 (868) 303-4621",
+        "",
+        "A premium tropical beach flyer with flamingos and palm trees",
+      ].join("\n"),
+    );
+    expect(snippet).not.toMatch(/AUTHORITATIVE/i);
+    expect(snippet).toMatch(/premium tropical beach/i);
+  });
+
+  it("prefers a short subject over the full prompt", () => {
+    expect(
+      promptSnippetForName(
+        "AUTHORITATIVE REVIEWED REQUIREMENTS\n- Subject: X\n\nLong body about flamingos",
+        42,
+        "Yatishara Flash Sale Flyer",
+      ),
+    ).toMatch(/Yatishara Flash Sale Flyer/i);
+  });
 });

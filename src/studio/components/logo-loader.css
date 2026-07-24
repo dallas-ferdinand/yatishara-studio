@@ -1,12 +1,19 @@
 .logo-loader {
   --logo-loader-ring: 56px;
   --logo-loader-mark: 34px;
+  --logo-loader-shadow-tight: 0 0 8px color-mix(in srgb, #000 14%, transparent);
+  --logo-loader-shadow-wide:
+    0 0 34px color-mix(in srgb, #000 36%, transparent),
+    0 0 16px color-mix(in srgb, #000 22%, transparent);
   position: relative;
   display: grid;
   place-items: center;
   width: var(--logo-loader-ring);
   height: var(--logo-loader-ring);
   flex-shrink: 0;
+  border-radius: 999px;
+  overflow: visible;
+  background: transparent;
 }
 
 .logo-loader[data-size="sm"] {
@@ -24,49 +31,95 @@
   --logo-loader-mark: 34px;
 }
 
-.logo-loader-spin {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  animation: logo-loader-spin 5.5s linear infinite;
-  will-change: transform;
-}
-
+/* Scale the whole unit — plate + aura + mark breathe together. */
 .logo-loader-breathe {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
   height: 100%;
-  animation: logo-loader-breathe 2.6s ease-in-out infinite;
-  will-change: transform, opacity;
+  border-radius: 999px;
+  background: transparent;
+  overflow: visible;
+  animation: logo-loader-breathe-scale 2.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+/*
+ * Shadow aura — separate from glass so clip-path can't kill the glow.
+ * Grows + brightens on inhale; shrinks + fades on exhale.
+ */
+.logo-loader-aura {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: transparent;
+  pointer-events: none;
+  animation: logo-loader-breathe-shadow 2.6s ease-in-out infinite;
+  will-change: box-shadow, opacity;
 }
 
 .logo-loader-glass {
   position: absolute;
   inset: 0;
-  border-radius: 999px;
-  border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11));
-  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 10%, transparent);
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  box-shadow:
-    0 0 28px color-mix(in srgb, #000 34%, transparent),
-    0 0 12px color-mix(in srgb, #000 22%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+  background: color-mix(in srgb, #fff 10%, transparent);
+  /* clip-path clips box-shadow — shadow lives on .logo-loader-aura instead */
+  clip-path: circle(50% at 50% 50%);
+  -webkit-clip-path: circle(50% at 50% 50%);
+  box-shadow: none;
+  animation: logo-loader-breathe-fade 2.6s ease-in-out infinite;
   pointer-events: none;
+  will-change: opacity;
+}
+
+.logo-loader[data-variant="bare"] .logo-loader-glass {
+  display: none;
+}
+
+.logo-loader[data-variant="bare"] .logo-loader-breathe {
+  animation: none;
+  will-change: auto;
+}
+
+.logo-loader[data-variant="bare"] .logo-loader-aura {
+  animation: logo-loader-breathe-shadow 2.6s ease-in-out infinite;
+}
+
+.logo-loader[data-variant="bare"] .logo-loader-spin {
+  animation: logo-loader-spin 5.5s linear infinite,
+    logo-loader-breathe-scale 2.6s ease-in-out infinite;
+}
+
+.logo-loader[data-variant="bare"] .logo-loader-mark {
+  animation: logo-loader-breathe-fade 2.6s ease-in-out infinite;
+}
+
+/* Only the mark rotates — never the plate/aura. */
+.logo-loader-spin {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--logo-loader-mark);
+  height: var(--logo-loader-mark);
+  border-radius: 999px;
+  background: transparent;
+  animation: logo-loader-spin 5.5s linear infinite;
+  will-change: transform;
 }
 
 .logo-loader-mark {
-  position: relative;
-  z-index: 1;
+  display: block;
   width: var(--logo-loader-mark);
   height: var(--logo-loader-mark);
   object-fit: contain;
+  background: transparent;
   opacity: 0.9;
-  filter: drop-shadow(0 0 10px color-mix(in srgb, #000 18%, transparent));
+  filter: drop-shadow(0 0 8px color-mix(in srgb, #000 20%, transparent));
+  animation: logo-loader-breathe-fade 2.6s ease-in-out infinite;
+  will-change: opacity;
 }
 
 @keyframes logo-loader-spin {
@@ -75,43 +128,96 @@
   }
 }
 
-/* Fade+shrink out and fade+grow in together — soft breath. */
-@keyframes logo-loader-breathe {
+@keyframes logo-loader-breathe-scale {
   0%,
   100% {
-    opacity: 0.38;
     transform: scale(0.84);
   }
   50% {
-    opacity: 1;
     transform: scale(1);
   }
+}
+
+@keyframes logo-loader-breathe-fade {
+  0%,
+  100% {
+    opacity: 0.38;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes logo-loader-breathe-shadow {
+  0%,
+  100% {
+    opacity: 0.28;
+    box-shadow: var(--logo-loader-shadow-tight);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: var(--logo-loader-shadow-wide);
+  }
+}
+
+[data-appearance="light"] .logo-loader,
+.logo-loader[data-appearance="light"] {
+  --logo-loader-shadow-tight: 0 0 6px color-mix(in srgb, #000 10%, transparent);
+  --logo-loader-shadow-wide:
+    0 0 28px color-mix(in srgb, #000 22%, transparent),
+    0 0 12px color-mix(in srgb, #000 12%, transparent);
 }
 
 [data-appearance="light"] .logo-loader-glass,
 .logo-loader[data-appearance="light"] .logo-loader-glass {
   border-color: color-mix(in srgb, #1b1f24 12%, transparent);
   background: color-mix(in srgb, #ffffff 42%, transparent);
-  box-shadow:
-    0 0 22px color-mix(in srgb, #000 10%, transparent),
-    0 0 10px color-mix(in srgb, #000 6%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+[data-appearance="dark"] .logo-loader,
+.logo-loader[data-appearance="dark"] {
+  --logo-loader-shadow-tight: 0 0 8px color-mix(in srgb, #000 18%, transparent);
+  --logo-loader-shadow-wide:
+    0 0 36px color-mix(in srgb, #000 42%, transparent),
+    0 0 16px color-mix(in srgb, #000 26%, transparent);
+}
+
+[data-appearance="dark"] .logo-loader-glass,
+.logo-loader[data-appearance="dark"] .logo-loader-glass {
+  border-color: color-mix(in srgb, #fff 14%, transparent);
+  background: color-mix(in srgb, #07111f 24%, transparent);
 }
 
 [data-appearance="light"] .logo-loader-mark,
 .logo-loader[data-appearance="light"] .logo-loader-mark {
-  opacity: 0.76;
-  filter: none;
+  opacity: 0.82;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, #000 12%, transparent));
 }
 
 @media (prefers-reduced-motion: reduce) {
   .logo-loader-spin,
-  .logo-loader-breathe {
+  .logo-loader-breathe,
+  .logo-loader-aura,
+  .logo-loader-glass,
+  .logo-loader-mark,
+  .logo-loader[data-variant="bare"] .logo-loader-spin,
+  .logo-loader[data-variant="bare"] .logo-loader-mark,
+  .logo-loader[data-variant="bare"] .logo-loader-aura {
     animation: none;
   }
 
-  .logo-loader-breathe {
-    opacity: 0.82;
+  .logo-loader-breathe,
+  .logo-loader[data-variant="bare"] .logo-loader-spin {
     transform: none;
+  }
+
+  .logo-loader-aura {
+    opacity: 0.7;
+    box-shadow: var(--logo-loader-shadow-wide);
+  }
+
+  .logo-loader-glass,
+  .logo-loader-mark {
+    opacity: 0.82;
   }
 }

@@ -1628,7 +1628,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     update_brief: tool({
       description:
-        "Persist creative facts into the working brief (subject, offer, copy, look, notes, brand). Call this whenever you learn something needed for the deliverable.",
+        "Persist creative facts into the working brief (subject, offer, copy, look, notes, brand). Call this whenever you learn something needed for the deliverable. Keep subject to a short label (~100 chars); put scene/layout detail in visualDirection or notes.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
@@ -1638,7 +1638,11 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
             description:
               "Use user_explicit only when the current user message directly states or corrects the value.",
           },
-          subject: { type: "string" },
+          subject: {
+            type: "string",
+            description:
+              "Short label only (max ~100 chars). Scene paragraphs go in visualDirection/notes.",
+          },
           objective: { type: "string" },
           audience: { type: "string" },
           keyMessage: { type: "string" },
@@ -2308,7 +2312,7 @@ export function createAssistanceTools(session: AssistanceAgentSession) {
 
     ask_user: tool({
       description:
-        "End this turn with one short casual chat message that asks a single high-leverage question. Do not ask for values you already stored with tools. Do not narrate tool updates.",
+        "End this turn with one short casual chat message that asks a single high-leverage question for a real missing fact or choice. Never ask only whether the user is ready to generate — call prepare_review instead. Do not ask for values you already stored with tools. Do not narrate tool updates.",
       inputSchema: jsonSchema<object>({
         type: "object",
         properties: {
