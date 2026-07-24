@@ -125,7 +125,7 @@ export function GenerationStatusPhrase({
   useEffect(() => {
     setIndex(Math.floor(Math.random() * words.length));
     setPhase("in");
-  }, [mode, stage, words]);
+  }, [mode, stage, words.length]);
 
   useEffect(() => {
     if (words.length <= 1) return;
@@ -147,7 +147,7 @@ export function GenerationStatusPhrase({
       window.clearInterval(tick);
       if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
     };
-  }, [words]);
+  }, [mode, stage, words.length]);
 
   const label = words[index] ?? words[0] ?? "Working";
 
