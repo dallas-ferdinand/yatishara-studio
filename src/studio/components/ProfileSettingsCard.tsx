@@ -3,7 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   Check,
-  ChevronDown,
+  ArrowDown,
   Copy,
   ExternalLink,
   Globe,
@@ -120,7 +120,7 @@ function ProfileLinkTypeMenu({
       >
         <LinkTypeIcon type={value} />
         <span>{active.label}</span>
-        <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        <ArrowDown className="h-3 w-3" aria-hidden="true" />
       </button>
       {open && menuStyle
         ? createPortal(

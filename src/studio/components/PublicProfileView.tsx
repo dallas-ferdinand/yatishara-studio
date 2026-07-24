@@ -7,6 +7,7 @@ import {
   Eye,
   Globe,
   Forward,
+  HandCoins,
   Heart,
   Image as ImageIcon,
   LayoutGrid,
@@ -111,6 +112,10 @@ export function PublicProfileView({
   );
   const follow = useMutation(api.profiles.follow);
   const unfollow = useMutation(api.profiles.unfollow);
+  const showOffersLink = useQuery(
+    api.marketplace.viewerCanSeeSellerOffers,
+    username ? { username } : "skip",
+  );
 
   const [followBusy, setFollowBusy] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -251,6 +256,19 @@ export function PublicProfileView({
             </div>
 
             {profile.bio ? <p className="public-profile-bio">{profile.bio}</p> : null}
+
+            {showOffersLink ? (
+              <p className="mt-2">
+                <a
+                  href={`/offers?u=${encodeURIComponent(profile.username)}`}
+                  className="public-profile-follow"
+                  style={{ display: "inline-flex", textDecoration: "none", alignItems: "center", gap: 6 }}
+                >
+                  <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />
+                  Offers
+                </a>
+              </p>
+            ) : null}
 
             {profile.contactLinks.length ? (
               <ul className="public-profile-links">

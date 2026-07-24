@@ -9,6 +9,7 @@ import {
 } from "./lib/elementAssetModel";
 import { inferElementSourceMode } from "./lib/elementSheetGuides";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { applyStorageBytesDelta } from "./lib/storageBilling";
 
 const elementType = v.union(
   v.literal("character"),
@@ -253,6 +254,7 @@ export const setBuiltSheet = authedMutation({
   args: {
     elementId: v.id("elements"),
     sheetAssetId: v.id("assets"),
+    byteSize: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -263,6 +265,7 @@ export const setBuiltSheet = authedMutation({
       builtAt: now,
       updatedAt: now,
     });
+    await recordSheetAssetBytes(ctx, args.sheetAssetId, args.byteSize);
     return null;
   },
 });
@@ -335,6 +338,7 @@ export const setBuiltSheetForUser = internalMutation({
     userId: v.id("users"),
     elementId: v.id("elements"),
     sheetAssetId: v.id("assets"),
+    byteSize: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -345,9 +349,31 @@ export const setBuiltSheetForUser = internalMutation({
       builtAt: now,
       updatedAt: now,
     });
+    await recordSheetAssetBytes(ctx, args.sheetAssetId, args.byteSize);
     return null;
   },
 });
+
+/** Sheet images live in the Bunny zone, so their bytes belong on the storage meter. */
+async function recordSheetAssetBytes(
+  ctx: MutationCtx,
+  sheetAssetId: Id<"assets">,
+  byteSize?: number,
+) {
+  if (byteSize == null || byteSize <= 0) return;
+  const asset = await ctx.db.get("assets", sheetAssetId);
+  if (!asset) return;
+  await ctx.db.patch(asset._id, {
+    byteSize,
+    storageStatus: "ready",
+    updatedAt: Date.now(),
+  });
+  await applyStorageBytesDelta(ctx, {
+    userId: asset.ownerId,
+    deltaBytes: byteSize - (asset.byteSize ?? 0),
+    reason: `Storage added — ${asset.name}`,
+  });
+}
 
 async function requireElementForUser(
   ctx: MutationCtx,

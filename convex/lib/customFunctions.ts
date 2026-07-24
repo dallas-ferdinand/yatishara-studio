@@ -5,10 +5,19 @@ import {
 } from "convex-helpers/server/customFunctions";
 import type { Doc, Id } from "../_generated/dataModel";
 import { mutation, query } from "../_generated/server";
-import { getCurrentUser, requireAdmin } from "./auth";
+import {
+  getCurrentUser,
+  requireAdmin,
+  requireApprovedSeller,
+  type ApprovedSeller,
+} from "./auth";
 
 export type StudioCtx = {
   user: Doc<"users"> & { _id: Id<"users"> };
+};
+
+export type SellerCtx = StudioCtx & {
+  seller: ApprovedSeller;
 };
 
 export const authedQuery = customQuery(
@@ -40,5 +49,19 @@ export const adminMutation = customMutation(
   customCtx(async (ctx): Promise<StudioCtx> => {
     const user = await requireAdmin(ctx);
     return { user };
+  }),
+);
+
+export const sellerQuery = customQuery(
+  query,
+  customCtx(async (ctx): Promise<SellerCtx> => {
+    return await requireApprovedSeller(ctx);
+  }),
+);
+
+export const sellerMutation = customMutation(
+  mutation,
+  customCtx(async (ctx): Promise<SellerCtx> => {
+    return await requireApprovedSeller(ctx);
   }),
 );

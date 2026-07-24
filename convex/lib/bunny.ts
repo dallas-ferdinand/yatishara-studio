@@ -42,6 +42,18 @@ export function buildReceiptPath(args: {
   return `users/${args.userId}/payments/${args.paymentId}/${filename}`;
 }
 
+/** Private seller KYC docs (signed CDN reads only). */
+export function buildSellerKycPath(args: {
+  userId: string;
+  docKind: string;
+  filename: string;
+}): string {
+  const filename = sanitizeSegment(args.filename) || "doc.bin";
+  const kind = sanitizeSegment(args.docKind) || "doc";
+  const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `users/${args.userId}/marketplace-kyc/${kind}/${stamp}-${filename}`;
+}
+
 /** Max signed CDN URL lifetime clients may request (24h). */
 export const MAX_SIGNED_URL_TTL_SEC = 60 * 60 * 24;
 
@@ -97,6 +109,29 @@ export async function putObject(args: {
     if (!response.ok) {
       const text = await response.text().catch(() => "");
       throw new Error(`Bunny PUT failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function deleteObject(path: string): Promise<void> {
+  const config = getBunnyConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch(
+      `https://${config.storageHost}/${config.zone}/${normalizeStoragePath(path)}`,
+      {
+        method: "DELETE",
+        headers: { AccessKey: config.accessKey },
+        signal: controller.signal,
+      },
+    );
+    // 404 = already gone
+    if (!response.ok && response.status !== 404) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Bunny DELETE failed (${response.status}): ${text.slice(0, 300)}`);
     }
   } finally {
     clearTimeout(timeout);

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
 
 export const getReservedForCommit = internalQuery({
   args: {
@@ -24,6 +25,8 @@ export const getReservedForCommit = internalQuery({
     if (asset.byteSize != null && asset.byteSize > 0) {
       return null;
     }
+    // Debt can cross the grace period between reserving and committing.
+    await assertUploadsAllowed(ctx, args.userId);
     return {
       bunnyPath: asset.bunnyPath,
       mimeType: asset.mimeType,
@@ -48,6 +51,11 @@ export const finalizeCommittedUpload = internalMutation({
       byteSize: args.byteSize,
       storageStatus: "ready",
       updatedAt: Date.now(),
+    });
+    await applyStorageBytesDelta(ctx, {
+      userId: asset.ownerId,
+      deltaBytes: args.byteSize - (asset.byteSize ?? 0),
+      reason: `Storage added — ${asset.name}`,
     });
     if (asset.kind === "video" || asset.kind === "audio") {
       await ctx.scheduler.runAfter(0, internal.assetsInternal.enqueueMediaProxy, {
@@ -177,6 +185,7 @@ export const completeMediaProxyJob = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job) return null;
+    const asset = await ctx.db.get("assets", job.assetId);
     const now = Date.now();
     await ctx.db.patch(job._id, {
       status: "ready",
@@ -203,6 +212,17 @@ export const completeMediaProxyJob = internalMutation({
       rotation: args.rotation,
       updatedAt: now,
     });
+    if (asset) {
+      // Proxies live in the same storage zone, so they are billable too.
+      const previous =
+        (asset.editProxyByteSize ?? 0) + (asset.editProxy1080ByteSize ?? 0);
+      const next = args.proxyByteSize + (args.proxy1080ByteSize ?? 0);
+      await applyStorageBytesDelta(ctx, {
+        userId: asset.ownerId,
+        deltaBytes: next - previous,
+        reason: `Storage added — ${asset.name} edit proxy`,
+      });
+    }
     return null;
   },
 });

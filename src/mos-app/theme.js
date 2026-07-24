@@ -24,114 +24,114 @@ export const SCHEMES = {
   agent: {
     label: "Genesis",
     accent: "#22c55e",
-    bg: "#020617",
-    surface: "#0f172a",
-    raised: "#1e293b",
+    bg: "#05080f",
+    surface: "#0a1018",
+    raised: "#101820",
   },
   gold: {
     label: "Archive",
     accent: "#c4a574",
-    bg: "#1b1c23",
-    surface: "#1d1e26",
-    raised: "#21222c",
+    bg: "#0a0b10",
+    surface: "#12131a",
+    raised: "#181922",
   },
   ocean: {
     label: "Ocean",
     accent: "#38bdf8",
-    bg: "#070b10",
-    surface: "#0f172a",
-    raised: "#172554",
+    bg: "#05080c",
+    surface: "#0a121c",
+    raised: "#101a28",
   },
   ember: {
     label: "Forge",
     accent: "#fb923c",
-    bg: "#0a0806",
-    surface: "#1a120c",
-    raised: "#291911",
+    bg: "#080605",
+    surface: "#120e0a",
+    raised: "#1a1410",
   },
   mint: {
     label: "Meadow",
     accent: "#4ade80",
-    bg: "#060a08",
-    surface: "#0f1a14",
-    raised: "#14261c",
+    bg: "#050807",
+    surface: "#0a1410",
+    raised: "#101c16",
   },
   violet: {
     label: "Dusk",
     accent: "#c084fc",
-    bg: "#09070d",
-    surface: "#15101f",
-    raised: "#1f1630",
+    bg: "#07060a",
+    surface: "#100c18",
+    raised: "#161022",
   },
   rose: {
     label: "Bloom",
     accent: "#fb7185",
-    bg: "#0d0809",
-    surface: "#1a1012",
-    raised: "#261419",
+    bg: "#0a0607",
+    surface: "#140c0e",
+    raised: "#1c1216",
   },
   cobalt: {
     label: "Skyline",
     accent: "#60a5fa",
-    bg: "#060810",
-    surface: "#0c1222",
-    raised: "#111a2e",
+    bg: "#05070c",
+    surface: "#0a101c",
+    raised: "#101828",
   },
   coral: {
     label: "Reef",
     accent: "#f472b6",
-    bg: "#0c080a",
-    surface: "#1a1018",
-    raised: "#261422",
+    bg: "#0a0608",
+    surface: "#140c12",
+    raised: "#1c121a",
   },
   sage: {
     label: "Grove",
     accent: "#86efac",
-    bg: "#070a08",
-    surface: "#101a14",
-    raised: "#16261c",
+    bg: "#050806",
+    surface: "#0c1410",
+    raised: "#121c16",
   },
   cherry: {
     label: "Pulse",
     accent: "#f87171",
-    bg: "#0a0606",
-    surface: "#1a0e0e",
-    raised: "#281414",
+    bg: "#080505",
+    surface: "#140a0a",
+    raised: "#1c1010",
   },
   teal: {
     label: "Lagoon",
     accent: "#2dd4bf",
-    bg: "#060a0a",
-    surface: "#0c1a18",
-    raised: "#102826",
+    bg: "#050808",
+    surface: "#0a1412",
+    raised: "#101c1a",
   },
   lime: {
     label: "Canopy",
     accent: "#a3e635",
-    bg: "#080a06",
-    surface: "#141a0c",
-    raised: "#1e2610",
+    bg: "#060805",
+    surface: "#10140a",
+    raised: "#161c0e",
   },
   fuchsia: {
     label: "Neon",
     accent: "#e879f9",
-    bg: "#0a060c",
-    surface: "#180c1e",
-    raised: "#24122c",
+    bg: "#08050a",
+    surface: "#120a16",
+    raised: "#1a1020",
   },
   copper: {
     label: "Foundry",
     accent: "#d97706",
-    bg: "#0a0806",
-    surface: "#18120c",
-    raised: "#241a10",
+    bg: "#080605",
+    surface: "#120e0a",
+    raised: "#1a1410",
   },
   indigo: {
     label: "Midnight",
     accent: "#818cf8",
-    bg: "#07060e",
-    surface: "#100e1c",
-    raised: "#181428",
+    bg: "#06050a",
+    surface: "#0c0a16",
+    raised: "#12101e",
   },
 };
 
@@ -221,6 +221,26 @@ function accentHover(hex) {
   return lighten(hex, 0.1);
 }
 
+/** Composer/header ink — dark chrome should sit near this, not slate-lifted. */
+const DARK_INK = "#05080f";
+
+function hexLuminance(hex) {
+  const { r, g, b } = parseHex(hex);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/** Pull a color toward composer ink, then clamp luminance so panes stay deep. */
+function deepenDarkSurface(hex, towardInk = 0.45, maxLum = 0.1) {
+  const mixed = mixHex(hex, DARK_INK, towardInk);
+  const lum = hexLuminance(mixed);
+  if (lum <= maxLum) return mixed;
+  const scale = maxLum / lum;
+  const { r, g, b } = parseHex(mixed);
+  return `#${[r, g, b]
+    .map((v) => Math.max(0, Math.min(255, Math.round(v * scale))).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
 /** Hairline borders — low-contrast rgba, not lightened hex stripes. */
 function hairlineBorder(isLight, alpha) {
   return isLight ? `rgba(0, 0, 0, ${alpha})` : `rgba(255, 255, 255, ${alpha})`;
@@ -268,13 +288,13 @@ function buildDeskPalette(scheme, isLight) {
     };
   }
 
-  const bg = scheme.bg;
-  const sidebar = darken(bg, 0.04);
-  const panel = scheme.surface;
-  // Keep composer/surfaces close to canvas — subtle lift, not a second palette.
-  const composer = mixHex(bg, panel, 0.28);
-  const surface = mixHex(bg, panel, 0.34);
-  const raised = mixHex(panel, bg, 0.12);
+  // Deepen toward composer/header ink — wallpaper/scheme surfaces otherwise sit too light.
+  const bg = deepenDarkSurface(scheme.bg, 0.4, 0.075);
+  const sidebar = darken(bg, 0.06);
+  const panel = deepenDarkSurface(scheme.surface, 0.5, 0.1);
+  const composer = mixHex(bg, panel, 0.12);
+  const surface = mixHex(bg, panel, 0.18);
+  const raised = mixHex(panel, bg, 0.1);
 
   return {
     bg,
@@ -283,8 +303,8 @@ function buildDeskPalette(scheme, isLight) {
     composer,
     surface,
     surfaceRaised: raised,
-    surfaceOverlay: mixHex(panel, bg, 0.2),
-    surfaceInput: darken(panel, 0.04),
+    surfaceOverlay: mixHex(panel, bg, 0.14),
+    surfaceInput: mixHex(bg, panel, 0.22),
     border: hairlineBorder(false, 0.07),
     borderSoft: hairlineBorder(false, 0.04),
     borderSubtle: hairlineBorder(false, 0.05),
@@ -293,8 +313,8 @@ function buildDeskPalette(scheme, isLight) {
     textSoft: "rgba(255,255,255,0.82)",
     muted: "rgba(255,255,255,0.62)",
     faint: "rgba(255,255,255,0.42)",
-    hover: mixHex(panel, bg, 0.22),
-    active: mixHex(panel, bg, 0.32),
+    hover: mixHex(panel, bg, 0.16),
+    active: mixHex(panel, bg, 0.24),
     accent: scheme.accent,
   };
 }
@@ -771,5 +791,5 @@ export function getThemeBootInlineScript() {
   const schemesJson = JSON.stringify(SCHEMES);
   const bgMigrationJson = JSON.stringify(BG_FAMILY_MIGRATION);
   const wallpaperBoot = getStudioBackgroundBootInlineFragment();
-  return `(function(){try{var SCHEMES=${schemesJson};var BG_MIG=${bgMigrationJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1",BK="mercuryos-studio-bg-pack-v1",WK="mercuryos-wallpaper-v1";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}function normBg(id){if(!id)return"animated";return BG_MIG[id]||id||"animated"}var wpState=null;try{wpState=JSON.parse(localStorage.getItem(WK)||"null")}catch(e){wpState=null}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";var storedBg=localStorage.getItem(BK);var bgFamily=normBg(storedBg);var assetUrlHint=null;var cachedPal=null;if(wpState&&wpState.current){if(wpState.current.kind==="preset"){sid=wpState.current.themeId||sid;bgFamily=normBg(wpState.current.family)}else if(wpState.current.kind==="asset"){var ak="asset:"+wpState.current.assetId;assetUrlHint=wpState.urlHints&&wpState.urlHints[ak];cachedPal=wpState.palettes&&wpState.palettes[ak]}if(wpState.current.kind==="preset"){var pk="preset:"+bgFamily+":"+sid;cachedPal=wpState.palettes&&wpState.palettes[pk]}}if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=Object.assign({},SCHEMES[sid]);if(cachedPal&&cachedPal.accent){scheme.accent=cachedPal.accent;if(cachedPal.bg)scheme.bg=cachedPal.bg;if(cachedPal.surface)scheme.surface=cachedPal.surface;if(cachedPal.raised)scheme.raised=cachedPal.raised}var isLight=mode==="light";var LIGHT={bg:"#efeff1",surface:"#ffffff",raised:"#e3e3e8",text:"#1c1c1e",textMuted:"#636366",textFaint:"#8e8e93",hover:"#e8e8ec",active:"#dcdce2"};var palette=isLight?{bg:LIGHT.bg,sidebar:LIGHT.bg,panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.38),surface:mixHex(LIGHT.bg,LIGHT.surface,0.55),surfaceRaised:mixHex(LIGHT.raised,LIGHT.surface,0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}:{bg:scheme.bg,sidebar:darken(scheme.bg,0.04),panel:scheme.surface,composer:mixHex(scheme.bg,scheme.surface,0.28),surface:mixHex(scheme.bg,scheme.surface,0.34),surfaceRaised:mixHex(scheme.surface,scheme.bg,0.12),surfaceOverlay:mixHex(scheme.surface,scheme.bg,0.2),surfaceInput:darken(scheme.surface,0.04),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,scheme.bg,0.38),text:"#ffffff",textSoft:"#d4d4d8",muted:"#a1a1aa",faint:"#71717a",hover:mixHex(scheme.surface,scheme.bg,0.22),active:mixHex(scheme.surface,scheme.bg,0.32),accent:scheme.accent};var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.dataset.studioBgFamily=bgFamily;root.dataset.studioBgPack=bgFamily==="animated"?"worlds":bgFamily;if(wpState&&wpState.current&&wpState.current.kind==="asset"){root.dataset.wallpaperKind="asset";root.dataset.wallpaperAssetId=wpState.current.assetId}else{root.dataset.wallpaperKind="preset"}root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.025)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted);var wpOverride=assetUrlHint;${wallpaperBoot}}catch(e){}})();`;
+  return `(function(){try{var SCHEMES=${schemesJson};var BG_MIG=${bgMigrationJson};var SK="mercuryos-theme-v1",MK="mercuryos-appearance-v1",BK="mercuryos-studio-bg-pack-v1",WK="mercuryos-wallpaper-v1";var DARK_INK="#05080f";function parseHex(h){h=h.replace("#","");return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}function mixHex(a,b,t){function f(x,y){return Math.round(x+(y-x)*t)}var c1=parseHex(a),c2=parseHex(b);return"#"+[f(c1.r,c2.r),f(c1.g,c2.g),f(c1.b,c2.b)].map(function(v){return v.toString(16).padStart(2,"0")}).join("")}function darken(h,a){return mixHex(h,"#000000",a||0.12)}function lighten(h,a){return mixHex(h,"#ffffff",a||0.12)}function hexLum(h){var p=parseHex(h);return(0.2126*p.r+0.7152*p.g+0.0722*p.b)/255}function deepenDark(h,toward,maxLum){var mixed=mixHex(h,DARK_INK,toward==null?0.45:toward);var lum=hexLum(mixed);if(lum<=(maxLum==null?0.1:maxLum))return mixed;var scale=(maxLum==null?0.1:maxLum)/lum;var p=parseHex(mixed);return"#"+[p.r,p.g,p.b].map(function(v){return Math.max(0,Math.min(255,Math.round(v*scale))).toString(16).padStart(2,"0")}).join("")}function hairlineBorder(isLight,a){return isLight?"rgba(0,0,0,"+a+")":"rgba(255,255,255,"+a+")"}function accentDim(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.14)"}function accentBorder(hex){var p=parseHex(hex);return"rgba("+p.r+","+p.g+","+p.b+",0.28)"}function accentHover(hex){return lighten(hex,0.1)}function normBg(id){if(!id)return"animated";return BG_MIG[id]||id||"animated"}var wpState=null;try{wpState=JSON.parse(localStorage.getItem(WK)||"null")}catch(e){wpState=null}var sid=localStorage.getItem(SK)||"agent";var mode=localStorage.getItem(MK)||"dark";var storedBg=localStorage.getItem(BK);var bgFamily=normBg(storedBg);var assetUrlHint=null;var cachedPal=null;if(wpState&&wpState.current){if(wpState.current.kind==="preset"){sid=wpState.current.themeId||sid;bgFamily=normBg(wpState.current.family)}else if(wpState.current.kind==="asset"){var ak="asset:"+wpState.current.assetId;assetUrlHint=wpState.urlHints&&wpState.urlHints[ak];cachedPal=wpState.palettes&&wpState.palettes[ak]}if(wpState.current.kind==="preset"){var pk="preset:"+bgFamily+":"+sid;cachedPal=wpState.palettes&&wpState.palettes[pk]}}if(sid==="light"){mode="light";sid="agent"}if(!SCHEMES[sid])sid="agent";var scheme=Object.assign({},SCHEMES[sid]);if(cachedPal&&cachedPal.accent){scheme.accent=cachedPal.accent;if(cachedPal.bg)scheme.bg=cachedPal.bg;if(cachedPal.surface)scheme.surface=cachedPal.surface;if(cachedPal.raised)scheme.raised=cachedPal.raised}var isLight=mode==="light";var LIGHT={bg:"#efeff1",surface:"#ffffff",raised:"#e3e3e8",text:"#1c1c1e",textMuted:"#636366",textFaint:"#8e8e93",hover:"#e8e8ec",active:"#dcdce2"};var palette;if(isLight){palette={bg:LIGHT.bg,sidebar:LIGHT.bg,panel:LIGHT.surface,composer:mixHex(LIGHT.bg,LIGHT.surface,0.38),surface:mixHex(LIGHT.bg,LIGHT.surface,0.55),surfaceRaised:mixHex(LIGHT.raised,LIGHT.surface,0.35),surfaceOverlay:LIGHT.hover,surfaceInput:LIGHT.surface,border:hairlineBorder(true,0.07),borderSoft:hairlineBorder(true,0.045),borderSubtle:hairlineBorder(true,0.055),borderFocus:mixHex(scheme.accent,"#000000",0.28),text:LIGHT.text,textSoft:mixHex(LIGHT.text,LIGHT.textMuted,0.35),muted:LIGHT.textMuted,faint:LIGHT.textFaint,hover:LIGHT.hover,active:LIGHT.active,accent:scheme.accent}}else{var dbg=deepenDark(scheme.bg,0.4,0.075);var dpanel=deepenDark(scheme.surface,0.5,0.1);palette={bg:dbg,sidebar:darken(dbg,0.06),panel:dpanel,composer:mixHex(dbg,dpanel,0.12),surface:mixHex(dbg,dpanel,0.18),surfaceRaised:mixHex(dpanel,dbg,0.1),surfaceOverlay:mixHex(dpanel,dbg,0.14),surfaceInput:mixHex(dbg,dpanel,0.22),border:hairlineBorder(false,0.07),borderSoft:hairlineBorder(false,0.04),borderSubtle:hairlineBorder(false,0.05),borderFocus:mixHex(scheme.accent,dbg,0.38),text:"#ffffff",textSoft:"rgba(255,255,255,0.82)",muted:"rgba(255,255,255,0.62)",faint:"rgba(255,255,255,0.42)",hover:mixHex(dpanel,dbg,0.16),active:mixHex(dpanel,dbg,0.24),accent:scheme.accent}}var root=document.documentElement;var accent=palette.accent;var hover=accentHover(accent);var rgb=parseHex(accent);root.dataset.appearance=mode;root.dataset.theme=sid;root.dataset.studioBgFamily=bgFamily;root.dataset.studioBgPack=bgFamily==="animated"?"worlds":bgFamily;if(wpState&&wpState.current&&wpState.current.kind==="asset"){root.dataset.wallpaperKind="asset";root.dataset.wallpaperAssetId=wpState.current.assetId}else{root.dataset.wallpaperKind="preset"}root.style.setProperty("--mos-bg",palette.bg);root.style.setProperty("--mos-sidebar",palette.sidebar);root.style.setProperty("--mos-panel",palette.panel);root.style.setProperty("--mos-composer",palette.composer);root.style.setProperty("--mos-surface",palette.surface);root.style.setProperty("--mos-border",palette.border);root.style.setProperty("--mos-border-soft",palette.borderSoft);root.style.setProperty("--mos-border-subtle",palette.borderSubtle);root.style.setProperty("--mos-text",palette.text);root.style.setProperty("--mos-text-soft",palette.textSoft);root.style.setProperty("--mos-text-bright",palette.text);root.style.setProperty("--mos-muted",palette.muted);root.style.setProperty("--mos-faint",palette.faint);root.style.setProperty("--mos-accent",accent);root.style.setProperty("--mos-accent-hover",hover);root.style.setProperty("--mos-hover",palette.hover);root.style.setProperty("--mos-active",palette.active);root.style.setProperty("--cursor-accent",accent);root.style.setProperty("--cursor-accent-hover",hover);root.style.setProperty("--cursor-accent-dim",accentDim(accent));root.style.setProperty("--cursor-accent-border",accentBorder(accent));root.style.setProperty("--cursor-sidebar",palette.sidebar);root.style.setProperty("--color-cursor-bg",palette.bg);root.style.setProperty("--color-cursor-border-subtle",palette.borderSubtle);root.style.setProperty("--accent-rgb",rgb.r+","+rgb.g+","+rgb.b);var ov=isLight?{subtle:"rgba(0,0,0,0.04)",hover:"rgba(0,0,0,0.06)",muted:"rgba(0,0,0,0.025)"}:{subtle:"rgba(255,255,255,0.05)",hover:"rgba(255,255,255,0.08)",muted:"rgba(255,255,255,0.03)"};root.style.setProperty("--cursor-overlay-subtle",ov.subtle);root.style.setProperty("--cursor-overlay-hover",ov.hover);root.style.setProperty("--cursor-overlay-muted",ov.muted);var wpOverride=assetUrlHint;${wallpaperBoot}}catch(e){}})();`;
 }

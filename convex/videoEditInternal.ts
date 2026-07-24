@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { buildAssetPath } from "./lib/bunny";
+import { applyStorageBytesDelta } from "./lib/storageBilling";
 
 export const getAssetForExport = internalQuery({
   args: {
@@ -103,10 +104,18 @@ export const finalizeExportAsset = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const asset = await ctx.db.get("assets", args.assetId);
     await ctx.db.patch(args.assetId, {
       byteSize: args.byteSize,
       updatedAt: Date.now(),
     });
+    if (asset) {
+      await applyStorageBytesDelta(ctx, {
+        userId: asset.ownerId,
+        deltaBytes: args.byteSize - (asset.byteSize ?? 0),
+        reason: `Storage added — ${asset.name}`,
+      });
+    }
     return null;
   },
 });

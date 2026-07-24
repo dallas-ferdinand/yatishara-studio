@@ -76,6 +76,7 @@ function uiSheetCallbacks(ctx: ActionCtx) {
     setBuiltSheet: async (args: {
       elementId: Id<"elements">;
       sheetAssetId: Id<"assets">;
+      byteSize?: number;
     }) => {
       await ctx.runMutation(api.elements.setBuiltSheet, args);
     },
@@ -116,6 +117,7 @@ function apiSheetCallbacks(ctx: ActionCtx, userId: Id<"users">) {
     setBuiltSheet: async (args: {
       elementId: Id<"elements">;
       sheetAssetId: Id<"assets">;
+      byteSize?: number;
     }) => {
       await ctx.runMutation(internal.elements.setBuiltSheetForUser, {
         userId,

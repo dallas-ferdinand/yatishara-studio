@@ -44,6 +44,7 @@ type CreateSheetAsset = (args: {
 type SetBuiltSheet = (args: {
   elementId: Id<"elements">;
   sheetAssetId: Id<"assets">;
+  byteSize?: number;
 }) => Promise<void>;
 
 /**
@@ -116,6 +117,7 @@ export async function generateElementSheetImage(
     await args.setBuiltSheet({
       elementId: args.element._id,
       sheetAssetId: created.assetId,
+      byteSize: image.data.byteLength,
     });
     return { assetId: created.assetId, creditsSpent };
   } catch (error) {

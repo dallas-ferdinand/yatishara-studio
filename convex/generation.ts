@@ -21,6 +21,7 @@ import {
   canReuseAssistanceMediaJob,
   parseAssistanceGenerationPlan,
 } from "./lib/assistanceGenerationPlan";
+import { applyStorageBytesDelta } from "./lib/storageBilling";
 
 const generationMode = v.union(
   v.literal("image"),
@@ -2074,6 +2075,13 @@ export const setGeneratedAssetStorageStatus = internalMutation({
       byteSize: args.status === "ready" ? args.byteSize : asset.byteSize,
       updatedAt: Date.now(),
     });
+    if (args.status === "ready" && args.byteSize != null) {
+      await applyStorageBytesDelta(ctx, {
+        userId: asset.ownerId,
+        deltaBytes: args.byteSize - (asset.byteSize ?? 0),
+        reason: `Storage added — ${asset.name}`,
+      });
+    }
     if (
       args.status === "ready" &&
       (asset.kind === "video" || asset.kind === "audio")

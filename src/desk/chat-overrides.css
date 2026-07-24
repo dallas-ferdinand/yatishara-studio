@@ -178,9 +178,9 @@
 .cursor-chat-thread.mos-chat .cursor-turn-user .msg-body {
   padding: 8px 12px;
   font-size: var(--desk-text-base);
-  font-weight: 450;
+  font-weight: 500;
   line-height: var(--desk-leading-tight);
-  border-radius: 8px 8px 3px 8px;
+  border-radius: 8px 8px 4px 8px;
   background: var(--cursor-accent-dim);
   border: 1px solid var(--cursor-accent-border);
   box-shadow: none;
@@ -218,7 +218,7 @@
   padding: 7px 11px;
   font-size: var(--desk-text-ui);
   line-height: var(--desk-leading-tight);
-  border-radius: 8px 8px 3px 8px;
+  border-radius: 8px 8px 4px 8px;
   background: color-mix(in srgb, var(--cursor-accent-dim) 35%, transparent);
   border: 1px solid color-mix(in srgb, var(--cursor-accent-border) 35%, transparent);
   opacity: 0.82;
@@ -371,7 +371,7 @@
   place-items: center;
   width: 24px;
   height: 24px;
-  border-radius: 9px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--mos-accent) 12%, transparent);
   color: var(--mos-accent);
   opacity: 1;
@@ -693,7 +693,7 @@
 .cursor-chat-thread.mos-chat .flow-text {
   padding: 0;
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.68;
   color: var(--mos-text-bright, var(--text));
   background: transparent;
@@ -704,7 +704,7 @@
 
 .cursor-chat-thread.mos-chat .flow-text .md-prose,
 .cursor-chat-thread.mos-chat .flow-text .mos-md {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.68;
   color: var(--mos-text-bright, #f0f0f3);
 }
@@ -737,7 +737,7 @@
 .cursor-chat-thread.mos-chat .flow-text .md-prose code {
   background: color-mix(in srgb, var(--mos-text) 7%, transparent);
   border: 1px solid var(--mos-border-soft, var(--border));
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 0.12em 0.38em;
   font-size: 0.9em;
 }
@@ -976,7 +976,7 @@
 
 .cursor-chat-thread.mos-chat .flow-mcp-badge {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: lowercase;
@@ -1035,7 +1035,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--mos-text-soft);
   background: transparent;
@@ -1091,7 +1091,7 @@
 .cursor-chat-thread.mos-chat .flow-thinking-body {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.4;
   color: var(--mos-muted);
   margin: 0;
@@ -1212,7 +1212,7 @@
   max-height: 280px;
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -1346,7 +1346,7 @@
 }
 
 .cursor-chat-thread.mos-chat .flow-shell-hint {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--mos-muted);
   opacity: 0.7;
 }

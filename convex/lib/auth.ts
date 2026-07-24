@@ -4,6 +4,10 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export type AuthedUser = Doc<"users"> & { _id: Id<"users"> };
 
+export type ApprovedSeller = Doc<"marketplaceSellers"> & {
+  _id: Id<"marketplaceSellers">;
+};
+
 export async function getCurrentUser(ctx: QueryCtx | MutationCtx): Promise<AuthedUser> {
   const userId = await getAuthUserId(ctx);
   if (userId === null) {
@@ -36,4 +40,26 @@ export async function requireAdmin(ctx: QueryCtx | MutationCtx): Promise<AuthedU
 
 export function isAdminRole(role: Doc<"users">["role"]): boolean {
   return role === "admin" || role === "super_admin";
+}
+
+export async function getMarketplaceSellerForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApprovedSeller | null> {
+  const seller = await ctx.db
+    .query("marketplaceSellers")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  return seller ?? null;
+}
+
+export async function requireApprovedSeller(
+  ctx: QueryCtx | MutationCtx,
+): Promise<{ user: AuthedUser; seller: ApprovedSeller }> {
+  const user = await getCurrentUser(ctx);
+  const seller = await getMarketplaceSellerForUser(ctx, user._id);
+  if (!seller || seller.status !== "approved") {
+    throw new Error("Approved marketplace seller access required");
+  }
+  return { user, seller };
 }

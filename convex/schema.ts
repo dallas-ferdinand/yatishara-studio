@@ -138,6 +138,62 @@ export const creditTransactionKind = v.union(
   v.literal("refunded"),
   v.literal("admin_adjustment"),
   v.literal("subscription_grant"),
+  v.literal("marketplace_escrow_hold"),
+  v.literal("marketplace_escrow_release"),
+  v.literal("marketplace_escrow_refund"),
+  v.literal("storage_charge"),
+);
+
+export const marketplaceSellerStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("suspended"),
+);
+
+export const marketplaceSellerEntityType = v.union(
+  v.literal("freelancer"),
+  v.literal("business"),
+);
+
+export const marketplaceSellerBusinessType = v.union(
+  v.literal("sole_trader"),
+  v.literal("limited_company"),
+  v.literal("partnership"),
+  v.literal("other"),
+);
+
+export const marketplaceSellerPhotoIdKind = v.union(
+  v.literal("national_id"),
+  v.literal("passport"),
+  v.literal("drivers_permit"),
+);
+
+export const marketplaceOfferStatus = v.union(
+  v.literal("draft"),
+  v.literal("published"),
+  v.literal("paused"),
+  v.literal("archived"),
+);
+
+export const marketplaceJobStatus = v.union(
+  v.literal("pending_payment"),
+  v.literal("in_escrow"),
+  v.literal("in_progress"),
+  v.literal("delivered"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+  v.literal("refunded"),
+);
+
+export const platformEscrowHoldStatus = v.union(
+  v.literal("held"),
+  v.literal("released"),
+  v.literal("refunded"),
+);
+
+export const sellerPayoutStatus = v.union(
+  v.literal("owed"),
+  v.literal("paid"),
 );
 
 export const notificationKind = v.union(
@@ -248,6 +304,12 @@ export default defineSchema({
     editProxyUpdatedAt: v.optional(v.number()),
     sourceGenerationJobId: v.optional(v.id("generationJobs")),
     deletedAt: v.optional(v.number()),
+    /**
+     * Hard-deleted: Bunny objects are being removed and the bytes are already
+     * released from billing. The row is kept as a tombstone because many tables
+     * reference `assets` by id; it is hidden from trash and folder listings.
+     */
+    purgedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -255,6 +317,9 @@ export default defineSchema({
     .index("by_folder", ["folderId"])
     .index("by_folder_and_kind", ["folderId", "kind"])
     .index("by_owner_and_deleted", ["ownerId", "deletedAt"])
+    .index("by_deleted_at", ["deletedAt"])
+    // `duplicate` reuses the source object, so purges must check for other referrers.
+    .index("by_bunny_path", ["bunnyPath"])
     .index("by_generation_job", ["sourceGenerationJobId"]),
 
   mediaProxyJobs: defineTable({
@@ -655,6 +720,7 @@ export default defineSchema({
     amount: v.number(),
     balanceAfter: v.number(),
     generationJobId: v.optional(v.id("generationJobs")),
+    marketplaceJobId: v.optional(v.id("marketplaceJobs")),
     paymentId: v.optional(v.id("payments")),
     reversesTransactionId: v.optional(v.id("creditTransactions")),
     reason: v.optional(v.string()),
@@ -664,7 +730,24 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_payment", ["paymentId"])
     .index("by_generation_job", ["generationJobId"])
+    .index("by_marketplace_job", ["marketplaceJobId"])
     .index("by_reversed_transaction", ["reversesTransactionId"]),
+
+  /**
+   * Per-user Bunny storage meter. `currentBytes` tracks what is stored;
+   * the monthly cron charges the full rate for that snapshot on the 1st.
+   */
+  storageBilling: defineTable({
+    userId: v.id("users"),
+    currentBytes: v.number(),
+    outstandingCredits: v.number(),
+    outstandingSince: v.optional(v.number()),
+    lastMonthlyChargeAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_outstanding_since", ["outstandingSince"])
+    .index("by_last_monthly_charge", ["lastMonthlyChargeAt"]),
 
   subscriptionPlans: defineTable({
     name: v.string(),
@@ -1071,4 +1154,129 @@ export default defineSchema({
   })
     .index("by_user_and_comment", ["userId", "commentId"])
     .index("by_comment", ["commentId"]),
+
+  marketplaceSellers: defineTable({
+    userId: v.id("users"),
+    status: marketplaceSellerStatus,
+    /** Public / trading name shown on offers. */
+    businessName: v.string(),
+    entityType: v.optional(marketplaceSellerEntityType),
+    /** Legal name of the applicant / director. */
+    legalName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    residentialAddress: v.optional(v.string()),
+    businessType: v.optional(marketplaceSellerBusinessType),
+    businessRegistrationNumber: v.optional(v.string()),
+    birNumber: v.optional(v.string()),
+    businessAddress: v.optional(v.string()),
+    primaryIdKind: v.optional(marketplaceSellerPhotoIdKind),
+    primaryIdBunnyPath: v.optional(v.string()),
+    /** Back of a two-sided photo ID (national ID / driver's permit). */
+    primaryIdBackBunnyPath: v.optional(v.string()),
+    birthCertificateBunnyPath: v.optional(v.string()),
+    proofOfResidentialAddressBunnyPath: v.optional(v.string()),
+    businessRegistrationBunnyPath: v.optional(v.string()),
+    proofOfBusinessAddressBunnyPath: v.optional(v.string()),
+    approvedBy: v.optional(v.id("users")),
+    approvedAt: v.optional(v.number()),
+    suspendedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_status", ["status"]),
+
+  marketplaceOffers: defineTable({
+    sellerId: v.id("marketplaceSellers"),
+    sellerUserId: v.id("users"),
+    title: v.string(),
+    slug: v.string(),
+    description: v.string(),
+    priceCents: v.number(),
+    category: v.optional(v.string()),
+    status: marketplaceOfferStatus,
+    deliveryDays: v.number(),
+    coverAssetId: v.optional(v.id("assets")),
+    sampleAssetIds: v.optional(v.array(v.id("assets"))),
+    publishedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_seller", ["sellerId"])
+    .index("by_seller_user", ["sellerUserId"])
+    .index("by_status", ["status"])
+    .index("by_status_and_published", ["status", "publishedAt"]),
+
+  marketplaceJobs: defineTable({
+    offerId: v.id("marketplaceOffers"),
+    sellerId: v.id("marketplaceSellers"),
+    sellerUserId: v.id("users"),
+    buyerUserId: v.id("users"),
+    priceCredits: v.number(),
+    priceCents: v.number(),
+    creditPriceCents: v.number(),
+    status: marketplaceJobStatus,
+    escrowHoldId: v.optional(v.id("platformEscrowHolds")),
+    escrowCreditTransactionId: v.optional(v.id("creditTransactions")),
+    workFolderId: v.optional(v.id("folders")),
+    deliveredAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_seller", ["sellerUserId"])
+    .index("by_buyer", ["buyerUserId"])
+    .index("by_offer", ["offerId"])
+    .index("by_status", ["status"])
+    .index("by_status_and_delivered", ["status", "deliveredAt"]),
+
+  marketplaceJobEvents: defineTable({
+    jobId: v.id("marketplaceJobs"),
+    actorUserId: v.optional(v.id("users")),
+    kind: v.string(),
+    message: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_job", ["jobId"]),
+
+  marketplaceDeliverables: defineTable({
+    jobId: v.id("marketplaceJobs"),
+    assetId: v.id("assets"),
+    note: v.optional(v.string()),
+    deliveredBy: v.id("users"),
+    deliveredAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_asset", ["assetId"]),
+
+  platformEscrowHolds: defineTable({
+    jobId: v.id("marketplaceJobs"),
+    buyerUserId: v.id("users"),
+    credits: v.number(),
+    holdCreditTransactionId: v.id("creditTransactions"),
+    releaseCreditTransactionId: v.optional(v.id("creditTransactions")),
+    refundCreditTransactionId: v.optional(v.id("creditTransactions")),
+    status: platformEscrowHoldStatus,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_status", ["status"])
+    .index("by_buyer", ["buyerUserId"]),
+
+  sellerPayouts: defineTable({
+    sellerUserId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+    amountCents: v.number(),
+    status: sellerPayoutStatus,
+    paidAt: v.optional(v.number()),
+    adminNote: v.optional(v.string()),
+    markedPaidBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_seller", ["sellerUserId"])
+    .index("by_job", ["jobId"])
+    .index("by_status", ["status"]),
 });

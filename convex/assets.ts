@@ -12,6 +12,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { assertUploadsAllowed, beginAssetPurge } from "./lib/storageBilling";
 
 const assetKind = v.union(
   v.literal("image"),
@@ -80,7 +81,16 @@ async function withSignedThumbnails(
   expiresUnix: number | undefined,
   quality: "thumb" | "preview" = "thumb",
 ) {
-  if (expiresUnix === undefined) return assets;
+  if (expiresUnix === undefined) {
+    return assets.map((asset) => ({
+      ...asset,
+      signedReadUrl: undefined as string | undefined,
+      signedEditProxyUrl: undefined as string | undefined,
+      signedEditProxy1080Url: undefined as string | undefined,
+      signedThumbnailUrl: undefined as string | undefined,
+      signedThumbnailLqipUrl: undefined as string | undefined,
+    }));
+  }
   const paths = assets.map((asset) => assetThumbnailPath(asset));
   const thumbTransform = quality === "preview" ? PREVIEW_TRANSFORM : THUMB_TRANSFORM;
   const needsMediaRead = (asset: Doc<"assets">) =>
@@ -155,6 +165,31 @@ export const listByFolder = authedQuery({
   },
 });
 
+/** Recent ready assets for pickers (e.g. marketplace job delivery). */
+export const listRecentReady = authedQuery({
+  args: {
+    limit: v.optional(v.number()),
+    expiresUnix: v.number(),
+  },
+  returns: v.array(assetReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 24, 1), 48);
+    const assets = await ctx.db
+      .query("assets")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
+      .order("desc")
+      .take(120);
+    const ready = assets
+      .filter(
+        (asset) =>
+          !asset.deletedAt &&
+          (asset.storageStatus === undefined || asset.storageStatus === "ready"),
+      )
+      .slice(0, limit);
+    return await withSignedThumbnails(ready, args.expiresUnix, "thumb");
+  },
+});
+
 /**
  * Reserve an asset row and return a short-lived Convex staging upload URL.
  * Bytes go to Convex storage; `assetActions.commitStagingUpload` copies them
@@ -174,6 +209,7 @@ export const reserveUpload = authedMutation({
   }),
   handler: async (ctx, args) => {
     await requireFolderOwner(ctx, args.folderId);
+    await assertUploadsAllowed(ctx, ctx.user._id);
     const now = Date.now();
     const assetId = await ctx.db.insert("assets", {
       ownerId: ctx.user._id,
@@ -403,8 +439,47 @@ export const listTrash = authedQuery({
       .query("assets")
       .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
       .collect();
-    const visibleAssets = assets.filter((asset) => asset.deletedAt !== undefined);
+    const visibleAssets = assets.filter(
+      (asset) => asset.deletedAt !== undefined && !asset.purgedAt,
+    );
     return await withSignedThumbnails(visibleAssets, args.expiresUnix);
+  },
+});
+
+/**
+ * Permanently remove an asset's files from Bunny. Storage billing drops as soon
+ * as this runs, which is the only way a customer's monthly charge can go down.
+ */
+export const deleteForever = authedMutation({
+  args: { assetId: v.id("assets") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const asset = await requireAssetOwner(ctx, args.assetId);
+    if (!asset.deletedAt) {
+      throw new Error("Move the file to trash before deleting it forever.");
+    }
+    await beginAssetPurge(ctx, asset);
+    return null;
+  },
+});
+
+export const emptyTrash = authedMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const trashed = await ctx.db
+      .query("assets")
+      .withIndex("by_owner_and_deleted", (q) =>
+        q.eq("ownerId", ctx.user._id).gt("deletedAt", 0),
+      )
+      .collect();
+    let purged = 0;
+    for (const asset of trashed) {
+      if (asset.purgedAt) continue;
+      await beginAssetPurge(ctx, asset);
+      purged += 1;
+    }
+    return purged;
   },
 });
 

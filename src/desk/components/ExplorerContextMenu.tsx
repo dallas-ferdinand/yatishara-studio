@@ -39,6 +39,8 @@ function buildMenuItems(entry, {
   }
   if (isBlank && inTrashView) {
     items.push({ id: "refresh", label: "Refresh" });
+    items.push({ id: "sep-trash-empty", sep: true });
+    items.push({ id: "empty-trash", label: "Empty trash", danger: true });
     return items;
   }
   if (isBlank) {
@@ -60,6 +62,10 @@ function buildMenuItems(entry, {
     if (onRequestDelete) {
       items.push({ id: "sep-trash-restore", sep: true });
       items.push({ id: "delete", label: "Restore" });
+    }
+    // Only assets hold billable storage, so only they can be purged from the zone.
+    if (entry.studioKind === "asset" && entry.studioId) {
+      items.push({ id: "delete-forever", label: "Delete forever", danger: true });
     }
     return items;
   }

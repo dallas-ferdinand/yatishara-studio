@@ -67,21 +67,30 @@
   --cursor-border-subtle: var(--mos-border-subtle, var(--mos-border-soft));
   --cursor-border-focus: color-mix(in srgb, var(--mos-accent) 38%, var(--mos-border-subtle, var(--mos-border-soft)));
   --cursor-shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.48);
-  /* Radius scale */
-  --cursor-radius-xs: 4px;
-  --cursor-radius-sm: 6px;
-  --cursor-radius-md: 8px;
-  --cursor-radius-lg: 10px;
-  --cursor-radius-xl: 12px;
-  --cursor-radius-pill: 999px;
-  --cursor-composer-radius: var(--desk-composer-radius, 16px);
+  /* Radius scale — aliases Studio DS tokens */
+  --cursor-radius-xs: var(--studio-r-xs, 4px);
+  --cursor-radius-sm: var(--studio-r-sm, 6px);
+  --cursor-radius-md: var(--studio-r-md, 8px);
+  --cursor-radius-lg: var(--studio-r-lg, 10px);
+  --cursor-radius-xl: var(--studio-r-xl, 12px);
+  --cursor-radius-2xl: var(--studio-r-2xl, 14px);
+  --cursor-radius-3xl: var(--studio-r-3xl, 16px);
+  --cursor-radius-4xl: var(--studio-r-4xl, 18px);
+  --cursor-radius-pill: var(--studio-r-pill, 999px);
+  --cursor-composer-radius: var(--desk-composer-radius, var(--studio-r-3xl, 16px));
   /* Legacy alias */
   --cursor-radius: var(--cursor-radius-lg);
-  /* Typography — desk tokens */
-  --desk-text-sm: 12px;
-  --desk-text-ui: 13px;
-  --desk-text-base: 14px;
-  --desk-text-lg: 15px;
+  /* Typography — desk tokens → Studio type scale */
+  --desk-text-2xs: var(--studio-fs-2xs, 10px);
+  --desk-text-xs: var(--studio-fs-xs, 11px);
+  --desk-text-sm: var(--studio-fs-sm, 12px);
+  --desk-text-ui: var(--studio-fs-md, 13px);
+  --desk-text-base: var(--studio-fs-lg, 14px);
+  --desk-text-lg: var(--studio-fs-xl, 16px);
+  --desk-w-medium: var(--studio-w-medium, 500);
+  --desk-w-semibold: var(--studio-w-semibold, 600);
+  --desk-w-strong: var(--studio-w-strong, 650);
+  --desk-w-bold: var(--studio-w-bold, 700);
   --desk-leading: 1.65;
   --desk-leading-tight: 1.45;
   --desk-composer-max: 680px;
@@ -104,7 +113,7 @@
 
 .studio-polish .cursor-workspace-head.cursor-panel-head {
   border: 0 !important;
-  border-bottom: 0 !important;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
 }
 
 .cursor-panel-head-tools {
@@ -324,7 +333,7 @@
 .finance-glance-card strong {
   display: block;
   margin-top: 6px;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
 }
 
@@ -384,7 +393,7 @@
 .finance-bucket-amount {
   margin-top: 12px;
   font-size: 24px;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .finance-bucket-meta {
@@ -783,7 +792,8 @@
   background: color-mix(in srgb, var(--mos-text-bright, #fff) 3.5%, var(--mos-bg, var(--color-cursor-bg)));
 }
 .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-  background: var(--desk-transparency-grid);
+  background: var(--desk-transparency-bg);
+  box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
 }
 
 .desk-file-thumb-badge {
@@ -1093,7 +1103,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
-  border-radius: 7px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--mos-panel, #0f172a) 88%, var(--color-cursor-bg));
   box-shadow: none;
   transform-origin: 50% 50%;
@@ -1145,7 +1155,7 @@
   background-color: var(--mos-panel, #0f172a);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 55%, transparent);
   color: var(--mos-text-soft, rgba(255, 255, 255, 0.82));
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
@@ -1175,7 +1185,7 @@
   background-color: var(--mos-panel, #0f172a);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 55%, transparent);
   color: var(--mos-text-soft, rgba(255, 255, 255, 0.82));
-  font-size: 7px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.15;
   text-align: center;
@@ -1256,7 +1266,7 @@
   flex: 0 0 auto;
   z-index: 2;
   padding: 4px 6px;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
@@ -2090,7 +2100,7 @@
   box-shadow: none;
   border-radius: 0;
   outline: none;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.65;
 }
 .cursor-doc-page.mos-md,
@@ -2395,7 +2405,7 @@
   background: transparent;
   color: var(--color-cursor-text);
   font-size: 12px;
-  font-weight: 450;
+  font-weight: 500;
   line-height: 1;
   outline: none;
   box-shadow: none;
@@ -2456,8 +2466,8 @@
   background: transparent;
   color: var(--color-cursor-muted);
   font: inherit;
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -2775,7 +2785,7 @@
   -webkit-text-fill-color: var(--mos-text-bright, #fff);
   opacity: 0.38;
   font-size: var(--desk-text-sm);
-  font-weight: 450;
+  font-weight: 500;
   line-height: inherit;
   pointer-events: none;
   white-space: pre-wrap;
@@ -3115,7 +3125,7 @@
   border-radius: 50%;
   background: color-mix(in srgb, var(--sophie-face-accent) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--sophie-face-accent) 42%, transparent);
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .cursor-composer-sophie-panel-title,
@@ -3673,7 +3683,7 @@
 .cursor-attach-chip-thumb {
   width: 18px;
   height: 18px;
-  border-radius: 3px;
+  border-radius: 4px;
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -3764,10 +3774,11 @@
   border-radius: 8px;
   overflow: hidden;
   justify-content: center;
-  background: var(--desk-transparency-grid);
+  background: var(--desk-transparency-bg);
+  box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
 }
 .cursor-attach-tile.is-square .cursor-attach-tile-open:hover {
-  background: var(--desk-transparency-grid);
+  background: var(--desk-transparency-bg);
 }
 .cursor-attach-tile.is-video .cursor-attach-tile-open {
   width: 72px;
@@ -3819,7 +3830,7 @@
 }
 .cursor-attach-tile-badge {
   flex-shrink: 0;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-cursor-muted);
@@ -4030,8 +4041,8 @@
   width: 100%;
   max-width: 100%;
   border-radius: 0;
-  box-shadow: none;
-  background: var(--desk-transparency-grid);
+  background: var(--desk-transparency-bg);
+  box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
 }
 .cursor-attach-preview-iframe {
   width: 100%;
@@ -4161,7 +4172,7 @@
 
 .desk-explorer-dialog-head h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-cursor-text);
 }
@@ -5032,7 +5043,7 @@
   background: linear-gradient(to top, color-mix(in srgb, #000 62%, transparent), transparent);
   color: #fff;
   font-size: 10px;
-  font-weight: 550;
+  font-weight: 500;
   letter-spacing: 0.01em;
   text-align: left;
   overflow: hidden;
@@ -5132,6 +5143,87 @@
 .cursor-settings-action.muted {
   background: transparent;
   color: var(--color-cursor-muted);
+}
+
+/* Studio chrome text field — pairs with .cursor-settings-action */
+.cursor-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--studio-control-h, 40px);
+  padding: 8px 12px;
+  border-radius: var(--studio-input-radius, var(--cursor-radius-xl));
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--cursor-surface-input, color-mix(in srgb, var(--mos-surface) 72%, var(--mos-bg)));
+  color: var(--color-cursor-text);
+  font: inherit;
+  font-size: var(--desk-text-ui);
+  font-weight: var(--desk-w-medium, 500);
+  line-height: 1.45;
+  outline: none;
+  transition: border-color var(--cursor-ease), background var(--cursor-ease), box-shadow var(--cursor-ease);
+}
+.cursor-input::placeholder {
+  color: color-mix(in srgb, var(--color-cursor-muted) 82%, transparent);
+}
+.cursor-input:hover:not(:disabled):not(:focus) {
+  border-color: var(--cursor-border-subtle, var(--color-cursor-border-soft));
+}
+.cursor-input:focus {
+  border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+}
+.cursor-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+textarea.cursor-input {
+  resize: vertical;
+}
+
+/* Kill browser autofill paint (Chrome/Safari) — keep Studio surface + text */
+.cursor-input:-webkit-autofill,
+.cursor-input:-webkit-autofill:hover,
+.cursor-input:-webkit-autofill:focus,
+.cursor-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--color-cursor-text-bright, var(--color-cursor-text)) !important;
+  caret-color: var(--color-cursor-text-bright, var(--color-cursor-text));
+  border-color: var(--color-cursor-border-soft) !important;
+  background-color: var(--mos-bg, #05080f) !important;
+  background-image: none !important;
+  /* Opaque inset wash replaces the default light-blue autofill fill */
+  -webkit-box-shadow: 0 0 0 1000px var(--mos-bg, #05080f) inset !important;
+  box-shadow: 0 0 0 1000px var(--mos-bg, #05080f) inset !important;
+  transition: background-color 99999s ease-out 0s;
+  filter: none;
+  color-scheme: dark;
+}
+.cursor-input:-webkit-autofill:focus {
+  border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft)) !important;
+  -webkit-box-shadow:
+    0 0 0 1000px var(--mos-bg, #05080f) inset,
+    0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent) !important;
+  box-shadow:
+    0 0 0 1000px var(--mos-bg, #05080f) inset,
+    0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent) !important;
+}
+[data-appearance="light"] .cursor-input:-webkit-autofill,
+[data-appearance="light"] .cursor-input:-webkit-autofill:hover,
+[data-appearance="light"] .cursor-input:-webkit-autofill:focus,
+[data-appearance="light"] .cursor-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--color-cursor-text) !important;
+  caret-color: var(--color-cursor-text);
+  background-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  box-shadow: 0 0 0 1000px #ffffff inset !important;
+  color-scheme: light;
+}
+[data-appearance="light"] .cursor-input:-webkit-autofill:focus {
+  -webkit-box-shadow:
+    0 0 0 1000px #ffffff inset,
+    0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent) !important;
+  box-shadow:
+    0 0 0 1000px #ffffff inset,
+    0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent) !important;
 }
 
 /* Empty chat + editor welcome */
@@ -5507,7 +5599,7 @@
   width: 26px;
   height: 26px;
   border: none;
-  border-radius: calc(var(--cursor-radius-sm) - 1px);
+  border-radius: calc(var(--cursor-radius-sm) - 4px);
   background: transparent;
   color: var(--cursor-accent);
   cursor: pointer;
@@ -5836,7 +5928,7 @@
 
 .desk-mobile-header-title {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-cursor-text);
   line-height: var(--desk-mobile-head-h);
@@ -5982,7 +6074,7 @@
   left: 18%;
   right: 18%;
   height: 2px;
-  border-radius: 0 0 2px 2px;
+  border-radius: 0 0 4px 4px;
   background: transparent;
   transition: background var(--cursor-ease);
 }
@@ -6179,7 +6271,7 @@
   border-bottom: 1px solid var(--color-cursor-border-soft);
   background: transparent;
   color: var(--color-cursor-text);
-  font-size: 15px;
+  font-size: 14px;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -6205,7 +6297,7 @@
   border-radius: 14px;
   background: var(--color-cursor-sidebar);
   color: var(--color-cursor-text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -6292,7 +6384,7 @@
     min-height: 40px;
     max-height: 140px;
     padding: 8px 10px 2px;
-    font-size: 17px;
+    font-size: 16px;
     line-height: 1.35;
   }
 
@@ -7281,7 +7373,7 @@
   height: var(--cursor-head-h);
   flex-shrink: 0;
   border: 1px solid color-mix(in srgb, var(--color-cursor-accent, #6b8afd) 18%, transparent);
-  border-radius: 11px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--color-cursor-accent, #6b8afd) 7%, transparent);
   opacity: 0.68;
   pointer-events: none;
@@ -7364,7 +7456,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 5px;
+  border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
   position: relative;
@@ -7668,7 +7760,7 @@
 }
 .studio-feed-mode-menu button {
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: transparent;
   color: var(--color-cursor-text);
   font: inherit;
@@ -7683,7 +7775,7 @@
 }
 .studio-feed-mode-menu button.is-selected {
   background: var(--cursor-overlay-subtle);
-  font-weight: 750;
+  font-weight: 700;
 }
 .cursor-unified-tab.cursor-unified-tab-new {
   width: var(--cursor-head-h);
@@ -7934,23 +8026,28 @@
   padding: 0 8px 8px;
 }
 
-/* Transparency checkerboard for images with alpha (white logos stay visible). */
+/* Transparent / alpha images: application bg + faint edge (no checkerboard). */
 :root {
-  --desk-transparency-cell: 20px;
-  --desk-transparency-a: #f3f5f8;
-  --desk-transparency-b: #dfe3ea;
-  --desk-transparency-grid: repeating-conic-gradient(
-      var(--desk-transparency-a) 0% 25%,
-      var(--desk-transparency-b) 0% 50%
-    )
-    0 0 / var(--desk-transparency-cell) var(--desk-transparency-cell);
+  --desk-transparency-bg: var(--mos-bg, var(--color-cursor-bg, #050608));
+  --desk-transparency-border: color-mix(
+    in srgb,
+    var(--mos-text-bright, #ffffff) 16%,
+    transparent
+  );
+  /* Legacy alias — solid app fill, not a checkerboard. */
+  --desk-transparency-grid: var(--desk-transparency-bg);
 }
 [data-appearance="light"] {
-  --desk-transparency-a: #f3f5f8;
-  --desk-transparency-b: #e0e4eb;
+  --desk-transparency-bg: var(--mos-bg, var(--color-cursor-bg, #ffffff));
+  --desk-transparency-border: color-mix(
+    in srgb,
+    var(--mos-text, #1b1f24) 12%,
+    transparent
+  );
 }
 .desk-transparency-grid {
-  background: var(--desk-transparency-grid) !important;
+  background: var(--desk-transparency-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
 }
 
 .desk-image-viewer {
@@ -8069,8 +8166,9 @@
   will-change: transform;
   user-select: none;
   -webkit-user-drag: none;
-  /* Checkerboard only under the image bounds (alpha shows through). */
-  background: var(--desk-transparency-grid);
+  /* App bg under image bounds (alpha shows through) + faint edge. */
+  background: var(--desk-transparency-bg);
+  box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
 }
 .desk-media-toolbar {
   display: flex;
@@ -8730,15 +8828,13 @@
   contain: none !important;
 }
 
-/* --- panel heads / workspace header — same overlay on every tab --- */
+/* --- panel heads / workspace header — solid canvas (no glass) --- */
 .studio-polish .cursor-panel-head,
 .studio-polish .cursor-workspace-head {
-  background: var(
-    --studio-mobile-chrome-glass,
-    color-mix(in srgb, #05080f 88%, transparent)
-  ) !important;
-  -webkit-backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
-  backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   transform: none !important;
   filter: none !important;
   isolation: auto !important;
@@ -8754,10 +8850,10 @@
 
 [data-appearance="light"] .studio-polish .cursor-panel-head,
 [data-appearance="light"] .studio-polish .cursor-workspace-head {
-  background: var(
-    --studio-mobile-chrome-glass,
-    color-mix(in srgb, #ffffff 84%, transparent)
-  ) !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 /* --- explorer panels, tree rows, pills, icon buttons --- */
@@ -9061,9 +9157,14 @@
 
 .studio-asset-preview .desk-image-viewer-toolbar,
 .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
-  background: var(--color-cursor-sidebar) !important;
+  background: var(--color-cursor-bg) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+[data-appearance="light"] .studio-asset-preview .desk-image-viewer-toolbar,
+[data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
+  background: #ffffff !important;
 }
 
 /* --- empty copy / placeholder --- */
@@ -9639,7 +9740,7 @@ html[data-theme="light"] .studio-assist-review-half-btn.is-review:hover:not(:dis
   margin: 0;
   color: color-mix(in srgb, var(--color-cursor-text, #fff) 72%, transparent);
   font-size: 0.74rem;
-  font-weight: 450;
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -9962,7 +10063,7 @@ html[data-theme="light"] .studio-assist-review-half-btn.is-review:hover:not(:dis
 
 .studio-assist-generate-label {
   font-size: 0.82rem;
-  font-weight: 750;
+  font-weight: 700;
 }
 
 .studio-assist-generate-cost {
@@ -10017,7 +10118,7 @@ html[data-theme="light"] .studio-assist-review-half-btn.is-review:hover:not(:dis
 
 .studio-assist-review-summary dt {
   font-size: 0.64rem;
-  font-weight: 450;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
   opacity: 0.44;
@@ -10386,7 +10487,7 @@ html[data-theme="light"] .studio-assist-review-half-btn.is-review:hover:not(:dis
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   color: var(--color-cursor-text, #f4f7fb);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
   user-select: none;
@@ -10426,7 +10527,7 @@ html[data-theme="light"] .studio-assist-review-half-btn.is-review:hover:not(:dis
   color: var(--color-cursor-text-bright, #fff);
   -webkit-text-fill-color: var(--color-cursor-text-bright, #fff);
   opacity: 0.38;
-  font-weight: 450;
+  font-weight: 500;
   pointer-events: none;
   white-space: pre-wrap;
 }

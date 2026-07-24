@@ -13,11 +13,18 @@ import {
 import { AssistanceThinkingIndicator } from "./guided-video/AssistanceThinkingIndicator";
 import { ChatMessageRow } from "./guided-video/ChatMessageAvatars";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useAction, useConvex, useMutation, useQueries, useQuery } from "convex/react";
+import {
+  useAction,
+  useConvex,
+  useMutation,
+  usePaginatedQuery,
+  useQueries,
+  useQuery,
+} from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
   AudioLines,
-  ChevronDown,
+  ArrowDown,
   Clapperboard,
   Clock3,
   CreditCard,
@@ -43,6 +50,7 @@ import {
   Plus,
   ArrowUp,
   Cloud,
+  HandCoins,
   Search,
   SlidersHorizontal,
   RectangleHorizontal,
@@ -174,6 +182,14 @@ const ProfilePostViewer = dynamic(
 );
 const PostComposeTab = dynamic(
   () => import("./PostComposeTab").then((m) => m.PostComposeTab),
+  { ssr: false },
+);
+const MarketplaceOffersPane = dynamic(
+  () => import("./MarketplaceOffersPane").then((m) => m.MarketplaceOffersPane),
+  { ssr: false },
+);
+const AdminMarketplacePane = dynamic(
+  () => import("./AdminMarketplacePane").then((m) => m.AdminMarketplacePane),
   { ssr: false },
 );
 const ThemeSettings = dynamic(
@@ -448,6 +464,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "element:",
   "admin:",
   "billing:",
+  "offers:",
   "create:",
   "post:",
   "videoEdit:",
@@ -819,6 +836,8 @@ export function StudioShell({
   const duplicateAsset = useMutation(api.assets.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
   const restoreAsset = useMutation(api.assets.restore);
+  const deleteAssetForever = useMutation(api.assets.deleteForever);
+  const emptyTrash = useMutation(api.assets.emptyTrash);
   const createVideoEdit = useMutation(api.videoEdits.create);
   const updateVideoEdit = useMutation(api.videoEdits.update);
   const trashVideoEdit = useMutation(api.videoEdits.moveToTrash);
@@ -2774,15 +2793,6 @@ export function StudioShell({
     setSettingsOpen(true);
   }, [isMobile]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const settings = params.get("settings");
-    if (settings !== "profile") return;
-    setSettingsSection("profile");
-    setSettingsOpen(true);
-  }, [isMobile]);
-
   const openedInitialProfileRef = useRef(false);
   useEffect(() => {
     if (openedInitialProfileRef.current) return;
@@ -2880,6 +2890,34 @@ export function StudioShell({
     if (isMobile) setMobileSection("composer");
     openTab(`admin:${tab}`);
   }
+
+  function openOffersTab(section = "home") {
+    setSettingsOpen(false);
+    if (isMobile) setMobileSection("composer");
+    openTab(`offers:${section}`);
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const settings = params.get("settings");
+    if (settings === "profile") {
+      setSettingsSection("profile");
+      setSettingsOpen(true);
+      return;
+    }
+    if (settings === "billing") {
+      openCreditsPane();
+      return;
+    }
+    if (params.get("offers") === "1") {
+      openOffersTab();
+      const url = new URL(window.location.href);
+      url.searchParams.delete("offers");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+    }
+  }, [isMobile, openCreditsPane]);
 
   function openMobileSection(section) {
     startMobileTransition(() => {
@@ -3462,6 +3500,39 @@ export function StudioShell({
       await restoreElement({ elementId: entry.studioId });
     } else if (entry.studioKind === "videoEdit") {
       await restoreVideoEdit({ projectId: entry.studioId });
+    }
+  }
+
+  /** Removes the files from Bunny, which is what actually lowers the storage bill. */
+  async function deleteEntryForever(entry) {
+    if (entry?.studioKind !== "asset" || !entry.studioId) return;
+    const ok = window.confirm(
+      `Permanently delete "${entry.name}"? This frees the storage it uses and cannot be undone.`,
+    );
+    if (!ok) return;
+    try {
+      await deleteAssetForever({ assetId: entry.studioId });
+      closeTab(`asset:${entry.studioId}`);
+      toast.success("Deleted forever");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not delete the file."));
+    }
+  }
+
+  async function handleEmptyTrash() {
+    const ok = window.confirm(
+      "Permanently delete every file in the trash? This frees their storage and cannot be undone.",
+    );
+    if (!ok) return;
+    try {
+      const purged = await emptyTrash({});
+      toast.success(
+        purged > 0
+          ? `Deleted ${purged} file${purged === 1 ? "" : "s"} forever.`
+          : "No files to delete.",
+      );
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not empty the trash."));
     }
   }
 
@@ -4631,9 +4702,9 @@ export function StudioShell({
           --studio-hover-scale: 1;
           --studio-press-scale: 0.985;
           --studio-focus-ring: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
-          --studio-composer-glass: color-mix(in srgb, #05080f 88%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #05080f 94%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #05080f 78%, transparent);
+          --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent);
           --studio-composer-glass-border: rgba(255, 255, 255, 0.14);
           --studio-composer-glass-blur: saturate(180%) blur(28px);
           --studio-composer-glass-shadow:
@@ -4658,8 +4729,8 @@ export function StudioShell({
           /* Fixed control size so chrome bars can grow without scaling buttons/tabs/pills */
           --studio-mobile-chrome-control: 30px;
           /* Opaque frosted overlays — never fully transparent */
-          --studio-mobile-chrome-glass: color-mix(in srgb, #05080f 86%, transparent);
-          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #05080f 86%, transparent);
+          --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
+          --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
           --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           --studio-mobile-chrome-border: rgba(255, 255, 255, 0.14);
           /* Active / muted chrome: right-corner → left fade border stroke */
@@ -4723,13 +4794,13 @@ export function StudioShell({
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 6.5%, var(--mos-bg));
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 8%, var(--mos-bg));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: color-mix(in srgb, #05080f 50%, var(--cursor-accent) 3%);
+          --studio-gen-frame-bg: color-mix(in srgb, var(--mos-bg, #05080f) 50%, var(--cursor-accent) 3%);
           --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 78%, var(--color-cursor-muted));
           --studio-gen-card-shadow:
             0 10px 28px rgba(0, 0, 0, 0.22),
             inset 0 1px 0 rgba(255, 255, 255, 0.05);
-          --studio-gen-media-bg: color-mix(in srgb, #05080f 52%, transparent);
-          --studio-gen-glass-fill: color-mix(in srgb, #05080f 48%, var(--cursor-accent) 3%);
+          --studio-gen-media-bg: color-mix(in srgb, var(--mos-bg, #05080f) 52%, transparent);
+          --studio-gen-glass-fill: color-mix(in srgb, var(--mos-bg, #05080f) 48%, var(--cursor-accent) 3%);
           --studio-gen-glass-blur: saturate(140%) blur(10px);
           --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 7%, transparent);
           --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 4%, transparent);
@@ -4897,11 +4968,10 @@ export function StudioShell({
             width: 100% !important;
             min-width: 0 !important;
           }
-          .studio-polish.is-studio-mobile .cursor-workspace-head,
-          .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            background: var(--studio-mobile-chrome-glass) !important;
-            backdrop-filter: var(--studio-mobile-chrome-blur) !important;
-            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+          .studio-polish.is-studio-mobile .cursor-workspace-head {
+            background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
@@ -4909,6 +4979,12 @@ export function StudioShell({
           }
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
             background: var(--studio-mobile-chrome-glass-foot) !important;
+            backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+            transform: none !important;
+            filter: none !important;
+            isolation: auto !important;
+            contain: none !important;
           }
           .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box {
             background: var(--studio-composer-glass) !important;
@@ -4919,7 +4995,7 @@ export function StudioShell({
             isolation: auto !important;
           }
           .studio-polish.is-studio-mobile .studio-mode-row {
-            background: color-mix(in srgb, #05080f 48%, transparent) !important;
+            background: color-mix(in srgb, var(--mos-bg, #05080f) 48%, transparent) !important;
             backdrop-filter: saturate(140%) blur(8px) !important;
             -webkit-backdrop-filter: saturate(140%) blur(8px) !important;
             transform: none !important;
@@ -4937,8 +5013,8 @@ export function StudioShell({
             --studio-chat-empty-clearance: calc(108px + env(safe-area-inset-bottom, 0px));
             --cursor-head-h: var(--studio-mobile-nav-height, 44px);
             /* Dark overlay chrome — readable bars, still slightly frosted */
-            --studio-mobile-chrome-glass: color-mix(in srgb, #05080f 88%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, #05080f 88%, transparent);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
             --studio-mobile-chrome-blur: saturate(160%) blur(18px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
@@ -5178,7 +5254,7 @@ export function StudioShell({
             backdrop-filter: saturate(120%) blur(4px);
             -webkit-backdrop-filter: saturate(120%) blur(4px);
             color: color-mix(in srgb, var(--color-cursor-text-bright) 48%, transparent);
-            font-size: 9px;
+            font-size: 10px;
           }
           .studio-polish .studio-mode-row.is-active {
             border: 1px solid transparent !important;
@@ -5516,7 +5592,11 @@ export function StudioShell({
         .studio-polish :where(aside, .cursor-panel-head, .cursor-settings-panel, .border-cursor-border) {
           border-color: var(--studio-shell-border) !important;
         }
-        .studio-polish .cursor-workspace-head,
+        .studio-polish .cursor-workspace-head {
+          border: 0 !important;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+        }
         .studio-polish .studio-mobile-bottom-nav {
           border: 0 !important;
           border-color: transparent !important;
@@ -5609,18 +5689,20 @@ export function StudioShell({
           transform: scale(var(--studio-press-scale));
         }
         .studio-polish .cursor-panel-head {
-          border-bottom: 0 !important;
-          background: rgb(255 255 255 / 0.001) !important;
-          box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.04),
-            0 12px 34px rgb(0 0 0 / 0.14) !important;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+          background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          box-shadow: none !important;
         }
         .studio-polish aside .cursor-panel-head,
         .studio-polish aside .cursor-sidebar-head,
         .studio-polish .studio-settings-sidebar .cursor-panel-head {
-          background: var(--color-cursor-bg) !important;
+          background: var(--mos-bg, var(--color-cursor-bg)) !important;
           border-bottom: 1px solid var(--studio-chrome-divider) !important;
           box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
         }
         .studio-workspace-panels {
           height: 100%;
@@ -5818,11 +5900,11 @@ export function StudioShell({
           padding: 0 2px 0 4px !important;
           gap: 0;
           align-items: center;
-          background: var(--studio-mobile-chrome-glass) !important;
-          backdrop-filter: var(--studio-mobile-chrome-blur) !important;
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+          background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
           border: 0 !important;
-          border-bottom: 0 !important;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
           box-shadow: none !important;
           transform: none !important;
           filter: none !important;
@@ -5842,11 +5924,11 @@ export function StudioShell({
             padding-top: env(safe-area-inset-top, 0px) !important;
             padding-left: max(4px, env(safe-area-inset-left, 0px)) !important;
             padding-right: max(2px, env(safe-area-inset-right, 0px)) !important;
-            background: var(--studio-mobile-chrome-glass) !important;
+            background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
             border: 0 !important;
-            border-bottom: 0 !important;
-            backdrop-filter: var(--studio-mobile-chrome-blur);
-            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+            border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             box-shadow: none !important;
             overflow: visible;
           }
@@ -6011,8 +6093,8 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab-preview.is-initials {
           display: inline-grid;
           place-items: center;
-          font-size: 8px;
-          font-weight: 750;
+          font-size: 10px;
+          font-weight: 700;
           letter-spacing: 0.01em;
           line-height: 1;
           color: #fff;
@@ -6024,7 +6106,7 @@ export function StudioShell({
             height: 20px;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-preview.is-initials {
-            font-size: 8px;
+            font-size: 10px;
           }
         }
         .studio-new-tab-cluster {
@@ -6065,7 +6147,7 @@ export function StudioShell({
           flex: none;
           min-height: 0;
           overflow: hidden;
-          border-radius: 20px;
+          border-radius: 18px;
           border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
           /* Glass lives on ::before — backdrop-filter on this overflow:hidden shell
              breaks touch scroll and can kill blur (same class of bug as composer glass). */
@@ -6326,7 +6408,8 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-files-mobile-sheet .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-grid) !important;
+          background: var(--desk-transparency-bg) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
         }
@@ -6776,9 +6859,9 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
         [data-appearance="light"] .studio-polish .studio-settings-sidebar .cursor-panel-head,
         [data-appearance="light"] .studio-polish main .cursor-workspace-head {
-          background: var(--studio-mobile-chrome-glass) !important;
-          backdrop-filter: var(--studio-mobile-chrome-blur);
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          background: #ffffff !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
@@ -6787,14 +6870,16 @@ export function StudioShell({
           border-bottom: 1px solid var(--studio-chrome-divider) !important;
         }
         [data-appearance="light"] .studio-polish main .cursor-workspace-head {
-          border-bottom: 0 !important;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
         }
         @media (max-width: 899px) {
           [data-appearance="light"] .studio-polish main .cursor-workspace-head {
-            background: var(--studio-mobile-chrome-glass) !important;
+            background: #ffffff !important;
             border: 0 !important;
-            border-bottom: 0 !important;
+            border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             box-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
           }
           [data-appearance="light"] .studio-mobile-bottom-nav {
             background: var(--studio-mobile-chrome-glass-foot) !important;
@@ -7207,7 +7292,8 @@ export function StudioShell({
           padding: 0 !important;
         }
         .studio-settings-workspace .studio-settings-invoices-card,
-        .studio-settings-workspace .studio-settings-plans {
+        .studio-settings-workspace .studio-settings-plans,
+        .studio-settings-workspace .studio-settings-storage-card {
           overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
@@ -7218,7 +7304,8 @@ export function StudioShell({
             0 4px 10px color-mix(in srgb, #000 6%, transparent);
         }
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-invoices-card,
-        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-plans {
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-plans,
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-storage-card {
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.72),
             0 1px 2px rgba(15, 23, 42, 0.05),
@@ -7245,7 +7332,7 @@ export function StudioShell({
         .studio-settings-balance-pill strong {
           color: var(--color-cursor-text-bright);
           font-size: 13px;
-          font-weight: 750;
+          font-weight: 700;
           font-variant-numeric: tabular-nums;
           letter-spacing: -0.01em;
         }
@@ -7273,8 +7360,8 @@ export function StudioShell({
         }
         .studio-settings-balance-block strong {
           color: var(--color-cursor-text-bright);
-          font-size: 34px;
-          font-weight: 750;
+          font-size: 24px;
+          font-weight: 700;
           line-height: 1.02;
           letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
@@ -7314,7 +7401,8 @@ export function StudioShell({
           text-align: right;
           font-variant-numeric: tabular-nums;
         }
-        .studio-settings-workspace .studio-settings-plans {
+        .studio-settings-workspace .studio-settings-plans,
+        .studio-settings-workspace .studio-settings-storage-card {
           padding: 16px 18px 12px !important;
         }
         .studio-settings-workspace .studio-settings-invoices-card {
@@ -7325,7 +7413,7 @@ export function StudioShell({
           padding: 0 2px;
           color: var(--color-cursor-text-bright);
           font-size: 13px;
-          font-weight: 750;
+          font-weight: 700;
         }
         .studio-settings-invoice-row {
           display: grid;
@@ -7415,7 +7503,7 @@ export function StudioShell({
           padding: 5px 8px;
           color: var(--color-cursor-text-bright);
           font-size: 11px;
-          font-weight: 750;
+          font-weight: 700;
           line-height: 1;
           text-decoration: none;
         }
@@ -7432,6 +7520,78 @@ export function StudioShell({
           padding: 8px 0 4px;
           color: var(--color-cursor-muted);
           font-size: 12px;
+        }
+        .studio-settings-ledger-amount {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          line-height: 1.2;
+          white-space: nowrap;
+        }
+        .studio-settings-ledger-amount.is-credit {
+          color: color-mix(in srgb, #4ade80 72%, var(--color-cursor-text-bright));
+        }
+        .studio-settings-ledger-amount.is-none {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 600;
+        }
+        .studio-settings-storage-alert {
+          display: grid;
+          gap: 10px;
+        }
+        .studio-settings-storage-alert strong {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+        }
+        .studio-settings-storage-alert p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.45;
+          max-width: 42ch;
+        }
+        .studio-settings-storage-card {
+          display: grid;
+          gap: 12px;
+        }
+        .studio-settings-storage-card .studio-settings-balance-pill {
+          margin-bottom: 0;
+        }
+        .studio-settings-storage-summary {
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+          border-radius: 14px;
+          background: color-mix(in srgb, var(--mos-bg) 36%, transparent);
+          padding: 4px 0;
+        }
+        .studio-settings-storage-summary .studio-settings-stat-list {
+          padding: 0;
+        }
+        .studio-settings-storage-summary .studio-settings-stat-row {
+          min-height: 40px;
+          padding-inline: 14px;
+        }
+        .studio-settings-storage-card.is-blocked {
+          border-color: color-mix(in srgb, #f87171 42%, var(--color-cursor-border-soft)) !important;
+        }
+        .studio-settings-storage-card.is-due {
+          border-color: color-mix(in srgb, #fbbf24 38%, var(--color-cursor-border-soft)) !important;
+        }
+        .studio-settings-storage-note {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.4;
+        }
+        .studio-settings-storage-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding-top: 2px;
         }
         .studio-settings-credit-switch {
           display: grid;
@@ -7501,7 +7661,7 @@ export function StudioShell({
             0 1px 2px color-mix(in srgb, #000 8%, transparent),
             0 2px 6px color-mix(in srgb, #000 5%, transparent);
           color: var(--color-cursor-muted);
-          font-size: 15px;
+          font-size: 14px;
         }
         .studio-settings-custom-amount-input.is-emphasis:focus-within {
           border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
@@ -7523,8 +7683,8 @@ export function StudioShell({
             0 1px 3px rgba(15, 23, 42, 0.05);
         }
         .studio-settings-custom-amount-input.is-emphasis input {
-          font-size: 18px;
-          font-weight: 750;
+          font-size: 16px;
+          font-weight: 700;
           letter-spacing: -0.02em;
         }
         .studio-settings-custom-amount-input input {
@@ -7796,7 +7956,7 @@ export function StudioShell({
         }
         .studio-settings-rate-strip b {
           color: var(--color-cursor-text-bright);
-          font-size: 15px;
+          font-size: 14px;
         }
         .studio-settings-plans {
           display: grid;
@@ -7896,7 +8056,7 @@ export function StudioShell({
           padding: 2px 6px;
           color: var(--color-cursor-text-bright) !important;
           font-size: 10px !important;
-          font-weight: 800;
+          font-weight: 700;
           letter-spacing: 0.02em;
         }
         .studio-settings-discount.is-empty {
@@ -7912,7 +8072,7 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
           font: inherit;
           font-size: 10px;
-          font-weight: 800;
+          font-weight: 700;
           text-align: center;
           cursor: pointer;
         }
@@ -7980,8 +8140,8 @@ export function StudioShell({
         }
         .studio-settings-payment-hero-copy strong {
           color: var(--color-cursor-text-bright);
-          font-size: 34px;
-          font-weight: 750;
+          font-size: 24px;
+          font-weight: 700;
           line-height: 1.02;
           letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
@@ -8034,7 +8194,7 @@ export function StudioShell({
           background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           color: var(--color-cursor-text-bright);
           font-size: 10px;
-          font-weight: 800;
+          font-weight: 700;
         }
         .studio-settings-payment-amount-note {
           margin: 0;
@@ -8216,7 +8376,7 @@ export function StudioShell({
         .studio-settings-activity-head strong {
           color: var(--color-cursor-text-bright);
           font-size: 13px;
-          font-weight: 750;
+          font-weight: 700;
         }
         .studio-settings-activity-head span {
           color: var(--color-cursor-muted);
@@ -8456,8 +8616,8 @@ export function StudioShell({
         }
         .studio-account-fields span {
           color: var(--color-cursor-muted);
-          font-size: 11px;
-          font-weight: 650;
+          font-size: var(--studio-label-size, 11px);
+          font-weight: var(--studio-label-weight, 650);
         }
         .studio-account-fields input,
         .studio-account-fields textarea {
@@ -8465,9 +8625,9 @@ export function StudioShell({
           max-width: 100%;
           min-width: 0;
           box-sizing: border-box;
-          min-height: 40px;
+          min-height: var(--studio-control-h, 40px);
           height: auto;
-          border-radius: 12px;
+          border-radius: var(--studio-input-radius, 12px);
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
           background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
           padding: 0 12px;
@@ -8485,6 +8645,30 @@ export function StudioShell({
         .studio-account-fields textarea:focus {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+        }
+        .studio-account-fields input:-webkit-autofill,
+        .studio-account-fields input:-webkit-autofill:hover,
+        .studio-account-fields input:-webkit-autofill:focus,
+        .studio-account-fields textarea:-webkit-autofill,
+        .studio-account-fields textarea:-webkit-autofill:hover,
+        .studio-account-fields textarea:-webkit-autofill:focus {
+          -webkit-text-fill-color: var(--color-cursor-text-bright) !important;
+          caret-color: var(--color-cursor-text-bright);
+          box-shadow: 0 0 0 1000px
+            color-mix(in srgb, var(--mos-surface) 72%, var(--mos-bg))
+            inset !important;
+          transition: background-color 99999s ease-out 0s;
+          filter: none;
+        }
+        [data-appearance="light"] .studio-account-fields input:-webkit-autofill,
+        [data-appearance="light"] .studio-account-fields input:-webkit-autofill:hover,
+        [data-appearance="light"] .studio-account-fields input:-webkit-autofill:focus,
+        [data-appearance="light"] .studio-account-fields textarea:-webkit-autofill,
+        [data-appearance="light"] .studio-account-fields textarea:-webkit-autofill:hover,
+        [data-appearance="light"] .studio-account-fields textarea:-webkit-autofill:focus {
+          -webkit-text-fill-color: var(--color-cursor-text) !important;
+          caret-color: var(--color-cursor-text);
+          box-shadow: 0 0 0 1000px #ffffff inset !important;
         }
         .studio-profile-editor {
           min-width: 0;
@@ -8845,11 +9029,11 @@ export function StudioShell({
           justify-content: center;
           gap: 8px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
-          border-radius: 999px;
+          border-radius: var(--studio-save-radius, 999px);
           background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           color: var(--color-cursor-text-bright);
-          font-size: 13px;
-          font-weight: 700;
+          font-size: var(--studio-fs-md, 13px);
+          font-weight: var(--studio-save-weight, 700);
           cursor: pointer;
           transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
         }
@@ -8933,7 +9117,7 @@ export function StudioShell({
         .studio-api-keys-secret {
           display: block;
           padding: 10px 12px;
-          border-radius: 9px;
+          border-radius: 10px;
           border: 1px solid var(--color-cursor-border-soft);
           background: color-mix(in srgb, var(--mos-bg) 56%, transparent);
           color: var(--color-cursor-text-bright);
@@ -8967,7 +9151,7 @@ export function StudioShell({
         .studio-api-keys-item-copy strong {
           color: var(--color-cursor-text-bright);
           font-size: 12px;
-          font-weight: 750;
+          font-weight: 700;
         }
         .studio-api-keys-item-copy span {
           color: var(--color-cursor-muted);
@@ -9077,7 +9261,7 @@ export function StudioShell({
           margin-top: 4px;
           color: var(--color-cursor-text-bright);
           font-size: 20px;
-          font-weight: 750;
+          font-weight: 700;
         }
         .studio-plan-sub,
         .studio-plan-card li {
@@ -9305,7 +9489,8 @@ export function StudioShell({
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-grid) !important;
+          background: var(--desk-transparency-bg) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
@@ -9416,7 +9601,7 @@ export function StudioShell({
           opacity: 1;
           overflow: hidden;
           white-space: nowrap;
-          font-size: 10.5px;
+          font-size: 11px;
           font-weight: 500;
           line-height: 1.2;
           text-align: center;
@@ -9446,7 +9631,8 @@ export function StudioShell({
         .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-grid) !important;
+          background: var(--desk-transparency-bg) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
@@ -9476,7 +9662,7 @@ export function StudioShell({
         .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-grid) !important;
+          background: var(--desk-transparency-bg) !important;
           box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent);
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-label,
@@ -9543,7 +9729,7 @@ export function StudioShell({
           line-height: 0;
         }
         .studio-polish .cursor-panel-search-input {
-          font-size: 11.5px;
+          font-size: 12px;
           line-height: 1;
           height: 100%;
         }
@@ -9844,7 +10030,7 @@ export function StudioShell({
           -webkit-backdrop-filter: saturate(120%) blur(4px);
           padding: 0 6px;
           color: color-mix(in srgb, var(--color-cursor-text-bright) 48%, transparent);
-          font-size: 9px;
+          font-size: 10px;
           font-weight: 650;
           line-height: 1;
           text-align: center;
@@ -10193,7 +10379,7 @@ export function StudioShell({
         }
         .studio-composer-options-panel .studio-preset-grid-copy strong {
           font-size: 14px;
-          font-weight: 750;
+          font-weight: 700;
           letter-spacing: 0.01em;
         }
         .studio-preset-grid-copy .studio-preset-grid-blurb,
@@ -10361,7 +10547,7 @@ export function StudioShell({
           opacity: 0.38 !important;
           font-size: var(--studio-composer-text-size);
           line-height: var(--studio-composer-line-size);
-          font-weight: 450;
+          font-weight: 500;
           pointer-events: none;
           white-space: pre-wrap;
         }
@@ -10373,7 +10559,7 @@ export function StudioShell({
           opacity: 0.38;
           font-size: var(--studio-composer-text-size);
           line-height: var(--studio-composer-line-size);
-          font-weight: 450;
+          font-weight: 500;
           pointer-events: none;
           white-space: pre-wrap;
         }
@@ -10839,7 +11025,7 @@ export function StudioShell({
           max-width: 72px;
           color: var(--color-cursor-text-bright);
           font-size: 10px;
-          font-weight: 750;
+          font-weight: 700;
           text-overflow: ellipsis;
         }
         .studio-composer-actions {
@@ -10948,7 +11134,7 @@ export function StudioShell({
           height: 24px;
           min-height: 24px;
           justify-content: center;
-          border-radius: 9999px;
+          border-radius: 999px;
           border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border));
           background:
             linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-panel)), var(--color-cursor-panel));
@@ -11106,7 +11292,7 @@ export function StudioShell({
           display: none;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar .studio-composer-send-cost {
-          font-size: 9px;
+          font-size: 10px;
         }
         .studio-composer-actions .cursor-composer-mic:not(.studio-composer-circle-btn) {
           width: 26px;
@@ -11207,7 +11393,7 @@ export function StudioShell({
         }
         .studio-ratio-glyph > span {
           display: block;
-          border-radius: 3px;
+          border-radius: 4px;
           background:
             linear-gradient(var(--cursor-accent), var(--cursor-accent)) left top / 6px 1px no-repeat,
             linear-gradient(var(--cursor-accent), var(--cursor-accent)) left top / 1px 6px no-repeat,
@@ -11309,8 +11495,8 @@ export function StudioShell({
           min-height: 18px;
           padding: 0 2px;
           color: var(--color-cursor-muted);
-          font-size: 10.5px;
-          font-weight: 750;
+          font-size: 11px;
+          font-weight: 700;
           letter-spacing: 0.05em;
           text-transform: uppercase;
         }
@@ -11340,7 +11526,7 @@ export function StudioShell({
           justify-content: center;
           gap: 2px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
-          border-radius: 11px;
+          border-radius: 12px;
           background: color-mix(in srgb, var(--mos-surface) 70%, transparent);
           padding: 5px 8px;
           color: var(--color-cursor-text);
@@ -11369,7 +11555,7 @@ export function StudioShell({
         }
         .studio-settings-chip small {
           color: var(--color-cursor-muted);
-          font-size: 10.5px;
+          font-size: 11px;
           font-weight: 650;
           line-height: 1;
         }
@@ -11455,7 +11641,7 @@ export function StudioShell({
         .studio-duration-readout strong {
           color: var(--color-cursor-text-bright);
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 700;
           letter-spacing: -0.02em;
         }
         .studio-duration-readout span {
@@ -11471,7 +11657,7 @@ export function StudioShell({
           margin-top: -5px;
           padding: 0 3px;
           color: color-mix(in srgb, var(--color-cursor-muted) 80%, transparent);
-          font-size: 9.5px;
+          font-size: 10px;
           font-weight: 700;
         }
         .studio-duration-ticks span:nth-child(2) {
@@ -11528,7 +11714,7 @@ export function StudioShell({
           margin: 2px 4px -2px;
           color: color-mix(in srgb, var(--color-cursor-muted) 82%, transparent);
           font-size: 10px;
-          font-weight: 750;
+          font-weight: 700;
           letter-spacing: 0.08em;
           line-height: 1;
           text-transform: uppercase;
@@ -11657,7 +11843,7 @@ export function StudioShell({
           align-content: center;
           gap: 4px;
           border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 13px;
+          border-radius: 12px;
           background: color-mix(in srgb, var(--mos-surface) 78%, transparent);
           padding: 8px 10px;
           color: var(--color-cursor-muted);
@@ -11852,7 +12038,7 @@ export function StudioShell({
           display: inline-flex;
           align-items: center;
           gap: 3px;
-          font-size: 9px;
+          font-size: 10px;
           font-weight: 650;
           line-height: 1;
           color: color-mix(in srgb, #ffffff 94%, transparent);
@@ -12510,7 +12696,7 @@ export function StudioShell({
           width: 34px;
           height: 34px;
           flex: 0 0 auto;
-          border-radius: 11px;
+          border-radius: 12px;
           background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
           color: var(--cursor-accent);
           overflow: hidden;
@@ -12523,20 +12709,20 @@ export function StudioShell({
         .studio-composer-setting-card-icon .studio-preset-trigger-media {
           width: 100%;
           height: 100%;
-          border-radius: 11px;
+          border-radius: 12px;
         }
         .studio-composer-setting-card-icon .studio-preset-trigger-direct,
         .studio-composer-setting-card-icon .studio-preset-grid-thumb {
           width: 100%;
           height: 100%;
-          border-radius: 11px;
+          border-radius: 12px;
         }
         .studio-composer-setting-card-icon .studio-preset-trigger-sheet-img {
           width: 100%;
           height: 100%;
           object-fit: cover;
           object-position: center;
-          border-radius: 11px;
+          border-radius: 12px;
         }
         .studio-composer-setting-card-icon .studio-preset-trigger-icon-overlay {
           color: #fff;
@@ -12688,7 +12874,7 @@ export function StudioShell({
           padding: 0 10px;
           color: var(--color-cursor-text-bright);
           font-size: 11px;
-          font-weight: 720;
+          font-weight: 700;
         }
         .studio-asset-preview {
           position: relative;
@@ -12706,8 +12892,11 @@ export function StudioShell({
           height: var(--cursor-head-h);
           padding: 0 12px;
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-sidebar) !important;
+          background: var(--color-cursor-bg) !important;
           flex-shrink: 0;
+        }
+        [data-appearance="light"] .studio-asset-media-bar {
+          background: #ffffff !important;
         }
         .studio-asset-media-bar-name {
           min-width: 0;
@@ -12757,10 +12946,14 @@ export function StudioShell({
           border: none;
           border-bottom: 1px solid var(--studio-chrome-divider);
           border-radius: 0;
-          background: var(--color-cursor-sidebar) !important;
+          background: var(--color-cursor-bg) !important;
           box-shadow: none;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
+        }
+        [data-appearance="light"] .studio-asset-preview .desk-image-viewer-toolbar,
+        [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
+          background: #ffffff !important;
         }
         .studio-asset-preview .desk-image-viewer-name,
         .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-name {
@@ -12768,7 +12961,10 @@ export function StudioShell({
         }
         .studio-document-preview .cursor-doc-toolbar.has-name {
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-sidebar) !important;
+          background: var(--color-cursor-bg) !important;
+        }
+        [data-appearance="light"] .studio-document-preview .cursor-doc-toolbar.has-name {
+          background: #ffffff !important;
         }
         .studio-document-preview .desk-image-viewer-name {
           color: var(--color-cursor-text);
@@ -12845,8 +13041,8 @@ export function StudioShell({
         }
         .studio-asset-preview .desk-image-viewer-img {
           border-radius: 0;
-          box-shadow: none;
-          background: var(--desk-transparency-grid);
+          background: var(--desk-transparency-bg);
+          box-shadow: inset 0 0 0 1px var(--desk-transparency-border);
         }
         .studio-asset-player {
           flex: 1;
@@ -12872,7 +13068,7 @@ export function StudioShell({
           justify-content: space-between;
           gap: 16px;
           border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
-          border-radius: 22px;
+          border-radius: 18px;
           background:
             radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 36%),
             color-mix(in srgb, var(--mos-surface) 72%, transparent);
@@ -12888,7 +13084,7 @@ export function StudioShell({
         .studio-admin-hero-card h2,
         .studio-admin-card h3 {
           color: var(--color-cursor-text-bright);
-          font-weight: 720;
+          font-weight: 700;
         }
         .studio-admin-hero-card h2 {
           font-size: 24px;
@@ -12936,7 +13132,7 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           padding: 7px 12px;
           font-size: 12px;
-          font-weight: 720;
+          font-weight: 700;
           cursor: pointer;
         }
         .studio-admin-tabbar button.is-active,
@@ -13081,7 +13277,7 @@ export function StudioShell({
         .studio-admin-setup-card h4 {
           display: block;
           color: var(--color-cursor-text-bright);
-          font-weight: 760;
+          font-weight: 700;
         }
         .studio-admin-table td span {
           display: block;
@@ -13091,7 +13287,7 @@ export function StudioShell({
         }
         .studio-admin-table a {
           color: var(--cursor-accent);
-          font-weight: 720;
+          font-weight: 700;
           text-decoration: none;
         }
         .studio-payment-status-pill {
@@ -13104,7 +13300,7 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
           padding: 5px 8px;
           font-size: 11px;
-          font-weight: 760;
+          font-weight: 700;
         }
         .studio-payment-status-pill.is-payment_completed {
           border-color: color-mix(in srgb, #22c55e 42%, var(--color-cursor-border-soft));
@@ -13146,7 +13342,7 @@ export function StudioShell({
           color: var(--color-cursor-text-bright);
           padding: 7px 10px;
           font-size: 12px;
-          font-weight: 720;
+          font-weight: 700;
           text-decoration: none;
           cursor: pointer;
         }
@@ -13222,8 +13418,8 @@ export function StudioShell({
         .studio-price-card-credits {
           margin-top: 4px;
           color: var(--cursor-accent);
-          font-size: 26px;
-          font-weight: 720;
+          font-size: 24px;
+          font-weight: 700;
           line-height: 1;
           text-shadow: 0 0 14px var(--studio-glow-soft);
         }
@@ -13285,7 +13481,7 @@ export function StudioShell({
         }
         .studio-bank-row strong {
           color: var(--color-cursor-text);
-          font-weight: 520;
+          font-weight: 500;
           text-align: right;
         }
         .studio-element-picker {
@@ -13432,7 +13628,7 @@ export function StudioShell({
           margin-top: 6px;
           color: var(--color-cursor-text-bright);
           font-size: 24px;
-          font-weight: 720;
+          font-weight: 700;
         }
         .studio-element-detail-hero p {
           margin-top: 6px;
@@ -13716,7 +13912,7 @@ export function StudioShell({
         .studio-empty-logo-btn:focus-visible {
           outline: 2px solid color-mix(in srgb, var(--cursor-accent) 55%, transparent);
           outline-offset: 6px;
-          border-radius: 20px;
+          border-radius: 18px;
         }
         .studio-empty-logo,
         .studio-empty-logo img,
@@ -13930,7 +14126,7 @@ export function StudioShell({
           gap: 8px;
           margin-top: -8px;
           border: 1px solid var(--studio-card-border);
-          border-radius: 24px;
+          border-radius: 18px;
           background:
             radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 48%),
             color-mix(in srgb, var(--mos-surface) 52%, transparent);
@@ -13943,7 +14139,7 @@ export function StudioShell({
           margin: 0;
           color: var(--color-cursor-text-bright);
           font-size: clamp(22px, 4vw, 34px);
-          font-weight: 760;
+          font-weight: 700;
           letter-spacing: -0.035em;
         }
         .studio-empty-copy p {
@@ -13996,7 +14192,7 @@ export function StudioShell({
           margin: -24px 0 0;
           color: var(--color-cursor-text-bright);
           font-size: clamp(20px, 3vw, 30px);
-          font-weight: 740;
+          font-weight: 700;
           line-height: 1.05;
           letter-spacing: -0.035em;
           text-shadow: 0 14px 38px color-mix(in srgb, #000 28%, transparent);
@@ -14050,7 +14246,7 @@ export function StudioShell({
           padding: 4px 8px;
           color: var(--cursor-accent);
           font-size: 10px;
-          font-weight: 750;
+          font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
         }
@@ -14151,7 +14347,7 @@ export function StudioShell({
         .studio-history-head-title {
           margin: 0;
           color: var(--color-cursor-text-bright);
-          font-size: 15px;
+          font-size: 14px;
           font-weight: 700;
           line-height: 1.2;
           letter-spacing: -0.02em;
@@ -14742,8 +14938,8 @@ export function StudioShell({
           border-radius: 999px;
           background: color-mix(in srgb, var(--color-cursor-surface, #1a1a1a) 72%, transparent);
           color: var(--color-cursor-muted);
-          font-size: 11.5px;
-          font-weight: 550;
+          font-size: 12px;
+          font-weight: 500;
           line-height: 1.35;
           letter-spacing: 0.01em;
           text-align: center;
@@ -14765,20 +14961,20 @@ export function StudioShell({
           margin-bottom: 6px;
           color: var(--color-cursor-muted);
           font-size: 10px;
-          font-weight: 800;
+          font-weight: 700;
           letter-spacing: 0.12em;
           text-transform: uppercase;
         }
         .studio-chat-text {
           color: var(--color-cursor-text);
-          font-size: 13.5px;
+          font-size: 14px;
           font-weight: 400;
           line-height: 1.5;
           white-space: pre-wrap;
         }
         .studio-chat-markdown {
           color: var(--color-cursor-text);
-          font-size: 13.5px;
+          font-size: 14px;
           font-weight: 400;
           line-height: 1.55;
           white-space: normal;
@@ -14890,7 +15086,7 @@ export function StudioShell({
         .studio-chat-markdown-bit {
           display: inline;
           color: var(--color-cursor-text);
-          font-size: 13.5px;
+          font-size: 14px;
           font-weight: 400;
           line-height: 1.5;
         }
@@ -15128,7 +15324,7 @@ export function StudioShell({
           max-width: 36ch;
           color: color-mix(in srgb, var(--color-cursor-muted) 88%, transparent);
           font-size: 11px;
-          font-weight: 450;
+          font-weight: 500;
           line-height: 1.45;
         }
         .studio-gen-status-icon {
@@ -15354,7 +15550,8 @@ export function StudioShell({
           max-width: 100%;
           max-height: min(42dvh, 320px);
           border-radius: var(--studio-chat-image-radius) !important;
-          background: var(--desk-transparency-grid) !important;
+          background: var(--desk-transparency-bg) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
           object-fit: contain !important;
         }
         .studio-chat-result-card[draggable="true"] {
@@ -15967,6 +16164,7 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                   onEditProfile={() => openSettingsTab("profile")}
+                  onOpenOffers={() => openOffersTab()}
                   onSignOut={() => void signOut()}
                 />
                 <button
@@ -16288,6 +16486,7 @@ export function StudioShell({
                 mode="direct"
                 onViewProfile={openOwnProfile}
                 onEditProfile={() => openSettingsTab("profile")}
+                onOpenOffers={() => openOffersTab()}
                 onSignOut={() => void signOut()}
               />
               <button
@@ -16324,6 +16523,10 @@ export function StudioShell({
           onEditProfile={() => {
             setMobileAppMenuOpen(false);
             openSettingsTab("profile");
+          }}
+          onOpenOffers={() => {
+            setMobileAppMenuOpen(false);
+            openOffersTab();
           }}
           onOpenSection={(section) => {
             setMobileAppMenuOpen(false);
@@ -16391,6 +16594,8 @@ export function StudioShell({
             setContextMenu(null);
             if (action === "open") handleEntryOpen(entry);
             if (action === "attach") attachEntry(entry);
+            if (action === "delete-forever") void deleteEntryForever(entry);
+            if (action === "empty-trash") void handleEmptyTrash();
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
             if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
@@ -17688,7 +17893,7 @@ function StudioPresetTriggerButton({ preset, open, onClick, panel = false }) {
         )}
       </span>
       <span className="studio-preset-trigger-copy">{preset?.name ?? "Style"}</span>
-      <ChevronDown aria-hidden="true" />
+      <ArrowDown aria-hidden="true" />
     </button>
   );
 }
@@ -18227,7 +18432,7 @@ function StudioInlineSettingPopover({ icon: Icon, label, valueLabel, menuLabel, 
             <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             {hideLabel ? null : <span>{label}</span>}
             {hideValue ? null : <strong>{valueLabel}</strong>}
-            {hideChevron ? null : <ChevronDown className="h-3 w-3" aria-hidden="true" />}
+            {hideChevron ? null : <ArrowDown className="h-3 w-3" aria-hidden="true" />}
           </>
         )}
       </button>
@@ -18306,6 +18511,7 @@ function StudioProfileMenu({
   mode = "dropdown",
   onViewProfile,
   onEditProfile,
+  onOpenOffers,
   onSignOut,
 }) {
   const [open, setOpen] = useState(false);
@@ -18397,6 +18603,20 @@ function StudioProfileMenu({
           >
             Edit profile
           </button>
+          <button
+            type="button"
+            className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenOffers?.();
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />
+              Offers &amp; jobs
+            </span>
+          </button>
           <div className="cursor-tab-context-sep" role="separator" />
           <button
             type="button"
@@ -18420,6 +18640,7 @@ function StudioMobileAppMenu({
   onClose,
   onViewProfile,
   onEditProfile,
+  onOpenOffers,
   onOpenSection,
   onOpenSettings,
   onOpenCredits,
@@ -18441,6 +18662,14 @@ function StudioMobileAppMenu({
       items: [
         { label: "View profile", Icon: UserRound, onClick: onViewProfile },
         { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
+        {
+          label: "Offers & jobs",
+          Icon: HandCoins,
+          onClick: () => {
+            onClose?.();
+            onOpenOffers?.();
+          },
+        },
       ],
     },
     {
@@ -20734,6 +20963,7 @@ function ActivePane({
   adminCustomers,
   payments,
   onOpenSettings,
+  onOpenCredits,
   onOpenAdminTab,
   onSeedStylePresets,
   onGeneratePresetThumbnails,
@@ -21046,6 +21276,14 @@ function ActivePane({
         onOpenAdminTab={onOpenAdminTab}
         onSeedStylePresets={onSeedStylePresets}
         onGeneratePresetThumbnails={onGeneratePresetThumbnails}
+      />,
+    );
+  }
+  if (typeof activeTab === "string" && activeTab.startsWith("offers:")) {
+    return wrapPane(
+      <MarketplaceOffersPane
+        onOpenCredits={onOpenCredits ?? onOpenSettings}
+        creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
       />,
     );
   }
@@ -21641,6 +21879,7 @@ function AdminWorkspacePane({
   const adminTabs = [
     { id: "payments", label: "Payments" },
     { id: "customers", label: "Customers" },
+    { id: "marketplace", label: "Marketplace" },
     { id: "setup", label: "Setup" },
     { id: "pricing", label: "Pricing" },
   ];
@@ -21792,6 +22031,8 @@ function AdminWorkspacePane({
               {!customerRows.length ? <p className="studio-settings-empty">No customers yet.</p> : null}
             </div>
           </section>
+        ) : tab === "marketplace" ? (
+          <AdminMarketplacePane />
         ) : tab === "setup" ? (
           <section className="studio-admin-card studio-admin-table-card">
             <div className="studio-admin-table-head">
@@ -21972,11 +22213,11 @@ function PaymentStatusPill({ status }) {
 }
 
 function adminTitle(tab) {
-  if (tab === "payments") return "Payments";
   if (tab === "customers") return "Customers";
+  if (tab === "marketplace") return "Marketplace";
   if (tab === "setup") return "Admin setup";
-  if (tab === "pricing") return "Pricing setup";
-  return "Admin";
+  if (tab === "pricing") return "Pricing";
+  return "Payments";
 }
 
 function paymentCustomerName(payment) {
@@ -22471,6 +22712,7 @@ function SettingsWorkspacePane({
     { id: "billing", label: "Billing" },
     { id: "general", label: "Appearance" },
     { id: "profile", label: "Profile" },
+    { id: "storage", label: "Storage" },
     { id: "account", label: "Account details" },
     { id: "activity", label: "Activity" },
     { id: "api-keys", label: "API keys" },
@@ -22644,7 +22886,7 @@ function SettingsWorkspacePane({
                   <div className="studio-settings-card-title">Invoices</div>
                   <span className="studio-settings-invoices-toggle-meta">
                     {(payments?.length ?? 0) > 0 ? `${Math.min(payments.length, 6)} recent` : "None yet"}
-                    <ChevronDown
+                    <ArrowDown
                       className={`studio-settings-invoices-chevron h-3.5 w-3.5${invoicesOpen ? " is-open" : ""}`}
                       aria-hidden="true"
                     />
@@ -22671,7 +22913,17 @@ function SettingsWorkspacePane({
                 ) : null}
               </section>
             ) : null}
+            {!isThankYouStep ? (
+              <UsageHistorySection creditPriceCents={creditPriceCents} />
+            ) : null}
           </div>
+        ) : null}
+
+        {settingsSectionId === "storage" ? (
+          <StorageSettingsCard
+            creditPriceCents={creditPriceCents}
+            onTopUp={() => setSection("billing")}
+          />
         ) : null}
 
         {settingsSectionId === "activity" ? (
@@ -22686,6 +22938,226 @@ function SettingsWorkspacePane({
         ) : null}
         </div>
       </div>
+  );
+}
+
+const LEDGER_KIND_LABELS = {
+  top_up: "Top up",
+  reserved: "Reserved",
+  spent: "Usage",
+  refunded: "Refund",
+  admin_adjustment: "Adjustment",
+  subscription_grant: "Plan credits",
+  marketplace_escrow_hold: "Marketplace booking",
+  marketplace_escrow_release: "Marketplace delivered",
+  marketplace_escrow_refund: "Marketplace refund",
+  storage_charge: "Storage",
+};
+
+function formatStorageBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "0 MB";
+  const mib = value / 1024 ** 2;
+  if (mib < 1) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  if (mib < 1024) return `${mib.toFixed(mib < 10 ? 1 : 0)} MB`;
+  return `${(mib / 1024).toFixed(mib < 10 ? 2 : 1)} GB`;
+}
+
+/** Every debit and credit on the account, priced in TTD. */
+function UsageHistorySection({ creditPriceCents }) {
+  const [open, setOpen] = useState(false);
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.billing.listMyCreditTransactions,
+    open ? {} : "skip",
+    { initialNumItems: 12 },
+  );
+  return (
+    <section className="cursor-settings-section studio-settings-invoices-card">
+      <button
+        type="button"
+        className="studio-settings-invoices-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <div className="studio-settings-card-title">Usage history</div>
+        <span className="studio-settings-invoices-toggle-meta">
+          Every charge in TTD
+          <ArrowDown
+            className={`studio-settings-invoices-chevron h-3.5 w-3.5${open ? " is-open" : ""}`}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+      {open ? (
+        <div className="studio-settings-invoice-list">
+          {(results ?? []).map((entry) => {
+            const isCredit = entry.amount > 0;
+            return (
+              <div key={entry._id} className="studio-settings-invoice-row">
+                <div className="studio-settings-invoice-copy">
+                  <strong>{entry.reason || LEDGER_KIND_LABELS[entry.kind] || "Usage"}</strong>
+                  <span>
+                    {formatActivityTime(entry.createdAt)} ·{" "}
+                    {LEDGER_KIND_LABELS[entry.kind] ?? entry.kind}
+                  </span>
+                </div>
+                <div className="studio-settings-invoice-meta">
+                  {entry.amount === 0 ? (
+                    <span className="studio-settings-ledger-amount is-none">No charge</span>
+                  ) : (
+                    <span
+                      className={`studio-settings-ledger-amount${isCredit ? " is-credit" : ""}`}
+                    >
+                      {isCredit ? "+" : "−"}
+                      {formatTtdFromCredits(Math.abs(entry.amount), creditPriceCents)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {status === "LoadingFirstPage" ? (
+            <p className="studio-settings-empty">Loading…</p>
+          ) : null}
+          {status !== "LoadingFirstPage" && !results?.length ? (
+            <p className="studio-settings-empty">No usage yet.</p>
+          ) : null}
+          {status === "CanLoadMore" || status === "LoadingMore" ? (
+            <button
+              type="button"
+              className="cursor-settings-action"
+              disabled={status === "LoadingMore"}
+              onClick={() => loadMore(12)}
+            >
+              {status === "LoadingMore" ? "Loading…" : "Load more"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Same card chrome as Billing: pill + quiet rows. */
+function StorageSettingsCard({ creditPriceCents, onTopUp }) {
+  const storage = useQuery(api.storageBilling.getMyStorage, {});
+  const emptyTrash = useMutation(api.assets.emptyTrash);
+  const [emptying, setEmptying] = useState(false);
+
+  async function handleEmptyTrash() {
+    if (emptying) return;
+    setEmptying(true);
+    try {
+      const purged = await emptyTrash({});
+      toast.success(
+        purged > 0
+          ? `Deleted ${purged} file${purged === 1 ? "" : "s"} forever.`
+          : "Trash is already empty.",
+      );
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not empty trash."));
+    } finally {
+      setEmptying(false);
+    }
+  }
+
+  if (storage === undefined) {
+    return (
+      <div className="studio-settings-stack">
+        <section className="cursor-settings-section studio-settings-storage-card">
+          <div className="studio-settings-balance-pill" aria-label="Stored">
+            <span>Stored</span>
+            <strong>—</strong>
+          </div>
+          <p className="studio-settings-storage-note">Loading…</p>
+        </section>
+      </div>
+    );
+  }
+
+  const outstandingCredits = storage.outstandingCredits ?? 0;
+  const hasTrash = storage.trashBytes > 0;
+  const cardState = storage.uploadsBlocked
+    ? " is-blocked"
+    : outstandingCredits > 0
+      ? " is-due"
+      : "";
+
+  return (
+    <div className="studio-settings-stack">
+      <section
+        className={`cursor-settings-section studio-settings-storage-card${cardState}`}
+      >
+        <div className="studio-settings-balance-pill" aria-label="Stored">
+          <span>Stored</span>
+          <strong>{formatStorageBytes(storage.usedBytes)}</strong>
+        </div>
+
+        <div className="studio-settings-storage-summary">
+          <dl className="studio-settings-stat-list">
+            <div className="studio-settings-stat-row">
+              <dt>Next charge</dt>
+              <dd>
+                {formatTtdCents(Math.round(storage.projectedChargeTtd * 100))} ·{" "}
+                {formatDate(storage.nextChargeAt)}
+              </dd>
+            </div>
+            <div className="studio-settings-stat-row">
+              <dt>Rate</dt>
+              <dd>{formatTtdCents(Math.round(storage.ttdPerGibMonth * 100))} / GB</dd>
+            </div>
+            <div className="studio-settings-stat-row">
+              <dt>Trash</dt>
+              <dd>{formatStorageBytes(storage.trashBytes)}</dd>
+            </div>
+            {outstandingCredits > 0 ? (
+              <div className="studio-settings-stat-row">
+                <dt>Outstanding</dt>
+                <dd>{formatTtdFromCredits(outstandingCredits, creditPriceCents)}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+
+        {storage.uploadsBlocked ? (
+          <div className="studio-settings-storage-alert">
+            <strong>Uploads paused</strong>
+            <p>
+              Outstanding for {storage.outstandingDays} days. Top up to settle and resume.
+            </p>
+          </div>
+        ) : outstandingCredits > 0 ? (
+          <p className="studio-settings-storage-note">
+            Uploads pause after {storage.blockAfterDays} days outstanding.
+          </p>
+        ) : hasTrash ? (
+          <p className="studio-settings-storage-note">
+            Trash still counts until emptied. Auto-clears after {storage.trashRetentionDays}{" "}
+            days.
+          </p>
+        ) : null}
+
+        {(storage.uploadsBlocked || outstandingCredits > 0 || hasTrash) ? (
+          <div className="studio-settings-storage-actions">
+            {storage.uploadsBlocked || outstandingCredits > 0 ? (
+              <button type="button" className="cursor-settings-action" onClick={onTopUp}>
+                Top up
+              </button>
+            ) : null}
+            {hasTrash ? (
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={emptying}
+                onClick={() => void handleEmptyTrash()}
+              >
+                {emptying ? "Emptying…" : "Empty trash"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
 
@@ -22879,7 +23351,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
           onClick={() => setPasswordOpen((open) => !open)}
         >
           <strong>Password</strong>
-          <ChevronDown
+          <ArrowDown
             className={`studio-settings-invoices-chevron h-3.5 w-3.5${passwordOpen ? " is-open" : ""}`}
             aria-hidden="true"
           />
@@ -23636,8 +24108,13 @@ function tabDescriptor({
             ? "Admin setup"
             : kind === "pricing"
               ? "Pricing"
-              : "Admin";
+              : kind === "marketplace"
+                ? "Marketplace"
+                : "Admin";
     return { key, kind: "settings", title, status: "ready" };
+  }
+  if (key.startsWith("offers:")) {
+    return { key, kind: "settings", title: "Offers", status: "ready" };
   }
   if (key.startsWith("billing:")) {
     const kind = key.slice("billing:".length);

@@ -338,7 +338,7 @@
   width: 20px;
   height: 20px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: #9ca3af;
   cursor: pointer;
@@ -379,7 +379,7 @@
   min-width: 3.35rem;
   padding: 0.2rem 0.3rem;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   background: #f3f4f6;
   color: #4b5563;
   font-size: 0.68rem;
@@ -655,7 +655,7 @@
 .studio-editor-frame-preset-icon {
   width: 28px;
   max-height: 28px;
-  border-radius: 3px;
+  border-radius: 4px;
   border: 1.5px solid currentColor;
   background: color-mix(in srgb, currentColor 12%, transparent);
 }
@@ -800,7 +800,7 @@
   content: "";
   position: absolute;
   inset: -1px;
-  border-radius: 9px;
+  border-radius: 10px;
   border: 2px solid var(--studio-clip-accent);
   box-sizing: border-box;
   pointer-events: none;
@@ -827,7 +827,7 @@
   width: 5px;
   background: #111314;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   box-sizing: border-box;
   pointer-events: auto;
 }
@@ -1158,7 +1158,7 @@
   align-items: center;
   overflow: hidden;
   border: 1px solid rgb(0 0 0 / 0.12);
-  border-radius: 7px;
+  border-radius: 8px;
   background: rgb(255 255 255 / 0.9);
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.1);
   backdrop-filter: blur(10px);
@@ -2079,7 +2079,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   content: "";
   position: absolute;
   inset: -1px;
-  border-radius: 9px;
+  border-radius: 10px;
   border: 2px solid var(--studio-clip-accent);
   box-sizing: border-box;
   pointer-events: none;
@@ -2243,7 +2243,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   width: 8px;
   height: 8px;
   margin: 0;
-  border-radius: 1px;
+  border-radius: 4px;
   background: #111314;
   border: 1.5px solid var(--studio-clip-accent, #00c2c7);
   box-sizing: border-box;
@@ -2320,7 +2320,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   background: transparent;
   color: rgba(255, 255, 255, 0.95);
   font-size: 0.6rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.15;
   text-transform: uppercase;
@@ -2403,7 +2403,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   );
   font: inherit;
   font-size: 0.6rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.95);
@@ -2433,7 +2433,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
   width: 5px;
   background: #111314;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   box-sizing: border-box;
   box-shadow: none;
   z-index: 11;
@@ -2451,7 +2451,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 
 .studio-editor-clip.is-selected .studio-editor-clip-handle.is-left {
   left: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   /* Top/bottom + inside (right) — no outer (left) border. */
   border-top: 2px solid var(--studio-clip-accent);
   border-bottom: 2px solid var(--studio-clip-accent);
@@ -2466,7 +2466,7 @@ body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track
 
 .studio-editor-clip.is-selected .studio-editor-clip-handle.is-right {
   right: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   /* Top/bottom + inside (left) — no outer (right) border. */
   border-top: 2px solid var(--studio-clip-accent);
   border-bottom: 2px solid var(--studio-clip-accent);

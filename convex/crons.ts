@@ -21,4 +21,31 @@ crons.interval(
   internal.assetsInternal.reclaimStaleMediaProxyJobs,
 );
 
+crons.interval(
+  "auto-accept marketplace delivered jobs",
+  { hours: 1 },
+  internal.marketplace.autoAcceptDeliveredJobs,
+);
+
+// Billing day: 1st of the month at 00:00 AST. Charges the full monthly rate for each storage snapshot.
+crons.monthly(
+  "charge monthly storage",
+  { day: 1, hourUTC: 4, minuteUTC: 0 },
+  internal.storageBilling.chargeMonthly,
+  {},
+);
+
+crons.daily(
+  "purge expired trash from storage",
+  { hourUTC: 5, minuteUTC: 0 },
+  internal.storageBilling.purgeExpiredTrash,
+);
+
+crons.daily(
+  "reconcile storage totals",
+  { hourUTC: 5, minuteUTC: 30 },
+  internal.storageBilling.reconcileStorageTotals,
+  {},
+);
+
 export default crons;

@@ -1,0 +1,1306 @@
+import { v } from "convex/values";
+import { internalMutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { getMarketplaceSellerForUser } from "./lib/auth";
+import {
+  adminMutation,
+  adminQuery,
+  authedMutation,
+  authedQuery,
+  sellerMutation,
+  sellerQuery,
+} from "./lib/customFunctions";
+import {
+  creditsFromOfferPriceCents,
+  getCreditPriceCents,
+  holdMarketplaceEscrow,
+  refundMarketplaceEscrow,
+  releaseMarketplaceEscrow,
+} from "./lib/marketplaceEscrow";
+import {
+  signBunnyFullUrl,
+  signBunnyCdnUrls,
+  assetThumbnailPath,
+  THUMB_TRANSFORM,
+} from "./lib/bunny";
+
+const AUTO_ACCEPT_MS = 7 * 24 * 60 * 60 * 1000;
+
+const offerStatus = v.union(
+  v.literal("draft"),
+  v.literal("published"),
+  v.literal("paused"),
+  v.literal("archived"),
+);
+
+const jobStatus = v.union(
+  v.literal("pending_payment"),
+  v.literal("in_escrow"),
+  v.literal("in_progress"),
+  v.literal("delivered"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+  v.literal("refunded"),
+);
+
+const sellerStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("suspended"),
+);
+
+const sellerEntityType = v.union(
+  v.literal("freelancer"),
+  v.literal("business"),
+);
+
+const sellerBusinessType = v.union(
+  v.literal("sole_trader"),
+  v.literal("limited_company"),
+  v.literal("partnership"),
+  v.literal("other"),
+);
+
+const sellerPhotoIdKind = v.union(
+  v.literal("national_id"),
+  v.literal("passport"),
+  v.literal("drivers_permit"),
+);
+
+function slugify(input: string): string {
+  const base = input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return base || "offer";
+}
+
+async function uniqueOfferSlug(
+  ctx: MutationCtx,
+  title: string,
+  excludeId?: Id<"marketplaceOffers">,
+): Promise<string> {
+  const base = slugify(title);
+  for (let i = 0; i < 50; i += 1) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    const existing = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_slug", (q) => q.eq("slug", candidate))
+      .unique();
+    if (!existing || (excludeId && existing._id === excludeId)) {
+      return candidate;
+    }
+  }
+  return `${base}-${Date.now()}`;
+}
+
+async function appendJobEvent(
+  ctx: MutationCtx,
+  args: {
+    jobId: Id<"marketplaceJobs">;
+    actorUserId?: Id<"users">;
+    kind: string;
+    message?: string;
+  },
+) {
+  await ctx.db.insert("marketplaceJobEvents", {
+    jobId: args.jobId,
+    actorUserId: args.actorUserId,
+    kind: args.kind,
+    message: args.message,
+    createdAt: Date.now(),
+  });
+}
+
+async function sellerPublicLabel(
+  ctx: QueryCtx | MutationCtx,
+  seller: Doc<"marketplaceSellers">,
+): Promise<{ businessName: string; username?: string }> {
+  const profile = await ctx.db
+    .query("profiles")
+    .withIndex("by_user", (q) => q.eq("userId", seller.userId))
+    .unique();
+  return {
+    businessName: seller.businessName,
+    username: profile?.username,
+  };
+}
+
+const publicOfferReturn = v.object({
+  _id: v.id("marketplaceOffers"),
+  title: v.string(),
+  slug: v.string(),
+  description: v.string(),
+  priceCents: v.number(),
+  category: v.optional(v.string()),
+  deliveryDays: v.number(),
+  status: offerStatus,
+  publishedAt: v.optional(v.number()),
+  sellerBusinessName: v.string(),
+  sellerUsername: v.optional(v.string()),
+  sellerUserId: v.id("users"),
+});
+
+async function toPublicOffer(
+  ctx: QueryCtx | MutationCtx,
+  offer: Doc<"marketplaceOffers">,
+) {
+  const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
+  const label = seller
+    ? await sellerPublicLabel(ctx, seller)
+    : { businessName: "Seller", username: undefined };
+  return {
+    _id: offer._id,
+    title: offer.title,
+    slug: offer.slug,
+    description: offer.description,
+    priceCents: offer.priceCents,
+    category: offer.category,
+    deliveryDays: offer.deliveryDays,
+    status: offer.status,
+    publishedAt: offer.publishedAt,
+    sellerBusinessName: label.businessName,
+    sellerUsername: label.username,
+    sellerUserId: offer.sellerUserId,
+  };
+}
+
+async function requireOwnedOffer(
+  ctx: MutationCtx,
+  sellerId: Id<"marketplaceSellers">,
+  offerId: Id<"marketplaceOffers">,
+) {
+  const offer = await ctx.db.get("marketplaceOffers", offerId);
+  if (!offer || offer.sellerId !== sellerId) {
+    throw new Error("Offer not found");
+  }
+  return offer;
+}
+
+async function completeJobWithRelease(
+  ctx: MutationCtx,
+  job: Doc<"marketplaceJobs">,
+  actorUserId?: Id<"users">,
+  message?: string,
+) {
+  if (job.status !== "delivered") {
+    throw new Error("Job is not awaiting acceptance");
+  }
+  if (!job.escrowHoldId) {
+    throw new Error("Job has no escrow hold");
+  }
+  await releaseMarketplaceEscrow(ctx, {
+    holdId: job.escrowHoldId,
+    reason: message ?? "Marketplace job completed",
+  });
+  const now = Date.now();
+  await ctx.db.patch(job._id, {
+    status: "completed",
+    completedAt: now,
+    updatedAt: now,
+  });
+  const existingPayout = await ctx.db
+    .query("sellerPayouts")
+    .withIndex("by_job", (q) => q.eq("jobId", job._id))
+    .unique();
+  if (!existingPayout) {
+    await ctx.db.insert("sellerPayouts", {
+      sellerUserId: job.sellerUserId,
+      jobId: job._id,
+      amountCents: job.priceCents,
+      status: "owed",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  await appendJobEvent(ctx, {
+    jobId: job._id,
+    actorUserId,
+    kind: "completed",
+    message: message ?? "Delivery accepted; escrow released to platform",
+  });
+}
+
+// —— Public catalog ——
+
+export const listPublicOffers = query({
+  args: {
+    category: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicOfferReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 48, 1), 100);
+    const rows = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_status_and_published", (q) => q.eq("status", "published"))
+      .order("desc")
+      .take(limit * 2);
+    const filtered = args.category
+      ? rows.filter((o) => o.category === args.category)
+      : rows;
+    const out = [];
+    for (const offer of filtered.slice(0, limit)) {
+      out.push(await toPublicOffer(ctx, offer));
+    }
+    return out;
+  },
+});
+
+export const getPublicOfferBySlug = query({
+  args: { slug: v.string() },
+  returns: v.union(publicOfferReturn, v.null()),
+  handler: async (ctx, args) => {
+    const slug = args.slug.trim().toLowerCase();
+    const offer = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!offer || offer.status !== "published") return null;
+    return await toPublicOffer(ctx, offer);
+  },
+});
+
+export const listPublicOffersByUsername = query({
+  args: { username: v.string() },
+  returns: v.array(publicOfferReturn),
+  handler: async (ctx, args) => {
+    const username = args.username.trim().toLowerCase().replace(/^@/, "");
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile) return [];
+    const seller = await getMarketplaceSellerForUser(ctx, profile.userId);
+    if (!seller || seller.status !== "approved") return [];
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
+      .collect();
+    const published = offers.filter((o) => o.status === "published");
+    const out = [];
+    for (const offer of published) {
+      out.push(await toPublicOffer(ctx, offer));
+    }
+    return out;
+  },
+});
+
+// —— Seller status (any authed user) ——
+
+export const getMySellerStatus = authedQuery({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("marketplaceSellers"),
+      status: sellerStatus,
+      businessName: v.string(),
+      entityType: v.optional(sellerEntityType),
+      legalName: v.optional(v.string()),
+      businessType: v.optional(sellerBusinessType),
+    }),
+  ),
+  handler: async (ctx) => {
+    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    if (!seller) return null;
+    return {
+      _id: seller._id,
+      status: seller.status,
+      businessName: seller.businessName,
+      entityType: seller.entityType,
+      legalName: seller.legalName,
+      businessType: seller.businessType,
+    };
+  },
+});
+
+export const prepareSellerDocUpload = authedMutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const requestSellerAccess = authedMutation({
+  args: {
+    entityType: sellerEntityType,
+    businessName: v.string(),
+    legalName: v.string(),
+    phone: v.string(),
+    residentialAddress: v.string(),
+    primaryIdKind: sellerPhotoIdKind,
+    primaryIdBunnyPath: v.string(),
+    primaryIdBackBunnyPath: v.optional(v.string()),
+    birthCertificateBunnyPath: v.string(),
+    proofOfResidentialAddressBunnyPath: v.string(),
+    businessType: v.optional(sellerBusinessType),
+    businessRegistrationNumber: v.optional(v.string()),
+    birNumber: v.optional(v.string()),
+    businessAddress: v.optional(v.string()),
+    businessRegistrationBunnyPath: v.optional(v.string()),
+    proofOfBusinessAddressBunnyPath: v.optional(v.string()),
+  },
+  returns: v.id("marketplaceSellers"),
+  handler: async (ctx, args) => {
+    const businessName = args.businessName.trim();
+    const legalName = args.legalName.trim();
+    const phone = args.phone.trim();
+    const residentialAddress = args.residentialAddress.trim();
+    if (!businessName) throw new Error("Display / trading name required");
+    if (!legalName) throw new Error("Legal name required");
+    if (!phone) throw new Error("Phone required");
+    if (!residentialAddress) throw new Error("Residential address required");
+
+    const ownPrefix = `users/${ctx.user._id}/marketplace-kyc/`;
+    const assertOwnPath = (path: string, label: string) => {
+      const normalized = path.trim();
+      if (!normalized.startsWith(ownPrefix)) {
+        throw new Error(`Invalid ${label} upload path`);
+      }
+      return normalized;
+    };
+
+    const primaryIdBunnyPath = assertOwnPath(args.primaryIdBunnyPath, "primary ID");
+    const twoSidedId =
+      args.primaryIdKind === "national_id" || args.primaryIdKind === "drivers_permit";
+    if (twoSidedId && !args.primaryIdBackBunnyPath?.trim()) {
+      throw new Error("Back of the photo ID is required");
+    }
+    const primaryIdBackBunnyPath = args.primaryIdBackBunnyPath?.trim()
+      ? assertOwnPath(args.primaryIdBackBunnyPath, "primary ID back")
+      : undefined;
+    const birthCertificateBunnyPath = assertOwnPath(
+      args.birthCertificateBunnyPath,
+      "birth certificate",
+    );
+    const proofOfResidentialAddressBunnyPath = assertOwnPath(
+      args.proofOfResidentialAddressBunnyPath,
+      "residential address proof",
+    );
+
+    if (args.entityType === "business") {
+      if (!args.businessType) throw new Error("Business type required");
+      if (!args.businessAddress?.trim()) throw new Error("Business address required");
+      if (!args.businessRegistrationBunnyPath) {
+        throw new Error("Business registration / certificate of incorporation required");
+      }
+      if (!args.proofOfBusinessAddressBunnyPath) {
+        throw new Error("Proof of business address required");
+      }
+    }
+
+    const existing = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    if (existing) {
+      if (existing.status === "suspended") {
+        throw new Error("Seller account is suspended");
+      }
+      if (existing.status === "approved") {
+        throw new Error("You are already an approved seller");
+      }
+      throw new Error("You already have a pending seller request");
+    }
+
+    const now = Date.now();
+    return await ctx.db.insert("marketplaceSellers", {
+      userId: ctx.user._id,
+      status: "pending",
+      businessName,
+      entityType: args.entityType,
+      legalName,
+      phone,
+      residentialAddress,
+      businessType: args.entityType === "business" ? args.businessType : undefined,
+      businessRegistrationNumber: args.businessRegistrationNumber?.trim() || undefined,
+      birNumber: args.birNumber?.trim() || undefined,
+      businessAddress:
+        args.entityType === "business" ? args.businessAddress?.trim() : undefined,
+      primaryIdKind: args.primaryIdKind,
+      primaryIdBunnyPath,
+      primaryIdBackBunnyPath,
+      birthCertificateBunnyPath,
+      proofOfResidentialAddressBunnyPath,
+      businessRegistrationBunnyPath:
+        args.entityType === "business"
+          ? assertOwnPath(args.businessRegistrationBunnyPath!, "business registration")
+          : undefined,
+      proofOfBusinessAddressBunnyPath:
+        args.entityType === "business"
+          ? assertOwnPath(args.proofOfBusinessAddressBunnyPath!, "business address proof")
+          : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+function sellerKycPaths(seller: Doc<"marketplaceSellers">): string[] {
+  return [
+    seller.primaryIdBunnyPath,
+    seller.primaryIdBackBunnyPath,
+    seller.birthCertificateBunnyPath,
+    seller.proofOfResidentialAddressBunnyPath,
+    seller.businessRegistrationBunnyPath,
+    seller.proofOfBusinessAddressBunnyPath,
+  ].filter((p): p is string => Boolean(p));
+}
+
+/** Withdraw a pending seller application (before admin approval). */
+export const cancelSellerRequest = authedMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    if (!seller) return null;
+    if (seller.status !== "pending") {
+      throw new Error("Only a pending seller request can be cancelled");
+    }
+    const paths = sellerKycPaths(seller);
+    if (paths.length) {
+      await ctx.scheduler.runAfter(0, internal.marketplaceActions.deleteSellerKycPaths, {
+        paths,
+      });
+    }
+    await ctx.db.delete(seller._id);
+    return null;
+  },
+});
+
+// —— Admin seller + payout ——
+
+export const adminListSellers = adminQuery({
+  args: { status: v.optional(sellerStatus) },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceSellers"),
+      userId: v.id("users"),
+      status: sellerStatus,
+      businessName: v.string(),
+      entityType: v.optional(sellerEntityType),
+      legalName: v.optional(v.string()),
+      businessType: v.optional(sellerBusinessType),
+      email: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      name: v.optional(v.string()),
+      createdAt: v.number(),
+      approvedAt: v.optional(v.number()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = args.status
+      ? await ctx.db
+          .query("marketplaceSellers")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .collect()
+      : await ctx.db.query("marketplaceSellers").collect();
+    const out = [];
+    for (const seller of rows) {
+      const user = await ctx.db.get("users", seller.userId);
+      out.push({
+        _id: seller._id,
+        userId: seller.userId,
+        status: seller.status,
+        businessName: seller.businessName,
+        entityType: seller.entityType,
+        legalName: seller.legalName,
+        businessType: seller.businessType,
+        email: user?.email,
+        phone: seller.phone ?? user?.phone,
+        name: user?.name,
+        createdAt: seller.createdAt,
+        approvedAt: seller.approvedAt,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const adminGetSellerApplication = adminQuery({
+  args: { sellerId: v.id("marketplaceSellers") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("marketplaceSellers"),
+      status: sellerStatus,
+      businessName: v.string(),
+      entityType: v.optional(sellerEntityType),
+      legalName: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      residentialAddress: v.optional(v.string()),
+      businessType: v.optional(sellerBusinessType),
+      businessRegistrationNumber: v.optional(v.string()),
+      birNumber: v.optional(v.string()),
+      businessAddress: v.optional(v.string()),
+      primaryIdKind: v.optional(sellerPhotoIdKind),
+      primaryIdUrl: v.optional(v.string()),
+      primaryIdBackUrl: v.optional(v.string()),
+      birthCertificateUrl: v.optional(v.string()),
+      proofOfResidentialAddressUrl: v.optional(v.string()),
+      businessRegistrationUrl: v.optional(v.string()),
+      proofOfBusinessAddressUrl: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const seller = await ctx.db.get("marketplaceSellers", args.sellerId);
+    if (!seller) return null;
+    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+    const sign = async (path: string | undefined) =>
+      path ? await signBunnyFullUrl(path, expiresUnix, "document") : undefined;
+    return {
+      _id: seller._id,
+      status: seller.status,
+      businessName: seller.businessName,
+      entityType: seller.entityType,
+      legalName: seller.legalName,
+      phone: seller.phone,
+      residentialAddress: seller.residentialAddress,
+      businessType: seller.businessType,
+      businessRegistrationNumber: seller.businessRegistrationNumber,
+      birNumber: seller.birNumber,
+      businessAddress: seller.businessAddress,
+      primaryIdKind: seller.primaryIdKind,
+      primaryIdUrl: await sign(seller.primaryIdBunnyPath),
+      primaryIdBackUrl: await sign(seller.primaryIdBackBunnyPath),
+      birthCertificateUrl: await sign(seller.birthCertificateBunnyPath),
+      proofOfResidentialAddressUrl: await sign(
+        seller.proofOfResidentialAddressBunnyPath,
+      ),
+      businessRegistrationUrl: await sign(seller.businessRegistrationBunnyPath),
+      proofOfBusinessAddressUrl: await sign(seller.proofOfBusinessAddressBunnyPath),
+      createdAt: seller.createdAt,
+    };
+  },
+});
+
+export const adminApproveSeller = adminMutation({
+  args: {
+    sellerId: v.id("marketplaceSellers"),
+    approve: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const seller = await ctx.db.get("marketplaceSellers", args.sellerId);
+    if (!seller) throw new Error("Seller not found");
+    const now = Date.now();
+    if (args.approve) {
+      await ctx.db.patch(seller._id, {
+        status: "approved",
+        approvedBy: ctx.user._id,
+        approvedAt: now,
+        suspendedAt: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.patch(seller._id, {
+        status: "suspended",
+        suspendedAt: now,
+        updatedAt: now,
+      });
+    }
+    return null;
+  },
+});
+
+export const adminListPayouts = adminQuery({
+  args: { status: v.optional(v.union(v.literal("owed"), v.literal("paid"))) },
+  returns: v.array(
+    v.object({
+      _id: v.id("sellerPayouts"),
+      sellerUserId: v.id("users"),
+      jobId: v.id("marketplaceJobs"),
+      amountCents: v.number(),
+      status: v.union(v.literal("owed"), v.literal("paid")),
+      businessName: v.optional(v.string()),
+      paidAt: v.optional(v.number()),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = args.status
+      ? await ctx.db
+          .query("sellerPayouts")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .collect()
+      : await ctx.db.query("sellerPayouts").collect();
+    const out = [];
+    for (const payout of rows) {
+      const seller = await getMarketplaceSellerForUser(ctx, payout.sellerUserId);
+      out.push({
+        _id: payout._id,
+        sellerUserId: payout.sellerUserId,
+        jobId: payout.jobId,
+        amountCents: payout.amountCents,
+        status: payout.status,
+        businessName: seller?.businessName,
+        paidAt: payout.paidAt,
+        adminNote: payout.adminNote,
+        createdAt: payout.createdAt,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const adminMarkPayoutPaid = adminMutation({
+  args: {
+    payoutId: v.id("sellerPayouts"),
+    adminNote: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const payout = await ctx.db.get("sellerPayouts", args.payoutId);
+    if (!payout) throw new Error("Payout not found");
+    if (payout.status === "paid") return null;
+    const now = Date.now();
+    await ctx.db.patch(payout._id, {
+      status: "paid",
+      paidAt: now,
+      markedPaidBy: ctx.user._id,
+      adminNote: args.adminNote?.trim() || payout.adminNote,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminRefundDeliveredJob = adminMutation({
+  args: {
+    jobId: v.id("marketplaceJobs"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "delivered" && job.status !== "in_progress" && job.status !== "in_escrow") {
+      throw new Error("Job cannot be refunded in current status");
+    }
+    if (!job.escrowHoldId) throw new Error("No escrow to refund");
+    await refundMarketplaceEscrow(ctx, {
+      holdId: job.escrowHoldId,
+      reason: args.reason ?? "Admin marketplace refund",
+      adminId: ctx.user._id,
+    });
+    const now = Date.now();
+    await ctx.db.patch(job._id, {
+      status: "refunded",
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: ctx.user._id,
+      kind: "refunded",
+      message: args.reason ?? "Admin refunded escrow to buyer",
+    });
+    return null;
+  },
+});
+
+// —— Seller offers CRUD ——
+
+export const listMyOffers = sellerQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceOffers"),
+      title: v.string(),
+      slug: v.string(),
+      description: v.string(),
+      priceCents: v.number(),
+      category: v.optional(v.string()),
+      status: offerStatus,
+      deliveryDays: v.number(),
+      publishedAt: v.optional(v.number()),
+      updatedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", ctx.seller._id))
+      .collect();
+    return offers
+      .map((o) => ({
+        _id: o._id,
+        title: o.title,
+        slug: o.slug,
+        description: o.description,
+        priceCents: o.priceCents,
+        category: o.category,
+        status: o.status,
+        deliveryDays: o.deliveryDays,
+        publishedAt: o.publishedAt,
+        updatedAt: o.updatedAt,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+});
+
+export const createOffer = sellerMutation({
+  args: {
+    title: v.string(),
+    description: v.string(),
+    priceCents: v.number(),
+    category: v.optional(v.string()),
+    deliveryDays: v.number(),
+    coverAssetId: v.optional(v.id("assets")),
+    sampleAssetIds: v.optional(v.array(v.id("assets"))),
+  },
+  returns: v.id("marketplaceOffers"),
+  handler: async (ctx, args) => {
+    const title = args.title.trim();
+    const description = args.description.trim();
+    if (!title) throw new Error("Title required");
+    if (!description) throw new Error("Description required");
+    if (!Number.isFinite(args.priceCents) || args.priceCents < 50) {
+      throw new Error("Price must be at least $0.50 TTD");
+    }
+    if (!Number.isFinite(args.deliveryDays) || args.deliveryDays < 1) {
+      throw new Error("Delivery days must be at least 1");
+    }
+    const now = Date.now();
+    const slug = await uniqueOfferSlug(ctx, title);
+    return await ctx.db.insert("marketplaceOffers", {
+      sellerId: ctx.seller._id,
+      sellerUserId: ctx.user._id,
+      title,
+      slug,
+      description,
+      priceCents: Math.round(args.priceCents),
+      category: args.category?.trim() || undefined,
+      status: "draft",
+      deliveryDays: Math.floor(args.deliveryDays),
+      coverAssetId: args.coverAssetId,
+      sampleAssetIds: args.sampleAssetIds,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const updateOffer = sellerMutation({
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    priceCents: v.optional(v.number()),
+    category: v.optional(v.string()),
+    deliveryDays: v.optional(v.number()),
+    coverAssetId: v.optional(v.id("assets")),
+    sampleAssetIds: v.optional(v.array(v.id("assets"))),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const offer = await requireOwnedOffer(ctx, ctx.seller._id, args.offerId);
+    const patch: Partial<Doc<"marketplaceOffers">> = { updatedAt: Date.now() };
+    if (args.title !== undefined) {
+      const title = args.title.trim();
+      if (!title) throw new Error("Title required");
+      patch.title = title;
+      patch.slug = await uniqueOfferSlug(ctx, title, offer._id);
+    }
+    if (args.description !== undefined) {
+      const description = args.description.trim();
+      if (!description) throw new Error("Description required");
+      patch.description = description;
+    }
+    if (args.priceCents !== undefined) {
+      if (args.priceCents < 50) throw new Error("Price must be at least $0.50 TTD");
+      patch.priceCents = Math.round(args.priceCents);
+    }
+    if (args.category !== undefined) {
+      patch.category = args.category.trim() || undefined;
+    }
+    if (args.deliveryDays !== undefined) {
+      if (args.deliveryDays < 1) throw new Error("Delivery days must be at least 1");
+      patch.deliveryDays = Math.floor(args.deliveryDays);
+    }
+    if (args.coverAssetId !== undefined) patch.coverAssetId = args.coverAssetId;
+    if (args.sampleAssetIds !== undefined) patch.sampleAssetIds = args.sampleAssetIds;
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
+export const setOfferStatus = sellerMutation({
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    status: offerStatus,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const offer = await requireOwnedOffer(ctx, ctx.seller._id, args.offerId);
+    const now = Date.now();
+    const patch: Partial<Doc<"marketplaceOffers">> = {
+      status: args.status,
+      updatedAt: now,
+    };
+    if (args.status === "published" && !offer.publishedAt) {
+      patch.publishedAt = now;
+    }
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
+// —— Book + jobs ——
+
+export const quoteBookOffer = authedQuery({
+  args: { offerId: v.id("marketplaceOffers") },
+  returns: v.object({
+    priceCents: v.number(),
+    priceCredits: v.number(),
+    creditPriceCents: v.number(),
+    creditBalance: v.number(),
+    shortfallCredits: v.number(),
+    canBook: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") {
+      throw new Error("Offer not available");
+    }
+    const settings = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const creditPriceCents = settings?.creditPriceCents ?? 50;
+    const priceCredits = creditsFromOfferPriceCents(offer.priceCents, creditPriceCents);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .unique();
+    const creditBalance = account?.creditBalance ?? 0;
+    const shortfallCredits = Math.max(0, priceCredits - creditBalance);
+    return {
+      priceCents: offer.priceCents,
+      priceCredits,
+      creditPriceCents,
+      creditBalance,
+      shortfallCredits,
+      canBook:
+        shortfallCredits === 0 &&
+        offer.sellerUserId !== ctx.user._id,
+    };
+  },
+});
+
+export const bookOffer = authedMutation({
+  args: { offerId: v.id("marketplaceOffers") },
+  returns: v.object({
+    jobId: v.id("marketplaceJobs"),
+    priceCredits: v.number(),
+    shortfallCredits: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") {
+      throw new Error("Offer not available");
+    }
+    if (offer.sellerUserId === ctx.user._id) {
+      throw new Error("Cannot book your own offer");
+    }
+    const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
+    if (!seller || seller.status !== "approved") {
+      throw new Error("Seller is not accepting jobs");
+    }
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    const priceCredits = creditsFromOfferPriceCents(offer.priceCents, creditPriceCents);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .unique();
+    const balance = account?.creditBalance ?? 0;
+    if (balance < priceCredits) {
+      throw new Error(
+        `Insufficient credits. Need ${priceCredits} credits (${offer.priceCents} cents TTD). Shortfall: ${priceCredits - balance}`,
+      );
+    }
+    const now = Date.now();
+    const jobId = await ctx.db.insert("marketplaceJobs", {
+      offerId: offer._id,
+      sellerId: offer.sellerId,
+      sellerUserId: offer.sellerUserId,
+      buyerUserId: ctx.user._id,
+      priceCredits,
+      priceCents: offer.priceCents,
+      creditPriceCents,
+      status: "pending_payment",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const { holdId, holdTransactionId } = await holdMarketplaceEscrow(ctx, {
+      buyerUserId: ctx.user._id,
+      jobId,
+      credits: priceCredits,
+      reason: `Escrow for offer ${offer.slug}`,
+    });
+    const workFolderId = await ctx.db.insert("folders", {
+      ownerId: offer.sellerUserId,
+      name: `Job · ${offer.title}`.slice(0, 80),
+      icon: "folder",
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const heldAt = Date.now();
+    await ctx.db.patch(jobId, {
+      status: "in_escrow",
+      escrowHoldId: holdId,
+      escrowCreditTransactionId: holdTransactionId,
+      workFolderId,
+      updatedAt: heldAt,
+    });
+    await appendJobEvent(ctx, {
+      jobId,
+      actorUserId: ctx.user._id,
+      kind: "booked",
+      message: `Booked with ${priceCredits} credits in escrow`,
+    });
+    await ctx.db.patch(jobId, {
+      status: "in_progress",
+      updatedAt: Date.now(),
+    });
+    await appendJobEvent(ctx, {
+      jobId,
+      actorUserId: ctx.user._id,
+      kind: "in_progress",
+      message: "Escrow held; work started",
+    });
+    return { jobId, priceCredits };
+  },
+});
+
+const jobSummary = v.object({
+  _id: v.id("marketplaceJobs"),
+  offerId: v.id("marketplaceOffers"),
+  offerTitle: v.string(),
+  offerSlug: v.string(),
+  status: jobStatus,
+  priceCents: v.number(),
+  priceCredits: v.number(),
+  sellerUserId: v.id("users"),
+  buyerUserId: v.id("users"),
+  deliveredAt: v.optional(v.number()),
+  completedAt: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  role: v.union(v.literal("seller"), v.literal("buyer")),
+});
+
+async function toJobSummary(
+  ctx: QueryCtx | MutationCtx,
+  job: Doc<"marketplaceJobs">,
+  role: "seller" | "buyer",
+) {
+  const offer = await ctx.db.get("marketplaceOffers", job.offerId);
+  return {
+    _id: job._id,
+    offerId: job.offerId,
+    offerTitle: offer?.title ?? "Offer",
+    offerSlug: offer?.slug ?? "",
+    status: job.status,
+    priceCents: job.priceCents,
+    priceCredits: job.priceCredits,
+    sellerUserId: job.sellerUserId,
+    buyerUserId: job.buyerUserId,
+    deliveredAt: job.deliveredAt,
+    completedAt: job.completedAt,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    role,
+  };
+}
+
+export const listMySellerJobs = sellerQuery({
+  args: { offerId: v.optional(v.id("marketplaceOffers")) },
+  returns: v.array(jobSummary),
+  handler: async (ctx, args) => {
+    let jobs = await ctx.db
+      .query("marketplaceJobs")
+      .withIndex("by_seller", (q) => q.eq("sellerUserId", ctx.user._id))
+      .collect();
+    if (args.offerId) {
+      jobs = jobs.filter((j) => j.offerId === args.offerId);
+    }
+    const out = [];
+    for (const job of jobs.sort((a, b) => b.updatedAt - a.updatedAt)) {
+      out.push(await toJobSummary(ctx, job, "seller"));
+    }
+    return out;
+  },
+});
+
+export const listMyBuyerJobs = authedQuery({
+  args: {},
+  returns: v.array(jobSummary),
+  handler: async (ctx) => {
+    const jobs = await ctx.db
+      .query("marketplaceJobs")
+      .withIndex("by_buyer", (q) => q.eq("buyerUserId", ctx.user._id))
+      .collect();
+    const out = [];
+    for (const job of jobs.sort((a, b) => b.updatedAt - a.updatedAt)) {
+      out.push(await toJobSummary(ctx, job, "buyer"));
+    }
+    return out;
+  },
+});
+
+export const getJob = authedQuery({
+  args: { jobId: v.id("marketplaceJobs") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      job: jobSummary,
+      events: v.array(
+        v.object({
+          _id: v.id("marketplaceJobEvents"),
+          kind: v.string(),
+          message: v.optional(v.string()),
+          createdAt: v.number(),
+        }),
+      ),
+      deliverables: v.array(
+        v.object({
+          _id: v.id("marketplaceDeliverables"),
+          assetId: v.id("assets"),
+          note: v.optional(v.string()),
+          deliveredAt: v.number(),
+          name: v.optional(v.string()),
+          kind: v.optional(v.string()),
+          signedReadUrl: v.optional(v.string()),
+          signedThumbnailUrl: v.optional(v.string()),
+        }),
+      ),
+      workFolderId: v.optional(v.id("folders")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) return null;
+    if (job.buyerUserId !== ctx.user._id && job.sellerUserId !== ctx.user._id) {
+      const user = ctx.user;
+      if (user.role !== "admin" && user.role !== "super_admin") {
+        return null;
+      }
+    }
+    const role =
+      job.sellerUserId === ctx.user._id ? "seller" : ("buyer" as const);
+    const events = await ctx.db
+      .query("marketplaceJobEvents")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const deliverableRows = await ctx.db
+      .query("marketplaceDeliverables")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+    const deliverables = [];
+    for (const row of deliverableRows) {
+      const asset = await ctx.db.get("assets", row.assetId);
+      let signedReadUrl: string | undefined;
+      let signedThumbnailUrl: string | undefined;
+      if (asset?.bunnyPath) {
+        signedReadUrl = await signBunnyFullUrl(
+          asset.bunnyPath,
+          expiresUnix,
+          asset.kind,
+        );
+        const thumbPath = assetThumbnailPath(asset);
+        if (thumbPath) {
+          const signed = await signBunnyCdnUrls(
+            [thumbPath],
+            expiresUnix,
+            THUMB_TRANSFORM,
+          );
+          signedThumbnailUrl = signed.get(thumbPath);
+        }
+      }
+      deliverables.push({
+        _id: row._id,
+        assetId: row.assetId,
+        note: row.note,
+        deliveredAt: row.deliveredAt,
+        name: asset?.name,
+        kind: asset?.kind,
+        signedReadUrl,
+        signedThumbnailUrl,
+      });
+    }
+    return {
+      job: await toJobSummary(ctx, job, role),
+      events: events
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((e) => ({
+          _id: e._id,
+          kind: e.kind,
+          message: e.message,
+          createdAt: e.createdAt,
+        })),
+      deliverables,
+      workFolderId: job.workFolderId,
+    };
+  },
+});
+
+export const deliverJobAssets = sellerMutation({
+  args: {
+    jobId: v.id("marketplaceJobs"),
+    assetIds: v.array(v.id("assets")),
+    note: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.sellerUserId !== ctx.user._id) {
+      throw new Error("Job not found");
+    }
+    if (job.status !== "in_progress" && job.status !== "delivered") {
+      throw new Error("Job is not in progress");
+    }
+    if (!args.assetIds.length) throw new Error("Select at least one asset");
+    const now = Date.now();
+    for (const assetId of args.assetIds) {
+      const asset = await ctx.db.get("assets", assetId);
+      if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt) {
+        throw new Error("Asset not found or not owned");
+      }
+      const existing = await ctx.db
+        .query("marketplaceDeliverables")
+        .withIndex("by_asset", (q) => q.eq("assetId", assetId))
+        .collect();
+      if (existing.some((d) => d.jobId === job._id)) continue;
+      await ctx.db.insert("marketplaceDeliverables", {
+        jobId: job._id,
+        assetId,
+        note: args.note?.trim(),
+        deliveredBy: ctx.user._id,
+        deliveredAt: now,
+      });
+    }
+    await ctx.db.patch(job._id, {
+      status: "delivered",
+      deliveredAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: ctx.user._id,
+      kind: "delivered",
+      message: args.note?.trim() || `Delivered ${args.assetIds.length} asset(s)`,
+    });
+    return null;
+  },
+});
+
+export const acceptJobDelivery = authedMutation({
+  args: { jobId: v.id("marketplaceJobs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.buyerUserId !== ctx.user._id) {
+      throw new Error("Job not found");
+    }
+    await completeJobWithRelease(ctx, job, ctx.user._id, "Buyer accepted delivery");
+    return null;
+  },
+});
+
+export const cancelJobBeforeDelivery = authedMutation({
+  args: {
+    jobId: v.id("marketplaceJobs"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) throw new Error("Job not found");
+    const isBuyer = job.buyerUserId === ctx.user._id;
+    const isSeller = job.sellerUserId === ctx.user._id;
+    if (!isBuyer && !isSeller) throw new Error("Unauthorized");
+    if (job.status !== "in_progress" && job.status !== "in_escrow") {
+      throw new Error("Can only cancel before delivery");
+    }
+    if (!job.escrowHoldId) throw new Error("No escrow hold");
+    await refundMarketplaceEscrow(ctx, {
+      holdId: job.escrowHoldId,
+      reason: args.reason ?? "Job cancelled before delivery",
+    });
+    const now = Date.now();
+    await ctx.db.patch(job._id, {
+      status: "cancelled",
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: ctx.user._id,
+      kind: "cancelled",
+      message: args.reason ?? "Cancelled; escrow refunded",
+    });
+    return null;
+  },
+});
+
+export const autoAcceptDeliveredJobs = internalMutation({
+  args: {},
+  returns: v.object({ accepted: v.number() }),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - AUTO_ACCEPT_MS;
+    const delivered = await ctx.db
+      .query("marketplaceJobs")
+      .withIndex("by_status", (q) => q.eq("status", "delivered"))
+      .collect();
+    let accepted = 0;
+    for (const job of delivered) {
+      if (!job.deliveredAt || job.deliveredAt > cutoff) continue;
+      await completeJobWithRelease(
+        ctx,
+        job,
+        undefined,
+        "Auto-accepted after 7 days",
+      );
+      accepted += 1;
+    }
+    return { accepted };
+  },
+});
+
+/** Lightweight public check used by profile UI. */
+export const isApprovedSellerUser = query({
+  args: { userId: v.id("users") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const seller = await getMarketplaceSellerForUser(ctx, args.userId);
+    return Boolean(seller && seller.status === "approved");
+  },
+});
+
+export const viewerCanSeeSellerOffers = query({
+  args: { username: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const username = args.username.trim().toLowerCase().replace(/^@/, "");
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile) return false;
+    const seller = await getMarketplaceSellerForUser(ctx, profile.userId);
+    if (!seller || seller.status !== "approved") return false;
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
+      .collect();
+    return offers.some((o) => o.status === "published");
+  },
+});

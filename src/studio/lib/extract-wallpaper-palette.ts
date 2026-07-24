@@ -168,19 +168,19 @@ export async function extractWallpaperPalette(
           g: sum.g / darkTop.length,
           b: sum.b / darkTop.length,
         };
-        // Ensure bg is dark enough for chrome
+        // Ensure bg stays near composer/header ink (not mid-grey from wallpaper)
         const lum = luminance(bg.r, bg.g, bg.b);
-        const scale = lum > 0.22 ? 0.22 / lum : 1;
+        const scale = lum > 0.085 ? 0.085 / lum : 1;
         const bgHex = toHex(bg.r * scale, bg.g * scale, bg.b * scale);
         const surface = toHex(
+          Math.min(255, bg.r * scale + 10),
+          Math.min(255, bg.g * scale + 10),
+          Math.min(255, bg.b * scale + 12),
+        );
+        const raised = toHex(
           Math.min(255, bg.r * scale + 18),
           Math.min(255, bg.g * scale + 18),
           Math.min(255, bg.b * scale + 22),
-        );
-        const raised = toHex(
-          Math.min(255, bg.r * scale + 32),
-          Math.min(255, bg.g * scale + 32),
-          Math.min(255, bg.b * scale + 38),
         );
         result.bg = bgHex;
         result.surface = surface;

@@ -486,7 +486,7 @@
   background: var(--accent-dim);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--text);
-  border-radius: 10px 10px 3px 10px;
+  border-radius: 10px 10px 4px 10px;
   box-shadow: var(--shadow-sm);
   white-space: pre-wrap;
 }

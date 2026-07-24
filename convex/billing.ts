@@ -1,5 +1,9 @@
 import { v } from "convex/values";
-import { makeFunctionReference, type FunctionReference } from "convex/server";
+import {
+  makeFunctionReference,
+  paginationOptsValidator,
+  type FunctionReference,
+} from "convex/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -20,6 +24,7 @@ import {
   videoCreditCost,
 } from "./lib/generationPricing";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
+import { settleOutstandingStorage } from "./lib/storageBilling";
 
 const paymentMethod = v.union(v.literal("bank"), v.literal("card"), v.literal("paywise"));
 
@@ -32,6 +37,20 @@ const paymentStatus = v.union(
   v.literal("receipt_received"),
   v.literal("payment_completed"),
   v.literal("rejected"),
+);
+
+/** Must match `creditTransactionKind` in schema.ts. */
+const creditTransactionKind = v.union(
+  v.literal("top_up"),
+  v.literal("reserved"),
+  v.literal("spent"),
+  v.literal("refunded"),
+  v.literal("admin_adjustment"),
+  v.literal("subscription_grant"),
+  v.literal("marketplace_escrow_hold"),
+  v.literal("marketplace_escrow_release"),
+  v.literal("marketplace_escrow_refund"),
+  v.literal("storage_charge"),
 );
 
 const sendPushForNotificationRef = makeFunctionReference<
@@ -236,6 +255,47 @@ export const listMyPayments = authedQuery({
       .order("desc")
       .take(50);
     return await withReceiptUrls(ctx, payments);
+  },
+});
+
+/** Every spend and grant on the account — the customer-facing usage ledger. */
+export const listMyCreditTransactions = authedQuery({
+  args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    page: v.array(
+      v.object({
+        _id: v.id("creditTransactions"),
+        _creationTime: v.number(),
+        kind: creditTransactionKind,
+        amount: v.number(),
+        balanceAfter: v.number(),
+        reason: v.optional(v.string()),
+        createdAt: v.number(),
+      }),
+    ),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(v.union(v.string(), v.null())),
+  }),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("creditTransactions")
+      .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
+      .order("desc")
+      .paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: page.page.map((tx) => ({
+        _id: tx._id,
+        _creationTime: tx._creationTime,
+        kind: tx.kind,
+        amount: tx.amount,
+        balanceAfter: tx.balanceAfter,
+        reason: tx.reason,
+        createdAt: tx.createdAt,
+      })),
+    };
   },
 });
 
@@ -1669,6 +1729,10 @@ async function grantCredits(
     adminId: args.adminId,
     createdAt: now,
   });
+  if (args.amount > 0) {
+    // Storage debt is settled before the customer can spend the new balance.
+    await settleOutstandingStorage(ctx, args.userId);
+  }
 }
 
 async function audit(

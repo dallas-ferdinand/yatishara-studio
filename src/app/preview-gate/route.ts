@@ -17,12 +17,12 @@ function gatePage(next = "/", error = ""): string {
     <style>
       :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
       body { min-height: 100vh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 50% 0%, rgba(196, 255, 64, .16), transparent 34%), #0d100c; color: #f5f7ee; }
-      form { width: min(360px, calc(100vw - 32px)); display: grid; gap: 14px; padding: 22px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(22, 27, 18, .88); box-shadow: 0 22px 70px rgba(0,0,0,.42); backdrop-filter: blur(18px); }
-      h1 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+      form { width: min(360px, calc(100vw - 32px)); display: grid; gap: 14px; padding: 22px; border: 1px solid rgba(255,255,255,.1); border-radius: 18px; background: rgba(22, 27, 18, .88); box-shadow: 0 22px 70px rgba(0,0,0,.42); backdrop-filter: blur(18px); }
+      h1 { margin: 0; font-size: 16px; letter-spacing: -.02em; }
       p { margin: 0; color: rgba(245,247,238,.62); font-size: 13px; line-height: 1.45; }
-      input { height: 42px; border: 1px solid rgba(255,255,255,.12); border-radius: 13px; background: rgba(255,255,255,.06); color: #fff; padding: 0 12px; font: inherit; outline: none; }
+      input { height: 42px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.06); color: #fff; padding: 0 12px; font: inherit; outline: none; }
       input:focus { border-color: rgba(210,255,47,.45); box-shadow: 0 0 0 3px rgba(210,255,47,.12); }
-      button { height: 42px; border: 0; border-radius: 13px; background: #d8ff00; color: #11170b; font-weight: 800; cursor: pointer; }
+      button { height: 42px; border: 0; border-radius: 12px; background: #d8ff00; color: #11170b; font-weight: 700; cursor: pointer; }
       .error { color: #ff9d9d; }
     </style>
   </head>

@@ -465,7 +465,7 @@
 }
 
 .post-compose-inline-chip-initial {
-  font-size: 7px;
+  font-size: 10px;
   font-weight: 700;
   color: color-mix(in srgb, currentColor 90%, transparent);
   line-height: 1;

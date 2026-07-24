@@ -16,11 +16,12 @@
  * Tailwind cursor/mos utilities MUST reference var(--mos-*) so colors stay dynamic.
  */
 :root {
-  --mos-bg: #020617;
-  --mos-sidebar: #020617;
-  --mos-panel: #0f172a;
-  --mos-composer: #07111f;
-  --mos-surface: #111c2f;
+  color-scheme: dark;
+  --mos-bg: #05080f;
+  --mos-sidebar: #04060c;
+  --mos-panel: #0a1018;
+  --mos-composer: #060910;
+  --mos-surface: #0c121c;
   --mos-border: rgba(148, 163, 184, 0.13);
   --mos-border-soft: rgba(148, 163, 184, 0.08);
   --mos-border-subtle: rgba(148, 163, 184, 0.1);
@@ -52,6 +53,40 @@
   --desk-composer-radius: 16px;
   --desk-gap-chat-turn: 18px;
 
+  /*
+   * Studio design system — type + radius scale.
+   * Use these for new chrome; literals elsewhere should match this scale only:
+   * weights 500/600/650/700 (400 body); radii 4/6/8/10/12/14/16/18/999; type 10–14/16/20/24.
+   */
+  --studio-w-regular: 400;
+  --studio-w-medium: 500;
+  --studio-w-semibold: 600;
+  --studio-w-strong: 650;
+  --studio-w-bold: 700;
+  --studio-fs-2xs: 10px;
+  --studio-fs-xs: 11px;
+  --studio-fs-sm: 12px;
+  --studio-fs-md: 13px;
+  --studio-fs-lg: 14px;
+  --studio-fs-xl: 16px;
+  --studio-fs-2xl: 20px;
+  --studio-fs-3xl: 24px;
+  --studio-r-xs: 4px;
+  --studio-r-sm: 6px;
+  --studio-r-md: 8px;
+  --studio-r-lg: 10px;
+  --studio-r-xl: 12px;
+  --studio-r-2xl: 14px;
+  --studio-r-3xl: 16px;
+  --studio-r-4xl: 18px;
+  --studio-r-pill: 999px;
+  --studio-control-h: 40px;
+  --studio-label-size: var(--studio-fs-xs);
+  --studio-label-weight: var(--studio-w-strong);
+  --studio-input-radius: var(--studio-r-xl);
+  --studio-save-radius: var(--studio-r-pill);
+  --studio-save-weight: var(--studio-w-bold);
+
   /* shadcn / ElevenLabs UI tokens → mos theme */
   --background: var(--mos-bg);
   --foreground: var(--mos-text);
@@ -71,10 +106,11 @@
   --border: var(--mos-border);
   --input: var(--mos-border);
   --ring: var(--mos-accent);
-  --radius: 0.625rem;
+  --radius: var(--studio-r-xl);
 }
 
 [data-appearance="light"] {
+  color-scheme: light;
   --primary-foreground: #ffffff;
 }
 

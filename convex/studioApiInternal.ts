@@ -27,6 +27,7 @@ import {
   textCreditCost,
 } from "./lib/generationPricing";
 import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
+import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
 
 const folderShape = v.object({
   id: v.id("folders"),
@@ -528,6 +529,7 @@ export const reserveAssetUpload = internalMutation({
   }),
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    await assertUploadsAllowed(ctx, args.userId);
     const now = Date.now();
     const assetId = await ctx.db.insert("assets", {
       ownerId: args.userId,
@@ -1635,14 +1637,17 @@ export const prepareInlineAssetUpload = internalMutation({
   }),
   handler: async (ctx, args) => {
     await requireFolderForUser(ctx, args.userId, args.folderId, args.sandboxFolderId);
+    await assertUploadsAllowed(ctx, args.userId);
     const now = Date.now();
+    // Size is recorded by finalizeInlineAssetUpload once the Bunny put lands, so a
+    // failed put leaves no phantom bytes on the storage bill.
     const assetId = await ctx.db.insert("assets", {
       ownerId: args.userId,
       folderId: args.folderId,
       name: args.name.trim(),
       kind: args.kind,
       mimeType: args.mimeType,
-      byteSize: args.byteSize,
+      storageStatus: "pending",
       createdAt: now,
       updatedAt: now,
     });
@@ -1675,7 +1680,13 @@ export const finalizeInlineAssetUpload = internalMutation({
     }
     await ctx.db.patch(asset._id, {
       byteSize: args.byteSize,
+      storageStatus: "ready",
       updatedAt: Date.now(),
+    });
+    await applyStorageBytesDelta(ctx, {
+      userId: asset.ownerId,
+      deltaBytes: args.byteSize - (asset.byteSize ?? 0),
+      reason: `Storage added — ${asset.name}`,
     });
     return null;
   },
