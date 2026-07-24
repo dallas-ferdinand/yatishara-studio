@@ -20779,17 +20779,24 @@ function ActivePane({
     [openTabs],
   );
   const isSocialActive = Boolean(feedPostId || profilePostMatch || profileUsername);
+  const needsSocialKeepalive =
+    isSocialActive || keptFeedTabs.length > 0 || keptProfileTabs.length > 0;
   // Defer feed/profile keepalive until after first paint so authenticated boot
   // doesn't instantiate ProfilePostViewer during the shell's critical path.
+  // Only mount when a social tab actually exists — avoid unconditional rAF mount.
   const [socialMounted, setSocialMounted] = useState(false);
   useEffect(() => {
+    if (!needsSocialKeepalive) {
+      setSocialMounted(false);
+      return;
+    }
     if (isSocialActive) {
       setSocialMounted(true);
       return;
     }
     const id = window.requestAnimationFrame(() => setSocialMounted(true));
     return () => window.cancelAnimationFrame(id);
-  }, [isSocialActive]);
+  }, [isSocialActive, needsSocialKeepalive]);
 
   const socialKeepalive = !socialMounted ? null : (
     <div className="studio-social-keepalive" aria-hidden={!isSocialActive}>

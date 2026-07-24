@@ -21,7 +21,9 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
   const [scaleDraft, setScaleDraft] = useState(String(Math.round(DEFAULT_SCALE * 100)));
   const stageRef = useRef(null);
   const scaleInputRef = useRef(null);
+  const scaleRef = useRef(scale);
   const dragRef = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+  scaleRef.current = scale;
 
   const canPan = scale > 1.001;
 
@@ -57,53 +59,32 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
   }, [scale, editingScale]);
 
   const applyScale = useCallback((next, anchor = null) => {
-    setScale((prev) => {
-      const clamped = clampScale(next);
-      if (clamped <= 1) {
-        setPan({ x: 0, y: 0 });
-        return clamped;
-      }
-      if (anchor && stageRef.current) {
-        const rect = stageRef.current.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const mx = anchor.x - cx;
-        const my = anchor.y - cy;
-        const ratio = clamped / prev;
-        setPan((p) => ({
-          x: mx - (mx - p.x) * ratio,
-          y: my - (my - p.y) * ratio,
-        }));
-      }
-      return clamped;
-    });
+    // Never nest setPan inside setScale — Strict Mode double-invokes updaters
+    // and that trips React #301 (too many re-renders).
+    const prev = scaleRef.current;
+    const clamped = clampScale(next);
+    setScale(clamped);
+    if (clamped <= 1) {
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    if (anchor && stageRef.current) {
+      const rect = stageRef.current.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const mx = anchor.x - cx;
+      const my = anchor.y - cy;
+      const ratio = clamped / (prev || 1);
+      setPan((p) => ({
+        x: mx - (mx - p.x) * ratio,
+        y: my - (my - p.y) * ratio,
+      }));
+    }
   }, []);
 
-  const zoom = useCallback(
-    (delta, anchor = null) => {
-      setScale((prev) => {
-        const next = clampScale(prev + delta);
-        if (next <= 1) {
-          setPan({ x: 0, y: 0 });
-          return next;
-        }
-        if (anchor && stageRef.current) {
-          const rect = stageRef.current.getBoundingClientRect();
-          const cx = rect.left + rect.width / 2;
-          const cy = rect.top + rect.height / 2;
-          const mx = anchor.x - cx;
-          const my = anchor.y - cy;
-          const ratio = next / prev;
-          setPan((p) => ({
-            x: mx - (mx - p.x) * ratio,
-            y: my - (my - p.y) * ratio,
-          }));
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const zoom = useCallback((delta, anchor = null) => {
+    applyScale(scaleRef.current + delta, anchor);
+  }, [applyScale]);
 
   const fit = useCallback(() => {
     setScale(DEFAULT_SCALE);

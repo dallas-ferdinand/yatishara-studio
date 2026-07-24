@@ -522,15 +522,14 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
 
   useLayoutEffect(() => {
     if (!menuOpen || menuDismissed) {
-      setMenuPos(null);
+      setMenuPos((prev) => (prev == null ? prev : null));
       return;
     }
     const wrap = suggestWrapRef.current;
-    if (!wrap) {
-      setMenuPos({ top: 44, left: 12 });
-      return;
-    }
-    setMenuPos(getCaretMenuPosition(wrap));
+    const next = wrap ? getCaretMenuPosition(wrap) : { top: 44, left: 12 };
+    setMenuPos((prev) =>
+      prev && prev.top === next.top && prev.left === next.left ? prev : next,
+    );
   }, [menuOpen, menuDismissed, trigger, caption, caret]);
 
   function syncFromEditor() {

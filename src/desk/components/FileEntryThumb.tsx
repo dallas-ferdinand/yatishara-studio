@@ -145,8 +145,12 @@ function ProgressiveThumb({
     if (!url) return;
     loadedSrcRef.current = url;
     attemptRef.current = 0;
-    setHiLoaded(true);
-    setFailed(false);
+    // Defer: cached <img onLoad> / complete-during-layout can fire in commit and
+    // schedule a render-phase update (React #301) when many thumbs mount at boot.
+    queueMicrotask(() => {
+      setHiLoaded((prev) => (prev ? prev : true));
+      setFailed((prev) => (prev ? false : prev));
+    });
     window.clearTimeout(underlayTimerRef.current);
     underlayTimerRef.current = window.setTimeout(() => {
       setShowUnderlay(false);
@@ -154,12 +158,12 @@ function ProgressiveThumb({
   }, []);
 
   useLayoutEffect(() => {
-    setFailed(false);
     attemptRef.current = 0;
     window.clearTimeout(underlayTimerRef.current);
     window.clearTimeout(retryTimerRef.current);
 
     if (!src) {
+      setFailed(false);
       setHiLoaded(false);
       setShowUnderlay(true);
       return;
@@ -167,8 +171,9 @@ function ProgressiveThumb({
 
     // Same URL already shown — keep it painted (avoids Convex re-render blink).
     if (loadedSrcRef.current === src) {
-      setHiLoaded(true);
-      setShowUnderlay(false);
+      setFailed((prev) => (prev ? false : prev));
+      setHiLoaded((prev) => (prev ? prev : true));
+      setShowUnderlay((prev) => (prev ? false : prev));
       return;
     }
 
@@ -181,8 +186,9 @@ function ProgressiveThumb({
       return;
     }
 
-    setHiLoaded(false);
-    setShowUnderlay(true);
+    setFailed((prev) => (prev ? false : prev));
+    setHiLoaded((prev) => (prev ? false : prev));
+    setShowUnderlay((prev) => (prev ? prev : true));
   }, [src, lqipSrc, markLoaded]);
 
   useEffect(() => {
@@ -228,10 +234,12 @@ function ProgressiveThumb({
           const attempt = attemptRef.current + 1;
           attemptRef.current = attempt;
           if (attempt > 5) {
-            setFailed(true);
-            setHiLoaded(false);
-            setShowUnderlay(true);
             loadedSrcRef.current = "";
+            queueMicrotask(() => {
+              setFailed(true);
+              setHiLoaded(false);
+              setShowUnderlay(true);
+            });
             return;
           }
           window.clearTimeout(retryTimerRef.current);
@@ -281,13 +289,13 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
         preload="metadata"
         onLoadedData={() => {
           attemptRef.current = 0;
-          setLoaded(true);
+          queueMicrotask(() => setLoaded((prev) => (prev ? prev : true)));
         }}
         onError={() => {
           const attempt = attemptRef.current + 1;
           attemptRef.current = attempt;
           if (attempt > 5) {
-            setFailed(true);
+            queueMicrotask(() => setFailed(true));
             return;
           }
           window.clearTimeout(retryTimerRef.current);

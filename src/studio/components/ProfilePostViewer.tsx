@@ -944,12 +944,6 @@ export function ProfilePostViewer({
   const sizeRef = useRef({ w: 1, h: 1 });
   const rootRef = useRef<HTMLDivElement | null>(null);
   const layoutRef = useRef<HTMLDivElement | null>(null);
-  /** Layout node as state so wheel rebinds when loading → feed mounts the card. */
-  const [layoutEl, setLayoutEl] = useState<HTMLDivElement | null>(null);
-  const setLayoutNode = useCallback((node: HTMLDivElement | null) => {
-    layoutRef.current = node;
-    setLayoutEl((prev) => (prev === node ? prev : node));
-  }, []);
   const trackRef = useRef<HTMLDivElement | null>(null);
   const pendingCommitRef = useRef<{ axis: "x" | "y"; delta: -1 | 1 } | null>(null);
   const pendingSnapRef = useRef(false);
@@ -1284,12 +1278,17 @@ export function ProfilePostViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [commitSlide, tabActive]);
 
-  // Attach on the layout node (callback-ref driven) — not window+composedPath.
+  // Attach on the layout node — not window+composedPath.
   // Video targets often miss composedPath().includes(root) after loading→feed
   // remounts; element capture + contains() is reliable for image and video.
+  // Rebind when the ready branch mounts (hasFeedCard) — do NOT mirror the node
+  // into state via a ref callback; that setState-during-commit path trips React #301.
+  const hasFeedCard = Boolean(activePost && resolvedFeed.length);
   useLayoutEffect(() => {
-    if (!layoutEl || !tabActive || !feed?.length) return undefined;
-    const layout: HTMLElement = layoutEl;
+    if (!hasFeedCard || !tabActive || !feed?.length) return undefined;
+    const layoutNode = layoutRef.current;
+    if (!layoutNode) return undefined;
+    const layout: HTMLElement = layoutNode;
     let wheelLockUntil = 0;
     function onWheel(event: WheelEvent) {
       const target = event.target;
@@ -1327,7 +1326,7 @@ export function ProfilePostViewer({
     }
     layout.addEventListener("wheel", onWheel, { capture: true, passive: false });
     return () => layout.removeEventListener("wheel", onWheel, { capture: true });
-  }, [commitSlide, tabActive, layoutEl, feed?.length]);
+  }, [commitSlide, tabActive, hasFeedCard, feed?.length, activePostId]);
 
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (event.button !== 0 || animatingRef.current) return;
@@ -1708,7 +1707,7 @@ export function ProfilePostViewer({
   })();
 
   return (
-    <div className="profile-post-viewer-layout" ref={setLayoutNode}>
+    <div className="profile-post-viewer-layout" ref={layoutRef}>
       <div
         ref={rootRef}
         className="profile-post-viewer is-feed"
