@@ -129,7 +129,9 @@ export function matchesExplorerTypeFilter(entry, filterId) {
 /** Icon for unified workspace file tab. */
 export function workspaceTabIcon(tab) {
   if (!tab) return "file";
-  if (tab.kind === "chat") return "message";
+  // AI chat tabs (Generate / threads) use the sparkle; the message bubble
+  // now belongs to person-to-person Messages.
+  if (tab.kind === "chat") return "sparkles";
   if (tab.kind === "pulse") return "infinity";
   if (tab.kind === "buckets") return "bucket";
   if (tab.kind === "settings") return "settings";
