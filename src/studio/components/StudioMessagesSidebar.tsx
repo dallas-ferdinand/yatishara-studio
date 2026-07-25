@@ -1,15 +1,24 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { useDeferredValue, useState } from "react";
+import { Pencil, Plus, Tags } from "lucide-react";
+import { useDeferredValue, useEffect, useState } from "react";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
+import {
+  StudioDmAssignLabelsDialog,
+  StudioDmLabelEditorDialog,
+} from "./StudioDmLabelDialogs";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   StudioDmConversationRow,
   type DmConversationId,
 } from "./StudioMessagesPane";
 import "./studio-messages.css";
+
+type LabelId = Id<"dmLabels">;
 
 type StudioMessagesSidebarProps = {
   activeConversationId: DmConversationId | null;
@@ -28,12 +37,35 @@ export function StudioMessagesSidebar({
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
   const searching = deferredSearch.length >= 1;
+  const [activeLabelId, setActiveLabelId] = useState<LabelId | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingLabel, setEditingLabel] = useState<{
+    labelId: LabelId;
+    name: string;
+    icon: string;
+  } | null>(null);
+  const [assignPeer, setAssignPeer] = useState<{
+    userId: Id<"users">;
+    label: string;
+  } | null>(null);
 
-  const conversations = useQuery(api.dms.listMyConversations, { expiresUnix });
+  const labels = useQuery(api.dmLabels.listMine, {});
+  const conversations = useQuery(api.dms.listMyConversations, {
+    expiresUnix,
+    labelId: activeLabelId ?? undefined,
+  });
   const searchResults = useQuery(
     api.hashtags.suggestPeople,
     searching ? { query: deferredSearch, limit: 16, expiresUnix } : "skip",
   );
+
+  // Drop the filter if the active label was deleted.
+  useEffect(() => {
+    if (!activeLabelId || labels === undefined) return;
+    if (!labels.some((label) => label.labelId === activeLabelId)) {
+      setActiveLabelId(null);
+    }
+  }, [activeLabelId, labels]);
 
   return (
     <div className="studio-dm-sidebar">
@@ -43,6 +75,68 @@ export function StudioMessagesSidebar({
         placeholder="Search people"
         aria-label="Search people to message"
       />
+
+      <div className="studio-dm-label-rail" role="tablist" aria-label="Labels">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeLabelId === null}
+          className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
+          onClick={() => setActiveLabelId(null)}
+        >
+          <Tags className="h-3 w-3" aria-hidden="true" />
+          All
+        </button>
+        {(labels ?? []).map((label) => {
+          const Icon = dmLabelIcon(label.icon);
+          const active = activeLabelId === label.labelId;
+          return (
+            <div key={label.labelId} className="studio-dm-label-chip-wrap">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={`studio-dm-label-chip${active ? " is-active" : ""}`}
+                onClick={() =>
+                  setActiveLabelId(active ? null : label.labelId)
+                }
+                title={`${label.name} (${label.memberCount})`}
+              >
+                <Icon className="h-3 w-3" aria-hidden="true" />
+                {label.name}
+              </button>
+              <button
+                type="button"
+                className="studio-dm-label-edit"
+                aria-label={`Edit ${label.name}`}
+                onClick={() => {
+                  setEditingLabel({
+                    labelId: label.labelId,
+                    name: label.name,
+                    icon: label.icon,
+                  });
+                  setEditorOpen(true);
+                }}
+              >
+                <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
+        <button
+          type="button"
+          className="studio-dm-label-chip is-add"
+          onClick={() => {
+            setEditingLabel(null);
+            setEditorOpen(true);
+          }}
+          aria-label="Create label"
+        >
+          <Plus className="h-3 w-3" aria-hidden="true" />
+          New
+        </button>
+      </div>
+
       <div className="studio-dm-sidebar-body">
         {searching ? (
           searchResults === undefined ? (
@@ -89,7 +183,9 @@ export function StudioMessagesSidebar({
           <p className="studio-dm-empty">Loading…</p>
         ) : conversations.length === 0 ? (
           <p className="studio-dm-empty">
-            Search people above or tap Message on a profile.
+            {activeLabelId
+              ? "No chats in this label yet. Open a chat and tap the tag to add people."
+              : "Search people above or tap Message on a profile."}
           </p>
         ) : (
           <ul className="studio-dm-conversations">
@@ -99,12 +195,37 @@ export function StudioMessagesSidebar({
                   row={row}
                   active={row.conversationId === activeConversationId}
                   onSelect={() => onSelectConversation(row.conversationId)}
+                  onEditLabels={() =>
+                    setAssignPeer({
+                      userId: row.peer.userId,
+                      label:
+                        row.peer.displayName?.trim() ||
+                        `@${row.peer.username}`,
+                    })
+                  }
                 />
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <StudioDmLabelEditorDialog
+        open={editorOpen}
+        labelId={editingLabel?.labelId}
+        initialName={editingLabel?.name}
+        initialIcon={editingLabel?.icon}
+        onClose={() => {
+          setEditorOpen(false);
+          setEditingLabel(null);
+        }}
+      />
+      <StudioDmAssignLabelsDialog
+        open={Boolean(assignPeer)}
+        peerUserId={assignPeer?.userId ?? null}
+        peerLabel={assignPeer?.label ?? ""}
+        onClose={() => setAssignPeer(null)}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   Mic,
   Paperclip,
   SendHorizontal,
+  Tags,
   Trash2,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
@@ -768,10 +770,12 @@ export function StudioDmConversationRow({
   row,
   active,
   onSelect,
+  onEditLabels,
 }: {
   row: {
     conversationId: DmConversationId;
     peer: { username: string; displayName?: string; avatarUrl?: string };
+    labels?: Array<{ labelId: Id<"dmLabels">; name: string; icon: string }>;
     lastMessagePreview?: string;
     lastMessageAt: number;
     lastMessageFromMe: boolean;
@@ -780,41 +784,75 @@ export function StudioDmConversationRow({
   };
   active: boolean;
   onSelect: () => void;
+  onEditLabels?: () => void;
 }) {
   const label = row.peer.displayName?.trim() || `@${row.peer.username}`;
   const preview = row.lastMessagePreview || "Tap to start chatting";
+  const peerLabels = row.labels ?? [];
   return (
-    <button
-      type="button"
-      className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}`}
-      onClick={onSelect}
+    <div
+      className={`studio-dm-row-shell${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}`}
     >
-      <StudioProfileAvatar
-        size="sm"
-        src={row.peer.avatarUrl}
-        displayName={row.peer.displayName}
-        name={row.peer.username}
-        alt=""
-      />
-      <span className="studio-dm-row-copy">
-        <span className="studio-dm-row-top">
-          <strong>{label}</strong>
-          <time className={row.unread ? "is-unread" : undefined}>
-            {conversationTimeLabel(row.lastMessageAt)}
-          </time>
-        </span>
-        <span className="studio-dm-row-bottom">
-          <span className="studio-dm-row-preview">
-            {row.lastMessageFromMe ? (
-              <DmReadReceipt read={row.lastMessageRead} />
-            ) : null}
-            {preview}
+      <button
+        type="button"
+        className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}`}
+        onClick={onSelect}
+      >
+        <StudioProfileAvatar
+          size="sm"
+          src={row.peer.avatarUrl}
+          displayName={row.peer.displayName}
+          name={row.peer.username}
+          alt=""
+        />
+        <span className="studio-dm-row-copy">
+          <span className="studio-dm-row-top">
+            <strong>{label}</strong>
+            <time className={row.unread ? "is-unread" : undefined}>
+              {conversationTimeLabel(row.lastMessageAt)}
+            </time>
           </span>
-          {row.unread ? (
-            <span className="studio-dm-unread-dot" aria-label="Unread" />
+          <span className="studio-dm-row-bottom">
+            <span className="studio-dm-row-preview">
+              {row.lastMessageFromMe ? (
+                <DmReadReceipt read={row.lastMessageRead} />
+              ) : null}
+              {preview}
+            </span>
+            {row.unread ? (
+              <span className="studio-dm-unread-dot" aria-label="Unread" />
+            ) : null}
+          </span>
+          {peerLabels.length > 0 ? (
+            <span className="studio-dm-row-labels" aria-label="Labels">
+              {peerLabels.slice(0, 4).map((item) => {
+                const Icon = dmLabelIcon(item.icon);
+                return (
+                  <span
+                    key={item.labelId}
+                    className="studio-dm-row-label"
+                    title={item.name}
+                  >
+                    <Icon className="h-2.5 w-2.5" aria-hidden="true" />
+                    {item.name}
+                  </span>
+                );
+              })}
+            </span>
           ) : null}
         </span>
-      </span>
-    </button>
+      </button>
+      {onEditLabels ? (
+        <button
+          type="button"
+          className="studio-dm-row-tag"
+          onClick={onEditLabels}
+          aria-label={`Edit labels for ${label}`}
+          title="Labels"
+        >
+          <Tags className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
   );
 }

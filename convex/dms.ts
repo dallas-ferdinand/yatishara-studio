@@ -6,6 +6,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
+import { peerIdsInLabel } from "./dmLabels";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { hydrateSocialPeople } from "./profiles";
 
@@ -62,14 +63,22 @@ async function requireMemberConversation(
   return conversation;
 }
 
+const conversationLabelReturn = v.object({
+  labelId: v.id("dmLabels"),
+  name: v.string(),
+  icon: v.string(),
+});
+
 const conversationRowReturn = v.object({
   conversationId: v.id("dmConversations"),
   peer: v.object({
+    userId: v.id("users"),
     profileId: v.id("profiles"),
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   }),
+  labels: v.array(conversationLabelReturn),
   lastMessagePreview: v.optional(v.string()),
   lastMessageAt: v.number(),
   lastMessageFromMe: v.boolean(),
@@ -123,12 +132,23 @@ export const openConversation = authedMutation({
 
 /** Chat-list sidebar: newest-first conversations with peer identity + unread flag. */
 export const listMyConversations = authedQuery({
-  args: { expiresUnix: v.optional(v.number()) },
+  args: {
+    expiresUnix: v.optional(v.number()),
+    /** When set, only chats whose peer is in this owned label. */
+    labelId: v.optional(v.id("dmLabels")),
+  },
   returns: v.array(conversationRowReturn),
   handler: async (ctx, args) => {
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
     const me = ctx.user._id;
+
+    const labelFilter = args.labelId
+      ? await peerIdsInLabel(ctx, me, args.labelId)
+      : undefined;
+    if (args.labelId && !labelFilter) {
+      throw new Error("Label not found");
+    }
 
     const asLow = await ctx.db
       .query("dmConversations")
@@ -140,9 +160,15 @@ export const listMyConversations = authedQuery({
       .withIndex("by_high_and_time", (q) => q.eq("userHighId", me))
       .order("desc")
       .take(CONVERSATIONS_MAX);
-    const conversations = [...asLow, ...asHigh]
+    let conversations = [...asLow, ...asHigh]
       .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
       .slice(0, CONVERSATIONS_MAX);
+
+    if (labelFilter) {
+      conversations = conversations.filter((conversation) =>
+        labelFilter.has(peerIdOf(conversation, me)),
+      );
+    }
 
     const peerProfiles: Array<Doc<"profiles"> | null> = await Promise.all(
       conversations.map((conversation) =>
@@ -170,25 +196,52 @@ export const listMyConversations = authedQuery({
       expiresUnix,
     );
 
-    return visible.map((row, i) => {
-      const { conversation } = row;
-      const lastMessageFromMe = conversation.lastMessageSenderId === me;
-      return {
-        conversationId: conversation._id,
-        peer: peers[i]!,
-        lastMessagePreview: conversation.lastMessagePreview,
-        lastMessageAt: conversation.lastMessageAt,
-        lastMessageFromMe,
-        lastMessageRead:
-          lastMessageFromMe &&
-          peerReadAt(conversation, me) >= conversation.lastMessageAt,
-        unread: Boolean(
-          conversation.lastMessageSenderId &&
-            conversation.lastMessageSenderId !== me &&
-            conversation.lastMessageAt > myReadAt(conversation, me),
-        ),
-      };
-    });
+    return await Promise.all(
+      visible.map(async (row, i) => {
+        const { conversation, profile } = row;
+        const lastMessageFromMe = conversation.lastMessageSenderId === me;
+        const memberships = await ctx.db
+          .query("dmLabelMembers")
+          .withIndex("by_owner_and_peer", (q) =>
+            q.eq("ownerUserId", me).eq("peerUserId", profile.userId),
+          )
+          .collect();
+        const labelDocs = await Promise.all(
+          memberships.map((m) => ctx.db.get("dmLabels", m.labelId)),
+        );
+        const labels = labelDocs
+          .filter((label): label is Doc<"dmLabels"> => Boolean(label))
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((label) => ({
+            labelId: label._id,
+            name: label.name,
+            icon: label.icon,
+          }));
+        const person = peers[i]!;
+        return {
+          conversationId: conversation._id,
+          peer: {
+            userId: profile.userId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+          },
+          labels,
+          lastMessagePreview: conversation.lastMessagePreview,
+          lastMessageAt: conversation.lastMessageAt,
+          lastMessageFromMe,
+          lastMessageRead:
+            lastMessageFromMe &&
+            peerReadAt(conversation, me) >= conversation.lastMessageAt,
+          unread: Boolean(
+            conversation.lastMessageSenderId &&
+              conversation.lastMessageSenderId !== me &&
+              conversation.lastMessageAt > myReadAt(conversation, me),
+          ),
+        };
+      }),
+    );
   },
 });
 

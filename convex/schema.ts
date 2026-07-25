@@ -1211,6 +1211,33 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_conversation_and_created", ["conversationId", "createdAt"]),
 
+  /**
+   * WhatsApp-style DM labels (lists). Owner-scoped; people can sit in
+   * multiple labels via dmLabelMembers.
+   */
+  dmLabels: defineTable({
+    ownerUserId: v.id("users"),
+    name: v.string(),
+    /** Allowlisted Lucide icon key (e.g. "briefcase"). */
+    icon: v.string(),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner", ["ownerUserId"])
+    .index("by_owner_and_order", ["ownerUserId", "sortOrder"]),
+
+  dmLabelMembers: defineTable({
+    labelId: v.id("dmLabels"),
+    /** Denormalized owner for peer→labels lookups. */
+    ownerUserId: v.id("users"),
+    peerUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_label_and_peer", ["labelId", "peerUserId"])
+    .index("by_label", ["labelId"])
+    .index("by_owner_and_peer", ["ownerUserId", "peerUserId"]),
+
   marketplaceSellers: defineTable({
     userId: v.id("users"),
     status: marketplaceSellerStatus,
