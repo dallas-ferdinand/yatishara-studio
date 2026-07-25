@@ -64,6 +64,7 @@ import type * as lib_marketplaceEscrow from "../lib/marketplaceEscrow.js";
 import type * as lib_passwordCrypto from "../lib/passwordCrypto.js";
 import type * as lib_paywise from "../lib/paywise.js";
 import type * as lib_presetThumbnails from "../lib/presetThumbnails.js";
+import type * as lib_profileEnsure from "../lib/profileEnsure.js";
 import type * as lib_profileIdentity from "../lib/profileIdentity.js";
 import type * as lib_referenceInput from "../lib/referenceInput.js";
 import type * as lib_referenceIntent from "../lib/referenceIntent.js";
@@ -174,6 +175,7 @@ declare const fullApi: ApiFromModules<{
   "lib/passwordCrypto": typeof lib_passwordCrypto;
   "lib/paywise": typeof lib_paywise;
   "lib/presetThumbnails": typeof lib_presetThumbnails;
+  "lib/profileEnsure": typeof lib_profileEnsure;
   "lib/profileIdentity": typeof lib_profileIdentity;
   "lib/referenceInput": typeof lib_referenceInput;
   "lib/referenceIntent": typeof lib_referenceIntent;
