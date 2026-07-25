@@ -55,6 +55,7 @@ import {
   Plus,
   ArrowUp,
   Cloud,
+  Award,
   HandCoins,
   Search,
   SlidersHorizontal,
@@ -2914,8 +2915,13 @@ export function StudioShell({
     if (!isAdminUser) return;
     setSettingsOpen(false);
     if (isMobile) setMobileSection("composer");
-    // Setup + Pricing were demoted into Tools (P4).
-    const section = tab === "setup" || tab === "pricing" ? "tools" : tab;
+    // Setup + Pricing → Tools; old Marketplace blob → Sellers.
+    const section =
+      tab === "setup" || tab === "pricing"
+        ? "tools"
+        : tab === "marketplace"
+          ? "sellers"
+          : tab;
     openTab(`admin:${section}`);
   }
 
@@ -9468,6 +9474,7 @@ export function StudioShell({
         .studio-admin-head-tab {
           display: inline-flex;
           align-items: center;
+          gap: 6px;
           flex: 0 0 auto;
           min-height: 24px;
           padding: 0 10px;
@@ -18921,7 +18928,7 @@ function StudioProfileMenu({
             }}
           >
             <span className="inline-flex items-center gap-2">
-              <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />
+              <Award className="h-3.5 w-3.5" aria-hidden="true" />
               Offers &amp; jobs
             </span>
           </button>
@@ -18972,7 +18979,7 @@ function StudioMobileAppMenu({
         { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
         {
           label: "Offers & jobs",
-          Icon: HandCoins,
+          Icon: Award,
           onClick: () => {
             onClose?.();
             onOpenOffers?.();
@@ -22130,6 +22137,7 @@ function AdminWorkspacePane({
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [customerQuery, setCustomerQuery] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [focusMarketplaceJobId, setFocusMarketplaceJobId] = useState(null);
   const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
   const adminAdjustCredits = useMutation(api.billing.adminAdjustCredits);
   const adminRefreshPaywise = useAction(api.paywiseActions.adminRefreshPaywisePayment);
@@ -22202,16 +22210,24 @@ function AdminWorkspacePane({
     }
   }
 
-  // Ops first; launch seeds / price cards live under Tools (not primary tabs).
+  // Ops first; marketplace surfaces are their own tabs (not one nested pane).
   const adminTabs = [
     { id: "payments", label: "Payments" },
     { id: "customers", label: "Customers" },
-    { id: "marketplace", label: "Marketplace" },
+    { id: "sellers", label: "Sellers" },
+    { id: "offers", label: "Offers" },
+    { id: "jobs", label: "Jobs", Icon: Award },
+    { id: "payouts", label: "Payouts" },
     { id: "tools", label: "Tools" },
   ];
-  // Old open tabs / deep links admin:setup|pricing still land on Tools.
+  const marketplaceSections = ["sellers", "offers", "jobs", "payouts"];
+  // Old deep links: setup|pricing → Tools; marketplace → Sellers.
   const adminSection =
-    tab === "setup" || tab === "pricing" || tab === "tools" ? "tools" : tab;
+    tab === "setup" || tab === "pricing" || tab === "tools"
+      ? "tools"
+      : tab === "marketplace"
+        ? "sellers"
+        : tab;
   const customerRows = customers ?? [];
   const visibleCustomers = useMemo(() => {
     const q = customerQuery.trim().toLowerCase();
@@ -22248,6 +22264,9 @@ function AdminWorkspacePane({
               className={`studio-admin-head-tab${adminSection === item.id ? " is-active" : ""}`}
               onClick={() => onOpenAdminTab(item.id)}
             >
+              {"Icon" in item && item.Icon ? (
+                <item.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : null}
               {item.label}
             </button>
           ))}
@@ -22440,8 +22459,15 @@ function AdminWorkspacePane({
               />
             ) : null}
           </div>
-        ) : adminSection === "marketplace" ? (
-          <AdminMarketplacePane />
+        ) : marketplaceSections.includes(adminSection) ? (
+          <AdminMarketplacePane
+            section={adminSection}
+            focusJobId={adminSection === "jobs" ? focusMarketplaceJobId : null}
+            onOpenJobs={(jobId) => {
+              setFocusMarketplaceJobId(jobId);
+              onOpenAdminTab("jobs");
+            }}
+          />
         ) : (
           <div className="studio-admin-stack">
             <section className="studio-admin-section">
@@ -22901,7 +22927,10 @@ function PaymentStatusPill({ status, admin = false }) {
 
 function adminTitle(tab) {
   if (tab === "customers") return "Customers";
-  if (tab === "marketplace") return "Marketplace";
+  if (tab === "sellers" || tab === "marketplace") return "Sellers";
+  if (tab === "offers") return "Offers";
+  if (tab === "jobs") return "Jobs";
+  if (tab === "payouts") return "Payouts";
   if (tab === "tools" || tab === "setup" || tab === "pricing") return "Tools";
   return "Payments";
 }
@@ -24813,11 +24842,17 @@ function tabDescriptor({
         ? "Payments"
         : kind === "customers"
           ? "Customers"
-          : kind === "marketplace"
-            ? "Marketplace"
-            : kind === "tools" || kind === "setup" || kind === "pricing"
-              ? "Tools"
-              : "Admin";
+          : kind === "sellers" || kind === "marketplace"
+            ? "Sellers"
+            : kind === "offers"
+              ? "Offers"
+              : kind === "jobs"
+                ? "Jobs"
+                : kind === "payouts"
+                  ? "Payouts"
+                  : kind === "tools" || kind === "setup" || kind === "pricing"
+                    ? "Tools"
+                    : "Admin";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("offers:")) {

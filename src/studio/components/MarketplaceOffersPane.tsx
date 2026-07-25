@@ -6,12 +6,12 @@ import {
   ArrowLeft,
   CalendarDays,
   FileBadge,
-  HandCoins,
   Image as ImageIcon,
   Loader2,
   MessageSquare,
   Plus,
   RotateCcw,
+  Award,
   Star,
   Tag,
   Trash2,
@@ -732,7 +732,7 @@ export function MarketplaceOffersPane({
           <div className="marketplace-apply-body">
             <div className="marketplace-apply-stage">
               <div className="marketplace-apply-intro">
-                <HandCoins
+                <Award
                   className="marketplace-apply-intro-icon"
                   aria-hidden="true"
                 />
@@ -770,7 +770,7 @@ export function MarketplaceOffersPane({
         <div className="marketplace-apply-body">
           <div className="marketplace-apply-stage">
             <div className="marketplace-apply-intro">
-              <HandCoins
+              <Award
                 className="marketplace-apply-intro-icon"
                 aria-hidden="true"
               />
@@ -857,6 +857,7 @@ export function MarketplaceOffersPane({
             className={`studio-admin-head-tab${homeTab === "jobs" ? " is-active" : ""}`}
             onClick={() => setHomeTab("jobs")}
           >
+            <Award className="h-3.5 w-3.5" aria-hidden="true" />
             Jobs
           </button>
         </OffersHead>

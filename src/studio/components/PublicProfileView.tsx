@@ -7,7 +7,7 @@ import {
   Eye,
   Globe,
   Forward,
-  HandCoins,
+  Award,
   Heart,
   Image as ImageIcon,
   LayoutGrid,
@@ -263,7 +263,7 @@ export function PublicProfileView({
                   className="public-profile-follow"
                   style={{ display: "inline-flex", textDecoration: "none", alignItems: "center", gap: 6 }}
                 >
-                  <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Award className="h-3.5 w-3.5" aria-hidden="true" />
                   Offers
                 </a>
               </p>

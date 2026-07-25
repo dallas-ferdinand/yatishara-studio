@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   Ban,
-  Briefcase,
+  Award,
   CheckCircle2,
   Clock3,
   LayoutList,
@@ -112,7 +112,18 @@ function formatJobAge(createdAt: number): string {
   return `${days} days`;
 }
 
-export function AdminMarketplacePane() {
+export type AdminMarketplaceSection = "sellers" | "offers" | "jobs" | "payouts";
+
+export function AdminMarketplacePane({
+  section,
+  focusJobId: focusJobIdProp = null,
+  onOpenJobs,
+}: {
+  section: AdminMarketplaceSection;
+  focusJobId?: Id<"marketplaceJobs"> | null;
+  /** Payout row → Jobs tab (parent switches admin tab). */
+  onOpenJobs?: (jobId: Id<"marketplaceJobs">) => void;
+}) {
   const [sellerFilter, setSellerFilter] = useState<
     "all" | "pending" | "approved" | "rejected" | "suspended"
   >("pending");
@@ -121,7 +132,7 @@ export function AdminMarketplacePane() {
   const [payoutFilter, setPayoutFilter] = useState<"owed" | "paid" | "all">("owed");
   const [busy, setBusy] = useState(false);
   const [reviewSellerId, setReviewSellerId] = useState<Id<"marketplaceSellers"> | null>(null);
-  const [focusJobId, setFocusJobId] = useState<Id<"marketplaceJobs"> | null>(null);
+  const [focusJobId, setFocusJobId] = useState<Id<"marketplaceJobs"> | null>(focusJobIdProp);
   const [refundJobId, setRefundJobId] = useState<Id<"marketplaceJobs"> | null>(null);
   const [refundReason, setRefundReason] = useState("");
   const [confirmAction, setConfirmAction] = useState<
@@ -132,25 +143,49 @@ export function AdminMarketplacePane() {
   const [confirmNote, setConfirmNote] = useState("");
   const jobsSectionRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    setFocusJobId(focusJobIdProp);
+  }, [focusJobIdProp]);
+
+  useEffect(() => {
+    setConfirmAction(null);
+    setConfirmNote("");
+    setRefundJobId(null);
+    setRefundReason("");
+    if (section !== "sellers") setReviewSellerId(null);
+  }, [section]);
+
   const sellers = useQuery(
     api.marketplace.adminListSellers,
-    sellerFilter === "all" ? {} : { status: sellerFilter },
+    section === "sellers"
+      ? sellerFilter === "all"
+        ? {}
+        : { status: sellerFilter }
+      : "skip",
   );
   const offers = useQuery(
     api.marketplace.adminListOffers,
-    offerFilter === "all" ? {} : { status: offerFilter },
+    section === "offers"
+      ? offerFilter === "all"
+        ? {}
+        : { status: offerFilter }
+      : "skip",
   );
   const jobs = useQuery(
     api.marketplace.adminListJobs,
-    jobFilter === "all" ? {} : { status: jobFilter },
+    section === "jobs" ? (jobFilter === "all" ? {} : { status: jobFilter }) : "skip",
   );
   const payouts = useQuery(
     api.marketplace.adminListPayouts,
-    payoutFilter === "all" ? {} : { status: payoutFilter },
+    section === "payouts"
+      ? payoutFilter === "all"
+        ? {}
+        : { status: payoutFilter }
+      : "skip",
   );
   const application = useQuery(
     api.marketplace.adminGetSellerApplication,
-    reviewSellerId ? { sellerId: reviewSellerId } : "skip",
+    section === "sellers" && reviewSellerId ? { sellerId: reviewSellerId } : "skip",
   );
 
   const decideSeller = useMutation(api.marketplace.adminApproveSeller);
@@ -283,6 +318,7 @@ export function AdminMarketplacePane() {
   return (
     <>
     <div className="studio-admin-stack">
+      {section === "sellers" ? (
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Sellers</span>
@@ -435,7 +471,9 @@ export function AdminMarketplacePane() {
         ) : null}
 
       </section>
+      ) : null}
 
+      {section === "offers" ? (
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Offers</span>
@@ -521,7 +559,9 @@ export function AdminMarketplacePane() {
           </tbody>
         </CursorTable>
       </section>
+      ) : null}
 
+      {section === "jobs" ? (
       <section className="studio-admin-section" ref={jobsSectionRef}>
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Jobs</span>
@@ -533,7 +573,7 @@ export function AdminMarketplacePane() {
               options={[
                 { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
                 { value: "in_escrow", label: "In escrow", icon: <Wallet />, tone: "warn" },
-                { value: "in_progress", label: "In progress", icon: <Briefcase />, tone: "info" },
+                { value: "in_progress", label: "In progress", icon: <Award />, tone: "info" },
                 { value: "delivered", label: "Delivered", icon: <Clock3 />, tone: "warn" },
                 { value: "completed", label: "Completed", icon: <CheckCircle2 />, tone: "good" },
                 { value: "refunded", label: "Refunded", icon: <Undo2 />, tone: "muted" },
@@ -547,7 +587,7 @@ export function AdminMarketplacePane() {
           ariaLabel="Marketplace jobs"
           loading={!jobs}
           empty={!!jobs && !jobs.length}
-          emptyIcon={<Briefcase />}
+          emptyIcon={<Award />}
           emptyTitle="No jobs"
           emptyHint="No jobs match this filter yet."
         >
@@ -647,7 +687,9 @@ export function AdminMarketplacePane() {
           </div>
         ) : null}
       </section>
+      ) : null}
 
+      {section === "payouts" ? (
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Payouts</span>
@@ -691,7 +733,8 @@ export function AdminMarketplacePane() {
                         className="studio-admin-job-link"
                         onClick={() => {
                           setJobFilter("all");
-                          setFocusJobId(payout.jobId);
+                          if (onOpenJobs) onOpenJobs(payout.jobId);
+                          else setFocusJobId(payout.jobId);
                         }}
                       >
                         {payout.offerTitle ?? "Open job"}
@@ -760,9 +803,10 @@ export function AdminMarketplacePane() {
           </div>
         ) : null}
       </section>
+      ) : null}
     </div>
 
-    {reviewSellerId ? (
+    {section === "sellers" && reviewSellerId ? (
       <>
         <button
           type="button"
