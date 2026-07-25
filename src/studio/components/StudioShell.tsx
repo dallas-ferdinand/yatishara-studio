@@ -21943,6 +21943,7 @@ function AdminWorkspacePane({
   const pendingPayments = safePayments.filter(
     (payment) =>
       payment.status === "pending" ||
+      payment.status === "needs_review" ||
       payment.status === "receipt_uploaded" ||
       payment.status === "receipt_received",
   );
@@ -21965,9 +21966,13 @@ function AdminWorkspacePane({
       if (paymentFilter === "pending") {
         return (
           payment.status === "pending" ||
+          payment.status === "needs_review" ||
           payment.status === "receipt_uploaded" ||
           payment.status === "receipt_received"
         );
+      }
+      if (paymentFilter === "failed") {
+        return payment.status === "checkout_failed";
       }
       return payment.status === paymentFilter;
     })
@@ -22052,8 +22057,8 @@ function AdminWorkspacePane({
         {tab === "payments" ? (
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
-              <AdminMetricCard label="Pending" value={pendingPayments.length} body="Awaiting PayWise confirmation or legacy receipt review." />
-              <AdminMetricCard label="Completed" value={completedPayments.length} body="Confirmed payments and balance grants." />
+              <AdminMetricCard label="Pending" value={pendingPayments.length} body="Awaiting PayWise confirmation or bank receipt review." />
+              <AdminMetricCard label="Paid" value={completedPayments.length} body="Confirmed payments and balance grants." />
               <AdminMetricCard label="Failed" value={rejectedPayments.length} body="Rejected, cancelled, or failed checkouts." />
             </section>
             <section className="studio-admin-section">
@@ -22066,7 +22071,8 @@ function AdminWorkspacePane({
                     onChange={setPaymentFilter}
                     options={[
                       { value: "pending", label: "Pending", icon: <Clock3 />, tone: "warn" },
-                      { value: "payment_completed", label: "Completed", icon: <CheckCircle2 />, tone: "good" },
+                      { value: "payment_completed", label: "Paid", icon: <CheckCircle2 />, tone: "good" },
+                      { value: "failed", label: "Failed", icon: <XCircle />, tone: "bad" },
                       { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
                       { value: "cancelled", label: "Cancelled", icon: <Ban />, tone: "muted" },
                       { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
@@ -22101,9 +22107,9 @@ function AdminWorkspacePane({
                         <strong>{paymentCustomerName(payment)}</strong>
                         <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
                       </td>
-                      <td>{payment.method === "paywise" ? "PayWise" : payment.method === "bank" ? "Legacy bank" : payment.method}</td>
+                      <td>{payment.method === "paywise" ? "PayWise" : payment.method === "bank" ? "Bank transfer" : payment.method}</td>
                       <td>{formatMoney(payment.amountCents)}</td>
-                      <td><PaymentStatusPill status={payment.status} /></td>
+                      <td><PaymentStatusPill status={payment.status} admin /></td>
                       <td>{formatDate(payment.createdAt)}</td>
                     </tr>
                   ))}
@@ -22248,8 +22254,16 @@ function AdminMetricCard({ label, value, body }) {
 
 function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywise }) {
   const isPaywise = payment.method === "paywise";
-  const isLegacyBank = payment.method === "bank";
+  const isBankTransfer = payment.method === "bank";
   const receiptIsImage = /\.(png|jpe?g|webp|gif)(\?|$)/i.test(payment.receiptUrl ?? "");
+  const bankReviewOptions = [
+    ...(payment.status === "receipt_uploaded"
+      ? [{ value: "receipt_uploaded", label: "Receipt uploaded", icon: <FileUp />, tone: "warn" }]
+      : []),
+    { value: "receipt_received", label: "Receipt received", icon: <Inbox />, tone: "info" },
+    { value: "payment_completed", label: "Paid", icon: <CheckCircle2 />, tone: "good" },
+    { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
+  ];
   return (
     <>
       <button type="button" className="studio-admin-payment-sidebar-backdrop" onClick={onClose} aria-label="Close payment details" />
@@ -22266,14 +22280,27 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
         <div className="studio-admin-detail-list">
           <BankLine label="Customer" value={paymentCustomerName(payment)} />
           <BankLine label="Contact" value={payment.customer?.email ?? payment.customer?.phone ?? "Unknown"} />
-          <BankLine label="Method" value={isPaywise ? "PayWise" : isLegacyBank ? "Legacy bank" : payment.method} />
-          <BankLine label="Type" value={payment.subscriptionPlanId ? "Legacy subscription" : "Top up"} />
-          <BankLine label="Balance added" value={payment.creditsGranted != null ? formatTtdFromCredits(payment.creditsGranted) : payment.subscriptionPlanId ? "Legacy grant" : "—"} />
+          <BankLine label="Method" value={isPaywise ? "PayWise" : isBankTransfer ? "Bank transfer" : payment.method} />
+          <BankLine label="Type" value={payment.subscriptionPlanId ? "Subscription" : "Top up"} />
+          <BankLine
+            label="Balance added"
+            value={
+              payment.creditsGranted != null
+                ? formatTtdFromCredits(payment.creditsGranted)
+                : payment.subscriptionPlanId
+                  ? "Plan grant"
+                  : "—"
+            }
+          />
           {payment.externalPaymentId ? <BankLine label="PayWise id" value={payment.externalPaymentId} /> : null}
           {payment.providerStatus ? <BankLine label="Provider status" value={payment.providerStatus} /> : null}
+          <BankLine label="Status" value={humanizeAdminPaymentStatus(payment.status)} />
           <BankLine label="Created" value={formatDate(payment.createdAt)} />
           <BankLine label="Reviewed" value={payment.reviewedAt ? formatDate(payment.reviewedAt) : "Not reviewed"} />
         </div>
+        {isBankTransfer ? (
+          <p className="studio-settings-empty">Older bank-transfer checkout — review the receipt, then mark paid or reject.</p>
+        ) : null}
         {isPaywise ? (
           <button
             type="button"
@@ -22283,21 +22310,19 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
             Refresh from PayWise
           </button>
         ) : null}
-        {isLegacyBank ? (
+        {isBankTransfer ? (
           <label className="studio-admin-status-field">
-            <span>Status</span>
+            <span>Set status</span>
             <CursorSelect
               value={payment.status}
               ariaLabel="Payment status"
               align="end"
               variant="field"
-              options={[
-                { value: "receipt_uploaded", label: "Receipt uploaded", icon: <FileUp />, tone: "warn" },
-                { value: "receipt_received", label: "Receipt received", icon: <Inbox />, tone: "info" },
-                { value: "payment_completed", label: "Payment approved", icon: <CheckCircle2 />, tone: "good" },
-                { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
-              ]}
-              onChange={(next) => onStatusChange(payment._id, next)}
+              options={bankReviewOptions}
+              onChange={(next) => {
+                if (next === "receipt_uploaded") return;
+                onStatusChange(payment._id, next);
+              }}
             />
           </label>
         ) : (
@@ -22306,7 +22331,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
           </p>
         )}
         {payment.rejectionReason ? <p className="studio-admin-rejection-note">{payment.rejectionReason}</p> : null}
-        {isLegacyBank ? (
+        {isBankTransfer ? (
           <div className="studio-admin-receipt-preview">
             <p className="studio-admin-card-kicker">Receipt</p>
             {payment.receiptUrl ? (
@@ -22342,8 +22367,12 @@ function AdminSetupAction({ title, body, actionLabel, onRun }) {
   );
 }
 
-function PaymentStatusPill({ status }) {
-  return <span className={`studio-payment-status-pill is-${status}`}>{humanizePaymentStatus(status)}</span>;
+function PaymentStatusPill({ status, admin = false }) {
+  return (
+    <span className={`studio-payment-status-pill is-${status}`}>
+      {admin ? humanizeAdminPaymentStatus(status) : humanizePaymentStatus(status)}
+    </span>
+  );
 }
 
 function adminTitle(tab) {
@@ -23757,12 +23786,13 @@ function humanizePaymentStatus(status, method) {
   const key = String(status ?? "");
   const labels = {
     pending: method === "paywise" ? "Awaiting card payment" : "Pending",
+    needs_review: "Needs review",
     checkout_failed: "Checkout failed",
     payment_completed: "Paid",
     cancelled: "Cancelled",
     rejected: "Rejected",
-    receipt_uploaded: "Receipt uploaded (legacy)",
-    receipt_received: "Receipt received (legacy)",
+    receipt_uploaded: "Receipt uploaded",
+    receipt_received: "Receipt received",
   };
   if (labels[key]) return labels[key];
   return (
@@ -23771,6 +23801,23 @@ function humanizePaymentStatus(status, method) {
       .replace(/_/g, " ")
       .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Pending"
   );
+}
+
+/** Admin glossary — always Pending for open PayWise, never “(legacy)”. */
+function humanizeAdminPaymentStatus(status) {
+  const key = String(status ?? "");
+  const labels = {
+    pending: "Pending",
+    needs_review: "Needs review",
+    checkout_failed: "Failed",
+    payment_completed: "Paid",
+    cancelled: "Cancelled",
+    rejected: "Rejected",
+    receipt_uploaded: "Receipt uploaded",
+    receipt_received: "Receipt received",
+  };
+  if (labels[key]) return labels[key];
+  return humanizePaymentStatus(status);
 }
 
 function buildStudioActivityItems(notifications = [], payments = []) {

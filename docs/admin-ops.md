@@ -1,0 +1,121 @@
+# Admin ops — backlog & tracking
+
+Living checklist for the Studio **admin workspace**. Update checkboxes as slices ship.
+Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
+
+## Operator jobs (day-to-day)
+
+1. Confirm / troubleshoot **top-ups** (PayWise + older bank-transfer receipts)
+2. **Manual credit** grants / deductions after payment glitches
+3. Review **seller KYC** applications (approve / reject)
+4. **Pay sellers** (owed → paid) with enough bank detail to actually send money
+5. Intervene in marketplace **jobs / escrow** (stuck, refund)
+6. Rare: seed pricing / presets (launch tools)
+
+## Current surface map
+
+| Tab | UI | Backend |
+|---|---|---|
+| Payments | [`StudioShell.tsx`](../src/studio/components/StudioShell.tsx) `AdminWorkspacePane` + `AdminPaymentSidebar` | `billing.adminListPayments`, `adminReviewPayment`, `paywiseActions.adminRefreshPaywisePayment` |
+| Customers | same file — read-only table | `users.adminListCustomers` |
+| Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + payouts | `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
+| Setup | seed cards | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing` |
+| Pricing | read-only cards | display only — `billing.adminSetPricing` **unused** |
+
+Entry: header Gauge → always opens `admin:payments` (admin / super_admin only).
+
+## Canonical payment status labels (admin)
+
+| Status key | Admin label |
+|---|---|
+| `pending` | Pending |
+| `needs_review` | Needs review |
+| `receipt_uploaded` | Receipt uploaded *(display only — not a review action)* |
+| `receipt_received` | Receipt received |
+| `payment_completed` | Paid |
+| `checkout_failed` | Failed |
+| `cancelled` | Cancelled |
+| `rejected` | Rejected |
+
+Method labels (admin): **PayWise** · **Bank transfer** (not “Legacy bank”).
+
+## Backend available without UI (yet)
+
+- `billing.adminAdjustCredits` — grant/deduct credits + reason
+- `marketplace.adminRefundDeliveredJob` — refund escrow jobs
+- `billing.adminSetPricing` — edit credit/content pricing
+- `generation.adminGetJobDebug` — job debug
+- Job statuses exist on `marketplaceJobs`; no admin list query wired in UI yet
+
+---
+
+## Backlog
+
+### P0 — Labels + broken status option
+
+Cheap language cleanup; fixes toast when operators pick an invalid review status.
+
+- [x] Remove `receipt_uploaded` as a **review action** (backend only allows `receipt_received` \| `payment_completed` \| `rejected`); keep as display when current
+- [x] Align filter / pills / metric cards: Pending · Paid · Failed · Cancelled · Rejected · All
+- [x] Soft-pedal “Legacy” in admin payment UI (Bank transfer / Subscription / Top up; optional bank hint)
+- [x] Admin table status = **Pending** for PayWise pending (not “Awaiting card payment”)
+- [x] Document check-off
+
+**Done when:** No invalid status in the bank review select; admin copy matches the glossary above.
+
+### P1 — Customers: search, detail, credit adjust
+
+#1 support gap. API: `billing.adminAdjustCredits`.
+
+- [ ] Customer search (email / phone / name)
+- [ ] Detail pane: balance, reserved, recent payments, subscription if any
+- [ ] Adjust credits (+/−) with required reason
+- [ ] Link out to related payment rows
+
+**Done when:** Support can fix a balance without Convex CLI / `internalSetCreditsByPhone`.
+
+### P2 — Marketplace Jobs + refund
+
+Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
+
+- [ ] Admin jobs list (status, buyer, seller, amount, age)
+- [ ] Filter by job status
+- [ ] Refund action with reason (replaces `window.prompt` eventually)
+- [ ] Deep-link from payout row → job (stop showing raw id as the only context)
+
+**Done when:** Operator can find a stuck/delivered job and refund without knowing a Convex id.
+
+### P3 — Payouts + seller reject language
+
+- [ ] Payout rows show **who to pay + bank details**
+- [ ] Seller still-pending: **Reject** (not Suspend); capture reason
+- [ ] Approved sellers keep Suspend for enforcement
+- [ ] Replace `window.prompt` for mark-paid / reject with inline confirm field
+
+**Done when:** Operator can pay from the payouts table and reject an application with a reason.
+
+### P4 — Tab reshape
+
+- [ ] Main nav: Payments · Customers · Marketplace (Jobs under Marketplace or own tab)
+- [ ] Demote Setup + Pricing into **Tools** (or Settings → Admin)
+- [ ] Entry still lands on Payments
+
+**Done when:** Launch seeds are not two of five primary tabs.
+
+### P5 — Polish / reporting
+
+- [ ] Metric cards sum TTD (not only row counts)
+- [ ] Credit ledger view on customer detail
+- [ ] Offer moderation (pause bad listing)
+- [ ] Audit log viewer
+- [ ] Raise list caps / pagination (payments 200, customers 100 today)
+
+---
+
+## Priority ladder
+
+```
+P0 labels_fix → refocus → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
+```
+
+Next chat: open this file and start **P1**.
