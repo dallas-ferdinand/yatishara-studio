@@ -297,6 +297,31 @@
   cursor: wait;
 }
 
+.public-profile-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Message — same 28px chip as Follow, neutral glass instead of accent. */
+.public-profile-message {
+  background: var(--pp-glass);
+  color: var(--pp-ink);
+  border: 1px solid var(--pp-line);
+  -webkit-backdrop-filter: var(--pp-glass-blur);
+  backdrop-filter: var(--pp-glass-blur);
+}
+
+.public-profile-message:hover:not(:disabled) {
+  filter: none;
+  border-color: color-mix(in srgb, var(--pp-accent) 40%, var(--pp-line));
+}
+
+[data-appearance="light"] .public-profile-message {
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, transparent);
+}
+
 .public-profile-links {
   list-style: none;
   display: flex;

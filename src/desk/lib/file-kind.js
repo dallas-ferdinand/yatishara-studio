@@ -134,6 +134,7 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "buckets") return "bucket";
   if (tab.kind === "settings") return "settings";
   if (tab.studioKind === "feed") return "cloud";
+  if (tab.studioKind === "messages") return "message";
   if (tab.studioKind === "profile") return "user";
   if (tab.studioKind === "videoEdit") return "clapperboard";
   if (tab.studioKind === "element") {

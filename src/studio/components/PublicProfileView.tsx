@@ -14,6 +14,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  MessageCircle,
   Phone,
   Play,
   UserMinus,
@@ -81,6 +82,7 @@ export function PublicProfileView({
   embedded = false,
   ownerName,
   onOpenPost,
+  onMessage,
 }: {
   username: string;
   embedded?: boolean;
@@ -90,6 +92,7 @@ export function PublicProfileView({
     name?: string | null;
   } | null;
   onOpenPost?: (post: PublicPost) => void;
+  onMessage?: (username: string) => void;
 }) {
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
   const [tab, setTab] = useState<ProfileTab>("posts");
@@ -224,36 +227,48 @@ export function PublicProfileView({
                 <p className="public-profile-handle">@{profile.username}</p>
               </div>
               {!profile.isOwner ? (
-                <button
-                  type="button"
-                  className={`public-profile-follow${profile.isFollowing ? " is-following" : ""}`}
-                  onClick={() => void handleFollowToggle()}
-                  disabled={followBusy}
-                  aria-label={
-                    followBusy
+                <div className="public-profile-actions">
+                  <button
+                    type="button"
+                    className={`public-profile-follow${profile.isFollowing ? " is-following" : ""}`}
+                    onClick={() => void handleFollowToggle()}
+                    disabled={followBusy}
+                    aria-label={
+                      followBusy
+                        ? profile.isFollowing
+                          ? "Unfollowing"
+                          : "Following"
+                        : profile.isFollowing
+                          ? "Unfollow"
+                          : "Follow"
+                    }
+                  >
+                    {followBusy ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : profile.isFollowing ? (
+                      <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    {followBusy
                       ? profile.isFollowing
                         ? "Unfollowing"
                         : "Following"
                       : profile.isFollowing
                         ? "Unfollow"
-                        : "Follow"
-                  }
-                >
-                  {followBusy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : profile.isFollowing ? (
-                    <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                  {followBusy
-                    ? profile.isFollowing
-                      ? "Unfollowing"
-                      : "Following"
-                    : profile.isFollowing
-                      ? "Unfollow"
-                      : "Follow"}
-                </button>
+                        : "Follow"}
+                  </button>
+                  {onMessage && auth.isAuthenticated ? (
+                    <button
+                      type="button"
+                      className="public-profile-follow public-profile-message"
+                      onClick={() => onMessage(profile.username)}
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      Message
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 

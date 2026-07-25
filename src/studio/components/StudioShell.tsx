@@ -48,6 +48,7 @@ import {
   MapPin,
   Maximize2,
   Menu,
+  MessageCircle,
   Mic,
   Package,
   Palette,
@@ -112,6 +113,8 @@ import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { StudioSocialSidebar } from "./StudioSocialSidebar";
+import { StudioMessagesPane } from "./StudioMessagesPane";
+import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -237,6 +240,8 @@ const AssistanceApprovalCard = dynamic(
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
+/** Single Messages tab — the chat window; the sidebar becomes the chat list. */
+const MESSAGES_TAB = "messages:main";
 const TRASH_FOLDER_ID = "__trash__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
 const CHAT_LIVE_EVENT_LIMIT = 80;
@@ -471,6 +476,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "composer:",
   "thread:",
   "feed:",
+  "messages:",
   "profile:",
   "profilePost:",
   "asset:",
@@ -832,6 +838,7 @@ export function StudioShell({
     [isMobile]
   );
   const ensureDefaults = useMutation(api.users.ensureStudioDefaults);
+  const openDmConversation = useMutation(api.dms.openConversation);
   const createFolder = useMutation(api.folders.create);
   const updateFolder = useMutation(api.folders.update);
   const trashFolder = useMutation(api.folders.moveToTrash);
@@ -1050,6 +1057,8 @@ export function StudioShell({
   const [feedModeMenuPos, setFeedModeMenuPos] = useState(null);
   const [entitlementNow] = useState(() => Date.now());
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
+  // DM chat selection — shared by the chat-list sidebar and the Messages pane.
+  const [activeDmConversationId, setActiveDmConversationId] = useState(null);
   useStudioBackground();
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
@@ -2777,6 +2786,29 @@ export function StudioShell({
       return;
     }
     openPublicProfile(username);
+  }
+
+  function openMessages() {
+    openTab(MESSAGES_TAB);
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) setMobileSection("composer");
+  }
+
+  /** Open (or create) the one-per-pair chat with a person and focus it. */
+  function openChatWith(username) {
+    const normalized = String(username ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/^@/, "");
+    if (!normalized) return;
+    openMessages();
+    void openDmConversation({ username: normalized })
+      .then((result) => setActiveDmConversationId(result.conversationId))
+      .catch((error) => {
+        toast.error(friendlyConvexError(error, "Could not open chat"));
+      });
   }
 
   function openNewComposerTab() {
@@ -4745,6 +4777,9 @@ export function StudioShell({
     (activeTab.startsWith("feed:") ||
       activeTab.startsWith("profile:") ||
       activeTab.startsWith("profilePost:"));
+
+  const isMessagesRail =
+    typeof activeTab === "string" && activeTab.startsWith("messages:");
 
   return (
     <div
@@ -16401,7 +16436,7 @@ export function StudioShell({
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
           <StudioSidebarBrand />
-          {!isSocialRail ? (
+          {!isSocialRail && !isMessagesRail ? (
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -16430,7 +16465,14 @@ export function StudioShell({
             }}
           />
         </div>
-        {isSocialRail ? (
+        {isMessagesRail ? (
+          <StudioMessagesSidebar
+            activeConversationId={activeDmConversationId}
+            onSelectConversation={setActiveDmConversationId}
+            onStartChat={openChatWith}
+            expiresUnix={assetUrlExpiresUnix}
+          />
+        ) : isSocialRail ? (
           <StudioSocialSidebar
             onOpenProfile={openPublicProfile}
             expiresUnix={assetUrlExpiresUnix}
@@ -16583,6 +16625,7 @@ export function StudioShell({
                   onViewProfile={openOwnProfile}
                   onEditProfile={() => openSettingsTab("profile")}
                   onOpenOffers={() => openOffersTab()}
+                  onOpenMessages={openMessages}
                   onSignOut={() => void signOut()}
                 />
                 <button
@@ -16784,6 +16827,9 @@ export function StudioShell({
             onOpenProfilePost={openProfilePost}
             onOpenFeedTab={openFeedTab}
             openTabs={openTabs}
+            dmConversationId={activeDmConversationId}
+            onSelectDmConversation={setActiveDmConversationId}
+            onOpenChat={openChatWith}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -16960,6 +17006,10 @@ export function StudioShell({
           onOpenOffers={() => {
             setMobileAppMenuOpen(false);
             openOffersTab();
+          }}
+          onOpenMessages={() => {
+            setMobileAppMenuOpen(false);
+            openMessages();
           }}
           onOpenSection={(section) => {
             setMobileAppMenuOpen(false);
@@ -18945,6 +18995,7 @@ function StudioProfileMenu({
   onViewProfile,
   onEditProfile,
   onOpenOffers,
+  onOpenMessages,
   onSignOut,
 }) {
   const [open, setOpen] = useState(false);
@@ -19056,6 +19107,20 @@ function StudioProfileMenu({
               Offers &amp; jobs
             </span>
           </button>
+          <button
+            type="button"
+            className="cursor-tab-context-item"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenMessages?.();
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              Messages
+            </span>
+          </button>
           <div className="cursor-tab-context-sep" role="separator" />
           <button
             type="button"
@@ -19083,6 +19148,7 @@ function StudioMobileAppMenu({
   onViewProfile,
   onEditProfile,
   onOpenOffers,
+  onOpenMessages,
   onOpenSection,
   onOpenSettings,
   onOpenCredits,
@@ -19119,6 +19185,14 @@ function StudioMobileAppMenu({
       items: [
         { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
         { label: "Feed", Icon: Cloud, onClick: () => onOpenSection?.("feed") },
+        {
+          label: "Messages",
+          Icon: MessageCircle,
+          onClick: () => {
+            onClose?.();
+            onOpenMessages?.();
+          },
+        },
         { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
         { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
         { label: "History", Icon: History, onClick: onOpenHistory },
@@ -21427,6 +21501,9 @@ function ActivePane({
   onOpenProfilePost,
   onOpenFeedTab,
   openTabs = [],
+  dmConversationId = null,
+  onSelectDmConversation,
+  onOpenChat,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -21534,6 +21611,7 @@ function ActivePane({
               embedded
               ownerName={currentUser}
               onOpenPost={(post) => onOpenProfilePost?.(username, post._id)}
+              onMessage={onOpenChat}
             />
           </div>
         );
@@ -21668,6 +21746,15 @@ function ActivePane({
         elements={elements}
         onOpenEntry={onOpenEntry}
         currentUser={currentUser}
+      />,
+    );
+  }
+  if (activeTab.startsWith("messages:")) {
+    return wrapPane(
+      <StudioMessagesPane
+        conversationId={dmConversationId}
+        onSelectConversation={onSelectDmConversation}
+        onOpenProfile={onOpenPublicProfile}
       />,
     );
   }
@@ -24960,6 +25047,15 @@ function tabDescriptor({
       status: "ready",
       studioKind: "feed",
       hasMenu: true,
+    };
+  }
+  if (key.startsWith("messages:")) {
+    return {
+      key,
+      kind: "file",
+      title: "Messages",
+      status: "ready",
+      studioKind: "messages",
     };
   }
   if (key.startsWith("admin:")) {
