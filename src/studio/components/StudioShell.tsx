@@ -9246,9 +9246,9 @@ export function StudioShell({
         }
         .studio-rate-grid span,
         .studio-admin-chip {
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
+          border: 1px solid var(--color-cursor-border-soft);
           border-radius: 999px;
-          background: color-mix(in srgb, var(--cursor-accent) 9%, transparent);
+          background: var(--cursor-surface-raised);
           padding: 5px 8px;
         }
         .studio-rate-grid b {
@@ -9264,16 +9264,13 @@ export function StudioShell({
         .studio-plan-card,
         .studio-bank-card {
           position: relative;
-          overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
-          border-radius: 16px;
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--mos-surface) 58%, transparent), color-mix(in srgb, var(--mos-bg) 88%, transparent));
-          padding: 10px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
+          padding: 12px;
         }
         .studio-plan-card.is-featured {
-          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
-          box-shadow: 0 0 26px color-mix(in srgb, var(--cursor-accent) 13%, transparent);
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
         }
         .studio-plan-badge {
           display: inline-flex;
@@ -13166,13 +13163,10 @@ export function StudioShell({
           align-items: center;
           justify-content: space-between;
           gap: 16px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
-          border-radius: 18px;
-          background:
-            radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 36%),
-            color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          padding: 20px;
-          box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), 0 0 30px var(--studio-glow-soft);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
+          padding: 16px;
         }
         .studio-admin-hero-actions {
           display: flex;
@@ -13186,7 +13180,7 @@ export function StudioShell({
           font-weight: 700;
         }
         .studio-admin-hero-card h2 {
-          font-size: 24px;
+          font-size: 18px;
         }
         .studio-admin-hero-card p {
           margin-top: 4px;
@@ -13197,47 +13191,28 @@ export function StudioShell({
         .studio-bank-card,
         .studio-admin-card {
           position: relative;
-          overflow: hidden;
-          border-radius: 18px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
-          background:
-            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 14%, transparent), transparent 42%),
-            color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-          padding: 16px;
-          transition:
-            border-color var(--studio-motion-fast) var(--studio-motion-ease),
-            box-shadow var(--studio-motion-med) var(--studio-motion-ease),
-            transform var(--studio-motion-fast) var(--studio-motion-spring);
+          border-radius: var(--cursor-radius-lg, 10px);
+          border: 1px solid var(--color-cursor-border-soft);
+          background: var(--cursor-surface-raised);
+          padding: 14px;
         }
         .studio-admin-table-card,
         .studio-admin-table-card:hover {
           transform: none;
         }
-        .studio-admin-tabbar {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 14%, var(--color-cursor-border-soft));
-          border-radius: 18px;
-          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          padding: 8px;
-        }
-        .studio-admin-tabbar button,
         .studio-admin-filter-tabs button {
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--cursor-surface-raised);
           color: var(--color-cursor-muted);
-          padding: 7px 12px;
+          padding: 6px 10px;
           font-size: 12px;
-          font-weight: 700;
+          font-weight: 600;
           cursor: pointer;
         }
-        .studio-admin-tabbar button.is-active,
         .studio-admin-filter-tabs button.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 54%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent-dim) 62%, var(--color-cursor-hover));
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--cursor-surface-raised));
           color: var(--color-cursor-text-bright);
         }
         .studio-admin-table-head {
@@ -13306,8 +13281,8 @@ export function StudioShell({
         .studio-admin-status-field select {
           min-height: 38px;
           border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 10px;
-          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--cursor-surface-raised);
           padding: 0 10px;
           color: var(--color-cursor-text);
           font-size: 13px;
@@ -13325,8 +13300,8 @@ export function StudioShell({
           min-height: 280px;
           max-height: 52vh;
           border: 1px solid var(--color-cursor-border-soft);
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
           object-fit: contain;
         }
         .studio-admin-receipt-frame {
@@ -13352,9 +13327,9 @@ export function StudioShell({
         }
         .studio-admin-kyc-doc {
           display: block;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
-          border-radius: 10px;
-          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--cursor-surface-raised);
           padding: 8px 10px;
           color: var(--color-cursor-text-bright);
           font-size: 12px;
@@ -13367,9 +13342,9 @@ export function StudioShell({
         }
         .studio-admin-table-wrap {
           overflow: auto;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
-          border-radius: 16px;
-          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
         }
         .studio-admin-table {
           width: 100%;
@@ -13396,7 +13371,7 @@ export function StudioShell({
         }
         .studio-admin-table tbody tr:hover,
         .studio-admin-table tbody tr.is-selected {
-          background: color-mix(in srgb, var(--cursor-accent-dim) 36%, transparent);
+          background: var(--color-cursor-hover);
         }
         .studio-admin-table td strong,
         .studio-admin-detail-panel h3,
@@ -13420,13 +13395,13 @@ export function StudioShell({
           display: inline-flex;
           width: fit-content;
           align-items: center;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 20%, var(--color-cursor-border-soft));
+          border: 1px solid var(--color-cursor-border-soft);
           border-radius: 999px;
-          background: color-mix(in srgb, var(--cursor-accent-dim) 34%, transparent);
-          color: var(--color-cursor-text-bright);
-          padding: 5px 8px;
+          background: var(--cursor-surface-raised);
+          color: var(--color-cursor-text);
+          padding: 4px 8px;
           font-size: 11px;
-          font-weight: 700;
+          font-weight: 600;
         }
         .studio-payment-status-pill.is-payment_completed {
           border-color: color-mix(in srgb, #22c55e 42%, var(--color-cursor-border-soft));
@@ -13439,12 +13414,10 @@ export function StudioShell({
         .studio-admin-detail-panel {
           display: grid;
           gap: 12px;
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-border-soft));
-          border-radius: 18px;
-          background:
-            radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--cursor-accent) 13%, transparent), transparent 40%),
-            color-mix(in srgb, var(--mos-surface) 72%, transparent);
-          padding: 16px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
+          padding: 14px;
         }
         .studio-admin-detail-list {
           display: grid;
@@ -13462,13 +13435,13 @@ export function StudioShell({
         .studio-admin-detail-actions button,
         .studio-admin-detail-actions span,
         .studio-admin-muted-action {
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--cursor-surface-raised);
           color: var(--color-cursor-text-bright);
           padding: 7px 10px;
           font-size: 12px;
-          font-weight: 700;
+          font-weight: 650;
           text-decoration: none;
           cursor: pointer;
         }
@@ -13492,9 +13465,9 @@ export function StudioShell({
         }
         .studio-admin-setup-card {
           align-items: flex-start;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
-          border-radius: 16px;
-          background: color-mix(in srgb, var(--mos-bg) 42%, transparent);
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-lg, 10px);
+          background: var(--cursor-surface-raised);
           padding: 14px;
         }
         .studio-admin-setup-card p {
@@ -13502,18 +13475,8 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
-        .studio-price-card:hover,
-        .studio-bank-card:hover,
-        .studio-admin-card:hover {
-          transform: none;
-          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
-          box-shadow: none;
-        }
         .studio-price-card.is-featured {
-          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
-          background:
-            radial-gradient(circle at 28% 0%, color-mix(in srgb, var(--cursor-accent) 24%, transparent), transparent 48%),
-            color-mix(in srgb, var(--mos-surface) 80%, transparent);
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
         }
         .studio-price-card-kicker,
         .studio-admin-card-kicker {
@@ -13544,10 +13507,9 @@ export function StudioShell({
         .studio-price-card-credits {
           margin-top: 4px;
           color: var(--cursor-accent);
-          font-size: 24px;
+          font-size: 22px;
           font-weight: 700;
           line-height: 1;
-          text-shadow: 0 0 14px var(--studio-glow-soft);
         }
         .studio-price-card-meta,
         .studio-bank-meta,
