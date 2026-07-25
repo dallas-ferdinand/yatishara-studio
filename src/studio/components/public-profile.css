@@ -302,9 +302,27 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   padding: 0;
+}
+
+.public-profile-links > li {
+  position: relative;
+}
+
+.public-profile-links > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 12px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--pp-ink) 14%, transparent);
+  pointer-events: none;
 }
 
 .public-profile-links a {
@@ -383,7 +401,7 @@
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: fit-content;
   max-width: 100%;
   margin: 0 auto;
@@ -393,7 +411,7 @@
 .public-profile-tab {
   position: relative;
   z-index: 0;
-  overflow: hidden;
+  overflow: visible;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -427,6 +445,26 @@
     color 0.16s ease,
     background 0.16s ease,
     border-color 0.16s ease;
+}
+
+/* Same hairline as workspace header tabs (cursor-unified-tab::after). */
+.public-profile-tab::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 1px;
+  height: 12px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--pp-ink) 14%, transparent);
+  pointer-events: none;
+}
+
+.public-profile-tab:last-child::after,
+.public-profile-tab.is-active::after {
+  content: none;
 }
 
 .public-profile-tab > * {
