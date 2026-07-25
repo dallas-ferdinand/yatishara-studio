@@ -6627,6 +6627,9 @@ export function StudioShell({
             color-mix(in srgb, var(--mos-text-bright) 3%, transparent) 40%,
             color-mix(in srgb, var(--mos-text-bright) 6%, transparent) 100%
           ) !important;
+          background-position: center !important;
+          background-repeat: no-repeat !important;
+          background-size: 100% calc(100% - 2px) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
