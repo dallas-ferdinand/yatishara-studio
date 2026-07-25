@@ -2740,10 +2740,20 @@ export function StudioShell({
   }
 
   function resolveAttachTargetTab() {
-    if (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) {
+    if (
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("composer:") || activeTab.startsWith("thread:"))
+    ) {
       return activeTab;
     }
-    return lastChatTabRef.current || COMPOSER_TAB;
+    if (
+      typeof lastChatTabRef.current === "string" &&
+      (lastChatTabRef.current.startsWith("composer:") ||
+        lastChatTabRef.current.startsWith("thread:"))
+    ) {
+      return lastChatTabRef.current;
+    }
+    return COMPOSER_TAB;
   }
 
   function openCreateTab(kind, elementType = "") {
@@ -2768,7 +2778,7 @@ export function StudioShell({
 
   function openElementCreateInComposer() {
     if (isMobile) setMobileSection("composer");
-    setActiveTab(COMPOSER_TAB);
+    openTab(COMPOSER_TAB);
     setMode("element");
   }
 
@@ -2943,7 +2953,7 @@ export function StudioShell({
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
         if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
-          setActiveTab(lastChatTabRef.current || COMPOSER_TAB);
+          openTab(lastChatTabRef.current || COMPOSER_TAB);
         }
         return;
       }
@@ -3162,9 +3172,8 @@ export function StudioShell({
       return;
     }
 
-    if (composerContextKey !== targetTab) {
-      setActiveTab(targetTab);
-    }
+    // Ensure a chat tab exists (including when the workspace had no tabs open).
+    openTab(targetTab);
     window.requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
@@ -14877,6 +14886,18 @@ export function StudioShell({
           pointer-events: none;
           box-sizing: border-box;
         }
+        /* No open tabs — full pane, no composer clearance. */
+        .studio-workspace-empty {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+          box-sizing: border-box;
+        }
+        .studio-workspace-empty .studio-empty-logo-btn,
         .studio-chat-empty-state .studio-empty-logo-btn {
           pointer-events: auto;
         }
@@ -16434,7 +16455,8 @@ export function StudioShell({
             openTabs={openTabs}
           />
         </section>
-        {activeTab.startsWith("composer:") || activeTab.startsWith("thread:") ? (
+        {typeof activeTab === "string" &&
+        (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) ? (
           <StudioComposer
             draft={draft}
             setDraft={setDraft}
@@ -21196,7 +21218,7 @@ function ActivePane({
   }
 
   useEffect(() => {
-    if (!activeTab.startsWith("create:")) return;
+    if (!activeTab || !activeTab.startsWith("create:")) return;
     const createTarget = parseCreateTab(activeTab);
     if (createTarget.kind === "element") {
       onCloseTab(activeTab);
@@ -21205,6 +21227,7 @@ function ActivePane({
   }, [activeTab, onCloseTab, onOpenElementCreate]);
 
   const videoEditContext = useMemo(() => {
+    if (!activeTab) return null;
     if (activeTab.startsWith("videoEdit:")) {
       return { projectId: activeTab.slice("videoEdit:".length), tabKey: activeTab };
     }
@@ -21224,6 +21247,15 @@ function ActivePane({
     }
     return null;
   }, [activeTab, activeEntry]);
+
+  // Closing the last tab: wallpaper + centered logo only (no composer / pane chrome).
+  if (!activeTab) {
+    return wrapPane(
+      <div className="studio-workspace-empty" aria-label="Studio">
+        <StudioEmptyLogoButton />
+      </div>,
+    );
+  }
 
   if (activeTab.startsWith("create:")) {
     const createTarget = parseCreateTab(activeTab);
