@@ -70,9 +70,10 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: color-mix(in srgb, #050608 72%, transparent);
-  -webkit-backdrop-filter: saturate(140%) blur(22px);
-  backdrop-filter: saturate(140%) blur(22px);
+  /* Opaque wash — feed swipe must stay GPU-cheap. */
+  background: color-mix(in srgb, #050608 86%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 [data-appearance="light"] .profile-post-viewer-blur {
