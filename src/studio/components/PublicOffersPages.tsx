@@ -18,6 +18,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Star,
   Store,
   Timer,
   Wallet,
@@ -35,6 +36,114 @@ import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
 import "./public-offers.css";
+
+function RatingStars({
+  value,
+  size = 14,
+}: {
+  value: number;
+  size?: number;
+}) {
+  const rounded = Math.round(value * 2) / 2;
+  return (
+    <span
+      className="public-offers-stars"
+      aria-label={`${value.toFixed(1)} out of 5`}
+    >
+      {([1, 2, 3, 4, 5] as const).map((star) => {
+        const filled = rounded >= star;
+        const half = !filled && rounded >= star - 0.5;
+        return (
+          <Star
+            key={star}
+            aria-hidden="true"
+            className={filled || half ? "is-filled" : undefined}
+            style={{ width: size, height: size }}
+            fill={filled ? "currentColor" : "none"}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+function OfferStatsChips({
+  ratingAvg,
+  ratingCount,
+  purchaseCount,
+}: {
+  ratingAvg: number | null;
+  ratingCount: number;
+  purchaseCount: number;
+}) {
+  return (
+    <>
+      {ratingCount > 0 && ratingAvg != null ? (
+        <span className="public-offers-chip">
+          <RatingStars value={ratingAvg} />
+          <strong>{ratingAvg.toFixed(1)}</strong>
+          <em>({ratingCount})</em>
+        </span>
+      ) : (
+        <span className="public-offers-chip">No ratings yet</span>
+      )}
+      <span className="public-offers-chip">
+        {purchaseCount} purchase{purchaseCount === 1 ? "" : "s"}
+      </span>
+    </>
+  );
+}
+
+function OfferReviewsList({ offerId }: { offerId: Id<"marketplaceOffers"> }) {
+  const reviews = useQuery(api.marketplace.listPublicOfferReviews, {
+    offerId,
+    limit: 20,
+  });
+  if (reviews === undefined) {
+    return (
+      <section className="public-offers-panel">
+        <h2>Reviews</h2>
+        <p className="public-offers-note">Loading reviews…</p>
+      </section>
+    );
+  }
+  if (reviews.length === 0) {
+    return (
+      <section className="public-offers-panel">
+        <h2>Reviews</h2>
+        <p className="public-offers-note">
+          No verified reviews yet — ratings come from completed purchases only.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <section className="public-offers-panel">
+      <h2>Reviews</h2>
+      <ul className="public-offers-reviews">
+        {reviews.map((review) => (
+          <li key={review._id} className="public-offers-review">
+            <div className="public-offers-review-head">
+              <RatingStars value={review.rating} />
+              <strong>{review.buyerDisplayName}</strong>
+              <time dateTime={new Date(review.createdAt).toISOString()}>
+                {new Date(review.createdAt).toLocaleDateString()}
+              </time>
+            </div>
+            {review.packageName ? (
+              <p className="public-offers-review-pkg">{review.packageName} package</p>
+            ) : null}
+            {review.body ? (
+              <p className="public-offers-prose">{review.body}</p>
+            ) : (
+              <p className="public-offers-note">Stars only — no written review.</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function OffersSidebarBrand() {
   const logoSrc = useMercurySidebarLogo();
@@ -850,6 +959,11 @@ function OffersCatalogInner() {
                             <Clock aria-hidden="true" />
                             {offer.deliveryDays} day delivery
                           </span>
+                          <OfferStatsChips
+                            ratingAvg={offer.ratingAvg}
+                            ratingCount={offer.ratingCount}
+                            purchaseCount={offer.purchaseCount}
+                          />
                           {offer.category ? (
                             <span className="public-offers-chip">{offer.category}</span>
                           ) : null}
@@ -1332,6 +1446,11 @@ function OfferDetailInner({ slug }: { slug: string }) {
                   {hasPackages && packages.length > 1 ? "From " : ""}
                   {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
                 </span>
+                <OfferStatsChips
+                  ratingAvg={offer.ratingAvg}
+                  ratingCount={offer.ratingCount}
+                  purchaseCount={offer.purchaseCount}
+                />
               </div>
             </section>
 
@@ -1339,6 +1458,8 @@ function OfferDetailInner({ slug }: { slug: string }) {
               <h2>What you get</h2>
               <p className="public-offers-prose">{offer.description}</p>
             </section>
+
+            <OfferReviewsList offerId={offer._id} />
           </main>
         </div>
       </div>
