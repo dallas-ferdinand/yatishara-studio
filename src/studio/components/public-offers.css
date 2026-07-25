@@ -1,8 +1,10 @@
 /* Public offers — admin/billing chrome: page L1, plates L2, chips L3 (see docs/DESIGN_SYSTEM.md) */
 
+/* Same viewport lock as Studio shell (h-dvh + overflow hidden) so chrome stays put. */
 .public-offers-route {
-  height: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
   overflow: hidden;
   background: var(--mos-page, #f5f5f7);
   color: var(--color-cursor-text, var(--mos-text, #1b1f24));
@@ -17,7 +19,8 @@
 .public-offers-shell {
   display: flex;
   height: 100%;
-  min-height: 100dvh;
+  max-height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -37,6 +40,9 @@
 }
 
 .public-offers-rail-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -496,6 +502,8 @@
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
   background: var(--mos-page, #f5f5f7);
 }
@@ -506,14 +514,17 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .public-offers-topbar {
-  position: relative;
-  z-index: 5;
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   flex-shrink: 0;
   height: var(--cursor-head-h, 32px);
   min-height: var(--cursor-head-h, 32px);
@@ -1477,6 +1488,13 @@
 
   .public-offers-shell {
     flex-direction: column;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .public-offers-main {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* Left filter rail becomes a floating sheet instead */
