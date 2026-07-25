@@ -24,13 +24,13 @@ Prefer **many tiny commits** over one mega commit. Experimental or ugly work **s
 
 Leaving a large uncommitted batch after a turn is a **policy failure**.
 
-## Enforced by hook
+## Enforced by hook (commit nudge)
 
-`.cursor/hooks.json` runs `.cursor/hooks/auto-commit.sh` on the `stop` event. Anything you leave dirty is swept into a `wip(auto): …` checkpoint commit at the end of the turn — the same way `memory_recall` is forced by the MercuryOS hooks.
+A user-level `stop` hook (`~/.cursor/hooks/auto-commit.sh`, registered in `~/.cursor/hooks.json`) checks every git workspace when the agent finishes a turn. If the tree is dirty, it injects a `COMMIT REQUIRED` follow-up — the same way `memory_recall` is forced. **The hook never commits by itself**; the agent decides how to group changes and writes real messages.
 
-The hook is a safety net, not the plan. A turn that ends in one `wip(auto)` blob instead of your own named commits still failed the rule: the sweep can't explain *why* a change happened. Commit your own slices first and let the hook catch only strays.
+When you receive that follow-up: `git status`/`diff`, stage related files together, commit in small named slices, leave other chats' in-flight changes alone. Never commit secrets. Never push.
 
-The hook never pushes, skips mid-merge/rebase states, and leaves credential-shaped files (`.env*`, `*.key`, `*.pem`, `*secret*`, `*credential*`) unstaged. It logs to `.git/auto-commit.log`.
+Per-repo opt-out: a `.cursor/no-auto-commit` marker file (MercuryOS has one — it stays ask-first).
 
 ## How
 
