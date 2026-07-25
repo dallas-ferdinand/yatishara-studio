@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Plus,
   RotateCcw,
+  Star,
   Tag,
   Trash2,
   Wallet,
@@ -406,6 +407,7 @@ export function MarketplaceOffersPane({
   const deliverJob = useMutation(api.marketplace.deliverJobAssets);
   const acceptJob = useMutation(api.marketplace.acceptJobDelivery);
   const cancelJob = useMutation(api.marketplace.cancelJobBeforeDelivery);
+  const submitReview = useMutation(api.marketplace.submitJobReview);
 
   const jobDetail = useQuery(
     api.marketplace.getJob,
@@ -466,6 +468,8 @@ export function MarketplaceOffersPane({
   } | null>(null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Id<"assets">[]>([]);
   const [deliverNote, setDeliverNote] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewBody, setReviewBody] = useState("");
 
   const selectedOffer = useMemo(() => {
     if (view.kind !== "offer" || !myOffers) return null;
@@ -512,6 +516,8 @@ export function MarketplaceOffersPane({
   useEffect(() => {
     setSelectedAssetIds([]);
     setDeliverNote("");
+    setReviewRating(5);
+    setReviewBody("");
   }, [jobIdForAssets]);
 
   function toggleAsset(id: Id<"assets">) {
@@ -662,6 +668,24 @@ export function MarketplaceOffersPane({
       toast.success("Job cancelled; escrow refunded");
     } catch (error) {
       toast.error(friendlyConvexError(error, "Cancel failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSubmitReview() {
+    if (view.kind !== "job") return;
+    setBusy(true);
+    try {
+      await submitReview({
+        jobId: view.jobId,
+        rating: reviewRating,
+        body: reviewBody.trim() || undefined,
+      });
+      toast.success("Thanks — your review is live");
+      setReviewBody("");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not submit review."));
     } finally {
       setBusy(false);
     }
@@ -1562,6 +1586,93 @@ export function MarketplaceOffersPane({
                       </button>
                     ) : null}
                   </div>
+                ) : null}
+
+                {jobDetail.review ? (
+                  <Section
+                    title={
+                      jobDetail.job.role === "buyer"
+                        ? "Your review"
+                        : "Buyer review"
+                    }
+                  >
+                    <div className="studio-admin-card">
+                      <div
+                        className="marketplace-offers-stars"
+                        aria-label={`${jobDetail.review.rating} out of 5 stars`}
+                      >
+                        {([1, 2, 3, 4, 5] as const).map((star) => (
+                          <Star
+                            key={star}
+                            className={`h-4 w-4${star <= jobDetail.review!.rating ? " is-filled" : ""}`}
+                            aria-hidden="true"
+                          />
+                        ))}
+                        <span className="marketplace-offers-bar-note">
+                          {jobDetail.review.rating}/5 · verified purchase
+                        </span>
+                      </div>
+                      {jobDetail.review.body ? (
+                        <p className="marketplace-offers-review-body">
+                          {jobDetail.review.body}
+                        </p>
+                      ) : (
+                        <p className="marketplace-offers-bar-note">
+                          No written review — stars only.
+                        </p>
+                      )}
+                    </div>
+                  </Section>
+                ) : null}
+
+                {jobDetail.canReview ? (
+                  <Section title="Leave a review">
+                    <div className="studio-admin-card">
+                      <p className="marketplace-offers-bar-note">
+                        Optional — only verified purchases can rate this service.
+                      </p>
+                      <div
+                        className="marketplace-offers-stars is-interactive"
+                        role="radiogroup"
+                        aria-label="Rating"
+                      >
+                        {([1, 2, 3, 4, 5] as const).map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            role="radio"
+                            aria-checked={reviewRating === star}
+                            aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                            className={
+                              star <= reviewRating ? "is-filled" : undefined
+                            }
+                            onClick={() => setReviewRating(star)}
+                          >
+                            <Star className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        ))}
+                      </div>
+                      <div className="marketplace-profile-fields">
+                        <IconTextarea
+                          icon={MessageSquare}
+                          value={reviewBody}
+                          onChange={(e) => setReviewBody(e.target.value)}
+                          placeholder="Written review (optional)"
+                          aria-label="Written review (optional)"
+                        />
+                      </div>
+                      <div className="marketplace-offers-actions">
+                        <button
+                          type="button"
+                          className="is-primary"
+                          disabled={busy}
+                          onClick={() => void handleSubmitReview()}
+                        >
+                          Submit review
+                        </button>
+                      </div>
+                    </div>
+                  </Section>
                 ) : null}
               </div>
             )

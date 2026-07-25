@@ -120,6 +120,47 @@ span.studio-admin-head-tab,
   text-decoration: none;
 }
 
+.marketplace-offers-stars {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--color-cursor-muted);
+}
+
+.marketplace-offers-stars .is-filled,
+.marketplace-offers-stars button.is-filled {
+  color: var(--cursor-accent);
+}
+
+.marketplace-offers-stars.is-interactive button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: transparent;
+  color: var(--color-cursor-muted);
+  cursor: pointer;
+}
+
+.marketplace-offers-stars.is-interactive button:hover,
+.marketplace-offers-stars.is-interactive button.is-filled {
+  color: var(--cursor-accent);
+  background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
+}
+
+.marketplace-offers-review-body {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* —— Package tiers editor —— */
 
 .marketplace-offers-packages {
