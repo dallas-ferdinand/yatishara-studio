@@ -16,10 +16,19 @@ function DocLink({ label, href }: { label: string; href?: string }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="cursor-settings-action"
+      className="studio-admin-kyc-doc"
     >
       {label}
     </a>
+  );
+}
+
+function KycLine({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <p className="studio-bank-row">
+      <span>{label}</span>
+      <strong>{value || "—"}</strong>
+    </p>
   );
 }
 
@@ -74,7 +83,10 @@ export function AdminMarketplacePane() {
     }
   }
 
+  const reviewSeller = sellers?.find((seller) => seller._id === reviewSellerId) ?? null;
+
   return (
+    <>
     <div className="flex flex-col gap-6">
       <section className="studio-admin-card studio-admin-table-card">
         <div className="studio-admin-table-head">
@@ -141,7 +153,7 @@ export function AdminMarketplacePane() {
                             )
                           }
                         >
-                          {reviewSellerId === seller._id ? "Hide docs" : "Review"}
+                          Review
                         </button>
                         {seller.status !== "approved" ? (
                           <button
@@ -175,64 +187,6 @@ export function AdminMarketplacePane() {
           ) : null}
         </div>
 
-        {reviewSellerId ? (
-          <div className="mt-4 rounded-xl border border-cursor-border-soft p-4">
-            {!application ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <div className="flex flex-col gap-3 text-sm">
-                <div>
-                  <p className="studio-admin-card-kicker">Application</p>
-                  <h4 className="m-0 text-base font-semibold">{application.businessName}</h4>
-                  <p className="m-0 text-cursor-muted">
-                    {application.entityType ?? "—"} · {application.legalName ?? "—"} ·{" "}
-                    {application.phone ?? "—"}
-                  </p>
-                </div>
-                {application.residentialAddress ? (
-                  <p className="m-0">
-                    <strong>Residential:</strong> {application.residentialAddress}
-                  </p>
-                ) : null}
-                {application.businessAddress ? (
-                  <p className="m-0">
-                    <strong>Business address:</strong> {application.businessAddress}
-                  </p>
-                ) : null}
-                {(application.businessRegistrationNumber || application.birNumber) && (
-                  <p className="m-0 text-cursor-muted">
-                    Reg: {application.businessRegistrationNumber ?? "—"} · BIR:{" "}
-                    {application.birNumber ?? "—"}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  <DocLink
-                    label={`ID 1 (${application.identityDoc1Kind?.replace(/_/g, " ") ?? "doc"})`}
-                    href={application.identityDoc1Url}
-                  />
-                  <DocLink label="ID 1 back" href={application.identityDoc1BackUrl} />
-                  <DocLink
-                    label={`ID 2 (${application.identityDoc2Kind?.replace(/_/g, " ") ?? "doc"})`}
-                    href={application.identityDoc2Url}
-                  />
-                  <DocLink label="ID 2 back" href={application.identityDoc2BackUrl} />
-                  <DocLink
-                    label="Residential address proof"
-                    href={application.proofOfResidentialAddressUrl}
-                  />
-                  <DocLink
-                    label="Business registration"
-                    href={application.businessRegistrationUrl}
-                  />
-                  <DocLink
-                    label="Business address proof"
-                    href={application.proofOfBusinessAddressUrl}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : null}
       </section>
 
       <section className="studio-admin-card studio-admin-table-card">
@@ -303,5 +257,99 @@ export function AdminMarketplacePane() {
         </div>
       </section>
     </div>
+
+    {reviewSellerId ? (
+      <>
+        <button
+          type="button"
+          className="studio-admin-payment-sidebar-backdrop"
+          onClick={() => setReviewSellerId(null)}
+          aria-label="Close application"
+        />
+        <aside className="studio-admin-payment-sidebar studio-admin-kyc-sidebar">
+          <header className="studio-admin-payment-sidebar-head">
+            <div>
+              <p className="studio-admin-card-kicker">Seller application</p>
+              <h3>{application?.businessName ?? reviewSeller?.businessName ?? "Review"}</h3>
+            </div>
+            <button
+              type="button"
+              className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
+              onClick={() => setReviewSellerId(null)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </header>
+
+          {!application ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <>
+              <div className="studio-admin-detail-list">
+                <KycLine label="Status" value={reviewSeller?.status} />
+                <KycLine label="Entity" value={application.entityType} />
+                <KycLine label="Legal name" value={application.legalName} />
+                <KycLine label="Phone" value={application.phone} />
+                <KycLine label="Residential" value={application.residentialAddress} />
+                <KycLine label="Business address" value={application.businessAddress} />
+                <KycLine label="Registration" value={application.businessRegistrationNumber} />
+                <KycLine label="BIR" value={application.birNumber} />
+              </div>
+
+              <div className="studio-admin-kyc-docs">
+                <p className="studio-admin-card-kicker">Documents</p>
+                <div className="studio-admin-kyc-doc-list">
+                  <DocLink
+                    label={`ID 1 (${application.identityDoc1Kind?.replace(/_/g, " ") ?? "doc"})`}
+                    href={application.identityDoc1Url}
+                  />
+                  <DocLink label="ID 1 back" href={application.identityDoc1BackUrl} />
+                  <DocLink
+                    label={`ID 2 (${application.identityDoc2Kind?.replace(/_/g, " ") ?? "doc"})`}
+                    href={application.identityDoc2Url}
+                  />
+                  <DocLink label="ID 2 back" href={application.identityDoc2BackUrl} />
+                  <DocLink
+                    label="Residential address proof"
+                    href={application.proofOfResidentialAddressUrl}
+                  />
+                  <DocLink
+                    label="Business registration"
+                    href={application.businessRegistrationUrl}
+                  />
+                  <DocLink
+                    label="Business address proof"
+                    href={application.proofOfBusinessAddressUrl}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <div className="studio-admin-detail-actions">
+            {reviewSeller?.status !== "approved" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setSeller(reviewSellerId, true)}
+              >
+                Approve seller
+              </button>
+            ) : null}
+            {reviewSeller?.status !== "suspended" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void setSeller(reviewSellerId, false)}
+              >
+                Suspend
+              </button>
+            ) : null}
+          </div>
+        </aside>
+      </>
+    ) : null}
+    </>
   );
 }
