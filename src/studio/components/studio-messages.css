@@ -1421,14 +1421,6 @@
   padding: 0 7px;
 }
 
-/* Peer sidebar Labels tab reuses the chat-list chip rail. */
-.studio-dm-peer-label-rail {
-  flex: 0 0 auto;
-  height: auto;
-  padding: 0;
-  flex-wrap: wrap;
-}
-
 .studio-dm-label-chip.is-add:hover {
   color: var(--color-cursor-text-bright, var(--mos-text));
 }

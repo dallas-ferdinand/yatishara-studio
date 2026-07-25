@@ -611,62 +611,64 @@ export function StudioDmPeerSidebar({
       ) : null}
 
       {tab === "labels" ? (
-        <div className="studio-dm-peer-stack">
-          <div className="studio-dm-label-rail studio-dm-peer-label-rail">
+        labelEditorOpen ? (
+          <StudioDmLabelEditorDialog
+            open
+            variant="inline"
+            onClose={() => setLabelEditorOpen(false)}
+          />
+        ) : (
+          <div className="studio-dm-peer-stack">
+            {panel === undefined ? (
+              <p className="studio-settings-empty">Loading…</p>
+            ) : panel === null ? (
+              <p className="studio-settings-empty">Profile unavailable.</p>
+            ) : panel.labels.length === 0 ? (
+              <p className="studio-settings-empty">
+                No labels yet. Create one to organize this chat.
+              </p>
+            ) : (
+              <ul className="studio-dm-assign-list">
+                {panel.labels.map((label) => {
+                  const Icon = dmLabelIcon(label.icon);
+                  const inputId = `dm-peer-label-${label.labelId}`;
+                  return (
+                    <li key={label.labelId}>
+                      <label
+                        htmlFor={inputId}
+                        className={`studio-dm-assign-row${label.assigned ? " is-on" : ""}`}
+                      >
+                        <span className="studio-dm-assign-icon" aria-hidden="true">
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="studio-dm-assign-name">
+                          {label.name}
+                        </span>
+                        <input
+                          id={inputId}
+                          type="checkbox"
+                          className="studio-dm-assign-checkbox"
+                          checked={label.assigned}
+                          onChange={() =>
+                            void handleToggleLabel(label.labelId, label.assigned)
+                          }
+                        />
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
             <button
               type="button"
-              className="studio-dm-label-chip is-add"
+              className="cursor-settings-action"
               onClick={() => setLabelEditorOpen(true)}
-              aria-label="Create label"
             >
-              <Plus aria-hidden="true" />
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               <span>New label</span>
             </button>
           </div>
-          {panel === undefined ? (
-            <p className="studio-settings-empty">Loading…</p>
-          ) : panel === null ? (
-            <p className="studio-settings-empty">Profile unavailable.</p>
-          ) : panel.labels.length === 0 ? (
-            <p className="studio-settings-empty">
-              No labels yet. Create one to organize this chat.
-            </p>
-          ) : (
-            <ul className="studio-dm-assign-list">
-              {panel.labels.map((label) => {
-                const Icon = dmLabelIcon(label.icon);
-                const inputId = `dm-peer-label-${label.labelId}`;
-                return (
-                  <li key={label.labelId}>
-                    <label
-                      htmlFor={inputId}
-                      className={`studio-dm-assign-row${label.assigned ? " is-on" : ""}`}
-                    >
-                      <span className="studio-dm-assign-icon" aria-hidden="true">
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="studio-dm-assign-name">{label.name}</span>
-                      <input
-                        id={inputId}
-                        type="checkbox"
-                        className="studio-dm-assign-checkbox"
-                        checked={label.assigned}
-                        onChange={() =>
-                          void handleToggleLabel(label.labelId, label.assigned)
-                        }
-                      />
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <StudioDmLabelEditorDialog
-            open={labelEditorOpen}
-            variant="modal"
-            onClose={() => setLabelEditorOpen(false)}
-          />
-        </div>
+        )
       ) : null}
 
       {tab === "about" ? (
