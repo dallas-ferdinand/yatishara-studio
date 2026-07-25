@@ -1,19 +1,12 @@
-import type { Metadata } from "next";
-import { PublicOfferDetail } from "@/studio/components/PublicOffersPages";
+import { redirect } from "next/navigation";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+/** Legacy path — permanent home is /creative-network/[slug]/. */
+export default async function OfferSlugRedirectPage({ params }: PageProps) {
   const { slug } = await params;
-  return {
-    title: `${slug} · Creative Network · Yatishara Studio`,
-    description: "Book a creative service from a verified creator on Yatishara Studio",
-  };
-}
-
-export default async function OfferDetailPage({ params }: PageProps) {
-  const { slug } = await params;
-  return <PublicOfferDetail slug={slug?.trim().toLowerCase() || ""} />;
+  const clean = slug?.trim().toLowerCase() || "";
+  redirect(clean ? `/creative-network/${clean}/` : "/creative-network/");
 }

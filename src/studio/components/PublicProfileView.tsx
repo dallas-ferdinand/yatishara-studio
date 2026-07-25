@@ -259,7 +259,7 @@ export function PublicProfileView({
             {showOffersLink ? (
               <p className="mt-2">
                 <a
-                  href={`/offers?u=${encodeURIComponent(profile.username)}`}
+                  href={`/creative-network/?u=${encodeURIComponent(profile.username)}`}
                   className="public-profile-follow"
                   style={{ display: "inline-flex", textDecoration: "none", alignItems: "center", gap: 6 }}
                 >

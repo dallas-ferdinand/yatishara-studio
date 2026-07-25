@@ -22,6 +22,20 @@ const nextConfig: NextConfig = {
   output: "standalone",
   trailingSlash: true,
   allowedDevOrigins: ["preview.studio.yatishara.com"],
+  async redirects() {
+    return [
+      {
+        source: "/offers",
+        destination: "/creative-network/",
+        permanent: true,
+      },
+      {
+        source: "/offers/:slug",
+        destination: "/creative-network/:slug/",
+        permanent: true,
+      },
+    ];
+  },
   async headers() {
     // Order matters: first matching source wins in Next.js.
     return [

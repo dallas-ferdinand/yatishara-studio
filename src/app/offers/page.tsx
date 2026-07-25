@@ -1,11 +1,19 @@
-import type { Metadata } from "next";
-import { PublicOffersCatalog } from "@/studio/components/PublicOffersPages";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Creative Network · Yatishara Studio",
-  description: "Creative services from verified creators on Yatishara Studio",
+type PageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default function OffersPage() {
-  return <PublicOffersCatalog />;
+/** Legacy path — permanent home is /creative-network/. */
+export default async function OffersRedirectPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") query.set(key, value);
+    else if (Array.isArray(value)) {
+      for (const item of value) query.append(key, item);
+    }
+  }
+  const qs = query.toString();
+  redirect(qs ? `/creative-network/?${qs}` : "/creative-network/");
 }

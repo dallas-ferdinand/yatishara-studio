@@ -596,12 +596,12 @@ export function MarketplaceOffersPane({
                             </td>
                             <td>
                               <a
-                                href={`/offers/${offer.slug}`}
+                                href={`/creative-network/${offer.slug}/`}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(event) => event.stopPropagation()}
                               >
-                                /offers/{offer.slug}
+                                /creative-network/{offer.slug}/
                               </a>
                             </td>
                           </tr>
@@ -806,11 +806,11 @@ export function MarketplaceOffersPane({
                 <div className="studio-admin-card">
                   <p className="marketplace-offers-link">
                     <a
-                      href={`/offers/${selectedOffer.slug}`}
+                      href={`/creative-network/${selectedOffer.slug}/`}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      /offers/{selectedOffer.slug}
+                      /creative-network/{selectedOffer.slug}/
                     </a>
                   </p>
                   <div className="marketplace-profile-fields">
