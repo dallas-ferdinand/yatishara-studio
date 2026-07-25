@@ -97,6 +97,9 @@
   --desk-chat-thread-max: var(--desk-composer-max);
   --cursor-unified-tab-width: 168px;
 }
+[data-appearance="light"] {
+  --cursor-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
 
 .cursor-panel-head {
   display: flex;
@@ -635,8 +638,8 @@ select.cursor-select:focus {
   padding: 4px;
   border-radius: var(--cursor-radius-sm);
   border: none;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  box-shadow: none;
+  background: var(--mos-plate, var(--mos-bg));
+  box-shadow: var(--cursor-shadow-pop);
 }
 
 .cursor-tree-empty-area {
@@ -4644,19 +4647,19 @@ select.cursor-select:focus {
   left: 0;
   margin-bottom: 4px;
   min-width: 120px;
-  /* Flat darker plate — no stroke, no pop shadow. */
-  background: var(--mos-plate-strong, var(--mos-raised));
+  /* Second-level plate fill, no stroke — lift with shadow. */
+  background: var(--mos-plate, var(--mos-bg));
   border: none;
   border-radius: var(--cursor-radius-md);
   padding: 4px;
   z-index: 30;
-  box-shadow: none;
+  box-shadow: var(--cursor-shadow-pop);
 }
 .cursor-tab-context-menu,
 .desk-explorer-view-dropdown {
-  background: var(--mos-plate-strong, var(--mos-raised));
+  background: var(--mos-plate, var(--mos-bg));
   border: none;
-  box-shadow: none;
+  box-shadow: var(--cursor-shadow-pop);
 }
 .cursor-dropdown.cursor-dropdown-down {
   top: calc(100% + 4px);
@@ -4699,7 +4702,7 @@ select.cursor-select:focus {
   padding: 0 6px 0 8px;
   border: none;
   border-radius: var(--cursor-radius-sm);
-  /* Flat darker chip — same family as the open menu. */
+  /* Darker than second-level plate (--mos-plate). */
   background: var(--mos-plate-strong, var(--mos-raised));
   color: var(--color-cursor-text);
   font: inherit;
@@ -4739,9 +4742,9 @@ select.cursor-select:focus {
 .cursor-select-menu .cursor-dropdown {
   min-width: 148px;
   z-index: 60;
-  background: var(--mos-plate-strong, var(--mos-raised));
+  background: var(--mos-plate, var(--mos-bg));
   border: none;
-  box-shadow: none;
+  box-shadow: var(--cursor-shadow-pop);
 }
 /* Field variant (forms / sidebars) — same flat darker fill, taller. */
 .cursor-select-menu.is-field {
@@ -4780,7 +4783,7 @@ select.cursor-select:focus {
 }
 .cursor-dropdown-item:hover,
 .cursor-dropdown-item.active {
-  background: var(--mos-active, var(--color-cursor-active));
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-hover)));
 }
 .cursor-dropdown-item.muted {
   color: var(--color-cursor-muted);
@@ -7783,8 +7786,8 @@ textarea.cursor-input {
   padding: 4px;
   border: none;
   border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised));
-  box-shadow: none;
+  background: var(--mos-plate, var(--mos-bg));
+  box-shadow: var(--cursor-shadow-pop);
 }
 .cursor-tab-context-item {
   display: block;

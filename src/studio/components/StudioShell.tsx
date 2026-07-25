@@ -6838,13 +6838,18 @@ export function StudioShell({
         .cursor-unified-tab-ghost svg {
           color: var(--cursor-accent-hover, var(--cursor-accent)) !important;
         }
-        .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
+        /* Menus: fill + shadow only — no stroke / hairline ring. */
+        .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown) {
+          border: none;
+          box-shadow: var(--cursor-shadow-pop);
+        }
+        .studio-polish .cursor-settings-panel {
           border-color: var(--color-cursor-border, var(--mos-border));
           box-shadow:
             0 18px 50px color-mix(in srgb, #000 22%, transparent),
             0 0 0 1px var(--color-cursor-border-soft, var(--mos-border-soft));
         }
-        [data-appearance="light"] .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
+        [data-appearance="light"] .studio-polish .cursor-settings-panel {
           box-shadow: 0 12px 28px color-mix(in srgb, #000 10%, transparent);
         }
         .studio-polish .cursor-settings-backdrop {

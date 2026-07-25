@@ -38,8 +38,8 @@ Three chrome roles, lightest → darkest. Applied to `:root` by the theme engine
 | Token | Role | Light | Dark |
 |---|---|---|---|
 | `--mos-page` | App canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
-| `--mos-plate` | Cards, tables, section bars | `#ececf0` | `mix(page, panel)` |
-| `--mos-plate-strong` | **Selects, open dropdown panels**, empty icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
+| `--mos-plate` | Cards, tables, section bars, **open dropdown menus** | `#ececf0` | `mix(page, panel)` |
+| `--mos-plate-strong` | **Select buttons** (darker than plate), empty icon chips, menu item hover | `#e1e1e7` | `deepen(scheme.raised)` |
 
 Supporting tokens (also both modes):
 
@@ -55,16 +55,17 @@ Supporting tokens (also both modes):
 
 ```css
 .app-canvas       { background: var(--mos-page); }
-.card, .table-wrap, .section-bar { background: var(--mos-plate); }
-.select-trigger, .dropdown-panel,
-.empty-icon-chip  { background: var(--mos-plate-strong); }
-.menu-item:hover, .menu-item.active { background: var(--mos-active); }
+.card, .table-wrap, .section-bar,
+.dropdown-panel   { background: var(--mos-plate); }       /* + shadow, no border */
+.select-trigger, .empty-icon-chip,
+.menu-item:hover  { background: var(--mos-plate-strong); } /* darker than plate */
 ```
 
 ### Select / dropdown (locked decision)
 
-- **Trigger + open menu panel** → flat `--mos-plate-strong`, **no border, no shadow**.
-- **Menu item hover / active** → `--mos-active` (one step darker than the panel).
+- **Open menu panel** → `--mos-plate` fill, **no border**, **with** `var(--cursor-shadow-pop)`.
+- **Trigger / button** → `--mos-plate-strong` (darker than second-level plate), no border.
+- **Menu item hover / active** → `--mos-plate-strong`.
 - **Caret icon** → Lucide `ArrowDown` (same as StudioShell / profile chrome). **Not**
   `Icon name="chevDown"` / chevron.
 
@@ -168,8 +169,8 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 | Class | Purpose | Key shades |
 |---|---|---|
-| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate-strong` (no border/shadow), item hover `--mos-active` |
-| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate-strong`, no border/shadow |
+| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate` + shadow, no border; item hover `--mos-plate-strong` |
+| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate` + shadow, no border |
 | `.cursor-settings-action` | Standard button/action | border-soft, hover `--color-cursor-hover` |
 | `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
 | `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
@@ -200,8 +201,9 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 **Don't**
 - Hardcode light-only greys (`#ececf0`, `#e1e1e7`, `#f5f5f7`) behind `[data-appearance="light"]`.
 - Hardcode `#fff`/`#000` borders on glass or chrome.
-- Put a stroke or pop-shadow on dropdown menus (they are flat).
+- Put a stroke/border on dropdown menus (fill + shadow only).
 - Use `Icon name="chevDown"` on selects.
+- Make the select button the same grey as `--mos-plate` (it must read darker).
 - Use `cursor-select` as the CursorSelect root.
 - Put table wraps on `--mos-plate-strong` (that's for chips/menus, not the plate).
 

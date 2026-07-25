@@ -16,7 +16,8 @@ and the shared components (`CursorSelect`, `CursorTable`).
 **When a design pattern solidifies** (Dallas confirms a shade/border/component choice),
 update `docs/DESIGN_SYSTEM.md` **and** MercuryOS memory in the same turn — do not leave
 docs/memory stale. Never bake light-only greys or hardcoded `#fff`/`#000` borders into
-chrome. Dropdowns: flat `--mos-plate-strong`, no border; caret = Lucide `ArrowDown`.
+chrome. Dropdowns: panel `--mos-plate` + shadow, no border; button `--mos-plate-strong`
+(darker than plate); caret = Lucide `ArrowDown`.
 
 ## Micro-commits (mandatory)
 
