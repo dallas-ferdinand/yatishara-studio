@@ -1155,13 +1155,27 @@
     display: none;
   }
 
-  /* Value props → centered inline title chips (no long copy) */
+  /* Value props → single-row chips; overflow scrolls horizontally */
   .public-offers-values {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
     align-items: center;
     gap: 8px;
+    margin: 0 -12px;
+    padding: 0 12px 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .public-offers-values::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .public-offers-value {

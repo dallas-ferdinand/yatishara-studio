@@ -10,11 +10,14 @@ import {
   BadgeCheck,
   CalendarDays,
   Clock,
+  Handshake,
   ListFilter,
+  MessageSquareText,
   PackageCheck,
   PackageSearch,
   Search,
   ShieldCheck,
+  Sparkles,
   Store,
   Timer,
   Wallet,
@@ -174,6 +177,21 @@ const VALUE_PROPS = [
     icon: PackageCheck,
     title: "Clear delivery",
     copy: "Every package has a defined timeline and a tracked handover in Studio.",
+  },
+  {
+    icon: Handshake,
+    title: "Work with, not for",
+    copy: "Book partners for scoped work — collaborative, not a freelance bidding board.",
+  },
+  {
+    icon: MessageSquareText,
+    title: "Direct in Studio",
+    copy: "Briefs, revisions, and delivery stay inside Studio instead of scattered chats.",
+  },
+  {
+    icon: Sparkles,
+    title: "Curated quality",
+    copy: "Packages are reviewed before they go live so the catalog stays high-signal.",
   },
 ] as const;
 
