@@ -220,6 +220,22 @@
   color: var(--cursor-accent, var(--mos-accent));
 }
 
+/*
+ * Studio polish forces button:hover svg → text-bright !important.
+ * Keep receipt ticks stable on chat-row hover / active.
+ */
+.studio-polish .studio-dm-row:hover .studio-dm-ticks,
+.studio-polish .studio-dm-row.is-active .studio-dm-ticks,
+.studio-polish .studio-dm-row:hover .studio-dm-ticks.is-delivered,
+.studio-polish .studio-dm-row.is-active .studio-dm-ticks.is-delivered {
+  color: var(--color-cursor-muted, var(--mos-muted)) !important;
+}
+
+.studio-polish .studio-dm-row:hover .studio-dm-ticks.is-read,
+.studio-polish .studio-dm-row.is-active .studio-dm-ticks.is-read {
+  color: var(--cursor-accent, var(--mos-accent)) !important;
+}
+
 .studio-dm-row-preview .studio-dm-ticks {
   width: 13px;
   height: 13px;
