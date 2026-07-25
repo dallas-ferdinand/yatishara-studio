@@ -115,7 +115,7 @@ function MetricCard({
 
 export function MarketplaceOffersPane({
   onOpenCredits,
-  creditPriceCents = 50,
+  creditPriceCents: _creditPriceCents = 50,
 }: MarketplaceOffersPaneProps) {
   const [view, setView] = useState<View>({ kind: "home" });
   const [homeTab, setHomeTab] = useState<HomeTab>("offers");
@@ -620,7 +620,7 @@ export function MarketplaceOffersPane({
                 <MetricCard
                   label="Open"
                   value={openJobs}
-                  body="Credits held in escrow until the work is accepted."
+                  body="Payment held until the work is accepted."
                 />
                 <MetricCard
                   label="Delivered"
@@ -654,7 +654,7 @@ export function MarketplaceOffersPane({
                       onClick={onOpenCredits}
                     >
                       <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
-                      Credits
+                      Balance
                     </button>
                   </>
                 }
@@ -689,7 +689,7 @@ export function MarketplaceOffersPane({
                           >
                             <td>
                               <strong>{job.offerTitle}</strong>
-                              <span>{job.priceCredits} credits held</span>
+                              <span>{formatTtdCents(job.priceCents)} held</span>
                             </td>
                             <td>
                               {job._role === "sell" ? "Selling" : "Buying"}
@@ -971,13 +971,8 @@ export function MarketplaceOffersPane({
                     body={
                       jobDetail.job.role === "seller"
                         ? "Released to you on acceptance."
-                        : "Held in escrow until you accept."
+                        : "Held until you accept delivery."
                     }
-                  />
-                  <MetricCard
-                    label="Credits held"
-                    value={jobDetail.job.priceCredits}
-                    body={`Valued at ${creditPriceCents}¢ per credit.`}
                   />
                   <MetricCard
                     label="Booked"

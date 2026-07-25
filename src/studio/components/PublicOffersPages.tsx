@@ -32,7 +32,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { formatTtdCents } from "@/studio/lib/money";
+import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
 import "./public-offers.css";
 
 function OffersSidebarBrand() {
@@ -169,8 +169,8 @@ const VALUE_PROPS = [
   },
   {
     icon: ShieldCheck,
-    title: "Your credits are safe",
-    copy: "Payment is held in escrow and only releases when you approve the delivery.",
+    title: "Your payment is safe",
+    copy: "Funds are held until you approve the delivery — then the creator is paid.",
   },
   {
     icon: PackageCheck,
@@ -723,7 +723,7 @@ function OffersCatalogInner() {
               <div className="public-offers-hero-copy">
                 <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
                 <p>
-                  Work with verified creative partners. Credits stay secure until
+                  Work with verified creative partners. Payment stays secure until
                   you accept the delivery.
                 </p>
               </div>
@@ -921,18 +921,18 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
     setBusy(true);
     try {
       if (quote && quote.shortfallCredits > 0) {
-        toast.message("Top up credits to book this offer");
+        toast.message("Top up your balance to book this package");
         router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
         return;
       }
       const result = await book({ offerId });
-      toast.success("Job booked — escrow held");
+      toast.success("Job booked — payment held until you accept delivery");
       router.push(`/?next=${encodeURIComponent("/")}&offers=1`);
       void result;
     } catch (error) {
       const msg = friendlyConvexError(error, "Could not book offer.");
       if (/Insufficient credits/i.test(msg)) {
-        toast.message("Top up credits to book this offer");
+        toast.message("Top up your balance to book this package");
         router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
       } else {
         toast.error(msg);
@@ -952,12 +952,8 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
             <dd>{formatTtdCents(quote.priceCents)}</dd>
           </div>
           <div className="public-offers-row">
-            <dt>Credits</dt>
-            <dd>{quote.priceCredits}</dd>
-          </div>
-          <div className="public-offers-row">
             <dt>Your balance</dt>
-            <dd>{quote.creditBalance}</dd>
+            <dd>{formatTtdFromCredits(quote.creditBalance, quote.creditPriceCents)}</dd>
           </div>
         </dl>
       ) : null}
@@ -972,8 +968,8 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
       </button>
       <p className="public-offers-note">
         {quote && quote.shortfallCredits > 0
-          ? `You need ${quote.shortfallCredits} more credits to book this package.`
-          : "Credits are held in escrow and only released once you accept the delivery."}
+          ? `You need ${formatTtdFromCredits(quote.shortfallCredits, quote.creditPriceCents)} more to book this package.`
+          : "Payment is held until you accept the delivery."}
       </p>
     </section>
   );
@@ -1067,7 +1063,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
                 <section className="public-offers-panel">
                   <h2>Booking</h2>
                   <p className="public-offers-note">
-                    Sign in to your Studio account to book this package with credits.
+                    Sign in to your Studio account to book this package in TTD.
                   </p>
                   <a
                     href={`/?next=${encodeURIComponent(`/creative-network/${offer.slug}/`)}`}
