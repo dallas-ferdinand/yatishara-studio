@@ -6,11 +6,9 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
-  DISPLAY_NAME_MAX,
   USERNAME_MAX,
   USERNAME_MIN,
   isReservedUsername,
-  sanitizeDisplayName,
   validateUsername,
 } from "./profileIdentity";
 
@@ -21,6 +19,48 @@ export type HandleSourceUser = {
   email?: string;
   phone?: string;
 };
+
+export type PublicNameUser = {
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+};
+
+export type PublicNameSeller = {
+  status: string;
+  businessName: string;
+};
+
+/** Account first + last (preferred) or legacy single name. */
+export function accountNameFromUser(user: PublicNameUser | null | undefined): string | undefined {
+  const first = user?.firstName?.trim();
+  const last = user?.lastName?.trim();
+  if (first && last) return `${first} ${last}`;
+  if (first) return first;
+  if (last) return last;
+  const legacy = user?.name?.trim();
+  return legacy || undefined;
+}
+
+/**
+ * Public label for profiles / feed / People.
+ * Verified seller trading name only when opted in; otherwise first+last.
+ */
+export function resolvePublicDisplayName(args: {
+  username: string;
+  useSellerDisplayName?: boolean;
+  user?: PublicNameUser | null;
+  seller?: PublicNameSeller | null;
+}): string {
+  if (
+    args.useSellerDisplayName &&
+    args.seller?.status === "approved"
+  ) {
+    const business = args.seller.businessName.trim();
+    if (business) return business;
+  }
+  return accountNameFromUser(args.user) || args.username;
+}
 
 /** Turn arbitrary text into a username-shaped slug, or null if unusable. */
 export function slugifyHandle(raw: string): string | null {
@@ -131,21 +171,6 @@ export async function allocateUniqueUsername(
   return validateUsername(`u${Date.now().toString(36)}`);
 }
 
-function displayNameFromUser(user: HandleSourceUser): string | undefined {
-  const fromAccount = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
-  try {
-    return (
-      sanitizeDisplayName(fromAccount || undefined) ??
-      sanitizeDisplayName(user.name?.trim() || undefined)
-    );
-  } catch {
-    // Over-long names: soft truncate without failing profile creation.
-    const raw = (fromAccount || user.name || "").trim().replace(/\s+/g, " ");
-    if (!raw) return undefined;
-    return raw.slice(0, DISPLAY_NAME_MAX);
-  }
-}
-
 /** Idempotent: return existing profile or create one with a unique auto username. */
 export async function ensureProfileForUser(
   ctx: MutationCtx,
@@ -171,7 +196,7 @@ export async function ensureProfileForUser(
   const profileId = await ctx.db.insert("profiles", {
     userId,
     username,
-    displayName: displayNameFromUser(user),
+    // Public name is resolved live from users / seller — do not store freeform displayName.
     bio: undefined,
     avatarAssetId: undefined,
     contactLinks: [],

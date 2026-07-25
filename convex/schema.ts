@@ -982,7 +982,13 @@ export default defineSchema({
     userId: v.id("users"),
     /** Unique browser-friendly handle, stored lowercase. */
     username: v.string(),
+    /** @deprecated Legacy freeform label — public reads ignore this. */
     displayName: v.optional(v.string()),
+    /**
+     * When true and the user is an approved marketplace seller, public name
+     * uses KYC businessName / trading name instead of account first+last.
+     */
+    useSellerDisplayName: v.optional(v.boolean()),
     bio: v.optional(v.string()),
     avatarAssetId: v.optional(v.id("assets")),
     /** Public contact / social links shown on the profile. */
