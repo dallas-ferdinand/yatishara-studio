@@ -615,7 +615,7 @@ function writePersistedTabSession(session) {
     const activeTab =
       typeof session?.activeTab === "string" && openTabs.includes(session.activeTab)
         ? session.activeTab
-        : openTabs[openTabs.length - 1] || COMPOSER_TAB;
+        : openTabs[openTabs.length - 1] || "";
     window.localStorage.setItem(
       STUDIO_OPEN_TABS_KEY,
       JSON.stringify({
@@ -913,9 +913,13 @@ export function StudioShell({
     if (isVideoEditorPreviewEnabled()) return;
     setOpenTabs((tabs) => {
       const next = tabs.filter((tab) => !isVideoEditTabKey(tab));
-      return next.length === tabs.length ? tabs : next.length ? next : [COMPOSER_TAB];
+      if (next.length === tabs.length) return tabs;
+      setActiveTab((tab) => {
+        if (!isVideoEditTabKey(tab)) return tab;
+        return next[next.length - 1] || "";
+      });
+      return next;
     });
-    setActiveTab((tab) => (isVideoEditTabKey(tab) ? COMPOSER_TAB : tab));
     setTabEntrySnapshots((snapshots) => {
       const keys = Object.keys(snapshots).filter(isVideoEditTabKey);
       if (!keys.length) return snapshots;
@@ -3038,15 +3042,12 @@ export function StudioShell({
       delete composerContextsRef.current[key];
       writePersistedComposerContexts(composerContextsRef.current);
     }
-    setOpenTabs((tabs) => {
-      const remaining = tabs.filter((tab) => tab !== key);
-      return remaining.length ? remaining : [COMPOSER_TAB];
-    });
+    setOpenTabs((tabs) => tabs.filter((tab) => tab !== key));
     if (activeTab === key) {
       setActiveTab((tab) => {
         if (tab !== key) return tab;
         const remaining = openTabs.filter((item) => item !== key);
-        return remaining.length ? remaining[remaining.length - 1] : COMPOSER_TAB;
+        return remaining.length ? remaining[remaining.length - 1] : "";
       });
     }
   }
@@ -3371,10 +3372,7 @@ export function StudioShell({
       return;
     }
     if (action === "close-others") {
-      setOpenTabs((tabs) => {
-        const next = tabs.includes(tab.key) ? [tab.key] : tabs.slice(0, 1);
-        return next.length ? next : [COMPOSER_TAB];
-      });
+      setOpenTabs((tabs) => (tabs.includes(tab.key) ? [tab.key] : tabs.slice(0, 1)));
       setActiveTab(tab.key);
       return;
     }
@@ -9301,12 +9299,8 @@ export function StudioShell({
           position: relative;
           border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
-          background: var(--cursor-surface-raised);
+          background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
           padding: 12px;
-        }
-        [data-appearance="light"] .studio-plan-card,
-        [data-appearance="light"] .studio-bank-card {
-          background: var(--mos-bg, #ececf0);
         }
         .studio-plan-card.is-featured {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
@@ -9347,21 +9341,17 @@ export function StudioShell({
           font-size: 12px;
           color: var(--color-cursor-muted);
         }
-        /* Flat opaque plate — theme bg token (no wallpaper / glass wash). */
+        /* Flat opaque plate — theme page token (no wallpaper / glass wash). */
         .studio-admin-panel {
           display: flex;
           flex-direction: column;
           height: 100%;
           min-height: 0;
           width: 100%;
-          background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           isolation: isolate;
-        }
-        /* Light: page = lighter system grey; containers = darker plate. */
-        [data-appearance="light"] .studio-admin-panel {
-          background: var(--mos-panel, #f5f5f7);
         }
         /* Secondary header — same height/chrome as the workspace head. */
         .studio-admin-head {
@@ -13231,13 +13221,8 @@ export function StudioShell({
           position: relative;
           border-radius: var(--cursor-radius-lg, 10px);
           border: 1px solid var(--color-cursor-border);
-          background: var(--cursor-surface-raised);
+          background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
           padding: 12px 14px;
-        }
-        [data-appearance="light"] .studio-price-card,
-        [data-appearance="light"] .studio-bank-card,
-        [data-appearance="light"] .studio-admin-card {
-          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-section {
           display: grid;
@@ -13255,12 +13240,9 @@ export function StudioShell({
           padding: 0 12px;
           border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-sm, 6px);
-          background: var(--cursor-surface-raised);
+          background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
           box-sizing: border-box;
           line-height: 1;
-        }
-        [data-appearance="light"] .studio-admin-section-head {
-          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-section-title {
           min-width: 0;

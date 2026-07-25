@@ -635,7 +635,7 @@ select.cursor-select:focus {
   padding: 4px;
   border-radius: var(--cursor-radius-sm);
   border: 1px solid var(--color-cursor-border);
-  background: var(--color-cursor-sidebar);
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
@@ -4644,18 +4644,16 @@ select.cursor-select:focus {
   left: 0;
   margin-bottom: 4px;
   min-width: 120px;
-  background: var(--cursor-surface-overlay);
+  background: var(--mos-plate-strong, var(--mos-raised, var(--cursor-surface-overlay)));
   border: 1px solid var(--cursor-border-subtle);
   border-radius: var(--cursor-radius-md);
   padding: 4px;
   z-index: 30;
   box-shadow: var(--cursor-shadow-pop);
 }
-[data-appearance="light"] .cursor-dropdown,
-[data-appearance="light"] .cursor-tab-context-menu,
-[data-appearance="light"] .desk-explorer-view-dropdown {
-  /* Darker plate than page/panel so menus read as overlays. */
-  background: var(--mos-raised, #e1e1e7);
+.cursor-tab-context-menu,
+.desk-explorer-view-dropdown {
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
 }
 .cursor-dropdown.cursor-dropdown-down {
   top: calc(100% + 4px);
@@ -4728,16 +4726,8 @@ select.cursor-select:focus {
 .cursor-select-menu .cursor-dropdown {
   min-width: 148px;
   z-index: 60;
-  background: var(--color-cursor-sidebar, var(--cursor-surface-overlay));
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
   border-color: var(--color-cursor-border);
-}
-[data-appearance="light"] .cursor-select-trigger:hover,
-[data-appearance="light"] .cursor-select-menu.is-open .cursor-select-trigger {
-  background: rgba(0, 0, 0, 0.06);
-}
-[data-appearance="light"] .cursor-select-menu .cursor-dropdown {
-  background: var(--mos-raised, #e1e1e7);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 /* Bordered field variant (forms / sidebars). */
 .cursor-select-menu.is-field {
@@ -4750,19 +4740,13 @@ select.cursor-select:focus {
   justify-content: space-between;
   padding: 0 8px 0 12px;
   border-color: var(--color-cursor-border);
-  background: transparent;
+  background: var(--mos-plate-strong, var(--mos-raised));
   font-size: 13px;
-}
-[data-appearance="light"] .cursor-select-menu.is-field .cursor-select-trigger {
-  background: var(--mos-raised, #e1e1e7);
 }
 .cursor-select-menu.is-field .cursor-select-trigger:hover,
 .cursor-select-menu.is-field.is-open .cursor-select-trigger {
   border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
-}
-[data-appearance="light"] .cursor-select-menu.is-field .cursor-select-trigger:hover,
-[data-appearance="light"] .cursor-select-menu.is-field.is-open .cursor-select-trigger {
-  background: var(--mos-active, #dadadf);
+  background: var(--mos-active, var(--color-cursor-active));
 }
 .cursor-dropdown-item {
   display: flex;
@@ -4804,14 +4788,8 @@ select.cursor-select:focus {
   overflow: auto;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-radius: var(--cursor-radius-lg, 10px);
-  background: var(--cursor-surface-raised);
+  background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
   min-height: 0;
-}
-
-[data-appearance="light"] .cursor-table-wrap,
-[data-appearance="light"] .studio-admin-table-wrap {
-  /* Match other admin plates — mos-bg, not the darker raised tile grey. */
-  background: var(--mos-bg, #ececf0);
 }
 
 .cursor-table,
@@ -7779,7 +7757,7 @@ textarea.cursor-input {
   padding: 4px;
   border: 1px solid var(--color-cursor-border);
   border-radius: 8px;
-  background: var(--color-cursor-surface-raised, var(--color-cursor-sidebar));
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 .cursor-tab-context-item {
