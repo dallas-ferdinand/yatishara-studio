@@ -516,7 +516,8 @@
   color: var(--color-cursor-muted);
   margin-bottom: 6px;
 }
-.cursor-select {
+/* Native <select> only — do not style the CursorSelect menu wrapper. */
+select.cursor-select {
   width: 100%;
   padding: 6px 8px;
   border-radius: var(--cursor-radius-sm);
@@ -527,7 +528,7 @@
   font-family: inherit;
   outline: none;
 }
-.cursor-select:focus {
+select.cursor-select:focus {
   border-color: var(--cursor-border-focus);
 }
 .cursor-settings-meta {
@@ -4672,23 +4673,27 @@
   overflow-y: auto;
 }
 
-/* Reusable compact select (admin filters, chrome extras). */
-.cursor-select {
+/* Reusable compact select menu (admin filters, chrome extras). */
+.cursor-select-menu {
   position: relative;
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 .cursor-select-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
+  gap: 5px;
+  height: 24px;
   min-width: 0;
-  max-width: 160px;
+  max-width: 140px;
   margin: 0;
-  padding: 0 6px 0 9px;
-  border: 1px solid var(--color-cursor-border);
+  padding: 0 4px 0 8px;
+  border: 1px solid transparent;
   border-radius: var(--cursor-radius-sm);
   background: transparent;
   color: var(--color-cursor-text);
@@ -4704,9 +4709,8 @@
     color var(--cursor-ease);
 }
 .cursor-select-trigger:hover,
-.cursor-select.is-open .cursor-select-trigger {
-  border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
-  background: var(--color-cursor-surface-hover, rgba(127, 127, 127, 0.08));
+.cursor-select-menu.is-open .cursor-select-trigger {
+  background: var(--color-cursor-hover, rgba(127, 127, 127, 0.1));
   color: var(--color-cursor-text-bright);
 }
 .cursor-select-trigger:disabled {
@@ -4718,19 +4722,37 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cursor-select .cursor-dropdown {
+.cursor-select-menu .cursor-dropdown {
   min-width: 148px;
   z-index: 60;
   background: var(--color-cursor-sidebar, var(--cursor-surface-overlay));
   border-color: var(--color-cursor-border);
 }
 [data-appearance="light"] .cursor-select-trigger:hover,
-[data-appearance="light"] .cursor-select.is-open .cursor-select-trigger {
-  background: rgba(0, 0, 0, 0.05);
+[data-appearance="light"] .cursor-select-menu.is-open .cursor-select-trigger {
+  background: rgba(0, 0, 0, 0.06);
 }
-[data-appearance="light"] .cursor-select .cursor-dropdown {
+[data-appearance="light"] .cursor-select-menu .cursor-dropdown {
   background: var(--mos-panel, #f5f5f7);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+/* Bordered field variant (forms / sidebars). */
+.cursor-select-menu.is-field {
+  width: 100%;
+}
+.cursor-select-menu.is-field .cursor-select-trigger {
+  width: 100%;
+  max-width: none;
+  height: 34px;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
+  border-color: var(--color-cursor-border);
+  background: transparent;
+  font-size: 13px;
+}
+.cursor-select-menu.is-field .cursor-select-trigger:hover,
+.cursor-select-menu.is-field.is-open .cursor-select-trigger {
+  border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
 }
 .cursor-dropdown-item {
   display: flex;

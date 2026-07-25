@@ -9286,7 +9286,7 @@ export function StudioShell({
         .studio-plan-card,
         .studio-bank-card {
           position: relative;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
           padding: 12px;
@@ -13193,7 +13193,7 @@ export function StudioShell({
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
           padding: 14px;
@@ -13225,7 +13225,7 @@ export function StudioShell({
         .studio-admin-card {
           position: relative;
           border-radius: var(--cursor-radius-lg, 10px);
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           background: var(--cursor-surface-raised);
           padding: 12px 14px;
         }
@@ -13328,18 +13328,12 @@ export function StudioShell({
           text-transform: uppercase;
           letter-spacing: 0.06em;
         }
-        .studio-admin-status-field .cursor-select {
+        .studio-admin-status-field .cursor-select-menu {
           width: 100%;
         }
         .studio-admin-status-field .cursor-select-trigger {
-          width: 100%;
-          max-width: none;
-          height: 34px;
-          justify-content: space-between;
-          padding: 0 8px 0 12px;
           text-transform: none;
           letter-spacing: normal;
-          font-size: 13px;
         }
         .studio-admin-receipt-preview {
           display: grid;
@@ -13395,7 +13389,7 @@ export function StudioShell({
         }
         .studio-admin-table-wrap {
           overflow: auto;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
         }
@@ -13470,7 +13464,7 @@ export function StudioShell({
         .studio-admin-detail-panel {
           display: grid;
           gap: 12px;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
           padding: 14px;
@@ -13521,7 +13515,7 @@ export function StudioShell({
         }
         .studio-admin-setup-card {
           align-items: flex-start;
-          border: 1px solid var(--color-cursor-border-soft);
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
           padding: 12px 14px;
@@ -22281,6 +22275,7 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
               value={payment.status}
               ariaLabel="Payment status"
               align="end"
+              variant="field"
               options={[
                 { value: "receipt_uploaded", label: "Receipt uploaded" },
                 { value: "receipt_received", label: "Receipt received" },

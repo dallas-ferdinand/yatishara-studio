@@ -14,6 +14,8 @@ type CursorSelectProps = {
   onChange?: (value: string) => void;
   ariaLabel?: string;
   align?: "start" | "end";
+  /** Bordered full-width field (sidebars/forms). Default is a ghost chrome control. */
+  variant?: "ghost" | "field";
   className?: string;
   disabled?: boolean;
 };
@@ -21,6 +23,8 @@ type CursorSelectProps = {
 /**
  * Compact themed select — same menu language as explorer filters
  * (.cursor-dropdown / .cursor-dropdown-item).
+ * Root class is cursor-select-menu (not cursor-select) so native
+ * select.cursor-select styles never paint a second box around it.
  */
 export function CursorSelect({
   value,
@@ -28,6 +32,7 @@ export function CursorSelect({
   onChange,
   ariaLabel,
   align = "end",
+  variant = "ghost",
   className = "",
   disabled = false,
 }: CursorSelectProps) {
@@ -55,7 +60,7 @@ export function CursorSelect({
 
   return (
     <div
-      className={`cursor-select${open ? " is-open" : ""}${className ? ` ${className}` : ""}`}
+      className={`cursor-select-menu${variant === "field" ? " is-field" : ""}${open ? " is-open" : ""}${className ? ` ${className}` : ""}`}
       ref={wrapRef}
     >
       <button
