@@ -87,7 +87,7 @@ export function AdminMarketplacePane() {
 
   return (
     <>
-    <div className="flex flex-col gap-6">
+    <div className="studio-admin-stack">
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Sellers</span>

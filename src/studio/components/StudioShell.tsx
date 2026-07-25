@@ -9290,6 +9290,10 @@ export function StudioShell({
           background: var(--cursor-surface-raised);
           padding: 12px;
         }
+        [data-appearance="light"] .studio-plan-card,
+        [data-appearance="light"] .studio-bank-card {
+          background: var(--mos-bg, #ececf0);
+        }
         .studio-plan-card.is-featured {
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
         }
@@ -9340,6 +9344,10 @@ export function StudioShell({
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           isolation: isolate;
+        }
+        /* Light: page = lighter system grey; containers = darker plate. */
+        [data-appearance="light"] .studio-admin-panel {
+          background: var(--mos-panel, #f5f5f7);
         }
         /* Secondary header — same height/chrome as the workspace head. */
         .studio-admin-head {
@@ -9398,7 +9406,7 @@ export function StudioShell({
           flex: 1 1 auto;
           min-height: 0;
           overflow: auto;
-          padding: 20px 16px 28px;
+          padding: 16px;
         }
         @media (max-width: 760px) {
           .studio-settings-billing-summary,
@@ -9440,11 +9448,6 @@ export function StudioShell({
           .studio-admin-quick-link {
             min-width: 72px;
             flex: 0 0 auto;
-          }
-          .studio-admin-section-head {
-            flex-wrap: wrap;
-            min-height: 36px;
-            padding: 6px 12px;
           }
           .studio-admin-filter-select {
             min-width: 120px;
@@ -12978,9 +12981,13 @@ export function StudioShell({
           grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
           gap: 10px;
         }
-        .studio-admin-workspace {
+        .studio-admin-workspace,
+        .studio-admin-stack {
           display: grid;
-          gap: 14px;
+          gap: 16px;
+          width: 100%;
+        }
+        .studio-admin-workspace {
           max-width: 1180px;
           margin: 0 auto;
         }
@@ -13181,17 +13188,20 @@ export function StudioShell({
         .studio-admin-grid-large {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 14px;
+          gap: 12px;
         }
         .studio-admin-hero-card {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 16px;
+          gap: 12px;
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
-          padding: 16px;
+          padding: 14px;
+        }
+        [data-appearance="light"] .studio-admin-hero-card {
+          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-hero-actions {
           display: flex;
@@ -13219,25 +13229,35 @@ export function StudioShell({
           border-radius: var(--cursor-radius-lg, 10px);
           border: 1px solid var(--color-cursor-border-soft);
           background: var(--cursor-surface-raised);
-          padding: 14px;
+          padding: 12px 14px;
+        }
+        [data-appearance="light"] .studio-price-card,
+        [data-appearance="light"] .studio-bank-card,
+        [data-appearance="light"] .studio-admin-card {
+          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-section {
           display: grid;
-          gap: 10px;
+          gap: 8px;
         }
         /* Compact section bar — MercuryOS finance-section-title language. */
         .studio-admin-section-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
+          gap: 12px;
           width: 100%;
+          height: 36px;
           min-height: 36px;
           padding: 0 12px;
           border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-sm, 6px);
           background: var(--cursor-surface-raised);
           box-sizing: border-box;
+          line-height: 1;
+        }
+        [data-appearance="light"] .studio-admin-section-head {
+          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-section-title {
           min-width: 0;
@@ -13263,7 +13283,7 @@ export function StudioShell({
           padding: 0 28px 0 10px;
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: var(--cursor-radius-sm, 6px);
-          background-color: var(--cursor-surface-input, var(--mos-panel));
+          background-color: var(--mos-panel, var(--cursor-surface-input));
           background-image: linear-gradient(
             45deg,
             transparent 50%,
@@ -13289,6 +13309,9 @@ export function StudioShell({
           -webkit-appearance: none;
           appearance: none;
         }
+        [data-appearance="light"] .studio-admin-filter-select {
+          background-color: var(--mos-panel, #f5f5f7);
+        }
         .studio-admin-filter-select:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
         }
@@ -13304,6 +13327,8 @@ export function StudioShell({
         }
         .studio-admin-payments-shell {
           position: relative;
+          display: grid;
+          gap: 16px;
         }
         .studio-admin-payment-sidebar-backdrop {
           position: fixed;
@@ -13321,12 +13346,15 @@ export function StudioShell({
           width: min(420px, 100vw);
           height: 100dvh;
           flex-direction: column;
-          gap: 14px;
+          gap: 12px;
           overflow: auto;
           border-left: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-bg);
+          background: var(--mos-bg, var(--color-cursor-bg));
           padding: 16px;
           box-shadow: -16px 0 40px color-mix(in srgb, #000 24%, transparent);
+        }
+        [data-appearance="light"] .studio-admin-payment-sidebar {
+          background: var(--mos-panel, #f5f5f7);
         }
         .studio-admin-payment-sidebar-head {
           display: flex;
@@ -13413,6 +13441,9 @@ export function StudioShell({
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
+        }
+        [data-appearance="light"] .studio-admin-table-wrap {
+          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-table {
           width: 100%;
@@ -13536,7 +13567,10 @@ export function StudioShell({
           border: 1px solid var(--color-cursor-border-soft);
           border-radius: var(--cursor-radius-lg, 10px);
           background: var(--cursor-surface-raised);
-          padding: 14px;
+          padding: 12px 14px;
+        }
+        [data-appearance="light"] .studio-admin-setup-card {
+          background: var(--mos-bg, #ececf0);
         }
         .studio-admin-setup-card p {
           margin-top: 4px;
