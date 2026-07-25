@@ -731,7 +731,7 @@ function OffersCatalogInner() {
 
             <div className="public-offers-values">
               {VALUE_PROPS.map((value) => (
-                <div key={value.title} className="public-offers-value">
+                <div key={value.title} className="public-offers-value" title={value.copy}>
                   <span className="public-offers-value-icon">
                     <value.icon aria-hidden="true" />
                   </span>
