@@ -1,6 +1,9 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { internalMutation } from "./_generated/server";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { ensureProfileForUser } from "./lib/profileEnsure";
+import { toNameCase } from "./lib/profileIdentity";
 import { userHasPassword } from "./passwordAuth";
 import { normalizePhone } from "./phonePasswordAuth";
 
@@ -25,8 +28,8 @@ function resolveNameParts(user: {
   lastName?: string;
   name?: string;
 }): { firstName?: string; lastName?: string } {
-  const firstName = user.firstName?.trim();
-  const lastName = user.lastName?.trim();
+  const firstName = nameCasePart(user.firstName);
+  const lastName = nameCasePart(user.lastName);
   if (firstName && lastName) {
     return { firstName, lastName };
   }
@@ -37,11 +40,16 @@ function resolveNameParts(user: {
   };
 }
 
+function nameCasePart(value: string | undefined): string | undefined {
+  const cased = value ? toNameCase(value) : "";
+  return cased || undefined;
+}
+
 function splitLegacyName(name: string | undefined): {
   firstName?: string;
   lastName?: string;
 } {
-  const trimmed = name?.trim();
+  const trimmed = name ? toNameCase(name) : "";
   if (!trimmed) return {};
   const parts = trimmed.split(/\s+/);
   if (parts.length === 1) {
@@ -352,12 +360,91 @@ export const adminListCustomers = adminQuery({
 });
 
 function requireNamePart(value: string, label: string): string {
-  const trimmed = value.trim();
-  if (!trimmed || trimmed.length > 80) {
+  const cased = toNameCase(value);
+  if (!cased || cased.length > 80) {
     throw new Error(`${label} is required`);
   }
-  return trimmed;
+  return cased;
 }
+
+const NAME_NORMALIZE_BATCH = 50;
+
+/** One-time / ops: rewrite stored account names in proper name case. */
+export const normalizeStoredAccountNames = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("users").paginate({
+      cursor: args.cursor ?? null,
+      numItems: NAME_NORMALIZE_BATCH,
+    });
+    let updated = 0;
+    for (const user of page.page) {
+      const firstName = nameCasePart(user.firstName);
+      const lastName = nameCasePart(user.lastName);
+      const name =
+        firstName && lastName
+          ? composeDisplayName(firstName, lastName)
+          : nameCasePart(user.name);
+      const patch: {
+        firstName?: string;
+        lastName?: string;
+        name?: string;
+        updatedAt: number;
+      } = { updatedAt: Date.now() };
+      let changed = false;
+      if (firstName && firstName !== user.firstName) {
+        patch.firstName = firstName;
+        changed = true;
+      }
+      if (lastName && lastName !== user.lastName) {
+        patch.lastName = lastName;
+        changed = true;
+      }
+      if (name && name !== user.name) {
+        patch.name = name;
+        changed = true;
+      }
+      if (!changed) continue;
+      await ctx.db.patch(user._id, patch);
+      updated += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.users.normalizeStoredAccountNames, {
+        cursor: page.continueCursor,
+      });
+    }
+    return updated;
+  },
+});
+
+/** Ops: set a person's account name (support fixes, missing signup names). */
+export const setAccountNameForUser = internalMutation({
+  args: {
+    userId: v.id("users"),
+    firstName: v.string(),
+    lastName: v.string(),
+  },
+  returns: v.object({
+    firstName: v.string(),
+    lastName: v.string(),
+    name: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    const firstName = requireNamePart(args.firstName, "First name");
+    const lastName = requireNamePart(args.lastName, "Last name");
+    const name = composeDisplayName(firstName, lastName);
+    await ctx.db.patch(user._id, {
+      firstName,
+      lastName,
+      name,
+      updatedAt: Date.now(),
+    });
+    return { firstName, lastName, name };
+  },
+});
 
 function requireEmail(value: string): string {
   const email = value.trim().toLowerCase();

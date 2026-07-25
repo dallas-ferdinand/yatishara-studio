@@ -74,6 +74,37 @@ export function validateUsername(raw: string): string {
   return username;
 }
 
+/**
+ * Proper name case for account names: "dallas" → "Dallas", "FERDINAND" →
+ * "Ferdinand", "o'brien" → "O'Brien", "jean-luc" → "Jean-Luc". Deliberate inner
+ * capitals ("McDonald", "DeSilva") are left alone.
+ */
+export function toNameCase(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .map(nameCaseWord)
+    .join(" ");
+}
+
+function nameCaseWord(word: string): string {
+  return word
+    .split(/([-'’.])/)
+    .map((chunk) => (/^[-'’.]$/.test(chunk) ? chunk : nameCaseChunk(chunk)))
+    .join("");
+}
+
+function nameCaseChunk(chunk: string): string {
+  if (!chunk) return chunk;
+  const hasInnerUpper = /\p{Lu}/u.test(chunk.slice(1));
+  const hasLower = /\p{Ll}/u.test(chunk);
+  if (hasInnerUpper && hasLower) {
+    return chunk.charAt(0).toUpperCase() + chunk.slice(1);
+  }
+  return chunk.charAt(0).toUpperCase() + chunk.slice(1).toLowerCase();
+}
+
 export function sanitizeDisplayName(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const trimmed = raw.trim().replace(/\s+/g, " ");

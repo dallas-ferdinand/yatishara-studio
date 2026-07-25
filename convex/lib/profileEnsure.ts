@@ -9,6 +9,7 @@ import {
   USERNAME_MAX,
   USERNAME_MIN,
   isReservedUsername,
+  toNameCase,
   validateUsername,
 } from "./profileIdentity";
 
@@ -34,9 +35,10 @@ export type PublicNameSeller = {
 export function accountNameFromUser(user: PublicNameUser | null | undefined): string | undefined {
   const first = user?.firstName?.trim();
   const last = user?.lastName?.trim();
-  if (first && last) return `${first} ${last}`;
-  if (first) return first;
-  if (last) return last;
+  // Case-fix on read as well as on write so older rows never display lowercase.
+  if (first && last) return toNameCase(`${first} ${last}`);
+  if (first) return toNameCase(first);
+  if (last) return toNameCase(last);
   return undefined;
 }
 
