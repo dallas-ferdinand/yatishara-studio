@@ -292,18 +292,6 @@ export function StudioMessagesSidebar({
           </div>
           <StudioDmChatFilter value={chatFilter} onChange={setChatFilter} />
         </div>
-
-        <StudioDmLabelEditorDialog
-          open={editorOpen}
-          variant="overlay"
-          labelId={editingLabel?.labelId}
-          initialName={editingLabel?.name}
-          initialIcon={editingLabel?.icon}
-          onClose={() => {
-            setEditorOpen(false);
-            setEditingLabel(null);
-          }}
-        />
       </div>
 
       <div className="studio-dm-sidebar-body">
@@ -529,6 +517,18 @@ export function StudioMessagesSidebar({
           </ul>
         )}
       </div>
+
+      <StudioDmLabelEditorDialog
+        open={editorOpen}
+        variant="overlay"
+        labelId={editingLabel?.labelId}
+        initialName={editingLabel?.name}
+        initialIcon={editingLabel?.icon}
+        onClose={() => {
+          setEditorOpen(false);
+          setEditingLabel(null);
+        }}
+      />
 
       <StudioDmAssignLabelsDialog
         open={Boolean(assignPeer)}

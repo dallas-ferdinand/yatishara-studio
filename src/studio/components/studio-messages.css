@@ -822,6 +822,7 @@
 /* —— Sidebar rail —— */
 
 .studio-dm-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -830,7 +831,6 @@
 }
 
 .studio-dm-sidebar-chrome {
-  position: relative;
   flex: 0 0 auto;
   z-index: 2;
 }
@@ -1355,27 +1355,79 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-/* New/Edit label overlay over sidebar search + label rail. */
+/* New/Edit label — full-sidebar overlay sheet (not a page modal). */
 .studio-dm-label-editor-overlay {
   position: absolute;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--mos-bg, #05080f) 72%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  justify-content: flex-start;
+  padding: 10px;
+  background: color-mix(in srgb, var(--mos-page, var(--mos-bg)) 58%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
 .studio-dm-label-editor-panel {
   display: flex;
   flex-direction: column;
-  max-height: min(70vh, 420px);
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
   margin: 0;
-  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--mos-panel, var(--mos-bg));
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  border-radius: 10px;
+  border: 0;
+  background: var(--mos-plate, var(--mos-panel, var(--mos-bg)));
+  box-shadow: var(--cursor-shadow-menu, 0 10px 28px rgba(0, 0, 0, 0.28));
   overflow: hidden;
+}
+
+.studio-dm-label-editor-panel .studio-dm-dialog-head {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+}
+
+.studio-dm-label-editor-panel .studio-dm-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  gap: 12px;
+}
+
+.studio-dm-label-editor-panel .studio-dm-icon-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.studio-dm-label-editor-panel .studio-dm-icon-opt {
+  border-radius: 7px;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised, var(--mos-surface)));
+  border-color: transparent;
+}
+
+.studio-dm-label-editor-panel .studio-dm-icon-opt.is-active,
+.studio-dm-label-editor-panel .studio-dm-icon-opt:hover {
+  border-color: transparent;
+  background: var(--mos-active, var(--mos-plate-strong));
+}
+
+.studio-dm-label-editor-panel .studio-dm-icon-opt.is-active {
+  outline: 1px solid
+    color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 55%, transparent);
+  outline-offset: -1px;
+}
+
+.studio-dm-label-editor-panel .studio-dm-dialog-field input {
+  background: var(--mos-page, var(--cursor-surface-input, var(--mos-surface)));
+}
+
+.studio-dm-label-editor-panel .studio-dm-dialog-foot {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-plate, var(--mos-panel));
 }
 
 /* Right-click / long-press floating menu */

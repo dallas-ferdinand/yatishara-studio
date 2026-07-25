@@ -20,7 +20,7 @@ export function StudioDmLabelEditorDialog({
   initialName,
   initialIcon,
   onClose,
-  /** Overlay sits over the sidebar header; modal is the old centered dialog. */
+  /** Overlay covers the messages sidebar; modal is a centered page dialog. */
   variant = "overlay",
 }: {
   open: boolean;
@@ -154,7 +154,7 @@ export function StudioDmLabelEditorDialog({
             Delete
           </button>
         ) : (
-          <span />
+          <span aria-hidden="true" />
         )}
         <div className="studio-dm-dialog-actions">
           <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
