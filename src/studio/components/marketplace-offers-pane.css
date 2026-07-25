@@ -724,8 +724,7 @@ span.studio-admin-head-tab,
   min-height: 40px;
   padding: 0 12px;
   border-radius: var(--cursor-radius-md, 10px);
-  border: 1px solid
-    color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+  border: 1px solid var(--color-cursor-border-soft);
   background: #ffffff;
   color: var(--color-cursor-text);
   cursor: text;
