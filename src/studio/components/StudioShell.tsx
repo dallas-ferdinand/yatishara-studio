@@ -893,6 +893,7 @@ export function StudioShell({
   const [activeTab, setActiveTab] = useState(() => readPersistedTabSession().activeTab);
   const [navTrail, setNavTrail] = useState(() => readPersistedTabSession().navTrail);
   const [viewMode, setViewMode] = useState("grid");
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -1209,6 +1210,45 @@ export function StudioShell({
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const sync = () => {
+      const el =
+        document.fullscreenElement ||
+        // Safari
+        document.webkitFullscreenElement;
+      setBrowserFullscreen(Boolean(el));
+    };
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  async function toggleBrowserFullscreen() {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    const active =
+      document.fullscreenElement || document.webkitFullscreenElement;
+    try {
+      if (active) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      } else if (root.requestFullscreen) {
+        await root.requestFullscreen();
+      } else if (root.webkitRequestFullscreen) {
+        await root.webkitRequestFullscreen();
+      } else {
+        toast.error("Full screen is not available in this browser.");
+      }
+    } catch {
+      toast.error("Could not toggle full screen.");
+    }
+  }
 
   // Mobile: kill native `title` tooltips on tap; only show a tip after long-press.
   useEffect(() => {
@@ -16514,6 +16554,20 @@ export function StudioShell({
                   isActive={settingsOpen}
                   onOpenSettingsTab={openSettingsTab}
                 />
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${browserFullscreen ? " is-active" : ""}`}
+                  onClick={() => void toggleBrowserFullscreen()}
+                  aria-label={browserFullscreen ? "Exit full screen" : "Enter full screen"}
+                  title={browserFullscreen ? "Exit full screen" : "Full screen"}
+                  aria-pressed={browserFullscreen}
+                >
+                  <Icon
+                    name={browserFullscreen ? "exitFullscreen" : "maximize"}
+                    size={14}
+                    className="h-3.5 w-3.5"
+                  />
+                </button>
               </>
             ) : isAdminUser ? (
               <AdminQuickLinks onOpenAdminTab={openAdminTab} />
@@ -18921,7 +18975,10 @@ function StudioProfileMenu({
               onViewProfile?.();
             }}
           >
-            View profile
+            <span className="inline-flex items-center gap-2">
+              <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
+              View profile
+            </span>
           </button>
           <button
             type="button"
@@ -18932,7 +18989,10 @@ function StudioProfileMenu({
               onEditProfile?.();
             }}
           >
-            Edit profile
+            <span className="inline-flex items-center gap-2">
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+              Edit profile
+            </span>
           </button>
           <button
             type="button"
@@ -18958,7 +19018,10 @@ function StudioProfileMenu({
               onSignOut?.();
             }}
           >
-            Sign out
+            <span className="inline-flex items-center gap-2">
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Sign out
+            </span>
           </button>
         </div>
       ) : null}
