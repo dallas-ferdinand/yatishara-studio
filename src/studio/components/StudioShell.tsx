@@ -22010,7 +22010,7 @@ function AdminWorkspacePane({
       setReviewStatus(
         result.granted
           ? "PayWise payment confirmed and credits granted."
-          : `PayWise status: ${humanizePaymentStatus(result.status)}`,
+          : `PayWise status: ${humanizeAdminPaymentStatus(result.status)}`,
       );
     } catch (error) {
       setReviewStatus(friendlyConvexError(error, "PayWise refresh failed."));
@@ -22161,7 +22161,7 @@ function AdminWorkspacePane({
                     <td>{formatTtdFromCredits(customer.creditBalance)} <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span></td>
                     <td>
                       <strong>{customer.paymentCount}</strong>
-                      <span>{customer.latestPaymentStatus ? humanizePaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
+                      <span>{customer.latestPaymentStatus ? humanizeAdminPaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
                     </td>
                     <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
                   </tr>
