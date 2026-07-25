@@ -1506,6 +1506,140 @@ export const unfollow = authedMutation({
   },
 });
 
+const socialPersonReturn = v.object({
+  profileId: v.id("profiles"),
+  username: v.string(),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+});
+
+async function hydrateSocialPeople(
+  ctx: QueryCtx,
+  profiles: Doc<"profiles">[],
+  expiresUnix: number,
+) {
+  if (profiles.length === 0) return [];
+
+  const avatarAssetIds = [
+    ...new Set(
+      profiles
+        .map((p) => p.avatarAssetId)
+        .filter((id): id is Id<"assets"> => Boolean(id)),
+    ),
+  ];
+  const avatarAssets = await Promise.all(
+    avatarAssetIds.map((id) => ctx.db.get("assets", id)),
+  );
+  const assetById = new Map<string, Doc<"assets"> | null>();
+  for (let i = 0; i < avatarAssetIds.length; i++) {
+    assetById.set(avatarAssetIds[i]!, avatarAssets[i] ?? null);
+  }
+
+  const thumbPaths = [
+    ...new Set(
+      [...assetById.values()]
+        .map((asset) => {
+          if (!asset || asset.deletedAt || !asset.bunnyPath) return undefined;
+          return assetThumbnailPath(asset) ?? asset.bunnyPath;
+        })
+        .filter((path): path is string => Boolean(path)),
+    ),
+  ];
+  const signed =
+    thumbPaths.length > 0
+      ? await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM)
+      : new Map<string, string>();
+
+  return profiles.map((profile) => {
+    let avatarUrl: string | undefined;
+    if (profile.avatarAssetId) {
+      const asset = assetById.get(profile.avatarAssetId) ?? null;
+      if (asset && !asset.deletedAt && asset.bunnyPath) {
+        const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
+        avatarUrl = thumbPath ? signed.get(thumbPath) : undefined;
+      }
+    }
+    return {
+      profileId: profile._id,
+      username: profile.username,
+      displayName: profile.displayName?.trim() || undefined,
+      avatarUrl,
+    };
+  });
+}
+
+/** People the viewer follows — social sidebar directory. */
+export const listMyFollowing = authedQuery({
+  args: {
+    limit: v.optional(v.number()),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(socialPersonReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 60);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", ctx.user._id))
+      .order("desc")
+      .take(limit);
+    const profiles: Doc<"profiles">[] = [];
+    for (const follow of follows) {
+      const profile = await ctx.db.get("profiles", follow.followingProfileId);
+      if (profile?.isPublic) profiles.push(profile);
+    }
+    return await hydrateSocialPeople(ctx, profiles, expiresUnix);
+  },
+});
+
+/** Public profiles the viewer does not follow — discovery for the social sidebar. */
+export const listSuggestedPeople = authedQuery({
+  args: {
+    limit: v.optional(v.number()),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(socialPersonReturn),
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 12, 1), 24);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", ctx.user._id))
+      .take(200);
+    const followingIds = new Set(
+      follows.map((follow) => follow.followingProfileId),
+    );
+    const myProfile = await getProfileByUser(ctx, ctx.user._id);
+
+    const scanned = await ctx.db
+      .query("profiles")
+      .withIndex("by_username")
+      .order("desc")
+      .take(100);
+
+    const candidates = scanned
+      .filter(
+        (profile) =>
+          profile.isPublic &&
+          profile.userId !== ctx.user._id &&
+          (!myProfile || profile._id !== myProfile._id) &&
+          !followingIds.has(profile._id),
+      )
+      .sort(
+        (a, b) =>
+          b.followerCount - a.followerCount ||
+          b.postCount - a.postCount ||
+          b.updatedAt - a.updatedAt,
+      )
+      .slice(0, limit);
+
+    return await hydrateSocialPeople(ctx, candidates, expiresUnix);
+  },
+});
+
 export const toggleLike = authedMutation({
   args: { postId: v.id("profilePosts") },
   returns: v.object({
