@@ -16,6 +16,7 @@ import {
   Tag,
   Trash2,
   Wallet,
+  Clock,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -126,6 +127,76 @@ function SummaryChip({
 
 function SummaryRow({ children }: { children: ReactNode }) {
   return <section className="marketplace-offers-summary">{children}</section>;
+}
+
+type JobCardModel = {
+  _id: Id<"marketplaceJobs">;
+  offerTitle: string;
+  packageName?: string;
+  priceCents: number;
+  deliveryDays?: number;
+  status: string;
+  createdAt: number;
+  sideLabel: string;
+};
+
+function JobCard({
+  job,
+  onOpen,
+}: {
+  job: JobCardModel;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="marketplace-job-card"
+      onClick={onOpen}
+    >
+      <div className="marketplace-job-card-top">
+        <div>
+          <h3 className="marketplace-job-card-title">{job.offerTitle}</h3>
+          <p className="marketplace-job-card-sub">
+            {job.sideLabel}
+            {job.packageName ? ` · ${job.packageName}` : ""}
+          </p>
+        </div>
+        <span className="marketplace-job-card-price">
+          {formatTtdCents(job.priceCents)}
+        </span>
+      </div>
+      <div className="marketplace-job-card-meta">
+        <StatusChip status={job.status} />
+        {job.deliveryDays != null ? (
+          <span className="marketplace-job-chip">
+            <Clock aria-hidden="true" />
+            {job.deliveryDays} day delivery
+          </span>
+        ) : null}
+        <span className="marketplace-job-chip">
+          Booked {new Date(job.createdAt).toLocaleDateString()}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function JobsCardGrid({
+  jobs,
+  onOpen,
+}: {
+  jobs: JobCardModel[];
+  onOpen: (jobId: Id<"marketplaceJobs">) => void;
+}) {
+  return (
+    <ul className="marketplace-job-grid">
+      {jobs.map((job) => (
+        <li key={job._id}>
+          <JobCard job={job} onOpen={() => onOpen(job._id)} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** Editable tier, held as strings so partial numeric input never fights the user. */
@@ -1140,57 +1211,30 @@ export function MarketplaceOffersPane({
                   />
                 }
               >
-                <div className="studio-admin-table-wrap">
-                  {jobsLoading ? (
-                    <Loader2 className="m-4 h-4 w-4 animate-spin" />
-                  ) : visibleJobs.length === 0 ? (
-                    <p className="studio-settings-empty marketplace-offers-table-empty">
-                      {allJobs.length === 0
-                        ? "No jobs yet."
-                        : "No jobs on this side of the marketplace."}
-                    </p>
-                  ) : (
-                    <table className="studio-admin-table">
-                      <thead>
-                        <tr>
-                          <th>Job</th>
-                          <th>Side</th>
-                          <th>Booked</th>
-                          <th>Price</th>
-                          <th>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleJobs.map((job) => (
-                          <tr
-                            key={`${job._role}-${job._id}`}
-                            onClick={() =>
-                              setView({ kind: "job", jobId: job._id })
-                            }
-                          >
-                            <td>
-                              <strong>{job.offerTitle}</strong>
-                              <span>
-                                {job.packageName ? `${job.packageName} · ` : ""}
-                                {formatTtdCents(job.priceCents)} held
-                              </span>
-                            </td>
-                            <td>
-                              {job._role === "sell" ? "Selling" : "Buying"}
-                            </td>
-                            <td>
-                              {new Date(job.createdAt).toLocaleDateString()}
-                            </td>
-                            <td>{formatTtdCents(job.priceCents)}</td>
-                            <td>
-                              <StatusChip status={job.status} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+                {jobsLoading ? (
+                  <Loader2 className="m-4 h-4 w-4 animate-spin" />
+                ) : visibleJobs.length === 0 ? (
+                  <p className="studio-settings-empty marketplace-offers-table-empty">
+                    {allJobs.length === 0
+                      ? "No jobs yet."
+                      : "No jobs on this side of the marketplace."}
+                  </p>
+                ) : (
+                  <JobsCardGrid
+                    jobs={visibleJobs.map((job) => ({
+                      _id: job._id,
+                      offerTitle: job.offerTitle,
+                      packageName: job.packageName,
+                      priceCents: job.priceCents,
+                      deliveryDays: job.deliveryDays,
+                      status: job.status,
+                      createdAt: job.createdAt,
+                      sideLabel:
+                        job._role === "sell" ? "Selling" : "Buying",
+                    }))}
+                    onOpen={(jobId) => setView({ kind: "job", jobId })}
+                  />
+                )}
               </Section>
             </div>
           ) : null}
@@ -1481,45 +1525,29 @@ export function MarketplaceOffersPane({
 
               {offerEditorTab === "jobs" ? (
                 <Section title="Jobs on this offer">
-                  <div className="studio-admin-table-wrap">
-                    {(sellerJobs ?? []).filter(
-                      (j) => j.offerId === selectedOffer._id,
-                    ).length === 0 ? (
-                      <p className="studio-settings-empty marketplace-offers-table-empty">
-                        No bookings on this offer yet.
-                      </p>
-                    ) : (
-                      <table className="studio-admin-table">
-                        <thead>
-                          <tr>
-                            <th>Status</th>
-                            <th>Booked</th>
-                            <th>Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(sellerJobs ?? [])
-                            .filter((j) => j.offerId === selectedOffer._id)
-                            .map((job) => (
-                              <tr
-                                key={job._id}
-                                onClick={() =>
-                                  setView({ kind: "job", jobId: job._id })
-                                }
-                              >
-                                <td>
-                                  <StatusChip status={job.status} />
-                                </td>
-                                <td>
-                                  {new Date(job.createdAt).toLocaleString()}
-                                </td>
-                                <td>{formatTtdCents(job.priceCents)}</td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                  {(sellerJobs ?? []).filter(
+                    (j) => j.offerId === selectedOffer._id,
+                  ).length === 0 ? (
+                    <p className="studio-settings-empty marketplace-offers-table-empty">
+                      No bookings on this offer yet.
+                    </p>
+                  ) : (
+                    <JobsCardGrid
+                      jobs={(sellerJobs ?? [])
+                        .filter((j) => j.offerId === selectedOffer._id)
+                        .map((job) => ({
+                          _id: job._id,
+                          offerTitle: job.offerTitle,
+                          packageName: job.packageName,
+                          priceCents: job.priceCents,
+                          deliveryDays: job.deliveryDays,
+                          status: job.status,
+                          createdAt: job.createdAt,
+                          sideLabel: "Selling",
+                        }))}
+                      onOpen={(jobId) => setView({ kind: "job", jobId })}
+                    />
+                  )}
                 </Section>
               ) : null}
             </div>

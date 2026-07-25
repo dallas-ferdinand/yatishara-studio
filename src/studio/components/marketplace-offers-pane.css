@@ -2,6 +2,105 @@
    Only marketplace-specific pieces live here: status chips, the section-bar
    action, and the job timeline / deliverables / asset picker. */
 
+/* Job listings — card grid matching Creative Network public catalog cards */
+.marketplace-job-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.marketplace-job-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.marketplace-job-card:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 32%,
+    var(--color-cursor-border)
+  );
+  background: var(--mos-hover, var(--color-cursor-hover));
+}
+
+.marketplace-job-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.marketplace-job-card-title {
+  margin: 0;
+  font-size: var(--desk-text-base, 14px);
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.marketplace-job-card-sub {
+  margin: 2px 0 0;
+  font-size: var(--desk-text-xs, 11px);
+  font-weight: 600;
+  color: var(--color-cursor-muted);
+  overflow-wrap: anywhere;
+}
+
+.marketplace-job-card-price {
+  flex: 0 0 auto;
+  font-size: var(--desk-text-ui, 13px);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.marketplace-job-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.marketplace-job-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-muted);
+  font-size: var(--desk-text-xs, 11px);
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.marketplace-job-chip svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
 /* Offers puts a Back arrow inside a head tab; admin tabs are text-only. */
 .studio-admin-head-tab {
   gap: 6px;
