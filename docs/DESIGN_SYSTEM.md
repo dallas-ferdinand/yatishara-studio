@@ -143,6 +143,22 @@ Spacing rhythm for admin/finance panes: **16 / 12 / 8** (body padding / section 
 
 ---
 
+## 5b. Button & chip sizing (locked)
+
+Do **not** invent one-off heights. Match siblings on the same surface.
+
+| Role | Min-height | Pad | Font | Notes |
+|---|---|---|---|---|
+| **Compact action / profile chip** | **28px** | `0 10px` | 12px / 650 | Public profile Follow, Hire Me/Us, website links, suggestion chips |
+| Compact icon / filter chip | 24–28px | tight | 11–12px | Sidebar chips, step chips in Offers header |
+| Default chrome control | **32px** | `0 12px` | 13px | Panel/tab heads (`--cursor-head-h`), `.cursor-icon-btn-sm`, settings actions |
+| Form / primary field button | 34–36px | `0 14px` | 13px | Full-width form saves, tall field selects — **not** for profile hero CTAs |
+
+Rules:
+- On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
+- Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
+- Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
+
 ## 6. Shared components
 
 Prefer these over bespoke markup. Located in `src/desk/components/`.
@@ -238,6 +254,7 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 - Put a leading icon in front of dropdown option text.
 - Keep card/table borders on `--color-cursor-border*` / `--mos-border*`.
 - Mirror every token change in `applyDeskTokens()` **and** the boot inline script.
+- Match button height to siblings: profile chips **28px**, chrome heads **32px** (see §5b).
 - When a pattern solidifies, update this doc **and** MercuryOS memory in the same turn.
 
 **Don't**
@@ -248,6 +265,7 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 - Make the select button the same grey as `--mos-plate` (it must read darker).
 - Use `cursor-select` as the CursorSelect root.
 - Put table wraps on `--mos-plate-strong` (that's for chips/menus, not the plate).
+- Make Follow / Hire / link chips taller than 28px on the public profile hero.
 
 ---
 
@@ -266,3 +284,4 @@ Update memory when you change a rule here:
 - **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
 - **697** — Offers inputs keep raised fill; white/borderless rejected.
 - **703** — Public routes reuse mos tokens; `public-offers.css` mirrors admin billing chrome.
+- Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
