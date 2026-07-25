@@ -790,23 +790,14 @@ span.studio-admin-head-tab,
 .marketplace-icon-input-field:-webkit-autofill:hover,
 .marketplace-icon-input-field:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-cursor-text-bright);
-  -webkit-box-shadow: 0 0 0 1000px var(--cursor-surface-raised) inset;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
   caret-color: var(--color-cursor-text-bright);
   transition: background-color 100000s ease-in-out 0s;
 }
 
-[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill,
-[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:hover,
-[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 1000px var(--mos-bg, #ececf0) inset;
-}
-
 .marketplace-field-wrap.is-error .marketplace-icon-input {
-  border-color: color-mix(
-    in srgb,
-    var(--marketplace-status-warn, #f59e0b) 52%,
-    var(--color-cursor-border-soft)
-  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--marketplace-status-warn, #f59e0b) 72%, transparent);
 }
 
 .marketplace-field-error {
