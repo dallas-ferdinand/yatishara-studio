@@ -5018,8 +5018,8 @@ export function StudioShell({
             --studio-mobile-chrome-blur: saturate(160%) blur(18px);
           }
           [data-appearance="light"] .studio-polish.is-studio-mobile {
-            --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 84%, transparent);
-            --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 84%, transparent);
+            --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
+            --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
             --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
             --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           }
@@ -6755,7 +6755,7 @@ export function StudioShell({
           background: color-mix(
             in srgb,
             var(--cursor-accent) 10%,
-            color-mix(in srgb, #ffffff 82%, transparent)
+            color-mix(in srgb, var(--mos-panel, #f5f5f7) 82%, transparent)
           ) !important;
           color: var(--mos-text, var(--color-cursor-text, #1c1c1e)) !important;
         }
@@ -6785,8 +6785,8 @@ export function StudioShell({
           box-shadow: none !important;
         }
         [data-appearance="light"] .studio-polish {
-          --studio-mobile-chrome-glass: color-mix(in srgb, #ffffff 84%, transparent);
-          --studio-mobile-chrome-glass-foot: color-mix(in srgb, #ffffff 84%, transparent);
+          --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
+          --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
           --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
           --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           --studio-chrome-muted-border-fade: linear-gradient(
@@ -6848,18 +6848,18 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-settings-sidebar,
         [data-appearance="light"] .studio-polish .cursor-explorer-panel,
         [data-appearance="light"] .studio-polish .cursor-explorer-body {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
           border-right-color: var(--color-cursor-border-soft) !important;
         }
         [data-appearance="light"] .studio-polish .studio-folder-pathbar,
         [data-appearance="light"] .studio-polish .cursor-panel-search {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
         [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
         [data-appearance="light"] .studio-polish .studio-settings-sidebar .cursor-panel-head,
         [data-appearance="light"] .studio-polish main .cursor-workspace-head {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
           backdrop-filter: none !important;
           -webkit-backdrop-filter: none !important;
           box-shadow: none !important;
@@ -6874,7 +6874,7 @@ export function StudioShell({
         }
         @media (max-width: 899px) {
           [data-appearance="light"] .studio-polish main .cursor-workspace-head {
-            background: #ffffff !important;
+            background: var(--mos-panel, #f5f5f7) !important;
             border: 0 !important;
             border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             box-shadow: none !important;
@@ -6898,7 +6898,7 @@ export function StudioShell({
           [data-appearance="light"] .studio-mobile-nav-tools .studio-settings-pill.is-active,
           [data-appearance="light"] .studio-mobile-nav-btn.is-active {
             border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border)) !important;
-            background: color-mix(in srgb, var(--cursor-accent) 14%, #ffffff) !important;
+            background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-panel, #f5f5f7)) !important;
             color: var(--color-cursor-text) !important;
             box-shadow: none !important;
           }
@@ -7006,7 +7006,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab.cursor-unified-tab-new:hover {
           border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--studio-mobile-chrome-border)) !important;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, #ffffff) !important;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7)) !important;
           color: var(--color-cursor-text) !important;
         }
         [data-appearance="light"] .studio-polish .studio-settings-pill.is-active {
@@ -8668,7 +8668,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-account-fields textarea:-webkit-autofill:focus {
           -webkit-text-fill-color: var(--color-cursor-text) !important;
           caret-color: var(--color-cursor-text);
-          box-shadow: 0 0 0 1000px #ffffff inset !important;
+          box-shadow: 0 0 0 1000px var(--mos-panel, #f5f5f7) inset !important;
         }
         .studio-profile-editor {
           min-width: 0;
@@ -12394,7 +12394,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:disabled {
           color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 55%, transparent);
           border-color: rgba(15, 23, 42, 0.14);
-          background: color-mix(in srgb, #ffffff 72%, transparent);
+          background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 72%, transparent);
         }
         [data-appearance="light"] .studio-polish .studio-composer-circle-btn.studio-composer-send-btn:disabled svg {
           color: currentColor;
@@ -12896,7 +12896,7 @@ export function StudioShell({
           flex-shrink: 0;
         }
         [data-appearance="light"] .studio-asset-media-bar {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
         }
         .studio-asset-media-bar-name {
           min-width: 0;
@@ -12920,7 +12920,7 @@ export function StudioShell({
           flex-direction: column;
         }
         [data-appearance="light"] .studio-asset-lightbox {
-          background: #fff;
+          background: var(--mos-panel, #f5f5f7);
         }
         .studio-asset-preview .desk-image-viewer,
         .studio-asset-preview .desk-media-player--studio-preview {
@@ -12930,7 +12930,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-asset-preview .desk-image-viewer,
         [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview {
-          background: #fff;
+          background: var(--mos-panel, #f5f5f7);
         }
         .studio-asset-preview .desk-image-viewer-toolbar,
         .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
@@ -12953,7 +12953,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-asset-preview .desk-image-viewer-toolbar,
         [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
         }
         .studio-asset-preview .desk-image-viewer-name,
         .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-name {
@@ -12964,7 +12964,7 @@ export function StudioShell({
           background: var(--color-cursor-bg) !important;
         }
         [data-appearance="light"] .studio-document-preview .cursor-doc-toolbar.has-name {
-          background: #ffffff !important;
+          background: var(--mos-panel, #f5f5f7) !important;
         }
         .studio-document-preview .desk-image-viewer-name {
           color: var(--color-cursor-text);
