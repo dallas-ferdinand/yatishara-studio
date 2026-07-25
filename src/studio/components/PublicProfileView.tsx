@@ -420,16 +420,13 @@ export function PublicProfileView({
                       )}
                     </span>
                   </span>
-                  <span className="public-profile-tile-caption">
-                    <span className="public-profile-tile-username">
-                      {post.username || profile?.username || username}
-                    </span>
-                    {captionPreview ? (
+                  {captionPreview ? (
+                    <span className="public-profile-tile-caption">
                       <span className="public-profile-tile-description">
                         {captionPreview}
                       </span>
-                    ) : null}
-                  </span>
+                    </span>
+                  ) : null}
                 </button>
                 );
               })}
