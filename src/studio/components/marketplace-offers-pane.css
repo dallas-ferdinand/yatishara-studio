@@ -724,19 +724,14 @@ span.studio-admin-head-tab,
   min-height: 40px;
   padding: 0 12px;
   border-radius: var(--cursor-radius-md, 10px);
-  border: 1px solid
-    color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
-  background: var(--cursor-surface-raised);
+  /* Trial: white fill, no border — swap back if it feels too flat. */
+  border: 0;
+  background: #ffffff;
   color: var(--color-cursor-text);
   cursor: text;
   transition:
-    border-color var(--cursor-ease, 160ms ease),
     background var(--cursor-ease, 160ms ease),
     box-shadow var(--cursor-ease, 160ms ease);
-}
-
-[data-appearance="light"] .marketplace-icon-input {
-  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-icon-input.is-multiline {
@@ -745,20 +740,7 @@ span.studio-admin-head-tab,
   padding-bottom: 10px;
 }
 
-.marketplace-icon-input:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--cursor-accent) 26%,
-    var(--color-cursor-border-soft)
-  );
-}
-
 .marketplace-icon-input:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--cursor-accent) 40%,
-    var(--color-cursor-border-soft)
-  );
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--cursor-accent) 16%, transparent);
 }
