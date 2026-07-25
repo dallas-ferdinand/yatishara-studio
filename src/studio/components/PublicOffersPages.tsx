@@ -10,6 +10,7 @@ import {
   BadgeCheck,
   CalendarDays,
   Clock,
+  ListFilter,
   PackageCheck,
   PackageSearch,
   Search,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, Suspense, useMemo, useState } from "react";
+import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
@@ -48,11 +49,23 @@ function OffersSidebarBrand() {
 function OffersTopbar({
   back,
   showBrand = true,
+  search,
+  onSearchChange,
+  filtersOpen,
+  onToggleFilters,
+  filterActive = false,
 }: {
   back?: { href: string; label: string };
   showBrand?: boolean;
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  filtersOpen?: boolean;
+  onToggleFilters?: () => void;
+  filterActive?: boolean;
 }) {
   const logoSrc = useMercurySidebarLogo();
+  const showInlineSearch = typeof search === "string" && onSearchChange;
+
   return (
     <header className="public-offers-topbar">
       {showBrand ? (
@@ -67,20 +80,57 @@ function OffersTopbar({
           {back ? (
             <Link href={back.href} className="public-offers-btn is-quiet">
               <ArrowLeft aria-hidden="true" />
-              {back.label}
+              <span className="public-offers-btn-label">{back.label}</span>
             </Link>
-          ) : null}
+          ) : (
+            <div className="public-offers-topbar-mobile-brand">
+              <OffersSidebarBrand />
+            </div>
+          )}
         </div>
       )}
+
+      {showInlineSearch ? (
+        <label className="public-offers-topbar-search">
+          <Search aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search services"
+            aria-label="Search services"
+          />
+        </label>
+      ) : null}
+
       <div className="public-offers-topbar-actions">
         {showBrand && back ? (
           <Link href={back.href} className="public-offers-btn is-quiet">
             <ArrowLeft aria-hidden="true" />
-            {back.label}
+            <span className="public-offers-btn-label">{back.label}</span>
           </Link>
         ) : null}
-        <Link href="/" className="public-offers-btn">
-          Open Studio
+        {onToggleFilters ? (
+          <button
+            type="button"
+            className={`public-offers-btn is-icon public-offers-topbar-filter${filtersOpen ? " is-active" : ""}${filterActive ? " has-filters" : ""}`}
+            aria-label={filtersOpen ? "Close filters" : "Open filters"}
+            aria-expanded={filtersOpen}
+            title="Filters"
+            onClick={onToggleFilters}
+          >
+            {filtersOpen ? <X aria-hidden="true" /> : <ListFilter aria-hidden="true" />}
+            {filterActive && !filtersOpen ? (
+              <em className="public-offers-filter-dot" aria-hidden="true" />
+            ) : null}
+          </button>
+        ) : null}
+        <Link
+          href="/"
+          className="public-offers-btn is-icon"
+          aria-label="Open Studio"
+          title="Open Studio"
+        >
           <ArrowUpRight aria-hidden="true" />
         </Link>
       </div>
@@ -291,6 +341,155 @@ function FilterOption({
   );
 }
 
+function CatalogFiltersBody({
+  offers,
+  setValueFor,
+  valueFor,
+  facets,
+  closedSections,
+  toggleSection,
+  expandedSections,
+  setExpandedSections,
+  priceMin,
+  setPriceMin,
+  priceMax,
+  setPriceMax,
+  hasFilters,
+  clearFilters,
+}: {
+  offers: FilterableOffer[] | undefined;
+  setValueFor: (id: string, value: string) => void;
+  valueFor: (def: OptionFilterDef) => string;
+  facets: Map<string, Map<string, number>> | null;
+  closedSections: Record<string, boolean>;
+  toggleSection: (id: string) => void;
+  expandedSections: Record<string, boolean>;
+  setExpandedSections: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  priceMin: string;
+  setPriceMin: (value: string) => void;
+  priceMax: string;
+  setPriceMax: (value: string) => void;
+  hasFilters: boolean;
+  clearFilters: () => void;
+}) {
+  return (
+    <>
+      {OPTION_FILTERS.map((def) => {
+        const options = def.getOptions(offers ?? []);
+        const value = valueFor(def);
+        const counts = facets?.get(def.id);
+        const limit = def.visibleLimit ?? Infinity;
+        const expanded = expandedSections[def.id] ?? false;
+        const visible =
+          expanded || options.length <= limit ? options : options.slice(0, limit);
+        return (
+          <Fragment key={def.id}>
+            <FilterSection
+              title={def.label}
+              activeCount={value === def.anyValue ? 0 : 1}
+              open={!closedSections[def.id]}
+              onToggle={() => toggleSection(def.id)}
+            >
+              <FilterOption
+                active={value === def.anyValue}
+                onClick={() => setValueFor(def.id, def.anyValue)}
+                label={def.anyLabel}
+                count={counts?.get(def.anyValue)}
+              />
+              {visible.map((option) => (
+                <FilterOption
+                  key={option.value}
+                  active={value === option.value}
+                  onClick={() =>
+                    setValueFor(
+                      def.id,
+                      value === option.value ? def.anyValue : option.value,
+                    )
+                  }
+                  label={option.label}
+                  count={counts?.get(option.value)}
+                />
+              ))}
+              {options.length > limit ? (
+                <button
+                  type="button"
+                  className="public-offers-show-more"
+                  onClick={() =>
+                    setExpandedSections((prev) => ({
+                      ...prev,
+                      [def.id]: !expanded,
+                    }))
+                  }
+                >
+                  {expanded ? "Show less" : `Show all (${options.length})`}
+                </button>
+              ) : null}
+            </FilterSection>
+            {def.id === "category" ? (
+              <FilterSection
+                title="Price (TTD)"
+                activeCount={priceChipLabel(priceMin, priceMax) ? 1 : 0}
+                open={!closedSections.price}
+                onToggle={() => toggleSection("price")}
+              >
+                <div className="public-offers-range">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={priceMin}
+                    onChange={(event) => setPriceMin(event.target.value)}
+                    placeholder="Min"
+                    aria-label="Minimum price in TTD"
+                  />
+                  <span aria-hidden="true">–</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={priceMax}
+                    onChange={(event) => setPriceMax(event.target.value)}
+                    placeholder="Max"
+                    aria-label="Maximum price in TTD"
+                  />
+                </div>
+                <div className="public-offers-presets">
+                  {PRICE_PRESETS.map((preset) => {
+                    const active =
+                      priceMin === preset.min && priceMax === preset.max;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className={`public-offers-preset${active ? " is-active" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => {
+                          setPriceMin(active ? "" : preset.min);
+                          setPriceMax(active ? "" : preset.max);
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </FilterSection>
+            ) : null}
+          </Fragment>
+        );
+      })}
+
+      {hasFilters ? (
+        <button
+          type="button"
+          className="public-offers-btn is-quiet public-offers-rail-clear"
+          onClick={clearFilters}
+        >
+          Clear filters
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 function OffersCatalogInner() {
   const searchParams = useSearchParams();
   const sellerUsername = searchParams.get("u")?.replace(/^@/, "").trim() || undefined;
@@ -425,6 +624,46 @@ function OffersCatalogInner() {
     setOptionValues({});
   }
 
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false);
+    };
+    const onResize = () => {
+      if (window.matchMedia("(min-width: 861px)").matches) {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+      document.body.style.overflow = previous;
+    };
+  }, [filtersOpen]);
+
+  const filterBodyProps = {
+    offers: offers as FilterableOffer[] | undefined,
+    setValueFor,
+    valueFor,
+    facets,
+    closedSections,
+    toggleSection,
+    expandedSections,
+    setExpandedSections,
+    priceMin,
+    setPriceMin,
+    priceMax,
+    setPriceMax,
+    hasFilters,
+    clearFilters,
+  };
+
   return (
     <div className="public-offers-shell">
       <aside className="public-offers-rail" aria-label="Filter services">
@@ -442,118 +681,7 @@ function OffersCatalogInner() {
           />
         </label>
         <div className="public-offers-rail-body">
-          {OPTION_FILTERS.map((def) => {
-            const options = def.getOptions(offers ?? []);
-            const value = valueFor(def);
-            const counts = facets?.get(def.id);
-            const limit = def.visibleLimit ?? Infinity;
-            const expanded = expandedSections[def.id] ?? false;
-            const visible =
-              expanded || options.length <= limit ? options : options.slice(0, limit);
-            return (
-              <Fragment key={def.id}>
-                <FilterSection
-                  title={def.label}
-                  activeCount={value === def.anyValue ? 0 : 1}
-                  open={!closedSections[def.id]}
-                  onToggle={() => toggleSection(def.id)}
-                >
-                  <FilterOption
-                    active={value === def.anyValue}
-                    onClick={() => setValueFor(def.id, def.anyValue)}
-                    label={def.anyLabel}
-                    count={counts?.get(def.anyValue)}
-                  />
-                  {visible.map((option) => (
-                    <FilterOption
-                      key={option.value}
-                      active={value === option.value}
-                      onClick={() =>
-                        setValueFor(
-                          def.id,
-                          value === option.value ? def.anyValue : option.value,
-                        )
-                      }
-                      label={option.label}
-                      count={counts?.get(option.value)}
-                    />
-                  ))}
-                  {options.length > limit ? (
-                    <button
-                      type="button"
-                      className="public-offers-show-more"
-                      onClick={() =>
-                        setExpandedSections((prev) => ({
-                          ...prev,
-                          [def.id]: !expanded,
-                        }))
-                      }
-                    >
-                      {expanded ? "Show less" : `Show all (${options.length})`}
-                    </button>
-                  ) : null}
-                </FilterSection>
-                {def.id === "category" ? (
-                  <FilterSection
-                    title="Price (TTD)"
-                    activeCount={priceChipLabel(priceMin, priceMax) ? 1 : 0}
-                    open={!closedSections.price}
-                    onToggle={() => toggleSection("price")}
-                  >
-                    <div className="public-offers-range">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={priceMin}
-                        onChange={(event) => setPriceMin(event.target.value)}
-                        placeholder="Min"
-                        aria-label="Minimum price in TTD"
-                      />
-                      <span aria-hidden="true">–</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={priceMax}
-                        onChange={(event) => setPriceMax(event.target.value)}
-                        placeholder="Max"
-                        aria-label="Maximum price in TTD"
-                      />
-                    </div>
-                    <div className="public-offers-presets">
-                      {PRICE_PRESETS.map((preset) => {
-                        const active =
-                          priceMin === preset.min && priceMax === preset.max;
-                        return (
-                          <button
-                            key={preset.label}
-                            type="button"
-                            className={`public-offers-preset${active ? " is-active" : ""}`}
-                            aria-pressed={active}
-                            onClick={() => {
-                              setPriceMin(active ? "" : preset.min);
-                              setPriceMax(active ? "" : preset.max);
-                            }}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </FilterSection>
-                ) : null}
-              </Fragment>
-            );
-          })}
-
-          {hasFilters ? (
-            <button
-              type="button"
-              className="public-offers-btn is-quiet public-offers-rail-clear"
-              onClick={clearFilters}
-            >
-              Clear filters
-            </button>
-          ) : null}
+          <CatalogFiltersBody {...filterBodyProps} />
         </div>
       </aside>
 
@@ -561,6 +689,11 @@ function OffersCatalogInner() {
         <OffersTopbar
           showBrand={false}
           back={sellerUsername ? { href: "/creative-network/", label: "All services" } : undefined}
+          search={search}
+          onSearchChange={setSearch}
+          filtersOpen={filtersOpen}
+          onToggleFilters={() => setFiltersOpen((open) => !open)}
+          filterActive={hasFilters}
         />
         <div className="public-offers-main-scroll">
           <main className="public-offers-body">
@@ -691,6 +824,38 @@ function OffersCatalogInner() {
           </main>
         </div>
       </div>
+
+      {filtersOpen ? (
+        <div
+          className="public-offers-filters-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Filters"
+        >
+          <button
+            type="button"
+            className="public-offers-filters-backdrop"
+            aria-label="Dismiss filters"
+            onClick={() => setFiltersOpen(false)}
+          />
+          <div className="public-offers-filters-panel">
+            <div className="public-offers-filters-head">
+              <strong>Filters</strong>
+              <button
+                type="button"
+                className="public-offers-btn is-icon is-quiet"
+                aria-label="Close filters"
+                onClick={() => setFiltersOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="public-offers-filters-body">
+              <CatalogFiltersBody {...filterBodyProps} />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
