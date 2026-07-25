@@ -158,6 +158,9 @@ Rules:
 - On a public profile hero, Follow must match Hire Me / website chips (28×12), never a taller accent pill.
 - Prefer shared classes (`.public-profile-links a`, `.public-profile-follow`) over inline sizes.
 - Header bars stay exactly `--cursor-head-h` (32px); nest 24–28px chips inside, don’t grow the bar.
+- **In-rail / inline panel heads** (DM New/Edit label, assign sheets, secondary pane titles) use the
+  **same** `--cursor-head-h` — never a taller padded `10px 12px` dialog strip. Close/back icons
+  nest at **24px** inside the 32px bar (same as `.studio-dm-back` / chat head).
 
 ## 6. Shared components
 
@@ -285,3 +288,4 @@ Update memory when you change a rule here:
 - **697** — Offers inputs keep raised fill; white/borderless rejected.
 - **703** — Public routes reuse mos tokens; `public-offers.css` mirrors admin billing chrome.
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
+- **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.

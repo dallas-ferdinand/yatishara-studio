@@ -1376,7 +1376,10 @@
 
 .studio-dm-label-editor-panel .studio-dm-dialog-head {
   flex: 0 0 auto;
-  padding: 10px 12px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
@@ -1499,13 +1502,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  box-sizing: border-box;
 }
 
 .studio-dm-dialog-head strong {
   font-size: 13px;
   font-weight: 700;
+  line-height: 1;
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
@@ -1513,10 +1521,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
