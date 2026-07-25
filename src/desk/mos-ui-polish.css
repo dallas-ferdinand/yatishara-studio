@@ -3148,7 +3148,6 @@
 .cursor-chat-thread.mos-chat .mos-ui-kanban-board,
 .cursor-chat-thread.mos-chat .mos-ui-media-row-track {
   gap: var(--mos-ui-gap);
-  scrollbar-width: thin;
 }
 
 .cursor-chat-thread.mos-chat .mos-ui-journey-card,

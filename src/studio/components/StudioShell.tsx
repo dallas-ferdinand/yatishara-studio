@@ -10354,18 +10354,10 @@ export function StudioShell({
           overscroll-behavior: contain;
           margin: 0 -4px;
           padding: 8px 4px 12px;
-          scrollbar-width: thin;
         }
         .studio-polish.is-studio-mobile .studio-preset-grid,
         .studio-composer-options-panel .studio-preset-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-        .studio-preset-grid::-webkit-scrollbar {
-          width: 6px;
-        }
-        .studio-preset-grid::-webkit-scrollbar-thumb {
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-muted) 42%, transparent);
         }
         .studio-preset-grid-card {
           display: flex;
@@ -14573,7 +14565,6 @@ export function StudioShell({
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
-          scrollbar-gutter: stable;
           padding: 4px 10px 16px;
           display: flex;
           flex-direction: column;

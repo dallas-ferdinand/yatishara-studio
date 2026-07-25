@@ -427,18 +427,7 @@
   padding: 8px;
   max-height: min(280px, 38vh);
   overflow-y: auto;
-  scrollbar-gutter: stable;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-}
-
-.chat-todos-dock-panel::-webkit-scrollbar {
-  width: 10px;
-}
-
-.chat-todos-dock-panel::-webkit-scrollbar-thumb {
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--mos-accent) 28%, transparent) padding-box;
 }
 
 .chat-todos-list {
