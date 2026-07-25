@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { PublicOffersCatalog } from "@/studio/components/PublicOffersPages";
 
 export const metadata: Metadata = {
-  title: "Offers · Yatishara Studio",
-  description: "Browse creator packages on Yatishara Studio",
+  title: "Creative Network · Yatishara Studio",
+  description: "Creative services from verified creators on Yatishara Studio",
 };
 
 export default function OffersPage() {

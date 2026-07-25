@@ -8,8 +8,8 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   return {
-    title: `${slug} · Offers · Yatishara Studio`,
-    description: "Book a creator package on Yatishara Studio",
+    title: `${slug} · Creative Network · Yatishara Studio`,
+    description: "Book a creative service from a verified creator on Yatishara Studio",
   };
 }
 
