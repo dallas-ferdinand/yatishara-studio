@@ -64,8 +64,8 @@ Supporting tokens (also both modes):
 ### Select / dropdown (locked decision)
 
 - **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** `var(--cursor-shadow-pop)`.
-  Tight to the trigger (`2px` gap, `2px` padding, compact rows). Size with
-  `width: max-content`; parents must `overflow: visible`.
+  Close to the trigger: `4px` gap, `4px` panel padding, rows `7px 10px`, radius `md`.
+  Size with `width: max-content`; parents must `overflow: visible`.
 - **Trigger / button** → level-3 `--mos-plate-strong` at rest; hover/open → `--mos-active`.
 - **Menu item hover / active** → level-3 `--mos-plate-strong`.
 - **Caret icon** → Lucide `ArrowDown` (same as StudioShell / profile chrome). **Not**
