@@ -1242,6 +1242,11 @@ export default defineSchema({
     ),
     coverAssetId: v.optional(v.id("assets")),
     sampleAssetIds: v.optional(v.array(v.id("assets"))),
+    /** Completed bookings (verified purchases). */
+    purchaseCount: v.optional(v.number()),
+    /** Sum of 1–5 star ratings from verified buyers. */
+    ratingSum: v.optional(v.number()),
+    ratingCount: v.optional(v.number()),
     publishedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1271,6 +1276,8 @@ export default defineSchema({
     deliveredAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
     cancelledAt: v.optional(v.number()),
+    /** Set when the buyer leaves a verified-purchase review. */
+    reviewId: v.optional(v.id("marketplaceReviews")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1297,6 +1304,23 @@ export default defineSchema({
   })
     .index("by_job", ["jobId"])
     .index("by_asset", ["assetId"]),
+
+  /** Buyer reviews — one per completed job (verified purchase only). */
+  marketplaceReviews: defineTable({
+    jobId: v.id("marketplaceJobs"),
+    offerId: v.id("marketplaceOffers"),
+    sellerUserId: v.id("users"),
+    buyerUserId: v.id("users"),
+    rating: v.number(),
+    body: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_offer", ["offerId"])
+    .index("by_offer_and_created", ["offerId", "createdAt"])
+    .index("by_buyer", ["buyerUserId"])
+    .index("by_seller", ["sellerUserId"]),
 
   platformEscrowHolds: defineTable({
     jobId: v.id("marketplaceJobs"),

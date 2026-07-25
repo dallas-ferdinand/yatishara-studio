@@ -244,10 +244,25 @@ const publicOfferReturn = v.object({
   packages: v.optional(v.array(offerPackageValidator)),
   bannerThumbUrl: v.optional(v.string()),
   gallery: v.optional(v.array(publicGalleryItem)),
+  purchaseCount: v.number(),
+  ratingCount: v.number(),
+  ratingAvg: v.union(v.number(), v.null()),
   sellerBusinessName: v.string(),
   sellerUsername: v.optional(v.string()),
   sellerUserId: v.id("users"),
 });
+
+function offerRatingStats(offer: Doc<"marketplaceOffers">) {
+  const purchaseCount = offer.purchaseCount ?? 0;
+  const ratingCount = offer.ratingCount ?? 0;
+  const ratingSum = offer.ratingSum ?? 0;
+  return {
+    purchaseCount,
+    ratingCount,
+    ratingAvg:
+      ratingCount > 0 ? Math.round((ratingSum / ratingCount) * 10) / 10 : null,
+  };
+}
 
 async function signOfferGalleryItem(
   ctx: QueryCtx | MutationCtx,
@@ -300,6 +315,7 @@ async function toPublicOffer(
       if (gallery.length === 0) gallery = undefined;
     }
   }
+  const stats = offerRatingStats(offer);
   return {
     _id: offer._id,
     title: offer.title,
@@ -313,6 +329,9 @@ async function toPublicOffer(
     packages: offer.packages,
     bannerThumbUrl,
     gallery,
+    purchaseCount: stats.purchaseCount,
+    ratingCount: stats.ratingCount,
+    ratingAvg: stats.ratingAvg,
     sellerBusinessName: label.businessName,
     sellerUsername: label.username,
     sellerUserId: offer.sellerUserId,
@@ -353,6 +372,13 @@ async function completeJobWithRelease(
     completedAt: now,
     updatedAt: now,
   });
+  const offer = await ctx.db.get("marketplaceOffers", job.offerId);
+  if (offer) {
+    await ctx.db.patch(offer._id, {
+      purchaseCount: (offer.purchaseCount ?? 0) + 1,
+      updatedAt: now,
+    });
+  }
   const existingPayout = await ctx.db
     .query("sellerPayouts")
     .withIndex("by_job", (q) => q.eq("jobId", job._id))
@@ -1500,6 +1526,7 @@ const jobSummary = v.object({
   buyerUserId: v.id("users"),
   deliveredAt: v.optional(v.number()),
   completedAt: v.optional(v.number()),
+  reviewId: v.optional(v.id("marketplaceReviews")),
   createdAt: v.number(),
   updatedAt: v.number(),
   role: v.union(v.literal("seller"), v.literal("buyer")),
@@ -1526,6 +1553,7 @@ async function toJobSummary(
     buyerUserId: job.buyerUserId,
     deliveredAt: job.deliveredAt,
     completedAt: job.completedAt,
+    reviewId: job.reviewId,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
     role,
@@ -1594,6 +1622,16 @@ export const getJob = authedQuery({
         }),
       ),
       workFolderId: v.optional(v.id("folders")),
+      review: v.union(
+        v.null(),
+        v.object({
+          _id: v.id("marketplaceReviews"),
+          rating: v.number(),
+          body: v.optional(v.string()),
+          createdAt: v.number(),
+        }),
+      ),
+      canReview: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1648,6 +1686,36 @@ export const getJob = authedQuery({
         signedThumbnailUrl,
       });
     }
+    let review: {
+      _id: Id<"marketplaceReviews">;
+      rating: number;
+      body?: string;
+      createdAt: number;
+    } | null = null;
+    if (job.reviewId) {
+      const row = await ctx.db.get("marketplaceReviews", job.reviewId);
+      if (row) {
+        review = {
+          _id: row._id,
+          rating: row.rating,
+          body: row.body,
+          createdAt: row.createdAt,
+        };
+      }
+    } else {
+      const existing = await ctx.db
+        .query("marketplaceReviews")
+        .withIndex("by_job", (q) => q.eq("jobId", job._id))
+        .unique();
+      if (existing) {
+        review = {
+          _id: existing._id,
+          rating: existing.rating,
+          body: existing.body,
+          createdAt: existing.createdAt,
+        };
+      }
+    }
     return {
       job: await toJobSummary(ctx, job, role),
       events: events
@@ -1660,6 +1728,9 @@ export const getJob = authedQuery({
         })),
       deliverables,
       workFolderId: job.workFolderId,
+      review,
+      canReview:
+        role === "buyer" && job.status === "completed" && review === null,
     };
   },
 });
@@ -1814,5 +1885,124 @@ export const viewerCanSeeSellerOffers = query({
       .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
       .collect();
     return offers.some((o) => o.status === "published");
+  },
+});
+
+// —— Verified-purchase ratings & reviews ——
+
+const publicReviewReturn = v.object({
+  _id: v.id("marketplaceReviews"),
+  rating: v.number(),
+  body: v.optional(v.string()),
+  createdAt: v.number(),
+  buyerDisplayName: v.string(),
+  buyerUsername: v.optional(v.string()),
+  packageName: v.optional(v.string()),
+});
+
+export const listPublicOfferReviews = query({
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicReviewReturn),
+  handler: async (ctx, args) => {
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") return [];
+    const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
+    const rows = await ctx.db
+      .query("marketplaceReviews")
+      .withIndex("by_offer_and_created", (q) => q.eq("offerId", args.offerId))
+      .order("desc")
+      .take(limit);
+    const out = [];
+    for (const row of rows) {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", row.buyerUserId))
+        .unique();
+      const job = await ctx.db.get("marketplaceJobs", row.jobId);
+      out.push({
+        _id: row._id,
+        rating: row.rating,
+        body: row.body,
+        createdAt: row.createdAt,
+        buyerDisplayName:
+          profile?.displayName?.trim() ||
+          (profile?.username ? `@${profile.username}` : "Buyer"),
+        buyerUsername: profile?.username,
+        packageName: job?.packageName,
+      });
+    }
+    return out;
+  },
+});
+
+/**
+ * Buyer leaves a rating after a completed job (verified purchase).
+ * Written review body is optional — stars are required.
+ */
+export const submitJobReview = authedMutation({
+  args: {
+    jobId: v.id("marketplaceJobs"),
+    rating: v.number(),
+    body: v.optional(v.string()),
+  },
+  returns: v.id("marketplaceReviews"),
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.buyerUserId !== ctx.user._id) {
+      throw new Error("Job not found");
+    }
+    if (job.status !== "completed") {
+      throw new Error("Only completed purchases can be reviewed");
+    }
+    if (job.reviewId) {
+      throw new Error("You already reviewed this purchase");
+    }
+    const existing = await ctx.db
+      .query("marketplaceReviews")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .unique();
+    if (existing) {
+      throw new Error("You already reviewed this purchase");
+    }
+    const rating = Math.floor(args.rating);
+    if (rating < 1 || rating > 5) {
+      throw new Error("Rating must be 1 to 5 stars");
+    }
+    const body = args.body?.trim().slice(0, 2000) || undefined;
+    const now = Date.now();
+    const reviewId = await ctx.db.insert("marketplaceReviews", {
+      jobId: job._id,
+      offerId: job.offerId,
+      sellerUserId: job.sellerUserId,
+      buyerUserId: ctx.user._id,
+      rating,
+      body,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(job._id, {
+      reviewId,
+      updatedAt: now,
+    });
+    const offer = await ctx.db.get("marketplaceOffers", job.offerId);
+    if (offer) {
+      await ctx.db.patch(offer._id, {
+        ratingSum: (offer.ratingSum ?? 0) + rating,
+        ratingCount: (offer.ratingCount ?? 0) + 1,
+        updatedAt: now,
+      });
+    }
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: ctx.user._id,
+      kind: "reviewed",
+      message: body
+        ? `Rated ${rating}/5 — ${body.slice(0, 80)}`
+        : `Rated ${rating}/5`,
+    });
+    return reviewId;
   },
 });
