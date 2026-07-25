@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 type CursorTableEmptyProps = {
   title: string;
   hint?: string;
+  icon?: ReactNode;
   action?: ReactNode;
   className?: string;
 };
@@ -16,11 +17,13 @@ type CursorTableEmptyProps = {
 export function CursorTableEmpty({
   title,
   hint,
+  icon,
   action,
   className = "",
 }: CursorTableEmptyProps) {
   return (
     <div className={`cursor-table-empty${className ? ` ${className}` : ""}`}>
+      {icon ? <div className="cursor-table-empty-icon" aria-hidden>{icon}</div> : null}
       <p className="cursor-table-empty-title">{title}</p>
       {hint ? <p className="cursor-table-empty-hint">{hint}</p> : null}
       {action ? <div className="cursor-table-empty-action">{action}</div> : null}
@@ -34,6 +37,7 @@ type CursorTableProps = {
   empty?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
+  emptyIcon?: ReactNode;
   emptyAction?: ReactNode;
   loading?: boolean;
   loadingLabel?: string;
@@ -52,6 +56,7 @@ export function CursorTable({
   empty = false,
   emptyTitle = "Nothing here",
   emptyHint,
+  emptyIcon,
   emptyAction,
   loading = false,
   loadingLabel = "Loading…",
@@ -71,7 +76,12 @@ export function CursorTable({
           <span className="cursor-table-loading-label">{loadingLabel}</span>
         </div>
       ) : empty ? (
-        <CursorTableEmpty title={emptyTitle} hint={emptyHint} action={emptyAction} />
+        <CursorTableEmpty
+          title={emptyTitle}
+          hint={emptyHint}
+          icon={emptyIcon}
+          action={emptyAction}
+        />
       ) : (
         <table
           className={`cursor-table studio-admin-table${className ? ` ${className}` : ""}`}

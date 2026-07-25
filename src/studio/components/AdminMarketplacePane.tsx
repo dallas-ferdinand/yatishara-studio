@@ -1,12 +1,13 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Store, Wallet } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { CursorSelect } from "@/desk/components/CursorSelect";
+import { CursorTable } from "@/desk/components/CursorTable";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 
@@ -108,11 +109,14 @@ export function AdminMarketplacePane() {
             />
           </div>
         </div>
-        <div className="studio-admin-table-wrap">
-          {!sellers ? (
-            <Loader2 className="m-4 h-4 w-4 animate-spin" />
-          ) : (
-            <table className="studio-admin-table">
+        <CursorTable
+          ariaLabel="Sellers"
+          loading={!sellers}
+          empty={!!sellers && !sellers.length}
+          emptyIcon={<Store />}
+          emptyTitle="No sellers"
+          emptyHint="No sellers match this filter yet."
+        >
               <thead>
                 <tr>
                   <th>Business</th>
@@ -123,7 +127,7 @@ export function AdminMarketplacePane() {
                 </tr>
               </thead>
               <tbody>
-                {sellers.map((seller) => (
+                {(sellers ?? []).map((seller) => (
                   <tr key={seller._id}>
                     <td>
                       <strong>{seller.businessName}</strong>
@@ -181,12 +185,7 @@ export function AdminMarketplacePane() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          )}
-          {sellers && !sellers.length ? (
-            <p className="studio-settings-empty">No sellers in this filter.</p>
-          ) : null}
-        </div>
+        </CursorTable>
 
       </section>
 
@@ -206,11 +205,14 @@ export function AdminMarketplacePane() {
             />
           </div>
         </div>
-        <div className="studio-admin-table-wrap">
-          {!payouts ? (
-            <Loader2 className="m-4 h-4 w-4 animate-spin" />
-          ) : (
-            <table className="studio-admin-table">
+        <CursorTable
+          ariaLabel="Payouts"
+          loading={!payouts}
+          empty={!!payouts && !payouts.length}
+          emptyIcon={<Wallet />}
+          emptyTitle="No payouts"
+          emptyHint="No payouts match this filter yet."
+        >
               <thead>
                 <tr>
                   <th>Seller</th>
@@ -220,7 +222,7 @@ export function AdminMarketplacePane() {
                 </tr>
               </thead>
               <tbody>
-                {payouts.map((payout) => (
+                {(payouts ?? []).map((payout) => (
                   <tr key={payout._id}>
                     <td>
                       <strong>{payout.businessName ?? payout.sellerUserId}</strong>
@@ -247,12 +249,7 @@ export function AdminMarketplacePane() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          )}
-          {payouts && !payouts.length ? (
-            <p className="studio-settings-empty">No payouts in this filter.</p>
-          ) : null}
-        </div>
+        </CursorTable>
       </section>
     </div>
 

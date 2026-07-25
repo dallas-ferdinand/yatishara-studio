@@ -22039,6 +22039,7 @@ function AdminWorkspacePane({
               <CursorTable
                 ariaLabel="Payments"
                 empty={!visiblePayments.length}
+                emptyIcon={<HandCoins />}
                 emptyTitle="No payments"
                 emptyHint="Nothing matches this filter."
               >
@@ -22092,6 +22093,7 @@ function AdminWorkspacePane({
             <CursorTable
               ariaLabel="Customers"
               empty={!customerRows.length}
+              emptyIcon={<UserRound />}
               emptyTitle="No customers"
               emptyHint="No customers yet."
             >
