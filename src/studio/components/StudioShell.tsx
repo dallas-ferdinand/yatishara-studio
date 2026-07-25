@@ -6558,6 +6558,27 @@ export function StudioShell({
           z-index: 1;
         }
         .studio-polish .cursor-unified-tab::after {
+          content: "" !important;
+          display: block !important;
+          position: absolute;
+          right: -2px;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 0;
+          width: 1px;
+          height: 16px;
+          border-radius: 1px;
+          background: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          pointer-events: none;
+        }
+        .studio-polish .cursor-unified-tab:last-of-type::after,
+        .studio-polish .cursor-unified-tab.cursor-unified-tab-new::after,
+        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-new)::after,
+        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-placeholder)::after,
+        .studio-polish .cursor-unified-tab:hover::after,
+        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab:hover)::after,
+        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab.is-active)::after,
+        .studio-polish .cursor-unified-tabs.is-dragging-strip .cursor-unified-tab::after {
           content: none !important;
           display: none !important;
         }
