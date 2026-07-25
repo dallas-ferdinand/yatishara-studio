@@ -884,14 +884,20 @@
 
 /* —— WhatsApp-style label chips (lists) —— */
 
+/* Same chrome height as search / panel heads; chips nest at 22px. */
 .studio-dm-label-rail {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 0 0 auto;
-  padding: 6px 8px 8px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
+  box-sizing: border-box;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
@@ -904,6 +910,7 @@
   display: inline-flex;
   align-items: stretch;
   flex: 0 0 auto;
+  height: 22px;
   border-radius: 999px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-raised, var(--mos-surface));
@@ -922,26 +929,33 @@
 .studio-dm-label-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex: 0 0 auto;
-  height: 26px;
-  padding: 0 10px;
+  height: 22px;
+  padding: 0 8px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-radius: 999px;
   background: var(--cursor-surface-raised, var(--mos-surface));
   color: var(--color-cursor-text, var(--mos-text));
   font: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 650;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.studio-dm-label-chip svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
 }
 
 .studio-dm-label-chip-wrap .studio-dm-label-chip {
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding-right: 6px;
+  padding-right: 4px;
 }
 
 .studio-dm-label-chip.is-active {
@@ -956,6 +970,7 @@
 
 .studio-dm-label-chip.is-add {
   color: var(--color-cursor-muted, var(--mos-muted));
+  padding: 0 7px;
 }
 
 .studio-dm-label-chip.is-add:hover {
@@ -966,12 +981,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
+  width: 18px;
+  height: 22px;
   border: 0;
   border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
+}
+
+.studio-dm-label-edit svg {
+  width: 10px;
+  height: 10px;
 }
 
 .studio-dm-label-edit:hover {
