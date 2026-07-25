@@ -1383,6 +1383,23 @@
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
+.studio-dm-assign-peer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.studio-dm-assign-peer strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-assign-peer .studio-profile-avatar {
+  flex: 0 0 auto;
+}
+
 .studio-dm-label-editor-panel .studio-dm-dialog-body {
   flex: 1 1 auto;
   min-height: 0;

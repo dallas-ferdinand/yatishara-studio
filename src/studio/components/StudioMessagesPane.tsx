@@ -212,12 +212,14 @@ export function StudioMessagesPane({
   const [assignPeer, setAssignPeer] = useState<{
     userId: Id<"users">;
     label: string;
+    avatarUrl?: string | null;
   } | null>(null);
   const [listContext, setListContext] = useState<{
     x: number;
     y: number;
     userId: Id<"users">;
     label: string;
+    avatarUrl?: string | null;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -466,6 +468,7 @@ export function StudioMessagesPane({
                 setAssignPeer({
                   userId: listContext.userId,
                   label: listContext.label,
+                  avatarUrl: listContext.avatarUrl,
                 });
               },
             },
@@ -497,6 +500,7 @@ export function StudioMessagesPane({
                           label:
                             row.peer.displayName?.trim() ||
                             `@${row.peer.username}`,
+                          avatarUrl: row.peer.avatarUrl,
                         })
                       }
                     />
@@ -510,6 +514,7 @@ export function StudioMessagesPane({
             variant="modal"
             peerUserId={assignPeer?.userId ?? null}
             peerLabel={assignPeer?.label ?? ""}
+            peerAvatarUrl={assignPeer?.avatarUrl}
             onClose={() => setAssignPeer(null)}
           />
           {listContext ? (

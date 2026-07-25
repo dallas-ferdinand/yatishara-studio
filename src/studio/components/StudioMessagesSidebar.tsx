@@ -70,6 +70,7 @@ type ContextTarget =
       y: number;
       userId: Id<"users">;
       label: string;
+      avatarUrl?: string | null;
     };
 
 /** Chat-list rail — replaces the file manager while a Messages tab is active. */
@@ -94,6 +95,7 @@ export function StudioMessagesSidebar({
   const [assignPeer, setAssignPeer] = useState<{
     userId: Id<"users">;
     label: string;
+    avatarUrl?: string | null;
   } | null>(null);
   const [context, setContext] = useState<ContextTarget | null>(null);
 
@@ -173,7 +175,11 @@ export function StudioMessagesSidebar({
   const openChatMenu = useCallback(
     (
       coords: { x: number; y: number },
-      peer: { userId: Id<"users">; label: string },
+      peer: {
+        userId: Id<"users">;
+        label: string;
+        avatarUrl?: string | null;
+      },
     ) => {
       setContext({
         kind: "chat",
@@ -181,6 +187,7 @@ export function StudioMessagesSidebar({
         y: coords.y,
         userId: peer.userId,
         label: peer.label,
+        avatarUrl: peer.avatarUrl,
       });
     },
     [],
@@ -235,6 +242,7 @@ export function StudioMessagesSidebar({
               setAssignPeer({
                 userId: context.userId,
                 label: context.label,
+                avatarUrl: context.avatarUrl,
               });
             },
           },
@@ -317,6 +325,7 @@ export function StudioMessagesSidebar({
             variant="inline"
             peerUserId={assignPeer.userId}
             peerLabel={assignPeer.label}
+            peerAvatarUrl={assignPeer.avatarUrl}
             onClose={() => setAssignPeer(null)}
           />
         ) : searching ? (
@@ -533,6 +542,7 @@ export function StudioMessagesSidebar({
                       label:
                         row.peer.displayName?.trim() ||
                         `@${row.peer.username}`,
+                      avatarUrl: row.peer.avatarUrl,
                     })
                   }
                 />

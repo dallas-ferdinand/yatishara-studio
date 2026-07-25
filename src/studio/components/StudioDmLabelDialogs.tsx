@@ -10,6 +10,7 @@ import {
   DM_LABEL_ICON_OPTIONS,
   dmLabelIcon,
 } from "@/studio/lib/dmLabelIcons";
+import { StudioProfileAvatar } from "./StudioProfileAvatar";
 
 type LabelId = Id<"dmLabels">;
 type UserId = Id<"users">;
@@ -191,6 +192,7 @@ export function StudioDmAssignLabelsDialog({
   open,
   peerUserId,
   peerLabel,
+  peerAvatarUrl,
   onClose,
   /** Inline replaces the chat-list body; modal is a centered page dialog. */
   variant = "inline",
@@ -198,6 +200,7 @@ export function StudioDmAssignLabelsDialog({
   open: boolean;
   peerUserId: UserId | null;
   peerLabel: string;
+  peerAvatarUrl?: string | null;
   onClose: () => void;
   variant?: "inline" | "modal";
 }) {
@@ -267,7 +270,15 @@ export function StudioDmAssignLabelsDialog({
       }
     >
       <header className="studio-dm-dialog-head">
-        <strong>Labels · {peerLabel}</strong>
+        <span className="studio-dm-assign-peer">
+          <StudioProfileAvatar
+            size="sm"
+            src={peerAvatarUrl}
+            displayName={peerLabel}
+            alt=""
+          />
+          <strong>Labels · {peerLabel}</strong>
+        </span>
         <button type="button" onClick={onClose} aria-label="Close">
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
