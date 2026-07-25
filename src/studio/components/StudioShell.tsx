@@ -2914,7 +2914,9 @@ export function StudioShell({
     if (!isAdminUser) return;
     setSettingsOpen(false);
     if (isMobile) setMobileSection("composer");
-    openTab(`admin:${tab}`);
+    // Setup + Pricing were demoted into Tools (P4).
+    const section = tab === "setup" || tab === "pricing" ? "tools" : tab;
+    openTab(`admin:${section}`);
   }
 
   function openOffersTab(section = "home") {
@@ -22423,72 +22425,79 @@ function AdminWorkspacePane({
               />
             ) : null}
           </div>
-        ) : tab === "marketplace" ? (
+        ) : adminSection === "marketplace" ? (
           <AdminMarketplacePane />
-        ) : tab === "setup" ? (
-          <section className="studio-admin-section">
-            <div className="studio-admin-section-head">
-              <span className="studio-admin-section-title">Setup</span>
-            </div>
-            <div className="studio-admin-setup-grid">
-              <AdminSetupAction
-                title="Style presets"
-                body="Creates or refreshes the default creative style options used by generation."
-                actionLabel="Seed style presets"
-                onRun={() => runSetup("Seeding style presets", onSeedStylePresets)}
-              />
-              <AdminSetupAction
-                title="Preset preview images"
-                body="Generates preview cards for the style picker using GPT Image 2 and saves them to storage."
-                actionLabel="Generate preset previews"
-                onRun={() =>
-                  runSetup("Generating preset preview images", async () => {
-                    const result = await onGeneratePresetThumbnails();
-                    if (result?.errors?.length) {
-                      throw new Error(result.errors.slice(0, 3).join(" · "));
-                    }
-                    return result;
-                  })
-                }
-              />
-              <AdminSetupAction
-                title="Launch pricing"
-                body="Creates or refreshes default generation prices."
-                actionLabel="Seed pricing"
-                onRun={() => runSetup("Seeding pricing", seedLaunchPricing)}
-              />
-            </div>
-            {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
-          </section>
         ) : (
-          <>
-            <section className="studio-admin-grid-large">
-              {plans.map((plan) => (
-                <article key={plan.name} className={`studio-plan-card${plan.featured ? " is-featured" : ""}`}>
-                  <span className="studio-plan-badge">{plan.badge}</span>
-                  <h4>{plan.name}</h4>
-                  <p className="studio-plan-price">{plan.price}</p>
-                  <p className="studio-plan-sub">PayWise checkout</p>
-                  <ul>
-                    {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
-                  </ul>
-                </article>
-              ))}
-            </section>
-            <section className="studio-admin-card">
-                <p className="studio-admin-card-kicker">Content costs</p>
-              <div className="studio-credit-costs">
-                <div className="studio-credit-cost"><span>Image 1K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits1K ?? 2, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
-                <div className="studio-credit-cost"><span>Image 2K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits2K ?? 2, pricing?.creditPriceCents)}</strong><em>default</em></div>
-                <div className="studio-credit-cost"><span>Image 4K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits4K ?? 5, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
-                <div className="studio-credit-cost"><span>Image high</span><strong>prices scale with quality</strong><em>low / medium / high</em></div>
-                <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 14, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
-                <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>default</em></div>
-                <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits1080p ?? 69, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
-                <div className="studio-credit-cost"><span>Script / Assistance</span><strong>2× usage · from {formatTtdFromCredits(TEXT_GENERATION_BASE_CREDITS, pricing?.creditPriceCents)}</strong><em>per turn</em></div>
+          <div className="studio-admin-stack">
+            <section className="studio-admin-section">
+              <div className="studio-admin-section-head">
+                <span className="studio-admin-section-title">Setup</span>
               </div>
+              <p className="studio-settings-empty" style={{ margin: "0 0 10px" }}>
+                Launch seeds — not day-to-day ops. Use when bootstrapping a deployment.
+              </p>
+              <div className="studio-admin-setup-grid">
+                <AdminSetupAction
+                  title="Style presets"
+                  body="Creates or refreshes the default creative style options used by generation."
+                  actionLabel="Seed style presets"
+                  onRun={() => runSetup("Seeding style presets", onSeedStylePresets)}
+                />
+                <AdminSetupAction
+                  title="Preset preview images"
+                  body="Generates preview cards for the style picker using GPT Image 2 and saves them to storage."
+                  actionLabel="Generate preset previews"
+                  onRun={() =>
+                    runSetup("Generating preset preview images", async () => {
+                      const result = await onGeneratePresetThumbnails();
+                      if (result?.errors?.length) {
+                        throw new Error(result.errors.slice(0, 3).join(" · "));
+                      }
+                      return result;
+                    })
+                  }
+                />
+                <AdminSetupAction
+                  title="Launch pricing"
+                  body="Creates or refreshes default generation prices."
+                  actionLabel="Seed pricing"
+                  onRun={() => runSetup("Seeding pricing", seedLaunchPricing)}
+                />
+              </div>
+              {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
             </section>
-          </>
+            <section className="studio-admin-section">
+              <div className="studio-admin-section-head">
+                <span className="studio-admin-section-title">Pricing</span>
+              </div>
+              <section className="studio-admin-grid-large">
+                {plans.map((plan) => (
+                  <article key={plan.name} className={`studio-plan-card${plan.featured ? " is-featured" : ""}`}>
+                    <span className="studio-plan-badge">{plan.badge}</span>
+                    <h4>{plan.name}</h4>
+                    <p className="studio-plan-price">{plan.price}</p>
+                    <p className="studio-plan-sub">PayWise checkout</p>
+                    <ul>
+                      {plan.features.map((feature) => <li key={feature}>{feature}</li>)}
+                    </ul>
+                  </article>
+                ))}
+              </section>
+              <section className="studio-admin-card" style={{ marginTop: 12 }}>
+                <p className="studio-admin-card-kicker">Content costs</p>
+                <div className="studio-credit-costs">
+                  <div className="studio-credit-cost"><span>Image 1K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits1K ?? 2, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
+                  <div className="studio-credit-cost"><span>Image 2K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits2K ?? 2, pricing?.creditPriceCents)}</strong><em>default</em></div>
+                  <div className="studio-credit-cost"><span>Image 4K · medium</span><strong>{formatTtdFromCredits(pricing?.imageCredits4K ?? 5, pricing?.creditPriceCents)}</strong><em>2× model</em></div>
+                  <div className="studio-credit-cost"><span>Image high</span><strong>prices scale with quality</strong><em>low / medium / high</em></div>
+                  <div className="studio-credit-cost"><span>Video 480p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits480p ?? 14, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
+                  <div className="studio-credit-cost"><span>Video 720p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits720p ?? 31, pricing?.creditPriceCents)} / 5s</strong><em>default</em></div>
+                  <div className="studio-credit-cost"><span>Video 1080p</span><strong>from {formatTtdFromCredits(pricing?.videoCredits1080p ?? 69, pricing?.creditPriceCents)} / 5s</strong><em>2× gateway</em></div>
+                  <div className="studio-credit-cost"><span>Script / Assistance</span><strong>2× usage · from {formatTtdFromCredits(TEXT_GENERATION_BASE_CREDITS, pricing?.creditPriceCents)}</strong><em>per turn</em></div>
+                </div>
+              </section>
+            </section>
+          </div>
         )}
         </div>
       </div>
@@ -22798,8 +22807,7 @@ function PaymentStatusPill({ status, admin = false }) {
 function adminTitle(tab) {
   if (tab === "customers") return "Customers";
   if (tab === "marketplace") return "Marketplace";
-  if (tab === "setup") return "Admin setup";
-  if (tab === "pricing") return "Pricing";
+  if (tab === "tools" || tab === "setup" || tab === "pricing") return "Tools";
   return "Payments";
 }
 
@@ -24710,13 +24718,11 @@ function tabDescriptor({
         ? "Payments"
         : kind === "customers"
           ? "Customers"
-          : kind === "setup"
-            ? "Admin setup"
-            : kind === "pricing"
-              ? "Pricing"
-              : kind === "marketplace"
-                ? "Marketplace"
-                : "Admin";
+          : kind === "marketplace"
+            ? "Marketplace"
+            : kind === "tools" || kind === "setup" || kind === "pricing"
+              ? "Tools"
+              : "Admin";
     return { key, kind: "settings", title, status: "ready" };
   }
   if (key.startsWith("offers:")) {
