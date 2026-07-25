@@ -147,6 +147,7 @@ export const creditTransactionKind = v.union(
 export const marketplaceSellerStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
+  v.literal("rejected"),
   v.literal("suspended"),
 );
 
@@ -1202,6 +1203,12 @@ export default defineSchema({
     payoutUpdatedAt: v.optional(v.number()),
     approvedBy: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
+    /** Set when an application is rejected (pending → rejected). */
+    rejectionReason: v.optional(v.string()),
+    rejectedBy: v.optional(v.id("users")),
+    rejectedAt: v.optional(v.number()),
+    /** Optional note when an approved seller is suspended. */
+    suspendReason: v.optional(v.string()),
     suspendedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

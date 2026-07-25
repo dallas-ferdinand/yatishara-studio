@@ -48,6 +48,7 @@ const jobStatus = v.union(
 const sellerStatus = v.union(
   v.literal("pending"),
   v.literal("approved"),
+  v.literal("rejected"),
   v.literal("suspended"),
 );
 
@@ -338,6 +339,7 @@ export const getMySellerStatus = authedQuery({
       entityType: v.optional(sellerEntityType),
       legalName: v.optional(v.string()),
       businessType: v.optional(sellerBusinessType),
+      rejectionReason: v.optional(v.string()),
     }),
   ),
   handler: async (ctx) => {
@@ -350,6 +352,7 @@ export const getMySellerStatus = authedQuery({
       entityType: seller.entityType,
       legalName: seller.legalName,
       businessType: seller.businessType,
+      rejectionReason: seller.rejectionReason,
     };
   },
 });
@@ -509,13 +512,16 @@ export const requestSellerAccess = authedMutation({
       if (existing.status === "approved") {
         throw new Error("You are already an approved seller");
       }
-      throw new Error("You already have a pending seller request");
+      if (existing.status === "pending") {
+        throw new Error("You already have a pending seller request");
+      }
+      // rejected — allow a fresh application on the same row
     }
 
     const now = Date.now();
-    return await ctx.db.insert("marketplaceSellers", {
+    const record = {
       userId: ctx.user._id,
-      status: "pending",
+      status: "pending" as const,
       businessName,
       entityType: args.entityType,
       legalName,
@@ -541,8 +547,22 @@ export const requestSellerAccess = authedMutation({
         args.entityType === "business"
           ? assertOwnPath(args.proofOfBusinessAddressBunnyPath!, "business address proof")
           : undefined,
-      createdAt: now,
+      rejectionReason: undefined,
+      rejectedBy: undefined,
+      rejectedAt: undefined,
+      suspendReason: undefined,
+      suspendedAt: undefined,
       updatedAt: now,
+    };
+
+    if (existing?.status === "rejected") {
+      await ctx.db.patch(existing._id, record);
+      return existing._id;
+    }
+
+    return await ctx.db.insert("marketplaceSellers", {
+      ...record,
+      createdAt: now,
     });
   },
 });
@@ -598,6 +618,7 @@ export const adminListSellers = adminQuery({
       name: v.optional(v.string()),
       createdAt: v.number(),
       approvedAt: v.optional(v.number()),
+      rejectionReason: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -623,6 +644,7 @@ export const adminListSellers = adminQuery({
         name: user?.name,
         createdAt: seller.createdAt,
         approvedAt: seller.approvedAt,
+        rejectionReason: seller.rejectionReason,
       });
     }
     return out.sort((a, b) => b.createdAt - a.createdAt);
@@ -654,6 +676,7 @@ export const adminGetSellerApplication = adminQuery({
       proofOfResidentialAddressUrl: v.optional(v.string()),
       businessRegistrationUrl: v.optional(v.string()),
       proofOfBusinessAddressUrl: v.optional(v.string()),
+      rejectionReason: v.optional(v.string()),
       createdAt: v.number(),
     }),
   ),
@@ -686,6 +709,7 @@ export const adminGetSellerApplication = adminQuery({
       ),
       businessRegistrationUrl: await sign(seller.businessRegistrationBunnyPath),
       proofOfBusinessAddressUrl: await sign(seller.proofOfBusinessAddressBunnyPath),
+      rejectionReason: seller.rejectionReason,
       createdAt: seller.createdAt,
     };
   },
@@ -694,28 +718,63 @@ export const adminGetSellerApplication = adminQuery({
 export const adminApproveSeller = adminMutation({
   args: {
     sellerId: v.id("marketplaceSellers"),
-    approve: v.boolean(),
+    decision: v.union(
+      v.literal("approve"),
+      v.literal("reject"),
+      v.literal("suspend"),
+    ),
+    reason: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const seller = await ctx.db.get("marketplaceSellers", args.sellerId);
     if (!seller) throw new Error("Seller not found");
     const now = Date.now();
-    if (args.approve) {
+    const reason = args.reason?.trim() || undefined;
+
+    if (args.decision === "approve") {
       await ctx.db.patch(seller._id, {
         status: "approved",
         approvedBy: ctx.user._id,
         approvedAt: now,
+        rejectionReason: undefined,
+        rejectedBy: undefined,
+        rejectedAt: undefined,
+        suspendReason: undefined,
         suspendedAt: undefined,
         updatedAt: now,
       });
-    } else {
+      return null;
+    }
+
+    if (args.decision === "reject") {
+      if (seller.status !== "pending") {
+        throw new Error("Only pending applications can be rejected");
+      }
+      if (!reason) throw new Error("Rejection reason is required");
       await ctx.db.patch(seller._id, {
-        status: "suspended",
-        suspendedAt: now,
+        status: "rejected",
+        rejectionReason: reason,
+        rejectedBy: ctx.user._id,
+        rejectedAt: now,
         updatedAt: now,
       });
+      return null;
     }
+
+    // suspend — enforcement on approved (or re-suspend path)
+    if (seller.status === "pending") {
+      throw new Error("Reject pending applications instead of suspending");
+    }
+    if (seller.status === "rejected") {
+      throw new Error("Rejected applications cannot be suspended");
+    }
+    await ctx.db.patch(seller._id, {
+      status: "suspended",
+      suspendedAt: now,
+      suspendReason: reason,
+      updatedAt: now,
+    });
     return null;
   },
 });
