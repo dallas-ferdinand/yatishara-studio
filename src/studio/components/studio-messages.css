@@ -78,7 +78,7 @@
   justify-content: center;
   gap: 0;
   min-width: 0;
-  line-height: 1.15;
+  line-height: 1;
 }
 
 .studio-dm-chat-peer-copy strong {
@@ -87,6 +87,7 @@
   white-space: nowrap;
   font-size: var(--desk-text-sm, 12px);
   font-weight: 650;
+  line-height: 1.05;
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
@@ -94,8 +95,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-top: -1px;
   font-size: 10px;
   font-weight: 600;
+  line-height: 1.05;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
@@ -965,8 +968,9 @@
 .studio-dm-search-result-copy {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
+  line-height: 1;
 }
 
 .studio-dm-search-result-copy strong,
@@ -974,6 +978,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.05;
 }
 
 .studio-dm-search-result-copy strong {
@@ -983,6 +988,7 @@
 }
 
 .studio-dm-search-result-copy > span {
+  margin-top: -1px;
   color: var(--color-cursor-muted, var(--mos-muted));
   font-size: 10px;
   font-weight: 550;
