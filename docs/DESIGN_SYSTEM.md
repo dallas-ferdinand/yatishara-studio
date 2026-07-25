@@ -211,6 +211,13 @@ border, same as `.studio-account-save`). Logo mark comes from `useMercurySidebar
 so its ink follows appearance. The `studio-admin-*` classes are **not** available on public
 routes (they live in the `StudioShell` inline `<style>`) — mirror them with local classes.
 
+The public marketplace brand is **Yatishara Creative Network** ("Creative services from
+verified creators"); listings are *services/packages*, never "offers" in public copy
+(route stays `/offers`). Catalog = full-width body, hero with no chips, 3-card value grid
+(verified creators / secure booking / delivery tracking), desktop 240px sticky filter
+sidebar (search + category/price/delivery, client-side), pill-chip filters ≤860px.
+Memory: **705**.
+
 ---
 
 ## 7. Scrollbars
