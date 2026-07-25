@@ -49,6 +49,16 @@ export function parseCaptionParts(caption: string | undefined): CaptionPart[] {
   return parts;
 }
 
+/** Plain caption for profile grid tiles — drops #hashtags and @mentions. */
+export function captionGridPreviewText(caption: string | undefined): string {
+  return parseCaptionParts(caption)
+    .filter((part) => part.type === "text")
+    .map((part) => part.value)
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function OverlayHashChip({ tag }: { tag: string }) {
   return (
     <span className="post-compose-inline-chip is-hash is-on-media">

@@ -26,9 +26,8 @@ import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { LogoLoader } from "./logo-loader";
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
-import { CaptionChipText } from "./CaptionChipText";
+import { captionGridPreviewText } from "./CaptionChipText";
 import "./public-profile.css";
-import "./post-compose-tab.css";
 
 type PublicPost = {
   _id: Id<"profilePosts">;
@@ -336,7 +335,9 @@ export function PublicProfileView({
             </div>
           ) : (
             <div className="public-profile-grid">
-              {resolvedPosts.map((post) => (
+              {resolvedPosts.map((post) => {
+                const captionPreview = captionGridPreviewText(post.caption);
+                return (
                 <button
                   key={post._id}
                   type="button"
@@ -423,22 +424,15 @@ export function PublicProfileView({
                     <span className="public-profile-tile-username">
                       {post.username || profile?.username || username}
                     </span>
-                    {post.caption?.trim() ? (
+                    {captionPreview ? (
                       <span className="public-profile-tile-description">
-                        <CaptionChipText
-                          caption={post.caption}
-                          mentions={post.mentions}
-                          author={{
-                            username: post.username || profile?.username || username,
-                            avatarUrl: profile?.avatarUrl,
-                            displayName: profile?.displayName,
-                          }}
-                        />
+                        {captionPreview}
                       </span>
                     ) : null}
                   </span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
