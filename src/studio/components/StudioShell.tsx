@@ -23094,6 +23094,7 @@ function SettingsWorkspacePane({
   useHorizontalWheelScroll(settingsMenuScrollRef);
   const startPaywiseCheckout = useAction(api.paywiseActions.startCheckout);
   const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
+  const sellerPayout = useQuery(api.marketplace.getMyPayoutAccount);
   const creditPriceCents = pricing?.creditPriceCents ?? DEFAULT_CREDIT_PRICE_CENTS;
   const plans = pricingPlans(pricing);
   const minAmountCents = topUpMinAmountCents(creditPriceCents);
@@ -23233,6 +23234,8 @@ function SettingsWorkspacePane({
     { id: "profile", label: "Profile" },
     { id: "storage", label: "Storage" },
     { id: "account", label: "Account details" },
+    // Sellers only — buyers have nothing to be paid out.
+    ...(sellerPayout ? [{ id: "payouts", label: "Payouts" }] : []),
     { id: "activity", label: "Activity" },
     { id: "api-keys", label: "API keys" },
   ];
@@ -23269,6 +23272,8 @@ function SettingsWorkspacePane({
         {settingsSectionId === "account" ? (
           <AccountDetailsCard currentUser={currentUser} onSave={onSaveAccount} />
           ) : null}
+
+        {settingsSectionId === "payouts" ? <SellerPayoutSettingsCard /> : null}
 
         {settingsSectionId === "api-keys" ? <StudioApiKeysSettings /> : null}
 
