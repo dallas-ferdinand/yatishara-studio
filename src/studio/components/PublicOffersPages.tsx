@@ -1393,12 +1393,6 @@ function OfferDetailInner({ slug }: { slug: string }) {
         <div className="public-offers-rail-head">
           <OffersSidebarBrand />
         </div>
-        <div className="public-offers-rail-nav">
-          <Link href="/creative-network/" className="public-offers-rail-back">
-            <ArrowLeft aria-hidden="true" />
-            All services
-          </Link>
-        </div>
         <div className="public-offers-rail-body">{sidebarBody}</div>
       </aside>
 

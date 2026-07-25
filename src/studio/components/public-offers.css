@@ -167,41 +167,6 @@
   padding: 8px 0 12px;
 }
 
-.public-offers-rail-nav {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  min-height: var(--cursor-head-h, 32px);
-  height: var(--cursor-head-h, 32px);
-  padding: 0 6px;
-  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-}
-
-.public-offers-rail-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: var(--cursor-radius-sm, 6px);
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: var(--desk-text-sm, 12px);
-  font-weight: 650;
-  text-decoration: none;
-}
-
-.public-offers-rail-back:hover {
-  color: var(--color-cursor-text, var(--mos-text));
-  background: var(--color-cursor-hover, var(--mos-hover));
-}
-
-.public-offers-rail-back svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
 /* Offer detail: packages + booking live in the same left rail */
 .public-offers-rail-detail {
   display: grid;
