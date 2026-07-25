@@ -67,8 +67,8 @@
   --cursor-border-subtle: var(--mos-border-subtle, var(--mos-border-soft));
   --cursor-border-focus: color-mix(in srgb, var(--mos-accent) 38%, var(--mos-border-subtle, var(--mos-border-soft)));
   --cursor-shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.48);
-  /* Tighter shadow for dropdown/context menus — close to the panel, no big spread. */
-  --cursor-shadow-menu: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.32);
+  /* Menu shadow: y=0 so the top edge lifts too (down-only offset left the top flat). */
+  --cursor-shadow-menu: 0 0 1px rgba(0, 0, 0, 0.4), 0 0 8px rgba(0, 0, 0, 0.28);
   /* Radius scale — aliases Studio DS tokens */
   --cursor-radius-xs: var(--studio-r-xs, 4px);
   --cursor-radius-sm: var(--studio-r-sm, 6px);
@@ -101,7 +101,7 @@
 }
 [data-appearance="light"] {
   --cursor-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --cursor-shadow-menu: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 10px rgba(0, 0, 0, 0.1);
+  --cursor-shadow-menu: 0 0 1px rgba(0, 0, 0, 0.08), 0 0 8px rgba(0, 0, 0, 0.1);
 }
 
 .cursor-panel-head {
