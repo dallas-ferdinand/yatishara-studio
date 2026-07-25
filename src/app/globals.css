@@ -536,7 +536,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Custom pull-down-to-reload — white boot LogoLoader, spin locked to pull. */
+/* Custom pull-down-to-reload — white puck + mark; spin scrubbed to pull. */
 .ys-ptr {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
@@ -546,19 +546,21 @@ body {
   display: flex;
   justify-content: center;
   pointer-events: none;
-  /* Force light/boot tokens even when the app shell is dark. */
-  color-scheme: light;
 }
 
 .ys-ptr-puck {
   display: grid;
   place-items: center;
-  width: var(--logo-loader-ring, 44px);
-  height: var(--logo-loader-ring, 44px);
-  margin-top: -52px;
-  background: transparent;
+  width: 40px;
+  height: 40px;
+  margin-top: -44px;
+  padding: 0;
   border: 0;
-  box-shadow: none;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 6px 18px rgba(0, 0, 0, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease, opacity 0.18s ease;
   will-change: transform, opacity;
 }
@@ -567,14 +569,28 @@ body {
   transition: none;
 }
 
-/* Finger down: mark rotation scrubbed to pull distance (scroll-locked). */
-.ys-ptr-puck.is-pulling .logo-loader-spin {
-  animation: none !important;
+.ys-ptr-mark {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
   transform: rotate(var(--ys-ptr-spin, 0deg));
+  will-change: transform;
 }
 
-/* Release / reload: same continuous spin as the global boot loader. */
-.ys-ptr-puck:not(.is-pulling) .logo-loader-spin,
-.ys-ptr-puck.is-refreshing .logo-loader-spin {
-  animation: logo-loader-spin 5.5s linear infinite !important;
+/* Finger down: rotation locked to pull distance. */
+.ys-ptr-puck.is-pulling .ys-ptr-mark {
+  animation: none;
+}
+
+/* Release / reload: keep spinning. */
+.ys-ptr-puck:not(.is-pulling) .ys-ptr-mark,
+.ys-ptr-puck.is-refreshing .ys-ptr-mark {
+  animation: ys-ptr-spin 0.9s linear infinite;
+}
+
+@keyframes ys-ptr-spin {
+  to {
+    transform: rotate(calc(var(--ys-ptr-spin, 0deg) + 360deg));
+  }
 }

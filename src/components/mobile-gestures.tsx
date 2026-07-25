@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { LogoLoader } from "@/studio/components/logo-loader";
+import { mercuryLogoAssets } from "@/lib/brand-assets";
 
 const PULL_START_SLOP = 12;
 const PULL_THRESHOLD = 84;
 const PULL_MAX = 128;
 /** Degrees of mark rotation per px of eased pull — scrubbed while finger is down. */
 const SPIN_DEG_PER_PX = 4.2;
+const MARK_PX = 22;
+const logo = mercuryLogoAssets(MARK_PX, "light");
 
 function insideZoomRegion(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest("[data-allow-zoom]"));
@@ -38,8 +40,8 @@ function anyAncestorScrolled(target: EventTarget | null): boolean {
  * Mobile gesture layer:
  * - Kills browser pinch/double-tap page zoom everywhere (UI must never scale).
  *   Media viewers implement their own zoom and opt out via [data-allow-zoom].
- * - Custom pull-down-to-reload with the brand LogoLoader (native PTR is dead
- *   because body is overflow:hidden and the app runs standalone).
+ * - Custom pull-down-to-reload: white circular puck + mark spinner scrubbed to
+ *   pull distance (not the full page LogoLoader).
  */
 export function MobileGestures() {
   const [pull, setPull] = useState(0);
@@ -168,19 +170,29 @@ export function MobileGestures() {
   const progress = Math.min(1, pull / PULL_THRESHOLD);
   const spinDeg = Math.round(pull * SPIN_DEG_PER_PX);
   const puckStyle = {
-    transform: `translateY(${Math.round(12 + pull * 0.95)}px)`,
-    opacity: refreshing ? 1 : Math.min(1, 0.35 + progress * 0.9),
+    transform: `translateY(${Math.round(pull)}px)`,
+    opacity: refreshing ? 1 : Math.min(1, 0.4 + progress * 0.85),
     ["--ys-ptr-spin" as string]: `${spinDeg}deg`,
   } as CSSProperties;
 
   return (
-    <div className="ys-ptr" data-appearance="light" aria-hidden="true">
+    <div className="ys-ptr" aria-hidden="true">
       <div
         className={`ys-ptr-puck${pulling ? " is-pulling" : ""}${refreshing ? " is-refreshing" : ""}`}
         style={puckStyle}
       >
-        {/* Always the white boot loader — even when the app is in dark mode. */}
-        <LogoLoader size="md" appearance="light" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="ys-ptr-mark"
+          src={logo.src}
+          srcSet={logo.srcSet}
+          sizes={logo.sizes}
+          alt=""
+          width={MARK_PX}
+          height={MARK_PX}
+          draggable={false}
+          decoding="async"
+        />
       </div>
     </div>
   );
