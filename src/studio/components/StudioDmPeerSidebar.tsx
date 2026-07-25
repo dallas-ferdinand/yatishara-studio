@@ -5,22 +5,14 @@ import {
   ArrowLeft,
   Ban,
   Briefcase,
-  Check,
   ExternalLink,
   Loader2,
   NotebookPen,
   Plus,
   Tags,
   UserRound,
-  X,
 } from "lucide-react";
-import {
-  createElement,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -69,6 +61,28 @@ function creditsLabel(credits: number): string {
 
 function centsLabel(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function Section({
+  title,
+  extras,
+  children,
+}: {
+  title: string;
+  extras?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="studio-admin-section">
+      <div className="studio-admin-section-head">
+        <span className="studio-admin-section-title">{title}</span>
+        {extras ? (
+          <div className="studio-admin-section-extras">{extras}</div>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
 }
 
 export function StudioDmPeerSidebar({
@@ -129,7 +143,9 @@ export function StudioDmPeerSidebar({
   const bookOffer = useMutation(api.marketplace.bookOffer);
 
   useEffect(() => {
-    setPortalRoot(document.querySelector(".studio-polish") as HTMLElement | null);
+    setPortalRoot(
+      document.querySelector(".studio-polish") as HTMLElement | null,
+    );
   }, []);
 
   useEffect(() => {
@@ -251,28 +267,60 @@ export function StudioDmPeerSidebar({
   if (!open) return null;
 
   const tabs: Array<{ id: PeerTab; label: string; icon: ReactNode }> = [
-    { id: "notes", label: "Notes", icon: <NotebookPen aria-hidden="true" /> },
+    {
+      id: "notes",
+      label: "Notes",
+      icon: <NotebookPen className="h-3.5 w-3.5" aria-hidden="true" />,
+    },
     ...(showJobsTab
       ? [
           {
             id: "jobs" as const,
             label: "Jobs",
-            icon: <Briefcase aria-hidden="true" />,
+            icon: <Briefcase className="h-3.5 w-3.5" aria-hidden="true" />,
           },
         ]
       : []),
-    { id: "labels", label: "Labels", icon: <Tags aria-hidden="true" /> },
-    { id: "about", label: "About", icon: <UserRound aria-hidden="true" /> },
+    {
+      id: "labels",
+      label: "Labels",
+      icon: <Tags className="h-3.5 w-3.5" aria-hidden="true" />,
+    },
+    {
+      id: "about",
+      label: "About",
+      icon: <UserRound className="h-3.5 w-3.5" aria-hidden="true" />,
+    },
   ];
+
+  const tabNav = (
+    <nav className="studio-admin-head-tabs" aria-label="Peer panel">
+      {tabs.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`studio-admin-head-tab${tab === item.id ? " is-active" : ""}`}
+          onClick={() => {
+            setTab(item.id);
+            setJobDetailId(null);
+          }}
+        >
+          {item.icon}
+          <span>{item.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
 
   const body = (
     <>
       {error ? <p className="studio-dm-peer-error">{error}</p> : null}
 
       {tab === "notes" ? (
-        <div className="studio-dm-peer-notes">
-          <div className="studio-dm-peer-note-composer">
+        <div className="studio-dm-peer-stack">
+          <div className="studio-dm-peer-composer">
             <textarea
+              className="cursor-input"
               value={noteDraft}
               rows={2}
               placeholder="Add a private note…"
@@ -287,7 +335,7 @@ export function StudioDmPeerSidebar({
             />
             <button
               type="button"
-              className="studio-dm-peer-note-add"
+              className="cursor-settings-action"
               disabled={busy || !noteDraft.trim()}
               onClick={() => void handleAddNote()}
             >
@@ -296,30 +344,32 @@ export function StudioDmPeerSidebar({
               ) : (
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               )}
-              <span>Add</span>
+              <span>Add note</span>
             </button>
           </div>
           {notes === undefined ? (
-            <p className="studio-dm-peer-empty">Loading…</p>
+            <p className="studio-settings-empty">Loading…</p>
           ) : notes.length === 0 ? (
-            <p className="studio-dm-peer-empty">
+            <p className="studio-settings-empty">
               Private notes only you can see. Capture context over time.
             </p>
           ) : (
-            <ul className="studio-dm-peer-note-list">
+            <ul className="studio-dm-peer-list">
               {notes.map((note) => (
-                <li key={note.noteId} className="studio-dm-peer-note">
+                <li key={note.noteId} className="studio-dm-peer-plate">
                   {editingNoteId === note.noteId ? (
                     <>
                       <textarea
+                        className="cursor-input"
                         value={editingBody}
                         rows={3}
                         aria-label="Edit note"
                         onChange={(event) => setEditingBody(event.target.value)}
                       />
-                      <div className="studio-dm-peer-note-actions">
+                      <div className="studio-dm-peer-inline-actions">
                         <button
                           type="button"
+                          className="cursor-settings-action"
                           onClick={() => void handleSaveEdit()}
                           disabled={busy || !editingBody.trim()}
                         >
@@ -327,6 +377,7 @@ export function StudioDmPeerSidebar({
                         </button>
                         <button
                           type="button"
+                          className="cursor-settings-action muted"
                           onClick={() => {
                             setEditingNoteId(null);
                             setEditingBody("");
@@ -338,13 +389,13 @@ export function StudioDmPeerSidebar({
                     </>
                   ) : (
                     <>
-                      <p>{note.body}</p>
-                      <div className="studio-dm-peer-note-meta">
+                      <p className="studio-dm-peer-note-body">{note.body}</p>
+                      <div className="studio-dm-peer-meta">
                         <time dateTime={new Date(note.createdAt).toISOString()}>
                           {noteTimeLabel(note.createdAt)}
                           {note.updatedAt > note.createdAt ? " · edited" : ""}
                         </time>
-                        <span className="studio-dm-peer-note-actions">
+                        <span className="studio-dm-peer-meta-actions">
                           <button
                             type="button"
                             onClick={() => {
@@ -384,65 +435,75 @@ export function StudioDmPeerSidebar({
       ) : null}
 
       {tab === "jobs" ? (
-        <div className="studio-dm-peer-jobs">
+        <div className="studio-dm-peer-stack">
           {jobDetailId && jobDetail?.job ? (
-            <div className="studio-dm-peer-job-detail">
-              <button
-                type="button"
-                className="studio-dm-peer-back"
-                onClick={() => setJobDetailId(null)}
-              >
-                <ArrowLeft aria-hidden="true" />
-                <span>Back</span>
-              </button>
-              <strong>{jobDetail.job.offerTitle}</strong>
-              <span className="studio-dm-peer-job-status">
-                {JOB_STATUS_LABEL[jobDetail.job.status] ?? jobDetail.job.status}
-              </span>
-              <dl className="studio-dm-peer-job-facts">
-                <div>
-                  <dt>Price</dt>
-                  <dd>{creditsLabel(jobDetail.job.priceCredits)}</dd>
-                </div>
-                {jobDetail.job.packageName ? (
-                  <div>
-                    <dt>Package</dt>
-                    <dd>{jobDetail.job.packageName}</dd>
-                  </div>
-                ) : null}
-                {jobDetail.job.deliveryDays != null ? (
-                  <div>
-                    <dt>Delivery</dt>
-                    <dd>{jobDetail.job.deliveryDays}d</dd>
-                  </div>
-                ) : null}
-              </dl>
-              {onOpenOffersJobs ? (
+            <Section
+              title="Job"
+              extras={
                 <button
                   type="button"
-                  className="studio-dm-peer-action"
-                  onClick={onOpenOffersJobs}
+                  className="studio-dm-peer-text-btn"
+                  onClick={() => setJobDetailId(null)}
                 >
-                  <ExternalLink aria-hidden="true" />
-                  <span>Open in Offers</span>
+                  <ArrowLeft aria-hidden="true" />
+                  Back
                 </button>
-              ) : null}
-            </div>
+              }
+            >
+              <div className="studio-dm-peer-plate">
+                <strong className="studio-dm-peer-title">
+                  {jobDetail.job.offerTitle}
+                </strong>
+                <span className="studio-admin-chip">
+                  {JOB_STATUS_LABEL[jobDetail.job.status] ??
+                    jobDetail.job.status}
+                </span>
+                <dl className="studio-dm-peer-facts">
+                  <div>
+                    <dt>Price</dt>
+                    <dd>{creditsLabel(jobDetail.job.priceCredits)}</dd>
+                  </div>
+                  {jobDetail.job.packageName ? (
+                    <div>
+                      <dt>Package</dt>
+                      <dd>{jobDetail.job.packageName}</dd>
+                    </div>
+                  ) : null}
+                  {jobDetail.job.deliveryDays != null ? (
+                    <div>
+                      <dt>Delivery</dt>
+                      <dd>{jobDetail.job.deliveryDays}d</dd>
+                    </div>
+                  ) : null}
+                </dl>
+                {onOpenOffersJobs ? (
+                  <button
+                    type="button"
+                    className="cursor-settings-action"
+                    onClick={onOpenOffersJobs}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>Open in Offers</span>
+                  </button>
+                ) : null}
+              </div>
+            </Section>
           ) : (
             <>
               {(jobsWithPeer?.asBuyer.length ?? 0) > 0 ? (
-                <section className="studio-dm-peer-section">
-                  <header>My orders from them</header>
-                  <ul>
+                <Section title="My orders from them">
+                  <ul className="studio-dm-peer-list">
                     {jobsWithPeer!.asBuyer.map((job) => (
                       <li key={job._id}>
                         <button
                           type="button"
-                          className="studio-dm-peer-job-row"
+                          className="studio-dm-assign-row studio-dm-peer-job-row"
                           onClick={() => setJobDetailId(job._id)}
                         >
-                          <strong>{job.offerTitle}</strong>
-                          <span>
+                          <span className="studio-dm-assign-name">
+                            {job.offerTitle}
+                          </span>
+                          <span className="studio-dm-peer-row-meta">
                             {JOB_STATUS_LABEL[job.status] ?? job.status} ·{" "}
                             {creditsLabel(job.priceCredits)}
                           </span>
@@ -450,25 +511,29 @@ export function StudioDmPeerSidebar({
                       </li>
                     ))}
                   </ul>
-                </section>
+                </Section>
               ) : null}
 
               {(offers?.length ?? 0) > 0 ? (
-                <section className="studio-dm-peer-section">
-                  <header>Request a job</header>
-                  <ul>
+                <Section title="Request a job">
+                  <ul className="studio-dm-peer-list">
                     {offers!.map((offer) => (
-                      <li key={offer._id} className="studio-dm-peer-offer-row">
-                        <div>
-                          <strong>{offer.title}</strong>
-                          <span>
+                      <li
+                        key={offer._id}
+                        className="studio-dm-assign-row studio-dm-peer-offer-row"
+                      >
+                        <div className="studio-dm-peer-offer-copy">
+                          <span className="studio-dm-assign-name">
+                            {offer.title}
+                          </span>
+                          <span className="studio-dm-peer-row-meta">
                             from {centsLabel(offer.priceCents)} ·{" "}
                             {offer.deliveryDays}d
                           </span>
                         </div>
                         <button
                           type="button"
-                          className="studio-dm-peer-book"
+                          className="cursor-settings-action studio-dm-peer-book"
                           disabled={busy}
                           onClick={() => void handleBook(offer._id)}
                         >
@@ -484,30 +549,33 @@ export function StudioDmPeerSidebar({
                       </li>
                     ))}
                   </ul>
-                </section>
+                </Section>
               ) : null}
 
               {(jobsWithPeer?.asSeller.length ?? 0) > 0 ? (
-                <section className="studio-dm-peer-section">
-                  <header>Their orders from me</header>
-                  {jobsWithPeer?.sellerTotals ? (
-                    <p className="studio-dm-peer-totals">
-                      {jobsWithPeer.sellerTotals.jobCount} job
-                      {jobsWithPeer.sellerTotals.jobCount === 1 ? "" : "s"} ·{" "}
-                      {creditsLabel(jobsWithPeer.sellerTotals.totalCredits)}{" "}
-                      lifetime
-                    </p>
-                  ) : null}
-                  <ul>
+                <Section
+                  title="Their orders from me"
+                  extras={
+                    jobsWithPeer?.sellerTotals ? (
+                      <span className="studio-admin-chip">
+                        {jobsWithPeer.sellerTotals.jobCount} ·{" "}
+                        {creditsLabel(jobsWithPeer.sellerTotals.totalCredits)}
+                      </span>
+                    ) : null
+                  }
+                >
+                  <ul className="studio-dm-peer-list">
                     {jobsWithPeer!.asSeller.map((job) => (
                       <li key={job._id}>
                         <button
                           type="button"
-                          className="studio-dm-peer-job-row"
+                          className="studio-dm-assign-row studio-dm-peer-job-row"
                           onClick={() => setJobDetailId(job._id)}
                         >
-                          <strong>{job.offerTitle}</strong>
-                          <span>
+                          <span className="studio-dm-assign-name">
+                            {job.offerTitle}
+                          </span>
+                          <span className="studio-dm-peer-row-meta">
                             {JOB_STATUS_LABEL[job.status] ?? job.status} ·{" "}
                             {creditsLabel(job.priceCredits)}
                           </span>
@@ -518,14 +586,14 @@ export function StudioDmPeerSidebar({
                   {onOpenOffersJobs ? (
                     <button
                       type="button"
-                      className="studio-dm-peer-action is-ghost"
+                      className="cursor-settings-action muted"
                       onClick={onOpenOffersJobs}
                     >
-                      <ExternalLink aria-hidden="true" />
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       <span>Manage in Offers</span>
                     </button>
                   ) : null}
-                </section>
+                </Section>
               ) : null}
 
               {jobsWithPeer !== undefined &&
@@ -533,7 +601,9 @@ export function StudioDmPeerSidebar({
               jobsWithPeer.asBuyer.length === 0 &&
               jobsWithPeer.asSeller.length === 0 &&
               offers.length === 0 ? (
-                <p className="studio-dm-peer-empty">No jobs with this person.</p>
+                <p className="studio-settings-empty">
+                  No jobs with this person.
+                </p>
               ) : null}
             </>
           )}
@@ -541,46 +611,51 @@ export function StudioDmPeerSidebar({
       ) : null}
 
       {tab === "labels" ? (
-        <div className="studio-dm-peer-labels">
+        <div className="studio-dm-peer-stack">
           <button
             type="button"
-            className="studio-dm-peer-action is-ghost"
+            className="cursor-settings-action muted"
             onClick={() => setLabelEditorOpen(true)}
           >
-            <Plus aria-hidden="true" />
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             <span>New label</span>
           </button>
           {panel === undefined ? (
-            <p className="studio-dm-peer-empty">Loading…</p>
+            <p className="studio-settings-empty">Loading…</p>
           ) : panel === null ? (
-            <p className="studio-dm-peer-empty">Profile unavailable.</p>
+            <p className="studio-settings-empty">Profile unavailable.</p>
           ) : panel.labels.length === 0 ? (
-            <p className="studio-dm-peer-empty">
+            <p className="studio-settings-empty">
               No labels yet. Create one to organize this chat.
             </p>
           ) : (
-            <ul className="studio-dm-peer-label-list" role="listbox" aria-multiselectable>
-              {panel.labels.map((label) => (
-                <li key={label.labelId}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={label.assigned}
-                    className={`studio-dm-peer-label-row${label.assigned ? " is-on" : ""}`}
-                    onClick={() =>
-                      void handleToggleLabel(label.labelId, label.assigned)
-                    }
-                  >
-                    <span className="studio-dm-peer-label-check" aria-hidden="true">
-                      {label.assigned ? <Check /> : null}
-                    </span>
-                    {createElement(dmLabelIcon(label.icon), {
-                      "aria-hidden": true,
-                    })}
-                    <span>{label.name}</span>
-                  </button>
-                </li>
-              ))}
+            <ul className="studio-dm-assign-list">
+              {panel.labels.map((label) => {
+                const Icon = dmLabelIcon(label.icon);
+                const inputId = `dm-peer-label-${label.labelId}`;
+                return (
+                  <li key={label.labelId}>
+                    <label
+                      htmlFor={inputId}
+                      className={`studio-dm-assign-row${label.assigned ? " is-on" : ""}`}
+                    >
+                      <span className="studio-dm-assign-icon" aria-hidden="true">
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="studio-dm-assign-name">{label.name}</span>
+                      <input
+                        id={inputId}
+                        type="checkbox"
+                        className="studio-dm-assign-checkbox"
+                        checked={label.assigned}
+                        onChange={() =>
+                          void handleToggleLabel(label.labelId, label.assigned)
+                        }
+                      />
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
           )}
           <StudioDmLabelEditorDialog
@@ -592,14 +667,14 @@ export function StudioDmPeerSidebar({
       ) : null}
 
       {tab === "about" ? (
-        <div className="studio-dm-peer-about">
+        <div className="studio-dm-peer-stack">
           {panel === undefined ? (
-            <p className="studio-dm-peer-empty">Loading…</p>
+            <p className="studio-settings-empty">Loading…</p>
           ) : panel === null ? (
-            <p className="studio-dm-peer-empty">Profile unavailable.</p>
+            <p className="studio-settings-empty">Profile unavailable.</p>
           ) : (
             <>
-              <div className="studio-dm-peer-about-identity">
+              <div className="studio-dm-peer-plate studio-dm-peer-identity">
                 <StudioProfileAvatar
                   size="md"
                   src={panel.peer.avatarUrl}
@@ -622,67 +697,80 @@ export function StudioDmPeerSidebar({
               {panel.peer.bio ? (
                 <p className="studio-dm-peer-bio">{panel.peer.bio}</p>
               ) : null}
-              <dl className="studio-dm-peer-stats">
-                <div>
-                  <dt>Followers</dt>
-                  <dd>{panel.social.followerCount}</dd>
+              <Section title="Social">
+                <div className="studio-dm-peer-stat-grid">
+                  <div className="studio-dm-peer-plate">
+                    <span>Followers</span>
+                    <strong>{panel.social.followerCount}</strong>
+                  </div>
+                  <div className="studio-dm-peer-plate">
+                    <span>Following</span>
+                    <strong>{panel.social.followingCount}</strong>
+                  </div>
+                  <div className="studio-dm-peer-plate">
+                    <span>Posts</span>
+                    <strong>{panel.social.postCount}</strong>
+                  </div>
                 </div>
-                <div>
-                  <dt>Following</dt>
-                  <dd>{panel.social.followingCount}</dd>
-                </div>
-                <div>
-                  <dt>Posts</dt>
-                  <dd>{panel.social.postCount}</dd>
-                </div>
-              </dl>
+              </Section>
               {panel.sellerStats ? (
-                <dl className="studio-dm-peer-stats is-seller">
-                  <div>
-                    <dt>Jobs done</dt>
-                    <dd>{panel.sellerStats.completedJobs}</dd>
+                <Section title="Seller">
+                  <div className="studio-dm-peer-stat-grid">
+                    <div className="studio-dm-peer-plate">
+                      <span>Jobs done</span>
+                      <strong>{panel.sellerStats.completedJobs}</strong>
+                    </div>
+                    <div className="studio-dm-peer-plate">
+                      <span>Rating</span>
+                      <strong>
+                        {panel.sellerStats.ratingAverage != null
+                          ? `${panel.sellerStats.ratingAverage}`
+                          : "—"}
+                      </strong>
+                    </div>
+                    <div className="studio-dm-peer-plate">
+                      <span>Offers</span>
+                      <strong>{panel.sellerStats.publishedOfferCount}</strong>
+                    </div>
                   </div>
-                  <div>
-                    <dt>Rating</dt>
-                    <dd>
-                      {panel.sellerStats.ratingAverage != null
-                        ? `${panel.sellerStats.ratingAverage} (${panel.sellerStats.ratingCount})`
-                        : "—"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Offers</dt>
-                    <dd>{panel.sellerStats.publishedOfferCount}</dd>
-                  </div>
-                </dl>
+                </Section>
               ) : null}
               {panel.contactLinks.length > 0 ? (
-                <ul className="studio-dm-peer-contacts">
-                  {panel.contactLinks.map((link) => (
-                    <li key={`${link.type}:${link.value}`}>
-                      <a href={link.href} target="_blank" rel="noreferrer">
-                        {link.label || link.type}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                <Section title="Contact">
+                  <ul className="studio-dm-peer-list">
+                    {panel.contactLinks.map((link) => (
+                      <li key={`${link.type}:${link.value}`}>
+                        <a
+                          className="studio-dm-assign-row"
+                          href={link.href}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span className="studio-dm-assign-name">
+                            {link.label || link.type}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </Section>
               ) : null}
-              <div className="studio-dm-peer-about-actions">
+              <div className="studio-dm-peer-stack">
                 <button
                   type="button"
-                  className="studio-dm-peer-action"
+                  className="cursor-settings-action"
                   onClick={() => onOpenProfile?.(panel.peer.username)}
                 >
-                  <UserRound aria-hidden="true" />
+                  <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>Open profile</span>
                 </button>
                 <button
                   type="button"
-                  className={`studio-dm-peer-action${panel.blocked ? "" : " is-danger"}`}
+                  className={`cursor-settings-action${panel.blocked ? " muted" : ""}`}
                   disabled={busy}
                   onClick={() => void handleBlockToggle()}
                 >
-                  <Ban aria-hidden="true" />
+                  <Ban className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{panel.blocked ? "Unblock" : "Block"}</span>
                 </button>
               </div>
@@ -693,40 +781,22 @@ export function StudioDmPeerSidebar({
     </>
   );
 
-  const header = (
-    <header className="cursor-panel-head cursor-sidebar-head studio-dm-peer-head justify-between">
-      <nav className="studio-dm-peer-tabs" role="tablist" aria-label="Peer panel">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            className={`studio-dm-peer-tab${tab === item.id ? " is-active" : ""}`}
-            aria-selected={tab === item.id}
-            onClick={() => {
-              setTab(item.id);
-              setJobDetailId(null);
-            }}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </nav>
-      <button
-        type="button"
-        className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
-        onClick={onClose}
-        aria-label="Close peer panel"
-      >
-        <X aria-hidden="true" />
-      </button>
-    </header>
-  );
-
   const panelNode = (
-    <aside className="studio-dm-peer-sidebar" aria-label="Chat details">
-      {header}
+    <aside
+      className="studio-dm-peer-sidebar flex h-full w-full min-w-0 flex-col border-l border-cursor-border-soft"
+      aria-label="Chat details"
+    >
+      <div className="cursor-panel-head cursor-sidebar-head justify-between shrink-0">
+        {tabNav}
+        <button
+          type="button"
+          className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
+          onClick={onClose}
+          aria-label="Close peer panel"
+        >
+          ×
+        </button>
+      </div>
       <div className="studio-dm-peer-body">{body}</div>
     </aside>
   );
@@ -748,31 +818,10 @@ export function StudioDmPeerSidebar({
             aria-label="Close"
             onClick={onClose}
           >
-            <X aria-hidden="true" />
+            ×
           </button>
         </div>
-        <nav
-          className="studio-dm-peer-tabs is-mobile"
-          role="tablist"
-          aria-label="Peer panel"
-        >
-          {tabs.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              className={`studio-dm-peer-tab${tab === item.id ? " is-active" : ""}`}
-              aria-selected={tab === item.id}
-              onClick={() => {
-                setTab(item.id);
-                setJobDetailId(null);
-              }}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="studio-dm-peer-mobile-tabs">{tabNav}</div>
         <div className="studio-mobile-app-menu-body studio-dm-peer-body">
           {body}
         </div>

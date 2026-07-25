@@ -215,6 +215,14 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 | `.studio-admin-card`, `.studio-plan-card`, `.studio-bank-card` | Cards | `--mos-plate` |
 | `.studio-admin-chip` | Count / meta chip | subtle |
 
+**DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
+second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
+`studio-admin-head-tab`, body stacks with `studio-admin-section` /
+`studio-admin-section-head`, actions via `cursor-settings-action`, fields via
+`cursor-input`, empty copy via `studio-settings-empty`, labels via
+`studio-dm-assign-row` + checkbox (same as Assign labels). Layout-only helpers live in
+`studio-messages.css` under `.studio-dm-peer-*`. Memory: **745**.
+
 ---
 
 ## 6b. Public routes (`/offers`, share links)

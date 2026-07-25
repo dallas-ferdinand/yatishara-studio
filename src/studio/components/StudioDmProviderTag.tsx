@@ -13,7 +13,7 @@ export function StudioDmProviderTag({
   if (!tag) return null;
   return (
     <span
-      className={`studio-dm-provider-tag${className ? ` ${className}` : ""}`}
+      className={`studio-dm-provider-tag studio-admin-chip${className ? ` ${className}` : ""}`}
       title={tag === "business" ? "Business" : "Freelancer"}
     >
       {tag === "business" ? "Business" : "Freelancer"}
