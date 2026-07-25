@@ -623,10 +623,6 @@ export function StudioDmPeerSidebar({
               <p className="studio-settings-empty">Loading…</p>
             ) : panel === null ? (
               <p className="studio-settings-empty">Profile unavailable.</p>
-            ) : panel.labels.length === 0 ? (
-              <p className="studio-settings-empty">
-                No labels yet. Create one to organize this chat.
-              </p>
             ) : (
               <ul className="studio-dm-assign-list">
                 {panel.labels.map((label) => {
@@ -657,16 +653,18 @@ export function StudioDmPeerSidebar({
                     </li>
                   );
                 })}
+                <li>
+                  <button
+                    type="button"
+                    className="studio-dm-assign-row studio-dm-peer-new-label"
+                    onClick={() => setLabelEditorOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="studio-dm-assign-name">New label</span>
+                  </button>
+                </li>
               </ul>
             )}
-            <button
-              type="button"
-              className="cursor-settings-action"
-              onClick={() => setLabelEditorOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>New label</span>
-            </button>
           </div>
         )
       ) : null}
@@ -802,7 +800,11 @@ export function StudioDmPeerSidebar({
           ×
         </button>
       </div>
-      <div className="studio-dm-peer-body">{body}</div>
+      <div
+        className={`studio-dm-peer-body${tab === "labels" && labelEditorOpen ? " is-flush" : ""}`}
+      >
+        {body}
+      </div>
     </aside>
   );
 
@@ -827,7 +829,9 @@ export function StudioDmPeerSidebar({
           </button>
         </div>
         <div className="studio-dm-peer-mobile-tabs">{tabNav}</div>
-        <div className="studio-mobile-app-menu-body studio-dm-peer-body">
+        <div
+          className={`studio-mobile-app-menu-body studio-dm-peer-body${tab === "labels" && labelEditorOpen ? " is-flush" : ""}`}
+        >
           {body}
         </div>
       </div>,

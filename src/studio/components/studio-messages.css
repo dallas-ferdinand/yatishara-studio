@@ -1882,6 +1882,17 @@
   scrollbar-width: none;
 }
 
+.studio-dm-peer-body.is-flush {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.studio-dm-peer-body.is-flush > .studio-dm-label-editor-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .studio-dm-peer-body::-webkit-scrollbar {
   display: none;
 }
@@ -1936,6 +1947,28 @@
 
 .studio-dm-peer-add-note {
   flex: 0 0 auto;
+}
+
+/* Match assign-row height — no settings-action padding bloat. */
+.studio-dm-peer-new-label {
+  justify-content: flex-start;
+  gap: 8px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-peer-new-label > svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.studio-dm-peer-new-label .studio-dm-assign-name {
+  font-weight: 600;
+  color: inherit;
+}
+
+.studio-dm-peer-new-label:hover {
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
 .studio-dm-peer-list {
