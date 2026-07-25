@@ -997,13 +997,83 @@ export const adminListPayments = adminQuery({
         .query("payments")
         .withIndex("by_status", (q) => q.eq("status", status))
         .order("desc")
-        .take(200);
+        .take(500);
       return await withAdminPaymentDetails(ctx, payments);
     }
     return await withAdminPaymentDetails(
       ctx,
-      await ctx.db.query("payments").order("desc").take(200),
+      await ctx.db.query("payments").order("desc").take(500),
     );
+  },
+});
+
+/** Recent ledger rows for one customer (admin customer sidebar). */
+export const adminListCreditTransactions = adminQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(
+    v.object({
+      _id: v.id("creditTransactions"),
+      kind: creditTransactionKind,
+      amount: v.number(),
+      balanceAfter: v.number(),
+      reason: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("creditTransactions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .take(40);
+    return rows.map((tx) => ({
+      _id: tx._id,
+      kind: tx.kind,
+      amount: tx.amount,
+      balanceAfter: tx.balanceAfter,
+      reason: tx.reason,
+      createdAt: tx.createdAt,
+    }));
+  },
+});
+
+/** Recent admin actions — write-only table until now; Tools tab shows the tail. */
+export const adminListAuditEvents = adminQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id("adminAuditEvents"),
+      kind: v.string(),
+      adminId: v.id("users"),
+      adminLabel: v.optional(v.string()),
+      targetUserId: v.optional(v.id("users")),
+      targetLabel: v.optional(v.string()),
+      paymentId: v.optional(v.id("payments")),
+      details: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("adminAuditEvents").order("desc").take(80);
+    const out = [];
+    for (const event of rows) {
+      const admin = await ctx.db.get("users", event.adminId);
+      const target = event.targetUserId
+        ? await ctx.db.get("users", event.targetUserId)
+        : null;
+      out.push({
+        _id: event._id,
+        kind: event.kind,
+        adminId: event.adminId,
+        adminLabel: admin?.name ?? admin?.email ?? admin?.phone,
+        targetUserId: event.targetUserId,
+        targetLabel: target?.name ?? target?.email ?? target?.phone,
+        paymentId: event.paymentId,
+        details: event.details,
+        createdAt: event.createdAt,
+      });
+    }
+    return out;
   },
 });
 

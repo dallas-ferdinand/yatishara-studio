@@ -304,7 +304,7 @@ export const adminListCustomers = adminQuery({
   ),
   handler: async (ctx) => {
     // Cap admin customer enrichment — full historical N+1 was unbounded.
-    const users = await ctx.db.query("users").order("desc").take(100);
+    const users = await ctx.db.query("users").order("desc").take(250);
     const rows = await Promise.all(
       users.map(async (user) => {
         const account = await ctx.db
