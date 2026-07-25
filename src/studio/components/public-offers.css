@@ -55,7 +55,8 @@
   gap: 8px;
   min-width: 0;
   flex: 1;
-  padding: 2px 4px;
+  height: 100%;
+  padding: 0 4px;
   border-radius: var(--cursor-radius-sm, 6px);
   color: inherit;
   text-decoration: none;
@@ -74,15 +75,19 @@
 }
 
 .public-offers-sidebar-brand-text {
-  display: grid;
+  display: flex;
+  align-items: center;
   min-width: 0;
-  line-height: 1.15;
+  min-height: 16px;
+  line-height: 16px;
 }
 
 .public-offers-sidebar-brand-text strong {
+  display: block;
   font-size: var(--desk-text-sm, 12px);
   font-weight: 650;
   letter-spacing: -0.01em;
+  line-height: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
