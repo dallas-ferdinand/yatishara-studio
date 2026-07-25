@@ -324,8 +324,8 @@ function OffersCatalogInner() {
               <div className="public-offers-hero-copy">
                 <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
                 <p>
-                  Work with verified creative partners on packages priced in TTD. Credits
-                  stay secure until you accept the delivery.
+                  Work with verified creative partners. Credits stay secure until
+                  you accept the delivery.
                 </p>
               </div>
             </section>
