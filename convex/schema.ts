@@ -1222,10 +1222,24 @@ export default defineSchema({
     title: v.string(),
     slug: v.string(),
     description: v.string(),
+    // Starting-at price/delivery (mirrors the cheapest package when packages exist).
     priceCents: v.number(),
     category: v.optional(v.string()),
     status: marketplaceOfferStatus,
     deliveryDays: v.number(),
+    // Up to 3 Fiverr-style tiers; absent = single flat-rate offer.
+    packages: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          description: v.string(),
+          priceCents: v.number(),
+          deliveryDays: v.number(),
+          revisions: v.number(),
+          features: v.array(v.string()),
+        }),
+      ),
+    ),
     coverAssetId: v.optional(v.id("assets")),
     sampleAssetIds: v.optional(v.array(v.id("assets"))),
     publishedAt: v.optional(v.number()),
@@ -1246,6 +1260,10 @@ export default defineSchema({
     priceCredits: v.number(),
     priceCents: v.number(),
     creditPriceCents: v.number(),
+    // Snapshot of the booked package (absent for flat-rate bookings).
+    packageName: v.optional(v.string()),
+    deliveryDays: v.optional(v.number()),
+    revisions: v.optional(v.number()),
     status: marketplaceJobStatus,
     escrowHoldId: v.optional(v.id("platformEscrowHolds")),
     escrowCreditTransactionId: v.optional(v.id("creditTransactions")),

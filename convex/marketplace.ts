@@ -166,6 +166,71 @@ async function sellerPublicLabel(
   };
 }
 
+const offerPackageValidator = v.object({
+  name: v.string(),
+  description: v.string(),
+  priceCents: v.number(),
+  deliveryDays: v.number(),
+  revisions: v.number(),
+  features: v.array(v.string()),
+});
+
+type OfferPackage = {
+  name: string;
+  description: string;
+  priceCents: number;
+  deliveryDays: number;
+  revisions: number;
+  features: string[];
+};
+
+/** Validate 1–3 seller-supplied packages and derive starting price/delivery. */
+function normalizePackages(raw: OfferPackage[]): {
+  packages: OfferPackage[];
+  startingPriceCents: number;
+  startingDeliveryDays: number;
+} {
+  if (raw.length < 1 || raw.length > 3) {
+    throw new Error("Offer between 1 and 3 packages");
+  }
+  const packages = raw.map((pkg, index) => {
+    const name = pkg.name.trim();
+    if (!name) throw new Error(`Package ${index + 1} needs a name`);
+    if (!Number.isFinite(pkg.priceCents) || pkg.priceCents < 50) {
+      throw new Error(`${name}: price must be at least $0.50 TTD`);
+    }
+    if (!Number.isFinite(pkg.deliveryDays) || pkg.deliveryDays < 1) {
+      throw new Error(`${name}: delivery must be at least 1 day`);
+    }
+    if (!Number.isFinite(pkg.revisions) || pkg.revisions < 0) {
+      throw new Error(`${name}: revisions cannot be negative`);
+    }
+    return {
+      name: name.slice(0, 40),
+      description: pkg.description.trim().slice(0, 400),
+      priceCents: Math.round(pkg.priceCents),
+      deliveryDays: Math.floor(pkg.deliveryDays),
+      revisions: Math.floor(pkg.revisions),
+      features: pkg.features
+        .map((f) => f.trim())
+        .filter(Boolean)
+        .slice(0, 10),
+    };
+  });
+  return {
+    packages,
+    startingPriceCents: Math.min(...packages.map((p) => p.priceCents)),
+    startingDeliveryDays: Math.min(...packages.map((p) => p.deliveryDays)),
+  };
+}
+
+const publicGalleryItem = v.object({
+  kind: v.string(),
+  name: v.optional(v.string()),
+  url: v.optional(v.string()),
+  thumbnailUrl: v.optional(v.string()),
+});
+
 const publicOfferReturn = v.object({
   _id: v.id("marketplaceOffers"),
   title: v.string(),
@@ -176,19 +241,65 @@ const publicOfferReturn = v.object({
   deliveryDays: v.number(),
   status: offerStatus,
   publishedAt: v.optional(v.number()),
+  packages: v.optional(v.array(offerPackageValidator)),
+  bannerThumbUrl: v.optional(v.string()),
+  gallery: v.optional(v.array(publicGalleryItem)),
   sellerBusinessName: v.string(),
   sellerUsername: v.optional(v.string()),
   sellerUserId: v.id("users"),
 });
 
+async function signOfferGalleryItem(
+  ctx: QueryCtx | MutationCtx,
+  assetId: Id<"assets">,
+  expiresUnix: number,
+) {
+  const asset = await ctx.db.get("assets", assetId);
+  if (!asset?.bunnyPath || asset.deletedAt) return null;
+  const url = await signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind);
+  const thumbPath = assetThumbnailPath(asset);
+  let thumbnailUrl: string | undefined;
+  if (thumbPath) {
+    const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM);
+    thumbnailUrl = signed.get(thumbPath);
+  }
+  return { kind: asset.kind, name: asset.name, url, thumbnailUrl };
+}
+
 async function toPublicOffer(
   ctx: QueryCtx | MutationCtx,
   offer: Doc<"marketplaceOffers">,
+  opts?: { media?: "thumb" | "full" },
 ) {
   const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
   const label = seller
     ? await sellerPublicLabel(ctx, seller)
     : { businessName: "Seller", username: undefined };
+  let bannerThumbUrl: string | undefined;
+  let gallery:
+    | Array<{
+        kind: string;
+        name?: string;
+        url?: string;
+        thumbnailUrl?: string;
+      }>
+    | undefined;
+  if (opts?.media) {
+    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+    if (offer.coverAssetId) {
+      const cover = await signOfferGalleryItem(ctx, offer.coverAssetId, expiresUnix);
+      bannerThumbUrl = cover?.thumbnailUrl ?? cover?.url;
+      if (opts.media === "full" && cover) gallery = [cover];
+    }
+    if (opts.media === "full") {
+      gallery = gallery ?? [];
+      for (const assetId of offer.sampleAssetIds ?? []) {
+        const item = await signOfferGalleryItem(ctx, assetId, expiresUnix);
+        if (item) gallery.push(item);
+      }
+      if (gallery.length === 0) gallery = undefined;
+    }
+  }
   return {
     _id: offer._id,
     title: offer.title,
@@ -199,6 +310,9 @@ async function toPublicOffer(
     deliveryDays: offer.deliveryDays,
     status: offer.status,
     publishedAt: offer.publishedAt,
+    packages: offer.packages,
+    bannerThumbUrl,
+    gallery,
     sellerBusinessName: label.businessName,
     sellerUsername: label.username,
     sellerUserId: offer.sellerUserId,
@@ -281,7 +395,7 @@ export const listPublicOffers = query({
       : rows;
     const out = [];
     for (const offer of filtered.slice(0, limit)) {
-      out.push(await toPublicOffer(ctx, offer));
+      out.push(await toPublicOffer(ctx, offer, { media: "thumb" }));
     }
     return out;
   },
@@ -297,7 +411,7 @@ export const getPublicOfferBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
     if (!offer || offer.status !== "published") return null;
-    return await toPublicOffer(ctx, offer);
+    return await toPublicOffer(ctx, offer, { media: "full" });
   },
 });
 
@@ -320,7 +434,7 @@ export const listPublicOffersByUsername = query({
     const published = offers.filter((o) => o.status === "published");
     const out = [];
     for (const offer of published) {
-      out.push(await toPublicOffer(ctx, offer));
+      out.push(await toPublicOffer(ctx, offer, { media: "thumb" }));
     }
     return out;
   },
@@ -961,6 +1075,9 @@ export const listMyOffers = sellerQuery({
       category: v.optional(v.string()),
       status: offerStatus,
       deliveryDays: v.number(),
+      packages: v.optional(v.array(offerPackageValidator)),
+      coverAssetId: v.optional(v.id("assets")),
+      sampleAssetIds: v.optional(v.array(v.id("assets"))),
       publishedAt: v.optional(v.number()),
       updatedAt: v.number(),
     }),
@@ -980,6 +1097,9 @@ export const listMyOffers = sellerQuery({
         category: o.category,
         status: o.status,
         deliveryDays: o.deliveryDays,
+        packages: o.packages,
+        coverAssetId: o.coverAssetId,
+        sampleAssetIds: o.sampleAssetIds,
         publishedAt: o.publishedAt,
         updatedAt: o.updatedAt,
       }))
@@ -994,6 +1114,7 @@ export const createOffer = sellerMutation({
     priceCents: v.number(),
     category: v.optional(v.string()),
     deliveryDays: v.number(),
+    packages: v.optional(v.array(offerPackageValidator)),
     coverAssetId: v.optional(v.id("assets")),
     sampleAssetIds: v.optional(v.array(v.id("assets"))),
   },
@@ -1003,11 +1124,24 @@ export const createOffer = sellerMutation({
     const description = args.description.trim();
     if (!title) throw new Error("Title required");
     if (!description) throw new Error("Description required");
-    if (!Number.isFinite(args.priceCents) || args.priceCents < 50) {
-      throw new Error("Price must be at least $0.50 TTD");
+    let priceCents = Math.round(args.priceCents);
+    let deliveryDays = Math.floor(args.deliveryDays);
+    let packages: OfferPackage[] | undefined;
+    if (args.packages && args.packages.length > 0) {
+      const normalized = normalizePackages(args.packages);
+      packages = normalized.packages;
+      priceCents = normalized.startingPriceCents;
+      deliveryDays = normalized.startingDeliveryDays;
+    } else {
+      if (!Number.isFinite(args.priceCents) || args.priceCents < 50) {
+        throw new Error("Price must be at least $0.50 TTD");
+      }
+      if (!Number.isFinite(args.deliveryDays) || args.deliveryDays < 1) {
+        throw new Error("Delivery days must be at least 1");
+      }
     }
-    if (!Number.isFinite(args.deliveryDays) || args.deliveryDays < 1) {
-      throw new Error("Delivery days must be at least 1");
+    if ((args.sampleAssetIds ?? []).length > 6) {
+      throw new Error("Up to 6 gallery items");
     }
     const now = Date.now();
     const slug = await uniqueOfferSlug(ctx, title);
@@ -1017,10 +1151,11 @@ export const createOffer = sellerMutation({
       title,
       slug,
       description,
-      priceCents: Math.round(args.priceCents),
+      priceCents,
       category: args.category?.trim() || undefined,
       status: "draft",
-      deliveryDays: Math.floor(args.deliveryDays),
+      deliveryDays,
+      packages,
       coverAssetId: args.coverAssetId,
       sampleAssetIds: args.sampleAssetIds,
       createdAt: now,
@@ -1037,7 +1172,9 @@ export const updateOffer = sellerMutation({
     priceCents: v.optional(v.number()),
     category: v.optional(v.string()),
     deliveryDays: v.optional(v.number()),
-    coverAssetId: v.optional(v.id("assets")),
+    // null clears the tiers back to a flat-rate offer.
+    packages: v.optional(v.union(v.array(offerPackageValidator), v.null())),
+    coverAssetId: v.optional(v.union(v.id("assets"), v.null())),
     sampleAssetIds: v.optional(v.array(v.id("assets"))),
   },
   returns: v.null(),
@@ -1066,8 +1203,23 @@ export const updateOffer = sellerMutation({
       if (args.deliveryDays < 1) throw new Error("Delivery days must be at least 1");
       patch.deliveryDays = Math.floor(args.deliveryDays);
     }
-    if (args.coverAssetId !== undefined) patch.coverAssetId = args.coverAssetId;
-    if (args.sampleAssetIds !== undefined) patch.sampleAssetIds = args.sampleAssetIds;
+    if (args.packages !== undefined) {
+      if (args.packages === null || args.packages.length === 0) {
+        patch.packages = undefined;
+      } else {
+        const normalized = normalizePackages(args.packages);
+        patch.packages = normalized.packages;
+        patch.priceCents = normalized.startingPriceCents;
+        patch.deliveryDays = normalized.startingDeliveryDays;
+      }
+    }
+    if (args.coverAssetId !== undefined) {
+      patch.coverAssetId = args.coverAssetId ?? undefined;
+    }
+    if (args.sampleAssetIds !== undefined) {
+      if (args.sampleAssetIds.length > 6) throw new Error("Up to 6 gallery items");
+      patch.sampleAssetIds = args.sampleAssetIds;
+    }
     await ctx.db.patch(offer._id, patch);
     return null;
   },
@@ -1165,8 +1317,36 @@ export const adminSetOfferStatus = adminMutation({
 
 // —— Book + jobs ——
 
+/** Resolve the booked package (if any) and effective price/delivery/revisions. */
+function resolveBookedPackage(
+  offer: Doc<"marketplaceOffers">,
+  packageIndex: number | undefined,
+): {
+  priceCents: number;
+  deliveryDays: number;
+  revisions?: number;
+  packageName?: string;
+} {
+  const packages = offer.packages ?? [];
+  if (packages.length === 0) {
+    return { priceCents: offer.priceCents, deliveryDays: offer.deliveryDays };
+  }
+  const index = packageIndex ?? 0;
+  const pkg = packages[index];
+  if (!pkg) throw new Error("Package not available");
+  return {
+    priceCents: pkg.priceCents,
+    deliveryDays: pkg.deliveryDays,
+    revisions: pkg.revisions,
+    packageName: pkg.name,
+  };
+}
+
 export const quoteBookOffer = authedQuery({
-  args: { offerId: v.id("marketplaceOffers") },
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    packageIndex: v.optional(v.number()),
+  },
   returns: v.object({
     priceCents: v.number(),
     priceCredits: v.number(),
@@ -1174,18 +1354,21 @@ export const quoteBookOffer = authedQuery({
     creditBalance: v.number(),
     shortfallCredits: v.number(),
     canBook: v.boolean(),
+    packageName: v.optional(v.string()),
+    deliveryDays: v.number(),
   }),
   handler: async (ctx, args) => {
     const offer = await ctx.db.get("marketplaceOffers", args.offerId);
     if (!offer || offer.status !== "published") {
       throw new Error("Offer not available");
     }
+    const booked = resolveBookedPackage(offer, args.packageIndex);
     const settings = await ctx.db
       .query("pricingSettings")
       .withIndex("by_key", (q) => q.eq("key", "default"))
       .unique();
     const creditPriceCents = settings?.creditPriceCents ?? 50;
-    const priceCredits = creditsFromOfferPriceCents(offer.priceCents, creditPriceCents);
+    const priceCredits = creditsFromOfferPriceCents(booked.priceCents, creditPriceCents);
     const account = await ctx.db
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
@@ -1193,7 +1376,7 @@ export const quoteBookOffer = authedQuery({
     const creditBalance = account?.creditBalance ?? 0;
     const shortfallCredits = Math.max(0, priceCredits - creditBalance);
     return {
-      priceCents: offer.priceCents,
+      priceCents: booked.priceCents,
       priceCredits,
       creditPriceCents,
       creditBalance,
@@ -1201,12 +1384,17 @@ export const quoteBookOffer = authedQuery({
       canBook:
         shortfallCredits === 0 &&
         offer.sellerUserId !== ctx.user._id,
+      packageName: booked.packageName,
+      deliveryDays: booked.deliveryDays,
     };
   },
 });
 
 export const bookOffer = authedMutation({
-  args: { offerId: v.id("marketplaceOffers") },
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    packageIndex: v.optional(v.number()),
+  },
   returns: v.object({
     jobId: v.id("marketplaceJobs"),
     priceCredits: v.number(),
@@ -1224,8 +1412,9 @@ export const bookOffer = authedMutation({
     if (!seller || seller.status !== "approved") {
       throw new Error("Seller is not accepting jobs");
     }
+    const booked = resolveBookedPackage(offer, args.packageIndex);
     const creditPriceCents = await getCreditPriceCents(ctx);
-    const priceCredits = creditsFromOfferPriceCents(offer.priceCents, creditPriceCents);
+    const priceCredits = creditsFromOfferPriceCents(booked.priceCents, creditPriceCents);
     const account = await ctx.db
       .query("billingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", ctx.user._id))
@@ -1233,7 +1422,7 @@ export const bookOffer = authedMutation({
     const balance = account?.creditBalance ?? 0;
     if (balance < priceCredits) {
       throw new Error(
-        `Insufficient credits. Need ${priceCredits} credits (${offer.priceCents} cents TTD). Shortfall: ${priceCredits - balance}`,
+        `Insufficient credits. Need ${priceCredits} credits (${booked.priceCents} cents TTD). Shortfall: ${priceCredits - balance}`,
       );
     }
     const now = Date.now();
@@ -1243,8 +1432,11 @@ export const bookOffer = authedMutation({
       sellerUserId: offer.sellerUserId,
       buyerUserId: ctx.user._id,
       priceCredits,
-      priceCents: offer.priceCents,
+      priceCents: booked.priceCents,
       creditPriceCents,
+      packageName: booked.packageName,
+      deliveryDays: booked.deliveryDays,
+      revisions: booked.revisions,
       status: "pending_payment",
       createdAt: now,
       updatedAt: now,
@@ -1275,7 +1467,9 @@ export const bookOffer = authedMutation({
       jobId,
       actorUserId: ctx.user._id,
       kind: "booked",
-      message: `Booked with ${priceCredits} credits in escrow`,
+      message: booked.packageName
+        ? `Booked “${booked.packageName}” package — payment held in escrow`
+        : "Booked — payment held in escrow",
     });
     await ctx.db.patch(jobId, {
       status: "in_progress",
@@ -1299,6 +1493,9 @@ const jobSummary = v.object({
   status: jobStatus,
   priceCents: v.number(),
   priceCredits: v.number(),
+  packageName: v.optional(v.string()),
+  deliveryDays: v.optional(v.number()),
+  revisions: v.optional(v.number()),
   sellerUserId: v.id("users"),
   buyerUserId: v.id("users"),
   deliveredAt: v.optional(v.number()),
@@ -1322,6 +1519,9 @@ async function toJobSummary(
     status: job.status,
     priceCents: job.priceCents,
     priceCredits: job.priceCredits,
+    packageName: job.packageName,
+    deliveryDays: job.deliveryDays,
+    revisions: job.revisions,
     sellerUserId: job.sellerUserId,
     buyerUserId: job.buyerUserId,
     deliveredAt: job.deliveredAt,
