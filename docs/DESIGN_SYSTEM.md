@@ -213,10 +213,12 @@ routes (they live in the `StudioShell` inline `<style>`) — mirror them with lo
 
 The public marketplace brand is **Yatishara Creative Network** ("Creative services from
 verified creators"); listings are *services/packages*, never "offers" in public copy
-(route stays `/offers`). Catalog = full-width body, hero with no chips, 3-card value grid
-(verified creators / secure booking / delivery tracking), desktop 240px sticky filter
-sidebar (search + category/price/delivery, client-side), pill-chip filters ≤860px.
-Memory: **705**.
+(route stays `/offers`). Catalog shell = full-height left rail (248px, `--color-cursor-sidebar`,
+32px brand head + flat search strip + tree-row filters — same chrome family as the Studio
+file-manager sidebar) + main column (workspace head + scrolling page body). Value grid sits
+in the main column (verified creators / secure booking / delivery tracking). Filters are
+client-side (search + category/price/delivery); ≤860px the rail stacks above content with
+pill chips. Memory: **705**.
 
 ---
 

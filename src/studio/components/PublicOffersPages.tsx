@@ -25,18 +25,51 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 import "./public-offers.css";
 
-function OffersTopbar({ back }: { back?: { href: string; label: string } }) {
+function OffersSidebarBrand() {
+  const logoSrc = useMercurySidebarLogo();
+  return (
+    <Link href="/offers" className="public-offers-sidebar-brand">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={logoSrc} alt="" aria-hidden="true" />
+      <span className="public-offers-sidebar-brand-text">
+        <strong>Creative Network</strong>
+        <em>Yatishara Studio</em>
+      </span>
+    </Link>
+  );
+}
+
+function OffersTopbar({
+  back,
+  showBrand = true,
+}: {
+  back?: { href: string; label: string };
+  showBrand?: boolean;
+}) {
   const logoSrc = useMercurySidebarLogo();
   return (
     <header className="public-offers-topbar">
-      <Link href="/offers" className="public-offers-brand">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoSrc} alt="" aria-hidden="true" />
-        <strong>Yatishara Studio</strong>
-        <span>Creative Network</span>
-      </Link>
+      {showBrand ? (
+        <Link href="/offers" className="public-offers-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoSrc} alt="" aria-hidden="true" />
+          <strong>Yatishara Studio</strong>
+          <span>Creative Network</span>
+        </Link>
+      ) : (
+        <div className="public-offers-topbar-title">
+          {back ? (
+            <Link href={back.href} className="public-offers-btn is-quiet">
+              <ArrowLeft aria-hidden="true" />
+              {back.label}
+            </Link>
+          ) : (
+            <span>Services</span>
+          )}
+        </div>
+      )}
       <div className="public-offers-topbar-actions">
-        {back ? (
+        {showBrand && back ? (
           <Link href={back.href} className="public-offers-btn is-quiet">
             <ArrowLeft aria-hidden="true" />
             {back.label}
@@ -214,163 +247,174 @@ function OffersCatalogInner() {
   }
 
   return (
-    <>
-      <OffersTopbar
-        back={sellerUsername ? { href: "/offers", label: "All services" } : undefined}
-      />
-      <main className="public-offers-body">
-        <section className="public-offers-hero">
-          <div className="public-offers-hero-copy">
-            <p className="public-offers-kicker">Yatishara Studio</p>
-            <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
-            <p>
-              Creative services from verified creators. Prices are in TTD and paid with
-              Studio credits held until you accept the delivery.
-            </p>
-          </div>
-        </section>
-
-        <div className="public-offers-values">
-          {VALUE_PROPS.map((value) => (
-            <div key={value.title} className="public-offers-value">
-              <span className="public-offers-value-icon">
-                <value.icon aria-hidden="true" />
-              </span>
-              <div>
-                <strong>{value.title}</strong>
-                <p>{value.copy}</p>
-              </div>
-            </div>
-          ))}
+    <div className="public-offers-shell">
+      <aside className="public-offers-rail" aria-label="Filter services">
+        <div className="public-offers-rail-head">
+          <OffersSidebarBrand />
         </div>
-
-        <div className="public-offers-layout">
-          <aside className="public-offers-sidebar" aria-label="Filter services">
-            <label className="public-offers-search">
-              <Search aria-hidden="true" />
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search services"
-                aria-label="Search services"
-              />
-            </label>
-
-            <FilterGroup title="Category">
+        <label className="public-offers-rail-search">
+          <Search aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search services"
+            aria-label="Search services"
+          />
+        </label>
+        <div className="public-offers-rail-body">
+          <FilterGroup title="Category">
+            <FilterOption
+              active={category === "all"}
+              onClick={() => setCategory("all")}
+              label="All categories"
+              count={offers?.length}
+            />
+            {categories.map(([name, count]) => (
               <FilterOption
-                active={category === "all"}
-                onClick={() => setCategory("all")}
-                label="All categories"
-                count={offers?.length}
+                key={name}
+                active={category === name}
+                onClick={() => setCategory(name)}
+                label={name}
+                count={count}
               />
-              {categories.map(([name, count]) => (
-                <FilterOption
-                  key={name}
-                  active={category === name}
-                  onClick={() => setCategory(name)}
-                  label={name}
-                  count={count}
-                />
+            ))}
+          </FilterGroup>
+
+          <FilterGroup title="Price">
+            {PRICE_FILTERS.map((option) => (
+              <FilterOption
+                key={option.value}
+                active={price === option.value}
+                onClick={() => setPrice(option.value)}
+                label={option.label}
+              />
+            ))}
+          </FilterGroup>
+
+          <FilterGroup title="Delivery time">
+            {DELIVERY_FILTERS.map((option) => (
+              <FilterOption
+                key={option.value}
+                active={delivery === option.value}
+                onClick={() => setDelivery(option.value)}
+                label={option.label}
+              />
+            ))}
+          </FilterGroup>
+
+          {hasFilters ? (
+            <button
+              type="button"
+              className="public-offers-btn is-quiet public-offers-rail-clear"
+              onClick={clearFilters}
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+      </aside>
+
+      <div className="public-offers-main">
+        <OffersTopbar
+          showBrand={false}
+          back={sellerUsername ? { href: "/offers", label: "All services" } : undefined}
+        />
+        <div className="public-offers-main-scroll">
+          <main className="public-offers-body">
+            <section className="public-offers-hero">
+              <div className="public-offers-hero-copy">
+                <p className="public-offers-kicker">Yatishara Studio</p>
+                <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
+                <p>
+                  Creative services from verified creators. Prices are in TTD and paid with
+                  Studio credits held until you accept the delivery.
+                </p>
+              </div>
+            </section>
+
+            <div className="public-offers-values">
+              {VALUE_PROPS.map((value) => (
+                <div key={value.title} className="public-offers-value">
+                  <span className="public-offers-value-icon">
+                    <value.icon aria-hidden="true" />
+                  </span>
+                  <div>
+                    <strong>{value.title}</strong>
+                    <p>{value.copy}</p>
+                  </div>
+                </div>
               ))}
-            </FilterGroup>
-
-            <FilterGroup title="Price">
-              {PRICE_FILTERS.map((option) => (
-                <FilterOption
-                  key={option.value}
-                  active={price === option.value}
-                  onClick={() => setPrice(option.value)}
-                  label={option.label}
-                />
-              ))}
-            </FilterGroup>
-
-            <FilterGroup title="Delivery time">
-              {DELIVERY_FILTERS.map((option) => (
-                <FilterOption
-                  key={option.value}
-                  active={delivery === option.value}
-                  onClick={() => setDelivery(option.value)}
-                  label={option.label}
-                />
-              ))}
-            </FilterGroup>
-
-            {hasFilters ? (
-              <button type="button" className="public-offers-btn is-quiet" onClick={clearFilters}>
-                Clear filters
-              </button>
-            ) : null}
-          </aside>
-
-          <div className="public-offers-results">
-            <div className="public-offers-section-head">
-              <h2>Services</h2>
-              {filtered ? <span className="public-offers-chip">{filtered.length}</span> : null}
             </div>
 
-            {!filtered ? (
-              <OffersState icon={<PackageSearch />} title="Loading services…" />
-            ) : filtered.length === 0 ? (
-              hasFilters ? (
-                <OffersState
-                  icon={<Search />}
-                  title="No matching services"
-                  hint="Nothing fits these filters yet. Try widening your search."
-                  action={
-                    <button type="button" className="public-offers-btn" onClick={clearFilters}>
-                      Clear filters
-                    </button>
-                  }
-                />
+            <div className="public-offers-results">
+              <div className="public-offers-section-head">
+                <h2>Services</h2>
+                {filtered ? <span className="public-offers-chip">{filtered.length}</span> : null}
+              </div>
+
+              {!filtered ? (
+                <OffersState icon={<PackageSearch />} title="Loading services…" />
+              ) : filtered.length === 0 ? (
+                hasFilters ? (
+                  <OffersState
+                    icon={<Search />}
+                    title="No matching services"
+                    hint="Nothing fits these filters yet. Try widening your search."
+                    action={
+                      <button type="button" className="public-offers-btn" onClick={clearFilters}>
+                        Clear filters
+                      </button>
+                    }
+                  />
+                ) : (
+                  <OffersState
+                    icon={<Store />}
+                    title="No published services yet"
+                    hint={
+                      sellerUsername
+                        ? "This creator has no live packages right now."
+                        : "Creators are still setting up their packages. Check back soon."
+                    }
+                  />
+                )
               ) : (
-                <OffersState
-                  icon={<Store />}
-                  title="No published services yet"
-                  hint={
-                    sellerUsername
-                      ? "This creator has no live packages right now."
-                      : "Creators are still setting up their packages. Check back soon."
-                  }
-                />
-              )
-            ) : (
-              <ul className="public-offers-grid">
-                {filtered.map((offer) => (
-                  <li key={offer._id}>
-                    <Link href={`/offers/${offer.slug}`} className="public-offers-card">
-                      <div className="public-offers-card-top">
-                        <div>
-                          <h3 className="public-offers-card-title">{offer.title}</h3>
-                          <p className="public-offers-card-seller">
-                            {offer.sellerBusinessName}
-                            {offer.sellerUsername ? ` · @${offer.sellerUsername}` : ""}
-                          </p>
+                <ul className="public-offers-grid">
+                  {filtered.map((offer) => (
+                    <li key={offer._id}>
+                      <Link href={`/offers/${offer.slug}`} className="public-offers-card">
+                        <div className="public-offers-card-top">
+                          <div>
+                            <h3 className="public-offers-card-title">{offer.title}</h3>
+                            <p className="public-offers-card-seller">
+                              {offer.sellerBusinessName}
+                              {offer.sellerUsername ? ` · @${offer.sellerUsername}` : ""}
+                            </p>
+                          </div>
+                          <span className="public-offers-card-price">
+                            {formatTtdCents(offer.priceCents)}
+                          </span>
                         </div>
-                        <span className="public-offers-card-price">
-                          {formatTtdCents(offer.priceCents)}
-                        </span>
-                      </div>
-                      <p className="public-offers-card-desc">{offer.description}</p>
-                      <div className="public-offers-card-meta">
-                        <span className="public-offers-chip">
-                          <Clock aria-hidden="true" />
-                          {offer.deliveryDays} day delivery
-                        </span>
-                        {offer.category ? (
-                          <span className="public-offers-chip">{offer.category}</span>
-                        ) : null}
-                      </div>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                        <p className="public-offers-card-desc">{offer.description}</p>
+                        <div className="public-offers-card-meta">
+                          <span className="public-offers-chip">
+                            <Clock aria-hidden="true" />
+                            {offer.deliveryDays} day delivery
+                          </span>
+                          {offer.category ? (
+                            <span className="public-offers-chip">{offer.category}</span>
+                          ) : null}
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </main>
         </div>
-      </main>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -380,9 +424,21 @@ export function PublicOffersCatalog() {
       <div className="public-offers-route">
         <Suspense
           fallback={
-            <main className="public-offers-body">
-              <OffersState icon={<PackageSearch />} title="Loading services…" />
-            </main>
+            <div className="public-offers-shell">
+              <aside className="public-offers-rail" aria-hidden="true">
+                <div className="public-offers-rail-head">
+                  <OffersSidebarBrand />
+                </div>
+              </aside>
+              <div className="public-offers-main">
+                <OffersTopbar showBrand={false} />
+                <div className="public-offers-main-scroll">
+                  <main className="public-offers-body">
+                    <OffersState icon={<PackageSearch />} title="Loading services…" />
+                  </main>
+                </div>
+              </div>
+            </div>
           }
         >
           <OffersCatalogInner />
@@ -570,7 +626,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
 export function PublicOfferDetail({ slug }: { slug: string }) {
   return (
     <ConvexClientProvider>
-      <div className="public-offers-route">
+      <div className="public-offers-route is-plain">
         <OfferDetailInner slug={slug} />
       </div>
     </ConvexClientProvider>
