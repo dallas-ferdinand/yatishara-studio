@@ -7772,7 +7772,7 @@ textarea.cursor-input {
   padding: 4px;
   border: 1px solid var(--color-cursor-border);
   border-radius: 8px;
-  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
+  background: var(--mos-plate, var(--mos-bg, var(--color-cursor-sidebar)));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 .cursor-tab-context-item {
