@@ -7318,7 +7318,7 @@ export function StudioShell({
           overflow-x: auto;
           overflow-y: hidden;
           padding: 4px 8px;
-          scroll-behavior: smooth;
+          scroll-behavior: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: none;
         }

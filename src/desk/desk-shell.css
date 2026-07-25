@@ -6457,7 +6457,7 @@ textarea.cursor-input {
   overflow-x: auto;
   overflow-y: hidden;
   padding: 4px 10px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
