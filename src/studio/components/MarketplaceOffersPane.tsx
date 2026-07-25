@@ -7,10 +7,13 @@ import {
   CalendarDays,
   FileBadge,
   HandCoins,
+  Image as ImageIcon,
   Loader2,
   MessageSquare,
   Plus,
+  RotateCcw,
   Tag,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -123,6 +126,258 @@ function SummaryRow({ children }: { children: ReactNode }) {
   return <section className="marketplace-offers-summary">{children}</section>;
 }
 
+/** Editable tier, held as strings so partial numeric input never fights the user. */
+type PackageDraft = {
+  name: string;
+  description: string;
+  priceTtd: string;
+  deliveryDays: string;
+  revisions: string;
+  features: string;
+};
+
+const PACKAGE_PRESET_NAMES = ["Basic", "Standard", "Premium"] as const;
+
+function emptyPackageDraft(index: number): PackageDraft {
+  return {
+    name: PACKAGE_PRESET_NAMES[index] ?? `Package ${index + 1}`,
+    description: "",
+    priceTtd: "50",
+    deliveryDays: "5",
+    revisions: "1",
+    features: "",
+  };
+}
+
+function packageDraftsToArgs(drafts: PackageDraft[]) {
+  return drafts.map((draft) => ({
+    name: draft.name,
+    description: draft.description,
+    priceCents: Math.round(Number(draft.priceTtd) * 100),
+    deliveryDays: Number(draft.deliveryDays) || 1,
+    revisions: Number(draft.revisions) || 0,
+    features: draft.features
+      .split("\n")
+      .map((feature) => feature.trim())
+      .filter(Boolean),
+  }));
+}
+
+function packagesToDrafts(
+  packages:
+    | Array<{
+        name: string;
+        description: string;
+        priceCents: number;
+        deliveryDays: number;
+        revisions: number;
+        features: string[];
+      }>
+    | undefined,
+): PackageDraft[] {
+  return (packages ?? []).map((pkg) => ({
+    name: pkg.name,
+    description: pkg.description,
+    priceTtd: String(pkg.priceCents / 100),
+    deliveryDays: String(pkg.deliveryDays),
+    revisions: String(pkg.revisions),
+    features: pkg.features.join("\n"),
+  }));
+}
+
+function PackagesEditor({
+  drafts,
+  onChange,
+}: {
+  drafts: PackageDraft[];
+  onChange: (next: PackageDraft[]) => void;
+}) {
+  function patch(index: number, part: Partial<PackageDraft>) {
+    onChange(drafts.map((d, i) => (i === index ? { ...d, ...part } : d)));
+  }
+  return (
+    <div className="marketplace-offers-packages">
+      {drafts.length === 0 ? (
+        <p className="marketplace-offers-bar-note">
+          Flat rate right now — add packages to sell Basic / Standard / Premium
+          tiers with their own price, delivery and revisions.
+        </p>
+      ) : null}
+      {drafts.map((draft, index) => (
+        <div key={index} className="marketplace-offers-package-card">
+          <div className="marketplace-offers-package-head">
+            <IconField
+              icon={FileBadge}
+              value={draft.name}
+              onChange={(e) => patch(index, { name: e.target.value })}
+              placeholder={`Package name — e.g. ${PACKAGE_PRESET_NAMES[index] ?? "Custom"}`}
+              aria-label={`Package ${index + 1} name`}
+            />
+            <button
+              type="button"
+              className="marketplace-offers-bar-action"
+              onClick={() => onChange(drafts.filter((_, i) => i !== index))}
+              aria-label={`Remove package ${index + 1}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <IconTextarea
+            icon={AlignLeft}
+            value={draft.description}
+            onChange={(e) => patch(index, { description: e.target.value })}
+            placeholder="What this tier includes"
+            aria-label={`Package ${index + 1} description`}
+          />
+          <div className="marketplace-optional-row">
+            <IconField
+              icon={Wallet}
+              value={draft.priceTtd}
+              onChange={(e) => patch(index, { priceTtd: e.target.value })}
+              placeholder="Price (TTD)"
+              aria-label={`Package ${index + 1} price in TTD`}
+            />
+            <IconField
+              icon={CalendarDays}
+              value={draft.deliveryDays}
+              onChange={(e) => patch(index, { deliveryDays: e.target.value })}
+              placeholder="Delivery days"
+              aria-label={`Package ${index + 1} delivery days`}
+            />
+            <IconField
+              icon={RotateCcw}
+              value={draft.revisions}
+              onChange={(e) => patch(index, { revisions: e.target.value })}
+              placeholder="Revisions"
+              aria-label={`Package ${index + 1} revisions`}
+            />
+          </div>
+          <IconTextarea
+            icon={Plus}
+            value={draft.features}
+            onChange={(e) => patch(index, { features: e.target.value })}
+            placeholder={"What's included — one per line\ne.g. Source files\nCommercial rights"}
+            aria-label={`Package ${index + 1} features`}
+          />
+        </div>
+      ))}
+      {drafts.length < 3 ? (
+        <button
+          type="button"
+          className="marketplace-offers-bar-action"
+          onClick={() => onChange([...drafts, emptyPackageDraft(drafts.length)])}
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          {drafts.length === 0 ? "Add packages" : "Add another package"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+type PickerAsset = {
+  _id: Id<"assets">;
+  name: string;
+  kind: string;
+  signedThumbnailUrl?: string;
+};
+
+function MediaAssetGrid({
+  assets,
+  isSelected,
+  onPick,
+  ariaLabel,
+}: {
+  assets: PickerAsset[];
+  isSelected: (id: Id<"assets">) => boolean;
+  onPick: (id: Id<"assets">) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      className="marketplace-offers-asset-grid"
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {assets.map((asset) => {
+        const selected = isSelected(asset._id);
+        return (
+          <button
+            key={asset._id}
+            type="button"
+            className={selected ? "is-selected" : undefined}
+            aria-pressed={selected}
+            onClick={() => onPick(asset._id)}
+            title={asset.name}
+          >
+            {asset.signedThumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={asset.signedThumbnailUrl} alt="" />
+            ) : (
+              <span className="marketplace-offers-thumb" aria-hidden="true" />
+            )}
+            <span>{asset.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function OfferMediaEditor({
+  assets,
+  coverAssetId,
+  sampleAssetIds,
+  onCover,
+  onToggleSample,
+}: {
+  assets: PickerAsset[] | undefined;
+  coverAssetId: Id<"assets"> | null;
+  sampleAssetIds: Id<"assets">[];
+  onCover: (id: Id<"assets"> | null) => void;
+  onToggleSample: (id: Id<"assets">) => void;
+}) {
+  if (!assets) {
+    return <p className="studio-settings-empty">Loading assets…</p>;
+  }
+  if (assets.length === 0) {
+    return (
+      <p className="studio-settings-empty">
+        No ready assets yet — upload images or video in Explorer first.
+      </p>
+    );
+  }
+  return (
+    <div className="marketplace-offers-media">
+      <div>
+        <p className="marketplace-offers-media-label">
+          <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          Banner — the main image buyers see first
+        </p>
+        <MediaAssetGrid
+          assets={assets}
+          ariaLabel="Banner image"
+          isSelected={(id) => id === coverAssetId}
+          onPick={(id) => onCover(id === coverAssetId ? null : id)}
+        />
+      </div>
+      <div>
+        <p className="marketplace-offers-media-label">
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          Gallery — up to 6 samples, images or video ({sampleAssetIds.length}
+          /6)
+        </p>
+        <MediaAssetGrid
+          assets={assets}
+          ariaLabel="Gallery samples"
+          isSelected={(id) => sampleAssetIds.includes(id)}
+          onPick={onToggleSample}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function MarketplaceOffersPane({
   onOpenCredits,
   creditPriceCents: _creditPriceCents = 50,
@@ -158,21 +413,30 @@ export function MarketplaceOffersPane({
   );
 
   const jobIdForAssets = view.kind === "job" ? view.jobId : null;
-  // Signed-URL window is stamped per job outside render so it stays stable.
+  // Asset picker is used for delivering jobs and for offer banner/gallery.
+  const assetPickerKey =
+    view.kind === "job"
+      ? `job:${view.jobId}`
+      : view.kind === "create"
+        ? "create"
+        : view.kind === "offer"
+          ? `offer:${view.offerId}`
+          : null;
+  // Signed-URL window is stamped per view outside render so it stays stable.
   const [assetUrlExpiresUnix, setAssetUrlExpiresUnix] = useState<number | null>(
     null,
   );
   useEffect(() => {
     setAssetUrlExpiresUnix(
-      jobIdForAssets ? Math.floor(Date.now() / 1000) + 60 * 60 : null,
+      assetPickerKey ? Math.floor(Date.now() / 1000) + 60 * 60 : null,
     );
-  }, [jobIdForAssets]);
+  }, [assetPickerKey]);
 
   const recentAssets = useQuery(
     api.assets.listRecentReady,
-    view.kind === "job" &&
-      jobDetail?.job.role === "seller" &&
-      assetUrlExpiresUnix !== null
+    assetPickerKey !== null &&
+      assetUrlExpiresUnix !== null &&
+      (view.kind !== "job" || jobDetail?.job.role === "seller")
       ? { limit: 24, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
@@ -184,12 +448,21 @@ export function MarketplaceOffersPane({
     deliveryDays: "5",
     category: "ads",
   });
+  const [createPackages, setCreatePackages] = useState<PackageDraft[]>([]);
+  const [createCoverAssetId, setCreateCoverAssetId] =
+    useState<Id<"assets"> | null>(null);
+  const [createSampleAssetIds, setCreateSampleAssetIds] = useState<
+    Id<"assets">[]
+  >([]);
   const [editForm, setEditForm] = useState<{
     title: string;
     description: string;
     priceTtd: string;
     deliveryDays: string;
     category: string;
+    packages: PackageDraft[];
+    coverAssetId: Id<"assets"> | null;
+    sampleAssetIds: Id<"assets">[];
   } | null>(null);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Id<"assets">[]>([]);
   const [deliverNote, setDeliverNote] = useState("");
@@ -230,6 +503,9 @@ export function MarketplaceOffersPane({
       priceTtd: String(selectedOffer.priceCents / 100),
       deliveryDays: String(selectedOffer.deliveryDays),
       category: selectedOffer.category ?? "",
+      packages: packagesToDrafts(selectedOffer.packages),
+      coverAssetId: selectedOffer.coverAssetId ?? null,
+      sampleAssetIds: selectedOffer.sampleAssetIds ?? [],
     });
   }, [selectedOffer?._id, selectedOffer?.updatedAt]);
 
@@ -259,13 +535,24 @@ export function MarketplaceOffersPane({
   async function handleCreateOffer() {
     setBusy(true);
     try {
-      const priceCents = Math.round(Number(createForm.priceTtd) * 100);
+      const packages = packageDraftsToArgs(createPackages);
+      const priceCents =
+        packages.length > 0
+          ? packages[0].priceCents
+          : Math.round(Number(createForm.priceTtd) * 100);
       const offerId = await createOffer({
         title: createForm.title,
         description: createForm.description,
         priceCents,
-        deliveryDays: Number(createForm.deliveryDays) || 5,
+        deliveryDays:
+          packages.length > 0
+            ? packages[0].deliveryDays
+            : Number(createForm.deliveryDays) || 5,
         category: createForm.category || undefined,
+        packages: packages.length > 0 ? packages : undefined,
+        coverAssetId: createCoverAssetId ?? undefined,
+        sampleAssetIds:
+          createSampleAssetIds.length > 0 ? createSampleAssetIds : undefined,
       });
       toast.success("Draft offer created");
       setView({ kind: "offer", offerId });
@@ -276,6 +563,9 @@ export function MarketplaceOffersPane({
         deliveryDays: "5",
         category: "ads",
       });
+      setCreatePackages([]);
+      setCreateCoverAssetId(null);
+      setCreateSampleAssetIds([]);
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not create offer."));
     } finally {
@@ -302,13 +592,23 @@ export function MarketplaceOffersPane({
     if (!selectedOffer || !editForm) return;
     setBusy(true);
     try {
+      const packages = packageDraftsToArgs(editForm.packages);
       await updateOffer({
         offerId: selectedOffer._id,
         title: editForm.title,
         description: editForm.description,
-        priceCents: Math.round(Number(editForm.priceTtd) * 100),
-        deliveryDays: Number(editForm.deliveryDays) || 5,
+        priceCents:
+          packages.length > 0
+            ? packages[0].priceCents
+            : Math.round(Number(editForm.priceTtd) * 100),
+        deliveryDays:
+          packages.length > 0
+            ? packages[0].deliveryDays
+            : Number(editForm.deliveryDays) || 5,
         category: editForm.category || undefined,
+        packages: packages.length > 0 ? packages : null,
+        coverAssetId: editForm.coverAssetId,
+        sampleAssetIds: editForm.sampleAssetIds,
       });
       toast.success("Offer saved");
     } catch (error) {
@@ -699,7 +999,10 @@ export function MarketplaceOffersPane({
                           >
                             <td>
                               <strong>{job.offerTitle}</strong>
-                              <span>{formatTtdCents(job.priceCents)} held</span>
+                              <span>
+                                {job.packageName ? `${job.packageName} · ` : ""}
+                                {formatTtdCents(job.priceCents)} held
+                              </span>
                             </td>
                             <td>
                               {job._role === "sell" ? "Selling" : "Buying"}
@@ -747,32 +1050,34 @@ export function MarketplaceOffersPane({
                       placeholder="What’s included, revisions, delivery notes"
                       aria-label="Description"
                     />
-                    <div className="marketplace-optional-row">
-                      <IconField
-                        icon={Wallet}
-                        value={createForm.priceTtd}
-                        onChange={(e) =>
-                          setCreateForm((f) => ({
-                            ...f,
-                            priceTtd: e.target.value,
-                          }))
-                        }
-                        placeholder="Price (TTD)"
-                        aria-label="Price in TTD"
-                      />
-                      <IconField
-                        icon={CalendarDays}
-                        value={createForm.deliveryDays}
-                        onChange={(e) =>
-                          setCreateForm((f) => ({
-                            ...f,
-                            deliveryDays: e.target.value,
-                          }))
-                        }
-                        placeholder="Delivery days"
-                        aria-label="Delivery days"
-                      />
-                    </div>
+                    {createPackages.length === 0 ? (
+                      <div className="marketplace-optional-row">
+                        <IconField
+                          icon={Wallet}
+                          value={createForm.priceTtd}
+                          onChange={(e) =>
+                            setCreateForm((f) => ({
+                              ...f,
+                              priceTtd: e.target.value,
+                            }))
+                          }
+                          placeholder="Price (TTD)"
+                          aria-label="Price in TTD"
+                        />
+                        <IconField
+                          icon={CalendarDays}
+                          value={createForm.deliveryDays}
+                          onChange={(e) =>
+                            setCreateForm((f) => ({
+                              ...f,
+                              deliveryDays: e.target.value,
+                            }))
+                          }
+                          placeholder="Delivery days"
+                          aria-label="Delivery days"
+                        />
+                      </div>
+                    ) : null}
                     <IconField
                       icon={Tag}
                       value={createForm.category}
@@ -786,24 +1091,54 @@ export function MarketplaceOffersPane({
                       aria-label="Category"
                     />
                   </div>
-                  <div className="marketplace-offers-actions">
-                    <button
-                      type="button"
-                      className="is-primary"
-                      disabled={busy || !createForm.title.trim()}
-                      onClick={() => void handleCreateOffer()}
-                    >
-                      {busy ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : null}
-                      Create draft
-                    </button>
-                    <button type="button" onClick={goHome}>
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               </Section>
+
+              <Section title="Packages">
+                <div className="studio-admin-card">
+                  <PackagesEditor
+                    drafts={createPackages}
+                    onChange={setCreatePackages}
+                  />
+                </div>
+              </Section>
+
+              <Section title="Media">
+                <div className="studio-admin-card">
+                  <OfferMediaEditor
+                    assets={recentAssets}
+                    coverAssetId={createCoverAssetId}
+                    sampleAssetIds={createSampleAssetIds}
+                    onCover={setCreateCoverAssetId}
+                    onToggleSample={(id) =>
+                      setCreateSampleAssetIds((prev) =>
+                        prev.includes(id)
+                          ? prev.filter((x) => x !== id)
+                          : prev.length >= 6
+                            ? prev
+                            : [...prev, id],
+                      )
+                    }
+                  />
+                </div>
+              </Section>
+
+              <div className="marketplace-offers-actions">
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={busy || !createForm.title.trim()}
+                  onClick={() => void handleCreateOffer()}
+                >
+                  {busy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : null}
+                  Create draft
+                </button>
+                <button type="button" onClick={goHome}>
+                  Cancel
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -846,30 +1181,32 @@ export function MarketplaceOffersPane({
                       placeholder="Description"
                       aria-label="Description"
                     />
-                    <div className="marketplace-optional-row">
-                      <IconField
-                        icon={Wallet}
-                        value={editForm.priceTtd}
-                        onChange={(e) =>
-                          setEditForm((f) =>
-                            f ? { ...f, priceTtd: e.target.value } : f,
-                          )
-                        }
-                        placeholder="Price (TTD)"
-                        aria-label="Price in TTD"
-                      />
-                      <IconField
-                        icon={CalendarDays}
-                        value={editForm.deliveryDays}
-                        onChange={(e) =>
-                          setEditForm((f) =>
-                            f ? { ...f, deliveryDays: e.target.value } : f,
-                          )
-                        }
-                        placeholder="Delivery days"
-                        aria-label="Delivery days"
-                      />
-                    </div>
+                    {editForm.packages.length === 0 ? (
+                      <div className="marketplace-optional-row">
+                        <IconField
+                          icon={Wallet}
+                          value={editForm.priceTtd}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, priceTtd: e.target.value } : f,
+                            )
+                          }
+                          placeholder="Price (TTD)"
+                          aria-label="Price in TTD"
+                        />
+                        <IconField
+                          icon={CalendarDays}
+                          value={editForm.deliveryDays}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f ? { ...f, deliveryDays: e.target.value } : f,
+                            )
+                          }
+                          placeholder="Delivery days"
+                          aria-label="Delivery days"
+                        />
+                      </div>
+                    ) : null}
                     <IconField
                       icon={Tag}
                       value={editForm.category}
@@ -922,6 +1259,47 @@ export function MarketplaceOffersPane({
                       Archive
                     </button>
                   </div>
+                </div>
+              </Section>
+
+              <Section title="Packages">
+                <div className="studio-admin-card">
+                  <PackagesEditor
+                    drafts={editForm.packages}
+                    onChange={(next) =>
+                      setEditForm((f) => (f ? { ...f, packages: next } : f))
+                    }
+                  />
+                  <p className="marketplace-offers-bar-note">
+                    Package changes apply when you press Save changes.
+                  </p>
+                </div>
+              </Section>
+
+              <Section title="Media">
+                <div className="studio-admin-card">
+                  <OfferMediaEditor
+                    assets={recentAssets}
+                    coverAssetId={editForm.coverAssetId}
+                    sampleAssetIds={editForm.sampleAssetIds}
+                    onCover={(id) =>
+                      setEditForm((f) => (f ? { ...f, coverAssetId: id } : f))
+                    }
+                    onToggleSample={(id) =>
+                      setEditForm((f) =>
+                        f
+                          ? {
+                              ...f,
+                              sampleAssetIds: f.sampleAssetIds.includes(id)
+                                ? f.sampleAssetIds.filter((x) => x !== id)
+                                : f.sampleAssetIds.length >= 6
+                                  ? f.sampleAssetIds
+                                  : [...f.sampleAssetIds, id],
+                            }
+                          : f,
+                      )
+                    }
+                  />
                 </div>
               </Section>
 
@@ -984,6 +1362,24 @@ export function MarketplaceOffersPane({
                         : "Held until you accept delivery."
                     }
                   />
+                  {jobDetail.job.packageName ? (
+                    <SummaryChip
+                      label="Package"
+                      value={jobDetail.job.packageName}
+                      body="The tier the buyer booked."
+                    />
+                  ) : null}
+                  {jobDetail.job.deliveryDays ? (
+                    <SummaryChip
+                      label="Delivery"
+                      value={`${jobDetail.job.deliveryDays} days`}
+                      body={
+                        jobDetail.job.revisions != null
+                          ? `${jobDetail.job.revisions} revision${jobDetail.job.revisions === 1 ? "" : "s"} included.`
+                          : "Promised turnaround for this booking."
+                      }
+                    />
+                  ) : null}
                   <SummaryChip
                     label="Booked"
                     value={new Date(

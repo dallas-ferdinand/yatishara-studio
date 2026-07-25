@@ -120,6 +120,50 @@ span.studio-admin-head-tab,
   text-decoration: none;
 }
 
+/* —— Package tiers editor —— */
+
+.marketplace-offers-packages {
+  display: grid;
+  gap: 10px;
+}
+
+.marketplace-offers-package-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+}
+
+.marketplace-offers-package-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketplace-offers-package-head > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* —— Offer media (banner + gallery) —— */
+
+.marketplace-offers-media {
+  display: grid;
+  gap: 14px;
+}
+
+.marketplace-offers-media-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  color: var(--color-cursor-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 /* —— Card action rows — same button language as .studio-admin-detail-actions —— */
 
 .marketplace-offers-actions {
