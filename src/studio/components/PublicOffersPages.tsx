@@ -33,7 +33,6 @@ function OffersSidebarBrand() {
       <img src={logoSrc} alt="" aria-hidden="true" />
       <span className="public-offers-sidebar-brand-text">
         <strong>Creative Network</strong>
-        <em>Yatishara Studio</em>
       </span>
     </Link>
   );
@@ -63,9 +62,7 @@ function OffersTopbar({
               <ArrowLeft aria-hidden="true" />
               {back.label}
             </Link>
-          ) : (
-            <span>Services</span>
-          )}
+          ) : null}
         </div>
       )}
       <div className="public-offers-topbar-actions">
@@ -108,18 +105,18 @@ function OffersState({
 const VALUE_PROPS = [
   {
     icon: BadgeCheck,
-    title: "Verified creators",
-    copy: "Every seller passes identity and business checks before they can list.",
+    title: "Verified partners",
+    copy: "Every creator is identity-checked before they can join the network.",
   },
   {
     icon: ShieldCheck,
     title: "Secure booking",
-    copy: "Your credits stay in escrow and are only released when you accept the work.",
+    copy: "Your credits stay in escrow and release only when you accept the work.",
   },
   {
     icon: PackageCheck,
-    title: "Delivery tracking",
-    copy: "Every package has a clear delivery window and a tracked handover in Studio.",
+    title: "Clear delivery",
+    copy: "Every package has a defined timeline and a tracked handover in Studio.",
   },
 ] as const;
 
@@ -323,12 +320,13 @@ function OffersCatalogInner() {
         <div className="public-offers-main-scroll">
           <main className="public-offers-body">
             <section className="public-offers-hero">
+              <div className="public-offers-hero-bg" aria-hidden="true" />
               <div className="public-offers-hero-copy">
                 <p className="public-offers-kicker">Yatishara Studio</p>
                 <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
                 <p>
-                  Creative services from verified creators. Prices are in TTD and paid with
-                  Studio credits held until you accept the delivery.
+                  Work with verified creative partners on packages priced in TTD.
+                  Credits stay secure until you accept the delivery.
                 </p>
               </div>
             </section>

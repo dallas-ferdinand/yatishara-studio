@@ -88,16 +88,6 @@
   text-overflow: ellipsis;
 }
 
-.public-offers-sidebar-brand-text em {
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .public-offers-rail-search {
   display: flex;
   align-items: center;
@@ -445,20 +435,75 @@
 }
 
 .public-offers-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 0;
+  min-height: 220px;
+  padding: 48px 28px;
+  overflow: hidden;
+  isolation: isolate;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: var(--cursor-radius-xl, 12px);
   background: var(--mos-plate, var(--cursor-surface));
 }
 
+.public-offers-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("/branding/creative-network-banner-4k.webp");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.48;
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.72) 42%,
+    rgba(0, 0, 0, 0.28) 78%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.72) 42%,
+    rgba(0, 0, 0, 0.28) 78%,
+    transparent 100%
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+[data-appearance="dark"] .public-offers-hero-bg {
+  opacity: 0.58;
+}
+
+.public-offers-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120% 90% at 50% 20%,
+      color-mix(in srgb, var(--mos-page, #f5f5f7) 18%, transparent) 0%,
+      color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 58%,
+      var(--mos-plate, #ececf0) 100%
+    );
+}
+
 .public-offers-hero-copy {
+  position: relative;
+  z-index: 2;
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  justify-items: center;
+  text-align: center;
   min-width: 0;
+  max-width: 42rem;
 }
 
 .public-offers-kicker {
@@ -472,18 +517,19 @@
 
 .public-offers-hero h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: clamp(26px, 3.4vw, 34px);
   font-weight: 650;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
   overflow-wrap: anywhere;
+  color: var(--color-cursor-text, var(--mos-text));
 }
 
 .public-offers-hero p {
   margin: 0;
-  max-width: 56ch;
+  max-width: 44ch;
   font-size: var(--desk-text-ui, 13px);
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
@@ -788,9 +834,9 @@
   }
 
   .public-offers-hero {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 14px;
+    min-height: 188px;
+    padding: 36px 18px;
+    align-items: center;
   }
 
   .public-offers-grid {
