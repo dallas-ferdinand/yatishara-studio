@@ -6304,8 +6304,8 @@ export function StudioShell({
           transition: border-color 120ms ease, box-shadow 120ms ease;
         }
         .studio-files-search-wrap:focus-within {
-          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
-          box-shadow: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          border-color: color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          box-shadow: none;
         }
         .studio-files-search-icon {
           margin-left: 11px;
@@ -14598,8 +14598,8 @@ export function StudioShell({
           transition: border-color 120ms ease, box-shadow 120ms ease;
         }
         .studio-history-search-wrap:focus-within {
-          border-color: color-mix(in srgb, var(--cursor-accent) 50%, transparent);
-          box-shadow: 0 0 0 3px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          border-color: color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          box-shadow: none;
         }
         .studio-history-search-icon {
           margin-left: 11px;

@@ -97,6 +97,17 @@
   padding: 10px 0;
 }
 
+.studio-voice-picker-search:focus-within {
+  border-color: color-mix(in srgb, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.18)) 80%, transparent);
+  box-shadow: none;
+}
+
+.studio-voice-picker-search input:focus,
+.studio-voice-picker-search input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .studio-voice-picker-search input::placeholder {
   color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 42%, transparent);
 }

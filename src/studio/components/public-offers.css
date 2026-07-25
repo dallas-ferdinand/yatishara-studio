@@ -140,10 +140,10 @@
   opacity: 1;
 }
 
+.public-offers-rail-search input:focus,
 .public-offers-rail-search input:focus-visible {
-  outline: 2px solid var(--cursor-accent-border, var(--cursor-accent));
-  outline-offset: 4px;
-  border-radius: var(--cursor-radius-sm, 6px);
+  outline: none;
+  box-shadow: none;
 }
 
 .public-offers-rail-search input::-webkit-search-cancel-button {

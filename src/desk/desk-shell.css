@@ -2419,9 +2419,8 @@ select.cursor-select:focus {
 }
 .cursor-panel-search-input:focus,
 .cursor-panel-search-input:focus-visible {
-  outline: 2px solid var(--cursor-accent-border);
-  outline-offset: 4px;
-  border-radius: var(--cursor-radius-sm);
+  outline: none;
+  box-shadow: none;
 }
 .cursor-panel-search-input::-webkit-search-decoration,
 .cursor-panel-search-input::-webkit-search-cancel-button {
@@ -3270,6 +3269,19 @@ select.cursor-select:focus {
   color: var(--color-cursor-text);
   font-size: 16px;
 }
+.composer-mobile-menu-search:focus,
+.composer-mobile-menu-search:focus-visible {
+  outline: none;
+  border-color: var(--color-cursor-border-soft);
+  box-shadow: none;
+}
+
+/* All search fields: no focus border / ring (resting chrome only). */
+input[type="search"]:focus,
+input[type="search"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
 
 .composer-mobile-menu-row {
   display: flex;
@@ -3534,8 +3546,11 @@ select.cursor-select:focus {
   outline: none;
   transition: border-color var(--cursor-ease);
 }
-.cursor-popover-search:focus {
-  border-color: var(--cursor-border-subtle);
+.cursor-popover-search:focus,
+.cursor-popover-search:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 .cursor-popover-search::placeholder {
   color: #666;
@@ -3625,8 +3640,11 @@ select.cursor-select:focus {
   font-family: inherit;
   outline: none;
 }
-.cursor-ref-search:focus {
-  border-color: var(--cursor-border-subtle);
+.cursor-ref-search:focus,
+.cursor-ref-search:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .sr-only {
