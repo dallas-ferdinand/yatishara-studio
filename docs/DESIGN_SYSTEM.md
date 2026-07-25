@@ -146,13 +146,14 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Root class **`cursor-select-menu`** — **never `cursor-select`** (that styles native
   `<select>` and double-boxes the control).
 - Variants: `ghost` (default, compact chrome filter) and `field` (full-width taller, forms/sidebars).
-- Props: `value`, `options[{value,label,icon?}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
+- Props: `value`, `options[{value,label,icon?,tone?}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
 - Prefer a leading `icon` on every option (shows on trigger + menu row).
+- Status filters: set `tone` — `good` (green), `warn` (amber), `bad` (red), `info` (accent), `muted`.
 - Flat darker fill, no border; caret is Lucide `ArrowDown` (see [select / dropdown](#select--dropdown-locked-decision)).
 
 ```tsx
 <CursorSelect ariaLabel="Status" value={f} onChange={setF}
-  options={[{ value: "all", label: "All", icon: <LayoutList /> }]} />
+  options={[{ value: "pending", label: "Pending", icon: <Clock3 />, tone: "warn" }]} />
 ```
 
 ### `CursorTable` / `CursorTableEmpty` — global table plate

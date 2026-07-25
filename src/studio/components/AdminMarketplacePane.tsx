@@ -109,10 +109,10 @@ export function AdminMarketplacePane() {
                 setSellerFilter(next as "all" | "pending" | "approved" | "suspended")
               }
               options={[
-                { value: "pending", label: "Pending", icon: <Clock3 /> },
-                { value: "approved", label: "Approved", icon: <CheckCircle2 /> },
-                { value: "suspended", label: "Suspended", icon: <Ban /> },
-                { value: "all", label: "All", icon: <LayoutList /> },
+                { value: "pending", label: "Pending", icon: <Clock3 />, tone: "warn" },
+                { value: "approved", label: "Approved", icon: <CheckCircle2 />, tone: "good" },
+                { value: "suspended", label: "Suspended", icon: <Ban />, tone: "bad" },
+                { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
               ]}
             />
           </div>
@@ -206,9 +206,9 @@ export function AdminMarketplacePane() {
               value={payoutFilter}
               onChange={(next) => setPayoutFilter(next as "owed" | "paid" | "all")}
               options={[
-                { value: "owed", label: "Owed", icon: <Wallet /> },
-                { value: "paid", label: "Paid", icon: <CheckCircle2 /> },
-                { value: "all", label: "All", icon: <LayoutList /> },
+                { value: "owed", label: "Owed", icon: <Wallet />, tone: "warn" },
+                { value: "paid", label: "Paid", icon: <CheckCircle2 />, tone: "good" },
+                { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
               ]}
             />
           </div>

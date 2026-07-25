@@ -4741,6 +4741,26 @@ select.cursor-select:focus {
   line-height: 0;
   color: var(--color-cursor-muted);
 }
+.cursor-select-leading.is-good,
+.cursor-dropdown-item-icon.is-good {
+  color: var(--mos-success, #22c55e);
+}
+.cursor-select-leading.is-warn,
+.cursor-dropdown-item-icon.is-warn {
+  color: var(--mos-warning, #f59e0b);
+}
+.cursor-select-leading.is-bad,
+.cursor-dropdown-item-icon.is-bad {
+  color: var(--mos-danger, #ef4444);
+}
+.cursor-select-leading.is-info,
+.cursor-dropdown-item-icon.is-info {
+  color: var(--cursor-accent, #3b82f6);
+}
+.cursor-select-leading.is-muted,
+.cursor-dropdown-item-icon.is-muted {
+  color: var(--color-cursor-muted);
+}
 .cursor-select-leading svg,
 .cursor-dropdown-item-icon svg,
 .cursor-dropdown-item > svg,
@@ -4822,12 +4842,7 @@ select.cursor-select:focus {
 .cursor-dropdown-item.active {
   background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
 }
-.cursor-dropdown-item:hover .cursor-dropdown-item-icon,
-.cursor-dropdown-item.active .cursor-dropdown-item-icon,
-.cursor-dropdown-item:hover > svg,
-.cursor-dropdown-item.active > svg {
-  color: var(--color-cursor-text);
-}
+/* Status icon tones stay put on hover/active (don't flatten to text). */
 .cursor-dropdown-item.muted {
   color: var(--color-cursor-muted);
   border-top: 1px solid var(--color-cursor-border);

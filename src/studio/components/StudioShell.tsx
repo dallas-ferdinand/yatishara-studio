@@ -22063,11 +22063,11 @@ function AdminWorkspacePane({
                     value={paymentFilter}
                     onChange={setPaymentFilter}
                     options={[
-                      { value: "pending", label: "Pending", icon: <Clock3 /> },
-                      { value: "payment_completed", label: "Completed", icon: <CheckCircle2 /> },
-                      { value: "rejected", label: "Rejected", icon: <XCircle /> },
-                      { value: "cancelled", label: "Cancelled", icon: <Ban /> },
-                      { value: "all", label: "All", icon: <LayoutList /> },
+                      { value: "pending", label: "Pending", icon: <Clock3 />, tone: "warn" },
+                      { value: "payment_completed", label: "Completed", icon: <CheckCircle2 />, tone: "good" },
+                      { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
+                      { value: "cancelled", label: "Cancelled", icon: <Ban />, tone: "muted" },
+                      { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
                     ]}
                   />
                 </div>
@@ -22290,10 +22290,10 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
               align="end"
               variant="field"
               options={[
-                { value: "receipt_uploaded", label: "Receipt uploaded", icon: <FileUp /> },
-                { value: "receipt_received", label: "Receipt received", icon: <Inbox /> },
-                { value: "payment_completed", label: "Payment approved", icon: <CheckCircle2 /> },
-                { value: "rejected", label: "Rejected", icon: <XCircle /> },
+                { value: "receipt_uploaded", label: "Receipt uploaded", icon: <FileUp />, tone: "warn" },
+                { value: "receipt_received", label: "Receipt received", icon: <Inbox />, tone: "info" },
+                { value: "payment_completed", label: "Payment approved", icon: <CheckCircle2 />, tone: "good" },
+                { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
               ]}
               onChange={(next) => onStatusChange(payment._id, next)}
             />

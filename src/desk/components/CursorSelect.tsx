@@ -4,11 +4,15 @@ import { ArrowDown } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
+export type CursorSelectTone = "good" | "warn" | "bad" | "info" | "muted";
+
 export type CursorSelectOption = {
   value: string;
   label: string;
   /** Prefer a Lucide (or Icon) node in front of the label. */
   icon?: ReactNode;
+  /** Color-codes the leading status icon (good/warn/bad/info/muted). */
+  tone?: CursorSelectTone;
 };
 
 type CursorSelectProps = {
@@ -23,12 +27,17 @@ type CursorSelectProps = {
   disabled?: boolean;
 };
 
+function toneClass(tone?: CursorSelectTone): string {
+  if (!tone || tone === "muted") return " is-muted";
+  return ` is-${tone}`;
+}
+
 /**
  * Compact themed select — same menu language as explorer filters
  * (.cursor-dropdown / .cursor-dropdown-item).
  * Root class is cursor-select-menu (not cursor-select) so native
  * select.cursor-select styles never paint a second box around it.
- * Prefer options with a leading icon.
+ * Prefer options with a leading icon; use tone for status color.
  */
 export function CursorSelect({
   value,
@@ -82,7 +91,10 @@ export function CursorSelect({
         }}
       >
         {active?.icon ? (
-          <span className="cursor-select-leading" aria-hidden="true">
+          <span
+            className={`cursor-select-leading${toneClass(active.tone)}`}
+            aria-hidden="true"
+          >
             {active.icon}
           </span>
         ) : null}
@@ -111,7 +123,10 @@ export function CursorSelect({
                 }}
               >
                 {opt.icon ? (
-                  <span className="cursor-dropdown-item-icon" aria-hidden="true">
+                  <span
+                    className={`cursor-dropdown-item-icon${toneClass(opt.tone)}`}
+                    aria-hidden="true"
+                  >
                     {opt.icon}
                   </span>
                 ) : null}
