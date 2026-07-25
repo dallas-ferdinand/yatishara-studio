@@ -41,6 +41,9 @@ enum NetworkState {
 }
 
 function formatTime(seconds: number) {
+  // MediaRecorder WebM often reports duration as Infinity until fully decoded.
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--"
+
   const hrs = Math.floor(seconds / 3600)
   const mins = Math.floor((seconds % 3600) / 60)
   const secs = Math.floor(seconds % 60)
@@ -365,16 +368,18 @@ export const AudioPlayerDuration = ({
   ...otherProps
 }: HTMLProps<HTMLSpanElement>) => {
   const player = useAudioPlayer()
+  const duration =
+    player.duration !== null &&
+    player.duration !== undefined &&
+    Number.isFinite(player.duration)
+      ? player.duration
+      : undefined
   return (
     <span
       {...otherProps}
       className={cn("text-muted-foreground text-sm tabular-nums", className)}
     >
-      {player.duration !== null &&
-      player.duration !== undefined &&
-      !Number.isNaN(player.duration)
-        ? formatTime(player.duration)
-        : "--:--"}
+      {duration !== undefined ? formatTime(duration) : "--:--"}
     </span>
   )
 }

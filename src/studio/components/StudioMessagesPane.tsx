@@ -525,6 +525,7 @@ export function StudioMessagesPane({
                           <StudioChatAudioPlayer
                             src={message.audioUrl}
                             title="Voice message"
+                            durationHint={message.durationSec}
                           />
                         ) : (
                           <p className="studio-dm-voice-missing">

@@ -18,8 +18,35 @@ type Props = {
   src: string;
   title?: string;
   variant?: "chat" | "pane";
+  /**
+   * Known length in seconds (e.g. MediaRecorder wall-clock). Used when the
+   * browser reports Infinity/NaN for WebM duration metadata.
+   */
+  durationHint?: number;
   onDownload?: () => void;
 };
+
+function formatAudioClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function resolveDuration(
+  playerDuration: number | undefined,
+  hint: number | undefined,
+): number | undefined {
+  if (
+    playerDuration !== undefined &&
+    Number.isFinite(playerDuration) &&
+    playerDuration > 0
+  ) {
+    return playerDuration;
+  }
+  if (hint !== undefined && Number.isFinite(hint) && hint > 0) return hint;
+  return undefined;
+}
 
 /** Stable envelope fed into ScrollingWaveform so the first view is full. */
 function seedWaveform(seedKey: string, bars = 96): number[] {
@@ -65,20 +92,16 @@ function AudioPlayerTrack({ src, title }: { src: string; title?: string }) {
 function WaveformScrubber({
   data,
   height,
+  durationHint,
 }: {
   data: number[];
   height: number;
+  durationHint?: number;
 }) {
   const player = useAudioPlayer();
   const time = useAudioPlayerTime();
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const duration =
-    player.duration !== undefined &&
-    Number.isFinite(player.duration) &&
-    !Number.isNaN(player.duration) &&
-    player.duration > 0
-      ? player.duration
-      : 0;
+  const duration = resolveDuration(player.duration, durationHint) ?? 0;
   const playing = player.isPlaying;
 
   function seekFromClientX(clientX: number) {
@@ -148,14 +171,29 @@ function PlayControl({ disabled }: { disabled?: boolean }) {
   );
 }
 
+function DurationLabel({ durationHint }: { durationHint?: number }) {
+  const player = useAudioPlayer();
+  const duration = resolveDuration(player.duration, durationHint);
+  if (duration !== undefined) {
+    return (
+      <span className="studio-chat-audio-duration text-inherit">
+        {formatAudioClock(duration)}
+      </span>
+    );
+  }
+  return <AudioPlayerDuration className="text-inherit" />;
+}
+
 function AudioPlayerBody({
   src,
   title,
   isPane,
+  durationHint,
 }: {
   src: string;
   title?: string;
   isPane: boolean;
+  durationHint?: number;
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
@@ -188,11 +226,16 @@ function AudioPlayerBody({
 
       <div className="studio-chat-audio-row">
         {!isPane ? <PlayControl disabled={failed} /> : null}
-        <WaveformScrubber key={src} data={waveform} height={isPane ? 80 : 48} />
+        <WaveformScrubber
+          key={src}
+          data={waveform}
+          height={isPane ? 80 : 48}
+          durationHint={durationHint}
+        />
         <span className="studio-chat-audio-time">
           <AudioPlayerTime className="text-inherit" />
           <span className="studio-chat-audio-time-sep">/</span>
-          <AudioPlayerDuration className="text-inherit" />
+          <DurationLabel durationHint={durationHint} />
         </span>
       </div>
     </div>
@@ -203,12 +246,18 @@ export function StudioChatAudioPlayer({
   src,
   title,
   variant = "chat",
+  durationHint,
 }: Props) {
   const isPane = variant === "pane";
   const player = (
     <AudioPlayerProvider>
       <AudioPlayerTrack src={src} title={title} />
-      <AudioPlayerBody src={src} title={title} isPane={isPane} />
+      <AudioPlayerBody
+        src={src}
+        title={title}
+        isPane={isPane}
+        durationHint={durationHint}
+      />
     </AudioPlayerProvider>
   );
 
