@@ -9295,7 +9295,7 @@ export function StudioShell({
           font-size: 12px;
           color: var(--color-cursor-muted);
         }
-        /* Flat opaque plate — same recipe as seller KYC (.marketplace-apply-pane). */
+        /* Flat opaque plate — theme bg token (no wallpaper / glass wash). */
         .studio-admin-panel {
           display: flex;
           flex-direction: column;
@@ -9304,13 +9304,10 @@ export function StudioShell({
           width: 100%;
           overflow: auto;
           padding: 24px;
-          background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, var(--mos-bg, #05080f));
+          background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           isolation: isolate;
-        }
-        [data-appearance="light"] .studio-admin-panel {
-          background: var(--mos-bg, #ececf0);
         }
         @media (max-width: 760px) {
           .studio-settings-billing-summary,
