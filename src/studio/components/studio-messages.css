@@ -1668,14 +1668,14 @@
   color: var(--mos-danger, #f87171);
 }
 
-/* Tight option rows on the panel page — no outer plate wrap (avoids plate-in-plate).
-   Hover = small level-3 pill; checked state is the checkbox only. */
+/* Each option is its own level-2 plate row (no outer wrap). Hover = level-3.
+   Checked state is the checkbox only — never a second nested plate. */
 .studio-dm-assign-list {
   list-style: none;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
   padding: 0;
   border-radius: 0;
   background: transparent;
@@ -1684,13 +1684,13 @@
 .studio-dm-assign-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   box-sizing: border-box;
   width: 100%;
-  padding: 4px 7px;
-  border-radius: var(--cursor-radius-sm, 6px);
+  padding: 7px 10px;
+  border-radius: var(--cursor-radius-md, 8px);
   border: 0;
-  background: transparent;
+  background: var(--mos-plate, var(--mos-bg));
   color: inherit;
   font: inherit;
   text-align: left;
