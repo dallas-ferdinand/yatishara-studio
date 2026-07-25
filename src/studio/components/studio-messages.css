@@ -1869,6 +1869,35 @@
   resize: vertical;
 }
 
+/* cursor-settings-action has no flex — icon+label stack without this. */
+.studio-dm-peer-sidebar .cursor-settings-action,
+.studio-dm-peer-mobile-sheet .cursor-settings-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+}
+
+.studio-dm-peer-sidebar .cursor-settings-action:disabled,
+.studio-dm-peer-mobile-sheet .cursor-settings-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.studio-dm-peer-sidebar .cursor-settings-action > svg,
+.studio-dm-peer-mobile-sheet .cursor-settings-action > svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.studio-dm-peer-add-note {
+  flex: 0 0 auto;
+}
+
 .studio-dm-peer-list {
   display: flex;
   flex-direction: column;

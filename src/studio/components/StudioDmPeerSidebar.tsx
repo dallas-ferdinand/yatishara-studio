@@ -322,20 +322,20 @@ export function StudioDmPeerSidebar({
             <textarea
               className="cursor-input"
               value={noteDraft}
-              rows={2}
+              rows={3}
               placeholder="Add a private note…"
               aria-label="Add a private note"
               onChange={(event) => setNoteDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                  event.preventDefault();
-                  void handleAddNote();
-                }
+                if (event.key !== "Enter" || event.shiftKey) return;
+                if (event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                void handleAddNote();
               }}
             />
             <button
               type="button"
-              className="cursor-settings-action"
+              className="cursor-settings-action studio-dm-peer-add-note"
               disabled={busy || !noteDraft.trim()}
               onClick={() => void handleAddNote()}
             >
