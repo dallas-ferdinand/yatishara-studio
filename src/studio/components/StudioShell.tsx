@@ -16830,6 +16830,7 @@ export function StudioShell({
             dmConversationId={activeDmConversationId}
             onSelectDmConversation={setActiveDmConversationId}
             onOpenChat={openChatWith}
+            showDmChatListWhenEmpty={isMobile}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -21504,6 +21505,7 @@ function ActivePane({
   dmConversationId = null,
   onSelectDmConversation,
   onOpenChat,
+  showDmChatListWhenEmpty = false,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -21755,6 +21757,7 @@ function ActivePane({
         conversationId={dmConversationId}
         onSelectConversation={onSelectDmConversation}
         onOpenProfile={onOpenPublicProfile}
+        showChatListWhenEmpty={showDmChatListWhenEmpty}
       />,
     );
   }

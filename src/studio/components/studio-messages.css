@@ -8,31 +8,39 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
+  width: 100%;
   background: var(--mos-page, var(--mos-bg));
   color: var(--color-cursor-text, var(--mos-text));
   font-family: var(--font-onest), system-ui, sans-serif;
 }
 
+/* Match other workspace panel heads (--cursor-head-h: 32px). */
 .studio-dm-chat-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
-  min-height: 44px;
-  padding: 6px 12px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-plate, var(--mos-panel));
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+}
+
+[data-appearance="light"] .studio-dm-chat-head {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-dm-back {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   cursor: pointer;
@@ -46,11 +54,12 @@
 .studio-dm-chat-peer {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 2px 8px 2px 2px;
+  height: 100%;
+  padding: 0 4px 0 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -58,21 +67,24 @@
   cursor: pointer;
 }
 
-.studio-dm-chat-peer:hover {
-  background: var(--color-cursor-hover, var(--mos-hover));
+.studio-dm-chat-peer:hover .studio-dm-chat-peer-copy strong {
+  color: var(--cursor-accent, var(--mos-accent));
 }
 
 .studio-dm-chat-peer-copy {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   gap: 0;
   min-width: 0;
+  line-height: 1.15;
 }
 
 .studio-dm-chat-peer-copy strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--desk-text-ui, 13px);
+  font-size: var(--desk-text-sm, 12px);
   font-weight: 650;
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
@@ -81,9 +93,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--desk-text-xs, 11px);
+  font-size: 10px;
   font-weight: 600;
   color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+/* Shrink avatar in the 32px chrome head so it fits cleanly. */
+.studio-dm-chat-head .studio-profile-avatar {
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 9px !important;
 }
 
 .studio-dm-scroll {
@@ -91,7 +110,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px 16px 10px;
+  padding: 12px 16px 10px;
   scrollbar-width: none;
 }
 
@@ -99,12 +118,13 @@
   display: none;
 }
 
+/* Full-width message column (WhatsApp main pane). */
 .studio-dm-messages {
   display: grid;
-  gap: 4px;
-  max-width: 720px;
-  margin: 0 auto;
+  gap: 3px;
   width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .studio-dm-day {
@@ -137,7 +157,7 @@
   display: inline-flex;
   align-items: flex-end;
   gap: 8px;
-  max-width: min(78%, 30rem);
+  max-width: min(72%, 42rem);
   padding: 7px 10px;
   border-radius: 14px;
   border-bottom-left-radius: 5px;
@@ -183,9 +203,13 @@
   align-items: flex-end;
   gap: 8px;
   flex: 0 0 auto;
-  padding: 10px 12px 12px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-plate, var(--mos-panel));
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+}
+
+[data-appearance="light"] .studio-dm-composer {
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-dm-composer textarea {
@@ -193,7 +217,7 @@
   min-width: 0;
   max-height: 120px;
   resize: none;
-  padding: 8px 12px;
+  padding: 7px 12px;
   border-radius: 16px;
   border: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--cursor-surface-input, var(--mos-surface));
@@ -217,8 +241,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   border: 0;
   border-radius: 999px;
@@ -236,33 +260,18 @@
   cursor: default;
 }
 
-/* —— Inline list (no chat selected / mobile) —— */
+/* —— Inline list (mobile, no chat selected) —— */
 
 .studio-dm-list-host {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  width: min(100%, 560px);
-  margin: 0 auto;
-}
-
-.studio-dm-list-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 14px 16px 8px;
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  font-size: var(--desk-text-base, 14px);
-}
-
-.studio-dm-list-head strong {
-  font-weight: 700;
+  width: 100%;
 }
 
 .studio-dm-list-host .studio-dm-conversations {
-  padding: 4px 10px 16px;
+  flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
   scrollbar-width: none;
@@ -272,11 +281,12 @@
   display: none;
 }
 
-/* —— Shared rows (sidebar + inline list) —— */
+/* —— Shared rows (sidebar + inline list) — WhatsApp flat list —— */
 
 .studio-dm-conversations {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -289,30 +299,29 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
-  border-radius: var(--cursor-radius-md, 8px);
-  background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease;
+  transition: background 0.12s ease;
 }
 
 .studio-dm-row:hover {
   background: var(--color-cursor-hover, var(--mos-hover));
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
 }
 
 .studio-dm-row.is-active {
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 46%, var(--mos-border));
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 8%, var(--cursor-surface-raised, var(--mos-surface)));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 10%, transparent);
 }
 
 .studio-dm-row-copy {
   display: grid;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -339,9 +348,23 @@
   font-size: var(--desk-text-2xs, 10px);
   font-weight: 600;
   color: var(--color-cursor-muted, var(--mos-muted));
+  white-space: nowrap;
+}
+
+.studio-dm-row-top time.is-unread {
+  color: var(--cursor-accent, var(--mos-accent));
+  font-weight: 700;
+}
+
+.studio-dm-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .studio-dm-row-preview {
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -376,13 +399,12 @@
 .studio-dm-sidebar-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 8px 8px 16px;
+  padding: 0;
   scrollbar-width: none;
 }
 
@@ -390,27 +412,15 @@
   display: none;
 }
 
-.studio-dm-section {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.studio-dm-section-title {
-  margin: 0;
-  padding: 0 6px;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: var(--desk-text-xs, 11px);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.studio-dm-sidebar-body .studio-dm-conversations {
+  flex: 1 1 auto;
 }
 
 /* —— Shared empty states —— */
 
 .studio-dm-empty {
   margin: 0;
-  padding: 6px 8px;
+  padding: 14px 12px;
   color: var(--color-cursor-muted, var(--mos-muted));
   font-size: var(--desk-text-sm, 12px);
   font-weight: 550;
@@ -420,16 +430,24 @@
 .studio-dm-empty-state {
   display: grid;
   justify-items: center;
+  align-content: center;
   gap: 6px;
-  padding: 42px 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 42px 24px;
   text-align: center;
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
+.studio-dm-empty-state.is-select {
+  padding: 48px 32px;
+}
+
 .studio-dm-empty-state svg {
-  width: 26px;
-  height: 26px;
-  opacity: 0.7;
+  width: 28px;
+  height: 28px;
+  opacity: 0.55;
+  margin-bottom: 4px;
 }
 
 .studio-dm-empty-state strong {
@@ -440,7 +458,7 @@
 
 .studio-dm-empty-state p {
   margin: 0;
-  max-width: 26rem;
+  max-width: 22rem;
   font-size: var(--desk-text-sm, 12px);
   line-height: 1.45;
 }

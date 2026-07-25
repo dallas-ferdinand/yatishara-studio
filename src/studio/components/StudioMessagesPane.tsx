@@ -15,6 +15,8 @@ type StudioMessagesPaneProps = {
   conversationId: DmConversationId | null;
   onSelectConversation: (conversationId: DmConversationId | null) => void;
   onOpenProfile?: (username: string) => void;
+  /** When true (mobile), empty pane shows the chat list instead of the select prompt. */
+  showChatListWhenEmpty?: boolean;
 };
 
 function timeLabel(value: number): string {
@@ -38,17 +40,40 @@ function dayLabel(value: number): string {
   });
 }
 
-export function conversationTimeLabel(value: number): string {
+/** WhatsApp-style relative stamp for the chat-list rail. */
+export function conversationTimeLabel(value: number, now = Date.now()): string {
   const date = new Date(value);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return timeLabel(value);
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  const diffMs = Math.max(0, now - value);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) return "now";
+  if (diffMs < hour) return `${Math.floor(diffMs / minute)}m`;
+  if (diffMs < day && date.toDateString() === new Date(now).toDateString()) {
+    return timeLabel(value);
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+
+  if (diffMs < 7 * day) {
+    return date.toLocaleDateString([], { weekday: "short" });
+  }
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() === new Date(now).getFullYear() ? undefined : "numeric",
+  });
 }
 
 export function StudioMessagesPane({
   conversationId,
   onSelectConversation,
   onOpenProfile,
+  showChatListWhenEmpty = false,
 }: StudioMessagesPaneProps) {
   const [expiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
@@ -113,35 +138,42 @@ export function StudioMessagesPane({
   }
 
   if (!conversationId) {
-    // No chat selected — inline chat list (also the mobile entry point).
+    if (showChatListWhenEmpty) {
+      return (
+        <div className="studio-dm-pane">
+          <div className="studio-dm-list-host">
+            {conversations === undefined ? (
+              <p className="studio-dm-empty">Loading…</p>
+            ) : conversations.length === 0 ? (
+              <div className="studio-dm-empty-state">
+                <MessageCircle aria-hidden="true" />
+                <strong>No chats yet</strong>
+                <p>Open someone’s profile and tap Message to start a chat.</p>
+              </div>
+            ) : (
+              <ul className="studio-dm-conversations">
+                {conversations.map((row) => (
+                  <li key={row.conversationId}>
+                    <StudioDmConversationRow
+                      row={row}
+                      active={false}
+                      onSelect={() => onSelectConversation(row.conversationId)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="studio-dm-pane">
-        <div className="studio-dm-list-host">
-          <header className="studio-dm-list-head">
-            <MessageCircle className="h-4 w-4" aria-hidden="true" />
-            <strong>Messages</strong>
-          </header>
-          {conversations === undefined ? (
-            <p className="studio-dm-empty">Loading…</p>
-          ) : conversations.length === 0 ? (
-            <div className="studio-dm-empty-state">
-              <MessageCircle aria-hidden="true" />
-              <strong>No chats yet</strong>
-              <p>Open someone’s profile and tap Message to start a chat.</p>
-            </div>
-          ) : (
-            <ul className="studio-dm-conversations">
-              {conversations.map((row) => (
-                <li key={row.conversationId}>
-                  <StudioDmConversationRow
-                    row={row}
-                    active={false}
-                    onSelect={() => onSelectConversation(row.conversationId)}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="studio-dm-empty-state is-select">
+          <MessageCircle aria-hidden="true" />
+          <strong>Select a chat to start chatting</strong>
+          <p>Pick a conversation from the sidebar, or search for someone to message.</p>
         </div>
       </div>
     );
@@ -156,14 +188,16 @@ export function StudioMessagesPane({
   return (
     <div className="studio-dm-pane">
       <header className="studio-dm-chat-head">
-        <button
-          type="button"
-          className="studio-dm-back"
-          onClick={() => onSelectConversation(null)}
-          aria-label="Back to chats"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        </button>
+        {showChatListWhenEmpty ? (
+          <button
+            type="button"
+            className="studio-dm-back"
+            onClick={() => onSelectConversation(null)}
+            aria-label="Back to chats"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           type="button"
           className="studio-dm-chat-peer"
@@ -278,7 +312,7 @@ export function StudioDmConversationRow({
   const label = row.peer.displayName?.trim() || `@${row.peer.username}`;
   const preview = row.lastMessagePreview
     ? `${row.lastMessageFromMe ? "You: " : ""}${row.lastMessagePreview}`
-    : "New chat";
+    : "Tap to start chatting";
   return (
     <button
       type="button"
@@ -295,11 +329,17 @@ export function StudioDmConversationRow({
       <span className="studio-dm-row-copy">
         <span className="studio-dm-row-top">
           <strong>{label}</strong>
-          <time>{conversationTimeLabel(row.lastMessageAt)}</time>
+          <time className={row.unread ? "is-unread" : undefined}>
+            {conversationTimeLabel(row.lastMessageAt)}
+          </time>
         </span>
-        <span className="studio-dm-row-preview">{preview}</span>
+        <span className="studio-dm-row-bottom">
+          <span className="studio-dm-row-preview">{preview}</span>
+          {row.unread ? (
+            <span className="studio-dm-unread-dot" aria-label="Unread" />
+          ) : null}
+        </span>
       </span>
-      {row.unread ? <span className="studio-dm-unread-dot" aria-label="Unread" /> : null}
     </button>
   );
 }

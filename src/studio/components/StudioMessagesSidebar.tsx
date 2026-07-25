@@ -45,70 +45,64 @@ export function StudioMessagesSidebar({
       />
       <div className="studio-dm-sidebar-body">
         {searching ? (
-          <section className="studio-dm-section">
-            <h2 className="studio-dm-section-title">Start a chat</h2>
-            {searchResults === undefined ? (
-              <p className="studio-dm-empty">Loading…</p>
-            ) : searchResults.length === 0 ? (
-              <p className="studio-dm-empty">No people match that name.</p>
-            ) : (
-              <ul className="studio-dm-conversations">
-                {searchResults.map((person) => (
-                  <li key={person.profileId}>
-                    <button
-                      type="button"
-                      className="studio-dm-row"
-                      onClick={() => {
-                        setSearch("");
-                        onStartChat(person.username);
-                      }}
-                    >
-                      <StudioProfileAvatar
-                        size="sm"
-                        src={person.avatarUrl}
-                        displayName={person.displayName}
-                        name={person.username}
-                        alt=""
-                      />
-                      <span className="studio-dm-row-copy">
-                        <span className="studio-dm-row-top">
-                          <strong>
-                            {person.displayName?.trim() || person.username}
-                          </strong>
-                        </span>
+          searchResults === undefined ? (
+            <p className="studio-dm-empty">Loading…</p>
+          ) : searchResults.length === 0 ? (
+            <p className="studio-dm-empty">No people match that name.</p>
+          ) : (
+            <ul className="studio-dm-conversations">
+              {searchResults.map((person) => (
+                <li key={person.profileId}>
+                  <button
+                    type="button"
+                    className="studio-dm-row"
+                    onClick={() => {
+                      setSearch("");
+                      onStartChat(person.username);
+                    }}
+                  >
+                    <StudioProfileAvatar
+                      size="sm"
+                      src={person.avatarUrl}
+                      displayName={person.displayName}
+                      name={person.username}
+                      alt=""
+                    />
+                    <span className="studio-dm-row-copy">
+                      <span className="studio-dm-row-top">
+                        <strong>
+                          {person.displayName?.trim() || person.username}
+                        </strong>
+                      </span>
+                      <span className="studio-dm-row-bottom">
                         <span className="studio-dm-row-preview">
                           @{person.username}
                         </span>
                       </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : conversations === undefined ? (
+          <p className="studio-dm-empty">Loading…</p>
+        ) : conversations.length === 0 ? (
+          <p className="studio-dm-empty">
+            Search people above or tap Message on a profile.
+          </p>
         ) : (
-          <section className="studio-dm-section">
-            <h2 className="studio-dm-section-title">Chats</h2>
-            {conversations === undefined ? (
-              <p className="studio-dm-empty">Loading…</p>
-            ) : conversations.length === 0 ? (
-              <p className="studio-dm-empty">
-                No chats yet. Search people above or tap Message on a profile.
-              </p>
-            ) : (
-              <ul className="studio-dm-conversations">
-                {conversations.map((row) => (
-                  <li key={row.conversationId}>
-                    <StudioDmConversationRow
-                      row={row}
-                      active={row.conversationId === activeConversationId}
-                      onSelect={() => onSelectConversation(row.conversationId)}
-                    />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <ul className="studio-dm-conversations">
+            {conversations.map((row) => (
+              <li key={row.conversationId}>
+                <StudioDmConversationRow
+                  row={row}
+                  active={row.conversationId === activeConversationId}
+                  onSelect={() => onSelectConversation(row.conversationId)}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
