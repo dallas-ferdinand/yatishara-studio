@@ -1,8 +1,24 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Pencil, Plus, Tags, Trash2 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useState } from "react";
+import {
+  MessageCircle,
+  MessagesSquare,
+  Pencil,
+  Plus,
+  SearchX,
+  Tags,
+  Trash2,
+  Users,
+} from "lucide-react";
+import {
+  createElement,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
@@ -58,6 +74,7 @@ export function StudioMessagesSidebar({
   expiresUnix,
 }: StudioMessagesSidebarProps) {
   const [search, setSearch] = useState("");
+  const [searchNow] = useState(() => Date.now());
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
   const searching = deferredSearch.length >= 1;
   const [activeLabelId, setActiveLabelId] = useState<LabelId | null>(null);
@@ -81,8 +98,14 @@ export function StudioMessagesSidebar({
     labelId: activeLabelId ?? undefined,
   });
   const searchResults = useQuery(
-    api.hashtags.suggestPeople,
-    searching ? { query: deferredSearch, limit: 16, expiresUnix } : "skip",
+    api.dms.searchSidebar,
+    searching
+      ? {
+          query: deferredSearch,
+          expiresUnix,
+          now: searchNow,
+        }
+      : "skip",
   );
 
   // Drop the filter if the active label was deleted.
@@ -196,8 +219,8 @@ export function StudioMessagesSidebar({
         <PanelSearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search people"
-          aria-label="Search people to message"
+          placeholder="Search people, chats & messages"
+          aria-label="Search people, chats, messages, and labels"
         />
 
         <div className="studio-dm-label-rail" role="tablist" aria-label="Labels">
@@ -255,45 +278,182 @@ export function StudioMessagesSidebar({
         {searching ? (
           searchResults === undefined ? (
             <p className="studio-dm-empty">Loading…</p>
-          ) : searchResults.length === 0 ? (
-            <p className="studio-dm-empty">No people match that name.</p>
+          ) : searchResults.people.length === 0 &&
+            searchResults.chats.length === 0 &&
+            searchResults.messages.length === 0 &&
+            searchResults.labels.length === 0 ? (
+            <div className="studio-dm-search-empty">
+              <SearchX aria-hidden="true" />
+              <strong>No results</strong>
+              <span>Try a person, label, or words from a message.</span>
+            </div>
           ) : (
-            <ul className="studio-dm-conversations">
-              {searchResults.map((person) => (
-                <li key={person.profileId}>
+            <div className="studio-dm-search-results">
+              <SearchResultSection
+                title="People & friends"
+                count={searchResults.people.length}
+                icon={<Users aria-hidden="true" />}
+              >
+                {searchResults.people.map((person) => (
                   <button
+                    key={person.profileId}
                     type="button"
-                    className="studio-dm-row"
+                    className="studio-dm-search-result"
                     onClick={() => {
                       setSearch("");
                       onStartChat(person.username);
                     }}
                   >
-                    <span className="studio-dm-row-main">
-                      <StudioProfileAvatar
-                        size="sm"
-                        src={person.avatarUrl}
-                        displayName={person.displayName}
-                        name={person.username}
-                        alt=""
-                      />
-                      <span className="studio-dm-row-copy">
-                        <span className="studio-dm-row-top">
-                          <strong>
-                            {person.displayName?.trim() || person.username}
-                          </strong>
-                        </span>
-                        <span className="studio-dm-row-bottom">
-                          <span className="studio-dm-row-preview">
-                            @{person.username}
-                          </span>
-                        </span>
-                      </span>
+                    <StudioProfileAvatar
+                      size="sm"
+                      src={person.avatarUrl}
+                      displayName={person.displayName}
+                      name={person.username}
+                      alt=""
+                    />
+                    <span className="studio-dm-search-result-copy">
+                      <strong>
+                        {person.displayName?.trim() || person.username}
+                      </strong>
+                      <span>@{person.username}</span>
+                    </span>
+                    <span className="studio-dm-search-badges">
+                      {person.following ? (
+                        <span className="studio-dm-search-badge">Following</span>
+                      ) : null}
+                      {person.hasChat ? (
+                        <span className="studio-dm-search-badge">Chat</span>
+                      ) : null}
                     </span>
                   </button>
-                </li>
-              ))}
-            </ul>
+                ))}
+              </SearchResultSection>
+
+              <SearchResultSection
+                title="Chats"
+                count={searchResults.chats.length}
+                icon={<MessageCircle aria-hidden="true" />}
+              >
+                {searchResults.chats.map((chat) => (
+                  <button
+                    key={chat.conversationId}
+                    type="button"
+                    className="studio-dm-search-result is-chat"
+                    onClick={() => {
+                      setSearch("");
+                      onSelectConversation(chat.conversationId);
+                    }}
+                  >
+                    <span className="studio-dm-row-avatar-wrap">
+                      <StudioProfileAvatar
+                        size="sm"
+                        src={chat.peer.avatarUrl}
+                        displayName={chat.peer.displayName}
+                        name={chat.peer.username}
+                        alt=""
+                      />
+                      {chat.peerOnline ? (
+                        <span
+                          className="studio-dm-online-dot"
+                          aria-label="Online"
+                        />
+                      ) : null}
+                    </span>
+                    <span className="studio-dm-search-result-copy">
+                      <strong>
+                        {chat.peer.displayName?.trim() ||
+                          `@${chat.peer.username}`}
+                      </strong>
+                      <span>
+                        {chat.lastMessagePreview || "Tap to start chatting"}
+                      </span>
+                    </span>
+                    <time>{searchTimeLabel(chat.lastMessageAt)}</time>
+                    {chat.labels.length > 0 ? (
+                      <span className="studio-dm-search-result-labels">
+                        {chat.labels.map((label) => (
+                          <span key={label.labelId}>
+                            {createElement(dmLabelIcon(label.icon), {
+                              "aria-hidden": true,
+                            })}
+                            {label.name}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </SearchResultSection>
+
+              <SearchResultSection
+                title="Messages"
+                count={searchResults.messages.length}
+                icon={<MessagesSquare aria-hidden="true" />}
+              >
+                {searchResults.messages.map((message) => (
+                  <button
+                    key={message.messageId}
+                    type="button"
+                    className="studio-dm-search-result is-message"
+                    onClick={() => {
+                      setSearch("");
+                      onSelectConversation(message.conversationId);
+                    }}
+                  >
+                    <StudioProfileAvatar
+                      size="sm"
+                      src={message.peer.avatarUrl}
+                      displayName={message.peer.displayName}
+                      name={message.peer.username}
+                      alt=""
+                    />
+                    <span className="studio-dm-search-result-copy">
+                      <strong>
+                        {message.fromMe
+                          ? `You → ${message.peer.displayName?.trim() || `@${message.peer.username}`}`
+                          : message.peer.displayName?.trim() ||
+                            `@${message.peer.username}`}
+                      </strong>
+                      <span>{message.body}</span>
+                    </span>
+                    <time>{searchTimeLabel(message.createdAt)}</time>
+                  </button>
+                ))}
+              </SearchResultSection>
+
+              <SearchResultSection
+                title="Labels"
+                count={searchResults.labels.length}
+                icon={<Tags aria-hidden="true" />}
+              >
+                {searchResults.labels.map((label) => {
+                  return (
+                    <button
+                      key={label.labelId}
+                      type="button"
+                      className="studio-dm-search-result is-label"
+                      onClick={() => {
+                        setActiveLabelId(label.labelId);
+                        setSearch("");
+                      }}
+                    >
+                      <span className="studio-dm-search-label-icon">
+                        {createElement(dmLabelIcon(label.icon), {
+                          "aria-hidden": true,
+                        })}
+                      </span>
+                      <span className="studio-dm-search-result-copy">
+                        <strong>{label.name}</strong>
+                        <span>
+                          {label.memberCount}{" "}
+                          {label.memberCount === 1 ? "chat" : "chats"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </SearchResultSection>
+            </div>
           )
         ) : conversations === undefined ? (
           <p className="studio-dm-empty">Loading…</p>
@@ -345,6 +505,44 @@ export function StudioMessagesSidebar({
   );
 }
 
+function searchTimeLabel(timestamp: number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function SearchResultSection({
+  title,
+  count,
+  icon,
+  children,
+}: {
+  title: string;
+  count: number;
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  if (count === 0) return null;
+  return (
+    <section className="studio-dm-search-section">
+      <header className="studio-dm-search-section-head">
+        <span>
+          {icon}
+          {title}
+        </span>
+        <strong>{count}</strong>
+      </header>
+      <div className="studio-dm-search-section-list">{children}</div>
+    </section>
+  );
+}
+
 function LabelChip({
   label,
   active,
@@ -359,7 +557,6 @@ function LabelChip({
     label: { labelId: LabelId; name: string; icon: string },
   ) => void;
 }) {
-  const Icon = dmLabelIcon(label.icon);
   const { longPressHandlers, longPressFired, clearLongPressFired } =
     useLongPress((coords) => {
       onMenu(coords, {
@@ -396,7 +593,7 @@ function LabelChip({
         );
       }}
     >
-      <Icon aria-hidden="true" />
+      {createElement(dmLabelIcon(label.icon), { "aria-hidden": true })}
       <span>{label.name}</span>
     </button>
   );

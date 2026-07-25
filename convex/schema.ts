@@ -1221,7 +1221,11 @@ export default defineSchema({
     /** Voice note length in seconds (client-measured). */
     durationSec: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_conversation_and_created", ["conversationId", "createdAt"]),
+  })
+    .index("by_conversation_and_created", ["conversationId", "createdAt"])
+    .searchIndex("search_body", {
+      searchField: "body",
+    }),
 
   /**
    * WhatsApp-style DM labels (lists). Owner-scoped; people can sit in

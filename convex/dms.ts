@@ -25,6 +25,10 @@ const ALLOWED_IMAGE_TYPES = new Set([
 const CONVERSATIONS_MAX = 60;
 const MESSAGES_PAGE_MAX = 200;
 const PUBLIC_URL_TTL_SECONDS = 60 * 60;
+const SEARCH_PEOPLE_MAX = 16;
+const SEARCH_CHATS_MAX = 16;
+const SEARCH_MESSAGES_MAX = 16;
+const SEARCH_MESSAGE_SCAN_MAX = 120;
 
 function peerReadAt(conversation: Doc<"dmConversations">, me: Id<"users">) {
   return conversation.userLowId === me
@@ -91,6 +95,24 @@ function peerIdOf(conversation: Doc<"dmConversations">, me: Id<"users">) {
     : conversation.userLowId;
 }
 
+async function memberConversations(ctx: QueryCtx, me: Id<"users">) {
+  const [asLow, asHigh] = await Promise.all([
+    ctx.db
+      .query("dmConversations")
+      .withIndex("by_low_and_time", (q) => q.eq("userLowId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX),
+    ctx.db
+      .query("dmConversations")
+      .withIndex("by_high_and_time", (q) => q.eq("userHighId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX),
+  ]);
+  return [...asLow, ...asHigh]
+    .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+    .slice(0, CONVERSATIONS_MAX);
+}
+
 function myReadAt(conversation: Doc<"dmConversations">, me: Id<"users">) {
   return conversation.userLowId === me
     ? conversation.lowLastReadAt
@@ -114,6 +136,24 @@ const conversationLabelReturn = v.object({
   labelId: v.id("dmLabels"),
   name: v.string(),
   icon: v.string(),
+});
+
+const searchPersonReturn = v.object({
+  userId: v.id("users"),
+  profileId: v.id("profiles"),
+  username: v.string(),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  following: v.boolean(),
+  hasChat: v.boolean(),
+});
+
+const searchPeerReturn = v.object({
+  userId: v.id("users"),
+  profileId: v.id("profiles"),
+  username: v.string(),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
 });
 
 const conversationRowReturn = v.object({
@@ -300,6 +340,286 @@ export const listMyConversations = authedQuery({
         };
       }),
     );
+  },
+});
+
+/**
+ * Unified DM sidebar search. Returns multiple full-width result groups:
+ * people/friends, existing chats, message matches, and owned labels.
+ * Self is excluded server-side because DMs cannot target the signed-in user.
+ */
+export const searchSidebar = authedQuery({
+  args: {
+    query: v.string(),
+    expiresUnix: v.number(),
+    now: v.number(),
+  },
+  returns: v.object({
+    people: v.array(searchPersonReturn),
+    chats: v.array(
+      v.object({
+        conversationId: v.id("dmConversations"),
+        peer: searchPeerReturn,
+        labels: v.array(conversationLabelReturn),
+        lastMessagePreview: v.optional(v.string()),
+        lastMessageAt: v.number(),
+        peerOnline: v.boolean(),
+      }),
+    ),
+    messages: v.array(
+      v.object({
+        messageId: v.id("dmMessages"),
+        conversationId: v.id("dmConversations"),
+        peer: searchPeerReturn,
+        body: v.string(),
+        createdAt: v.number(),
+        fromMe: v.boolean(),
+      }),
+    ),
+    labels: v.array(
+      v.object({
+        labelId: v.id("dmLabels"),
+        name: v.string(),
+        icon: v.string(),
+        memberCount: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const rawQuery = args.query.trim().slice(0, 80);
+    const needle = rawQuery.replace(/^@+/, "").toLowerCase();
+    if (!needle) {
+      return { people: [], chats: [], messages: [], labels: [] };
+    }
+
+    const me = ctx.user._id;
+    const conversations = await memberConversations(ctx, me);
+    const conversationById = new Map(
+      conversations.map((conversation) => [
+        String(conversation._id),
+        conversation,
+      ]),
+    );
+
+    const peerProfiles = (
+      await Promise.all(
+        conversations.map(async (conversation) => {
+          return await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q) =>
+              q.eq("userId", peerIdOf(conversation, me)),
+            )
+            .unique();
+        }),
+      )
+    ).filter((profile): profile is Doc<"profiles"> => Boolean(profile));
+
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", me))
+      .take(200);
+    const followingIds = new Set(
+      follows.map((follow) => String(follow.followingProfileId)),
+    );
+    const followedProfiles = (
+      await Promise.all(
+        follows.map((follow) =>
+          ctx.db.get("profiles", follow.followingProfileId),
+        ),
+      )
+    ).filter((profile): profile is Doc<"profiles"> => Boolean(profile));
+
+    const upper = `${needle}\uffff`;
+    const usernameProfiles = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) =>
+        q.gte("username", needle).lt("username", upper),
+      )
+      .take(SEARCH_PEOPLE_MAX * 2);
+
+    const candidateById = new Map<string, Doc<"profiles">>();
+    for (const profile of [
+      ...peerProfiles,
+      ...followedProfiles,
+      ...usernameProfiles,
+    ]) {
+      if (!profile.isPublic || profile.userId === me) continue;
+      candidateById.set(String(profile._id), profile);
+    }
+    const candidateProfiles = [...candidateById.values()];
+    const hydratedCandidates = await hydrateSocialPeople(
+      ctx,
+      candidateProfiles,
+      args.expiresUnix,
+    );
+    const candidatePersonByProfileId = new Map(
+      hydratedCandidates.map((person) => [String(person.profileId), person]),
+    );
+    const profileByUserId = new Map(
+      peerProfiles.map((profile) => [String(profile.userId), profile]),
+    );
+    const personByUserId = new Map<
+      string,
+      {
+        profileId: Id<"profiles">;
+        username: string;
+        displayName?: string;
+        avatarUrl?: string;
+      }
+    >();
+    for (const profile of candidateProfiles) {
+      const person = candidatePersonByProfileId.get(String(profile._id));
+      if (person) personByUserId.set(String(profile.userId), person);
+    }
+
+    const chatUserIds = new Set(
+      conversations.map((conversation) =>
+        String(peerIdOf(conversation, me)),
+      ),
+    );
+    const people = candidateProfiles
+      .map((profile) => {
+        const person = candidatePersonByProfileId.get(String(profile._id));
+        if (!person) return null;
+        const haystack =
+          `${person.username} ${person.displayName ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return null;
+        return {
+          userId: profile.userId,
+          profileId: person.profileId,
+          username: person.username,
+          displayName: person.displayName,
+          avatarUrl: person.avatarUrl,
+          following: followingIds.has(String(profile._id)),
+          hasChat: chatUserIds.has(String(profile.userId)),
+        };
+      })
+      .filter((person): person is NonNullable<typeof person> => Boolean(person))
+      .sort((a, b) => {
+        if (a.following !== b.following) return a.following ? -1 : 1;
+        if (a.hasChat !== b.hasChat) return a.hasChat ? -1 : 1;
+        return a.username.localeCompare(b.username);
+      })
+      .slice(0, SEARCH_PEOPLE_MAX);
+
+    const ownedLabels = await ctx.db
+      .query("dmLabels")
+      .withIndex("by_owner_and_order", (q) => q.eq("ownerUserId", me))
+      .collect();
+    const labelMembers = await Promise.all(
+      ownedLabels.map((label) =>
+        ctx.db
+          .query("dmLabelMembers")
+          .withIndex("by_label", (q) => q.eq("labelId", label._id))
+          .take(501),
+      ),
+    );
+    const labels = ownedLabels
+      .map((label, index) => ({
+        labelId: label._id,
+        name: label.name,
+        icon: label.icon,
+        memberCount: Math.min(labelMembers[index]?.length ?? 0, 500),
+      }))
+      .filter((label) => label.name.toLowerCase().includes(needle));
+
+    const labelByPeerUserId = new Map<
+      string,
+      Array<{ labelId: Id<"dmLabels">; name: string; icon: string }>
+    >();
+    for (let index = 0; index < ownedLabels.length; index++) {
+      const label = ownedLabels[index]!;
+      for (const membership of labelMembers[index] ?? []) {
+        const key = String(membership.peerUserId);
+        const rows = labelByPeerUserId.get(key) ?? [];
+        rows.push({ labelId: label._id, name: label.name, icon: label.icon });
+        labelByPeerUserId.set(key, rows);
+      }
+    }
+
+    const chats = conversations
+      .map((conversation) => {
+        const peerUserId = peerIdOf(conversation, me);
+        const profile = profileByUserId.get(String(peerUserId));
+        const person = personByUserId.get(String(peerUserId));
+        if (!profile || !person) return null;
+        const peerLabels = labelByPeerUserId.get(String(peerUserId)) ?? [];
+        const haystack = [
+          person.username,
+          person.displayName ?? "",
+          conversation.lastMessagePreview ?? "",
+          ...peerLabels.map((label) => label.name),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(needle)) return null;
+        return {
+          conversationId: conversation._id,
+          peer: {
+            userId: peerUserId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+          },
+          labels: peerLabels,
+          lastMessagePreview: conversation.lastMessagePreview,
+          lastMessageAt: conversation.lastMessageAt,
+          peerOnline: false,
+        };
+      })
+      .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
+      .slice(0, SEARCH_CHATS_MAX);
+
+    for (const chat of chats) {
+      const peerUser = await ctx.db.get("users", chat.peer.userId);
+      chat.peerOnline = isStudioOnline(peerUser, args.now);
+    }
+
+    const searchedMessages =
+      rawQuery.length >= 2
+        ? await ctx.db
+            .query("dmMessages")
+            .withSearchIndex("search_body", (q) =>
+              q.search("body", rawQuery),
+            )
+            .take(SEARCH_MESSAGE_SCAN_MAX)
+        : [];
+    const messages = searchedMessages
+      .map((message) => {
+        const conversation = conversationById.get(
+          String(message.conversationId),
+        );
+        if (!conversation) return null;
+        const peerUserId = peerIdOf(conversation, me);
+        const person = personByUserId.get(String(peerUserId));
+        if (!person) return null;
+        return {
+          messageId: message._id,
+          conversationId: conversation._id,
+          peer: {
+            userId: peerUserId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+          },
+          body: message.body.slice(0, 240),
+          createdAt: message.createdAt,
+          fromMe: message.senderId === me,
+        };
+      })
+      .filter((message): message is NonNullable<typeof message> =>
+        Boolean(message),
+      )
+      .slice(0, SEARCH_MESSAGES_MAX);
+
+    return {
+      people,
+      chats,
+      messages,
+      labels,
+    };
   },
 });
 
