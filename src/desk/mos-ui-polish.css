@@ -2578,7 +2578,7 @@
 }
 
 [data-appearance="light"] .desk-file-thumb-visual {
-  background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7));
+  background: var(--mos-raised, var(--cursor-surface-raised, #d4d4da));
 }
 
 .desk-file-thumb-visual:has(.desk-file-thumb-image),
