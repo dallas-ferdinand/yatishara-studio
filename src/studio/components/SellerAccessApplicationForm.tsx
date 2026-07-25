@@ -1483,13 +1483,13 @@ export function SellerAccessApplicationForm({
 
           {showDraftCue ? (
             <div className="marketplace-draft-cue">
-              <p>Draft restored — continue where you left off.</p>
+              <p>We saved your progress.</p>
               <div className="marketplace-draft-cue-actions">
                 <button type="button" onClick={() => setShowDraftCue(false)}>
-                  Continue
+                  Keep going
                 </button>
                 <button type="button" onClick={handleClearDraft}>
-                  Clear draft
+                  Start over
                 </button>
               </div>
             </div>
