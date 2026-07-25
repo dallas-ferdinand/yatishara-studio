@@ -111,7 +111,7 @@ export function PublicProfileView({
   );
   const follow = useMutation(api.profiles.follow);
   const unfollow = useMutation(api.profiles.unfollow);
-  const showOffersLink = useQuery(
+  const hireCta = useQuery(
     api.marketplace.viewerCanSeeSellerOffers,
     username ? { username } : "skip",
   );
@@ -253,13 +253,13 @@ export function PublicProfileView({
 
             {profile.bio ? <p className="public-profile-bio">{profile.bio}</p> : null}
 
-            {showOffersLink || profile.contactLinks.length ? (
+            {hireCta || profile.contactLinks.length ? (
               <ul className="public-profile-links">
-                {showOffersLink ? (
+                {hireCta ? (
                   <li>
                     <a href={`/creative-network/?u=${encodeURIComponent(profile.username)}`}>
                       <Award className="h-3.5 w-3.5" aria-hidden="true" />
-                      <span>Offers</span>
+                      <span>{hireCta.label}</span>
                     </a>
                   </li>
                 ) : null}

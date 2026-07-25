@@ -1875,21 +1875,29 @@ export const isApprovedSellerUser = query({
 
 export const viewerCanSeeSellerOffers = query({
   args: { username: v.string() },
-  returns: v.boolean(),
+  returns: v.union(
+    v.null(),
+    v.object({
+      label: v.union(v.literal("Hire Me"), v.literal("Hire Us")),
+    }),
+  ),
   handler: async (ctx, args) => {
     const username = args.username.trim().toLowerCase().replace(/^@/, "");
     const profile = await ctx.db
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", username))
       .unique();
-    if (!profile) return false;
+    if (!profile) return null;
     const seller = await getMarketplaceSellerForUser(ctx, profile.userId);
-    if (!seller || seller.status !== "approved") return false;
+    if (!seller || seller.status !== "approved") return null;
     const offers = await ctx.db
       .query("marketplaceOffers")
       .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
       .collect();
-    return offers.some((o) => o.status === "published");
+    if (!offers.some((o) => o.status === "published")) return null;
+    return {
+      label: seller.entityType === "business" ? ("Hire Us" as const) : ("Hire Me" as const),
+    };
   },
 });
 
