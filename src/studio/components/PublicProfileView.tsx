@@ -227,11 +227,26 @@ export function PublicProfileView({
                   className={`public-profile-follow${profile.isFollowing ? " is-following" : ""}`}
                   onClick={() => void handleFollowToggle()}
                   disabled={followBusy}
+                  aria-label={
+                    followBusy
+                      ? profile.isFollowing
+                        ? "Unfollowing"
+                        : "Following"
+                      : profile.isFollowing
+                        ? "Unfollow"
+                        : "Follow"
+                  }
                 >
                   {followBusy ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : null}
-                  {profile.isFollowing ? "Following" : "Follow"}
+                  {followBusy
+                    ? profile.isFollowing
+                      ? "Unfollowing"
+                      : "Following"
+                    : profile.isFollowing
+                      ? "Unfollow"
+                      : "Follow"}
                 </button>
               ) : null}
             </div>
