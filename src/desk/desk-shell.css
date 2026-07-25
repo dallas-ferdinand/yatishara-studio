@@ -4644,7 +4644,8 @@ select.cursor-select:focus {
   left: 0;
   margin-bottom: 4px;
   min-width: 120px;
-  background: var(--mos-plate-strong, var(--mos-raised, var(--cursor-surface-overlay)));
+  /* Menu panel stays on the lighter plate; trigger/button is the darker control. */
+  background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-overlay)));
   border: 1px solid var(--cursor-border-subtle);
   border-radius: var(--cursor-radius-md);
   padding: 4px;
@@ -4653,7 +4654,7 @@ select.cursor-select:focus {
 }
 .cursor-tab-context-menu,
 .desk-explorer-view-dropdown {
-  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
+  background: var(--mos-plate, var(--mos-bg, var(--color-cursor-sidebar)));
 }
 .cursor-dropdown.cursor-dropdown-down {
   top: calc(100% + 4px);
@@ -4694,9 +4695,10 @@ select.cursor-select:focus {
   max-width: 140px;
   margin: 0;
   padding: 0 4px 0 8px;
-  border: 1px solid transparent;
+  border: 1px solid var(--color-cursor-border);
   border-radius: var(--cursor-radius-sm);
-  background: transparent;
+  /* Closed control is the darker chip; open menu stays lighter. */
+  background: var(--mos-plate-strong, var(--mos-raised));
   color: var(--color-cursor-text);
   font: inherit;
   font-size: 12px;
@@ -4711,7 +4713,8 @@ select.cursor-select:focus {
 }
 .cursor-select-trigger:hover,
 .cursor-select-menu.is-open .cursor-select-trigger {
-  background: var(--color-cursor-hover, rgba(127, 127, 127, 0.1));
+  border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
+  background: var(--mos-active, var(--color-cursor-active));
   color: var(--color-cursor-text-bright);
 }
 .cursor-select-trigger:disabled {
@@ -4726,7 +4729,7 @@ select.cursor-select:focus {
 .cursor-select-menu .cursor-dropdown {
   min-width: 148px;
   z-index: 60;
-  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
+  background: var(--mos-plate, var(--mos-bg, var(--color-cursor-sidebar)));
   border-color: var(--color-cursor-border);
 }
 /* Bordered field variant (forms / sidebars). */
@@ -4739,14 +4742,7 @@ select.cursor-select:focus {
   height: 34px;
   justify-content: space-between;
   padding: 0 8px 0 12px;
-  border-color: var(--color-cursor-border);
-  background: var(--mos-plate-strong, var(--mos-raised));
   font-size: 13px;
-}
-.cursor-select-menu.is-field .cursor-select-trigger:hover,
-.cursor-select-menu.is-field.is-open .cursor-select-trigger {
-  border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
-  background: var(--mos-active, var(--color-cursor-active));
 }
 .cursor-dropdown-item {
   display: flex;
@@ -4773,7 +4769,7 @@ select.cursor-select:focus {
 }
 .cursor-dropdown-item:hover,
 .cursor-dropdown-item.active {
-  background: var(--color-cursor-hover);
+  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-hover)));
 }
 .cursor-dropdown-item.muted {
   color: var(--color-cursor-muted);
