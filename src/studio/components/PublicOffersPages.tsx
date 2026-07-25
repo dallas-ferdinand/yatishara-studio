@@ -322,11 +322,10 @@ function OffersCatalogInner() {
             <section className="public-offers-hero">
               <div className="public-offers-hero-bg" aria-hidden="true" />
               <div className="public-offers-hero-copy">
-                <p className="public-offers-kicker">Yatishara Studio</p>
                 <h1>{sellerUsername ? `@${sellerUsername}` : "Creative Network"}</h1>
                 <p>
-                  Work with verified creative partners on packages priced in TTD.
-                  Credits stay secure until you accept the delivery.
+                  Work with verified creative partners on packages priced in TTD. Credits
+                  stay secure until you accept the delivery.
                 </p>
               </div>
             </section>
