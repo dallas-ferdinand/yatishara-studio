@@ -612,14 +612,17 @@ export function StudioDmPeerSidebar({
 
       {tab === "labels" ? (
         <div className="studio-dm-peer-stack">
-          <button
-            type="button"
-            className="cursor-settings-action muted"
-            onClick={() => setLabelEditorOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>New label</span>
-          </button>
+          <div className="studio-dm-label-rail studio-dm-peer-label-rail">
+            <button
+              type="button"
+              className="studio-dm-label-chip is-add"
+              onClick={() => setLabelEditorOpen(true)}
+              aria-label="Create label"
+            >
+              <Plus aria-hidden="true" />
+              <span>New label</span>
+            </button>
+          </div>
           {panel === undefined ? (
             <p className="studio-settings-empty">Loading…</p>
           ) : panel === null ? (
