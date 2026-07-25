@@ -1870,11 +1870,35 @@
   overflow: visible;
 }
 
+/* Inactive = bordered glass pill (same language as settings horizontal menu / label chips). */
 .studio-dm-peer-sidebar .studio-admin-head-tab,
 .studio-dm-peer-mobile-tabs .studio-admin-head-tab {
   min-height: 24px;
   padding: 0 8px;
   font-size: 11px;
+  border-color: var(
+    --studio-composer-glass-border,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  background: var(
+    --studio-composer-glass-muted,
+    color-mix(in srgb, var(--mos-surface) 64%, transparent)
+  );
+  color: color-mix(
+    in srgb,
+    var(--color-cursor-text-bright, var(--mos-text)) 76%,
+    transparent
+  );
+}
+
+.studio-dm-peer-sidebar .studio-admin-head-tab:hover,
+.studio-dm-peer-mobile-tabs .studio-admin-head-tab:hover {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 28%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
 }
 
 .studio-dm-peer-mobile-tabs {
