@@ -9,11 +9,11 @@ import {
   Loader2,
   MessageCircle,
   Mic,
-  PanelRight,
   Paperclip,
   SendHorizontal,
   Tags,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -621,14 +621,15 @@ export function StudioMessagesPane({
         <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
           <button
             type="button"
-            className={`cursor-icon-btn cursor-icon-btn-sm${peerSidebarOpen ? " is-active" : ""}`}
+            className={`studio-composer-circle-btn studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
             aria-label={
               peerSidebarOpen ? "Close chat details" : "Open chat details"
             }
             aria-pressed={peerSidebarOpen}
+            title={peerSidebarOpen ? "Close chat details" : "Chat details"}
             onClick={() => setPeerSidebarOpen((open) => !open)}
           >
-            <PanelRight aria-hidden="true" />
+            <Wrench size={14} strokeWidth={2.25} aria-hidden="true" />
           </button>
         </div>
       </header>

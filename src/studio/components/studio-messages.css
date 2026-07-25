@@ -117,6 +117,46 @@
   margin-left: auto;
 }
 
+/* Nest 24px circle in 32px head; accent pill when peer sidebar is open. */
+.studio-dm-chat-head-tools .studio-dm-peer-toggle {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.studio-dm-chat-head-tools .studio-dm-peer-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 48%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 16%,
+    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
+  );
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 62%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 24%,
+    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
+  );
+}
+
 .studio-dm-chat-peer-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
