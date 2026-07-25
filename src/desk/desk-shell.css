@@ -635,7 +635,7 @@ select.cursor-select:focus {
   padding: 4px;
   border-radius: var(--cursor-radius-sm);
   border: 1px solid var(--color-cursor-border);
-  background: var(--mos-plate-strong, var(--mos-raised, var(--color-cursor-sidebar)));
+  background: var(--mos-plate, var(--mos-bg, var(--color-cursor-sidebar)));
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
