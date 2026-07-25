@@ -6568,16 +6568,12 @@ export function StudioShell({
           width: 1px;
           height: 16px;
           border-radius: 1px;
-          background: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--color-cursor-text) 22%, transparent);
           pointer-events: none;
         }
-        .studio-polish .cursor-unified-tab:last-of-type::after,
+        .studio-polish .cursor-unified-tab:last-child::after,
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new::after,
-        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-new)::after,
         .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-placeholder)::after,
-        .studio-polish .cursor-unified-tab:hover::after,
-        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab:hover)::after,
-        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab.is-active)::after,
         .studio-polish .cursor-unified-tabs.is-dragging-strip .cursor-unified-tab::after {
           content: none !important;
           display: none !important;
@@ -9299,10 +9295,22 @@ export function StudioShell({
           font-size: 12px;
           color: var(--color-cursor-muted);
         }
+        /* Flat opaque plate — same recipe as seller KYC (.marketplace-apply-pane). */
         .studio-admin-panel {
-          background:
-            radial-gradient(circle at top right, color-mix(in srgb, var(--cursor-accent) 18%, transparent), transparent 44%),
-            color-mix(in srgb, var(--mos-surface) 38%, transparent) !important;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          width: 100%;
+          overflow: auto;
+          padding: 24px;
+          background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, var(--mos-bg, #05080f));
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+          isolation: isolate;
+        }
+        [data-appearance="light"] .studio-admin-panel {
+          background: var(--mos-bg, #ececf0);
         }
         @media (max-width: 760px) {
           .studio-settings-billing-summary,
@@ -21907,7 +21915,7 @@ function AdminWorkspacePane({
   const customerRows = customers ?? [];
 
   return (
-    <div className="h-full overflow-auto p-6">
+    <div className="studio-admin-panel">
       <div className="studio-admin-workspace">
         <section className="studio-admin-hero-card">
           <div>
