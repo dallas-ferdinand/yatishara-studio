@@ -121,6 +121,7 @@ export function MarketplaceOffersPane({
   const [homeTab, setHomeTab] = useState<HomeTab>("offers");
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
   const [busy, setBusy] = useState(false);
+  const [reapplyRejected, setReapplyRejected] = useState(false);
 
   const seller = useQuery(api.marketplace.getMySellerStatus);
   const myOffers = useQuery(
@@ -382,6 +383,46 @@ export function MarketplaceOffersPane({
     }
     if (!seller) {
       return <SellerAccessApplicationForm busy={busy} setBusy={setBusy} />;
+    }
+    if (seller.status === "rejected" && reapplyRejected) {
+      return <SellerAccessApplicationForm busy={busy} setBusy={setBusy} />;
+    }
+    if (seller.status === "rejected") {
+      return (
+        <div className="marketplace-apply-pane">
+          <header className="marketplace-apply-head">
+            <nav className="studio-admin-head-tabs" aria-label="Seller status">
+              <span className="studio-admin-head-tab is-active">Application rejected</span>
+            </nav>
+          </header>
+          <div className="marketplace-apply-body">
+            <div className="marketplace-apply-stage">
+              <div className="marketplace-apply-intro">
+                <HandCoins
+                  className="marketplace-apply-intro-icon"
+                  aria-hidden="true"
+                />
+                <h2>{seller.businessName}</h2>
+                <p>
+                  {seller.rejectionReason
+                    ? `Rejected: ${seller.rejectionReason}`
+                    : "Your seller application was rejected."}
+                </p>
+              </div>
+              <div className="marketplace-status-actions">
+                <StatusChip status={seller.status} />
+                <button
+                  type="button"
+                  className="marketplace-status-cancel"
+                  onClick={() => setReapplyRejected(true)}
+                >
+                  Apply again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
     }
     return (
       <div className="marketplace-apply-pane">
