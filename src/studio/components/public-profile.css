@@ -213,16 +213,19 @@
 
 .public-profile-stats {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  align-items: start;
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 18rem);
+  margin-inline: auto;
   margin-top: 0;
+  gap: 0;
+  align-items: start;
+  /* no bg / border — equal columns only */
 }
 
 .public-profile-stats div {
   display: grid;
   gap: 0;
+  min-width: 0;
   justify-items: center;
   text-align: center;
 }
@@ -942,7 +945,7 @@
   }
 
   .public-profile-stats {
-    gap: 12px;
+    width: min(100%, 16.5rem);
   }
 
   .public-profile-grid {
