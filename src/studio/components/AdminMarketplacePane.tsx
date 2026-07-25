@@ -11,6 +11,7 @@ import {
   Store,
   Undo2,
   Wallet,
+  XCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -108,7 +109,9 @@ function formatJobAge(createdAt: number): string {
 }
 
 export function AdminMarketplacePane() {
-  const [sellerFilter, setSellerFilter] = useState<"all" | "pending" | "approved" | "suspended">("pending");
+  const [sellerFilter, setSellerFilter] = useState<
+    "all" | "pending" | "approved" | "rejected" | "suspended"
+  >("pending");
   const [jobFilter, setJobFilter] = useState<"all" | JobStatus>("all");
   const [payoutFilter, setPayoutFilter] = useState<"owed" | "paid" | "all">("owed");
   const [busy, setBusy] = useState(false);
@@ -116,6 +119,12 @@ export function AdminMarketplacePane() {
   const [focusJobId, setFocusJobId] = useState<Id<"marketplaceJobs"> | null>(null);
   const [refundJobId, setRefundJobId] = useState<Id<"marketplaceJobs"> | null>(null);
   const [refundReason, setRefundReason] = useState("");
+  const [confirmAction, setConfirmAction] = useState<
+    | null
+    | { kind: "reject" | "suspend"; sellerId: Id<"marketplaceSellers"> }
+    | { kind: "mark-paid"; payoutId: Id<"sellerPayouts"> }
+  >(null);
+  const [confirmNote, setConfirmNote] = useState("");
   const jobsSectionRef = useRef<HTMLElement | null>(null);
 
   const sellers = useQuery(
@@ -135,7 +144,7 @@ export function AdminMarketplacePane() {
     reviewSellerId ? { sellerId: reviewSellerId } : "skip",
   );
 
-  const approveSeller = useMutation(api.marketplace.adminApproveSeller);
+  const decideSeller = useMutation(api.marketplace.adminApproveSeller);
   const markPaid = useMutation(api.marketplace.adminMarkPayoutPaid);
   const refundJob = useMutation(api.marketplace.adminRefundDeliveredJob);
 
@@ -144,15 +153,18 @@ export function AdminMarketplacePane() {
     jobsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [focusJobId, jobs]);
 
-  async function setSeller(
-    sellerId: Id<"marketplaceSellers">,
-    approve: boolean,
-  ) {
+  function clearConfirm() {
+    setConfirmAction(null);
+    setConfirmNote("");
+  }
+
+  async function approveSeller(sellerId: Id<"marketplaceSellers">) {
     setBusy(true);
     try {
-      await approveSeller({ sellerId, approve });
-      toast.success(approve ? "Seller approved" : "Seller suspended");
-      if (approve && reviewSellerId === sellerId) setReviewSellerId(null);
+      await decideSeller({ sellerId, decision: "approve" });
+      toast.success("Seller approved");
+      if (reviewSellerId === sellerId) setReviewSellerId(null);
+      clearConfirm();
     } catch (error) {
       toast.error(friendlyConvexError(error, "Seller update failed."));
     } finally {
@@ -160,14 +172,35 @@ export function AdminMarketplacePane() {
     }
   }
 
-  async function payPayout(payoutId: Id<"sellerPayouts">) {
-    const note = window.prompt("Optional payout note", "") ?? undefined;
+  async function submitConfirm() {
+    if (!confirmAction) return;
+    const note = confirmNote.trim();
+    if (confirmAction.kind === "reject" && !note) {
+      toast.error("Rejection reason is required.");
+      return;
+    }
     setBusy(true);
     try {
-      await markPaid({ payoutId, adminNote: note || undefined });
-      toast.success("Payout marked paid");
+      if (confirmAction.kind === "mark-paid") {
+        await markPaid({
+          payoutId: confirmAction.payoutId,
+          adminNote: note || undefined,
+        });
+        toast.success("Payout marked paid");
+      } else {
+        await decideSeller({
+          sellerId: confirmAction.sellerId,
+          decision: confirmAction.kind,
+          reason: note || undefined,
+        });
+        toast.success(
+          confirmAction.kind === "reject" ? "Application rejected" : "Seller suspended",
+        );
+        if (reviewSellerId === confirmAction.sellerId) setReviewSellerId(null);
+      }
+      clearConfirm();
     } catch (error) {
-      toast.error(friendlyConvexError(error, "Could not mark payout paid."));
+      toast.error(friendlyConvexError(error, "Action failed."));
     } finally {
       setBusy(false);
     }
@@ -194,6 +227,27 @@ export function AdminMarketplacePane() {
   }
 
   const reviewSeller = sellers?.find((seller) => seller._id === reviewSellerId) ?? null;
+  const confirmTitle =
+    confirmAction?.kind === "reject"
+      ? "Reject application"
+      : confirmAction?.kind === "suspend"
+        ? "Suspend seller"
+        : confirmAction?.kind === "mark-paid"
+          ? "Mark payout paid"
+          : "";
+  const confirmPlaceholder =
+    confirmAction?.kind === "reject"
+      ? "Why is this application being rejected?"
+      : confirmAction?.kind === "suspend"
+        ? "Optional note for the record"
+        : "Optional payout note";
+  const confirmRequired = confirmAction?.kind === "reject";
+  const confirmSubmitLabel =
+    confirmAction?.kind === "reject"
+      ? "Confirm reject"
+      : confirmAction?.kind === "suspend"
+        ? "Confirm suspend"
+        : "Confirm paid";
 
   return (
     <>
@@ -206,11 +260,14 @@ export function AdminMarketplacePane() {
               ariaLabel="Seller status"
               value={sellerFilter}
               onChange={(next) =>
-                setSellerFilter(next as "all" | "pending" | "approved" | "suspended")
+                setSellerFilter(
+                  next as "all" | "pending" | "approved" | "rejected" | "suspended",
+                )
               }
               options={[
                 { value: "pending", label: "Pending", icon: <Clock3 />, tone: "warn" },
                 { value: "approved", label: "Approved", icon: <CheckCircle2 />, tone: "good" },
+                { value: "rejected", label: "Rejected", icon: <XCircle />, tone: "bad" },
                 { value: "suspended", label: "Suspended", icon: <Ban />, tone: "bad" },
                 { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
               ]}
@@ -273,17 +330,33 @@ export function AdminMarketplacePane() {
                             type="button"
                             className="cursor-settings-action"
                             disabled={busy}
-                            onClick={() => void setSeller(seller._id, true)}
+                            onClick={() => void approveSeller(seller._id)}
                           >
                             Approve
                           </button>
                         ) : null}
-                        {seller.status !== "suspended" ? (
+                        {seller.status === "pending" ? (
                           <button
                             type="button"
                             className="cursor-settings-action"
                             disabled={busy}
-                            onClick={() => void setSeller(seller._id, false)}
+                            onClick={() => {
+                              setConfirmAction({ kind: "reject", sellerId: seller._id });
+                              setConfirmNote("");
+                            }}
+                          >
+                            Reject
+                          </button>
+                        ) : null}
+                        {seller.status === "approved" ? (
+                          <button
+                            type="button"
+                            className="cursor-settings-action"
+                            disabled={busy}
+                            onClick={() => {
+                              setConfirmAction({ kind: "suspend", sellerId: seller._id });
+                              setConfirmNote("");
+                            }}
                           >
                             Suspend
                           </button>
@@ -294,6 +367,41 @@ export function AdminMarketplacePane() {
                 ))}
               </tbody>
         </CursorTable>
+        {confirmAction &&
+        (confirmAction.kind === "reject" || confirmAction.kind === "suspend") ? (
+          <div className="studio-admin-credit-form" style={{ marginTop: 8 }}>
+            <p className="studio-admin-card-kicker">{confirmTitle}</p>
+            <label className="studio-admin-status-field">
+              <span>{confirmRequired ? "Reason" : "Note"}</span>
+              <input
+                className="cursor-input"
+                type="text"
+                placeholder={confirmPlaceholder}
+                value={confirmNote}
+                onChange={(event) => setConfirmNote(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => void submitConfirm()}
+              >
+                {confirmSubmitLabel}
+              </button>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={clearConfirm}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
 
       </section>
 
@@ -483,7 +591,10 @@ export function AdminMarketplacePane() {
                           type="button"
                           className="cursor-settings-action"
                           disabled={busy}
-                          onClick={() => void payPayout(payout._id)}
+                          onClick={() => {
+                            setConfirmAction({ kind: "mark-paid", payoutId: payout._id });
+                            setConfirmNote("");
+                          }}
                         >
                           Mark paid
                         </button>
@@ -497,6 +608,40 @@ export function AdminMarketplacePane() {
                 ))}
               </tbody>
         </CursorTable>
+        {confirmAction?.kind === "mark-paid" ? (
+          <div className="studio-admin-credit-form" style={{ marginTop: 8 }}>
+            <p className="studio-admin-card-kicker">{confirmTitle}</p>
+            <label className="studio-admin-status-field">
+              <span>Note</span>
+              <input
+                className="cursor-input"
+                type="text"
+                placeholder={confirmPlaceholder}
+                value={confirmNote}
+                onChange={(event) => setConfirmNote(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => void submitConfirm()}
+              >
+                {confirmSubmitLabel}
+              </button>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={clearConfirm}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
       </section>
     </div>
 
@@ -530,6 +675,9 @@ export function AdminMarketplacePane() {
             <>
               <div className="studio-admin-detail-list">
                 <KycLine label="Status" value={reviewSeller?.status} />
+                {application.rejectionReason ? (
+                  <KycLine label="Rejection" value={application.rejectionReason} />
+                ) : null}
                 <KycLine label="Entity" value={application.entityType} />
                 <KycLine label="Legal name" value={application.legalName} />
                 <KycLine label="Phone" value={application.phone} />
@@ -574,16 +722,31 @@ export function AdminMarketplacePane() {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void setSeller(reviewSellerId, true)}
+                onClick={() => void approveSeller(reviewSellerId)}
               >
                 Approve seller
               </button>
             ) : null}
-            {reviewSeller?.status !== "suspended" ? (
+            {reviewSeller?.status === "pending" ? (
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void setSeller(reviewSellerId, false)}
+                onClick={() => {
+                  setConfirmAction({ kind: "reject", sellerId: reviewSellerId });
+                  setConfirmNote("");
+                }}
+              >
+                Reject
+              </button>
+            ) : null}
+            {reviewSeller?.status === "approved" ? (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setConfirmAction({ kind: "suspend", sellerId: reviewSellerId });
+                  setConfirmNote("");
+                }}
               >
                 Suspend
               </button>
