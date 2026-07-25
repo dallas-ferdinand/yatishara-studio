@@ -534,6 +534,11 @@
   box-sizing: border-box;
 }
 
+/* Mobile booking bar — solid plate like Studio bottom nav; hidden on desktop */
+.public-offers-mobile-book-nav {
+  display: none;
+}
+
 .public-offers-topbar-title {
   display: flex;
   align-items: center;
@@ -1495,6 +1500,49 @@
   .public-offers-main {
     flex: 1 1 auto;
     min-height: 0;
+  }
+
+  /* Solid bottom bar to open packages / book (Studio-style plate) */
+  .public-offers-mobile-book-nav {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 10px;
+    z-index: 40;
+    min-height: calc(52px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+    background: var(--mos-bg, var(--mos-panel, var(--color-cursor-bg, #f5f5f7)));
+    box-sizing: border-box;
+  }
+
+  .public-offers-mobile-book-meta {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .public-offers-mobile-book-meta strong {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .public-offers-mobile-book-meta span {
+    font-size: 11px;
+    font-weight: 650;
+    color: var(--color-cursor-muted, var(--mos-muted));
+  }
+
+  .public-offers-mobile-book-nav .public-offers-btn {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 14px;
   }
 
   /* Left filter rail becomes a floating sheet instead */

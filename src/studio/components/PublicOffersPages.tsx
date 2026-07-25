@@ -1462,6 +1462,30 @@ function OfferDetailInner({ slug }: { slug: string }) {
             <OfferReviewsList offerId={offer._id} />
           </main>
         </div>
+
+        <nav
+          className="public-offers-mobile-book-nav"
+          aria-label="Book this service"
+        >
+          <div className="public-offers-mobile-book-meta">
+            <strong>
+              {hasPackages && packages.length > 1 ? "From " : ""}
+              {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
+            </strong>
+            <span>
+              {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
+            </span>
+          </div>
+          <button
+            type="button"
+            className="public-offers-btn is-primary"
+            aria-expanded={bookSheetOpen}
+            onClick={() => setBookSheetOpen(true)}
+          >
+            <Wallet aria-hidden="true" />
+            {hasPackages ? "Choose package" : "Book"}
+          </button>
+        </nav>
       </div>
 
       {bookSheetOpen ? (
