@@ -111,6 +111,7 @@ import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import { StudioSocialSidebar } from "./StudioSocialSidebar";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -4698,6 +4699,12 @@ export function StudioShell({
       setFlowPending(false);
     }
   }
+
+  const isSocialRail =
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("feed:") ||
+      activeTab.startsWith("profile:") ||
+      activeTab.startsWith("profilePost:"));
 
   return (
     <div
@@ -16306,22 +16313,24 @@ export function StudioShell({
       <aside className={STYLE.sidebar}>
         <div className={STYLE.panelHead}>
           <StudioSidebarBrand />
-          <div className="flex items-center gap-1">
-            <StudioAddMenu
-              open={addMenuOpen}
-              setOpen={setAddMenuOpen}
-              onAction={runCreateAction}
-            />
-            <button
-              type="button"
-              className="studio-settings-pill studio-settings-trigger"
-              title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-              aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-              onClick={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
-            >
-              {viewMode === "grid" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
-            </button>
-          </div>
+          {!isSocialRail ? (
+            <div className="flex items-center gap-1">
+              <StudioAddMenu
+                open={addMenuOpen}
+                setOpen={setAddMenuOpen}
+                onAction={runCreateAction}
+              />
+              <button
+                type="button"
+                className="studio-settings-pill studio-settings-trigger"
+                title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                onClick={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
+              >
+                {viewMode === "grid" ? <List className="h-3.5 w-3.5" /> : <LayoutGrid className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          ) : null}
           <input
             ref={fileInputRef}
             className="hidden"
@@ -16333,31 +16342,38 @@ export function StudioShell({
             }}
           />
         </div>
-        <StudioFilesExplorerBody
-          search={search}
-          setSearch={setSearch}
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
-          breadcrumbPath={breadcrumbPath}
-          onBreadcrumbNavigate={handleBreadcrumbNavigate}
-          onBreadcrumbDrop={handleBreadcrumbDrop}
-          viewMode={viewMode}
-          displayRootEntries={displayRootEntries}
-          displayCurrentEntries={filteredCurrentEntries}
-          pathToEntry={pathToEntry}
-          topFolders={topFolders}
-          childFolders={childFolders}
-          setActiveFolderId={setActiveFolderId}
-          setNavTrail={setNavTrail}
-          onOpenPath={handleOpenPath}
-          onEntryOpen={handleEntryOpen}
-          searchState={searchState}
-          deferredSearch={deferredSearch}
-          setContextMenu={setContextMenu}
-          activeFolder={activeFolder}
-          onEntryDrop={handleEntryDrop}
-          isMobile={false}
-        />
+        {isSocialRail ? (
+          <StudioSocialSidebar
+            onOpenProfile={openPublicProfile}
+            expiresUnix={assetUrlExpiresUnix}
+          />
+        ) : (
+          <StudioFilesExplorerBody
+            search={search}
+            setSearch={setSearch}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            breadcrumbPath={breadcrumbPath}
+            onBreadcrumbNavigate={handleBreadcrumbNavigate}
+            onBreadcrumbDrop={handleBreadcrumbDrop}
+            viewMode={viewMode}
+            displayRootEntries={displayRootEntries}
+            displayCurrentEntries={filteredCurrentEntries}
+            pathToEntry={pathToEntry}
+            topFolders={topFolders}
+            childFolders={childFolders}
+            setActiveFolderId={setActiveFolderId}
+            setNavTrail={setNavTrail}
+            onOpenPath={handleOpenPath}
+            onEntryOpen={handleEntryOpen}
+            searchState={searchState}
+            deferredSearch={deferredSearch}
+            setContextMenu={setContextMenu}
+            activeFolder={activeFolder}
+            onEntryDrop={handleEntryDrop}
+            isMobile={false}
+          />
+        )}
       </aside>
         </Panel>
         ) : null}
