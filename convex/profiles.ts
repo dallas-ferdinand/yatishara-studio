@@ -1627,7 +1627,7 @@ const socialPersonReturn = v.object({
   avatarUrl: v.optional(v.string()),
 });
 
-async function hydrateSocialPeople(
+export async function hydrateSocialPeople(
   ctx: QueryCtx,
   profiles: Doc<"profiles">[],
   expiresUnix: number,

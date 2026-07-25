@@ -21,6 +21,7 @@ import type * as auth from "../auth.js";
 import type * as billing from "../billing.js";
 import type * as composerCatalog from "../composerCatalog.js";
 import type * as crons from "../crons.js";
+import type * as dms from "../dms.js";
 import type * as documents from "../documents.js";
 import type * as elementActions from "../elementActions.js";
 import type * as elements from "../elements.js";
@@ -132,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   billing: typeof billing;
   composerCatalog: typeof composerCatalog;
   crons: typeof crons;
+  dms: typeof dms;
   documents: typeof documents;
   elementActions: typeof elementActions;
   elements: typeof elements;

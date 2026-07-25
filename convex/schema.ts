@@ -1175,6 +1175,29 @@ export default defineSchema({
     .index("by_user_and_comment", ["userId", "commentId"])
     .index("by_comment", ["commentId"]),
 
+  /** Person-to-person DMs — exactly one conversation per user pair (sorted ids). */
+  dmConversations: defineTable({
+    userLowId: v.id("users"),
+    userHighId: v.id("users"),
+    lastMessageAt: v.number(),
+    lastMessagePreview: v.optional(v.string()),
+    lastMessageSenderId: v.optional(v.id("users")),
+    /** Per-member read watermarks (low/high = same ordering as the pair ids). */
+    lowLastReadAt: v.number(),
+    highLastReadAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_pair", ["userLowId", "userHighId"])
+    .index("by_low_and_time", ["userLowId", "lastMessageAt"])
+    .index("by_high_and_time", ["userHighId", "lastMessageAt"]),
+
+  dmMessages: defineTable({
+    conversationId: v.id("dmConversations"),
+    senderId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index("by_conversation_and_created", ["conversationId", "createdAt"]),
+
   marketplaceSellers: defineTable({
     userId: v.id("users"),
     status: marketplaceSellerStatus,
