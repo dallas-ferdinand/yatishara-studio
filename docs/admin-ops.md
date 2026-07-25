@@ -17,7 +17,7 @@ Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 | Tab | UI | Backend |
 |---|---|---|
 | Payments | [`StudioShell.tsx`](../src/studio/components/StudioShell.tsx) `AdminWorkspacePane` + `AdminPaymentSidebar` | `billing.adminListPayments`, `adminReviewPayment`, `paywiseActions.adminRefreshPaywisePayment` |
-| Customers | same file — read-only table | `users.adminListCustomers` |
+| Customers | same file — search, detail sidebar, credit adjust | `users.adminListCustomers`, `billing.adminAdjustCredits` |
 | Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + payouts | `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
 | Setup | seed cards | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing` |
 | Pricing | read-only cards | display only — `billing.adminSetPricing` **unused** |
@@ -67,10 +67,10 @@ Cheap language cleanup; fixes toast when operators pick an invalid review status
 
 #1 support gap. API: `billing.adminAdjustCredits`.
 
-- [ ] Customer search (email / phone / name)
-- [ ] Detail pane: balance, reserved, recent payments, subscription if any
-- [ ] Adjust credits (+/−) with required reason
-- [ ] Link out to related payment rows
+- [x] Customer search (email / phone / name)
+- [x] Detail pane: balance, reserved, recent payments, subscription if any
+- [x] Adjust credits (+/−) with required reason
+- [x] Link out to related payment rows (opens Payments tab + payment sidebar)
 
 **Done when:** Support can fix a balance without Convex CLI / `internalSetCreditsByPhone`.
 
@@ -115,7 +115,7 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 ## Priority ladder
 
 ```
-P0 labels_fix → refocus → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
+P0 labels_fix → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
 ```
 
-Next chat: open this file and start **P1**.
+Next: start **P2** (Marketplace Jobs + refund).

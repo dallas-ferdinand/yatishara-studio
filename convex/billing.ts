@@ -1211,11 +1211,14 @@ export const adminAdjustCredits = adminMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const reason = args.reason.trim();
+    if (!reason) throw new Error("Reason is required");
     await grantCredits(ctx, {
       userId: args.userId,
       amount: args.amount,
-      reason: args.reason,
+      reason,
       adminId: ctx.user._id,
+      kind: "admin_adjustment",
     });
     await audit(ctx, "credits_adjusted", args.userId);
     return null;

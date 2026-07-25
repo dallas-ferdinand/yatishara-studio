@@ -13369,6 +13369,96 @@ export function StudioShell({
           text-transform: none;
           letter-spacing: normal;
         }
+        .studio-admin-status-field .cursor-input {
+          text-transform: none;
+          letter-spacing: normal;
+          font-weight: 500;
+        }
+        .studio-admin-section-extras .cursor-panel-search {
+          width: min(220px, 42vw);
+          height: 26px;
+          min-height: 26px;
+        }
+        .studio-admin-credit-form {
+          display: grid;
+          gap: 8px;
+          padding: 12px;
+          border-radius: var(--cursor-radius-md, 8px);
+          background: var(--mos-plate, var(--cursor-surface-raised));
+        }
+        .studio-admin-credit-mode {
+          display: flex;
+          gap: 4px;
+        }
+        .studio-admin-credit-mode-btn {
+          flex: 1 1 0;
+          min-height: 28px;
+          border: none;
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+        .studio-admin-credit-mode-btn:hover {
+          color: var(--color-cursor-text);
+          background: var(--mos-hover, var(--color-cursor-hover));
+        }
+        .studio-admin-credit-mode-btn.is-active {
+          color: var(--color-cursor-text);
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
+        }
+        .studio-admin-customer-payments {
+          display: grid;
+          gap: 8px;
+        }
+        .studio-admin-customer-payments ul {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: grid;
+          gap: 4px;
+        }
+        .studio-admin-customer-payment-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-rows: auto auto;
+          column-gap: 8px;
+          width: 100%;
+          margin: 0;
+          padding: 8px 10px;
+          border: none;
+          border-radius: var(--cursor-radius-sm, 6px);
+          background: var(--mos-plate, var(--cursor-surface-raised));
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-admin-customer-payment-row:hover {
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
+        }
+        .studio-admin-customer-payment-row strong {
+          grid-column: 1;
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-admin-customer-payment-row span {
+          grid-column: 1;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-admin-customer-payment-row em {
+          grid-column: 2;
+          grid-row: 1 / span 2;
+          align-self: center;
+          font-style: normal;
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          white-space: nowrap;
+        }
         .studio-admin-receipt-preview {
           display: grid;
           gap: 8px;
@@ -21956,7 +22046,10 @@ function AdminWorkspacePane({
   );
   const [paymentFilter, setPaymentFilter] = useState("pending");
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const adminReviewPayment = useMutation(api.billing.adminReviewPayment);
+  const adminAdjustCredits = useMutation(api.billing.adminAdjustCredits);
   const adminRefreshPaywise = useAction(api.paywiseActions.adminRefreshPaywisePayment);
   const seedLaunchPricing = useMutation(api.billing.adminSeedLaunchPricing);
   const [reviewStatus, setReviewStatus] = useState("");
@@ -22035,6 +22128,29 @@ function AdminWorkspacePane({
     { id: "pricing", label: "Pricing" },
   ];
   const customerRows = customers ?? [];
+  const visibleCustomers = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase();
+    const digits = customerQuery.replace(/\D/g, "");
+    if (!q && !digits) return customerRows;
+    return customerRows.filter((customer) => {
+      const hay = [customer.name, customer.email, customer.phone, customer._id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (q && hay.includes(q)) return true;
+      if (digits && String(customer.phone ?? "").replace(/\D/g, "").includes(digits)) return true;
+      return false;
+    });
+  }, [customerRows, customerQuery]);
+  const selectedCustomer =
+    customerRows.find((customer) => customer._id === selectedCustomerId) ?? null;
+  const selectedCustomerPayments = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return safePayments
+      .filter((payment) => payment.userId === selectedCustomer._id)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 12);
+  }, [safePayments, selectedCustomer]);
 
   return (
     <div className="studio-admin-panel">
@@ -22127,48 +22243,106 @@ function AdminWorkspacePane({
             ) : null}
           </div>
         ) : tab === "customers" ? (
-          <section className="studio-admin-section">
-            <div className="studio-admin-section-head">
-              <span className="studio-admin-section-title">Customers</span>
-              <div className="studio-admin-section-extras">
-                <span className="studio-admin-chip">{customerRows.length} accounts</span>
+          <div className="studio-admin-payments-shell">
+            <section className="studio-admin-section">
+              <div className="studio-admin-section-head">
+                <span className="studio-admin-section-title">Customers</span>
+                <div className="studio-admin-section-extras">
+                  <PanelSearchBar
+                    value={customerQuery}
+                    onChange={setCustomerQuery}
+                    placeholder="Search name, email, phone"
+                    aria-label="Search customers"
+                  />
+                  <span className="studio-admin-chip">
+                    {visibleCustomers.length}
+                    {customerQuery.trim() ? ` / ${customerRows.length}` : ""} accounts
+                  </span>
+                </div>
               </div>
-            </div>
-            <CursorTable
-              ariaLabel="Customers"
-              empty={!customerRows.length}
-              emptyIcon={<UserRound />}
-              emptyTitle="No customers"
-              emptyHint="No customers yet."
-            >
-              <thead>
-                <tr>
-                  <th>Customer</th>
-                  <th>Role</th>
-                  <th>Balance</th>
-                  <th>Payments</th>
-                  <th>Last seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customerRows.map((customer) => (
-                  <tr key={customer._id}>
-                    <td>
-                      <strong>{customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer"}</strong>
-                      <span>{customer.email ?? customer.phone ?? customer._id}</span>
-                    </td>
-                    <td>{customer.role}</td>
-                    <td>{formatTtdFromCredits(customer.creditBalance)} <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span></td>
-                    <td>
-                      <strong>{customer.paymentCount}</strong>
-                      <span>{customer.latestPaymentStatus ? humanizeAdminPaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
-                    </td>
-                    <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
+              <CursorTable
+                ariaLabel="Customers"
+                empty={!visibleCustomers.length}
+                emptyIcon={<UserRound />}
+                emptyTitle={customerQuery.trim() ? "No matches" : "No customers"}
+                emptyHint={
+                  customerQuery.trim()
+                    ? "Try another name, email, or phone."
+                    : "No customers yet."
+                }
+              >
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Role</th>
+                    <th>Balance</th>
+                    <th>Payments</th>
+                    <th>Last seen</th>
                   </tr>
-                ))}
-              </tbody>
-            </CursorTable>
-          </section>
+                </thead>
+                <tbody>
+                  {visibleCustomers.map((customer) => (
+                    <tr
+                      key={customer._id}
+                      className={selectedCustomerId === customer._id ? "is-selected" : ""}
+                      onClick={() => setSelectedCustomerId(customer._id)}
+                    >
+                      <td>
+                        <strong>{customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer"}</strong>
+                        <span>{customer.email ?? customer.phone ?? customer._id}</span>
+                      </td>
+                      <td>{customer.role}</td>
+                      <td>
+                        {formatTtdFromCredits(customer.creditBalance)}{" "}
+                        <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span>
+                      </td>
+                      <td>
+                        <strong>{customer.paymentCount}</strong>
+                        <span>
+                          {customer.latestPaymentStatus
+                            ? humanizeAdminPaymentStatus(customer.latestPaymentStatus)
+                            : "No payments"}
+                        </span>
+                      </td>
+                      <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </CursorTable>
+              {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
+            </section>
+            {selectedCustomer ? (
+              <AdminCustomerSidebar
+                customer={selectedCustomer}
+                payments={selectedCustomerPayments}
+                onClose={() => setSelectedCustomerId(null)}
+                onAdjustCredits={async ({ amount, reason }) => {
+                  setReviewStatus("Updating credits...");
+                  try {
+                    await adminAdjustCredits({
+                      userId: selectedCustomer._id,
+                      amount,
+                      reason,
+                    });
+                    setReviewStatus(
+                      amount > 0
+                        ? `Granted ${amount} credits.`
+                        : `Deducted ${Math.abs(amount)} credits.`,
+                    );
+                  } catch (error) {
+                    setReviewStatus(friendlyConvexError(error, "Credit adjustment failed."));
+                    throw error;
+                  }
+                }}
+                onOpenPayment={(paymentId) => {
+                  setSelectedCustomerId(null);
+                  setPaymentFilter("all");
+                  setSelectedPaymentId(paymentId);
+                  onOpenAdminTab("payments");
+                }}
+              />
+            ) : null}
+          </div>
         ) : tab === "marketplace" ? (
           <AdminMarketplacePane />
         ) : tab === "setup" ? (
@@ -22348,6 +22522,172 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
             ) : null}
           </div>
         ) : null}
+      </aside>
+    </>
+  );
+}
+
+function AdminCustomerSidebar({ customer, payments, onClose, onAdjustCredits, onOpenPayment }) {
+  const [mode, setMode] = useState("grant");
+  const [amountText, setAmountText] = useState("");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const displayName =
+    customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer";
+
+  async function submitAdjust(event) {
+    event.preventDefault();
+    setFormError("");
+    const credits = Number.parseInt(amountText, 10);
+    if (!Number.isSafeInteger(credits) || credits <= 0) {
+      setFormError("Enter a whole number of credits greater than zero.");
+      return;
+    }
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) {
+      setFormError("Reason is required.");
+      return;
+    }
+    const amount = mode === "deduct" ? -credits : credits;
+    setBusy(true);
+    try {
+      await onAdjustCredits({ amount, reason: trimmedReason });
+      setAmountText("");
+      setReason("");
+    } catch {
+      // Parent already surfaces toast/status; keep form values for retry.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="studio-admin-payment-sidebar-backdrop"
+        onClick={onClose}
+        aria-label="Close customer details"
+      />
+      <aside className="studio-admin-payment-sidebar">
+        <header className="studio-admin-payment-sidebar-head">
+          <div>
+            <p className="studio-admin-card-kicker">Customer</p>
+            <h3>{displayName}</h3>
+          </div>
+          <button
+            type="button"
+            className="cursor-icon-btn cursor-icon-btn-sm studio-panel-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </header>
+        <div className="studio-admin-detail-list">
+          <BankLine label="Email" value={customer.email ?? "—"} />
+          <BankLine label="Phone" value={customer.phone ?? "—"} />
+          <BankLine label="Role" value={customer.role} />
+          <BankLine label="Balance" value={formatTtdFromCredits(customer.creditBalance)} />
+          <BankLine label="Reserved" value={formatTtdFromCredits(customer.reservedCredits)} />
+          <BankLine
+            label="Subscription"
+            value={
+              customer.activeSubscription
+                ? `${customer.activeSubscription.planName ?? "Plan"} · ${customer.activeSubscription.status}`
+                : "None"
+            }
+          />
+          {customer.activeSubscription ? (
+            <BankLine
+              label="Period ends"
+              value={formatDate(customer.activeSubscription.currentPeriodEnd)}
+            />
+          ) : null}
+          <BankLine label="Last seen" value={customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"} />
+        </div>
+
+        <form className="studio-admin-credit-form" onSubmit={(event) => void submitAdjust(event)}>
+          <p className="studio-admin-card-kicker">Adjust credits</p>
+          <div className="studio-admin-credit-mode" role="group" aria-label="Adjustment type">
+            <button
+              type="button"
+              className={`studio-admin-credit-mode-btn${mode === "grant" ? " is-active" : ""}`}
+              onClick={() => setMode("grant")}
+            >
+              Grant
+            </button>
+            <button
+              type="button"
+              className={`studio-admin-credit-mode-btn${mode === "deduct" ? " is-active" : ""}`}
+              onClick={() => setMode("deduct")}
+            >
+              Deduct
+            </button>
+          </div>
+          <label className="studio-admin-status-field">
+            <span>Credits</span>
+            <input
+              className="cursor-input"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              placeholder="e.g. 100"
+              value={amountText}
+              onChange={(event) => setAmountText(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <label className="studio-admin-status-field">
+            <span>Reason</span>
+            <input
+              className="cursor-input"
+              type="text"
+              placeholder="Support note / ticket"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              disabled={busy}
+              required
+            />
+          </label>
+          {formError ? <p className="studio-admin-rejection-note">{formError}</p> : null}
+          <button type="submit" className="cursor-settings-action" disabled={busy}>
+            {busy ? "Saving…" : mode === "grant" ? "Grant credits" : "Deduct credits"}
+          </button>
+        </form>
+
+        <div className="studio-admin-customer-payments">
+          <p className="studio-admin-card-kicker">Recent payments</p>
+          {payments.length ? (
+            <ul>
+              {payments.map((payment) => (
+                <li key={payment._id}>
+                  <button
+                    type="button"
+                    className="studio-admin-customer-payment-row"
+                    onClick={() => onOpenPayment(payment._id)}
+                  >
+                    <strong>{formatMoney(payment.amountCents)}</strong>
+                    <span>
+                      {humanizeAdminPaymentStatus(payment.status)}
+                      {" · "}
+                      {payment.method === "paywise"
+                        ? "PayWise"
+                        : payment.method === "bank"
+                          ? "Bank transfer"
+                          : payment.method}
+                    </span>
+                    <em>{formatDate(payment.createdAt)}</em>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="studio-settings-empty">No payments in the recent admin list for this customer.</p>
+          )}
+        </div>
       </aside>
     </>
   );
