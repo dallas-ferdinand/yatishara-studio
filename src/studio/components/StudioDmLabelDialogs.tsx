@@ -211,49 +211,40 @@ export function StudioDmAssignLabelsDialog({
   );
   const setPeerLabels = useMutation(api.dmLabels.setPeerLabels);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open || assigned === undefined) return;
     setSelected(new Set(assigned.map((row) => row.labelId)));
     setError("");
-    setBusy(false);
   }, [open, assigned]);
 
   useEffect(() => {
-    if (!open || variant !== "inline") return;
+    if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, variant, onClose]);
+  }, [open, onClose]);
 
   if (!open || !peerUserId) return null;
 
-  function toggle(labelId: LabelId) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(labelId)) next.delete(labelId);
-      else next.add(labelId);
-      return next;
-    });
-  }
-
-  async function save() {
-    setBusy(true);
+  async function toggle(labelId: LabelId) {
+    const next = new Set(selected);
+    if (next.has(labelId)) next.delete(labelId);
+    else next.add(labelId);
+    setSelected(next);
     setError("");
     try {
       await setPeerLabels({
         peerUserId: peerUserId!,
-        labelIds: [...selected] as LabelId[],
+        labelIds: [...next] as LabelId[],
       });
-      onClose();
     } catch (err) {
+      // Roll back optimistic UI if the write fails.
+      setSelected(new Set(selected));
       setError(friendlyConvexError(err, "Could not update labels"));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -309,7 +300,7 @@ export function StudioDmAssignLabelsDialog({
                       type="checkbox"
                       className="studio-dm-assign-checkbox"
                       checked={checked}
-                      onChange={() => toggle(label.labelId)}
+                      onChange={() => void toggle(label.labelId)}
                     />
                     <span className="studio-dm-assign-icon" aria-hidden="true">
                       <Icon className="h-3.5 w-3.5" />
@@ -323,25 +314,6 @@ export function StudioDmAssignLabelsDialog({
         )}
         {error ? <p className="studio-dm-error">{error}</p> : null}
       </div>
-      <footer className="studio-dm-dialog-foot">
-        <span aria-hidden="true" />
-        <div className="studio-dm-dialog-actions">
-          <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="studio-dm-dialog-primary"
-            onClick={() => void save()}
-            disabled={busy || labels === undefined}
-          >
-            {busy ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            ) : null}
-            Save
-          </button>
-        </div>
-      </footer>
     </div>
   );
 
