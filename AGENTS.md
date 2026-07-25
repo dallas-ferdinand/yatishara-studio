@@ -6,6 +6,15 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Yatishara Studio — Agent rules
 
+## Design system (mandatory for any UI/CSS work)
+
+Before touching chrome UI, tokens, CSS, or shared components, read
+`docs/DESIGN_SYSTEM.md`. It is the source of truth for shade scale
+(`--mos-page` / `--mos-plate` / `--mos-plate-strong`), borders, radius, typography,
+and the shared components (`CursorSelect`, `CursorTable`). Update that doc **and**
+MercuryOS memory whenever you change a shared pattern. Never bake light-only greys or
+hardcoded `#fff`/`#000` borders into chrome.
+
 ## Micro-commits (mandatory)
 
 Same weight as MercuryOS `memory_recall` every turn.

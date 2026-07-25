@@ -1,0 +1,214 @@
+# Yatishara Studio — Design System
+
+The single source of truth for chrome UI/UX in this repo: **admin, Offers/marketplace,
+Studio settings, file manager, desk chrome, dropdowns, tables, and forms.**
+
+> Read this before any UI/CSS/token work. If you add or change a shared pattern, update
+> this doc **and** the MercuryOS memory pinned decisions (see [Memory](#memory)).
+
+Owner file for tokens: `src/mos-app/theme.js` (runtime + boot inline script).
+Owner file for chrome CSS: `src/desk/desk-shell.css`.
+Admin/Offers embedded CSS lives in `src/studio/components/StudioShell.tsx`.
+
+---
+
+## 1. Themes & appearance
+
+- **Appearance modes:** `light` / `dark`, set on `document.documentElement[data-appearance]`.
+- **Accent schemes:** 16 named schemes in `SCHEMES` (`agent` Genesis, `ocean`, `ember`,
+  `violet`, `cobalt`, `teal`, `indigo`, …). Each defines `accent`, `bg`, `surface`, `raised`.
+- Tokens are applied at runtime by `applyDeskTokens()` **and** pre-paint by the inline
+  boot script (`getThemeBootInlineScript()`). **Any token change must be made in BOTH
+  places** or the first paint will disagree with hydration.
+
+### The golden rule for greys
+
+**Shade steps are semantic tokens that carry across both modes — never light-only greys.**
+
+Do NOT bake `[data-appearance="light"] { background: #ececf0 }` style overrides. Use the
+role tokens below; dark mode gets the *same step amounts* from the active scheme (so Ocean
+stays blue-tinted, Ember warm), light mode gets neutral greys.
+
+---
+
+## 2. Surface shade scale (the important part)
+
+Three chrome roles, lightest → darkest. Applied to `:root` by the theme engine:
+
+| Token | Role | Light | Dark |
+|---|---|---|---|
+| `--mos-page` | App canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
+| `--mos-plate` | Cards, tables, **open dropdown panels**, section bars | `#ececf0` | `mix(page, panel)` |
+| `--mos-plate-strong` | **Select/button chips**, menu item hover/active, icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
+
+Supporting tokens (also both modes):
+
+| Token | Meaning |
+|---|---|
+| `--mos-hover` | Row / control hover wash |
+| `--mos-active` | Pressed / selected wash (a touch darker than hover) |
+| `--mos-surface` | Neutral mid surface (composer, inputs base) |
+| `--mos-raised` | Legacy alias, **equals `--mos-plate-strong`** in both modes |
+| `--mos-bg` / `--mos-panel` | Legacy: in light, `mos-bg ≈ plate`, `mos-panel ≈ page` |
+
+**Usage cheatsheet**
+
+```css
+.app-canvas       { background: var(--mos-page); }
+.card, .table-wrap, .section-bar,
+.dropdown-panel   { background: var(--mos-plate); }
+.select-trigger, .menu-item:hover, .menu-item.active,
+.empty-icon-chip  { background: var(--mos-plate-strong); }
+```
+
+### Select / dropdown shade split (locked decision)
+
+- **Closed trigger / button** → `--mos-plate-strong` (the *darker* chip).
+- **Open menu panel** → `--mos-plate` (lighter than the button).
+- **Menu item hover / active** → `--mos-plate-strong` (darker than the panel again).
+
+Rationale: the resting control reads as a solid button, the open surface reads as a lifted
+sheet, and the highlighted row pops against it.
+
+---
+
+## 3. Borders
+
+Hairlines are low-contrast rgba, never lightened hex stripes (`hairlineBorder()`).
+
+| Token | Light α | Dark α | Use |
+|---|---|---|---|
+| `--mos-border` / `--color-cursor-border` | 0.11 | 0.07 | Default control & card borders |
+| `--mos-border-soft` / `--color-cursor-border-soft` | 0.075 | 0.04 | Table row dividers, icon chip rings |
+| `--mos-border-subtle` | 0.09 | 0.05 | Dropdown panels, quiet separators |
+| `--cursor-border-focus` | accent-mixed | accent-mixed | Focus ring border |
+
+Rules:
+- **Never** hardcode `#fff` / `rgba(255,255,255,…)` / `#000` borders on chrome — they vanish
+  in the opposite mode. Always use `--color-cursor-border*` / `--mos-border*`.
+- Focus/hover accent borders: `color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border))`.
+
+---
+
+## 4. Radius scale
+
+Aliases Studio DS tokens; use the `--cursor-radius-*` names in chrome CSS.
+
+| Token | Value |
+|---|---|
+| `--cursor-radius-xs` | 4px |
+| `--cursor-radius-sm` | 6px — inputs, chips, small controls, section bars |
+| `--cursor-radius-md` | 8px — dropdown panels, settings actions |
+| `--cursor-radius-lg` | 10px — cards, table wraps (default `--cursor-radius`) |
+| `--cursor-radius-xl`…`4xl` | 12/14/16/18px — larger surfaces |
+| `--cursor-radius-pill` | 999px — tabs, chips, icon-chip |
+
+---
+
+## 5. Typography
+
+| Token | Size | Use |
+|---|---|---|
+| `--desk-text-2xs` | 10px | Uppercase table headers, kickers |
+| `--desk-text-xs` | 11px | Secondary meta |
+| `--desk-text-sm` | 12px | Table cells, dropdown items |
+| `--desk-text-ui` | 13px | Default control text |
+| `--desk-text-base` | 14px | Body |
+| `--desk-text-lg` | 16px | Section / card headings |
+
+Weights: `--desk-w-medium` 500, `--desk-w-semibold` 600, `--desk-w-strong` 650,
+`--desk-w-bold` 700. Text colors: `--color-cursor-text`, `-text-bright`, `-muted`, `-faint`.
+
+Layout constant: `--cursor-head-h: 32px` (all panel/tab headers share this height).
+Spacing rhythm for admin/finance panes: **16 / 12 / 8** (body padding / section gap / control gap).
+
+---
+
+## 6. Shared components
+
+Prefer these over bespoke markup. Located in `src/desk/components/`.
+
+### `CursorSelect` — themed dropdown select
+`src/desk/components/CursorSelect.tsx`
+
+- Root class **`cursor-select-menu`** — **never `cursor-select`** (that styles native
+  `<select>` and double-boxes the control).
+- Variants: `ghost` (default, compact chrome filter) and `field` (full-width bordered, forms/sidebars).
+- Props: `value`, `options[{value,label}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
+- Shades follow the [select split](#select--dropdown-shade-split-locked-decision).
+
+```tsx
+<CursorSelect ariaLabel="Status" value={f} onChange={setF}
+  options={[{ value: "all", label: "All" }]} />
+```
+
+### `CursorTable` / `CursorTableEmpty` — global table plate
+`src/desk/components/CursorTable.tsx`
+
+- Renders `.cursor-table-wrap` + `.cursor-table` (legacy aliases `.studio-admin-table*`).
+- Pass `<thead>`/`<tbody>` as children. Handles **loading**, **empty**, and populated states.
+- When `empty`, the header is hidden and a centered **empty state** renders instead.
+- Empty state props: `emptyIcon` (lucide node), `emptyTitle`, `emptyHint`, `emptyAction`.
+- Table wrap = `--mos-plate`; empty icon chip = 44px pill on `--mos-plate-strong` + soft ring.
+
+```tsx
+<CursorTable ariaLabel="Sellers" loading={!rows}
+  empty={!!rows && !rows.length}
+  emptyIcon={<Store />} emptyTitle="No sellers"
+  emptyHint="No sellers match this filter yet.">
+  <thead>…</thead><tbody>…</tbody>
+</CursorTable>
+```
+
+### Other chrome classes (in `desk-shell.css`)
+
+| Class | Purpose | Key shades |
+|---|---|---|
+| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate`, item hover `--mos-plate-strong` |
+| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate` |
+| `.cursor-settings-action` | Standard button/action | border-soft, hover `--color-cursor-hover` |
+| `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
+| `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
+| `.studio-admin-panel` | Admin canvas | `--mos-page` |
+| `.studio-admin-section-head` | Compact section bar (36px) | `--mos-plate` |
+| `.studio-admin-card`, `.studio-plan-card`, `.studio-bank-card` | Cards | `--mos-plate` |
+| `.studio-admin-chip` | Count / meta chip | subtle |
+
+---
+
+## 7. Scrollbars
+
+Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !important` +
+`::-webkit-scrollbar { display: none }`. Do not re-introduce thin/visible scrollbars in chrome.
+
+---
+
+## 8. Do / Don't
+
+**Do**
+- Use `--mos-page` / `--mos-plate` / `--mos-plate-strong` for chrome surfaces.
+- Use `CursorSelect` and `CursorTable` instead of hand-rolled selects/tables.
+- Keep borders on `--color-cursor-border*` / `--mos-border*`.
+- Mirror every token change in `applyDeskTokens()` **and** the boot inline script.
+
+**Don't**
+- Hardcode light-only greys (`#ececf0`, `#e1e1e7`, `#f5f5f7`) behind `[data-appearance="light"]`.
+- Hardcode `#fff`/`#000` borders on glass or chrome.
+- Use `cursor-select` as the CursorSelect root.
+- Put table wraps on `--mos-plate-strong` (that's for chips/menus, not the plate).
+
+---
+
+## Memory
+
+These are mirrored as MercuryOS pinned/namespaced decisions (`namespace: yatishara-studio`).
+Update memory when you change a rule here:
+
+- **698** — Chrome shade steps are semantic tokens in both modes (page/plate/plate-strong; select split).
+- **692** — CursorSelect root = `cursor-select-menu`, never `cursor-select`.
+- **700** — Table empty = `CursorTable` empty + centered icon chip.
+- **694** — Glass/chrome borders = `--color-cursor-border`, never hardcoded white.
+- **695** — File manager plates = mos greys, never cool slate/teal.
+- **696** — Scrollbars hidden globally.
+- **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
+- **697** — Offers inputs keep raised fill; white/borderless rejected.
