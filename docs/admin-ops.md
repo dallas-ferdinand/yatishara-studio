@@ -90,9 +90,10 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
       tab only appears for users with a seller record)
 - [x] Payout rows show **who to pay + bank details** (`Pay to` column, click the
       account number to copy; warns when a seller has no details yet)
-- [ ] Seller still-pending: **Reject** (not Suspend); capture reason
-- [ ] Approved sellers keep Suspend for enforcement
-- [ ] Replace `window.prompt` for mark-paid / reject with inline confirm field
+- [x] Seller still-pending: **Reject** (not Suspend); capture required reason
+      (`adminApproveSeller` decision `reject` → status `rejected` + `rejectionReason`)
+- [x] Approved sellers keep **Suspend** for enforcement (optional note)
+- [x] Replace `window.prompt` for mark-paid / reject with inline confirm field
 
 **Done when:** Operator can pay from the payouts table and reject an application with a reason.
 
@@ -120,4 +121,4 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 P0 labels_fix → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
 ```
 
-Next: finish **P3** (seller Reject language + kill `window.prompt` on mark-paid / reject).
+Next: start **P4** (demote Setup + Pricing into Tools; main nav = ops).
