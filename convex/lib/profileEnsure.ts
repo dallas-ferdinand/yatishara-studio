@@ -23,7 +23,6 @@ export type HandleSourceUser = {
 export type PublicNameUser = {
   firstName?: string;
   lastName?: string;
-  name?: string;
 };
 
 export type PublicNameSeller = {
@@ -31,15 +30,14 @@ export type PublicNameSeller = {
   businessName: string;
 };
 
-/** Account first + last (preferred) or legacy single name. */
+/** Account first + last only — never legacy users.name or freeform profile labels. */
 export function accountNameFromUser(user: PublicNameUser | null | undefined): string | undefined {
   const first = user?.firstName?.trim();
   const last = user?.lastName?.trim();
   if (first && last) return `${first} ${last}`;
   if (first) return first;
   if (last) return last;
-  const legacy = user?.name?.trim();
-  return legacy || undefined;
+  return undefined;
 }
 
 /**

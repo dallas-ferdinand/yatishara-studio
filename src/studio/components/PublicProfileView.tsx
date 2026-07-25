@@ -159,13 +159,10 @@ export function PublicProfileView({
 
   const title =
     profile?.displayName?.trim() ||
-    [ownerName?.firstName, ownerName?.lastName].filter(Boolean).join(" ").trim() ||
-    ownerName?.name?.trim() ||
     (profile ? `@${profile.username}` : username);
   const initials = profileNameInitials({
     firstName: ownerName?.firstName,
     lastName: ownerName?.lastName,
-    name: ownerName?.name,
     displayName: profile?.displayName,
   });
 

@@ -1781,6 +1781,30 @@ export const backfillMissingProfiles = internalMutation({
   },
 });
 
+/** One-time: strip unused freeform profiles.displayName so nothing can surface them. */
+export const clearLegacyDisplayNames = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("profiles").paginate({
+      cursor: args.cursor ?? null,
+      numItems: BACKFILL_PROFILE_BATCH,
+    });
+    let cleared = 0;
+    for (const profile of page.page) {
+      if (profile.displayName === undefined) continue;
+      await ctx.db.patch(profile._id, { displayName: undefined });
+      cleared += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.profiles.clearLegacyDisplayNames, {
+        cursor: page.continueCursor,
+      });
+    }
+    return cleared;
+  },
+});
+
 export const toggleLike = authedMutation({
   args: { postId: v.id("profilePosts") },
   returns: v.object({
