@@ -9069,6 +9069,54 @@ export function StudioShell({
           font-size: 13px;
           font-weight: 650;
         }
+        .studio-profile-readonly-name {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+        .studio-profile-readonly-name > span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          font-weight: 650;
+        }
+        .studio-profile-readonly-name > p {
+          margin: 0;
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 600;
+          line-height: 1.35;
+          min-height: 20px;
+        }
+        .studio-profile-name-hint {
+          color: var(--color-cursor-muted);
+          font-weight: 500;
+        }
+        .studio-profile-seller-name-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          min-height: 36px;
+          padding: 6px 0;
+          border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+        }
+        .studio-profile-seller-name-copy {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .studio-profile-seller-name-copy > span {
+          color: var(--color-cursor-text-bright);
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-profile-seller-name-copy > p {
+          margin: 0;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          line-height: 1.35;
+          overflow-wrap: anywhere;
+        }
         .studio-profile-links-block {
           display: grid;
           gap: 8px;

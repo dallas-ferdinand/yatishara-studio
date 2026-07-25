@@ -173,7 +173,7 @@ export function ProfileSettingsCard({
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
 
   const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [useSellerDisplayName, setUseSellerDisplayName] = useState(false);
   const [bio, setBio] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [links, setLinks] = useState<ContactLinkDraft[]>([]);
@@ -188,7 +188,7 @@ export function ProfileSettingsCard({
   useEffect(() => {
     if (!profile) return;
     setUsername(profile.username);
-    setDisplayName(profile.displayName ?? "");
+    setUseSellerDisplayName(profile.useSellerDisplayName);
     setBio(profile.bio ?? "");
     setIsPublic(profile.isPublic);
     setLinks(
@@ -204,6 +204,10 @@ export function ProfileSettingsCard({
       setAvatarPreview(profile.avatarUrl);
     }
   }, [profile, pendingAvatarFile]);
+
+  const accountName = profile?.accountName?.trim() || displayNameHint?.trim() || "";
+  const canUseSellerDisplayName = Boolean(profile?.canUseSellerDisplayName);
+  const sellerBusinessName = profile?.sellerBusinessName?.trim();
 
   const publicUrl =
     typeof window !== "undefined" && profile
@@ -236,7 +240,6 @@ export function ProfileSettingsCard({
     try {
       const result = await claimUsername({
         username,
-        displayName: displayName || displayNameHint || undefined,
       });
       if (pendingAvatarFile) {
         setAvatarBusy(true);
@@ -267,7 +270,9 @@ export function ProfileSettingsCard({
         await changeUsername({ username: nextUsername });
       }
       await updateMine({
-        displayName,
+        useSellerDisplayName: canUseSellerDisplayName
+          ? useSellerDisplayName
+          : false,
         bio,
         isPublic,
         contactLinks: links
@@ -419,14 +424,16 @@ export function ProfileSettingsCard({
                   />
                 </div>
               </label>
-              <label>
-                <span>Display name</span>
-                <input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  placeholder={displayNameHint || "Your name"}
-                />
-              </label>
+              <div className="studio-profile-readonly-name">
+                <span>Name</span>
+                <p>
+                  {accountName || (
+                    <span className="studio-profile-name-hint">
+                      Set your first and last name in Settings → Account
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
           </div>
           {error ? <p className="studio-profile-status is-error">{error}</p> : null}
@@ -449,15 +456,16 @@ export function ProfileSettingsCard({
         <div className="studio-profile-identity">
           {avatarButton}
           <div className="studio-profile-identity-fields">
-            <label>
-              <span>Display name</span>
-              <input
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-                maxLength={48}
-                placeholder="Your name"
-              />
-            </label>
+            <div className="studio-profile-readonly-name">
+              <span>Name</span>
+              <p>
+                {accountName || (
+                  <span className="studio-profile-name-hint">
+                    Set your first and last name in Settings → Account
+                  </span>
+                )}
+              </p>
+            </div>
             <div className="studio-profile-handle-row">
               <div className="studio-profile-username-field">
                 <span className="studio-profile-username-prefix">@</span>
@@ -492,6 +500,23 @@ export function ProfileSettingsCard({
             </div>
           </div>
         </div>
+
+        {canUseSellerDisplayName && sellerBusinessName ? (
+          <div className="studio-profile-seller-name-row">
+            <div className="studio-profile-seller-name-copy">
+              <span>Show verified business / trading name on profile</span>
+              <p>{sellerBusinessName}</p>
+            </div>
+            <button
+              type="button"
+              className={`studio-audio-switch ${useSellerDisplayName ? "is-on" : ""}`}
+              role="switch"
+              aria-checked={useSellerDisplayName}
+              aria-label="Show verified business name on profile"
+              onClick={() => setUseSellerDisplayName((value) => !value)}
+            />
+          </div>
+        ) : null}
 
         <label>
           <span>Bio</span>
