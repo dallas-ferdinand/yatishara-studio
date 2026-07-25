@@ -32,6 +32,53 @@ function peerReadAt(conversation: Doc<"dmConversations">, me: Id<"users">) {
     : conversation.lowLastReadAt;
 }
 
+function peerDeliveredAt(
+  conversation: Doc<"dmConversations">,
+  me: Id<"users">,
+) {
+  return conversation.userLowId === me
+    ? (conversation.highLastDeliveredAt ?? 0)
+    : (conversation.lowLastDeliveredAt ?? 0);
+}
+
+function myDeliveredAt(
+  conversation: Doc<"dmConversations">,
+  me: Id<"users">,
+) {
+  return conversation.userLowId === me
+    ? (conversation.lowLastDeliveredAt ?? 0)
+    : (conversation.highLastDeliveredAt ?? 0);
+}
+
+const receiptStatus = v.union(
+  v.literal("sent"),
+  v.literal("delivered"),
+  v.literal("read"),
+);
+
+/** WhatsApp-style: sent → delivered (peer ACK) → read (peer opened chat). */
+function receiptFor(
+  createdAt: number,
+  peerReadWatermark: number,
+  peerDeliveredWatermark: number,
+): "sent" | "delivered" | "read" {
+  if (peerReadWatermark >= createdAt) return "read";
+  if (peerDeliveredWatermark >= createdAt) return "delivered";
+  return "sent";
+}
+
+/** Studio tab online — connect/visibility only; stale after 3 minutes. */
+const STUDIO_ONLINE_STALE_MS = 3 * 60 * 1000;
+
+function isStudioOnline(
+  user: Pick<Doc<"users">, "studioOnline" | "studioOnlineAt"> | null | undefined,
+  now: number,
+): boolean {
+  if (!user?.studioOnline) return false;
+  const at = user.studioOnlineAt ?? 0;
+  return now - at < STUDIO_ONLINE_STALE_MS;
+}
+
 function sortPair(a: Id<"users">, b: Id<"users">) {
   return String(a) < String(b)
     ? { low: a, high: b }
@@ -82,8 +129,10 @@ const conversationRowReturn = v.object({
   lastMessagePreview: v.optional(v.string()),
   lastMessageAt: v.number(),
   lastMessageFromMe: v.boolean(),
-  /** Peer has read the latest message (only meaningful when lastMessageFromMe). */
-  lastMessageRead: v.boolean(),
+  /** Receipt for the latest outbound message (mine only; ignored otherwise). */
+  lastMessageReceipt: receiptStatus,
+  /** Peer has Studio open (connect/visibility; stale after ~3 min). */
+  peerOnline: v.boolean(),
   unread: v.boolean(),
 });
 
@@ -124,6 +173,8 @@ export const openConversation = authedMutation({
       lastMessageAt: now,
       lowLastReadAt: now,
       highLastReadAt: now,
+      lowLastDeliveredAt: 0,
+      highLastDeliveredAt: 0,
       createdAt: now,
     });
     return { conversationId, username };
@@ -200,6 +251,7 @@ export const listMyConversations = authedQuery({
       visible.map(async (row, i) => {
         const { conversation, profile } = row;
         const lastMessageFromMe = conversation.lastMessageSenderId === me;
+        const peerUser = await ctx.db.get("users", profile.userId);
         const memberships = await ctx.db
           .query("dmLabelMembers")
           .withIndex("by_owner_and_peer", (q) =>
@@ -218,6 +270,7 @@ export const listMyConversations = authedQuery({
             icon: label.icon,
           }));
         const person = peers[i]!;
+        const now = Date.now();
         return {
           conversationId: conversation._id,
           peer: {
@@ -231,9 +284,14 @@ export const listMyConversations = authedQuery({
           lastMessagePreview: conversation.lastMessagePreview,
           lastMessageAt: conversation.lastMessageAt,
           lastMessageFromMe,
-          lastMessageRead:
-            lastMessageFromMe &&
-            peerReadAt(conversation, me) >= conversation.lastMessageAt,
+          lastMessageReceipt: lastMessageFromMe
+            ? receiptFor(
+                conversation.lastMessageAt,
+                peerReadAt(conversation, me),
+                peerDeliveredAt(conversation, me),
+              )
+            : "sent",
+          peerOnline: isStudioOnline(peerUser, now),
           unread: Boolean(
             conversation.lastMessageSenderId &&
               conversation.lastMessageSenderId !== me &&
@@ -265,8 +323,11 @@ export const listMessages = authedQuery({
       contentType: v.optional(v.string()),
       durationSec: v.optional(v.number()),
       fromMe: v.boolean(),
-      /** WhatsApp-style: true when peer watermark is past this message (mine only). */
-      read: v.boolean(),
+      /**
+       * WhatsApp-style receipt for outbound messages:
+       * sent (1 tick) → delivered (2 gray, peer ACK) → read (2 colored).
+       */
+      receipt: receiptStatus,
       createdAt: v.number(),
     }),
   ),
@@ -276,7 +337,11 @@ export const listMessages = authedQuery({
       args.conversationId,
       ctx.user._id,
     );
-    const peerWatermark = peerReadAt(conversation, ctx.user._id);
+    const peerReadWatermark = peerReadAt(conversation, ctx.user._id);
+    const peerDeliveredWatermark = peerDeliveredAt(
+      conversation,
+      ctx.user._id,
+    );
     const limit = Math.min(Math.max(args.limit ?? 120, 1), MESSAGES_PAGE_MAX);
     const rows = await ctx.db
       .query("dmMessages")
@@ -303,7 +368,13 @@ export const listMessages = authedQuery({
           contentType: row.contentType,
           durationSec: row.durationSec,
           fromMe,
-          read: fromMe && peerWatermark >= row.createdAt,
+          receipt: fromMe
+            ? receiptFor(
+                row.createdAt,
+                peerReadWatermark,
+                peerDeliveredWatermark,
+              )
+            : "sent",
           createdAt: row.createdAt,
         };
       }),
@@ -467,6 +538,37 @@ export const sendImageMessage = authedMutation({
   },
 });
 
+/**
+ * Recipient device ACK — advances my delivery watermark so the sender sees
+ * double gray ticks. Idempotent: only moves forward.
+ */
+export const ackDelivered = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    upToCreatedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    if (!Number.isFinite(args.upToCreatedAt) || args.upToCreatedAt <= 0) {
+      return null;
+    }
+    const current = myDeliveredAt(conversation, ctx.user._id);
+    if (args.upToCreatedAt <= current) return null;
+    const isLow = conversation.userLowId === ctx.user._id;
+    await ctx.db.patch(conversation._id, {
+      ...(isLow
+        ? { lowLastDeliveredAt: args.upToCreatedAt }
+        : { highLastDeliveredAt: args.upToCreatedAt }),
+    });
+    return null;
+  },
+});
+
 export const markRead = authedMutation({
   args: { conversationId: v.id("dmConversations") },
   returns: v.null(),
@@ -476,11 +578,13 @@ export const markRead = authedMutation({
       args.conversationId,
       ctx.user._id,
     );
+    const now = Date.now();
     const isLow = conversation.userLowId === ctx.user._id;
+    const delivered = Math.max(myDeliveredAt(conversation, ctx.user._id), now);
     await ctx.db.patch(conversation._id, {
       ...(isLow
-        ? { lowLastReadAt: Date.now() }
-        : { highLastReadAt: Date.now() }),
+        ? { lowLastReadAt: now, lowLastDeliveredAt: delivered }
+        : { highLastReadAt: now, highLastDeliveredAt: delivered }),
     });
     return null;
   },

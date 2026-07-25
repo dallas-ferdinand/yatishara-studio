@@ -244,6 +244,12 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.optional(v.number()),
+    /**
+     * Studio tab liveness (connect/visibility). No heartbeat poller —
+     * queries treat online as stale after ~3 minutes.
+     */
+    studioOnline: v.optional(v.boolean()),
+    studioOnlineAt: v.optional(v.number()),
   })
     .index("email", ["email"])
     .index("by_phone", ["phone"])
@@ -1185,6 +1191,12 @@ export default defineSchema({
     /** Per-member read watermarks (low/high = same ordering as the pair ids). */
     lowLastReadAt: v.number(),
     highLastReadAt: v.number(),
+    /**
+     * Per-member delivery watermarks — peer’s client acknowledged receipt
+     * (WhatsApp double gray). Missing → 0.
+     */
+    lowLastDeliveredAt: v.optional(v.number()),
+    highLastDeliveredAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_pair", ["userLowId", "userHighId"])

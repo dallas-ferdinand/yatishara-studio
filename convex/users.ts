@@ -223,6 +223,37 @@ export const setActiveStyleSheet = authedMutation({
   },
 });
 
+/**
+ * Studio tab online signal for DMs — set on connect/visibility only.
+ * No interval heartbeat. Queries treat `studioOnlineAt` older than ~3 min as offline.
+ */
+export const setStudioOnline = authedMutation({
+  args: { online: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const prevOnline = ctx.user.studioOnline === true;
+    const prevAt = ctx.user.studioOnlineAt ?? 0;
+    if (args.online) {
+      // Throttle online pings from rapid visibility toggles.
+      if (prevOnline && now - prevAt < 15_000) return null;
+      await ctx.db.patch(ctx.user._id, {
+        studioOnline: true,
+        studioOnlineAt: now,
+        updatedAt: now,
+      });
+      return null;
+    }
+    if (!prevOnline) return null;
+    await ctx.db.patch(ctx.user._id, {
+      studioOnline: false,
+      studioOnlineAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
 export const ensureStudioDefaults = authedMutation({
   args: {},
   returns: v.object({
