@@ -536,7 +536,7 @@ body {
   box-sizing: border-box;
 }
 
-/* Custom pull-down-to-reload puck (mobile). */
+/* Custom pull-down-to-reload — white boot LogoLoader, spin locked to pull. */
 .ys-ptr {
   position: fixed;
   top: env(safe-area-inset-top, 0px);
@@ -546,24 +546,35 @@ body {
   display: flex;
   justify-content: center;
   pointer-events: none;
+  /* Force light/boot tokens even when the app shell is dark. */
+  color-scheme: light;
 }
 
 .ys-ptr-puck {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  margin-top: -60px;
-  border-radius: 999px;
-  background: var(--mos-panel, #f5f5f7);
-  border: 1px solid color-mix(in srgb, var(--mos-text, #0f172a) 12%, transparent);
-  box-shadow:
-    0 10px 28px color-mix(in srgb, #000 24%, transparent),
-    0 2px 8px color-mix(in srgb, #000 14%, transparent);
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  width: var(--logo-loader-ring, 44px);
+  height: var(--logo-loader-ring, 44px);
+  margin-top: -52px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  transition: transform 0.2s ease, opacity 0.18s ease;
   will-change: transform, opacity;
 }
 
 .ys-ptr-puck.is-pulling {
   transition: none;
+}
+
+/* Finger down: mark rotation scrubbed to pull distance (scroll-locked). */
+.ys-ptr-puck.is-pulling .logo-loader-spin {
+  animation: none !important;
+  transform: rotate(var(--ys-ptr-spin, 0deg));
+}
+
+/* Release / reload: same continuous spin as the global boot loader. */
+.ys-ptr-puck:not(.is-pulling) .logo-loader-spin,
+.ys-ptr-puck.is-refreshing .logo-loader-spin {
+  animation: logo-loader-spin 5.5s linear infinite !important;
 }

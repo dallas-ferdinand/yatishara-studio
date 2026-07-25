@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { LogoLoader } from "@/studio/components/logo-loader";
 
 const PULL_START_SLOP = 12;
 const PULL_THRESHOLD = 84;
 const PULL_MAX = 128;
+/** Degrees of mark rotation per px of eased pull — scrubbed while finger is down. */
+const SPIN_DEG_PER_PX = 4.2;
 
 function insideZoomRegion(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest("[data-allow-zoom]"));
@@ -164,16 +166,21 @@ export function MobileGestures() {
   if (!visible) return null;
 
   const progress = Math.min(1, pull / PULL_THRESHOLD);
+  const spinDeg = Math.round(pull * SPIN_DEG_PER_PX);
+  const puckStyle = {
+    transform: `translateY(${Math.round(12 + pull * 0.95)}px)`,
+    opacity: refreshing ? 1 : Math.min(1, 0.35 + progress * 0.9),
+    ["--ys-ptr-spin" as string]: `${spinDeg}deg`,
+  } as CSSProperties;
+
   return (
-    <div className="ys-ptr" aria-hidden="true">
+    <div className="ys-ptr" data-appearance="light" aria-hidden="true">
       <div
         className={`ys-ptr-puck${pulling ? " is-pulling" : ""}${refreshing ? " is-refreshing" : ""}`}
-        style={{
-          transform: `translateY(${Math.round(pull * 0.9)}px) scale(${(0.68 + 0.32 * progress).toFixed(3)})`,
-          opacity: refreshing ? 1 : Math.min(1, progress * 1.2),
-        }}
+        style={puckStyle}
       >
-        <LogoLoader size="sm" variant="bare" />
+        {/* Always the white boot loader — even when the app is in dark mode. */}
+        <LogoLoader size="md" appearance="light" />
       </div>
     </div>
   );
