@@ -197,6 +197,22 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 ---
 
+## 6b. Public routes (`/offers`, share links)
+
+Public pages live outside the Studio shell, but `desk-shell.css` is imported by
+`src/app/globals.css` and the theme boot script sets the `--mos-*` tokens on `<html>`, so
+**the whole token set is available on every route** — never re-invent greys with Tailwind
+color classes or gradients.
+
+`src/studio/components/public-offers.css` is the reference: page canvas `--mos-page`, a
+48px sticky brand bar with a hairline bottom border, plate cards/hero/section bars, L3
+chips and buttons, and the accent-tinted primary button (`accent 16%` fill + `accent 34%`
+border, same as `.studio-account-save`). Logo mark comes from `useMercurySidebarLogo()`
+so its ink follows appearance. The `studio-admin-*` classes are **not** available on public
+routes (they live in the `StudioShell` inline `<style>`) — mirror them with local classes.
+
+---
+
 ## 7. Scrollbars
 
 Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !important` +
@@ -240,3 +256,4 @@ Update memory when you change a rule here:
 - **696** — Scrollbars hidden globally.
 - **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
 - **697** — Offers inputs keep raised fill; white/borderless rejected.
+- **703** — Public routes reuse mos tokens; `public-offers.css` mirrors admin billing chrome.
