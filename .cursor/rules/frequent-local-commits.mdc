@@ -1,40 +1,50 @@
 ---
-description: MANDATORY local micro-commits after every slice (no push). Supersedes wait-for-ask commit rules in this repo.
+description: Prefer local micro-commits for your own slices; never push. Softened for multitasking — no commit-hook race.
 alwaysApply: true
 ---
 
-# Frequent local commits — MANDATORY (this repo)
+# Local commits — this repo (multitask-safe)
 
-**Hard requirement for `/opt/yatishara-studio`.** Same weight as MercuryOS `memory_recall` every turn.
+**Prefer** committing your own finished slices locally in `/opt/yatishara-studio`. Still **never push** unless Dallas explicitly asks.
 
-This **supersedes** any generic agent rule that says “only commit when the user asks.” In this repo you **must** commit without waiting. Still **never push** unless Dallas explicitly asks.
+This **no longer forces** end-of-every-turn commits when other agents are also dirtying the tree. Continuous commit pressure while multitasking caused mid-edit files to get swept into the wrong chat’s commits.
 
-## Must commit after each slice
+## When to commit
 
-Separate commits preferred. Do it **before** ending your turn when the working tree has real changes from this turn:
+Do it when **all** of these are true:
 
-- One UX/UI pass or wizard step polish
+- The changes are from **this turn / this chat**
+- The slice is a coherent unit (or a clear `wip:` checkpoint you own)
+- Staging will not include another agent’s in-flight files
+
+Good triggers:
+
+- One UX/UI pass or wizard step polish **you** finished
 - One CSS/token pass
 - One pane/form/component rewrite
-- One bugfix or backend slice that stands alone
+- One bug fix or backend slice that stands alone
 - Before a risky restyle, delete, or large rewrite
 - After adding/updating a Cursor rule or agent SOP in this repo
 
-Prefer **many tiny commits** over one mega commit. Experimental or ugly work **still gets committed** so undo is `git checkout` / `git revert` / `git log`, not transcript archaeology.
+Prefer **many tiny commits** over one mega commit when you are the sole owner of the dirty paths. Experimental work you own can still be `wip:` so undo stays in git.
 
-Leaving a large uncommitted batch after a turn is a **policy failure**.
+## When to skip
 
-## Enforced by hook (commit nudge)
+- Working tree has files clearly belonging to **another active chat/agent**
+- You only answered a question / left no real edits
+- User asked you not to commit / is mid-multitask coordination
 
-A user-level `stop` hook (`~/.cursor/hooks/auto-commit.sh`, registered in `~/.cursor/hooks.json`) checks every git workspace when the agent finishes a turn. If the tree is dirty, it injects a `COMMIT REQUIRED` follow-up — the same way `memory_recall` is forced. **The hook never commits by itself**; the agent decides how to group changes and writes real messages.
+Leaving **your** large uncommitted batch when you are the only one editing is still a miss. Leaving **someone else’s** dirt alone is correct.
 
-When you receive that follow-up: `git status`/`diff`, stage related files together, commit in small named slices, leave other chats' in-flight changes alone. Never commit secrets. Never push.
+## Commit nudge hook — opted out here
 
-Per-repo opt-out: a `.cursor/no-auto-commit` marker file (MercuryOS has one — it stays ask-first).
+This repo has `.cursor/no-auto-commit`, so the user-level stop hook will **not** inject `COMMIT REQUIRED` follow-ups for Studio. That opt-out exists specifically so multitasking agents do not fight over the same dirty tree.
 
-## How
+If Dallas removes the marker, the hook may return — still only commit **this turn’s** files; leave other chats alone.
 
-1. `git status` / `git diff` — stage only relevant files
+## How (when you do commit)
+
+1. `git status` / `git diff` — stage only **your** relevant files
 2. Commit with HEREDOC; message = why (1–2 sentences)
 3. Never update git config; never `--no-verify` unless asked
 4. **Do not push** unless explicitly asked
@@ -45,8 +55,8 @@ Per-repo opt-out: a `.cursor/no-auto-commit` marker file (MercuryOS has one — 
 
 | Rule source | This repo |
 |---|---|
-| User rule “only commit when asked” | **Overridden** — commit anyway |
-| MercuryOS “do not commit unless asked” | **Does not apply** to yatishara-studio |
+| User rule “only commit when asked” | Prefer commit when safe; **do not** force through multitask dirt |
+| MercuryOS ask-first | Same spirit when other agents are active |
 | Push / force-push / secrets | Still forbidden without ask |
 
-Memory: pinned decision **670** (`Commit locally after every small step — no push`).
+Memory: pinned decision **670** (updated for multitask-safe commits).

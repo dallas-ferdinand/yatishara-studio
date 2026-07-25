@@ -20,13 +20,10 @@ chrome. Dropdowns: panel level-2 `--mos-plate` (tight, shadow, no border); butto
 level-3 `--mos-plate-strong` at rest; item hover/active level-3; caret = Lucide
 `ArrowDown`. Keep section bars `overflow: visible` so menus are not clipped.
 
-## Micro-commits (mandatory)
+## Local commits (multitask-safe)
 
-Same weight as MercuryOS `memory_recall` every turn.
-
-- After **each** meaningful slice of work, **commit locally** (do not wait to be asked).
-- Prefer many tiny commits; experimental/ugly work still gets committed so undo is git, not chat history.
-- **Never push** unless Dallas explicitly asks. Never force-push. Never commit secrets.
-- This **overrides** generic “only commit when asked” user/agent rules **for this repo only**.
-- Enforced by a user-level `stop` hook (`~/.cursor/hooks/auto-commit.sh`) that injects a `COMMIT REQUIRED` follow-up whenever a turn ends with a dirty tree. The agent does the committing — small, named, intelligent slices; the hook never commits by itself.
+- Prefer committing **your own** finished slices locally; never push unless Dallas asks.
+- **Do not** force end-of-turn commits when another agent’s files are also dirty — continuous commit pressure races multitasking chats.
+- Stage only paths from this turn; leave other chats’ in-flight work alone. `wip:` OK for your half-finished experiments.
+- This repo opts out of the user-level `COMMIT REQUIRED` nudge via `.cursor/no-auto-commit`.
 - Full text: `.cursor/rules/frequent-local-commits.mdc` (alwaysApply). Memory: pinned **670**.

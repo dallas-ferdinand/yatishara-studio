@@ -1,0 +1,4 @@
+# Opt out of the user-level COMMIT REQUIRED stop-hook nudge.
+# Continuous commit pressure races other agents while multitasking on this repo.
+# Agents still prefer committing their own finished slices when the tree is theirs;
+# they must leave other chats' in-flight files alone and never push without ask.
