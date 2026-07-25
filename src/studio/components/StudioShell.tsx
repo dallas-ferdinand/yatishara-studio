@@ -9299,12 +9299,69 @@ export function StudioShell({
           height: 100%;
           min-height: 0;
           width: 100%;
-          overflow: auto;
-          padding: 24px;
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           isolation: isolate;
+        }
+        /* Secondary header — same height/chrome as the workspace head. */
+        .studio-admin-head {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          height: var(--cursor-head-h);
+          min-height: var(--cursor-head-h);
+          padding: 0 8px 0 12px;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+        }
+        .studio-admin-head-tabs {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex: 1 1 auto;
+          min-width: 0;
+          height: var(--cursor-head-h);
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+        }
+        .studio-admin-head-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .studio-admin-head-tab {
+          display: inline-flex;
+          align-items: center;
+          flex: 0 0 auto;
+          min-height: 24px;
+          padding: 0 10px;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-muted);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+          white-space: nowrap;
+          cursor: pointer;
+          transition:
+            color 160ms ease,
+            border-color 160ms ease,
+            background 160ms ease;
+        }
+        .studio-admin-head-tab:hover {
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-admin-head-tab.is-active {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-admin-body {
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: auto;
+          padding: 20px 16px 28px;
         }
         @media (max-width: 760px) {
           .studio-settings-billing-summary,
@@ -13261,6 +13318,33 @@ export function StudioShell({
           font-size: 12px;
           font-weight: 650;
           text-decoration: none;
+        }
+        .studio-admin-kyc-sidebar .studio-admin-detail-actions {
+          margin-top: auto;
+          justify-content: flex-start;
+        }
+        .studio-admin-kyc-docs {
+          display: grid;
+          gap: 8px;
+        }
+        .studio-admin-kyc-doc-list {
+          display: grid;
+          gap: 6px;
+        }
+        .studio-admin-kyc-doc {
+          display: block;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--mos-bg) 48%, transparent);
+          padding: 8px 10px;
+          color: var(--color-cursor-text-bright);
+          font-size: 12px;
+          font-weight: 650;
+          text-decoration: none;
+        }
+        .studio-admin-kyc-doc:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          background: var(--color-cursor-hover);
         }
         .studio-admin-table-wrap {
           overflow: auto;
@@ -21806,7 +21890,6 @@ function BillingWorkspacePane({ tab: _tab, billingAccount, pricing, payments }) 
 
 function AdminWorkspacePane({
   tab,
-  currentUser,
   pricing,
   payments,
   customers,
@@ -21910,35 +21993,31 @@ function AdminWorkspacePane({
 
   return (
     <div className="studio-admin-panel">
-      <div className="studio-admin-workspace">
-        <section className="studio-admin-hero-card">
-          <div>
-            <p className="studio-section-kicker">Admin workspace</p>
-            <h2>{adminTitle(tab)}</h2>
-            <p>Manage payments, customers, pricing, and launch setup outside Settings.</p>
-          </div>
-          <div className="studio-admin-hero-actions">
-            <span className="studio-admin-chip">{currentUser?.email ?? currentUser?.phone ?? currentUser?.name ?? "admin"}</span>
-            <button type="button" className="cursor-settings-action" onClick={onOpenSettings}>
-              <Settings className="h-3.5 w-3.5" />
-              Settings
-            </button>
-          </div>
-        </section>
-
-        <nav className="studio-admin-tabbar" aria-label="Admin sections">
+      <header className="studio-admin-head">
+        <nav className="studio-admin-head-tabs" aria-label="Admin sections">
           {adminTabs.map((item) => (
             <button
               key={item.id}
               type="button"
-              className={tab === item.id ? "is-active" : ""}
+              className={`studio-admin-head-tab${tab === item.id ? " is-active" : ""}`}
               onClick={() => onOpenAdminTab(item.id)}
             >
               {item.label}
             </button>
           ))}
         </nav>
-
+        <button
+          type="button"
+          className="cursor-icon-btn cursor-icon-btn-sm"
+          onClick={onOpenSettings}
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      </header>
+      <div className="studio-admin-body">
+        <div className="studio-admin-workspace">
         {tab === "payments" ? (
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
@@ -22124,6 +22203,7 @@ function AdminWorkspacePane({
             </section>
           </>
         )}
+        </div>
       </div>
     </div>
   );
@@ -22233,6 +22313,14 @@ function AdminSetupAction({ title, body, actionLabel, onRun }) {
 
 function PaymentStatusPill({ status }) {
   return <span className={`studio-payment-status-pill is-${status}`}>{humanizePaymentStatus(status)}</span>;
+}
+
+function adminTitle(tab) {
+  if (tab === "customers") return "Customers";
+  if (tab === "marketplace") return "Marketplace";
+  if (tab === "setup") return "Admin setup";
+  if (tab === "pricing") return "Pricing";
+  return "Payments";
 }
 
 function paymentCustomerName(payment) {
