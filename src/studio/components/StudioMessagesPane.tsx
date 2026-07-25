@@ -9,6 +9,7 @@ import {
   Loader2,
   MessageCircle,
   Mic,
+  PanelRight,
   Paperclip,
   SendHorizontal,
   Tags,
@@ -16,10 +17,12 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { useLongPress } from "@/desk/hooks/use-long-press";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import { StudioDmAssignLabelsDialog } from "./StudioDmLabelDialogs";
@@ -28,8 +31,12 @@ import {
   type StudioDmContextMenuItem,
 } from "./StudioDmContextMenu";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { StudioDmPeerSidebar } from "./StudioDmPeerSidebar";
+import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
+
+const PEER_SIDEBAR_OPEN_KEY = "studio-dm-peer-sidebar-open";
 
 const VOICE_NOTE_MAX_SECONDS = 300;
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
@@ -129,6 +136,8 @@ type StudioMessagesPaneProps = {
   conversationId: DmConversationId | null;
   onSelectConversation: (conversationId: DmConversationId | null) => void;
   onOpenProfile?: (username: string) => void;
+  /** Jump to Offers → Jobs for deliver/manage. */
+  onOpenOffersJobs?: () => void;
   /** When true (mobile), empty pane shows the chat list instead of the select prompt. */
   showChatListWhenEmpty?: boolean;
 };
@@ -187,11 +196,27 @@ export function StudioMessagesPane({
   conversationId,
   onSelectConversation,
   onOpenProfile,
+  onOpenOffersJobs,
   showChatListWhenEmpty = false,
 }: StudioMessagesPaneProps) {
+  const { isMobile } = useMobileLayout();
   const [expiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
   );
+  const [peerSidebarOpen, setPeerSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(PEER_SIDEBAR_OPEN_KEY);
+    if (stored === null) return true;
+    return stored === "1";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      PEER_SIDEBAR_OPEN_KEY,
+      peerSidebarOpen ? "1" : "0",
+    );
+  }, [peerSidebarOpen]);
   const conversations = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messages = useQuery(
     api.dms.listMessages,
@@ -546,8 +571,8 @@ export function StudioMessagesPane({
 
   let lastDay = "";
 
-  return (
-    <div className="studio-dm-pane">
+  const chatColumn = (
+    <div className="studio-dm-chat-column">
       <header className="studio-dm-chat-head">
         {showChatListWhenEmpty ? (
           <button
@@ -574,7 +599,10 @@ export function StudioMessagesPane({
             alt=""
           />
           <span className="studio-dm-chat-peer-copy">
-            <strong>{peerLabel}</strong>
+            <strong>
+              {peerLabel}
+              <StudioDmProviderTag tag={activeRow?.peer.sellerTag} />
+            </strong>
             {activeRow ? (
               <span
                 className={
@@ -590,6 +618,19 @@ export function StudioMessagesPane({
             ) : null}
           </span>
         </button>
+        <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
+          <button
+            type="button"
+            className={`cursor-icon-btn cursor-icon-btn-sm${peerSidebarOpen ? " is-active" : ""}`}
+            aria-label={
+              peerSidebarOpen ? "Close chat details" : "Open chat details"
+            }
+            aria-pressed={peerSidebarOpen}
+            onClick={() => setPeerSidebarOpen((open) => !open)}
+          >
+            <PanelRight aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
       <div className="studio-dm-scroll" ref={scrollRef}>
@@ -860,6 +901,59 @@ export function StudioMessagesPane({
       ) : null}
     </div>
   );
+
+  const peerSidebar =
+    activeRow && peerSidebarOpen ? (
+      <StudioDmPeerSidebar
+        peerUserId={activeRow.peer.userId}
+        peerUsername={activeRow.peer.username}
+        open={peerSidebarOpen}
+        onClose={() => setPeerSidebarOpen(false)}
+        onOpenProfile={onOpenProfile}
+        onOpenOffersJobs={onOpenOffersJobs}
+        variant={isMobile ? "sheet" : "docked"}
+      />
+    ) : null;
+
+  if (isMobile || !peerSidebarOpen || !activeRow) {
+    return (
+      <div className="studio-dm-pane">
+        {chatColumn}
+        {peerSidebar}
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-dm-pane is-split">
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-dm-peer-h"
+        className="studio-dm-peer-panels h-full min-h-0 min-w-0 overflow-hidden"
+      >
+        <Panel
+          id="studio-dm-chat"
+          order={1}
+          defaultSize={72}
+          minSize={45}
+          className="min-h-0 min-w-0"
+        >
+          {chatColumn}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel
+          id="studio-dm-peer"
+          order={2}
+          defaultSize={28}
+          minSize={20}
+          maxSize={40}
+          className="min-h-0 min-w-0"
+        >
+          {peerSidebar}
+        </Panel>
+      </PanelGroup>
+    </div>
+  );
 }
 
 export function StudioDmConversationRow({
@@ -871,9 +965,11 @@ export function StudioDmConversationRow({
   row: {
     conversationId: DmConversationId;
     peer: {
+      userId?: Id<"users">;
       username: string;
       displayName?: string;
       avatarUrl?: string;
+      sellerTag?: "freelancer" | "business";
     };
     labels?: Array<{ labelId: Id<"dmLabels">; name: string; icon: string }>;
     lastMessagePreview?: string;
@@ -926,7 +1022,10 @@ export function StudioDmConversationRow({
         </span>
         <span className="studio-dm-row-copy">
           <span className="studio-dm-row-top">
-            <strong>{label}</strong>
+            <strong>
+              {label}
+              <StudioDmProviderTag tag={row.peer.sellerTag} />
+            </strong>
             <time className={row.unread ? "is-unread" : undefined}>
               {conversationTimeLabel(row.lastMessageAt)}
             </time>

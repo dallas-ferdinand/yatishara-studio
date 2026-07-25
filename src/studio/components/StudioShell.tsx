@@ -16832,6 +16832,7 @@ export function StudioShell({
             dmConversationId={activeDmConversationId}
             onSelectDmConversation={setActiveDmConversationId}
             onOpenChat={openChatWith}
+            onOpenOffersJobs={() => openOffersTab("home")}
             showDmChatListWhenEmpty={isMobile}
           />
         </section>
@@ -21507,6 +21508,7 @@ function ActivePane({
   dmConversationId = null,
   onSelectDmConversation,
   onOpenChat,
+  onOpenOffersJobs,
   showDmChatListWhenEmpty = false,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
@@ -21759,6 +21761,7 @@ function ActivePane({
         conversationId={dmConversationId}
         onSelectConversation={onSelectDmConversation}
         onOpenProfile={onOpenPublicProfile}
+        onOpenOffersJobs={onOpenOffersJobs}
         showChatListWhenEmpty={showDmChatListWhenEmpty}
       />,
     );

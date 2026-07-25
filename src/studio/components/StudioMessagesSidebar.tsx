@@ -39,6 +39,7 @@ import {
   StudioDmChatFilter,
   type StudioDmChatFilterId,
 } from "./StudioDmChatFilter";
+import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   StudioDmConversationRow,
@@ -367,6 +368,7 @@ export function StudioMessagesSidebar({
                     <span className="studio-dm-search-result-copy">
                       <strong>
                         {person.displayName?.trim() || person.username}
+                        <StudioDmProviderTag tag={person.sellerTag} />
                       </strong>
                       <span>@{person.username}</span>
                     </span>
@@ -416,6 +418,7 @@ export function StudioMessagesSidebar({
                       <strong>
                         {chat.peer.displayName?.trim() ||
                           `@${chat.peer.username}`}
+                        <StudioDmProviderTag tag={chat.peer.sellerTag} />
                       </strong>
                       <span>
                         {chat.lastMessagePreview || "Tap to start chatting"}
