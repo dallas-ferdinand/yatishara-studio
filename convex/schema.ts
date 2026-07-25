@@ -168,6 +168,14 @@ export const marketplaceSellerPhotoIdKind = v.union(
   v.literal("drivers_permit"),
 );
 
+/** Any of two identity docs the applicant may submit (must be different kinds). */
+export const marketplaceSellerIdentityDocKind = v.union(
+  v.literal("national_id"),
+  v.literal("passport"),
+  v.literal("drivers_permit"),
+  v.literal("birth_certificate"),
+);
+
 export const marketplaceOfferStatus = v.union(
   v.literal("draft"),
   v.literal("published"),
@@ -1169,11 +1177,13 @@ export default defineSchema({
     businessRegistrationNumber: v.optional(v.string()),
     birNumber: v.optional(v.string()),
     businessAddress: v.optional(v.string()),
-    primaryIdKind: v.optional(marketplaceSellerPhotoIdKind),
-    primaryIdBunnyPath: v.optional(v.string()),
-    /** Back of a two-sided photo ID (national ID / driver's permit). */
-    primaryIdBackBunnyPath: v.optional(v.string()),
-    birthCertificateBunnyPath: v.optional(v.string()),
+    /** Two different identity documents (any pair of kinds). */
+    identityDoc1Kind: v.optional(marketplaceSellerIdentityDocKind),
+    identityDoc1BunnyPath: v.optional(v.string()),
+    identityDoc1BackBunnyPath: v.optional(v.string()),
+    identityDoc2Kind: v.optional(marketplaceSellerIdentityDocKind),
+    identityDoc2BunnyPath: v.optional(v.string()),
+    identityDoc2BackBunnyPath: v.optional(v.string()),
     proofOfResidentialAddressBunnyPath: v.optional(v.string()),
     businessRegistrationBunnyPath: v.optional(v.string()),
     proofOfBusinessAddressBunnyPath: v.optional(v.string()),

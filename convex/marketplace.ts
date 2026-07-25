@@ -63,11 +63,18 @@ const sellerBusinessType = v.union(
   v.literal("other"),
 );
 
-const sellerPhotoIdKind = v.union(
+const sellerIdentityDocKind = v.union(
   v.literal("national_id"),
   v.literal("passport"),
   v.literal("drivers_permit"),
+  v.literal("birth_certificate"),
 );
+
+function isTwoSidedIdentityDoc(
+  kind: "national_id" | "passport" | "drivers_permit" | "birth_certificate",
+): boolean {
+  return kind === "national_id" || kind === "drivers_permit";
+}
 
 function slugify(input: string): string {
   const base = input
@@ -334,10 +341,12 @@ export const requestSellerAccess = authedMutation({
     legalName: v.string(),
     phone: v.string(),
     residentialAddress: v.string(),
-    primaryIdKind: sellerPhotoIdKind,
-    primaryIdBunnyPath: v.string(),
-    primaryIdBackBunnyPath: v.optional(v.string()),
-    birthCertificateBunnyPath: v.string(),
+    identityDoc1Kind: sellerIdentityDocKind,
+    identityDoc1BunnyPath: v.string(),
+    identityDoc1BackBunnyPath: v.optional(v.string()),
+    identityDoc2Kind: sellerIdentityDocKind,
+    identityDoc2BunnyPath: v.string(),
+    identityDoc2BackBunnyPath: v.optional(v.string()),
     proofOfResidentialAddressBunnyPath: v.string(),
     businessType: v.optional(sellerBusinessType),
     businessRegistrationNumber: v.optional(v.string()),
@@ -356,6 +365,9 @@ export const requestSellerAccess = authedMutation({
     if (!legalName) throw new Error("Legal name required");
     if (!phone) throw new Error("Phone required");
     if (!residentialAddress) throw new Error("Residential address required");
+    if (args.identityDoc1Kind === args.identityDoc2Kind) {
+      throw new Error("Choose two different identity document types");
+    }
 
     const ownPrefix = `users/${ctx.user._id}/marketplace-kyc/`;
     const assertOwnPath = (path: string, label: string) => {
@@ -366,18 +378,31 @@ export const requestSellerAccess = authedMutation({
       return normalized;
     };
 
-    const primaryIdBunnyPath = assertOwnPath(args.primaryIdBunnyPath, "primary ID");
-    const twoSidedId =
-      args.primaryIdKind === "national_id" || args.primaryIdKind === "drivers_permit";
-    if (twoSidedId && !args.primaryIdBackBunnyPath?.trim()) {
-      throw new Error("Back of the photo ID is required");
-    }
-    const primaryIdBackBunnyPath = args.primaryIdBackBunnyPath?.trim()
-      ? assertOwnPath(args.primaryIdBackBunnyPath, "primary ID back")
-      : undefined;
-    const birthCertificateBunnyPath = assertOwnPath(
-      args.birthCertificateBunnyPath,
-      "birth certificate",
+    const assertIdentity = (
+      kind: typeof args.identityDoc1Kind,
+      front: string,
+      back: string | undefined,
+      label: string,
+    ) => {
+      const frontPath = assertOwnPath(front, label);
+      if (isTwoSidedIdentityDoc(kind) && !back?.trim()) {
+        throw new Error(`Back of ${label} is required`);
+      }
+      const backPath = back?.trim() ? assertOwnPath(back, `${label} back`) : undefined;
+      return { frontPath, backPath };
+    };
+
+    const doc1 = assertIdentity(
+      args.identityDoc1Kind,
+      args.identityDoc1BunnyPath,
+      args.identityDoc1BackBunnyPath,
+      "first ID",
+    );
+    const doc2 = assertIdentity(
+      args.identityDoc2Kind,
+      args.identityDoc2BunnyPath,
+      args.identityDoc2BackBunnyPath,
+      "second ID",
     );
     const proofOfResidentialAddressBunnyPath = assertOwnPath(
       args.proofOfResidentialAddressBunnyPath,
@@ -420,10 +445,12 @@ export const requestSellerAccess = authedMutation({
       birNumber: args.birNumber?.trim() || undefined,
       businessAddress:
         args.entityType === "business" ? args.businessAddress?.trim() : undefined,
-      primaryIdKind: args.primaryIdKind,
-      primaryIdBunnyPath,
-      primaryIdBackBunnyPath,
-      birthCertificateBunnyPath,
+      identityDoc1Kind: args.identityDoc1Kind,
+      identityDoc1BunnyPath: doc1.frontPath,
+      identityDoc1BackBunnyPath: doc1.backPath,
+      identityDoc2Kind: args.identityDoc2Kind,
+      identityDoc2BunnyPath: doc2.frontPath,
+      identityDoc2BackBunnyPath: doc2.backPath,
       proofOfResidentialAddressBunnyPath,
       businessRegistrationBunnyPath:
         args.entityType === "business"
@@ -441,9 +468,10 @@ export const requestSellerAccess = authedMutation({
 
 function sellerKycPaths(seller: Doc<"marketplaceSellers">): string[] {
   return [
-    seller.primaryIdBunnyPath,
-    seller.primaryIdBackBunnyPath,
-    seller.birthCertificateBunnyPath,
+    seller.identityDoc1BunnyPath,
+    seller.identityDoc1BackBunnyPath,
+    seller.identityDoc2BunnyPath,
+    seller.identityDoc2BackBunnyPath,
     seller.proofOfResidentialAddressBunnyPath,
     seller.businessRegistrationBunnyPath,
     seller.proofOfBusinessAddressBunnyPath,
@@ -536,10 +564,12 @@ export const adminGetSellerApplication = adminQuery({
       businessRegistrationNumber: v.optional(v.string()),
       birNumber: v.optional(v.string()),
       businessAddress: v.optional(v.string()),
-      primaryIdKind: v.optional(sellerPhotoIdKind),
-      primaryIdUrl: v.optional(v.string()),
-      primaryIdBackUrl: v.optional(v.string()),
-      birthCertificateUrl: v.optional(v.string()),
+      identityDoc1Kind: v.optional(sellerIdentityDocKind),
+      identityDoc1Url: v.optional(v.string()),
+      identityDoc1BackUrl: v.optional(v.string()),
+      identityDoc2Kind: v.optional(sellerIdentityDocKind),
+      identityDoc2Url: v.optional(v.string()),
+      identityDoc2BackUrl: v.optional(v.string()),
       proofOfResidentialAddressUrl: v.optional(v.string()),
       businessRegistrationUrl: v.optional(v.string()),
       proofOfBusinessAddressUrl: v.optional(v.string()),
@@ -564,10 +594,12 @@ export const adminGetSellerApplication = adminQuery({
       businessRegistrationNumber: seller.businessRegistrationNumber,
       birNumber: seller.birNumber,
       businessAddress: seller.businessAddress,
-      primaryIdKind: seller.primaryIdKind,
-      primaryIdUrl: await sign(seller.primaryIdBunnyPath),
-      primaryIdBackUrl: await sign(seller.primaryIdBackBunnyPath),
-      birthCertificateUrl: await sign(seller.birthCertificateBunnyPath),
+      identityDoc1Kind: seller.identityDoc1Kind,
+      identityDoc1Url: await sign(seller.identityDoc1BunnyPath),
+      identityDoc1BackUrl: await sign(seller.identityDoc1BackBunnyPath),
+      identityDoc2Kind: seller.identityDoc2Kind,
+      identityDoc2Url: await sign(seller.identityDoc2BunnyPath),
+      identityDoc2BackUrl: await sign(seller.identityDoc2BackBunnyPath),
       proofOfResidentialAddressUrl: await sign(
         seller.proofOfResidentialAddressBunnyPath,
       ),
