@@ -9,7 +9,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { getOptionalUser } from "./lib/auth";
+import { getOptionalUser, getMarketplaceSellerForUser } from "./lib/auth";
 import {
   assetThumbnailPath,
   signBunnyCdnUrls,
@@ -17,7 +17,11 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
-import { ensureProfileForUser } from "./lib/profileEnsure";
+import {
+  accountNameFromUser,
+  ensureProfileForUser,
+  resolvePublicDisplayName,
+} from "./lib/profileEnsure";
 import {
   forYouCandidateCap,
   scoreFeedPost,
@@ -45,7 +49,6 @@ import {
   contactHref,
   sanitizeBio,
   sanitizeContactLinks,
-  sanitizeDisplayName,
   validateUsername,
   type ContactLinkInput,
 } from "./lib/profileIdentity";
@@ -61,6 +64,53 @@ const mentionChipValidator = v.object({
   displayName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
 });
+
+/** Batch-resolve public labels for profiles (account name or verified seller name). */
+async function resolveDisplayNameMap(
+  ctx: QueryCtx | MutationCtx,
+  profiles: Doc<"profiles">[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (profiles.length === 0) return map;
+  const users = await Promise.all(profiles.map((p) => ctx.db.get("users", p.userId)));
+  const sellers = await Promise.all(
+    profiles.map((p) =>
+      p.useSellerDisplayName
+        ? getMarketplaceSellerForUser(ctx, p.userId)
+        : Promise.resolve(null),
+    ),
+  );
+  for (let i = 0; i < profiles.length; i++) {
+    const profile = profiles[i]!;
+    map.set(
+      String(profile._id),
+      resolvePublicDisplayName({
+        username: profile.username,
+        useSellerDisplayName: profile.useSellerDisplayName,
+        user: users[i],
+        seller: sellers[i],
+      }),
+    );
+  }
+  return map;
+}
+
+async function resolvedDisplayNameForProfile(
+  ctx: QueryCtx | MutationCtx,
+  profile: Doc<"profiles">,
+  user?: Doc<"users"> | null,
+): Promise<string> {
+  const owner = user ?? (await ctx.db.get("users", profile.userId));
+  const seller = profile.useSellerDisplayName
+    ? await getMarketplaceSellerForUser(ctx, profile.userId)
+    : null;
+  return resolvePublicDisplayName({
+    username: profile.username,
+    useSellerDisplayName: profile.useSellerDisplayName,
+    user: owner,
+    seller,
+  });
+}
 
 const contactLinkValidator = v.object({
   type: v.union(
@@ -85,7 +135,13 @@ const myProfileReturn = v.union(
   v.object({
     _id: v.id("profiles"),
     username: v.string(),
+    /** Resolved public label (first+last or verified seller name). */
     displayName: v.optional(v.string()),
+    /** Account first+last for settings (read-only). */
+    accountName: v.optional(v.string()),
+    useSellerDisplayName: v.boolean(),
+    canUseSellerDisplayName: v.boolean(),
+    sellerBusinessName: v.optional(v.string()),
     bio: v.optional(v.string()),
     avatarAssetId: v.optional(v.id("assets")),
     avatarUrl: v.optional(v.string()),
@@ -382,9 +438,13 @@ async function hydrateMentionChips(
       ? await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM)
       : new Map<string, string>();
 
+  const nameByProfileId = await resolveDisplayNameMap(ctx, [...profileById.values()]);
+
   return mentions.map((m) => {
     const profile = profileById.get(m.profileId);
-    const displayName = profile?.displayName?.trim() || undefined;
+    const displayName = profile
+      ? nameByProfileId.get(String(profile._id))
+      : undefined;
     let avatarUrl: string | undefined;
     if (profile?.avatarAssetId) {
       const asset = assetById.get(profile.avatarAssetId) ?? null;
@@ -474,10 +534,27 @@ export const getMine = authedQuery({
       const avatar = await ctx.db.get("assets", profile.avatarAssetId);
       avatarUrl = await signAvatarUrl(avatar, expiresUnix);
     }
+    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    const approved = seller?.status === "approved";
+    const sellerBusinessName =
+      approved && seller.businessName.trim()
+        ? seller.businessName.trim()
+        : undefined;
+    const accountName = accountNameFromUser(ctx.user);
+    const displayName = resolvePublicDisplayName({
+      username: profile.username,
+      useSellerDisplayName: profile.useSellerDisplayName,
+      user: ctx.user,
+      seller,
+    });
     return {
       _id: profile._id,
       username: profile.username,
-      displayName: profile.displayName,
+      displayName,
+      accountName,
+      useSellerDisplayName: Boolean(profile.useSellerDisplayName),
+      canUseSellerDisplayName: Boolean(sellerBusinessName),
+      sellerBusinessName,
       bio: profile.bio,
       avatarAssetId: profile.avatarAssetId,
       avatarUrl,
@@ -524,7 +601,6 @@ export const checkUsernameAvailable = authedQuery({
 export const claimUsername = authedMutation({
   args: {
     username: v.string(),
-    displayName: v.optional(v.string()),
   },
   returns: v.object({
     profileId: v.id("profiles"),
@@ -542,28 +618,13 @@ export const claimUsername = authedMutation({
       throw new Error("Username is taken");
     }
     const now = Date.now();
-    const fromAccount = [ctx.user.firstName, ctx.user.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-    const displayName =
-      sanitizeDisplayName(args.displayName) ??
-      (fromAccount || ctx.user.name?.trim() || undefined);
 
     // Auto-provisioned profiles: claim becomes a vanity rename.
     if (existing) {
-      const patch: {
-        username: string;
-        updatedAt: number;
-        displayName?: string;
-      } = {
+      await ctx.db.patch(existing._id, {
         username,
         updatedAt: now,
-      };
-      if (args.displayName !== undefined || !existing.displayName) {
-        if (displayName) patch.displayName = displayName;
-      }
-      await ctx.db.patch(existing._id, patch);
+      });
       return {
         profileId: existing._id,
         username,
@@ -574,7 +635,6 @@ export const claimUsername = authedMutation({
     const profileId = await ctx.db.insert("profiles", {
       userId: ctx.user._id,
       username,
-      displayName,
       bio: undefined,
       avatarAssetId: undefined,
       contactLinks: [],
@@ -595,7 +655,7 @@ export const claimUsername = authedMutation({
 
 export const updateMine = authedMutation({
   args: {
-    displayName: v.optional(v.string()),
+    useSellerDisplayName: v.optional(v.boolean()),
     bio: v.optional(v.string()),
     isPublic: v.optional(v.boolean()),
     contactLinks: v.optional(v.array(contactLinkValidator)),
@@ -611,8 +671,22 @@ export const updateMine = authedMutation({
       throw new Error("Claim a username before editing your profile");
     }
     const patch: Partial<Doc<"profiles">> = { updatedAt: Date.now() };
-    if (args.displayName !== undefined) {
-      patch.displayName = sanitizeDisplayName(args.displayName);
+    if (args.useSellerDisplayName !== undefined) {
+      if (args.useSellerDisplayName) {
+        const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+        if (
+          !seller ||
+          seller.status !== "approved" ||
+          !seller.businessName.trim()
+        ) {
+          throw new Error(
+            "Verified marketplace seller trading name required to show business name",
+          );
+        }
+        patch.useSellerDisplayName = true;
+      } else {
+        patch.useSellerDisplayName = false;
+      }
     }
     if (args.bio !== undefined) {
       patch.bio = sanitizeBio(args.bio);
@@ -912,7 +986,7 @@ export const getPublicByUsername = query({
     return {
       _id: profile._id,
       username: profile.username,
-      displayName: profile.displayName,
+      displayName: await resolvedDisplayNameForProfile(ctx, profile),
       bio: profile.bio,
       avatarUrl,
       contactLinks: withPublicLinks(profile.contactLinks),
@@ -1302,6 +1376,13 @@ export const listFeed = query({
     const ownerUsers = await Promise.all(
       ordered.map((item) => ctx.db.get("users", item.profile.userId)),
     );
+    const authorSellers = await Promise.all(
+      ordered.map((item) =>
+        item.profile.useSellerDisplayName
+          ? getMarketplaceSellerForUser(ctx, item.profile.userId)
+          : Promise.resolve(null),
+      ),
+    );
 
     const results: Array<{
       _id: Id<"profilePosts">;
@@ -1360,6 +1441,12 @@ export const listFeed = query({
       const lastName = owner?.lastName?.trim() || undefined;
       const isOwner = Boolean(viewerId && item.profile.userId === viewerId);
       const mentions = mentionsByPost[i] ?? [];
+      const displayName = resolvePublicDisplayName({
+        username: item.profile.username,
+        useSellerDisplayName: item.profile.useSellerDisplayName,
+        user: owner,
+        seller: authorSellers[i],
+      });
       results.push({
         _id: item.post._id,
         assetId: item.post.assetId,
@@ -1381,7 +1468,7 @@ export const listFeed = query({
         likedByViewer: likedFlags[i] ?? false,
         savedByViewer: savedFlags[i] ?? false,
         username: item.profile.username,
-        displayName: item.profile.displayName?.trim() || undefined,
+        displayName,
         firstName,
         lastName,
         avatarUrl: avatarPath ? signed.get(avatarPath) : undefined,
@@ -1577,6 +1664,8 @@ async function hydrateSocialPeople(
       ? await signBunnyCdnUrls(thumbPaths, expiresUnix, THUMB_TRANSFORM)
       : new Map<string, string>();
 
+  const nameByProfileId = await resolveDisplayNameMap(ctx, profiles);
+
   return profiles.map((profile) => {
     let avatarUrl: string | undefined;
     if (profile.avatarAssetId) {
@@ -1589,7 +1678,7 @@ async function hydrateSocialPeople(
     return {
       profileId: profile._id,
       username: profile.username,
-      displayName: profile.displayName?.trim() || undefined,
+      displayName: nameByProfileId.get(String(profile._id)),
       avatarUrl,
     };
   });
@@ -1940,12 +2029,9 @@ async function hydrateComments(
     const user = await ctx.db.get("users", row.userId);
     if (!user) continue;
     const authorProfile = await getProfileByUser(ctx, row.userId);
-    const displayName =
-      authorProfile?.displayName?.trim() ||
-      user.name?.trim() ||
-      [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
-      authorProfile?.username ||
-      "User";
+    const displayName = authorProfile
+      ? await resolvedDisplayNameForProfile(ctx, authorProfile, user)
+      : accountNameFromUser(user) || "User";
     let likedByMe = false;
     if (viewerId) {
       const like = await ctx.db

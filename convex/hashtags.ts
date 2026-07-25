@@ -6,7 +6,9 @@ import {
   THUMB_TRANSFORM,
   signBunnyCdnUrls,
 } from "./lib/bunny";
+import { getMarketplaceSellerForUser } from "./lib/auth";
 import { normalizeHashtag } from "./lib/hashtagNormalize";
+import { resolvePublicDisplayName } from "./lib/profileEnsure";
 
 const suggestionReturn = v.object({
   tag: v.string(),
@@ -143,9 +145,18 @@ export const suggestPeople = query({
         const avatar = await ctx.db.get("assets", profile.avatarAssetId);
         avatarUrl = await signAvatarUrl(avatar, expiresUnix);
       }
+      const user = await ctx.db.get("users", profile.userId);
+      const seller = profile.useSellerDisplayName
+        ? await getMarketplaceSellerForUser(ctx, profile.userId)
+        : null;
       results.push({
         username: profile.username,
-        displayName: profile.displayName?.trim() || undefined,
+        displayName: resolvePublicDisplayName({
+          username: profile.username,
+          useSellerDisplayName: profile.useSellerDisplayName,
+          user,
+          seller,
+        }),
         profileId: profile._id,
         avatarUrl,
       });
