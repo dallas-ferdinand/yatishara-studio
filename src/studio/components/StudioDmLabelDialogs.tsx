@@ -277,7 +277,9 @@ export function StudioDmAssignLabelsDialog({
             displayName={peerLabel}
             alt=""
           />
-          <strong>Labels · {peerLabel}</strong>
+          <strong>{peerLabel}</strong>
+          <span className="studio-dm-assign-peer-divider" aria-hidden="true" />
+          <span className="studio-dm-assign-peer-action">Labels</span>
         </span>
         <button type="button" onClick={onClose} aria-label="Close">
           <X className="h-4 w-4" aria-hidden="true" />
