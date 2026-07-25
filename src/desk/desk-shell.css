@@ -9053,14 +9053,12 @@ textarea.cursor-input {
    Do NOT add backdrop-filter in StudioShell.tsx styled-jsx.
    ═══════════════════════════════════════════════════════════ */
 
-/* --- mobile bottom nav — dark/white overlay (never fully transparent) --- */
+/* --- mobile bottom nav — same solid plate as workspace header --- */
 .studio-mobile-bottom-nav {
-  background: var(
-    --studio-mobile-chrome-glass-foot,
-    color-mix(in srgb, #05080f 88%, transparent)
-  ) !important;
-  -webkit-backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
-  backdrop-filter: var(--studio-mobile-chrome-blur, saturate(160%) blur(18px)) !important;
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   transform: none !important;
   filter: none !important;
   isolation: auto !important;
@@ -9081,10 +9079,8 @@ textarea.cursor-input {
 }
 
 [data-appearance="light"] .studio-mobile-bottom-nav {
-  background: var(
-    --studio-mobile-chrome-glass-foot,
-    color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent)
-  ) !important;
+  background: var(--mos-panel, #f5f5f7) !important;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
 }
 
 [data-appearance="light"] .studio-polish .cursor-panel-head,

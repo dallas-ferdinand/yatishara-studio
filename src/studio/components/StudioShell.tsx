@@ -4851,10 +4851,11 @@ export function StudioShell({
           padding: 0 max(6px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px)
             max(6px, env(safe-area-inset-left, 0px));
           border: 0 !important;
-          border-top: 0 !important;
-          background: var(--studio-mobile-chrome-glass-foot);
-          backdrop-filter: var(--studio-mobile-chrome-blur);
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+          /* Same solid plate as .cursor-workspace-head — not frosted glass. */
+          background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
           box-shadow: none !important;
           transform: none;
           filter: none;
@@ -4987,9 +4988,10 @@ export function StudioShell({
             contain: none !important;
           }
           .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
-            background: var(--studio-mobile-chrome-glass-foot) !important;
-            backdrop-filter: var(--studio-mobile-chrome-blur) !important;
-            -webkit-backdrop-filter: var(--studio-mobile-chrome-blur) !important;
+            background: var(--mos-bg, var(--color-cursor-bg, #05080f)) !important;
+            border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
@@ -5031,6 +5033,12 @@ export function StudioShell({
             --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
             --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
             --studio-mobile-chrome-blur: saturate(160%) blur(16px);
+          }
+          [data-appearance="light"] .studio-polish.is-studio-mobile .studio-mobile-bottom-nav {
+            background: var(--mos-panel, #f5f5f7) !important;
+            border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
           }
           .studio-polish.is-studio-mobile :where(
             .cursor-workspace-head,
@@ -5608,7 +5616,8 @@ export function StudioShell({
         }
         .studio-polish .studio-mobile-bottom-nav {
           border: 0 !important;
-          border-color: transparent !important;
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
         }
         .studio-polish aside,
         .studio-polish .studio-settings-sidebar {
@@ -6949,10 +6958,12 @@ export function StudioShell({
             -webkit-backdrop-filter: none !important;
           }
           [data-appearance="light"] .studio-mobile-bottom-nav {
-            background: var(--studio-mobile-chrome-glass-foot) !important;
+            background: var(--mos-panel, #f5f5f7) !important;
             border: 0 !important;
-            border-top: 0 !important;
+            border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             box-shadow: none !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
           }
           [data-appearance="light"] .studio-mobile-nav-tools .studio-credit-pill,
           [data-appearance="light"] .studio-mobile-nav-tools .studio-settings-pill,
