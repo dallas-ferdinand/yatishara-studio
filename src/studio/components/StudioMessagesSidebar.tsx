@@ -16,6 +16,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -33,6 +34,10 @@ import {
   StudioDmContextMenu,
   type StudioDmContextMenuItem,
 } from "./StudioDmContextMenu";
+import {
+  StudioDmChatFilter,
+  type StudioDmChatFilterId,
+} from "./StudioDmChatFilter";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   StudioDmConversationRow,
@@ -78,6 +83,7 @@ export function StudioMessagesSidebar({
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
   const searching = deferredSearch.length >= 1;
   const [activeLabelId, setActiveLabelId] = useState<LabelId | null>(null);
+  const [chatFilter, setChatFilter] = useState<StudioDmChatFilterId>("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<{
     labelId: LabelId;
@@ -127,6 +133,24 @@ export function StudioMessagesSidebar({
       });
     }
   }, [ackDelivered, conversations]);
+
+  const filteredConversations = useMemo(() => {
+    if (!conversations) return conversations;
+    switch (chatFilter) {
+      case "unread":
+        return conversations.filter((row) => row.unread);
+      case "read":
+        return conversations.filter((row) => !row.unread);
+      case "online":
+        return conversations.filter((row) => row.peerOnline);
+      case "awaiting":
+        return conversations.filter(
+          (row) => row.lastMessageFromMe && row.lastMessageReceipt !== "read",
+        );
+      default:
+        return conversations;
+    }
+  }, [conversations, chatFilter]);
 
   const openLabelMenu = useCallback(
     (
@@ -223,42 +247,49 @@ export function StudioMessagesSidebar({
           aria-label="Search people, chats, messages, and labels"
         />
 
-        <div className="studio-dm-label-rail" role="tablist" aria-label="Labels">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeLabelId === null}
-            className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
-            onClick={() => setActiveLabelId(null)}
+        <div className="studio-dm-rail-row">
+          <div
+            className="studio-dm-label-rail"
+            role="tablist"
+            aria-label="Labels"
           >
-            <Tags aria-hidden="true" />
-            <span>All</span>
-          </button>
-          {(labels ?? []).map((label) => (
-            <LabelChip
-              key={label.labelId}
-              label={label}
-              active={activeLabelId === label.labelId}
-              onSelect={() =>
-                setActiveLabelId(
-                  activeLabelId === label.labelId ? null : label.labelId,
-                )
-              }
-              onMenu={openLabelMenu}
-            />
-          ))}
-          <button
-            type="button"
-            className="studio-dm-label-chip is-add"
-            onClick={() => {
-              setEditingLabel(null);
-              setEditorOpen(true);
-            }}
-            aria-label="Create label"
-          >
-            <Plus aria-hidden="true" />
-            <span>New</span>
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeLabelId === null}
+              className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
+              onClick={() => setActiveLabelId(null)}
+            >
+              <Tags aria-hidden="true" />
+              <span>All</span>
+            </button>
+            {(labels ?? []).map((label) => (
+              <LabelChip
+                key={label.labelId}
+                label={label}
+                active={activeLabelId === label.labelId}
+                onSelect={() =>
+                  setActiveLabelId(
+                    activeLabelId === label.labelId ? null : label.labelId,
+                  )
+                }
+                onMenu={openLabelMenu}
+              />
+            ))}
+            <button
+              type="button"
+              className="studio-dm-label-chip is-add"
+              onClick={() => {
+                setEditingLabel(null);
+                setEditorOpen(true);
+              }}
+              aria-label="Create label"
+            >
+              <Plus aria-hidden="true" />
+              <span>New</span>
+            </button>
+          </div>
+          <StudioDmChatFilter value={chatFilter} onChange={setChatFilter} />
         </div>
 
         <StudioDmLabelEditorDialog
@@ -455,7 +486,7 @@ export function StudioMessagesSidebar({
               </SearchResultSection>
             </div>
           )
-        ) : conversations === undefined ? (
+        ) : conversations === undefined || filteredConversations === undefined ? (
           <p className="studio-dm-empty">Loading…</p>
         ) : conversations.length === 0 ? (
           <p className="studio-dm-empty">
@@ -463,9 +494,19 @@ export function StudioMessagesSidebar({
               ? "No chats in this label yet. Right-click a chat to add labels."
               : "Search people above or tap Message on a profile."}
           </p>
+        ) : filteredConversations.length === 0 ? (
+          <p className="studio-dm-empty">
+            {chatFilter === "unread"
+              ? "No unread chats — you’re all caught up."
+              : chatFilter === "online"
+                ? "Nobody’s online right now."
+                : chatFilter === "awaiting"
+                  ? "No chats awaiting a reply."
+                  : "No chats match this filter."}
+          </p>
         ) : (
           <ul className="studio-dm-conversations">
-            {conversations.map((row) => (
+            {filteredConversations.map((row) => (
               <li key={row.conversationId}>
                 <StudioDmConversationRow
                   row={row}
