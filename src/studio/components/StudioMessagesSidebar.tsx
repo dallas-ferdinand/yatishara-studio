@@ -1,11 +1,18 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { Pencil, Plus, Tags } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { useDeferredValue, useEffect, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
   StudioDmAssignLabelsDialog,
@@ -50,6 +57,7 @@ export function StudioMessagesSidebar({
   } | null>(null);
 
   const labels = useQuery(api.dmLabels.listMine, {});
+  const removeLabel = useMutation(api.dmLabels.remove);
   const conversations = useQuery(api.dms.listMyConversations, {
     expiresUnix,
     labelId: activeLabelId ?? undefined,
@@ -84,8 +92,8 @@ export function StudioMessagesSidebar({
           className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
           onClick={() => setActiveLabelId(null)}
         >
-          <Tags className="h-3 w-3" aria-hidden="true" />
-          All
+          <Tags aria-hidden="true" />
+          <span>All</span>
         </button>
         {(labels ?? []).map((label) => {
           const Icon = dmLabelIcon(label.icon);
@@ -102,24 +110,62 @@ export function StudioMessagesSidebar({
                 }
                 title={`${label.name} (${label.memberCount})`}
               >
-                <Icon className="h-3 w-3" aria-hidden="true" />
-                {label.name}
+                <Icon aria-hidden="true" />
+                <span>{label.name}</span>
               </button>
-              <button
-                type="button"
-                className="studio-dm-label-edit"
-                aria-label={`Edit ${label.name}`}
-                onClick={() => {
-                  setEditingLabel({
-                    labelId: label.labelId,
-                    name: label.name,
-                    icon: label.icon,
-                  });
-                  setEditorOpen(true);
-                }}
-              >
-                <Pencil className="h-2.5 w-2.5" aria-hidden="true" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="studio-dm-label-more"
+                    aria-label={`${label.name} options`}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreHorizontal aria-hidden="true" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  sideOffset={4}
+                  className="studio-dm-label-menu"
+                >
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setEditingLabel({
+                        labelId: label.labelId,
+                        name: label.name,
+                        icon: label.icon,
+                      });
+                      setEditorOpen(true);
+                    }}
+                  >
+                    <Pencil aria-hidden="true" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => {
+                      if (
+                        !window.confirm(
+                          `Delete “${label.name}”? People stay in your chats.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void removeLabel({ labelId: label.labelId }).catch(
+                        (error) => {
+                          window.alert(
+                            friendlyConvexError(error, "Could not delete label"),
+                          );
+                        },
+                      );
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           );
         })}
@@ -132,8 +178,8 @@ export function StudioMessagesSidebar({
           }}
           aria-label="Create label"
         >
-          <Plus className="h-3 w-3" aria-hidden="true" />
-          New
+          <Plus aria-hidden="true" />
+          <span>New</span>
         </button>
       </div>
 
