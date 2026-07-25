@@ -15,6 +15,24 @@
   font-family: var(--font-onest), system-ui, sans-serif;
 }
 
+.studio-dm-pane.is-split {
+  overflow: hidden;
+}
+
+.studio-dm-peer-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.studio-dm-chat-column {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+
 /* Match other workspace panel heads (--cursor-head-h: 32px). */
 .studio-dm-chat-head {
   display: flex;
@@ -1650,14 +1668,15 @@
   color: var(--mos-danger, #f87171);
 }
 
-/* Level-2 plate holding tight option rows; hover/active = level-3. */
+/* Level-2 plate holding tight option rows; hover/active = smaller inset level-3 pill. */
 .studio-dm-assign-list {
   list-style: none;
   margin: 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 4px;
+  /* Generous surround so the hover/active pill sits inset from the plate edge. */
+  padding: 6px 8px;
   border-radius: var(--cursor-radius-md, 8px);
   background: var(--mos-plate, var(--mos-bg));
 }
@@ -1666,6 +1685,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
+  box-sizing: border-box;
   width: 100%;
   padding: 4px 7px;
   border-radius: var(--cursor-radius-sm, 6px);
