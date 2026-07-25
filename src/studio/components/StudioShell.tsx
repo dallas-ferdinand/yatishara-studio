@@ -13459,6 +13459,22 @@ export function StudioShell({
           font-size: 11px;
           white-space: nowrap;
         }
+        .studio-admin-job-link {
+          display: block;
+          margin: 2px 0 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: var(--cursor-accent);
+          font: inherit;
+          font-size: 11px;
+          font-weight: 650;
+          text-align: left;
+          cursor: pointer;
+        }
+        .studio-admin-job-link:hover {
+          text-decoration: underline;
+        }
         .studio-admin-receipt-preview {
           display: grid;
           gap: 8px;

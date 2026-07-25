@@ -3,14 +3,16 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   Ban,
+  Briefcase,
   CheckCircle2,
   Clock3,
   LayoutList,
   Loader2,
   Store,
+  Undo2,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -18,6 +20,15 @@ import { CursorSelect } from "@/desk/components/CursorSelect";
 import { CursorTable } from "@/desk/components/CursorTable";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
+
+type JobStatus =
+  | "pending_payment"
+  | "in_escrow"
+  | "in_progress"
+  | "delivered"
+  | "completed"
+  | "cancelled"
+  | "refunded";
 
 function DocLink({ label, href }: { label: string; href?: string }) {
   if (!href) return null;
@@ -42,15 +53,35 @@ function KycLine({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+function humanizeJobStatus(status: string): string {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatJobAge(createdAt: number): string {
+  const days = Math.max(0, Math.floor((Date.now() - createdAt) / 86_400_000));
+  if (days <= 0) return "Today";
+  if (days === 1) return "1 day";
+  return `${days} days`;
+}
+
 export function AdminMarketplacePane() {
   const [sellerFilter, setSellerFilter] = useState<"all" | "pending" | "approved" | "suspended">("pending");
+  const [jobFilter, setJobFilter] = useState<"all" | JobStatus>("all");
   const [payoutFilter, setPayoutFilter] = useState<"owed" | "paid" | "all">("owed");
   const [busy, setBusy] = useState(false);
   const [reviewSellerId, setReviewSellerId] = useState<Id<"marketplaceSellers"> | null>(null);
+  const [focusJobId, setFocusJobId] = useState<Id<"marketplaceJobs"> | null>(null);
+  const [refundJobId, setRefundJobId] = useState<Id<"marketplaceJobs"> | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+  const jobsSectionRef = useRef<HTMLElement | null>(null);
 
   const sellers = useQuery(
     api.marketplace.adminListSellers,
     sellerFilter === "all" ? {} : { status: sellerFilter },
+  );
+  const jobs = useQuery(
+    api.marketplace.adminListJobs,
+    jobFilter === "all" ? {} : { status: jobFilter },
   );
   const payouts = useQuery(
     api.marketplace.adminListPayouts,
@@ -63,6 +94,12 @@ export function AdminMarketplacePane() {
 
   const approveSeller = useMutation(api.marketplace.adminApproveSeller);
   const markPaid = useMutation(api.marketplace.adminMarkPayoutPaid);
+  const refundJob = useMutation(api.marketplace.adminRefundDeliveredJob);
+
+  useEffect(() => {
+    if (!focusJobId || !jobs) return;
+    jobsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focusJobId, jobs]);
 
   async function setSeller(
     sellerId: Id<"marketplaceSellers">,
@@ -88,6 +125,26 @@ export function AdminMarketplacePane() {
       toast.success("Payout marked paid");
     } catch (error) {
       toast.error(friendlyConvexError(error, "Could not mark payout paid."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitRefund() {
+    if (!refundJobId) return;
+    const reason = refundReason.trim();
+    if (!reason) {
+      toast.error("Refund reason is required.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await refundJob({ jobId: refundJobId, reason });
+      toast.success("Job refunded");
+      setRefundJobId(null);
+      setRefundReason("");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Refund failed."));
     } finally {
       setBusy(false);
     }
@@ -197,6 +254,132 @@ export function AdminMarketplacePane() {
 
       </section>
 
+      <section className="studio-admin-section" ref={jobsSectionRef}>
+        <div className="studio-admin-section-head">
+          <span className="studio-admin-section-title">Jobs</span>
+          <div className="studio-admin-section-extras">
+            <CursorSelect
+              ariaLabel="Job status"
+              value={jobFilter}
+              onChange={(next) => setJobFilter(next as "all" | JobStatus)}
+              options={[
+                { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
+                { value: "in_escrow", label: "In escrow", icon: <Wallet />, tone: "warn" },
+                { value: "in_progress", label: "In progress", icon: <Briefcase />, tone: "info" },
+                { value: "delivered", label: "Delivered", icon: <Clock3 />, tone: "warn" },
+                { value: "completed", label: "Completed", icon: <CheckCircle2 />, tone: "good" },
+                { value: "refunded", label: "Refunded", icon: <Undo2 />, tone: "muted" },
+                { value: "cancelled", label: "Cancelled", icon: <Ban />, tone: "bad" },
+                { value: "pending_payment", label: "Pending payment", icon: <Clock3 />, tone: "warn" },
+              ]}
+            />
+          </div>
+        </div>
+        <CursorTable
+          ariaLabel="Marketplace jobs"
+          loading={!jobs}
+          empty={!!jobs && !jobs.length}
+          emptyIcon={<Briefcase />}
+          emptyTitle="No jobs"
+          emptyHint="No jobs match this filter yet."
+        >
+          <thead>
+            <tr>
+              <th>Offer</th>
+              <th>Buyer</th>
+              <th>Seller</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Age</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(jobs ?? []).map((job) => (
+              <tr
+                key={job._id}
+                className={focusJobId === job._id ? "is-selected" : ""}
+                onClick={() => setFocusJobId(job._id)}
+              >
+                <td>
+                  <strong>{job.offerTitle}</strong>
+                </td>
+                <td>
+                  <span>{job.buyerLabel}</span>
+                </td>
+                <td>
+                  <span>{job.sellerLabel}</span>
+                </td>
+                <td>{formatTtdCents(job.priceCents)}</td>
+                <td>{humanizeJobStatus(job.status)}</td>
+                <td>{formatJobAge(job.createdAt)}</td>
+                <td>
+                  {job.canRefund ? (
+                    <button
+                      type="button"
+                      className="cursor-settings-action"
+                      disabled={busy}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setRefundJobId(job._id);
+                        setRefundReason("");
+                        setFocusJobId(job._id);
+                      }}
+                    >
+                      Refund
+                    </button>
+                  ) : (
+                    <span className="text-cursor-muted">
+                      {job.hasEscrow ? "—" : "No escrow"}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </CursorTable>
+        {refundJobId ? (
+          <div className="studio-admin-credit-form" style={{ marginTop: 8 }}>
+            <p className="studio-admin-card-kicker">Refund escrow</p>
+            <p className="studio-settings-empty">
+              Returns held credits to the buyer and marks the job refunded.
+            </p>
+            <label className="studio-admin-status-field">
+              <span>Reason</span>
+              <input
+                className="cursor-input"
+                type="text"
+                placeholder="Why refund this job?"
+                value={refundReason}
+                onChange={(event) => setRefundReason(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => void submitRefund()}
+              >
+                Confirm refund
+              </button>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => {
+                  setRefundJobId(null);
+                  setRefundReason("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       <section className="studio-admin-section">
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Payouts</span>
@@ -234,7 +417,16 @@ export function AdminMarketplacePane() {
                   <tr key={payout._id}>
                     <td>
                       <strong>{payout.businessName ?? payout.sellerUserId}</strong>
-                      <span>{payout.jobId}</span>
+                      <button
+                        type="button"
+                        className="studio-admin-job-link"
+                        onClick={() => {
+                          setJobFilter("all");
+                          setFocusJobId(payout.jobId);
+                        }}
+                      >
+                        {payout.offerTitle ?? "Open job"}
+                      </button>
                     </td>
                     <td>{formatTtdCents(payout.amountCents)}</td>
                     <td>{payout.status}</td>

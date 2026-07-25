@@ -639,6 +639,69 @@ export const adminApproveSeller = adminMutation({
   },
 });
 
+export const adminListJobs = adminQuery({
+  args: {
+    status: v.optional(jobStatus),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceJobs"),
+      offerTitle: v.string(),
+      status: jobStatus,
+      priceCents: v.number(),
+      priceCredits: v.number(),
+      buyerLabel: v.string(),
+      sellerLabel: v.string(),
+      hasEscrow: v.boolean(),
+      canRefund: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const jobs = args.status
+      ? await ctx.db
+          .query("marketplaceJobs")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .order("desc")
+          .take(150)
+      : await ctx.db.query("marketplaceJobs").order("desc").take(150);
+    const out = [];
+    for (const job of jobs) {
+      const [offer, buyer, sellerUser, seller] = await Promise.all([
+        ctx.db.get("marketplaceOffers", job.offerId),
+        ctx.db.get("users", job.buyerUserId),
+        ctx.db.get("users", job.sellerUserId),
+        getMarketplaceSellerForUser(ctx, job.sellerUserId),
+      ]);
+      const canRefund =
+        (job.status === "delivered" ||
+          job.status === "in_progress" ||
+          job.status === "in_escrow") &&
+        Boolean(job.escrowHoldId);
+      out.push({
+        _id: job._id,
+        offerTitle: offer?.title ?? "Offer",
+        status: job.status,
+        priceCents: job.priceCents,
+        priceCredits: job.priceCredits,
+        buyerLabel:
+          buyer?.name ?? buyer?.email ?? buyer?.phone ?? String(job.buyerUserId),
+        sellerLabel:
+          seller?.businessName ??
+          sellerUser?.name ??
+          sellerUser?.email ??
+          String(job.sellerUserId),
+        hasEscrow: Boolean(job.escrowHoldId),
+        canRefund,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
 export const adminListPayouts = adminQuery({
   args: { status: v.optional(v.union(v.literal("owed"), v.literal("paid"))) },
   returns: v.array(
@@ -649,6 +712,7 @@ export const adminListPayouts = adminQuery({
       amountCents: v.number(),
       status: v.union(v.literal("owed"), v.literal("paid")),
       businessName: v.optional(v.string()),
+      offerTitle: v.optional(v.string()),
       paidAt: v.optional(v.number()),
       adminNote: v.optional(v.string()),
       createdAt: v.number(),
@@ -664,6 +728,10 @@ export const adminListPayouts = adminQuery({
     const out = [];
     for (const payout of rows) {
       const seller = await getMarketplaceSellerForUser(ctx, payout.sellerUserId);
+      const job = await ctx.db.get("marketplaceJobs", payout.jobId);
+      const offer = job
+        ? await ctx.db.get("marketplaceOffers", job.offerId)
+        : null;
       out.push({
         _id: payout._id,
         sellerUserId: payout.sellerUserId,
@@ -671,6 +739,7 @@ export const adminListPayouts = adminQuery({
         amountCents: payout.amountCents,
         status: payout.status,
         businessName: seller?.businessName,
+        offerTitle: offer?.title,
         paidAt: payout.paidAt,
         adminNote: payout.adminNote,
         createdAt: payout.createdAt,

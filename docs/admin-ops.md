@@ -18,7 +18,7 @@ Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 |---|---|---|
 | Payments | [`StudioShell.tsx`](../src/studio/components/StudioShell.tsx) `AdminWorkspacePane` + `AdminPaymentSidebar` | `billing.adminListPayments`, `adminReviewPayment`, `paywiseActions.adminRefreshPaywisePayment` |
 | Customers | same file — search, detail sidebar, credit adjust | `users.adminListCustomers`, `billing.adminAdjustCredits` |
-| Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + payouts | `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
+| Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + jobs + payouts | `adminListJobs`, `adminRefundDeliveredJob`, `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
 | Setup | seed cards | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing` |
 | Pricing | read-only cards | display only — `billing.adminSetPricing` **unused** |
 
@@ -42,10 +42,8 @@ Method labels (admin): **PayWise** · **Bank transfer** (not “Legacy bank”).
 ## Backend available without UI (yet)
 
 - `billing.adminAdjustCredits` — grant/deduct credits + reason
-- `marketplace.adminRefundDeliveredJob` — refund escrow jobs
 - `billing.adminSetPricing` — edit credit/content pricing
 - `generation.adminGetJobDebug` — job debug
-- Job statuses exist on `marketplaceJobs`; no admin list query wired in UI yet
 
 ---
 
@@ -78,10 +76,10 @@ Cheap language cleanup; fixes toast when operators pick an invalid review status
 
 Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 
-- [ ] Admin jobs list (status, buyer, seller, amount, age)
-- [ ] Filter by job status
-- [ ] Refund action with reason (replaces `window.prompt` eventually)
-- [ ] Deep-link from payout row → job (stop showing raw id as the only context)
+- [x] Admin jobs list (status, buyer, seller, amount, age) via `adminListJobs`
+- [x] Filter by job status
+- [x] Refund action with required reason (inline form, not `window.prompt`)
+- [x] Deep-link from payout row → job (offer title link; highlights Jobs row)
 
 **Done when:** Operator can find a stuck/delivered job and refund without knowing a Convex id.
 
@@ -118,4 +116,4 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 P0 labels_fix → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
 ```
 
-Next: start **P2** (Marketplace Jobs + refund).
+Next: start **P3** (payout bank details + seller Reject language).
