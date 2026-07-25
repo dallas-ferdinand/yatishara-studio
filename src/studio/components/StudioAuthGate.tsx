@@ -21,6 +21,10 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { StudioBootLoader } from "@/components/studio-boot-loader";
+import {
+  claimPaintBoot,
+  dismissPaintBoot,
+} from "@/components/studio-paint-boot-control";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -197,9 +201,8 @@ export function StudioAuthGate({
   const [authLoadTimedOut, setAuthLoadTimedOut] = useState(false);
   const [shellReady, setShellReady] = useState(false);
   const [shellFailed, setShellFailed] = useState(false);
-  // Boot overlay is client-only — never SSR it (avoids HMR/SW class-prefix hydration fights).
-  const [bootMountReady, setBootMountReady] = useState(false);
   const shellReadyRef = useRef(false);
+  const paintBootClaimedRef = useRef(false);
 
   const markShellReady = useCallback(() => {
     if (shellReadyRef.current) return;
@@ -212,8 +215,9 @@ export function StudioAuthGate({
   }, []);
 
   useEffect(() => {
-    // PaintBoot hides itself declaratively in the same passive-effect flush.
-    setBootMountReady(true);
+    // Keep layout PaintBoot mounted — claim so it doesn't auto-dismiss.
+    claimPaintBoot();
+    paintBootClaimedRef.current = true;
   }, []);
 
   useEffect(() => {
@@ -254,22 +258,22 @@ export function StudioAuthGate({
     currentUser != null &&
     Boolean(currentUser.accountComplete);
 
-  // One continuous white boot overlay across auth → user → shell-chunk gates.
-  // Hide it once the shell error boundary owns the screen so Reset stays clickable.
-  const showBoot =
-    bootMountReady &&
+  // Drive the single layout PaintBoot overlay across auth → user → shell-chunk.
+  // Do not mount a second StudioBootLoader here — that remount restarted the spin.
+  const bootNeeded =
     !shellFailed &&
     !showSignInScreen &&
     !showCompleteAccount &&
     (authPending || userPending || (showShell && !shellReady));
 
+  useEffect(() => {
+    if (!paintBootClaimedRef.current) return;
+    if (bootNeeded) claimPaintBoot();
+    else dismissPaintBoot();
+  }, [bootNeeded]);
+
   return (
     <>
-      {showBoot ? (
-        <div className="ys-boot-overlay">
-          <StudioBootLoader />
-        </div>
-      ) : null}
       {showSignInScreen ? <StudioSignIn /> : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
       {showShell ? (

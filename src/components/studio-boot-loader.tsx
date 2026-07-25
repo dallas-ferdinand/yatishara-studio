@@ -9,8 +9,8 @@ type Props = {
 };
 
 /**
- * White boot screen. Intended for client-only mounts (auth gate / error recovery).
- * First paint uses PaintBoot in `layout.tsx`.
+ * White boot screen for recovery / nested loading (desk restore, error boundary).
+ * Normal app boot uses the continuous PaintBoot overlay in `layout.tsx`.
  */
 export function StudioBootLoader({ recovery }: Props) {
   return (
