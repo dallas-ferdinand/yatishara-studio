@@ -6844,10 +6844,12 @@ export function StudioShell({
         .cursor-unified-tab-ghost svg {
           color: var(--cursor-accent-hover, var(--cursor-accent)) !important;
         }
-        /* Menus: fill + shadow only — no stroke / hairline ring. */
+        /* Menus: fill + shadow only — no stroke / hairline ring.
+           Panel look lives on the shared block in desk-shell.css; only
+           enforce borderless + the tight menu shadow here. */
         .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .desk-explorer-type-filter-menu) {
           border: none;
-          box-shadow: var(--cursor-shadow-pop);
+          box-shadow: var(--cursor-shadow-menu, var(--cursor-shadow-pop));
         }
         .studio-polish .cursor-settings-panel {
           border-color: var(--color-cursor-border, var(--mos-border));

@@ -63,7 +63,14 @@ Supporting tokens (also both modes):
 
 ### Select / dropdown (locked decision)
 
-- **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** `var(--cursor-shadow-pop)`.
+- **One source of truth:** the shared menu block in `desk-shell.css` styles
+  `.cursor-dropdown, .cursor-tab-context-menu, .desk-explorer-view-dropdown,
+  .desk-explorer-type-filter-menu` together (fill, shadow, padding, gap, radius).
+  Per-menu rules carry **positioning/sizing only** — never restyle the panel.
+  New menus must join that selector list (or reuse `.cursor-dropdown`), so they
+  are correct by default.
+- **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** the tight
+  `var(--cursor-shadow-menu)` (not the big `--cursor-shadow-pop`).
   Roomier surround, tight options: `6px` panel padding, `1px` gap between rows,
   rows `5px 8px`, radius `md`. Size with `width: max-content`; parents must
   `overflow: visible`.
@@ -178,8 +185,8 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 | Class | Purpose | Key shades |
 |---|---|---|
-| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel L2 `--mos-plate` + shadow, no border; item hover/active L3 |
-| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | L2 + shadow, no border, tight padding |
+| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel L2 `--mos-plate` + `--cursor-shadow-menu`, no border; item hover/active L3 |
+| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown`, `.desk-explorer-type-filter-menu` | Floating menus | share the `.cursor-dropdown` panel block; positioning only per class |
 | `.cursor-settings-action` | Standard button/action | border-soft, hover `--color-cursor-hover` |
 | `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
 | `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
