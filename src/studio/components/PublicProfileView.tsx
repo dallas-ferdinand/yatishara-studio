@@ -16,6 +16,8 @@ import {
   Mail,
   Phone,
   Play,
+  UserMinus,
+  UserPlus,
   UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -239,7 +241,11 @@ export function PublicProfileView({
                 >
                   {followBusy ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : null}
+                  ) : profile.isFollowing ? (
+                    <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />
+                  ) : (
+                    <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
                   {followBusy
                     ? profile.isFollowing
                       ? "Unfollowing"
