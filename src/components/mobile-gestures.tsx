@@ -63,6 +63,10 @@ function easeOutCubic(t: number): number {
  * - Custom pull-down-to-reload: white circle + logo mark whose rotation is
  *   locked to pull distance (down = one way, back up = reverse). Free-spins
  *   only after a reload is triggered.
+ *
+ * Scroll snappiness: no always-on non-passive touchmove. Zoom uses CSS
+ * touch-action + iOS gesture events; pull attaches a non-passive move listener
+ * only while a reload drag is active.
  */
 export function MobileGestures() {
   const [active, setActive] = useState(false);
@@ -94,23 +98,17 @@ export function MobileGestures() {
     }
   };
 
-  // Page-zoom guard. iOS Safari tabs ignore user-scalable=no, so block the
-  // gesture events too. Multi-touch moves are prevented globally — custom
-  // zoom uses pointer events and keeps working.
+  // iOS Safari ignores user-scalable=no — block native pinch gestures only.
+  // Page pan uses CSS touch-action (no non-passive touchmove here).
   useEffect(() => {
     const onGesture = (event: Event) => {
       event.preventDefault();
     };
-    const onTouchMove = (event: TouchEvent) => {
-      if (event.touches.length > 1 && event.cancelable) event.preventDefault();
-    };
     document.addEventListener("gesturestart", onGesture, { passive: false });
     document.addEventListener("gesturechange", onGesture, { passive: false });
-    document.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => {
       document.removeEventListener("gesturestart", onGesture);
       document.removeEventListener("gesturechange", onGesture);
-      document.removeEventListener("touchmove", onTouchMove);
     };
   }, []);
 
@@ -136,6 +134,7 @@ export function MobileGestures() {
     let startY = 0;
     let armed = false;
     let dragging = false;
+    let dragMoveAttached = false;
 
     const cancelUnwind = () => {
       if (unwindRafRef.current) {
@@ -144,9 +143,36 @@ export function MobileGestures() {
       }
     };
 
+    const onTouchMoveDrag = (event: TouchEvent) => {
+      if (!dragging || refreshingRef.current) return;
+      if (event.touches.length !== 1) {
+        detachDragMove();
+        dragging = false;
+        armed = false;
+        if (!refreshingRef.current) unwindPull();
+        return;
+      }
+      if (event.cancelable) event.preventDefault();
+      const touch = event.touches[0];
+      paintPull(mapPull(touch.clientY - startY));
+    };
+
+    const attachDragMove = () => {
+      if (dragMoveAttached) return;
+      window.addEventListener("touchmove", onTouchMoveDrag, { passive: false });
+      dragMoveAttached = true;
+    };
+
+    const detachDragMove = () => {
+      if (!dragMoveAttached) return;
+      window.removeEventListener("touchmove", onTouchMoveDrag);
+      dragMoveAttached = false;
+    };
+
     /** Settle pull → 0 so the mark unwinds the opposite direction. */
     const unwindPull = () => {
       cancelUnwind();
+      detachDragMove();
       const from = pullRef.current;
       if (from <= 0.5) {
         paintPull(0);
@@ -173,6 +199,7 @@ export function MobileGestures() {
     const reset = () => {
       dragging = false;
       armed = false;
+      detachDragMove();
       if (!refreshingRef.current) unwindPull();
     };
 
@@ -183,6 +210,7 @@ export function MobileGestures() {
         return;
       }
       cancelUnwind();
+      detachDragMove();
       const touch = event.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
@@ -193,7 +221,9 @@ export function MobileGestures() {
         !anyAncestorScrolled(event.target);
     };
 
-    const onTouchMove = (event: TouchEvent) => {
+    /** Passive probe — never blocks native scroll until a pull actually arms. */
+    const onTouchMovePassive = (event: TouchEvent) => {
+      if (dragging) return; // non-passive drag listener owns the gesture
       if (!armed || refreshingRef.current) return;
       if (event.touches.length !== 1) {
         reset();
@@ -202,33 +232,32 @@ export function MobileGestures() {
       const touch = event.touches[0];
       const dy = touch.clientY - startY;
       const dx = touch.clientX - startX;
-      if (!dragging) {
-        if (dy < -4 || Math.abs(dx) > Math.abs(dy)) {
-          armed = false;
-          return;
-        }
-        if (dy < PULL_START_SLOP) return;
-        // Another handler (feed swipe, sheets) already owns this gesture.
-        if (event.defaultPrevented) {
-          armed = false;
-          return;
-        }
-        dragging = true;
-        setActive(true);
+      if (dy < -4 || Math.abs(dx) > Math.abs(dy)) {
+        armed = false;
+        return;
       }
-      if (event.cancelable) event.preventDefault();
-      // Locked both ways: paint straight from the finger (no React setState jitter).
+      if (dy < PULL_START_SLOP) return;
+      // Another handler (feed swipe, sheets) already owns this gesture.
+      if (event.defaultPrevented) {
+        armed = false;
+        return;
+      }
+      dragging = true;
+      setActive(true);
+      attachDragMove();
       paintPull(mapPull(dy));
     };
 
     const onTouchEnd = () => {
       if (!dragging) {
-        reset();
+        armed = false;
+        detachDragMove();
         return;
       }
       const distance = pullRef.current;
       dragging = false;
       armed = false;
+      detachDragMove();
       if (distance >= PULL_THRESHOLD) {
         cancelUnwind();
         refreshingRef.current = true;
@@ -244,13 +273,14 @@ export function MobileGestures() {
     };
 
     window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchmove", onTouchMovePassive, { passive: true });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
     window.addEventListener("touchcancel", onTouchEnd, { passive: true });
     return () => {
       cancelUnwind();
+      detachDragMove();
       window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchmove", onTouchMovePassive);
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
     };
