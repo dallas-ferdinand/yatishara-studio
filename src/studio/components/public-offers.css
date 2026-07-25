@@ -161,6 +161,103 @@
   padding: 8px 0 12px;
 }
 
+.public-offers-rail-nav {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  padding: 0 6px;
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.public-offers-rail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--cursor-radius-sm, 6px);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: var(--desk-text-sm, 12px);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.public-offers-rail-back:hover {
+  color: var(--color-cursor-text, var(--mos-text));
+  background: var(--color-cursor-hover, var(--mos-hover));
+}
+
+.public-offers-rail-back svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* Offer detail: packages + booking live in the same left rail */
+.public-offers-rail-detail {
+  display: grid;
+  gap: 10px;
+  padding: 0 8px;
+  min-width: 0;
+}
+
+.public-offers-rail-detail .public-offers-panel,
+.public-offers-filters-body .public-offers-rail-detail .public-offers-panel {
+  padding: 10px 10px 12px;
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+.public-offers-rail-detail .public-offers-price {
+  font-size: 18px;
+}
+
+.public-offers-detail-intro {
+  display: grid;
+  gap: 12px;
+}
+
+.public-offers-detail-intro-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.public-offers-detail-intro-copy h1 {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.public-offers-detail-intro-copy > p {
+  margin: 0;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-detail-intro-copy a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.public-offers-detail-intro-copy a:hover {
+  color: var(--cursor-accent);
+}
+
+.public-offers-detail-intro-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .public-offers-filter-group {
   display: grid;
   gap: 2px;

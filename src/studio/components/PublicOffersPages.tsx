@@ -57,6 +57,7 @@ function OffersTopbar({
   filtersOpen,
   onToggleFilters,
   filterActive = false,
+  filterTitle = "Filters",
 }: {
   back?: { href: string; label: string };
   showBrand?: boolean;
@@ -65,6 +66,7 @@ function OffersTopbar({
   filtersOpen?: boolean;
   onToggleFilters?: () => void;
   filterActive?: boolean;
+  filterTitle?: string;
 }) {
   const logoSrc = useMercurySidebarLogo();
   const showInlineSearch = typeof search === "string" && onSearchChange;
@@ -117,12 +119,18 @@ function OffersTopbar({
           <button
             type="button"
             className={`public-offers-btn is-icon public-offers-topbar-filter${filtersOpen ? " is-active" : ""}${filterActive ? " has-filters" : ""}`}
-            aria-label={filtersOpen ? "Close filters" : "Open filters"}
+            aria-label={filtersOpen ? `Close ${filterTitle.toLowerCase()}` : `Open ${filterTitle.toLowerCase()}`}
             aria-expanded={filtersOpen}
-            title="Filters"
+            title={filterTitle}
             onClick={onToggleFilters}
           >
-            {filtersOpen ? <X aria-hidden="true" /> : <ListFilter aria-hidden="true" />}
+            {filtersOpen ? (
+              <X aria-hidden="true" />
+            ) : filterTitle === "Book" ? (
+              <Wallet aria-hidden="true" />
+            ) : (
+              <ListFilter aria-hidden="true" />
+            )}
             {filterActive && !filtersOpen ? (
               <em className="public-offers-filter-dot" aria-hidden="true" />
             ) : null}
@@ -1121,134 +1129,257 @@ function OfferDetailInner({ slug }: { slug: string }) {
   const offer = useQuery(api.marketplace.getPublicOfferBySlug, { slug });
   const { isAuthenticated } = useConvexAuth();
   const [pkgIndex, setPkgIndex] = useState(0);
+  const [bookSheetOpen, setBookSheetOpen] = useState(false);
   const packages = offer?.packages ?? [];
   const hasPackages = packages.length > 0;
   const activePkg = hasPackages
     ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
     : null;
 
+  useEffect(() => {
+    if (!bookSheetOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBookSheetOpen(false);
+    };
+    const onResize = () => {
+      if (window.matchMedia("(min-width: 861px)").matches) {
+        setBookSheetOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+      document.body.style.overflow = previous;
+    };
+  }, [bookSheetOpen]);
+
+  const sidebarBody =
+    offer && offer !== null ? (
+      <div className="public-offers-rail-detail">
+        {hasPackages ? (
+          <PackagePicker
+            packages={packages}
+            index={pkgIndex}
+            onIndex={setPkgIndex}
+          />
+        ) : (
+          <section className="public-offers-panel">
+            <h2>Package</h2>
+            <p className="public-offers-price">{formatTtdCents(offer.priceCents)}</p>
+            <dl className="public-offers-rows">
+              <div className="public-offers-row">
+                <dt>Delivery</dt>
+                <dd>{offer.deliveryDays} days</dd>
+              </div>
+              {offer.category ? (
+                <div className="public-offers-row">
+                  <dt>Category</dt>
+                  <dd>{offer.category}</dd>
+                </div>
+              ) : null}
+            </dl>
+          </section>
+        )}
+
+        {isAuthenticated ? (
+          <Authenticated>
+            <BookPanel
+              offerId={offer._id}
+              slug={offer.slug}
+              packageIndex={hasPackages ? pkgIndex : undefined}
+            />
+          </Authenticated>
+        ) : (
+          <Unauthenticated>
+            <section className="public-offers-panel">
+              <h2>Booking</h2>
+              <p className="public-offers-note">
+                Sign in to your Studio account to book this package in TTD.
+              </p>
+              <a
+                href={`/?next=${encodeURIComponent(`/creative-network/${offer.slug}/`)}`}
+                className="public-offers-btn is-primary is-block"
+              >
+                <Wallet aria-hidden="true" />
+                Sign in to book
+              </a>
+            </section>
+          </Unauthenticated>
+        )}
+      </div>
+    ) : null;
+
   if (offer === undefined) {
     return (
-      <>
-        <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
-        <main className="public-offers-body is-narrow">
-          <OffersState icon={<PackageSearch />} title="Loading service…" />
-        </main>
-      </>
+      <div className="public-offers-shell">
+        <aside className="public-offers-rail" aria-label="Book this service">
+          <div className="public-offers-rail-head">
+            <OffersSidebarBrand />
+          </div>
+          <div className="public-offers-rail-body">
+            <p className="public-offers-note" style={{ padding: "0 12px" }}>
+              Loading…
+            </p>
+          </div>
+        </aside>
+        <div className="public-offers-main">
+          <OffersTopbar
+            showBrand={false}
+            back={{ href: "/creative-network/", label: "All services" }}
+          />
+          <div className="public-offers-main-scroll">
+            <main className="public-offers-body">
+              <OffersState icon={<PackageSearch />} title="Loading service…" />
+            </main>
+          </div>
+        </div>
+      </div>
     );
   }
+
   if (offer === null) {
     return (
-      <>
-        <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
-        <main className="public-offers-body is-narrow">
-          <OffersState
-            icon={<Store />}
-            title="Service not found"
-            hint="This package is no longer published. Browse the other creator services instead."
+      <div className="public-offers-shell">
+        <aside className="public-offers-rail" aria-label="Book this service">
+          <div className="public-offers-rail-head">
+            <OffersSidebarBrand />
+          </div>
+          <div className="public-offers-rail-body">
+            <p className="public-offers-note" style={{ padding: "0 12px" }}>
+              This package is no longer published.
+            </p>
+          </div>
+        </aside>
+        <div className="public-offers-main">
+          <OffersTopbar
+            showBrand={false}
+            back={{ href: "/creative-network/", label: "All services" }}
           />
-        </main>
-      </>
+          <div className="public-offers-main-scroll">
+            <main className="public-offers-body">
+              <OffersState
+                icon={<Store />}
+                title="Service not found"
+                hint="This package is no longer published. Browse the other creator services instead."
+              />
+            </main>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <>
-      <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
-      <main className="public-offers-body is-narrow">
-        <section className="public-offers-hero">
-          <div className="public-offers-hero-copy">
-            <p className="public-offers-kicker">Creative Network</p>
-            <h1>{offer.title}</h1>
-            <p>
-              {offer.sellerBusinessName}
-              {offer.sellerUsername ? (
-                <>
-                  {" · "}
-                  <Link href={`/u/${offer.sellerUsername}`}>@{offer.sellerUsername}</Link>
-                </>
-              ) : null}
-            </p>
-          </div>
-          <span className="public-offers-chip">
-            <Clock aria-hidden="true" />
-            {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
-          </span>
-        </section>
+    <div className="public-offers-shell">
+      <aside className="public-offers-rail" aria-label="Book this service">
+        <div className="public-offers-rail-head">
+          <OffersSidebarBrand />
+        </div>
+        <div className="public-offers-rail-nav">
+          <Link href="/creative-network/" className="public-offers-rail-back">
+            <ArrowLeft aria-hidden="true" />
+            All services
+          </Link>
+        </div>
+        <div className="public-offers-rail-body">{sidebarBody}</div>
+      </aside>
 
-        <div className="public-offers-detail">
-          <div className="public-offers-detail-main">
+      <div className="public-offers-main">
+        <OffersTopbar
+          showBrand={false}
+          back={{ href: "/creative-network/", label: "All services" }}
+          filtersOpen={bookSheetOpen}
+          onToggleFilters={() => setBookSheetOpen((open) => !open)}
+          filterActive={hasPackages}
+          filterTitle="Book"
+        />
+        <div className="public-offers-main-scroll">
+          <main className="public-offers-body">
             {offer.gallery && offer.gallery.length > 0 ? (
               <OfferGallery items={offer.gallery} />
             ) : null}
+
+            <section className="public-offers-detail-intro">
+              <div className="public-offers-detail-intro-copy">
+                {offer.category ? (
+                  <p className="public-offers-kicker">{offer.category}</p>
+                ) : (
+                  <p className="public-offers-kicker">Creative Network</p>
+                )}
+                <h1>{offer.title}</h1>
+                <p>
+                  {offer.sellerBusinessName}
+                  {offer.sellerUsername ? (
+                    <>
+                      {" · "}
+                      <Link href={`/u/${offer.sellerUsername}`}>
+                        @{offer.sellerUsername}
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <div className="public-offers-detail-intro-meta">
+                <span className="public-offers-chip">
+                  <Clock aria-hidden="true" />
+                  {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
+                </span>
+                <span className="public-offers-chip">
+                  {hasPackages && packages.length > 1 ? "From " : ""}
+                  {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
+                </span>
+              </div>
+            </section>
+
             <section className="public-offers-panel">
               <h2>What you get</h2>
               <p className="public-offers-prose">{offer.description}</p>
             </section>
-          </div>
+          </main>
+        </div>
+      </div>
 
-          <div className="public-offers-detail-aside">
-            {hasPackages ? (
-              <PackagePicker
-                packages={packages}
-                index={pkgIndex}
-                onIndex={setPkgIndex}
-              />
-            ) : (
-              <section className="public-offers-panel">
-                <h2>Package</h2>
-                <p className="public-offers-price">{formatTtdCents(offer.priceCents)}</p>
-                <dl className="public-offers-rows">
-                  <div className="public-offers-row">
-                    <dt>Delivery</dt>
-                    <dd>{offer.deliveryDays} days</dd>
-                  </div>
-                  {offer.category ? (
-                    <div className="public-offers-row">
-                      <dt>Category</dt>
-                      <dd>{offer.category}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </section>
-            )}
-
-            {isAuthenticated ? (
-              <Authenticated>
-                <BookPanel
-                  offerId={offer._id}
-                  slug={offer.slug}
-                  packageIndex={hasPackages ? pkgIndex : undefined}
-                />
-              </Authenticated>
-            ) : (
-              <Unauthenticated>
-                <section className="public-offers-panel">
-                  <h2>Booking</h2>
-                  <p className="public-offers-note">
-                    Sign in to your Studio account to book this package in TTD.
-                  </p>
-                  <a
-                    href={`/?next=${encodeURIComponent(`/creative-network/${offer.slug}/`)}`}
-                    className="public-offers-btn is-primary is-block"
-                  >
-                    <Wallet aria-hidden="true" />
-                    Sign in to book
-                  </a>
-                </section>
-              </Unauthenticated>
-            )}
+      {bookSheetOpen ? (
+        <div
+          className="public-offers-filters-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Packages and booking"
+        >
+          <button
+            type="button"
+            className="public-offers-filters-backdrop"
+            aria-label="Dismiss booking"
+            onClick={() => setBookSheetOpen(false)}
+          />
+          <div className="public-offers-filters-panel">
+            <div className="public-offers-filters-head">
+              <strong>Book</strong>
+              <button
+                type="button"
+                className="public-offers-btn is-icon is-quiet"
+                aria-label="Close booking"
+                onClick={() => setBookSheetOpen(false)}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+            <div className="public-offers-filters-body">{sidebarBody}</div>
           </div>
         </div>
-      </main>
-    </>
+      ) : null}
+    </div>
   );
 }
 
 export function PublicOfferDetail({ slug }: { slug: string }) {
   return (
     <ConvexClientProvider>
-      <div className="public-offers-route is-plain">
+      <div className="public-offers-route">
         <OfferDetailInner slug={slug} />
       </div>
     </ConvexClientProvider>
