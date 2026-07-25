@@ -1600,6 +1600,60 @@ export const listMyBuyerJobs = authedQuery({
   },
 });
 
+/**
+ * Jobs between the viewer and a specific peer — for the DM peer sidebar.
+ * asBuyer = I bought from them; asSeller = they bought from me.
+ */
+export const listJobsWithPeer = authedQuery({
+  args: { peerUserId: v.id("users") },
+  returns: v.object({
+    asBuyer: v.array(jobSummary),
+    asSeller: v.array(jobSummary),
+    sellerTotals: v.object({
+      jobCount: v.number(),
+      totalCredits: v.number(),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    if (args.peerUserId === ctx.user._id) {
+      return {
+        asBuyer: [],
+        asSeller: [],
+        sellerTotals: { jobCount: 0, totalCredits: 0 },
+      };
+    }
+    const [buyerJobs, sellerJobs] = await Promise.all([
+      ctx.db
+        .query("marketplaceJobs")
+        .withIndex("by_buyer", (q) => q.eq("buyerUserId", ctx.user._id))
+        .collect(),
+      ctx.db
+        .query("marketplaceJobs")
+        .withIndex("by_seller", (q) => q.eq("sellerUserId", ctx.user._id))
+        .collect(),
+    ]);
+    const asBuyerDocs = buyerJobs
+      .filter((job) => job.sellerUserId === args.peerUserId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const asSellerDocs = sellerJobs
+      .filter((job) => job.buyerUserId === args.peerUserId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const asBuyer = [];
+    for (const job of asBuyerDocs) {
+      asBuyer.push(await toJobSummary(ctx, job, "buyer"));
+    }
+    const asSeller = [];
+    for (const job of asSellerDocs) {
+      asSeller.push(await toJobSummary(ctx, job, "seller"));
+    }
+    const sellerTotals = {
+      jobCount: asSeller.length,
+      totalCredits: asSeller.reduce((sum, job) => sum + job.priceCredits, 0),
+    };
+    return { asBuyer, asSeller, sellerTotals };
+  },
+});
+
 export const getJob = authedQuery({
   args: { jobId: v.id("marketplaceJobs") },
   returns: v.union(

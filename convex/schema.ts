@@ -1254,6 +1254,28 @@ export default defineSchema({
     .index("by_label", ["labelId"])
     .index("by_owner_and_peer", ["ownerUserId", "peerUserId"]),
 
+  /**
+   * Private CRM notes on a DM peer. Owner-only — never visible to the peer.
+   */
+  dmPeerNotes: defineTable({
+    ownerUserId: v.id("users"),
+    peerUserId: v.id("users"),
+    body: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_owner_and_peer", ["ownerUserId", "peerUserId"]),
+
+  /**
+   * One-way DM block. When A blocks B, B cannot send messages to A.
+   */
+  dmBlocks: defineTable({
+    blockerUserId: v.id("users"),
+    blockedUserId: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_blocker_and_blocked", ["blockerUserId", "blockedUserId"])
+    .index("by_blocked", ["blockedUserId"]),
+
   marketplaceSellers: defineTable({
     userId: v.id("users"),
     status: marketplaceSellerStatus,

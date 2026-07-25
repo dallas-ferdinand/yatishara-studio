@@ -7,6 +7,10 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { peerIdsInLabel } from "./dmLabels";
+import {
+  assertCanMessagePeer,
+  sellerTagForUser,
+} from "./dmPeerPanel";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { hydrateSocialPeople } from "./profiles";
 
@@ -138,6 +142,10 @@ const conversationLabelReturn = v.object({
   icon: v.string(),
 });
 
+const sellerTagReturn = v.optional(
+  v.union(v.literal("freelancer"), v.literal("business")),
+);
+
 const searchPersonReturn = v.object({
   userId: v.id("users"),
   profileId: v.id("profiles"),
@@ -146,6 +154,7 @@ const searchPersonReturn = v.object({
   avatarUrl: v.optional(v.string()),
   following: v.boolean(),
   hasChat: v.boolean(),
+  sellerTag: sellerTagReturn,
 });
 
 const searchPeerReturn = v.object({
@@ -154,6 +163,7 @@ const searchPeerReturn = v.object({
   username: v.string(),
   displayName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
+  sellerTag: sellerTagReturn,
 });
 
 const conversationRowReturn = v.object({
@@ -164,6 +174,7 @@ const conversationRowReturn = v.object({
     username: v.string(),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    sellerTag: sellerTagReturn,
   }),
   labels: v.array(conversationLabelReturn),
   lastMessagePreview: v.optional(v.string()),
@@ -311,6 +322,7 @@ export const listMyConversations = authedQuery({
           }));
         const person = peers[i]!;
         const now = Date.now();
+        const sellerTag = await sellerTagForUser(ctx, profile.userId);
         return {
           conversationId: conversation._id,
           peer: {
@@ -319,6 +331,7 @@ export const listMyConversations = authedQuery({
             username: person.username,
             displayName: person.displayName,
             avatarUrl: person.avatarUrl,
+            sellerTag: sellerTag ?? undefined,
           },
           labels,
           lastMessagePreview: conversation.lastMessagePreview,
@@ -477,6 +490,12 @@ export const searchSidebar = authedQuery({
         String(peerIdOf(conversation, me)),
       ),
     );
+    const sellerTagByUserId = new Map<string, "freelancer" | "business">();
+    for (const profile of candidateProfiles) {
+      const tag = await sellerTagForUser(ctx, profile.userId);
+      if (tag) sellerTagByUserId.set(String(profile.userId), tag);
+    }
+
     const people = candidateProfiles
       .map((profile) => {
         const person = candidatePersonByProfileId.get(String(profile._id));
@@ -492,6 +511,7 @@ export const searchSidebar = authedQuery({
           avatarUrl: person.avatarUrl,
           following: followingIds.has(String(profile._id)),
           hasChat: chatUserIds.has(String(profile.userId)),
+          sellerTag: sellerTagByUserId.get(String(profile.userId)),
         };
       })
       .filter((person): person is NonNullable<typeof person> => Boolean(person))
@@ -561,6 +581,7 @@ export const searchSidebar = authedQuery({
             username: person.username,
             displayName: person.displayName,
             avatarUrl: person.avatarUrl,
+            sellerTag: sellerTagByUserId.get(String(peerUserId)),
           },
           labels: peerLabels,
           lastMessagePreview: conversation.lastMessagePreview,
@@ -603,6 +624,7 @@ export const searchSidebar = authedQuery({
             username: person.username,
             displayName: person.displayName,
             avatarUrl: person.avatarUrl,
+            sellerTag: sellerTagByUserId.get(String(peerUserId)),
           },
           body: message.body.slice(0, 240),
           createdAt: message.createdAt,
@@ -714,6 +736,11 @@ export const sendMessage = authedMutation({
       args.conversationId,
       ctx.user._id,
     );
+    await assertCanMessagePeer(
+      ctx,
+      ctx.user._id,
+      peerIdOf(conversation, ctx.user._id),
+    );
     const body = args.body.trim();
     if (!body) throw new Error("Message cannot be empty");
     if (body.length > DM_BODY_MAX) {
@@ -776,6 +803,11 @@ export const sendVoiceMessage = authedMutation({
       args.conversationId,
       ctx.user._id,
     );
+    await assertCanMessagePeer(
+      ctx,
+      ctx.user._id,
+      peerIdOf(conversation, ctx.user._id),
+    );
     if (
       !Number.isFinite(args.durationSec) ||
       args.durationSec <= 0 ||
@@ -817,6 +849,11 @@ export const sendImageMessage = authedMutation({
       ctx,
       args.conversationId,
       ctx.user._id,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      ctx.user._id,
+      peerIdOf(conversation, ctx.user._id),
     );
     const meta = await ctx.db.system.get("_storage", args.storageId);
     if (!meta) throw new Error("Image upload not found");

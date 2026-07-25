@@ -22,6 +22,7 @@ import type * as billing from "../billing.js";
 import type * as composerCatalog from "../composerCatalog.js";
 import type * as crons from "../crons.js";
 import type * as dmLabels from "../dmLabels.js";
+import type * as dmPeerPanel from "../dmPeerPanel.js";
 import type * as dms from "../dms.js";
 import type * as documents from "../documents.js";
 import type * as elementActions from "../elementActions.js";
@@ -135,6 +136,7 @@ declare const fullApi: ApiFromModules<{
   composerCatalog: typeof composerCatalog;
   crons: typeof crons;
   dmLabels: typeof dmLabels;
+  dmPeerPanel: typeof dmPeerPanel;
   dms: typeof dms;
   documents: typeof documents;
   elementActions: typeof elementActions;
