@@ -10,7 +10,6 @@ import {
   BadgeCheck,
   CalendarDays,
   Clock,
-  Handshake,
   ListFilter,
   MessageSquareText,
   PackageCheck,
@@ -165,33 +164,33 @@ function OffersState({
 const VALUE_PROPS = [
   {
     icon: BadgeCheck,
-    title: "Verified partners",
-    copy: "Every creator is identity-checked before they can join the network.",
+    title: "Verified creators",
+    copy: "Everyone you can book is identity-checked, so you know who you're hiring.",
   },
   {
     icon: ShieldCheck,
-    title: "Secure booking",
-    copy: "Your credits stay in escrow and release only when you accept the work.",
+    title: "Your credits are safe",
+    copy: "Payment is held in escrow and only releases when you approve the delivery.",
   },
   {
     icon: PackageCheck,
-    title: "Clear delivery",
-    copy: "Every package has a defined timeline and a tracked handover in Studio.",
-  },
-  {
-    icon: Handshake,
-    title: "Work with, not for",
-    copy: "Book partners for scoped work — collaborative, not a freelance bidding board.",
+    title: "Know what you get",
+    copy: "Every package spells out the scope and timeline before you book.",
   },
   {
     icon: MessageSquareText,
-    title: "Direct in Studio",
-    copy: "Briefs, revisions, and delivery stay inside Studio instead of scattered chats.",
+    title: "All in one place",
+    copy: "Send your brief, review drafts, and receive files right inside Studio.",
+  },
+  {
+    icon: Timer,
+    title: "On-time delivery",
+    copy: "Each order has a promised turnaround you can track from booking to handover.",
   },
   {
     icon: Sparkles,
-    title: "Curated quality",
-    copy: "Packages are reviewed before they go live so the catalog stays high-signal.",
+    title: "Quality you can trust",
+    copy: "Packages are reviewed before they go live, so the catalog stays high-signal.",
   },
 ] as const;
 
