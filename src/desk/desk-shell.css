@@ -1032,7 +1032,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-audio {
-  background: var(--mos-raised, #e1e1e7);
+  background: var(--mos-raised, #d4d4da);
 }
 
 .desk-file-thumb-audio-wave {
@@ -1118,7 +1118,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-card {
-  background: var(--mos-raised, #e1e1e7);
+  background: var(--mos-raised, #d4d4da);
   box-shadow: none;
 }
 
@@ -1166,7 +1166,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-label {
-  background-color: var(--mos-raised, #e1e1e7);
+  background-color: var(--mos-raised, #d4d4da);
   color: var(--color-cursor-text);
   box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
@@ -1176,7 +1176,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-card--element .desk-folder-peek-label {
-  background-color: var(--mos-raised, #e1e1e7);
+  background-color: var(--mos-raised, #d4d4da);
 }
 
 .desk-file-thumb-peek-label {
@@ -1196,7 +1196,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-label {
-  background-color: var(--mos-raised, #e1e1e7);
+  background-color: var(--mos-raised, #d4d4da);
   color: var(--color-cursor-text);
   box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
@@ -1206,7 +1206,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element .desk-file-thumb-peek-label {
-  background-color: var(--mos-raised, #e1e1e7);
+  background-color: var(--mos-raised, #d4d4da);
 }
 
 .desk-file-thumb-peek-wrap {
@@ -1223,11 +1223,11 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap {
-  background: var(--mos-raised, #e1e1e7);
+  background: var(--mos-raised, #d4d4da);
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element {
-  background: var(--mos-raised, #e1e1e7);
+  background: var(--mos-raised, #d4d4da);
 }
 
 .desk-file-thumb-peek-wrap .desk-file-thumb-progressive {
@@ -4708,7 +4708,7 @@ select.cursor-select:focus {
   border: none;
   border-radius: var(--cursor-radius-sm);
   /* Level-3 resting fill (not only on hover). */
-  background: var(--mos-plate-strong, var(--mos-raised, #e1e1e7));
+  background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
   color: var(--color-cursor-text);
   font: inherit;
   font-size: 12px;
@@ -4722,7 +4722,7 @@ select.cursor-select:focus {
 }
 .cursor-select-menu .cursor-select-trigger:hover,
 .cursor-select-menu.is-open .cursor-select-trigger {
-  background: var(--mos-active, var(--color-cursor-active, #dadadf));
+  background: var(--mos-active, var(--color-cursor-active, #c8c8d0));
   color: var(--color-cursor-text-bright);
 }
 .cursor-select-menu .cursor-select-trigger:disabled {
@@ -4747,7 +4747,7 @@ select.cursor-select:focus {
 }
 .cursor-select-menu .cursor-dropdown {
   z-index: 80;
-  background: var(--mos-plate-strong, var(--mos-raised, #e1e1e7));
+  background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
   border: none;
   box-shadow: var(--cursor-shadow-pop);
 }
@@ -4791,7 +4791,7 @@ select.cursor-select:focus {
 }
 .cursor-dropdown-item:hover,
 .cursor-dropdown-item.active {
-  background: var(--mos-active, var(--color-cursor-active, #dadadf));
+  background: var(--mos-active, var(--color-cursor-active, #c8c8d0));
 }
 .cursor-dropdown-item.muted {
   color: var(--color-cursor-muted);

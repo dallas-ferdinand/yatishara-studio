@@ -39,7 +39,7 @@ Three chrome roles, lightest → darkest. Applied to `:root` by the theme engine
 |---|---|---|---|
 | `--mos-page` | Level 1 — app canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
 | `--mos-plate` | Level 2 — cards, tables, section bars | `#ececf0` | `mix(page, panel)` |
-| `--mos-plate-strong` | Level 3 — **select buttons + open dropdown menus**, empty icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
+| `--mos-plate-strong` | Level 3 — **select buttons + open dropdown menus**, empty icon chips | `#d4d4da` | `deepen(scheme.raised)` |
 
 Supporting tokens (also both modes):
 
@@ -200,7 +200,7 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 - When a pattern solidifies, update this doc **and** MercuryOS memory in the same turn.
 
 **Don't**
-- Hardcode light-only greys (`#ececf0`, `#e1e1e7`, `#f5f5f7`) behind `[data-appearance="light"]`.
+- Hardcode light-only greys (`#ececf0`, `#d4d4da`, `#f5f5f7`) behind `[data-appearance="light"]`.
 - Hardcode `#fff`/`#000` borders on glass or chrome.
 - Put a stroke/border on dropdown menus (fill + shadow only).
 - Use `Icon name="chevDown"` on selects.

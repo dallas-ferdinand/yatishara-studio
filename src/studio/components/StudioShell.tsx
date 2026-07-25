@@ -6388,7 +6388,7 @@ export function StudioShell({
         .studio-files-mobile-sheet .desk-file-breadcrumbs-chip.is-current,
         .studio-files-mobile-sheet .desk-file-breadcrumbs-chip:hover {
           border-color: var(--color-cursor-border, var(--mos-border));
-          background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7));
+          background: var(--mos-raised, var(--cursor-surface-raised, #d4d4da));
           color: var(--color-cursor-text-bright);
         }
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip {
@@ -6397,7 +6397,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip.is-current,
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip:hover {
-          background: var(--mos-raised, #e1e1e7);
+          background: var(--mos-raised, #d4d4da);
           color: var(--color-cursor-text);
         }
         .studio-files-mobile-sheet .cursor-explorer-panel,
@@ -6426,11 +6426,11 @@ export function StudioShell({
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile {
-          --studio-grid-tile-bg: var(--mos-raised, #e1e1e7);
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #e1e1e7));
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #e1e1e7));
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #e1e1e7));
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #e1e1e7));
+          --studio-grid-tile-bg: var(--mos-raised, #d4d4da);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #d4d4da));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #d4d4da));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #d4d4da));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #d4d4da));
         }
         .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual,
         .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual,
@@ -6456,7 +6456,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
-          background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7)) !important;
+          background: var(--mos-raised, var(--cursor-surface-raised, #d4d4da)) !important;
         }
         .studio-polish.is-studio-mobile .desk-file-thumb-progressive,
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
@@ -6889,18 +6889,18 @@ export function StudioShell({
           --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-surface-hover: var(--color-cursor-hover);
           /* Neutral greys only — no cool/blue slate mixes in the file grid. */
-          --studio-grid-tile-bg: var(--mos-raised, #e1e1e7);
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #e1e1e7));
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #e1e1e7));
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #e1e1e7));
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #e1e1e7));
+          --studio-grid-tile-bg: var(--mos-raised, #d4d4da);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #d4d4da));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #d4d4da));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #d4d4da));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #d4d4da));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: var(--mos-raised, #e1e1e7);
+          --studio-gen-frame-bg: var(--mos-raised, #d4d4da);
           --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 72%, var(--color-cursor-muted));
           --studio-gen-card-shadow:
             0 6px 18px color-mix(in srgb, #000 4%, transparent),
             inset 0 1px 0 rgba(255, 255, 255, 0.4);
-          --studio-gen-media-bg: var(--mos-raised, #e1e1e7);
+          --studio-gen-media-bg: var(--mos-raised, #d4d4da);
           --studio-gen-glass-fill: var(--mos-panel, #f5f5f7);
           --studio-gen-glass-blur: saturate(140%) blur(10px);
           --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 5%, transparent);
@@ -7118,11 +7118,11 @@ export function StudioShell({
         }
         /* Keep select resting fill at level-3; polish button resets must not wash it out. */
         .studio-polish .cursor-select-menu .cursor-select-trigger {
-          background: var(--mos-plate-strong, var(--mos-raised, #e1e1e7));
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
         }
         .studio-polish .cursor-select-menu .cursor-select-trigger:hover,
         .studio-polish .cursor-select-menu.is-open .cursor-select-trigger {
-          background: var(--mos-active, var(--color-cursor-active, #dadadf));
+          background: var(--mos-active, var(--color-cursor-active, #c8c8d0));
         }
         .studio-polish .cursor-settings-tab:hover {
           background: var(--cursor-overlay-subtle);
