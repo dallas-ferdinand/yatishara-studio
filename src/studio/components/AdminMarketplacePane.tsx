@@ -88,23 +88,25 @@ export function AdminMarketplacePane() {
   return (
     <>
     <div className="flex flex-col gap-6">
-      <section className="studio-admin-card studio-admin-table-card">
-        <div className="studio-admin-table-head">
-          <div>
-            <p className="studio-admin-card-kicker">Sellers</p>
-            <h3>Approve marketplace sellers</h3>
-          </div>
-          <div className="studio-admin-filter-tabs" role="group" aria-label="Seller filters">
-            {(["pending", "approved", "suspended", "all"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={sellerFilter === value ? "is-active" : ""}
-                onClick={() => setSellerFilter(value)}
-              >
-                {value}
-              </button>
-            ))}
+      <section className="studio-admin-section">
+        <div className="studio-admin-section-head">
+          <span className="studio-admin-section-title">Sellers</span>
+          <div className="studio-admin-section-extras">
+            <select
+              className="studio-admin-filter-select"
+              aria-label="Seller status"
+              value={sellerFilter}
+              onChange={(event) =>
+                setSellerFilter(
+                  event.target.value as "all" | "pending" | "approved" | "suspended",
+                )
+              }
+            >
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="suspended">Suspended</option>
+              <option value="all">All</option>
+            </select>
           </div>
         </div>
         <div className="studio-admin-table-wrap">
@@ -189,23 +191,22 @@ export function AdminMarketplacePane() {
 
       </section>
 
-      <section className="studio-admin-card studio-admin-table-card">
-        <div className="studio-admin-table-head">
-          <div>
-            <p className="studio-admin-card-kicker">Offline payouts</p>
-            <h3>Mark creator payouts paid</h3>
-          </div>
-          <div className="studio-admin-filter-tabs" role="group" aria-label="Payout filters">
-            {(["owed", "paid", "all"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={payoutFilter === value ? "is-active" : ""}
-                onClick={() => setPayoutFilter(value)}
-              >
-                {value}
-              </button>
-            ))}
+      <section className="studio-admin-section">
+        <div className="studio-admin-section-head">
+          <span className="studio-admin-section-title">Payouts</span>
+          <div className="studio-admin-section-extras">
+            <select
+              className="studio-admin-filter-select"
+              aria-label="Payout status"
+              value={payoutFilter}
+              onChange={(event) =>
+                setPayoutFilter(event.target.value as "owed" | "paid" | "all")
+              }
+            >
+              <option value="owed">Owed</option>
+              <option value="paid">Paid</option>
+              <option value="all">All</option>
+            </select>
           </div>
         </div>
         <div className="studio-admin-table-wrap">

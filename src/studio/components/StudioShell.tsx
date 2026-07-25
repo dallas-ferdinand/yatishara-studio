@@ -9428,7 +9428,6 @@ export function StudioShell({
             grid-template-columns: 1fr;
           }
           .studio-admin-hero-card,
-          .studio-admin-table-head,
           .studio-admin-hero-actions {
             align-items: stretch;
             flex-direction: column;
@@ -9442,8 +9441,13 @@ export function StudioShell({
             min-width: 72px;
             flex: 0 0 auto;
           }
-          .studio-admin-filter-tabs {
-            justify-content: flex-start;
+          .studio-admin-section-head {
+            flex-wrap: wrap;
+            min-height: 36px;
+            padding: 6px 12px;
+          }
+          .studio-admin-filter-select {
+            min-width: 120px;
           }
         }
         .studio-polish .cursor-settings-action:hover,
@@ -13217,37 +13221,80 @@ export function StudioShell({
           background: var(--cursor-surface-raised);
           padding: 14px;
         }
-        .studio-admin-table-card,
-        .studio-admin-table-card:hover {
-          transform: none;
+        .studio-admin-section {
+          display: grid;
+          gap: 10px;
         }
-        .studio-admin-filter-tabs button {
-          border: 1px solid var(--color-cursor-border-soft);
+        /* Compact section bar — MercuryOS finance-section-title language. */
+        .studio-admin-section-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+          min-height: 36px;
+          padding: 0 12px;
+          border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-sm, 6px);
           background: var(--cursor-surface-raised);
-          color: var(--color-cursor-muted);
-          padding: 6px 10px;
+          box-sizing: border-box;
+        }
+        .studio-admin-section-title {
+          min-width: 0;
+          color: var(--color-cursor-text);
+          font-size: 13px;
+          font-weight: 650;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .studio-admin-section-extras {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          margin-left: auto;
+        }
+        .studio-admin-filter-select {
+          width: auto;
+          min-width: 132px;
+          max-width: 180px;
+          height: 28px;
+          padding: 0 28px 0 10px;
+          border: 1px solid var(--color-cursor-border-soft);
+          border-radius: var(--cursor-radius-sm, 6px);
+          background-color: var(--cursor-surface-input, var(--mos-panel));
+          background-image: linear-gradient(
+            45deg,
+            transparent 50%,
+            var(--color-cursor-muted) 50%
+          ),
+          linear-gradient(
+            135deg,
+            var(--color-cursor-muted) 50%,
+            transparent 50%
+          );
+          background-position:
+            calc(100% - 14px) 50%,
+            calc(100% - 9px) 50%;
+          background-size: 5px 5px, 5px 5px;
+          background-repeat: no-repeat;
+          color: var(--color-cursor-text);
+          font: inherit;
           font-size: 12px;
           font-weight: 600;
+          line-height: 28px;
+          outline: none;
           cursor: pointer;
+          -webkit-appearance: none;
+          appearance: none;
         }
-        .studio-admin-filter-tabs button.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--cursor-surface-raised));
-          color: var(--color-cursor-text-bright);
+        .studio-admin-filter-select:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
         }
-        .studio-admin-table-head {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 14px;
-        }
-        .studio-admin-filter-tabs {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-          justify-content: flex-end;
+        .studio-admin-filter-select:focus,
+        .studio-admin-filter-select:focus-visible {
+          border-color: var(--cursor-border-focus, var(--cursor-accent-border));
         }
         .studio-admin-payment-layout {
           display: grid;
@@ -22015,29 +22062,22 @@ function AdminWorkspacePane({
               <AdminMetricCard label="Completed" value={completedPayments.length} body="Confirmed payments and balance grants." />
               <AdminMetricCard label="Failed" value={rejectedPayments.length} body="Rejected, cancelled, or failed checkouts." />
             </section>
-            <section className="studio-admin-card studio-admin-table-card">
-              <div className="studio-admin-table-head">
-                <div>
-                  <p className="studio-admin-card-kicker">Payments</p>
-                  <h3>All payment activity</h3>
-                </div>
-                <div className="studio-admin-filter-tabs" role="group" aria-label="Payment filters">
-                  {[
-                    ["pending", "Pending"],
-                    ["payment_completed", "Completed"],
-                    ["rejected", "Rejected"],
-                    ["cancelled", "Cancelled"],
-                    ["all", "All"],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={paymentFilter === value ? "is-active" : ""}
-                      onClick={() => setPaymentFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
+            <section className="studio-admin-section">
+              <div className="studio-admin-section-head">
+                <span className="studio-admin-section-title">Payments</span>
+                <div className="studio-admin-section-extras">
+                  <select
+                    className="studio-admin-filter-select"
+                    aria-label="Payment status"
+                    value={paymentFilter}
+                    onChange={(event) => setPaymentFilter(event.target.value)}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="payment_completed">Completed</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="all">All</option>
+                  </select>
                 </div>
               </div>
               <div className="studio-admin-table-wrap">
@@ -22084,11 +22124,11 @@ function AdminWorkspacePane({
             ) : null}
           </div>
         ) : tab === "customers" ? (
-          <section className="studio-admin-card studio-admin-table-card">
-            <div className="studio-admin-table-head">
-              <div>
-                <p className="studio-admin-card-kicker">Customers</p>
-                <h3>{customerRows.length} accounts</h3>
+          <section className="studio-admin-section">
+            <div className="studio-admin-section-head">
+              <span className="studio-admin-section-title">Customers</span>
+              <div className="studio-admin-section-extras">
+                <span className="studio-admin-chip">{customerRows.length} accounts</span>
               </div>
             </div>
             <div className="studio-admin-table-wrap">
@@ -22126,12 +22166,9 @@ function AdminWorkspacePane({
         ) : tab === "marketplace" ? (
           <AdminMarketplacePane />
         ) : tab === "setup" ? (
-          <section className="studio-admin-card studio-admin-table-card">
-            <div className="studio-admin-table-head">
-              <div>
-                <p className="studio-admin-card-kicker">Launch setup</p>
-                <h3>Admin seeds and defaults</h3>
-              </div>
+          <section className="studio-admin-section">
+            <div className="studio-admin-section-head">
+              <span className="studio-admin-section-title">Setup</span>
             </div>
             <div className="studio-admin-setup-grid">
               <AdminSetupAction
