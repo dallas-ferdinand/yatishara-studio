@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   BadgeCheck,
   CalendarDays,
+  Check,
   Clock,
   ListFilter,
   MessageSquareText,
@@ -814,6 +815,12 @@ function OffersCatalogInner() {
                   {filtered.map((offer) => (
                     <li key={offer._id}>
                       <Link href={`/creative-network/${offer.slug}/`} className="public-offers-card">
+                        {offer.bannerThumbUrl ? (
+                          <div className="public-offers-card-media" aria-hidden="true">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={offer.bannerThumbUrl} alt="" loading="lazy" />
+                          </div>
+                        ) : null}
                         <div className="public-offers-card-top">
                           <div>
                             <h3 className="public-offers-card-title">{offer.title}</h3>
@@ -823,6 +830,9 @@ function OffersCatalogInner() {
                             </p>
                           </div>
                           <span className="public-offers-card-price">
+                            {offer.packages && offer.packages.length > 1 ? (
+                              <em>From</em>
+                            ) : null}
                             {formatTtdCents(offer.priceCents)}
                           </span>
                         </div>
@@ -911,9 +921,17 @@ export function PublicOffersCatalog() {
   );
 }
 
-function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: string }) {
+function BookPanel({
+  offerId,
+  slug,
+  packageIndex,
+}: {
+  offerId: Id<"marketplaceOffers">;
+  slug: string;
+  packageIndex?: number;
+}) {
   const router = useRouter();
-  const quote = useQuery(api.marketplace.quoteBookOffer, { offerId });
+  const quote = useQuery(api.marketplace.quoteBookOffer, { offerId, packageIndex });
   const book = useMutation(api.marketplace.bookOffer);
   const [busy, setBusy] = useState(false);
 
@@ -925,7 +943,7 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
         router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
         return;
       }
-      const result = await book({ offerId });
+      const result = await book({ offerId, packageIndex });
       toast.success("Job booked — payment held until you accept delivery");
       router.push(`/?next=${encodeURIComponent("/")}&offers=1`);
       void result;
@@ -947,9 +965,19 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
       <h2>Booking</h2>
       {quote ? (
         <dl className="public-offers-rows">
+          {quote.packageName ? (
+            <div className="public-offers-row">
+              <dt>Package</dt>
+              <dd>{quote.packageName}</dd>
+            </div>
+          ) : null}
           <div className="public-offers-row">
             <dt>Price</dt>
             <dd>{formatTtdCents(quote.priceCents)}</dd>
+          </div>
+          <div className="public-offers-row">
+            <dt>Delivery</dt>
+            <dd>{quote.deliveryDays} days</dd>
           </div>
           <div className="public-offers-row">
             <dt>Your balance</dt>
@@ -975,9 +1003,129 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
   );
 }
 
+type GalleryItem = {
+  kind: string;
+  name?: string;
+  url?: string;
+  thumbnailUrl?: string;
+};
+
+function OfferGallery({ items }: { items: GalleryItem[] }) {
+  const [index, setIndex] = useState(0);
+  const active = items[Math.min(index, items.length - 1)];
+  if (!active) return null;
+  return (
+    <section className="public-offers-gallery" aria-label="Work samples">
+      <div className="public-offers-gallery-stage">
+        {active.kind === "video" && active.url ? (
+          <video key={active.url} src={active.url} controls playsInline preload="metadata" />
+        ) : active.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={active.url} alt={active.name ?? "Work sample"} />
+        ) : null}
+      </div>
+      {items.length > 1 ? (
+        <div className="public-offers-gallery-thumbs" role="tablist" aria-label="Gallery items">
+          {items.map((item, i) => (
+            <button
+              key={`${item.url ?? i}`}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              className={i === index ? "is-active" : undefined}
+              onClick={() => setIndex(i)}
+              title={item.name}
+            >
+              {item.thumbnailUrl ?? item.url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.thumbnailUrl ?? item.url} alt="" loading="lazy" />
+              ) : null}
+              {item.kind === "video" ? <span className="public-offers-gallery-badge">▶</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+type OfferPackageView = {
+  name: string;
+  description: string;
+  priceCents: number;
+  deliveryDays: number;
+  revisions: number;
+  features: string[];
+};
+
+function PackagePicker({
+  packages,
+  index,
+  onIndex,
+}: {
+  packages: OfferPackageView[];
+  index: number;
+  onIndex: (i: number) => void;
+}) {
+  const active = packages[index] ?? packages[0];
+  return (
+    <section className="public-offers-panel">
+      <h2>Packages</h2>
+      <div className="public-offers-tiers" role="tablist" aria-label="Packages">
+        {packages.map((pkg, i) => (
+          <button
+            key={pkg.name + i}
+            type="button"
+            role="tab"
+            aria-selected={i === index}
+            className={`public-offers-tier${i === index ? " is-active" : ""}`}
+            onClick={() => onIndex(i)}
+          >
+            <strong>{pkg.name}</strong>
+            <span>{formatTtdCents(pkg.priceCents)}</span>
+          </button>
+        ))}
+      </div>
+      {active ? (
+        <div className="public-offers-tier-detail">
+          {active.description ? (
+            <p className="public-offers-prose">{active.description}</p>
+          ) : null}
+          <dl className="public-offers-rows">
+            <div className="public-offers-row">
+              <dt>Delivery</dt>
+              <dd>{active.deliveryDays} days</dd>
+            </div>
+            <div className="public-offers-row">
+              <dt>Revisions</dt>
+              <dd>{active.revisions}</dd>
+            </div>
+          </dl>
+          {active.features.length > 0 ? (
+            <ul className="public-offers-features">
+              {active.features.map((feature) => (
+                <li key={feature}>
+                  <Check aria-hidden="true" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function OfferDetailInner({ slug }: { slug: string }) {
   const offer = useQuery(api.marketplace.getPublicOfferBySlug, { slug });
   const { isAuthenticated } = useConvexAuth();
+  const [pkgIndex, setPkgIndex] = useState(0);
+  const packages = offer?.packages ?? [];
+  const hasPackages = packages.length > 0;
+  const activePkg = hasPackages
+    ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
+    : null;
 
   if (offer === undefined) {
     return (
@@ -1024,12 +1172,15 @@ function OfferDetailInner({ slug }: { slug: string }) {
           </div>
           <span className="public-offers-chip">
             <Clock aria-hidden="true" />
-            {offer.deliveryDays} day delivery
+            {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
           </span>
         </section>
 
         <div className="public-offers-detail">
           <div className="public-offers-detail-main">
+            {offer.gallery && offer.gallery.length > 0 ? (
+              <OfferGallery items={offer.gallery} />
+            ) : null}
             <section className="public-offers-panel">
               <h2>What you get</h2>
               <p className="public-offers-prose">{offer.description}</p>
@@ -1037,26 +1188,38 @@ function OfferDetailInner({ slug }: { slug: string }) {
           </div>
 
           <div className="public-offers-detail-aside">
-            <section className="public-offers-panel">
-              <h2>Package</h2>
-              <p className="public-offers-price">{formatTtdCents(offer.priceCents)}</p>
-              <dl className="public-offers-rows">
-                <div className="public-offers-row">
-                  <dt>Delivery</dt>
-                  <dd>{offer.deliveryDays} days</dd>
-                </div>
-                {offer.category ? (
+            {hasPackages ? (
+              <PackagePicker
+                packages={packages}
+                index={pkgIndex}
+                onIndex={setPkgIndex}
+              />
+            ) : (
+              <section className="public-offers-panel">
+                <h2>Package</h2>
+                <p className="public-offers-price">{formatTtdCents(offer.priceCents)}</p>
+                <dl className="public-offers-rows">
                   <div className="public-offers-row">
-                    <dt>Category</dt>
-                    <dd>{offer.category}</dd>
+                    <dt>Delivery</dt>
+                    <dd>{offer.deliveryDays} days</dd>
                   </div>
-                ) : null}
-              </dl>
-            </section>
+                  {offer.category ? (
+                    <div className="public-offers-row">
+                      <dt>Category</dt>
+                      <dd>{offer.category}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </section>
+            )}
 
             {isAuthenticated ? (
               <Authenticated>
-                <BookPanel offerId={offer._id} slug={offer.slug} />
+                <BookPanel
+                  offerId={offer._id}
+                  slug={offer.slug}
+                  packageIndex={hasPackages ? pkgIndex : undefined}
+                />
               </Authenticated>
             ) : (
               <Unauthenticated>
