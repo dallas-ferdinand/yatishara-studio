@@ -67,8 +67,9 @@ Supporting tokens (also both modes):
   `.cursor-dropdown, .cursor-tab-context-menu, .desk-explorer-view-dropdown,
   .desk-explorer-type-filter-menu` together (fill, shadow, padding, gap, radius).
   Per-menu rules carry **positioning/sizing only** — never restyle the panel.
-  New menus must join that selector list (or reuse `.cursor-dropdown`), so they
-  are correct by default.
+  New menus must join that selector list (or reuse `.cursor-dropdown` /
+  `.cursor-tab-context-menu`), so they are correct by default — including DM
+  right-click menus (`.studio-dm-context-menu` + shared classes).
 - **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** the tight
   `var(--cursor-shadow-menu)` (not the big `--cursor-shadow-pop`).
   Roomier surround, tight options: `6px` panel padding, `1px` gap between rows,

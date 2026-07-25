@@ -194,6 +194,7 @@ export function StudioMessagesSidebar({
             label: "Edit",
             icon: <Pencil aria-hidden="true" />,
             onSelect: () => {
+              setAssignPeer(null);
               setEditingLabel({
                 labelId: context.labelId,
                 name: context.name,
@@ -229,6 +230,8 @@ export function StudioMessagesSidebar({
             label: "Labels",
             icon: <Tags aria-hidden="true" />,
             onSelect: () => {
+              setEditorOpen(false);
+              setEditingLabel(null);
               setAssignPeer({
                 userId: context.userId,
                 label: context.label,
@@ -281,6 +284,7 @@ export function StudioMessagesSidebar({
               type="button"
               className="studio-dm-label-chip is-add"
               onClick={() => {
+                setAssignPeer(null);
                 setEditingLabel(null);
                 setEditorOpen(true);
               }}
@@ -306,6 +310,14 @@ export function StudioMessagesSidebar({
               setEditorOpen(false);
               setEditingLabel(null);
             }}
+          />
+        ) : assignPeer ? (
+          <StudioDmAssignLabelsDialog
+            open
+            variant="inline"
+            peerUserId={assignPeer.userId}
+            peerLabel={assignPeer.label}
+            onClose={() => setAssignPeer(null)}
           />
         ) : searching ? (
           searchResults === undefined ? (
@@ -529,13 +541,6 @@ export function StudioMessagesSidebar({
           </ul>
         )}
       </div>
-
-      <StudioDmAssignLabelsDialog
-        open={Boolean(assignPeer)}
-        peerUserId={assignPeer?.userId ?? null}
-        peerLabel={assignPeer?.label ?? ""}
-        onClose={() => setAssignPeer(null)}
-      />
 
       {context ? (
         <StudioDmContextMenu

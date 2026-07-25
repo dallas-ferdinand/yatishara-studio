@@ -507,6 +507,7 @@ export function StudioMessagesPane({
           </div>
           <StudioDmAssignLabelsDialog
             open={Boolean(assignPeer)}
+            variant="modal"
             peerUserId={assignPeer?.userId ?? null}
             peerLabel={assignPeer?.label ?? ""}
             onClose={() => setAssignPeer(null)}

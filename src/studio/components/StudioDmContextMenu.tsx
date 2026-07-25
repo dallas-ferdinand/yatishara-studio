@@ -18,7 +18,7 @@ type StudioDmContextMenuProps = {
   onClose: () => void;
 };
 
-/** Floating right-click / long-press menu for DM labels and chat rows. */
+/** Floating right-click / long-press menu — same proportions as chrome dropdowns. */
 export function StudioDmContextMenu({
   x,
   y,
@@ -64,7 +64,7 @@ export function StudioDmContextMenu({
   return createPortal(
     <div
       ref={ref}
-      className="studio-dm-context-menu"
+      className="cursor-tab-context-menu studio-dm-context-menu"
       role="menu"
       style={{ left: x, top: y }}
       onContextMenu={(event) => event.preventDefault()}
@@ -74,7 +74,7 @@ export function StudioDmContextMenu({
           key={item.key}
           type="button"
           role="menuitem"
-          className={`studio-dm-context-menu-item${item.danger ? " is-danger" : ""}`}
+          className={`cursor-tab-context-item${item.danger ? " is-danger" : ""}`}
           onClick={() => {
             item.onSelect();
             onClose();

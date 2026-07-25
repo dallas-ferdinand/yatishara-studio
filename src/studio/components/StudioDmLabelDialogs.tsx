@@ -192,11 +192,14 @@ export function StudioDmAssignLabelsDialog({
   peerUserId,
   peerLabel,
   onClose,
+  /** Inline replaces the chat-list body; modal is a centered page dialog. */
+  variant = "inline",
 }: {
   open: boolean;
   peerUserId: UserId | null;
   peerLabel: string;
   onClose: () => void;
+  variant?: "inline" | "modal";
 }) {
   const labels = useQuery(api.dmLabels.listMine, open ? {} : "skip");
   const assigned = useQuery(
@@ -214,6 +217,15 @@ export function StudioDmAssignLabelsDialog({
     setError("");
     setBusy(false);
   }, [open, assigned]);
+
+  useEffect(() => {
+    if (!open || variant !== "inline") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, variant, onClose]);
 
   if (!open || !peerUserId) return null;
 
@@ -242,76 +254,89 @@ export function StudioDmAssignLabelsDialog({
     }
   }
 
+  const panel = (
+    <div
+      className={
+        variant === "inline" ? "studio-dm-label-editor-panel" : "studio-dm-dialog"
+      }
+      role="dialog"
+      aria-modal={variant === "modal"}
+      aria-label={`Labels for ${peerLabel}`}
+      onClick={
+        variant === "modal" ? (event) => event.stopPropagation() : undefined
+      }
+    >
+      <header className="studio-dm-dialog-head">
+        <strong>Labels · {peerLabel}</strong>
+        <button type="button" onClick={onClose} aria-label="Close">
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </header>
+      <div className="studio-dm-dialog-body">
+        {labels === undefined || assigned === undefined ? (
+          <p className="studio-dm-empty">Loading…</p>
+        ) : labels.length === 0 ? (
+          <p className="studio-dm-empty">
+            Create a label first, then assign people to it.
+          </p>
+        ) : (
+          <ul className="studio-dm-assign-list">
+            {labels.map((label) => {
+              const Icon = dmLabelIcon(label.icon);
+              const checked = selected.has(label.labelId);
+              const inputId = `dm-assign-${label.labelId}`;
+              return (
+                <li key={label.labelId}>
+                  <label
+                    htmlFor={inputId}
+                    className={`studio-dm-assign-row${checked ? " is-on" : ""}`}
+                  >
+                    <input
+                      id={inputId}
+                      type="checkbox"
+                      className="studio-dm-assign-checkbox"
+                      checked={checked}
+                      onChange={() => toggle(label.labelId)}
+                    />
+                    <span className="studio-dm-assign-icon" aria-hidden="true">
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="studio-dm-assign-name">{label.name}</span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {error ? <p className="studio-dm-error">{error}</p> : null}
+      </div>
+      <footer className="studio-dm-dialog-foot">
+        <span aria-hidden="true" />
+        <div className="studio-dm-dialog-actions">
+          <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="studio-dm-dialog-primary"
+            onClick={() => void save()}
+            disabled={busy || labels === undefined}
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
+            Save
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+
+  if (variant === "inline") return panel;
+
   return (
     <div className="studio-dm-dialog-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="studio-dm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Labels for ${peerLabel}`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="studio-dm-dialog-head">
-          <strong>Labels · {peerLabel}</strong>
-          <button type="button" onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </header>
-        <div className="studio-dm-dialog-body">
-          {labels === undefined || assigned === undefined ? (
-            <p className="studio-dm-empty">Loading…</p>
-          ) : labels.length === 0 ? (
-            <p className="studio-dm-empty">
-              Create a label first, then assign people to it.
-            </p>
-          ) : (
-            <ul className="studio-dm-assign-list">
-              {labels.map((label) => {
-                const Icon = dmLabelIcon(label.icon);
-                const checked = selected.has(label.labelId);
-                return (
-                  <li key={label.labelId}>
-                    <button
-                      type="button"
-                      className={`studio-dm-assign-row${checked ? " is-on" : ""}`}
-                      onClick={() => toggle(label.labelId)}
-                      aria-pressed={checked}
-                    >
-                      <span className="studio-dm-assign-icon" aria-hidden="true">
-                        <Icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="studio-dm-assign-name">{label.name}</span>
-                      <span className="studio-dm-assign-check" aria-hidden="true">
-                        {checked ? "✓" : ""}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {error ? <p className="studio-dm-error">{error}</p> : null}
-        </div>
-        <footer className="studio-dm-dialog-foot">
-          <span />
-          <div className="studio-dm-dialog-actions">
-            <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="studio-dm-dialog-primary"
-              onClick={() => void save()}
-              disabled={busy || labels === undefined}
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : null}
-              Save
-            </button>
-          </div>
-        </footer>
-      </div>
+      {panel}
     </div>
   );
 }
