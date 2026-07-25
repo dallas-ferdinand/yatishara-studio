@@ -212,9 +212,10 @@
 }
 
 .public-profile-stats {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: start;
   gap: 14px;
   margin-top: 0;
 }
@@ -223,6 +224,7 @@
   display: grid;
   gap: 0;
   justify-items: center;
+  text-align: center;
 }
 
 .public-profile-stats strong {
