@@ -85,7 +85,11 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 
 ### P3 — Payouts + seller reject language
 
-- [ ] Payout rows show **who to pay + bank details**
+- [x] Sellers self-serve a payout bank account in **Settings → Payouts**
+      (`marketplaceSellers.payout*`, `getMyPayoutAccount` / `saveMyPayoutAccount`;
+      tab only appears for users with a seller record)
+- [x] Payout rows show **who to pay + bank details** (`Pay to` column, click the
+      account number to copy; warns when a seller has no details yet)
 - [ ] Seller still-pending: **Reject** (not Suspend); capture reason
 - [ ] Approved sellers keep Suspend for enforcement
 - [ ] Replace `window.prompt` for mark-paid / reject with inline confirm field
@@ -116,4 +120,4 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 P0 labels_fix → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
 ```
 
-Next: start **P3** (payout bank details + seller Reject language).
+Next: finish **P3** (seller Reject language + kill `window.prompt` on mark-paid / reject).
