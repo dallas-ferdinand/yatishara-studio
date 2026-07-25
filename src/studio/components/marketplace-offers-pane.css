@@ -256,19 +256,15 @@ span.studio-admin-head-tab,
   height: 100%;
   min-height: 0;
   width: 100%;
-  /* Lighter grey plate — matches editor track lane, not pure mos-bg. */
-  background: color-mix(
-    in srgb,
-    var(--mos-text-bright, #fff) 5%,
-    var(--mos-bg, #05080f)
-  );
+  /* Same plate as .studio-admin-panel — light page is lighter, dark is mos-bg. */
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   isolation: isolate;
 }
 
 [data-appearance="light"] .marketplace-apply-pane {
-  background: var(--mos-bg, #ececf0);
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .marketplace-apply-head {
@@ -452,7 +448,8 @@ span.studio-admin-head-tab,
   padding: 12px 10px;
   border-radius: 16px;
   border: 1px solid var(--color-cursor-border-soft);
-  background: transparent;
+  /* Raised plate — darker than page in light; lifted in dark. */
+  background: var(--cursor-surface-raised);
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -462,11 +459,24 @@ span.studio-admin-head-tab,
     background 160ms ease;
 }
 
+[data-appearance="light"] .marketplace-entity-visuals button {
+  background: var(--mos-bg, #ececf0);
+}
+
 .marketplace-entity-visuals button:hover {
   border-color: color-mix(
     in srgb,
     var(--cursor-accent) 35%,
     var(--color-cursor-border-soft)
+  );
+  background: var(--color-cursor-hover);
+}
+
+[data-appearance="light"] .marketplace-entity-visuals button:hover {
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 6%,
+    var(--mos-bg, #ececf0)
   );
 }
 
@@ -476,7 +486,19 @@ span.studio-admin-head-tab,
     var(--cursor-accent) 48%,
     var(--color-cursor-border-soft)
   );
-  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 14%,
+    var(--cursor-surface-raised)
+  );
+}
+
+[data-appearance="light"] .marketplace-entity-visuals button.is-active {
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 14%,
+    var(--mos-bg, #ececf0)
+  );
 }
 
 .marketplace-entity-visual-icon {
@@ -552,7 +574,7 @@ span.studio-admin-head-tab,
   padding: 12px 10px;
   border-radius: 16px;
   border: 1px solid var(--color-cursor-border-soft);
-  background: transparent;
+  background: var(--cursor-surface-raised);
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -562,11 +584,24 @@ span.studio-admin-head-tab,
     background 160ms ease;
 }
 
+[data-appearance="light"] .marketplace-choice-card {
+  background: var(--mos-bg, #ececf0);
+}
+
 .marketplace-choice-card:hover {
   border-color: color-mix(
     in srgb,
     var(--cursor-accent) 35%,
     var(--color-cursor-border-soft)
+  );
+  background: var(--color-cursor-hover);
+}
+
+[data-appearance="light"] .marketplace-choice-card:hover {
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 6%,
+    var(--mos-bg, #ececf0)
   );
 }
 
@@ -576,7 +611,19 @@ span.studio-admin-head-tab,
     var(--cursor-accent) 48%,
     var(--color-cursor-border-soft)
   );
-  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 14%,
+    var(--cursor-surface-raised)
+  );
+}
+
+[data-appearance="light"] .marketplace-choice-card.is-active {
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent) 14%,
+    var(--mos-bg, #ececf0)
+  );
 }
 
 .marketplace-choice-card-icon {
@@ -679,16 +726,17 @@ span.studio-admin-head-tab,
   border-radius: var(--cursor-radius-md, 10px);
   border: 1px solid
     color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
-  background: var(
-    --cursor-surface-input,
-    color-mix(in srgb, var(--mos-surface) 72%, var(--mos-bg))
-  );
+  background: var(--cursor-surface-raised);
   color: var(--color-cursor-text);
   cursor: text;
   transition:
     border-color var(--cursor-ease, 160ms ease),
     background var(--cursor-ease, 160ms ease),
     box-shadow var(--cursor-ease, 160ms ease);
+}
+
+[data-appearance="light"] .marketplace-icon-input {
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-icon-input.is-multiline {
@@ -760,14 +808,15 @@ span.studio-admin-head-tab,
 .marketplace-icon-input-field:-webkit-autofill:hover,
 .marketplace-icon-input-field:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-cursor-text-bright);
-  -webkit-box-shadow: 0 0 0 1000px
-    var(
-      --cursor-surface-input,
-      color-mix(in srgb, var(--mos-surface) 72%, var(--mos-bg))
-    )
-    inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--cursor-surface-raised) inset;
   caret-color: var(--color-cursor-text-bright);
   transition: background-color 100000s ease-in-out 0s;
+}
+
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill,
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:hover,
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--mos-bg, #ececf0) inset;
 }
 
 .marketplace-field-wrap.is-error .marketplace-icon-input {
@@ -820,8 +869,8 @@ span.studio-admin-head-tab,
   padding: 18px 12px;
   border-radius: 16px;
   border: 1px solid var(--color-cursor-border-soft);
-  /* Dark: lifted panel vs --mos-bg; light: solid white (see below) */
-  background: var(--mos-panel, #0a1018);
+  /* Raised plate — same language as .studio-admin-card / table-wrap. */
+  background: var(--cursor-surface-raised);
   cursor: pointer;
   text-align: center;
   transition:
@@ -830,7 +879,7 @@ span.studio-admin-head-tab,
 }
 
 [data-appearance="light"] .marketplace-doc-card {
-  background: var(--mos-panel, #f5f5f7);
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-doc-card:hover {
@@ -839,18 +888,14 @@ span.studio-admin-head-tab,
     var(--cursor-accent) 35%,
     var(--color-cursor-border-soft)
   );
-  background: color-mix(
-    in srgb,
-    var(--mos-text-bright, #fff) 4%,
-    var(--mos-panel, #0a1018)
-  );
+  background: var(--color-cursor-hover);
 }
 
 [data-appearance="light"] .marketplace-doc-card:hover {
   background: color-mix(
     in srgb,
-    var(--cursor-accent) 4%,
-    var(--mos-panel, #f5f5f7)
+    var(--cursor-accent) 6%,
+    var(--mos-bg, #ececf0)
   );
 }
 
@@ -863,7 +908,7 @@ span.studio-admin-head-tab,
   background: color-mix(
     in srgb,
     var(--cursor-accent) 14%,
-    var(--mos-panel, #0a1018)
+    var(--cursor-surface-raised)
   );
 }
 
@@ -871,7 +916,7 @@ span.studio-admin-head-tab,
   background: color-mix(
     in srgb,
     var(--cursor-accent) 14%,
-    var(--mos-panel, #f5f5f7)
+    var(--mos-bg, #ececf0)
   );
 }
 
@@ -1036,7 +1081,12 @@ span.studio-admin-head-tab,
   list-style: none;
   border-radius: 14px;
   border: 1px solid var(--color-cursor-border-soft);
+  background: var(--cursor-surface-raised);
   overflow: hidden;
+}
+
+[data-appearance="light"] .marketplace-review-checklist {
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-review-checklist li {
@@ -1104,7 +1154,12 @@ span.studio-admin-head-tab,
   margin: 0;
   border-radius: 14px;
   border: 1px solid var(--color-cursor-border-soft);
+  background: var(--cursor-surface-raised);
   overflow: hidden;
+}
+
+[data-appearance="light"] .marketplace-review-list {
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-review-row {
@@ -1185,14 +1240,14 @@ span.studio-admin-head-tab,
   border-radius: 12px;
   border: 1px solid
     color-mix(in srgb, var(--color-cursor-border-soft) 75%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--mos-bg) 72%,
-    var(--mos-surface, var(--color-cursor-bg))
-  );
+  background: var(--cursor-surface-raised);
   color: var(--color-cursor-muted);
   font-size: 11px;
   font-weight: 500;
+}
+
+[data-appearance="light"] .marketplace-draft-cue {
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-draft-cue p {
