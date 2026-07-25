@@ -5,12 +5,21 @@ import {
   ArrowLeft,
   Ban,
   Briefcase,
+  Building2,
   ExternalLink,
+  FileText,
+  Globe,
+  Link2,
   Loader2,
+  Mail,
   NotebookPen,
+  Package,
+  Phone,
   Plus,
+  Star,
   Tags,
   UserRound,
+  Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -65,17 +74,26 @@ function centsLabel(cents: number): string {
 
 function Section({
   title,
+  icon,
   extras,
   children,
 }: {
   title: string;
+  icon?: ReactNode;
   extras?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="studio-admin-section">
       <div className="studio-admin-section-head">
-        <span className="studio-admin-section-title">{title}</span>
+        <span className="studio-admin-section-title">
+          {icon ? (
+            <span className="studio-dm-peer-section-icon" aria-hidden="true">
+              {icon}
+            </span>
+          ) : null}
+          {title}
+        </span>
         {extras ? (
           <div className="studio-admin-section-extras">{extras}</div>
         ) : null}
@@ -83,6 +101,19 @@ function Section({
       {children}
     </section>
   );
+}
+
+function contactLinkIcon(type: string) {
+  switch (type) {
+    case "email":
+      return Mail;
+    case "phone":
+      return Phone;
+    case "website":
+      return Globe;
+    default:
+      return Link2;
+  }
 }
 
 export function StudioDmPeerSidebar({
@@ -685,80 +716,124 @@ export function StudioDmPeerSidebar({
                   name={panel.peer.username}
                   alt=""
                 />
-                <div>
+                <div className="studio-dm-peer-identity-copy">
                   <strong>
-                    {panel.peer.displayName?.trim() ||
-                      `@${panel.peer.username}`}
+                    <span className="studio-dm-name-text">
+                      {panel.peer.displayName?.trim() ||
+                        `@${panel.peer.username}`}
+                    </span>
                     <StudioDmProviderTag tag={panel.sellerTag} />
                   </strong>
-                  <span>@{panel.peer.username}</span>
+                  <span className="studio-dm-peer-handle">
+                    @{panel.peer.username}
+                  </span>
                   {panel.businessName ? (
-                    <span className="studio-dm-peer-biz">{panel.businessName}</span>
+                    <span className="studio-dm-peer-biz">
+                      <Building2 aria-hidden="true" />
+                      <span className="studio-dm-name-text">
+                        {panel.businessName}
+                      </span>
+                    </span>
                   ) : null}
                 </div>
               </div>
               {panel.peer.bio ? (
                 <p className="studio-dm-peer-bio">{panel.peer.bio}</p>
               ) : null}
-              <Section title="Social">
+
+              <Section
+                title="Social"
+                icon={<Users className="h-3 w-3" aria-hidden="true" />}
+              >
                 <div className="studio-dm-peer-stat-grid">
-                  <div className="studio-dm-peer-plate">
-                    <span>Followers</span>
+                  <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                    <Users aria-hidden="true" />
                     <strong>{panel.social.followerCount}</strong>
+                    <span>Followers</span>
                   </div>
-                  <div className="studio-dm-peer-plate">
-                    <span>Following</span>
+                  <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                    <UserRound aria-hidden="true" />
                     <strong>{panel.social.followingCount}</strong>
+                    <span>Following</span>
                   </div>
-                  <div className="studio-dm-peer-plate">
-                    <span>Posts</span>
+                  <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                    <FileText aria-hidden="true" />
                     <strong>{panel.social.postCount}</strong>
+                    <span>Posts</span>
                   </div>
                 </div>
               </Section>
+
               {panel.sellerStats ? (
-                <Section title="Seller">
+                <Section
+                  title="Seller"
+                  icon={<Briefcase className="h-3 w-3" aria-hidden="true" />}
+                >
                   <div className="studio-dm-peer-stat-grid">
-                    <div className="studio-dm-peer-plate">
-                      <span>Jobs done</span>
+                    <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                      <Briefcase aria-hidden="true" />
                       <strong>{panel.sellerStats.completedJobs}</strong>
+                      <span>Jobs done</span>
                     </div>
-                    <div className="studio-dm-peer-plate">
-                      <span>Rating</span>
+                    <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                      <Star aria-hidden="true" />
                       <strong>
                         {panel.sellerStats.ratingAverage != null
                           ? `${panel.sellerStats.ratingAverage}`
                           : "—"}
                       </strong>
+                      <span>Rating</span>
                     </div>
-                    <div className="studio-dm-peer-plate">
-                      <span>Offers</span>
+                    <div className="studio-dm-peer-plate studio-dm-peer-stat">
+                      <Package aria-hidden="true" />
                       <strong>{panel.sellerStats.publishedOfferCount}</strong>
+                      <span>Offers</span>
                     </div>
                   </div>
                 </Section>
               ) : null}
+
               {panel.contactLinks.length > 0 ? (
-                <Section title="Contact">
-                  <ul className="studio-dm-peer-list">
-                    {panel.contactLinks.map((link) => (
-                      <li key={`${link.type}:${link.value}`}>
-                        <a
-                          className="studio-dm-assign-row"
-                          href={link.href}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <span className="studio-dm-assign-name">
-                            {link.label || link.type}
-                          </span>
-                        </a>
-                      </li>
-                    ))}
+                <Section
+                  title="Contact"
+                  icon={<Link2 className="h-3 w-3" aria-hidden="true" />}
+                >
+                  <ul className="studio-dm-peer-list studio-dm-peer-contact-list">
+                    {panel.contactLinks.map((link) => {
+                      const Icon = contactLinkIcon(link.type);
+                      return (
+                        <li key={`${link.type}:${link.value}`}>
+                          <a
+                            className="studio-dm-assign-row"
+                            href={link.href}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span
+                              className="studio-dm-assign-icon"
+                              aria-hidden="true"
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="studio-dm-assign-name">
+                              {link.label || link.type}
+                            </span>
+                            <span className="studio-dm-peer-contact-value">
+                              {link.value}
+                            </span>
+                            <ExternalLink
+                              className="studio-dm-peer-contact-out"
+                              aria-hidden="true"
+                            />
+                          </a>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </Section>
               ) : null}
-              <div className="studio-dm-peer-stack">
+
+              <div className="studio-dm-peer-about-actions">
                 <button
                   type="button"
                   className="cursor-settings-action"

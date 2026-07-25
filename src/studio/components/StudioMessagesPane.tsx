@@ -600,7 +600,7 @@ export function StudioMessagesPane({
           />
           <span className="studio-dm-chat-peer-copy">
             <strong>
-              {peerLabel}
+              <span className="studio-dm-name-text">{peerLabel}</span>
               <StudioDmProviderTag tag={activeRow?.peer.sellerTag} />
             </strong>
             {activeRow ? (
@@ -1024,7 +1024,7 @@ export function StudioDmConversationRow({
         <span className="studio-dm-row-copy">
           <span className="studio-dm-row-top">
             <strong>
-              {label}
+              <span className="studio-dm-name-text">{label}</span>
               <StudioDmProviderTag tag={row.peer.sellerTag} />
             </strong>
             <time className={row.unread ? "is-unread" : undefined}>

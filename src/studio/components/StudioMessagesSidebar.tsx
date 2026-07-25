@@ -367,7 +367,9 @@ export function StudioMessagesSidebar({
                     />
                     <span className="studio-dm-search-result-copy">
                       <strong>
-                        {person.displayName?.trim() || person.username}
+                        <span className="studio-dm-name-text">
+                          {person.displayName?.trim() || person.username}
+                        </span>
                         <StudioDmProviderTag tag={person.sellerTag} />
                       </strong>
                       <span>@{person.username}</span>
@@ -416,8 +418,10 @@ export function StudioMessagesSidebar({
                     </span>
                     <span className="studio-dm-search-result-copy">
                       <strong>
-                        {chat.peer.displayName?.trim() ||
-                          `@${chat.peer.username}`}
+                        <span className="studio-dm-name-text">
+                          {chat.peer.displayName?.trim() ||
+                            `@${chat.peer.username}`}
+                        </span>
                         <StudioDmProviderTag tag={chat.peer.sellerTag} />
                       </strong>
                       <span>
