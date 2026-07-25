@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { action, internalMutation, mutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { ensureProfileForUser } from "./lib/profileEnsure";
 
 const DEFAULT_STUDIO_WHATSAPP_NUMBER = "18683034621";
 const DEFAULT_ADMIN_PHONE = "18683377338";
@@ -266,7 +267,7 @@ async function getOrCreateUserByPhone(
   }
 
   const role = phone === superAdminPhone ? "super_admin" : "user";
-  return await ctx.db.insert("users", {
+  const userId = await ctx.db.insert("users", {
     phone,
     phoneVerifiedAt: now,
     role,
@@ -274,6 +275,8 @@ async function getOrCreateUserByPhone(
     updatedAt: now,
     lastSeenAt: now,
   });
+  await ensureProfileForUser(ctx, userId);
+  return userId;
 }
 
 function normalizeEmail(email: unknown): string | undefined {

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
+import { ensureProfileForUser } from "./lib/profileEnsure";
 import { userHasPassword } from "./passwordAuth";
 import { normalizePhone } from "./phonePasswordAuth";
 
@@ -176,6 +177,7 @@ export const updateAccountDetails = authedMutation({
     if (!updated || !updated.email || !updated.phone || !updated.firstName || !updated.lastName) {
       throw new Error("User not found");
     }
+    await ensureProfileForUser(ctx, updated._id);
     return {
       userId: updated._id,
       name: updated.name,

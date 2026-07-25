@@ -9,6 +9,7 @@ import type { MutationCtx } from "./_generated/server";
 import { Password } from "@convex-dev/auth/providers/Password";
 import { PhonePassword } from "./phonePasswordAuth";
 import { ResendOTP } from "./ResendOTP";
+import { ensureProfileForUser } from "./lib/profileEnsure";
 
 type ConsumeWhatsAppArgs = {
   requestId: Id<"whatsappAuthRequests">;
@@ -76,7 +77,7 @@ async function createOrUpdateUser(
   const superAdminEmail = normalizeEmail(process.env.STUDIO_SUPER_ADMIN_EMAIL);
   const role = email && email === superAdminEmail ? "super_admin" : "user";
 
-  return await ctx.db.insert("users", {
+  const userId = await ctx.db.insert("users", {
     name: typeof args.profile.name === "string" ? args.profile.name : undefined,
     email,
     emailVerified: typeof args.profile.emailVerified === "boolean" ? args.profile.emailVerified : undefined,
@@ -86,6 +87,8 @@ async function createOrUpdateUser(
     updatedAt: now,
     lastSeenAt: now,
   });
+  await ensureProfileForUser(ctx, userId);
+  return userId;
 }
 
 function profileFields(profile: {

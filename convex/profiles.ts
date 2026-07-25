@@ -1,7 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { query, mutation, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
+import {
+  query,
+  mutation,
+  internalMutation,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { getOptionalUser } from "./lib/auth";
 import {
   assetThumbnailPath,
@@ -10,6 +17,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { ensureProfileForUser } from "./lib/profileEnsure";
 import {
   forYouCandidateCap,
   scoreFeedPost,
@@ -525,15 +533,12 @@ export const claimUsername = authedMutation({
   }),
   handler: async (ctx, args) => {
     const existing = await getProfileByUser(ctx, ctx.user._id);
-    if (existing) {
-      throw new Error("You already claimed a username");
-    }
     const username = validateUsername(args.username);
     const taken = await ctx.db
       .query("profiles")
       .withIndex("by_username", (q) => q.eq("username", username))
       .unique();
-    if (taken) {
+    if (taken && taken.userId !== ctx.user._id) {
       throw new Error("Username is taken");
     }
     const now = Date.now();
@@ -544,6 +549,28 @@ export const claimUsername = authedMutation({
     const displayName =
       sanitizeDisplayName(args.displayName) ??
       (fromAccount || ctx.user.name?.trim() || undefined);
+
+    // Auto-provisioned profiles: claim becomes a vanity rename.
+    if (existing) {
+      const patch: {
+        username: string;
+        updatedAt: number;
+        displayName?: string;
+      } = {
+        username,
+        updatedAt: now,
+      };
+      if (args.displayName !== undefined || !existing.displayName) {
+        if (displayName) patch.displayName = displayName;
+      }
+      await ctx.db.patch(existing._id, patch);
+      return {
+        profileId: existing._id,
+        username,
+        publicUrlPath: publicUrlPath(username),
+      };
+    }
+
     const profileId = await ctx.db.insert("profiles", {
       userId: ctx.user._id,
       username,
@@ -1593,15 +1620,15 @@ export const listMyFollowing = authedQuery({
   },
 });
 
-/** Public profiles the viewer does not follow — discovery for the social sidebar. */
-export const listSuggestedPeople = authedQuery({
+/** Public profiles the viewer does not follow — platform People directory. */
+export const listPlatformPeople = authedQuery({
   args: {
     limit: v.optional(v.number()),
     expiresUnix: v.optional(v.number()),
   },
   returns: v.array(socialPersonReturn),
   handler: async (ctx, args) => {
-    const limit = Math.min(Math.max(args.limit ?? 12, 1), 24);
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
 
@@ -1614,11 +1641,12 @@ export const listSuggestedPeople = authedQuery({
     );
     const myProfile = await getProfileByUser(ctx, ctx.user._id);
 
+    // Oversample then filter so Following + self exclusions still fill the list.
     const scanned = await ctx.db
       .query("profiles")
       .withIndex("by_username")
-      .order("desc")
-      .take(100);
+      .order("asc")
+      .take(Math.min(limit + followingIds.size + 8, 200));
 
     const candidates = scanned
       .filter(
@@ -1628,15 +1656,39 @@ export const listSuggestedPeople = authedQuery({
           (!myProfile || profile._id !== myProfile._id) &&
           !followingIds.has(profile._id),
       )
-      .sort(
-        (a, b) =>
-          b.followerCount - a.followerCount ||
-          b.postCount - a.postCount ||
-          b.updatedAt - a.updatedAt,
-      )
       .slice(0, limit);
 
     return await hydrateSocialPeople(ctx, candidates, expiresUnix);
+  },
+});
+
+const BACKFILL_PROFILE_BATCH = 25;
+
+/** One-time / ops: create public profiles for every user missing one. */
+export const backfillMissingProfiles = internalMutation({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db.query("users").paginate({
+      cursor: args.cursor ?? null,
+      numItems: BACKFILL_PROFILE_BATCH,
+    });
+    let created = 0;
+    for (const user of page.page) {
+      const existing = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .unique();
+      if (existing) continue;
+      await ensureProfileForUser(ctx, user._id);
+      created += 1;
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.profiles.backfillMissingProfiles, {
+        cursor: page.continueCursor,
+      });
+    }
+    return created;
   },
 });
 

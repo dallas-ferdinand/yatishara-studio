@@ -99,8 +99,8 @@ export function StudioSocialSidebar({
     searching ? "skip" : { limit: 40, expiresUnix },
   );
   const suggested = useQuery(
-    api.profiles.listSuggestedPeople,
-    searching ? "skip" : { limit: 12, expiresUnix },
+    api.profiles.listPlatformPeople,
+    searching ? "skip" : { limit: 60, expiresUnix },
   );
 
   return (
@@ -128,9 +128,9 @@ export function StudioSocialSidebar({
               onOpen={onOpenProfile}
             />
             <PersonSection
-              title="Suggested"
+              title="People"
               people={suggested}
-              empty="No suggestions yet."
+              empty="No other people on the platform yet."
               onOpen={onOpenProfile}
             />
           </>
