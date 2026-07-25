@@ -22122,6 +22122,10 @@ function AdminWorkspacePane({
       payment.status === "cancelled" ||
       payment.status === "checkout_failed",
   );
+  const sumCents = (rows) => rows.reduce((sum, payment) => sum + (payment.amountCents ?? 0), 0);
+  const pendingCents = sumCents(pendingPayments);
+  const completedCents = sumCents(completedPayments);
+  const rejectedCents = sumCents(rejectedPayments);
   const [paymentFilter, setPaymentFilter] = useState("pending");
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
   const [customerQuery, setCustomerQuery] = useState("");
@@ -22254,9 +22258,21 @@ function AdminWorkspacePane({
         {adminSection === "payments" ? (
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
-              <AdminMetricCard label="Pending" value={pendingPayments.length} body="Awaiting PayWise confirmation or bank receipt review." />
-              <AdminMetricCard label="Paid" value={completedPayments.length} body="Confirmed payments and balance grants." />
-              <AdminMetricCard label="Failed" value={rejectedPayments.length} body="Rejected, cancelled, or failed checkouts." />
+              <AdminMetricCard
+                label="Pending"
+                value={formatMoney(pendingCents)}
+                body={`${pendingPayments.length} payments · awaiting PayWise or bank receipt review.`}
+              />
+              <AdminMetricCard
+                label="Paid"
+                value={formatMoney(completedCents)}
+                body={`${completedPayments.length} payments · confirmed and balance granted.`}
+              />
+              <AdminMetricCard
+                label="Failed"
+                value={formatMoney(rejectedCents)}
+                body={`${rejectedPayments.length} payments · rejected, cancelled, or failed.`}
+              />
             </section>
             <section className="studio-admin-section">
               <div className="studio-admin-section-head">
@@ -22496,6 +22512,7 @@ function AdminWorkspacePane({
                 </div>
               </section>
             </section>
+            <AdminAuditSection />
           </div>
         )}
         </div>
@@ -22511,6 +22528,48 @@ function AdminMetricCard({ label, value, body }) {
       <h3>{value}</h3>
       <p>{body}</p>
     </article>
+  );
+}
+
+function AdminAuditSection() {
+  const events = useQuery(api.billing.adminListAuditEvents);
+  return (
+    <section className="studio-admin-section">
+      <div className="studio-admin-section-head">
+        <span className="studio-admin-section-title">Audit log</span>
+        <span className="studio-admin-chip">{events?.length ?? "…"} recent</span>
+      </div>
+      <CursorTable
+        ariaLabel="Admin audit log"
+        loading={!events}
+        empty={!!events && !events.length}
+        emptyIcon={<LayoutList />}
+        emptyTitle="No audit events"
+        emptyHint="Credit adjusts and payment reviews show up here."
+      >
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Action</th>
+            <th>Admin</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(events ?? []).map((event) => (
+            <tr key={event._id}>
+              <td>{formatDate(event.createdAt)}</td>
+              <td>
+                <strong>{event.kind.replace(/_/g, " ")}</strong>
+                {event.details ? <span>{event.details}</span> : null}
+              </td>
+              <td>{event.adminLabel ?? event.adminId}</td>
+              <td>{event.targetLabel ?? (event.paymentId ? "Payment" : "—")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </CursorTable>
+    </section>
   );
 }
 
@@ -22621,6 +22680,9 @@ function AdminCustomerSidebar({ customer, payments, onClose, onAdjustCredits, on
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  const ledger = useQuery(api.billing.adminListCreditTransactions, {
+    userId: customer._id,
+  });
   const displayName =
     customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer";
 
@@ -22745,6 +22807,40 @@ function AdminCustomerSidebar({ customer, payments, onClose, onAdjustCredits, on
             {busy ? "Saving…" : mode === "grant" ? "Grant credits" : "Deduct credits"}
           </button>
         </form>
+
+        <div className="studio-admin-customer-payments">
+          <p className="studio-admin-card-kicker">Credit ledger</p>
+          {!ledger ? (
+            <p className="studio-settings-empty">Loading ledger…</p>
+          ) : ledger.length ? (
+            <ul>
+              {ledger.map((entry) => {
+                const isCredit = entry.amount > 0;
+                return (
+                  <li key={entry._id}>
+                    <div className="studio-admin-customer-payment-row">
+                      <strong>
+                        {entry.reason || LEDGER_KIND_LABELS[entry.kind] || entry.kind}
+                      </strong>
+                      <span>
+                        {formatDate(entry.createdAt)}
+                        {" · "}
+                        {LEDGER_KIND_LABELS[entry.kind] ?? entry.kind}
+                      </span>
+                      <em>
+                        {entry.amount === 0
+                          ? "—"
+                          : `${isCredit ? "+" : "−"}${Math.abs(entry.amount)} cr`}
+                      </em>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="studio-settings-empty">No credit transactions yet.</p>
+          )}
+        </div>
 
         <div className="studio-admin-customer-payments">
           <p className="studio-admin-card-kicker">Recent payments</p>
