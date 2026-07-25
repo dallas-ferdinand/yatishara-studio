@@ -179,8 +179,10 @@ body {
   margin: 0;
   overflow: hidden;
   overscroll-behavior: none;
-  /* UI never zooms — media viewers implement their own pinch ([data-allow-zoom]). */
+  scroll-behavior: auto;
+  /* Pan only — no page pinch/double-tap zoom. Viewers use [data-allow-zoom]. */
   touch-action: pan-x pan-y;
+  -webkit-tap-highlight-color: transparent;
   background: var(--mos-bg);
   color: var(--mos-text);
   font-size: 13px;
@@ -189,6 +191,19 @@ body {
 
 body {
   font-family: var(--font-onest), system-ui, sans-serif;
+}
+
+/* Controls: kill double-tap zoom delay without allowing page pinch. */
+a,
+button,
+[role="button"],
+input,
+select,
+textarea,
+label,
+summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 ::selection {
