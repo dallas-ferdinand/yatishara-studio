@@ -1728,10 +1728,15 @@
 
 [data-appearance="light"] .cursor-chat-thread.mos-chat .mos-ui,
 [data-appearance="light"] .mos-ui {
-  --mos-ui-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.98), color-mix(in srgb, var(--mos-surface) 78%, #fff 22%));
-  --mos-ui-surface-soft: rgba(255, 255, 255, 0.86);
+  --mos-ui-surface: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 98%, transparent),
+    color-mix(in srgb, var(--mos-surface) 78%, var(--mos-panel, #f5f5f7) 22%)
+  );
+  --mos-ui-surface-soft: color-mix(in srgb, var(--mos-panel, #f5f5f7) 86%, transparent);
   --mos-ui-border: color-mix(in srgb, var(--mos-border) 76%, var(--mos-accent) 24%);
-  --mos-ui-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 16px 46px rgba(15, 23, 42, 0.12);
+  --mos-ui-shadow: 0 1px 0 color-mix(in srgb, var(--mos-panel, #f5f5f7) 80%, transparent) inset,
+    0 16px 46px rgba(15, 23, 42, 0.12);
   --mos-ui-shadow-live: 0 0 0 1px color-mix(in srgb, var(--mos-accent) 20%, transparent),
     0 18px 48px rgba(15, 23, 42, 0.14);
 }
@@ -2648,11 +2653,15 @@
   .mos-ui-source-grid
 ) {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.78)),
-    color-mix(in srgb, var(--mos-panel) 92%, #ffffff 8%);
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, transparent),
+      color-mix(in srgb, var(--mos-panel, #f5f5f7) 78%, transparent)
+    ),
+    color-mix(in srgb, var(--mos-panel) 92%, var(--mos-bg, #ececf0) 8%);
   border-color: color-mix(in srgb, var(--mos-border) 88%, var(--mos-accent) 12%);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8) inset,
+    0 1px 0 color-mix(in srgb, var(--mos-panel, #f5f5f7) 80%, transparent) inset,
     0 18px 42px rgba(15, 23, 42, 0.08);
 }
 
@@ -5217,9 +5226,9 @@
 
 [data-appearance="light"] .cursor-chat-thread.mos-chat .mos-ui,
 [data-appearance="light"] .cursor-chat-thread.mos-chat .mos-ui-stack {
-  --mos-ui-canvas: #f4f4f5;
-  --mos-ui-panel-pro: rgba(255, 255, 255, 0.94);
-  --mos-ui-surface-flat: linear-gradient(180deg, rgba(255, 255, 255, 0.98), color-mix(in srgb, var(--mos-surface) 70%, #fff 30%));
+  --mos-ui-canvas: var(--mos-bg, #ececf0);
+  --mos-ui-panel-pro: color-mix(in srgb, var(--mos-panel, #f5f5f7) 94%, transparent);
+  --mos-ui-surface-flat: linear-gradient(180deg, color-mix(in srgb, var(--mos-panel, #f5f5f7) 98%, transparent), color-mix(in srgb, var(--mos-surface) 70%, var(--mos-panel, #f5f5f7) 30%));
   --mos-ui-border: color-mix(in srgb, rgba(15, 23, 42, 0.12) 82%, var(--mos-accent) 18%);
   --mos-ui-border-strong: color-mix(in srgb, rgba(15, 23, 42, 0.18) 70%, var(--mos-accent) 30%);
 }
@@ -5229,7 +5238,7 @@
 [data-appearance="light"] .cursor-chat-thread.mos-chat .mos-ui-prompts {
   background:
     radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--mos-accent) 12%, transparent), transparent 34%),
-    rgba(255, 255, 255, 0.96) !important;
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 96%, transparent) !important;
 }
 
 /* Novelty OS system: every primitive gets a distinct modern role. Keep absolute last. */

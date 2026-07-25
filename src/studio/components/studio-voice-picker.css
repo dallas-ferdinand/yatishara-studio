@@ -479,14 +479,14 @@
 
 [data-appearance="light"] .studio-audio-voice-chip.is-empty {
   border-color: rgba(15, 23, 42, 0.22);
-  background: color-mix(in srgb, #ffffff 58%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 58%, transparent);
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 72%, transparent);
 }
 
 [data-appearance="light"] .studio-audio-voice-chip:hover,
 [data-appearance="light"] .studio-audio-suggest-chip:hover {
   border-color: rgba(15, 23, 42, 0.28);
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   color: var(--color-cursor-text, #0f172a);
 }
 
@@ -496,12 +496,12 @@
 
 [data-appearance="light"] .studio-voice-picker-tab {
   border-color: rgba(15, 23, 42, 0.12);
-  background: color-mix(in srgb, #ffffff 70%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 70%, transparent);
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 78%, transparent);
 }
 
 [data-appearance="light"] .studio-voice-picker-tab.is-active {
-  background: color-mix(in srgb, var(--cursor-accent, #3b82f6) 16%, #ffffff);
+  background: color-mix(in srgb, var(--cursor-accent, #3b82f6) 16%, var(--mos-panel, #f5f5f7));
   border-color: color-mix(in srgb, var(--cursor-accent, #3b82f6) 40%, transparent);
   color: color-mix(in srgb, var(--cursor-accent, #2563eb) 70%, #0f172a);
 }
@@ -514,7 +514,7 @@
 [data-appearance="light"] .studio-voice-picker-advanced-field input,
 [data-appearance="light"] .studio-voice-picker-accent-input input {
   border-color: rgba(15, 23, 42, 0.14);
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 86%, transparent);
 }
 
@@ -533,18 +533,18 @@
 [data-appearance="light"] .studio-voice-picker-filter-chip.is-open {
   border-color: rgba(15, 23, 42, 0.24);
   color: var(--color-cursor-text, #0f172a);
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 
 [data-appearance="light"] .studio-voice-picker-filter-chip.is-active {
   border-color: color-mix(in srgb, var(--cursor-accent, #3b82f6) 40%, transparent);
-  background: color-mix(in srgb, var(--cursor-accent, #3b82f6) 12%, #ffffff);
+  background: color-mix(in srgb, var(--cursor-accent, #3b82f6) 12%, var(--mos-panel, #f5f5f7));
   color: color-mix(in srgb, var(--cursor-accent, #2563eb) 70%, #0f172a);
 }
 
 [data-appearance="light"] .studio-voice-picker-menu {
   border-color: rgba(15, 23, 42, 0.12);
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
 }
 

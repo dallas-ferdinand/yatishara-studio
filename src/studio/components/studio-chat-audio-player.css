@@ -113,7 +113,7 @@
 }
 
 [data-appearance="light"] .studio-chat-audio-player {
-  background: #fff;
+  background: var(--mos-panel, #f5f5f7);
   border-color: rgba(15, 23, 42, 0.08);
 }
 
@@ -122,5 +122,5 @@
 }
 
 [data-appearance="light"] .studio-chat-audio-pane {
-  background: #fff;
+  background: var(--mos-panel, #f5f5f7);
 }

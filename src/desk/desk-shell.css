@@ -7733,7 +7733,7 @@ textarea.cursor-input {
   opacity: 0.7;
 }
 [data-appearance="light"] .cursor-unified-tab-rename {
-  background: color-mix(in srgb, #fff 92%, var(--mos-bg, #f4f4f5));
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, var(--mos-bg, #ececf0));
 }
 .cursor-unified-tab-menu-hint {
   flex: 0 0 auto;
@@ -8038,7 +8038,7 @@ textarea.cursor-input {
   --desk-transparency-grid: var(--desk-transparency-bg);
 }
 [data-appearance="light"] {
-  --desk-transparency-bg: var(--mos-bg, var(--color-cursor-bg, #ffffff));
+  --desk-transparency-bg: var(--mos-bg, var(--color-cursor-bg, #ececf0));
   --desk-transparency-border: color-mix(
     in srgb,
     var(--mos-text, #1b1f24) 12%,
@@ -8222,7 +8222,7 @@ textarea.cursor-input {
   min-height: 0;
   width: 100%;
   border: 0;
-  background: #fff;
+  background: var(--mos-panel, #f5f5f7);
 }
 .desk-file-media video {
   background: #000;
@@ -8844,13 +8844,13 @@ textarea.cursor-input {
 [data-appearance="light"] .studio-mobile-bottom-nav {
   background: var(
     --studio-mobile-chrome-glass-foot,
-    color-mix(in srgb, #ffffff 84%, transparent)
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent)
   ) !important;
 }
 
 [data-appearance="light"] .studio-polish .cursor-panel-head,
 [data-appearance="light"] .studio-polish .cursor-workspace-head {
-  background: #ffffff !important;
+  background: var(--mos-panel, #f5f5f7) !important;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -9090,13 +9090,13 @@ textarea.cursor-input {
 }
 
 [data-appearance="light"] .studio-polish .studio-mode-row {
-  background: color-mix(in srgb, #ffffff 42%, transparent) !important;
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 42%, transparent) !important;
   border-color: rgba(15, 23, 42, 0.08) !important;
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 52%, transparent) !important;
 }
 
 [data-appearance="light"] .studio-polish .studio-mode-row:hover {
-  background: color-mix(in srgb, #ffffff 62%, transparent) !important;
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 62%, transparent) !important;
   border-color: rgba(15, 23, 42, 0.14) !important;
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 78%, transparent) !important;
 }
@@ -9164,7 +9164,7 @@ textarea.cursor-input {
 
 [data-appearance="light"] .studio-asset-preview .desk-image-viewer-toolbar,
 [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-toolbar {
-  background: #ffffff !important;
+  background: var(--mos-panel, #f5f5f7) !important;
 }
 
 /* --- empty copy / placeholder --- */

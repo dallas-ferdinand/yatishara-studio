@@ -13012,7 +13012,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-asset-preview .desk-image-viewer-stage,
         [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-stage,
         [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-stage {
-          background: #fff;
+          background: var(--mos-panel, #f5f5f7);
         }
         .studio-asset-preview .desk-media-player--studio-preview .desk-media-player-volume {
           width: 56px;
@@ -13037,7 +13037,7 @@ export function StudioShell({
           background: var(--color-cursor-bg);
         }
         [data-appearance="light"] .studio-asset-preview .desk-media-player--studio-preview .desk-image-viewer-stage {
-          background: #fff;
+          background: var(--mos-panel, #f5f5f7);
         }
         .studio-asset-preview .desk-image-viewer-img {
           border-radius: 0;

@@ -499,7 +499,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 2147483000;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 .ys-boot {
   box-sizing: border-box;
@@ -512,7 +512,7 @@ body {
   overflow: hidden;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   color: #0f172a;
 }
 .ys-boot-overlay .ys-boot {

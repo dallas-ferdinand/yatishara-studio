@@ -81,8 +81,8 @@
   --pp-muted: var(--color-cursor-muted, color-mix(in srgb, #1b1f24 58%, transparent));
   --pp-line: color-mix(in srgb, #1b1f24 14%, transparent);
   --pp-accent-ink: #10140a;
-  --pp-glass: color-mix(in srgb, #ffffff 72%, transparent);
-  --pp-glass-muted: color-mix(in srgb, #ffffff 58%, transparent);
+  --pp-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 72%, transparent);
+  --pp-glass-muted: color-mix(in srgb, var(--mos-panel, #f5f5f7) 58%, transparent);
   --pp-glass-shadow:
     0 12px 28px rgba(15, 23, 42, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
@@ -91,15 +91,15 @@
 [data-appearance="light"] .public-profile-shell:not(.is-embedded)::before {
   background:
     radial-gradient(900px 420px at 50% -10%, color-mix(in srgb, var(--pp-accent) 10%, transparent), transparent 65%),
-    linear-gradient(180deg, #eef1f5, #e4e8ee 55%, #d8dee6);
+    linear-gradient(180deg, var(--mos-bg, #ececf0), color-mix(in srgb, var(--mos-bg, #ececf0) 70%, #d8dee6) 55%, color-mix(in srgb, var(--mos-bg, #ececf0) 40%, #d8dee6));
 }
 
 [data-appearance="light"] .public-profile-blur {
-  background: color-mix(in srgb, #e8ecf2 70%, transparent);
+  background: color-mix(in srgb, var(--mos-bg, #ececf0) 70%, transparent);
 }
 
 [data-appearance="light"] .public-profile-shell.is-embedded .public-profile-blur {
-  background: color-mix(in srgb, #eef1f5 62%, transparent);
+  background: color-mix(in srgb, var(--mos-bg, #ececf0) 62%, transparent);
 }
 
 [data-appearance="light"] .public-profile-error {
@@ -107,7 +107,7 @@
 }
 
 [data-appearance="light"] .public-profile-follow.is-following {
-  background: color-mix(in srgb, #ffffff 88%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, transparent);
 }
 
 [data-appearance="light"] .public-profile-empty-posts,
@@ -459,23 +459,23 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, #ffffff 28%, transparent) 18%,
-    color-mix(in srgb, #ffffff 48%, transparent) 38%,
-    color-mix(in srgb, #ffffff 56%, transparent) 50%,
-    color-mix(in srgb, #ffffff 48%, transparent) 62%,
-    color-mix(in srgb, #ffffff 28%, transparent) 82%,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 28%, transparent) 18%,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 48%, transparent) 38%,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 56%, transparent) 50%,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 48%, transparent) 62%,
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 28%, transparent) 82%,
     transparent 100%
   );
 }
 
 [data-appearance="light"] .public-profile-tab {
   border-color: color-mix(in srgb, #1b1f24 10%, transparent);
-  background: color-mix(in srgb, #ffffff 62%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 62%, transparent);
   color: color-mix(in srgb, var(--pp-ink) 68%, transparent);
 }
 
 [data-appearance="light"] .public-profile-tab:hover {
-  background: color-mix(in srgb, #ffffff 78%, transparent);
+  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 78%, transparent);
   color: var(--pp-ink);
 }
 
@@ -488,7 +488,7 @@
   background: color-mix(
     in srgb,
     var(--cursor-accent, var(--pp-accent, #d8ff3e)) 18%,
-    #ffffff
+    var(--mos-panel, #f5f5f7)
   );
   color: var(--pp-ink);
   box-shadow:
