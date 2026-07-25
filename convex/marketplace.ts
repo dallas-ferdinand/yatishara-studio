@@ -56,6 +56,34 @@ const sellerEntityType = v.union(
   v.literal("business"),
 );
 
+const payoutAccountType = v.union(
+  v.literal("chequing"),
+  v.literal("savings"),
+);
+
+const payoutAccountShape = v.object({
+  bankName: v.optional(v.string()),
+  accountName: v.optional(v.string()),
+  accountNumber: v.string(),
+  accountType: v.optional(payoutAccountType),
+  branch: v.optional(v.string()),
+  note: v.optional(v.string()),
+  updatedAt: v.optional(v.number()),
+});
+
+function toPayoutAccount(seller: Doc<"marketplaceSellers"> | null) {
+  if (!seller?.payoutAccountNumber) return null;
+  return {
+    bankName: seller.payoutBankName,
+    accountName: seller.payoutAccountName,
+    accountNumber: seller.payoutAccountNumber,
+    accountType: seller.payoutAccountType,
+    branch: seller.payoutBranch,
+    note: seller.payoutNote,
+    updatedAt: seller.payoutUpdatedAt,
+  };
+}
+
 const sellerBusinessType = v.union(
   v.literal("sole_trader"),
   v.literal("limited_company"),
@@ -323,6 +351,59 @@ export const getMySellerStatus = authedQuery({
       legalName: seller.legalName,
       businessType: seller.businessType,
     };
+  },
+});
+
+/** Payout destination the seller maintains in Settings → Payouts. */
+export const getMyPayoutAccount = authedQuery({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      sellerStatus: sellerStatus,
+      account: v.union(v.null(), payoutAccountShape),
+    }),
+  ),
+  handler: async (ctx) => {
+    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    if (!seller) return null;
+    return { sellerStatus: seller.status, account: toPayoutAccount(seller) };
+  },
+});
+
+export const saveMyPayoutAccount = authedMutation({
+  args: {
+    bankName: v.string(),
+    accountName: v.string(),
+    accountNumber: v.string(),
+    accountType: payoutAccountType,
+    branch: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    if (!seller) throw new Error("Apply as a seller before adding payout details");
+    const bankName = args.bankName.trim();
+    const accountName = args.accountName.trim();
+    const accountNumber = args.accountNumber.replace(/[\s-]/g, "");
+    if (!bankName) throw new Error("Bank name required");
+    if (!accountName) throw new Error("Account holder name required");
+    if (!/^\d{6,20}$/.test(accountNumber)) {
+      throw new Error("Enter a valid account number (digits only)");
+    }
+    const now = Date.now();
+    await ctx.db.patch(seller._id, {
+      payoutBankName: bankName,
+      payoutAccountName: accountName,
+      payoutAccountNumber: accountNumber,
+      payoutAccountType: args.accountType,
+      payoutBranch: args.branch?.trim() || undefined,
+      payoutNote: args.note?.trim() || undefined,
+      payoutUpdatedAt: now,
+      updatedAt: now,
+    });
+    return null;
   },
 });
 
@@ -713,6 +794,7 @@ export const adminListPayouts = adminQuery({
       status: v.union(v.literal("owed"), v.literal("paid")),
       businessName: v.optional(v.string()),
       offerTitle: v.optional(v.string()),
+      payoutAccount: v.union(v.null(), payoutAccountShape),
       paidAt: v.optional(v.number()),
       adminNote: v.optional(v.string()),
       createdAt: v.number(),
@@ -740,6 +822,7 @@ export const adminListPayouts = adminQuery({
         status: payout.status,
         businessName: seller?.businessName,
         offerTitle: offer?.title,
+        payoutAccount: toPayoutAccount(seller),
         paidAt: payout.paidAt,
         adminNote: payout.adminNote,
         createdAt: payout.createdAt,

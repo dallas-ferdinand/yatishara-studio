@@ -204,6 +204,11 @@ export const sellerPayoutStatus = v.union(
   v.literal("paid"),
 );
 
+export const bankAccountType = v.union(
+  v.literal("chequing"),
+  v.literal("savings"),
+);
+
 export const notificationKind = v.union(
   v.literal("generation_completed"),
   v.literal("generation_failed"),
@@ -807,7 +812,7 @@ export default defineSchema({
     bankName: v.string(),
     accountName: v.string(),
     accountNumber: v.string(),
-    accountType: v.union(v.literal("chequing"), v.literal("savings")),
+    accountType: bankAccountType,
     enabled: v.boolean(),
     sortOrder: v.number(),
     createdAt: v.number(),
@@ -1187,6 +1192,14 @@ export default defineSchema({
     proofOfResidentialAddressBunnyPath: v.optional(v.string()),
     businessRegistrationBunnyPath: v.optional(v.string()),
     proofOfBusinessAddressBunnyPath: v.optional(v.string()),
+    /** Where the seller wants payouts sent (self-served in Settings → Payouts). */
+    payoutBankName: v.optional(v.string()),
+    payoutAccountName: v.optional(v.string()),
+    payoutAccountNumber: v.optional(v.string()),
+    payoutAccountType: v.optional(bankAccountType),
+    payoutBranch: v.optional(v.string()),
+    payoutNote: v.optional(v.string()),
+    payoutUpdatedAt: v.optional(v.number()),
     approvedBy: v.optional(v.id("users")),
     approvedAt: v.optional(v.number()),
     suspendedAt: v.optional(v.number()),
