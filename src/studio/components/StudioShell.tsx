@@ -6010,10 +6010,19 @@ export function StudioShell({
           .studio-polish.is-studio-mobile .cursor-unified-tab {
             height: var(--studio-mobile-chrome-control, 30px) !important;
             min-height: var(--studio-mobile-chrome-control, 30px) !important;
+            max-height: var(--studio-mobile-chrome-control, 30px) !important;
             align-self: center;
             border-radius: 999px !important;
             border-left-width: 1px !important;
             margin: 0 !important;
+            padding: 0 6px !important;
+            box-sizing: border-box !important;
+          }
+          .studio-polish.is-studio-mobile .cursor-unified-tab:hover:not(.cursor-unified-tab-new),
+          .studio-polish.is-studio-mobile .cursor-unified-tab.is-active {
+            height: var(--studio-mobile-chrome-control, 30px) !important;
+            min-height: var(--studio-mobile-chrome-control, 30px) !important;
+            max-height: var(--studio-mobile-chrome-control, 30px) !important;
             padding: 0 6px !important;
           }
           .studio-polish.is-studio-mobile .cursor-unified-tab-placeholder {
@@ -6616,6 +6625,17 @@ export function StudioShell({
           margin-left: 0;
           border-radius: 999px;
         }
+        /* Hover/active share the same box metrics; fill clips inside the 1px border. */
+        .studio-polish .cursor-unified-tab:hover:not(.cursor-unified-tab-new),
+        .studio-polish .cursor-unified-tab.is-active {
+          height: calc(var(--cursor-head-h) - 2px) !important;
+          min-height: calc(var(--cursor-head-h) - 2px) !important;
+          max-height: calc(var(--cursor-head-h) - 2px) !important;
+          padding: 0 6px !important;
+          border: 1px solid transparent !important;
+          box-sizing: border-box !important;
+          background-clip: padding-box !important;
+        }
         .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover,
         /* Mirror the active pill's left-fading fill so hover doesn't read heavier. */
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
@@ -6627,14 +6647,12 @@ export function StudioShell({
             color-mix(in srgb, var(--mos-text-bright) 3%, transparent) 40%,
             color-mix(in srgb, var(--mos-text-bright) 6%, transparent) 100%
           ) !important;
-          background-position: center !important;
-          background-repeat: no-repeat !important;
-          background-size: 100% calc(100% - 2px) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
         .studio-polish .cursor-unified-tab.is-active:hover {
           background: var(--studio-chrome-glow-bg-fade-hover) !important;
+          background-clip: padding-box !important;
         }
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new)::before {
           content: none !important;
@@ -6650,6 +6668,7 @@ export function StudioShell({
         .studio-polish .cursor-unified-tab.is-active {
           border: 1px solid transparent !important;
           background: var(--studio-chrome-glow-bg-fade) !important;
+          background-clip: padding-box !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
           overflow: visible;
@@ -6992,6 +7011,7 @@ export function StudioShell({
             color-mix(in srgb, var(--color-cursor-text) 3%, transparent) 40%,
             color-mix(in srgb, var(--color-cursor-text) 5%, transparent) 100%
           ) !important;
+          background-clip: padding-box !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
@@ -7014,6 +7034,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .cursor-unified-tab.is-error.is-active {
           border: 1px solid transparent !important;
           background: var(--studio-chrome-glow-bg-fade) !important;
+          background-clip: padding-box !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
         }
