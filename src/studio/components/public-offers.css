@@ -342,16 +342,29 @@
 
 .public-offers-presets {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
   width: calc(100% - 8px);
   margin: 0 4px 4px;
-  padding: 0 4px;
+  padding: 0 4px 2px;
   box-sizing: border-box;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.public-offers-presets::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .public-offers-preset {
+  flex: 0 0 auto;
   min-height: 22px;
   padding: 0 8px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
@@ -359,6 +372,7 @@
   background: transparent;
   color: var(--color-cursor-muted, var(--mos-muted));
   font-size: var(--desk-text-xs, 11px);
+  white-space: nowrap;
   cursor: pointer;
 }
 

@@ -242,10 +242,14 @@ const OPTION_FILTERS: OptionFilterDef[] = [
 ];
 
 const PRICE_PRESETS = [
-  { label: "Under $100", min: "", max: "100" },
-  { label: "$100 – $500", min: "100", max: "500" },
+  { label: "Under $50", min: "", max: "50" },
+  { label: "$50 – $100", min: "50", max: "100" },
+  { label: "$100 – $250", min: "100", max: "250" },
+  { label: "$250 – $500", min: "250", max: "500" },
   { label: "$500 – $1k", min: "500", max: "1000" },
-  { label: "$1k+", min: "1000", max: "" },
+  { label: "$1k – $2.5k", min: "1000", max: "2500" },
+  { label: "$2.5k – $5k", min: "2500", max: "5000" },
+  { label: "$5k+", min: "5000", max: "" },
 ] as const;
 
 type SortKey = "newest" | "price-asc" | "price-desc" | "fastest";
