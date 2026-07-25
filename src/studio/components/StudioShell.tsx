@@ -6567,12 +6567,13 @@ export function StudioShell({
           transform: translateY(-50%);
           z-index: 3;
           width: 1px;
-          height: 16px;
+          height: 12px;
           border-radius: 1px;
-          background: color-mix(in srgb, var(--color-cursor-text) 22%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text) 14%, transparent);
           pointer-events: none;
         }
         .studio-polish .cursor-unified-tab:last-child::after,
+        .studio-polish .cursor-unified-tab.is-active::after,
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new::after,
         .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-new)::after,
         .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-placeholder)::after,
