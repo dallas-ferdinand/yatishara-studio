@@ -1094,6 +1094,75 @@ export const setOfferStatus = sellerMutation({
   },
 });
 
+/** Admin moderation — pause / restore / archive any listing. */
+export const adminListOffers = adminQuery({
+  args: {
+    status: v.optional(offerStatus),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceOffers"),
+      title: v.string(),
+      status: offerStatus,
+      priceCents: v.number(),
+      sellerUserId: v.id("users"),
+      businessName: v.optional(v.string()),
+      publishedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const rows = args.status
+      ? await ctx.db
+          .query("marketplaceOffers")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .order("desc")
+          .take(100)
+      : await ctx.db.query("marketplaceOffers").order("desc").take(100);
+    const out = [];
+    for (const offer of rows) {
+      const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
+      out.push({
+        _id: offer._id,
+        title: offer.title,
+        status: offer.status,
+        priceCents: offer.priceCents,
+        sellerUserId: offer.sellerUserId,
+        businessName: seller?.businessName,
+        publishedAt: offer.publishedAt,
+        createdAt: offer.createdAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const adminSetOfferStatus = adminMutation({
+  args: {
+    offerId: v.id("marketplaceOffers"),
+    status: v.union(
+      v.literal("paused"),
+      v.literal("published"),
+      v.literal("archived"),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer) throw new Error("Offer not found");
+    const now = Date.now();
+    const patch: Partial<Doc<"marketplaceOffers">> = {
+      status: args.status,
+      updatedAt: now,
+    };
+    if (args.status === "published" && !offer.publishedAt) {
+      patch.publishedAt = now;
+    }
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
 // —— Book + jobs ——
 
 export const quoteBookOffer = authedQuery({

@@ -8,6 +8,8 @@ import {
   Clock3,
   LayoutList,
   Loader2,
+  Package,
+  PauseCircle,
   Store,
   Undo2,
   Wallet,
@@ -30,6 +32,8 @@ type JobStatus =
   | "completed"
   | "cancelled"
   | "refunded";
+
+type OfferStatus = "draft" | "published" | "paused" | "archived";
 
 function DocLink({ label, href }: { label: string; href?: string }) {
   if (!href) return null;
@@ -112,6 +116,7 @@ export function AdminMarketplacePane() {
   const [sellerFilter, setSellerFilter] = useState<
     "all" | "pending" | "approved" | "rejected" | "suspended"
   >("pending");
+  const [offerFilter, setOfferFilter] = useState<"all" | OfferStatus>("published");
   const [jobFilter, setJobFilter] = useState<"all" | JobStatus>("all");
   const [payoutFilter, setPayoutFilter] = useState<"owed" | "paid" | "all">("owed");
   const [busy, setBusy] = useState(false);
@@ -131,6 +136,10 @@ export function AdminMarketplacePane() {
     api.marketplace.adminListSellers,
     sellerFilter === "all" ? {} : { status: sellerFilter },
   );
+  const offers = useQuery(
+    api.marketplace.adminListOffers,
+    offerFilter === "all" ? {} : { status: offerFilter },
+  );
   const jobs = useQuery(
     api.marketplace.adminListJobs,
     jobFilter === "all" ? {} : { status: jobFilter },
@@ -145,6 +154,7 @@ export function AdminMarketplacePane() {
   );
 
   const decideSeller = useMutation(api.marketplace.adminApproveSeller);
+  const setOfferStatus = useMutation(api.marketplace.adminSetOfferStatus);
   const markPaid = useMutation(api.marketplace.adminMarkPayoutPaid);
   const refundJob = useMutation(api.marketplace.adminRefundDeliveredJob);
 
@@ -221,6 +231,27 @@ export function AdminMarketplacePane() {
       setRefundReason("");
     } catch (error) {
       toast.error(friendlyConvexError(error, "Refund failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function moderateOffer(
+    offerId: Id<"marketplaceOffers">,
+    status: "paused" | "published" | "archived",
+  ) {
+    setBusy(true);
+    try {
+      await setOfferStatus({ offerId, status });
+      toast.success(
+        status === "paused"
+          ? "Offer paused"
+          : status === "published"
+            ? "Offer published"
+            : "Offer archived",
+      );
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not update offer."));
     } finally {
       setBusy(false);
     }
@@ -403,6 +434,92 @@ export function AdminMarketplacePane() {
           </div>
         ) : null}
 
+      </section>
+
+      <section className="studio-admin-section">
+        <div className="studio-admin-section-head">
+          <span className="studio-admin-section-title">Offers</span>
+          <div className="studio-admin-section-extras">
+            <CursorSelect
+              ariaLabel="Offer status"
+              value={offerFilter}
+              onChange={(next) => setOfferFilter(next as "all" | OfferStatus)}
+              options={[
+                { value: "published", label: "Published", icon: <Package />, tone: "good" },
+                { value: "paused", label: "Paused", icon: <PauseCircle />, tone: "warn" },
+                { value: "draft", label: "Draft", icon: <Clock3 />, tone: "muted" },
+                { value: "archived", label: "Archived", icon: <Ban />, tone: "muted" },
+                { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
+              ]}
+            />
+          </div>
+        </div>
+        <CursorTable
+          ariaLabel="Offers"
+          loading={!offers}
+          empty={!!offers && !offers.length}
+          emptyIcon={<Package />}
+          emptyTitle="No offers"
+          emptyHint="No offers match this filter yet."
+        >
+          <thead>
+            <tr>
+              <th>Offer</th>
+              <th>Seller</th>
+              <th>Price</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(offers ?? []).map((offer) => (
+              <tr key={offer._id}>
+                <td>
+                  <strong>{offer.title}</strong>
+                </td>
+                <td>
+                  <span>{offer.businessName ?? offer.sellerUserId}</span>
+                </td>
+                <td>{formatTtdCents(offer.priceCents)}</td>
+                <td>{offer.status}</td>
+                <td>
+                  <div className="flex flex-wrap gap-2">
+                    {offer.status === "published" ? (
+                      <button
+                        type="button"
+                        className="cursor-settings-action"
+                        disabled={busy}
+                        onClick={() => void moderateOffer(offer._id, "paused")}
+                      >
+                        Pause
+                      </button>
+                    ) : null}
+                    {offer.status === "paused" || offer.status === "archived" ? (
+                      <button
+                        type="button"
+                        className="cursor-settings-action"
+                        disabled={busy}
+                        onClick={() => void moderateOffer(offer._id, "published")}
+                      >
+                        Publish
+                      </button>
+                    ) : null}
+                    {offer.status !== "archived" ? (
+                      <button
+                        type="button"
+                        className="cursor-settings-action"
+                        disabled={busy}
+                        onClick={() => void moderateOffer(offer._id, "archived")}
+                      >
+                        Archive
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </CursorTable>
       </section>
 
       <section className="studio-admin-section" ref={jobsSectionRef}>
