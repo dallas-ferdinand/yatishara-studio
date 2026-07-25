@@ -7113,8 +7113,9 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 0.64;
         }
-        .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item):hover {
-          background: var(--mos-active, var(--color-cursor-active));
+        .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item):hover,
+        .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item).active {
+          background: var(--mos-plate-strong, var(--mos-raised));
         }
         /* Keep select resting fill at level-3; polish button resets must not wash it out. */
         .studio-polish .cursor-select-menu .cursor-select-trigger {
