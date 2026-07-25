@@ -223,11 +223,26 @@
 }
 
 .public-profile-stats div {
+  position: relative;
   display: grid;
   gap: 0;
   min-width: 0;
   justify-items: center;
   text-align: center;
+}
+
+/* Same hairline as workspace tab strip (::after between tabs). */
+.public-profile-stats div:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 12px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--pp-ink, var(--color-cursor-text, #fff)) 14%, transparent);
+  pointer-events: none;
 }
 
 .public-profile-stats strong {
