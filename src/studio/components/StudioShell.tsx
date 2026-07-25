@@ -90,6 +90,7 @@ import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import { Icon } from "@/desk/components/Icons";
 import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
+import { CursorSelect } from "@/desk/components/CursorSelect";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { matchesExplorerTypeFilter } from "@/desk/lib/file-kind";
 import {
@@ -9449,9 +9450,6 @@ export function StudioShell({
             min-width: 72px;
             flex: 0 0 auto;
           }
-          .studio-admin-filter-select {
-            min-width: 120px;
-          }
         }
         .studio-polish .cursor-settings-action:hover,
         .studio-polish .theme-chip:hover {
@@ -13274,50 +13272,6 @@ export function StudioShell({
           gap: 8px;
           flex: 0 0 auto;
           margin-left: auto;
-        }
-        .studio-admin-filter-select {
-          width: auto;
-          min-width: 132px;
-          max-width: 180px;
-          height: 28px;
-          padding: 0 28px 0 10px;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: var(--cursor-radius-sm, 6px);
-          background-color: var(--mos-panel, var(--cursor-surface-input));
-          background-image: linear-gradient(
-            45deg,
-            transparent 50%,
-            var(--color-cursor-muted) 50%
-          ),
-          linear-gradient(
-            135deg,
-            var(--color-cursor-muted) 50%,
-            transparent 50%
-          );
-          background-position:
-            calc(100% - 14px) 50%,
-            calc(100% - 9px) 50%;
-          background-size: 5px 5px, 5px 5px;
-          background-repeat: no-repeat;
-          color: var(--color-cursor-text);
-          font: inherit;
-          font-size: 12px;
-          font-weight: 600;
-          line-height: 28px;
-          outline: none;
-          cursor: pointer;
-          -webkit-appearance: none;
-          appearance: none;
-        }
-        [data-appearance="light"] .studio-admin-filter-select {
-          background-color: var(--mos-panel, #f5f5f7);
-        }
-        .studio-admin-filter-select:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
-        }
-        .studio-admin-filter-select:focus,
-        .studio-admin-filter-select:focus-visible {
-          border-color: var(--cursor-border-focus, var(--cursor-accent-border));
         }
         .studio-admin-payment-layout {
           display: grid;
@@ -22100,18 +22054,18 @@ function AdminWorkspacePane({
               <div className="studio-admin-section-head">
                 <span className="studio-admin-section-title">Payments</span>
                 <div className="studio-admin-section-extras">
-                  <select
-                    className="studio-admin-filter-select"
-                    aria-label="Payment status"
+                  <CursorSelect
+                    ariaLabel="Payment status"
                     value={paymentFilter}
-                    onChange={(event) => setPaymentFilter(event.target.value)}
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="payment_completed">Completed</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="cancelled">Cancelled</option>
-                    <option value="all">All</option>
-                  </select>
+                    onChange={setPaymentFilter}
+                    options={[
+                      { value: "pending", label: "Pending" },
+                      { value: "payment_completed", label: "Completed" },
+                      { value: "rejected", label: "Rejected" },
+                      { value: "cancelled", label: "Cancelled" },
+                      { value: "all", label: "All" },
+                    ]}
+                  />
                 </div>
               </div>
               <div className="studio-admin-table-wrap">

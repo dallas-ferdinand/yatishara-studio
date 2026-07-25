@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 
@@ -92,21 +93,19 @@ export function AdminMarketplacePane() {
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Sellers</span>
           <div className="studio-admin-section-extras">
-            <select
-              className="studio-admin-filter-select"
-              aria-label="Seller status"
+            <CursorSelect
+              ariaLabel="Seller status"
               value={sellerFilter}
-              onChange={(event) =>
-                setSellerFilter(
-                  event.target.value as "all" | "pending" | "approved" | "suspended",
-                )
+              onChange={(next) =>
+                setSellerFilter(next as "all" | "pending" | "approved" | "suspended")
               }
-            >
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="suspended">Suspended</option>
-              <option value="all">All</option>
-            </select>
+              options={[
+                { value: "pending", label: "Pending" },
+                { value: "approved", label: "Approved" },
+                { value: "suspended", label: "Suspended" },
+                { value: "all", label: "All" },
+              ]}
+            />
           </div>
         </div>
         <div className="studio-admin-table-wrap">
@@ -195,18 +194,16 @@ export function AdminMarketplacePane() {
         <div className="studio-admin-section-head">
           <span className="studio-admin-section-title">Payouts</span>
           <div className="studio-admin-section-extras">
-            <select
-              className="studio-admin-filter-select"
-              aria-label="Payout status"
+            <CursorSelect
+              ariaLabel="Payout status"
               value={payoutFilter}
-              onChange={(event) =>
-                setPayoutFilter(event.target.value as "owed" | "paid" | "all")
-              }
-            >
-              <option value="owed">Owed</option>
-              <option value="paid">Paid</option>
-              <option value="all">All</option>
-            </select>
+              onChange={(next) => setPayoutFilter(next as "owed" | "paid" | "all")}
+              options={[
+                { value: "owed", label: "Owed" },
+                { value: "paid", label: "Paid" },
+                { value: "all", label: "All" },
+              ]}
+            />
           </div>
         </div>
         <div className="studio-admin-table-wrap">

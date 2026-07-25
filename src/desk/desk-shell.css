@@ -4653,10 +4653,82 @@
   z-index: 30;
   box-shadow: var(--cursor-shadow-pop);
 }
+.cursor-dropdown.cursor-dropdown-down {
+  top: calc(100% + 4px);
+  bottom: auto;
+  margin-bottom: 0;
+}
+.cursor-dropdown.is-end {
+  left: auto;
+  right: 0;
+}
+.cursor-dropdown.is-start {
+  left: 0;
+  right: auto;
+}
 .cursor-dropdown-wide {
   min-width: 180px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+/* Reusable compact select (admin filters, chrome extras). */
+.cursor-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.cursor-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  min-width: 0;
+  max-width: 180px;
+  margin: 0;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-sm);
+  background: var(--mos-panel, var(--cursor-surface-input));
+  color: var(--color-cursor-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color var(--cursor-ease),
+    background var(--cursor-ease),
+    color var(--cursor-ease);
+}
+.cursor-select-trigger:hover,
+.cursor-select.is-open .cursor-select-trigger {
+  border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
+  color: var(--color-cursor-text-bright);
+}
+.cursor-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cursor-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cursor-select .cursor-dropdown {
+  min-width: 148px;
+  z-index: 60;
+  background: var(--color-cursor-sidebar, var(--cursor-surface-overlay));
+  border-color: var(--color-cursor-border);
+}
+[data-appearance="light"] .cursor-select-trigger {
+  background: var(--mos-panel, #f5f5f7);
+}
+[data-appearance="light"] .cursor-select .cursor-dropdown {
+  background: var(--mos-panel, #f5f5f7);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 .cursor-dropdown-item {
   display: flex;
