@@ -230,7 +230,7 @@ export function PublicProfileView({
                 <div className="public-profile-actions">
                   <button
                     type="button"
-                    className={`public-profile-follow${profile.isFollowing ? " is-following" : ""}`}
+                    className={`public-profile-action${profile.isFollowing ? " is-following" : " is-primary"}`}
                     onClick={() => void handleFollowToggle()}
                     disabled={followBusy}
                     aria-label={
@@ -244,28 +244,30 @@ export function PublicProfileView({
                     }
                   >
                     {followBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <Loader2 className="public-profile-action-icon animate-spin" aria-hidden="true" />
                     ) : profile.isFollowing ? (
-                      <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />
+                      <UserMinus className="public-profile-action-icon" aria-hidden="true" />
                     ) : (
-                      <UserPlus className="h-3.5 w-3.5" aria-hidden="true" />
+                      <UserPlus className="public-profile-action-icon" aria-hidden="true" />
                     )}
-                    {followBusy
-                      ? profile.isFollowing
-                        ? "Unfollowing"
-                        : "Following"
-                      : profile.isFollowing
-                        ? "Unfollow"
-                        : "Follow"}
+                    <span>
+                      {followBusy
+                        ? profile.isFollowing
+                          ? "Unfollowing"
+                          : "Following"
+                        : profile.isFollowing
+                          ? "Unfollow"
+                          : "Follow"}
+                    </span>
                   </button>
                   {onMessage && auth.isAuthenticated ? (
                     <button
                       type="button"
-                      className="public-profile-follow public-profile-message"
+                      className="public-profile-action"
                       onClick={() => onMessage(profile.username)}
                     >
-                      <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                      Message
+                      <MessageCircle className="public-profile-action-icon" aria-hidden="true" />
+                      <span>Message</span>
                     </button>
                   ) : null}
                 </div>

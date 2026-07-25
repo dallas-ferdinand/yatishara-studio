@@ -106,8 +106,13 @@
   color: #b42318;
 }
 
-[data-appearance="light"] .public-profile-follow.is-following {
+[data-appearance="light"] .public-profile-action.is-following {
   background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, transparent);
+}
+
+[data-appearance="light"] .public-profile-action.is-primary {
+  background: color-mix(in srgb, var(--pp-accent) 16%, var(--mos-panel, #f5f5f7));
+  color: var(--pp-ink);
 }
 
 [data-appearance="light"] .public-profile-empty-posts,
@@ -258,33 +263,37 @@
   letter-spacing: 0.01em;
 }
 
-.public-profile-follow {
+.public-profile-actions {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 10px;
   min-width: 0;
-  min-height: 28px;
-  margin-top: 0;
-  border: 0;
+}
+
+/* Follow / Message — shared glass chips; primary Follow uses soft accent tint (not solid neon). */
+.public-profile-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  min-height: 32px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--pp-line);
   border-radius: 999px;
-  background: var(--pp-accent);
-  color: var(--pp-accent-ink);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-  padding: 0 10px;
-}
-
-.public-profile-follow:hover:not(:disabled) {
-  filter: brightness(1.04);
-}
-
-.public-profile-follow.is-following {
   background: var(--pp-glass);
   color: var(--pp-ink);
-  border: 1px solid var(--pp-line);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
   -webkit-backdrop-filter: var(--pp-glass-blur);
   backdrop-filter: var(--pp-glass-blur);
   transform: none;
@@ -292,34 +301,43 @@
   isolation: auto;
 }
 
-.public-profile-follow:disabled {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.public-profile-actions {
+.public-profile-action > span {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
+  line-height: 1;
 }
 
-/* Message — same 28px chip as Follow, neutral glass instead of accent. */
-.public-profile-message {
-  background: var(--pp-glass);
+.public-profile-action-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 2.25;
+}
+
+.public-profile-action.is-primary {
+  background: color-mix(in srgb, var(--pp-accent) 20%, var(--pp-glass));
+  border-color: color-mix(in srgb, var(--pp-accent) 48%, var(--pp-line));
   color: var(--pp-ink);
-  border: 1px solid var(--pp-line);
-  -webkit-backdrop-filter: var(--pp-glass-blur);
-  backdrop-filter: var(--pp-glass-blur);
 }
 
-.public-profile-message:hover:not(:disabled) {
-  filter: none;
-  border-color: color-mix(in srgb, var(--pp-accent) 40%, var(--pp-line));
+.public-profile-action.is-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pp-accent) 68%, var(--pp-line));
+  background: color-mix(in srgb, var(--pp-accent) 28%, var(--pp-glass));
 }
 
-[data-appearance="light"] .public-profile-message {
-  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, transparent);
+.public-profile-action:not(.is-primary):hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--pp-accent) 42%, var(--pp-line));
+}
+
+.public-profile-action.is-following {
+  background: var(--pp-glass);
+  border-color: var(--pp-line);
+  color: var(--pp-ink);
+}
+
+.public-profile-action:disabled {
+  opacity: 0.7;
+  cursor: wait;
 }
 
 .public-profile-links {
