@@ -9,7 +9,6 @@
  */
 
 import type * as ResendOTP from "../ResendOTP.js";
-import type * as _tmpDeleteUser from "../_tmpDeleteUser.js";
 import type * as aiGatewayActions from "../aiGatewayActions.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as assetActions from "../assetActions.js";
@@ -120,7 +119,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
-  _tmpDeleteUser: typeof _tmpDeleteUser;
   aiGatewayActions: typeof aiGatewayActions;
   apiKeys: typeof apiKeys;
   assetActions: typeof assetActions;
