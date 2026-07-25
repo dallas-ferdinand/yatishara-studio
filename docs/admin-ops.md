@@ -18,8 +18,8 @@ Design chrome still follows [`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 |---|---|---|
 | Payments | [`StudioShell.tsx`](../src/studio/components/StudioShell.tsx) `AdminWorkspacePane` + `AdminPaymentSidebar` | `billing.adminListPayments`, `adminReviewPayment`, `paywiseActions.adminRefreshPaywisePayment` |
 | Customers | same file — search, detail sidebar, credit adjust | `users.adminListCustomers`, `billing.adminAdjustCredits` |
-| Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + jobs + payouts | `adminListJobs`, `adminRefundDeliveredJob`, `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
-| Tools | Setup seeds + read-only pricing cards (demoted from primary tabs) | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing`; `billing.adminSetPricing` **unused** |
+| Marketplace | [`AdminMarketplacePane.tsx`](../src/studio/components/AdminMarketplacePane.tsx) sellers + offers + jobs + payouts | `adminListJobs`, `adminListOffers` / `adminSetOfferStatus`, `adminRefundDeliveredJob`, `adminApproveSeller`, `adminMarkPayoutPaid`, KYC signed URLs |
+| Tools | Setup seeds + pricing cards + audit log | `stylePresets.adminSeedDefaults`, thumbnail action, `billing.adminSeedLaunchPricing`, `billing.adminListAuditEvents`; `billing.adminSetPricing` **unused** |
 
 Entry: header Gauge → always opens `admin:payments` (admin / super_admin only). Old `admin:setup` / `admin:pricing` deep links normalize to Tools.
 
@@ -107,11 +107,12 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 
 ### P5 — Polish / reporting
 
-- [ ] Metric cards sum TTD (not only row counts)
-- [ ] Credit ledger view on customer detail
-- [ ] Offer moderation (pause bad listing)
-- [ ] Audit log viewer
-- [ ] Raise list caps / pagination (payments 200, customers 100 today)
+- [x] Metric cards sum TTD (Pending / Paid / Failed show `$` totals; count in body)
+- [x] Credit ledger view on customer detail (`billing.adminListCreditTransactions`)
+- [x] Offer moderation — Marketplace **Offers** table with Pause / Publish / Archive
+      (`adminListOffers`, `adminSetOfferStatus`)
+- [x] Audit log viewer under Tools (`billing.adminListAuditEvents`, last 80)
+- [x] Raise list caps (payments 500, customers 250; full cursor pagination still later)
 
 ---
 
@@ -121,4 +122,4 @@ Escrow ops blocked today. API: `marketplace.adminRefundDeliveredJob`.
 P0 labels_fix → P1 credits → P2 jobs → P3 payouts/KYC → P4 tabs → P5 polish
 ```
 
-Next: start **P5** (totals, ledger, offer moderation, audit, pagination).
+Admin ops ladder complete through P5. Follow-ups: true pagination, editable pricing UI (`adminSetPricing`), richer audit details.
