@@ -13,6 +13,63 @@ span.studio-admin-head-tab,
   cursor: default;
 }
 
+/* One primary action in the secondary header (New offer / Balance). */
+.marketplace-offers-head-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+/* Offer/job summary chips — same horizontal scroll language as Creative Network value props */
+.marketplace-offers-summary {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -4px;
+  padding: 0 4px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.marketplace-offers-summary::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.marketplace-offers-summary-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate, var(--cursor-surface));
+  white-space: nowrap;
+}
+
+.marketplace-offers-summary-value {
+  color: var(--color-cursor-text-bright);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.marketplace-offers-summary-label {
+  color: var(--color-cursor-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
 .marketplace-offers-bar-action {
   display: inline-flex;
   align-items: center;

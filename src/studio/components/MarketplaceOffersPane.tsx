@@ -63,12 +63,19 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function OffersHead({ children }: { children: ReactNode }) {
+function OffersHead({
+  children,
+  action,
+}: {
+  children: ReactNode;
+  action?: ReactNode;
+}) {
   return (
     <header className="studio-admin-head">
       <nav className="studio-admin-head-tabs" aria-label="Offers sections">
         {children}
       </nav>
+      {action ? <div className="marketplace-offers-head-action">{action}</div> : null}
     </header>
   );
 }
@@ -95,7 +102,7 @@ function Section({
   );
 }
 
-function MetricCard({
+function SummaryChip({
   label,
   value,
   body,
@@ -105,12 +112,15 @@ function MetricCard({
   body: string;
 }) {
   return (
-    <article className="studio-admin-card">
-      <p className="studio-admin-card-kicker">{label}</p>
-      <h3>{value}</h3>
-      <p>{body}</p>
+    <article className="marketplace-offers-summary-chip" title={body}>
+      <strong className="marketplace-offers-summary-value">{value}</strong>
+      <span className="marketplace-offers-summary-label">{label}</span>
     </article>
   );
+}
+
+function SummaryRow({ children }: { children: ReactNode }) {
+  return <section className="marketplace-offers-summary">{children}</section>;
 }
 
 export function MarketplaceOffersPane({
@@ -488,7 +498,29 @@ export function MarketplaceOffersPane({
   return (
     <div className="studio-admin-panel">
       {view.kind === "home" ? (
-        <OffersHead>
+        <OffersHead
+          action={
+            homeTab === "offers" ? (
+              <button
+                type="button"
+                className="marketplace-offers-bar-action"
+                onClick={() => setView({ kind: "create" })}
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                New offer
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="marketplace-offers-bar-action"
+                onClick={onOpenCredits}
+              >
+                <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                Balance
+              </button>
+            )
+          }
+        >
           <button
             type="button"
             className={`studio-admin-head-tab${homeTab === "offers" ? " is-active" : ""}`}
@@ -528,37 +560,25 @@ export function MarketplaceOffersPane({
         <div className="studio-admin-workspace">
           {view.kind === "home" && homeTab === "offers" ? (
             <div className="studio-admin-stack">
-              <section className="studio-admin-grid-large">
-                <MetricCard
+              <SummaryRow>
+                <SummaryChip
                   label="Live"
                   value={liveOffers}
                   body="Published packages buyers can book right now."
                 />
-                <MetricCard
+                <SummaryChip
                   label="Drafts"
                   value={draftOffers}
                   body="Not visible yet — publish when the copy is ready."
                 />
-                <MetricCard
+                <SummaryChip
                   label="Open jobs"
                   value={openJobs}
                   body="Booked work in escrow or in progress."
                 />
-              </section>
+              </SummaryRow>
 
-              <Section
-                title="Your offers"
-                extras={
-                  <button
-                    type="button"
-                    className="marketplace-offers-bar-action"
-                    onClick={() => setView({ kind: "create" })}
-                  >
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                    New offer
-                  </button>
-                }
-              >
+              <Section title="Your offers">
                 <div className="studio-admin-table-wrap">
                   {!myOffers ? (
                     <Loader2 className="m-4 h-4 w-4 animate-spin" />
@@ -616,47 +636,37 @@ export function MarketplaceOffersPane({
 
           {view.kind === "home" && homeTab === "jobs" ? (
             <div className="studio-admin-stack">
-              <section className="studio-admin-grid-large">
-                <MetricCard
+              <SummaryRow>
+                <SummaryChip
                   label="Open"
                   value={openJobs}
                   body="Payment held until the work is accepted."
                 />
-                <MetricCard
+                <SummaryChip
                   label="Delivered"
                   value={deliveredJobs}
                   body="Waiting on buyer acceptance or auto-accept."
                 />
-                <MetricCard
+                <SummaryChip
                   label="Completed"
                   value={completedJobs}
                   body="Escrow released and payout recorded."
                 />
-              </section>
+              </SummaryRow>
 
               <Section
                 title="Jobs"
                 extras={
-                  <>
-                    <CursorSelect
-                      ariaLabel="Job side"
-                      value={jobFilter}
-                      onChange={(next) => setJobFilter(next as JobFilter)}
-                      options={[
-                        { value: "all", label: "All" },
-                        { value: "sell", label: "Selling" },
-                        { value: "buy", label: "Buying" },
-                      ]}
-                    />
-                    <button
-                      type="button"
-                      className="marketplace-offers-bar-action"
-                      onClick={onOpenCredits}
-                    >
-                      <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
-                      Balance
-                    </button>
-                  </>
+                  <CursorSelect
+                    ariaLabel="Job side"
+                    value={jobFilter}
+                    onChange={(next) => setJobFilter(next as JobFilter)}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "sell", label: "Selling" },
+                      { value: "buy", label: "Buying" },
+                    ]}
+                  />
                 }
               >
                 <div className="studio-admin-table-wrap">
@@ -964,8 +974,8 @@ export function MarketplaceOffersPane({
               <p className="studio-settings-empty">Loading job…</p>
             ) : (
               <div className="studio-admin-stack">
-                <section className="studio-admin-grid-large">
-                  <MetricCard
+                <SummaryRow>
+                  <SummaryChip
                     label="Price"
                     value={formatTtdCents(jobDetail.job.priceCents)}
                     body={
@@ -974,7 +984,7 @@ export function MarketplaceOffersPane({
                         : "Held until you accept delivery."
                     }
                   />
-                  <MetricCard
+                  <SummaryChip
                     label="Booked"
                     value={new Date(
                       jobDetail.job.createdAt,
@@ -983,7 +993,7 @@ export function MarketplaceOffersPane({
                       jobDetail.job.createdAt,
                     ).toLocaleTimeString()}
                   />
-                </section>
+                </SummaryRow>
 
                 <Section
                   title={jobDetail.job.offerTitle}
