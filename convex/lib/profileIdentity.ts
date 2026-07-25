@@ -39,6 +39,10 @@ const RESERVED_USERNAMES = new Set([
   "yatishara",
 ]);
 
+export function isReservedUsername(username: string): boolean {
+  return RESERVED_USERNAMES.has(normalizeUsername(username));
+}
+
 export type ContactLinkType = "website" | "phone" | "email" | "other";
 
 export type ContactLinkInput = {

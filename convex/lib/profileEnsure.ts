@@ -1,0 +1,188 @@
+/**
+ * Auto-provision public profiles with clean unique usernames.
+ * Used by signup hooks, account-complete safety net, and one-time backfill.
+ */
+
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
+import {
+  DISPLAY_NAME_MAX,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  isReservedUsername,
+  sanitizeDisplayName,
+  validateUsername,
+} from "./profileIdentity";
+
+export type HandleSourceUser = {
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+};
+
+/** Turn arbitrary text into a username-shaped slug, or null if unusable. */
+export function slugifyHandle(raw: string): string | null {
+  let s = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._]+/g, "")
+    .replace(/[._]{2,}/g, (match) => match[0] ?? ".")
+    .replace(/^[^a-z]+/, "")
+    .replace(/[._]+$/g, "");
+
+  if (s.length < USERNAME_MIN) {
+    // Pad short letter-leading scraps so "ab" → still fails; "jo" → null.
+    return null;
+  }
+  if (s.length > USERNAME_MAX) {
+    s = s.slice(0, USERNAME_MAX).replace(/[._]+$/g, "");
+  }
+  if (s.length < USERNAME_MIN) return null;
+  try {
+    return validateUsername(s);
+  } catch {
+    return null;
+  }
+}
+
+/** Prefer real name → account name → email local → user+phone → creator. */
+export function deriveBaseHandle(user: HandleSourceUser): string {
+  const candidates: string[] = [];
+  const fromNames = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (fromNames) candidates.push(fromNames);
+  if (user.name?.trim()) candidates.push(user.name.trim());
+  if (user.email?.trim()) {
+    const local = user.email.trim().split("@")[0]?.split("+")[0] ?? "";
+    if (local) candidates.push(local);
+  }
+  if (user.phone) {
+    const digits = user.phone.replace(/\D/g, "");
+    const last4 = digits.slice(-4);
+    if (last4.length === 4) candidates.push(`user${last4}`);
+  }
+  candidates.push("creator");
+
+  for (const candidate of candidates) {
+    const slug = slugifyHandle(candidate);
+    if (slug) return slug;
+  }
+  return "creator";
+}
+
+function withNumericSuffix(base: string, n: number): string {
+  if (n <= 1) return base;
+  const suffix = String(n);
+  const maxBase = USERNAME_MAX - suffix.length;
+  let truncated = base.slice(0, Math.max(USERNAME_MIN, maxBase)).replace(/[._]+$/g, "");
+  if (truncated.length < USERNAME_MIN) {
+    truncated = "creator".slice(0, Math.max(USERNAME_MIN, maxBase));
+  }
+  return `${truncated}${suffix}`;
+}
+
+/**
+ * Allocate an unused username: base, base2…base50, then base + short id chars.
+ */
+export async function allocateUniqueUsername(
+  ctx: MutationCtx,
+  baseRaw: string,
+  salt?: string,
+): Promise<string> {
+  const base = slugifyHandle(baseRaw) ?? "creator";
+
+  for (let i = 0; i < 50; i += 1) {
+    const candidate = withNumericSuffix(base, i === 0 ? 1 : i + 1);
+    if (isReservedUsername(candidate)) continue;
+    let validated: string;
+    try {
+      validated = validateUsername(candidate);
+    } catch {
+      continue;
+    }
+    const taken = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", validated))
+      .unique();
+    if (!taken) return validated;
+  }
+
+  const idPart = (salt ?? "x")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(-6);
+  const fallbackBase = slugifyHandle(`${base}${idPart}`) ?? slugifyHandle(`user${idPart}`) ?? "creator";
+  for (let i = 0; i < 20; i += 1) {
+    const candidate = withNumericSuffix(fallbackBase, i === 0 ? 1 : i + 1);
+    if (isReservedUsername(candidate)) continue;
+    try {
+      const validated = validateUsername(candidate);
+      const taken = await ctx.db
+        .query("profiles")
+        .withIndex("by_username", (q) => q.eq("username", validated))
+        .unique();
+      if (!taken) return validated;
+    } catch {
+      continue;
+    }
+  }
+  // Extremely unlikely — timestamp keeps us unique under the letter-prefix rule.
+  return validateUsername(`u${Date.now().toString(36)}`);
+}
+
+function displayNameFromUser(user: HandleSourceUser): string | undefined {
+  const fromAccount = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  try {
+    return (
+      sanitizeDisplayName(fromAccount || undefined) ??
+      sanitizeDisplayName(user.name?.trim() || undefined)
+    );
+  } catch {
+    // Over-long names: soft truncate without failing profile creation.
+    const raw = (fromAccount || user.name || "").trim().replace(/\s+/g, " ");
+    if (!raw) return undefined;
+    return raw.slice(0, DISPLAY_NAME_MAX);
+  }
+}
+
+/** Idempotent: return existing profile or create one with a unique auto username. */
+export async function ensureProfileForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<Doc<"profiles">> {
+  const existing = await ctx.db
+    .query("profiles")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  if (existing) return existing;
+
+  const user = await ctx.db.get("users", userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const username = await allocateUniqueUsername(
+    ctx,
+    deriveBaseHandle(user),
+    String(userId),
+  );
+  const now = Date.now();
+  const profileId = await ctx.db.insert("profiles", {
+    userId,
+    username,
+    displayName: displayNameFromUser(user),
+    bio: undefined,
+    avatarAssetId: undefined,
+    contactLinks: [],
+    isPublic: true,
+    followerCount: 0,
+    followingCount: 0,
+    postCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const profile = await ctx.db.get("profiles", profileId);
+  if (!profile) throw new Error("Failed to create profile");
+  return profile;
+}
