@@ -63,8 +63,8 @@
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
-  background: color-mix(in srgb, #fff 10%, transparent);
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: color-mix(in srgb, var(--color-cursor-text) 10%, transparent);
   /* clip-path clips box-shadow — shadow lives on .logo-loader-aura instead */
   clip-path: circle(50% at 50% 50%);
   -webkit-clip-path: circle(50% at 50% 50%);

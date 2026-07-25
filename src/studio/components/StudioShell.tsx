@@ -4706,7 +4706,7 @@ export function StudioShell({
           --studio-composer-glass: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent);
           --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
           --studio-composer-glass-muted: color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent);
-          --studio-composer-glass-border: rgba(255, 255, 255, 0.14);
+          --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
           --studio-composer-glass-blur: saturate(180%) blur(28px);
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
@@ -4733,7 +4733,7 @@ export function StudioShell({
           --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
           --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-bg, #05080f) 86%, transparent);
           --studio-mobile-chrome-blur: saturate(160%) blur(16px);
-          --studio-mobile-chrome-border: rgba(255, 255, 255, 0.14);
+          --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
           /* Active / muted chrome: right-corner → left fade border stroke */
           --studio-chrome-glow-border: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
           --studio-chrome-glow-border-strong: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border));
@@ -5021,7 +5021,7 @@ export function StudioShell({
           [data-appearance="light"] .studio-polish.is-studio-mobile {
             --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
             --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
-            --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
+            --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
             --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           }
           .studio-polish.is-studio-mobile :where(
@@ -5811,9 +5811,9 @@ export function StudioShell({
           max-width: min(240px, calc(100vw - 20px));
           padding: 8px 10px;
           border-radius: 10px;
-          border: 1px solid color-mix(in srgb, #fff 14%, transparent);
-          background: color-mix(in srgb, #0b1220 88%, transparent);
-          color: #fff;
+          border: 1px solid var(--color-cursor-border, var(--mos-border));
+          background: color-mix(in srgb, var(--mos-panel, #0b1220) 92%, transparent);
+          color: var(--color-cursor-text-bright);
           font-size: 12px;
           font-weight: 600;
           line-height: 1.3;
@@ -6458,9 +6458,9 @@ export function StudioShell({
           place-items: center;
           width: 36px;
           height: 36px;
-          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          border: 1px solid var(--color-cursor-border, var(--mos-border));
           border-radius: 999px;
-          background: color-mix(in srgb, #fff 6%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text) 6%, transparent);
           color: var(--color-cursor-text-bright);
           cursor: pointer;
           padding: 0;
@@ -6488,9 +6488,9 @@ export function StudioShell({
         }
         .studio-mobile-app-menu-section {
           flex: 0 0 auto;
-          border: 1px solid color-mix(in srgb, #fff 12%, transparent);
+          border: 1px solid var(--color-cursor-border, var(--mos-border));
           border-radius: 16px;
-          background: color-mix(in srgb, #fff 4%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text) 4%, transparent);
           overflow: hidden;
         }
         .studio-mobile-app-menu-label {
@@ -6502,7 +6502,7 @@ export function StudioShell({
           font-weight: 700;
           letter-spacing: 0.08em;
           text-transform: uppercase;
-          border-bottom: 1px solid color-mix(in srgb, #fff 10%, transparent);
+          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
         }
         .studio-mobile-app-menu-list {
           display: grid;
@@ -6528,7 +6528,7 @@ export function StudioShell({
         }
         .studio-mobile-app-menu-item:hover,
         .studio-mobile-app-menu-item:active {
-          background: color-mix(in srgb, #fff 8%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
         }
         .studio-mobile-app-menu-item.is-danger {
           color: #ff8a9a;
@@ -6540,7 +6540,7 @@ export function StudioShell({
           height: 32px;
           flex: 0 0 auto;
           border-radius: 10px;
-          background: color-mix(in srgb, #fff 8%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
           color: inherit;
         }
         .studio-mobile-app-menu-item.is-danger .studio-mobile-app-menu-item-icon {
@@ -6783,7 +6783,7 @@ export function StudioShell({
         }
         /* Ghost portals to body — only use :root tokens (studio-polish vars are undefined there). */
         .cursor-unified-tab-ghost {
-          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, rgba(255, 255, 255, 0.16)) !important;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border, var(--mos-border))) !important;
           border-radius: 999px !important;
           background: color-mix(
             in srgb,
@@ -6798,7 +6798,7 @@ export function StudioShell({
           color: var(--mos-text-bright, var(--color-cursor-text, #fff)) !important;
         }
         [data-appearance="light"] .cursor-unified-tab-ghost {
-          border-color: color-mix(in srgb, var(--cursor-accent) 24%, rgba(15, 23, 42, 0.12)) !important;
+          border-color: color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-border, var(--mos-border))) !important;
           background: color-mix(
             in srgb,
             var(--cursor-accent) 10%,
@@ -6813,11 +6813,13 @@ export function StudioShell({
           color: var(--cursor-accent-hover, var(--cursor-accent)) !important;
         }
         .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
-          border-color: color-mix(in srgb, var(--cursor-accent) 12%, var(--color-cursor-border));
+          border-color: var(--color-cursor-border, var(--mos-border));
           box-shadow:
-            0 18px 50px rgba(0, 0, 0, 0.34),
-            0 0 0 1px rgba(255, 255, 255, 0.025),
-            0 0 30px var(--studio-glow-soft);
+            0 18px 50px color-mix(in srgb, #000 22%, transparent),
+            0 0 0 1px var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        [data-appearance="light"] .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .cursor-settings-panel) {
+          box-shadow: 0 12px 28px color-mix(in srgb, #000 10%, transparent);
         }
         .studio-polish .cursor-settings-backdrop {
           background: color-mix(in srgb, #000 28%, transparent) !important;
@@ -6834,19 +6836,19 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish {
           --studio-mobile-chrome-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
           --studio-mobile-chrome-glass-foot: color-mix(in srgb, var(--mos-panel, #f5f5f7) 84%, transparent);
-          --studio-mobile-chrome-border: rgba(15, 23, 42, 0.12);
+          --studio-mobile-chrome-border: var(--color-cursor-border, var(--mos-border));
           --studio-mobile-chrome-blur: saturate(160%) blur(16px);
           --studio-chrome-muted-border-fade: linear-gradient(
             225deg,
-            rgba(15, 23, 42, 0.18),
-            rgba(15, 23, 42, 0.10) 28%,
-            rgba(15, 23, 42, 0.04) 55%,
+            color-mix(in srgb, var(--color-cursor-text) 18%, transparent),
+            color-mix(in srgb, var(--color-cursor-text) 10%, transparent) 28%,
+            color-mix(in srgb, var(--color-cursor-text) 4%, transparent) 55%,
             transparent 80%
           );
           --studio-composer-glass: color-mix(in srgb, #e8ecf2 92%, transparent);
           --studio-composer-glass-strong: color-mix(in srgb, #f4f6f9 96%, transparent);
           --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 86%, transparent);
-          --studio-composer-glass-border: rgba(15, 23, 42, 0.12);
+          --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
             0 2px 10px color-mix(in srgb, #000 3.5%, transparent),

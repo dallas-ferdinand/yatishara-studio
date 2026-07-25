@@ -3,7 +3,7 @@
 .public-profile-shell {
   --pp-ink: var(--color-cursor-text-bright, #f4f1ea);
   --pp-muted: var(--color-cursor-muted, color-mix(in srgb, #f4f1ea 62%, transparent));
-  --pp-line: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+  --pp-line: var(--studio-composer-glass-border, var(--color-cursor-border, var(--mos-border)));
   --pp-accent: var(--cursor-accent, #d8ff3e);
   --pp-accent-ink: #10140a;
   --pp-glass: var(
