@@ -272,7 +272,8 @@ function buildDeskPalette(scheme, isLight) {
       panel: LIGHT_BASE.surface,
       composer: mixHex(LIGHT_BASE.bg, LIGHT_BASE.surface, 0.38),
       surface: mixHex(LIGHT_BASE.bg, LIGHT_BASE.surface, 0.55),
-      surfaceRaised: mixHex(LIGHT_BASE.raised, LIGHT_BASE.surface, 0.35),
+      /* Darker plate grey for tiles/banners — keep neutral, not cool slate. */
+      surfaceRaised: LIGHT_BASE.raised,
       surfaceOverlay: LIGHT_BASE.hover,
       surfaceInput: LIGHT_BASE.surface,
       border: hairlineBorder(true, 0.11),
@@ -361,6 +362,7 @@ function applyDeskTokens(palette, isLight) {
   root.style.setProperty("--mos-bg", palette.bg);
   root.style.setProperty("--mos-sidebar", palette.sidebar);
   root.style.setProperty("--mos-panel", palette.panel);
+  root.style.setProperty("--mos-raised", palette.surfaceRaised);
   root.style.setProperty("--mos-composer", palette.composer);
   root.style.setProperty("--mos-surface", palette.surface);
   root.style.setProperty("--mos-border", palette.border);

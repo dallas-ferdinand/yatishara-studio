@@ -6357,7 +6357,7 @@ export function StudioShell({
           gap: 6px;
         }
         .studio-files-mobile-sheet .desk-file-breadcrumbs-chip {
-          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+          border: 1px solid var(--color-cursor-border, var(--mos-border));
           border-radius: 999px;
           background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
           color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
@@ -6370,9 +6370,18 @@ export function StudioShell({
         }
         .studio-files-mobile-sheet .desk-file-breadcrumbs-chip.is-current,
         .studio-files-mobile-sheet .desk-file-breadcrumbs-chip:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 40%, transparent);
-          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+          border-color: var(--color-cursor-border, var(--mos-border));
+          background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7));
           color: var(--color-cursor-text-bright);
+        }
+        [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip {
+          background: var(--mos-panel, #f5f5f7);
+          color: var(--color-cursor-muted);
+        }
+        [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip.is-current,
+        [data-appearance="light"] .studio-files-mobile-sheet .desk-file-breadcrumbs-chip:hover {
+          background: var(--mos-raised, #e1e1e7);
+          color: var(--color-cursor-text);
         }
         .studio-files-mobile-sheet .cursor-explorer-panel,
         .studio-files-mobile-sheet .desk-file-grid,
@@ -6397,14 +6406,14 @@ export function StudioShell({
           --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text-bright) 11%, transparent);
           --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text-bright) 9%, transparent);
           --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text-bright) 13%, transparent);
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 16%, transparent);
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile {
-          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text) 6%, transparent);
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 10%, transparent);
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 8%, transparent);
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 12%, transparent);
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 12%, transparent);
+          --studio-grid-tile-bg: var(--mos-raised, #e1e1e7);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #e1e1e7));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #e1e1e7));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #e1e1e7));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #e1e1e7));
         }
         .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual,
         .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual,
@@ -6430,7 +6439,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
-          background: color-mix(in srgb, var(--mos-text) 6%, transparent) !important;
+          background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7)) !important;
         }
         .studio-polish.is-studio-mobile .desk-file-thumb-progressive,
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
@@ -6845,9 +6854,9 @@ export function StudioShell({
             color-mix(in srgb, var(--color-cursor-text) 4%, transparent) 55%,
             transparent 80%
           );
-          --studio-composer-glass: color-mix(in srgb, #e8ecf2 92%, transparent);
-          --studio-composer-glass-strong: color-mix(in srgb, #f4f6f9 96%, transparent);
-          --studio-composer-glass-muted: color-mix(in srgb, #e8ecf2 86%, transparent);
+          --studio-composer-glass: color-mix(in srgb, var(--mos-panel, #f5f5f7) 92%, transparent);
+          --studio-composer-glass-strong: color-mix(in srgb, var(--mos-panel, #f5f5f7) 96%, transparent);
+          --studio-composer-glass-muted: color-mix(in srgb, var(--mos-bg, #ececf0) 90%, transparent);
           --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
           --studio-composer-glass-blur: saturate(180%) blur(10px);
           --studio-composer-glass-shadow:
@@ -6857,19 +6866,20 @@ export function StudioShell({
           --studio-shell-border: var(--color-cursor-border-soft);
           --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-surface-hover: var(--color-cursor-hover);
-          --studio-grid-tile-bg: color-mix(in srgb, var(--mos-text) 2%, var(--mos-bg));
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 4.5%, var(--mos-bg));
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 3.4%, var(--mos-bg));
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 5.5%, var(--mos-bg));
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-accent) 6%, var(--mos-bg));
+          /* Neutral greys only — no cool/blue slate mixes in the file grid. */
+          --studio-grid-tile-bg: var(--mos-raised, #e1e1e7);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #e1e1e7));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #e1e1e7));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #e1e1e7));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #e1e1e7));
           --studio-grid-tile-glow: none;
-          --studio-gen-frame-bg: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+          --studio-gen-frame-bg: var(--mos-raised, #e1e1e7);
           --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 72%, var(--color-cursor-muted));
           --studio-gen-card-shadow:
             0 6px 18px color-mix(in srgb, #000 4%, transparent),
             inset 0 1px 0 rgba(255, 255, 255, 0.4);
-          --studio-gen-media-bg: color-mix(in srgb, #e8ecf2 88%, transparent);
-          --studio-gen-glass-fill: color-mix(in srgb, #e8ecf2 92%, var(--cursor-accent) 4%);
+          --studio-gen-media-bg: var(--mos-raised, #e1e1e7);
+          --studio-gen-glass-fill: var(--mos-panel, #f5f5f7);
           --studio-gen-glass-blur: saturate(140%) blur(10px);
           --studio-gen-aura-a: color-mix(in srgb, var(--cursor-accent) 5%, transparent);
           --studio-gen-aura-b: color-mix(in srgb, var(--cursor-accent-hover) 3%, transparent);
@@ -9656,7 +9666,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge,
         [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge {
-          background: rgba(255, 255, 255, 0.78);
+          background: var(--mos-panel, #f5f5f7);
           color: var(--color-cursor-text);
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-badge svg,

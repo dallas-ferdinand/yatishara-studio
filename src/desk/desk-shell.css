@@ -1025,11 +1025,11 @@ select.cursor-select:focus {
 }
 
 :not([data-appearance="light"]) .desk-file-thumb-audio {
-  background: color-mix(in srgb, #2ec4c6 10%, var(--mos-panel, #0f172a));
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 6%, var(--mos-panel));
 }
 
 [data-appearance="light"] .desk-file-thumb-audio {
-  background: color-mix(in srgb, #0d9488 8%, var(--mos-bg, #fff));
+  background: var(--mos-raised, #e1e1e7);
 }
 
 .desk-file-thumb-audio-wave {
@@ -1048,9 +1048,9 @@ select.cursor-select:focus {
   border-radius: 999px;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #5eead4 88%, #fff) 0%,
-    color-mix(in srgb, #14b8a6 92%, #0f766e) 55%,
-    color-mix(in srgb, #0f766e 85%, #134e4a) 100%
+    color-mix(in srgb, var(--mos-text-bright, #fff) 72%, transparent) 0%,
+    color-mix(in srgb, var(--mos-text-bright, #fff) 42%, transparent) 55%,
+    color-mix(in srgb, var(--mos-text-bright, #fff) 22%, transparent) 100%
   );
   opacity: 0.88;
 }
@@ -1058,8 +1058,8 @@ select.cursor-select:focus {
 [data-appearance="light"] .desk-file-thumb-audio-wave > span {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, #2dd4bf 70%, #0f766e) 0%,
-    color-mix(in srgb, #0d9488 85%, #115e59) 100%
+    color-mix(in srgb, var(--mos-text) 48%, transparent) 0%,
+    color-mix(in srgb, var(--mos-text) 28%, transparent) 100%
   );
   opacity: 0.78;
 }
@@ -1103,22 +1103,20 @@ select.cursor-select:focus {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-radius: 8px;
-  background: color-mix(in srgb, var(--mos-panel, #0f172a) 88%, var(--color-cursor-bg));
+  background: var(--mos-panel);
   box-shadow: none;
   transform-origin: 50% 50%;
 }
 
 :not([data-appearance="light"]) .desk-folder-peek-card {
-  background: var(--mos-panel, #0f172a);
+  background: var(--mos-panel);
 }
 
 [data-appearance="light"] .desk-folder-peek-card {
-  background: color-mix(in srgb, var(--mos-panel, #f5f5f7) 88%, var(--color-cursor-bg));
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.1),
-    0 4px 10px rgb(0 0 0 / 0.12);
+  background: var(--mos-raised, #e1e1e7);
+  box-shadow: none;
 }
 
 .desk-folder-peek-card-media {
@@ -1141,11 +1139,11 @@ select.cursor-select:focus {
   height: 100%;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--mos-text-bright, #fff) 4%, var(--mos-bg, var(--color-cursor-bg)));
+  background: var(--mos-bg);
 }
 
 :not([data-appearance="light"]) .desk-folder-peek-icon {
-  background: color-mix(in srgb, var(--mos-text-bright, #fff) 4%, var(--mos-bg, var(--color-cursor-bg)));
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 4%, var(--mos-bg));
 }
 
 .desk-folder-peek-label {
@@ -1153,9 +1151,9 @@ select.cursor-select:focus {
   flex: 0 0 auto;
   padding: 2px 4px;
   overflow: hidden;
-  background-color: var(--mos-panel, #0f172a);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 55%, transparent);
-  color: var(--mos-text-soft, rgba(255, 255, 255, 0.82));
+  background-color: var(--mos-panel);
+  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--mos-text-soft, var(--color-cursor-muted));
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
@@ -1165,17 +1163,17 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-label {
-  background-color: color-mix(in srgb, var(--mos-text) 7%, var(--mos-bg));
-  color: var(--color-cursor-text, #1b1f24);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+  background-color: var(--mos-raised, #e1e1e7);
+  color: var(--color-cursor-text);
+  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
 .desk-folder-peek-card--element .desk-folder-peek-label {
-  background-color: var(--mos-surface, #111c2f);
+  background-color: var(--mos-panel);
 }
 
 [data-appearance="light"] .desk-folder-peek-card--element .desk-folder-peek-label {
-  background-color: color-mix(in srgb, var(--mos-text) 11%, var(--mos-bg));
+  background-color: var(--mos-raised, #e1e1e7);
 }
 
 .desk-file-thumb-peek-label {
@@ -1183,9 +1181,9 @@ select.cursor-select:focus {
   flex: 0 0 auto;
   padding: 2px 4px;
   overflow: hidden;
-  background-color: var(--mos-panel, #0f172a);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 55%, transparent);
-  color: var(--mos-text-soft, rgba(255, 255, 255, 0.82));
+  background-color: var(--mos-panel);
+  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--mos-text-soft, var(--color-cursor-muted));
   font-size: 10px;
   font-weight: 600;
   line-height: 1.15;
@@ -1195,17 +1193,17 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-label {
-  background-color: color-mix(in srgb, var(--mos-text) 7%, var(--mos-bg));
+  background-color: var(--mos-raised, #e1e1e7);
   color: var(--color-cursor-text);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-cursor-border-soft) 80%, transparent);
+  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
 .desk-file-thumb-peek-wrap--element .desk-file-thumb-peek-label {
-  background-color: var(--mos-surface, #111c2f);
+  background-color: var(--mos-panel);
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element .desk-file-thumb-peek-label {
-  background-color: color-mix(in srgb, var(--mos-text) 11%, var(--mos-bg));
+  background-color: var(--mos-raised, #e1e1e7);
 }
 
 .desk-file-thumb-peek-wrap {
@@ -1218,15 +1216,15 @@ select.cursor-select:focus {
   min-height: 0;
   overflow: hidden;
   border-radius: inherit;
-  background: var(--mos-panel, #0f172a);
+  background: var(--mos-panel);
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap {
-  background: color-mix(in srgb, var(--mos-text) 7%, var(--mos-bg));
+  background: var(--mos-raised, #e1e1e7);
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element {
-  background: color-mix(in srgb, var(--mos-text) 11%, var(--mos-bg));
+  background: var(--mos-raised, #e1e1e7);
 }
 
 .desk-file-thumb-peek-wrap .desk-file-thumb-progressive {
@@ -9325,7 +9323,7 @@ textarea.cursor-input {
 [data-appearance="light"] .studio-polish .studio-chat-bubble.is-assistant {
   background: var(
     --studio-composer-glass,
-    color-mix(in srgb, #e8ecf2 70%, transparent)
+    color-mix(in srgb, var(--mos-panel, #f5f5f7) 70%, transparent)
   ) !important;
 }
 

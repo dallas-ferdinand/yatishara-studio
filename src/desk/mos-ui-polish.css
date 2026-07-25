@@ -2569,8 +2569,8 @@
 }
 
 .desk-file-grid-item:hover {
-  border-color: color-mix(in srgb, var(--mos-accent) 34%, var(--mos-border));
-  background: color-mix(in srgb, var(--mos-accent) 7%, var(--mos-panel));
+  border-color: var(--color-cursor-border, var(--mos-border));
+  background: color-mix(in srgb, var(--mos-text) 5%, var(--mos-panel));
 }
 
 .desk-file-thumb-visual {
@@ -2578,7 +2578,7 @@
 }
 
 [data-appearance="light"] .desk-file-thumb-visual {
-  background: color-mix(in srgb, var(--mos-text) 2.5%, var(--mos-bg));
+  background: var(--mos-raised, var(--cursor-surface-raised, #e1e1e7));
 }
 
 .desk-file-thumb-visual:has(.desk-file-thumb-image),
