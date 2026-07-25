@@ -13275,11 +13275,11 @@ export function StudioShell({
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 12px;
+          gap: 8px;
           width: 100%;
           height: 36px;
           min-height: 36px;
-          padding: 0 12px;
+          padding: 0 8px;
           border: 1px solid var(--color-cursor-border);
           border-radius: var(--cursor-radius-sm, 6px);
           background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));

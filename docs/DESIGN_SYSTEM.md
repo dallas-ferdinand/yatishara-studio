@@ -191,7 +191,7 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 | `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
 | `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
 | `.studio-admin-panel` | Admin canvas | `--mos-page` |
-| `.studio-admin-section-head` | Compact section bar (36px) | `--mos-plate` |
+| `.studio-admin-section-head` | Compact section bar (36px, `0 8px` pad) | `--mos-plate` |
 | `.studio-admin-card`, `.studio-plan-card`, `.studio-bank-card` | Cards | `--mos-plate` |
 | `.studio-admin-chip` | Count / meta chip | subtle |
 

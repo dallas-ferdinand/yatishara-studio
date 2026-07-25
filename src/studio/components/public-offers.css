@@ -210,7 +210,7 @@
   justify-content: space-between;
   gap: 8px;
   min-height: 36px;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: var(--cursor-radius-sm, 6px);
   background: var(--mos-plate, var(--cursor-surface));
 }
