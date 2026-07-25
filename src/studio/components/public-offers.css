@@ -1,0 +1,450 @@
+/* Public offers — admin/billing chrome: page L1, plates L2, chips L3 (see docs/DESIGN_SYSTEM.md) */
+
+.public-offers-route {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--mos-page, #f5f5f7);
+  color: var(--color-cursor-text, var(--mos-text, #1b1f24));
+  font-family: var(--font-onest), system-ui, sans-serif;
+}
+
+.public-offers-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 48px;
+  padding: 0 16px;
+  background: var(--mos-page, #f5f5f7);
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.public-offers-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.public-offers-brand img {
+  display: block;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.public-offers-brand strong {
+  font-size: var(--desk-text-ui, 13px);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.public-offers-brand span {
+  font-size: var(--desk-text-xs, 11px);
+  font-weight: 600;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  white-space: nowrap;
+}
+
+.public-offers-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.public-offers-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: inherit;
+  font: inherit;
+  font-size: var(--desk-text-sm, 12px);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.public-offers-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.public-offers-btn:hover:not(:disabled) {
+  background: var(--mos-active, var(--color-cursor-active));
+}
+
+.public-offers-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.public-offers-btn.is-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-btn.is-quiet:hover:not(:disabled) {
+  background: var(--mos-plate, var(--color-cursor-hover));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.public-offers-btn.is-primary {
+  border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+  color: var(--color-cursor-text, var(--mos-text));
+  font-weight: 700;
+}
+
+.public-offers-btn.is-primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+}
+
+.public-offers-btn.is-block {
+  width: 100%;
+  min-height: 34px;
+}
+
+.public-offers-body {
+  box-sizing: border-box;
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}
+
+.public-offers-body.is-narrow {
+  max-width: 860px;
+}
+
+.public-offers-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-xl, 12px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+.public-offers-hero-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.public-offers-kicker {
+  margin: 0;
+  font-size: var(--desk-text-2xs, 10px);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-hero h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.public-offers-hero p {
+  margin: 0;
+  max-width: 56ch;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  font-size: var(--desk-text-xs, 11px);
+  font-weight: 600;
+  color: var(--color-cursor-text, var(--mos-text));
+  white-space: nowrap;
+}
+
+.public-offers-chip svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+.public-offers-section-head h2 {
+  margin: 0;
+  font-size: var(--desk-text-sm, 12px);
+  font-weight: 650;
+}
+
+.public-offers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.public-offers-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  height: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.public-offers-card:hover {
+  border-color: color-mix(in srgb, var(--cursor-accent) 32%, var(--color-cursor-border));
+  background: var(--mos-hover, var(--color-cursor-hover));
+}
+
+.public-offers-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.public-offers-card-title {
+  margin: 0;
+  font-size: var(--desk-text-base, 14px);
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.public-offers-card-seller {
+  margin: 2px 0 0;
+  font-size: var(--desk-text-xs, 11px);
+  font-weight: 600;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  overflow-wrap: anywhere;
+}
+
+.public-offers-card-price {
+  flex: 0 0 auto;
+  font-size: var(--desk-text-ui, 13px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.public-offers-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.public-offers-state {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 44px 16px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+  text-align: center;
+}
+
+.public-offers-state-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  box-shadow: inset 0 0 0 1px var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-state-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.public-offers-state strong {
+  font-size: var(--desk-text-ui, 13px);
+  font-weight: 650;
+}
+
+.public-offers-state p {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--desk-text-sm, 12px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+  align-items: start;
+  gap: 12px;
+}
+
+.public-offers-detail-main,
+.public-offers-detail-aside {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.public-offers-panel {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+.public-offers-panel h2 {
+  margin: 0;
+  font-size: var(--desk-text-sm, 12px);
+  font-weight: 650;
+}
+
+.public-offers-prose {
+  margin: 0;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.public-offers-price {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.public-offers-rows {
+  display: grid;
+  gap: 8px;
+}
+
+.public-offers-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--desk-text-sm, 12px);
+}
+
+.public-offers-row dt {
+  margin: 0;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-row dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.public-offers-note {
+  margin: 0;
+  font-size: var(--desk-text-xs, 11px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.public-offers-divider {
+  height: 1px;
+  margin: 0;
+  border: 0;
+  background: var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+@media (max-width: 860px) {
+  .public-offers-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .public-offers-topbar {
+    padding: 0 12px;
+  }
+
+  .public-offers-body {
+    padding: 12px 12px 32px;
+  }
+
+  .public-offers-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px;
+  }
+
+  .public-offers-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
