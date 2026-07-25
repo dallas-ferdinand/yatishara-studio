@@ -176,6 +176,10 @@ const ProfileSettingsCard = dynamic(
   () => import("./ProfileSettingsCard").then((m) => m.ProfileSettingsCard),
   { ssr: false },
 );
+const SellerPayoutSettingsCard = dynamic(
+  () => import("./SellerPayoutSettingsCard").then((m) => m.SellerPayoutSettingsCard),
+  { ssr: false },
+);
 const StudioRenameDialog = dynamic(
   () => import("./StudioRenameDialog").then((m) => m.StudioRenameDialog),
   { ssr: false },
@@ -8778,6 +8782,45 @@ export function StudioShell({
           caret-color: var(--color-cursor-text);
           box-shadow: 0 0 0 1000px var(--mos-panel, #f5f5f7) inset !important;
         }
+        /* Payout account: give the shared select the same skin as settings inputs. */
+        .studio-payout-fields .cursor-select-menu.is-field .cursor-select-trigger {
+          min-height: var(--studio-control-h, 40px);
+          height: auto;
+          border-radius: var(--studio-input-radius, 12px);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          background: color-mix(in srgb, var(--mos-surface) 72%, transparent);
+          padding: 0 10px 0 12px;
+          color: var(--color-cursor-text-bright);
+        }
+        .studio-payout-intro {
+          display: flex;
+          gap: 10px;
+          align-items: flex-start;
+          margin-bottom: 14px;
+        }
+        .studio-payout-intro svg {
+          width: 15px;
+          height: 15px;
+          margin-top: 1px;
+          flex: 0 0 auto;
+          color: var(--color-cursor-muted);
+        }
+        .studio-payout-intro strong {
+          display: block;
+          color: var(--color-cursor-text-bright);
+          font-size: 12.5px;
+        }
+        .studio-payout-intro p {
+          margin: 3px 0 0;
+          color: var(--color-cursor-muted);
+          font-size: 11.5px;
+          line-height: 1.5;
+        }
+        .studio-payout-updated {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+          text-align: center;
+        }
         .studio-profile-editor {
           min-width: 0;
           max-width: min(100%, 520px);
@@ -13474,6 +13517,26 @@ export function StudioShell({
         }
         .studio-admin-job-link:hover {
           text-decoration: underline;
+        }
+        .studio-admin-payout-dest {
+          display: grid;
+          gap: 1px;
+          min-width: 0;
+        }
+        .studio-admin-payout-dest strong {
+          font-size: 12px;
+        }
+        .studio-admin-payout-dest span {
+          color: var(--color-cursor-muted);
+          font-size: 11px;
+        }
+        .studio-admin-payout-dest .studio-admin-job-link {
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.02em;
+        }
+        .studio-admin-payout-missing {
+          color: var(--mos-warning, #f59e0b);
+          font-size: 11px;
         }
         .studio-admin-receipt-preview {
           display: grid;

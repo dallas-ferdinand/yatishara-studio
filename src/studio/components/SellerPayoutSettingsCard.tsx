@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { Landmark, Loader2, PiggyBank, Wallet } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
@@ -28,22 +28,21 @@ export function SellerPayoutSettingsCard() {
   const [busy, setBusy] = useState(false);
 
   const account = payout?.account ?? null;
+  const hydratedRef = useRef("");
   useEffect(() => {
     if (!account) return;
+    // Only refill from the server when the stored account actually changed,
+    // so a background query update never wipes what is being typed.
+    const signature = JSON.stringify(account);
+    if (hydratedRef.current === signature) return;
+    hydratedRef.current = signature;
     setBankName(account.bankName ?? "");
     setAccountName(account.accountName ?? "");
     setAccountNumber(account.accountNumber);
     setAccountType(account.accountType ?? "chequing");
     setBranch(account.branch ?? "");
     setNote(account.note ?? "");
-  }, [
-    account?.bankName,
-    account?.accountName,
-    account?.accountNumber,
-    account?.accountType,
-    account?.branch,
-    account?.note,
-  ]);
+  }, [account]);
 
   function touched() {
     setSaved("");

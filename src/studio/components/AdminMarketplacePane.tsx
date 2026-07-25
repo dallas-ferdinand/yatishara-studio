@@ -53,6 +53,49 @@ function KycLine({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
+type PayoutAccount = {
+  bankName?: string;
+  accountName?: string;
+  accountNumber: string;
+  accountType?: "chequing" | "savings";
+  branch?: string;
+  note?: string;
+};
+
+/** Everything finance needs to send the transfer, straight from the seller's Settings. */
+function PayoutDestination({ account }: { account: PayoutAccount | null }) {
+  if (!account) {
+    return (
+      <span className="studio-admin-payout-missing">
+        No bank details — ask the seller to add them in Settings → Payouts
+      </span>
+    );
+  }
+  const line = [account.bankName, account.accountType, account.branch]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="studio-admin-payout-dest">
+      <strong>{account.accountName || "—"}</strong>
+      <button
+        type="button"
+        className="studio-admin-job-link"
+        title="Copy account number"
+        onClick={() => {
+          void navigator.clipboard
+            ?.writeText(account.accountNumber)
+            .then(() => toast.success("Account number copied"))
+            .catch(() => toast.error("Could not copy"));
+        }}
+      >
+        {account.accountNumber}
+      </button>
+      {line ? <span>{line}</span> : null}
+      {account.note ? <span>{account.note}</span> : null}
+    </div>
+  );
+}
+
 function humanizeJobStatus(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -407,6 +450,7 @@ export function AdminMarketplacePane() {
               <thead>
                 <tr>
                   <th>Seller</th>
+                  <th>Pay to</th>
                   <th>Amount</th>
                   <th>Status</th>
                   <th>Actions</th>
@@ -427,6 +471,9 @@ export function AdminMarketplacePane() {
                       >
                         {payout.offerTitle ?? "Open job"}
                       </button>
+                    </td>
+                    <td>
+                      <PayoutDestination account={payout.payoutAccount} />
                     </td>
                     <td>{formatTtdCents(payout.amountCents)}</td>
                     <td>{payout.status}</td>
