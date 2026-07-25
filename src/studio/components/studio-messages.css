@@ -454,6 +454,7 @@
   pointer-events: none;
 }
 
+/* Same footprint as .studio-dm-send, bordered quiet style (like .is-mic). */
 .studio-dm-attach {
   display: inline-flex;
   align-items: center;
@@ -461,20 +462,20 @@
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
-  border: 0;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
   border-radius: 999px;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
+  background: var(--cursor-surface-input, var(--mos-surface));
+  color: var(--color-cursor-text, var(--mos-text));
   cursor: pointer;
 }
 
 .studio-dm-attach:hover:not(:disabled) {
+  border-color: var(--cursor-border-focus, var(--cursor-accent));
   color: var(--color-cursor-text-bright, var(--mos-text));
-  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
 }
 
 .studio-dm-attach:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
