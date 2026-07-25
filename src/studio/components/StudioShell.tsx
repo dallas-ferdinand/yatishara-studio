@@ -115,6 +115,7 @@ import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { StudioSocialSidebar } from "./StudioSocialSidebar";
 import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
+import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
   TOP_UP_TIER_CREDITS,
@@ -4792,6 +4793,7 @@ export function StudioShell({
         }
       }}
     >
+      <StudioOnlinePresence />
       <div className="studio-backdrop" aria-hidden="true" />
       <style jsx global>{`
         .studio-polish {

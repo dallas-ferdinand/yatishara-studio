@@ -20,12 +20,15 @@ export function StudioDmLabelEditorDialog({
   initialName,
   initialIcon,
   onClose,
+  /** Overlay sits over the sidebar header; modal is the old centered dialog. */
+  variant = "overlay",
 }: {
   open: boolean;
   labelId?: LabelId;
   initialName?: string;
   initialIcon?: string;
   onClose: () => void;
+  variant?: "overlay" | "modal";
 }) {
   const createLabel = useMutation(api.dmLabels.create);
   const updateLabel = useMutation(api.dmLabels.update);
@@ -42,6 +45,15 @@ export function StudioDmLabelEditorDialog({
     setError("");
     setBusy(false);
   }, [open, initialName, initialIcon]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -77,90 +89,108 @@ export function StudioDmLabelEditorDialog({
     }
   }
 
+  const panel = (
+    <div
+      className={
+        variant === "overlay" ? "studio-dm-label-editor-panel" : "studio-dm-dialog"
+      }
+      role="dialog"
+      aria-modal="true"
+      aria-label={labelId ? "Edit label" : "New label"}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <header className="studio-dm-dialog-head">
+        <strong>{labelId ? "Edit label" : "New label"}</strong>
+        <button type="button" onClick={onClose} aria-label="Close">
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </header>
+      <div className="studio-dm-dialog-body">
+        <label className="studio-dm-dialog-field">
+          <span>Name</span>
+          <input
+            value={name}
+            maxLength={40}
+            placeholder="e.g. Clients"
+            autoFocus
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void save();
+            }}
+          />
+        </label>
+        <div className="studio-dm-dialog-field">
+          <span>Icon</span>
+          <div className="studio-dm-icon-grid" role="listbox" aria-label="Label icon">
+            {DM_LABEL_ICON_OPTIONS.map(({ key, Icon, label }) => {
+              const active = icon === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  className={`studio-dm-icon-opt${active ? " is-active" : ""}`}
+                  title={label}
+                  onClick={() => setIcon(key)}
+                >
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {error ? <p className="studio-dm-error">{error}</p> : null}
+      </div>
+      <footer className="studio-dm-dialog-foot">
+        {labelId ? (
+          <button
+            type="button"
+            className="studio-dm-dialog-danger"
+            onClick={() => void destroy()}
+            disabled={busy}
+          >
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+            Delete
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="studio-dm-dialog-actions">
+          <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="studio-dm-dialog-primary"
+            onClick={() => void save()}
+            disabled={busy || !name.trim()}
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
+            {labelId ? "Save" : "Create"}
+          </button>
+        </div>
+      </footer>
+    </div>
+  );
+
+  if (variant === "overlay") {
+    return (
+      <div
+        className="studio-dm-label-editor-overlay"
+        role="presentation"
+        onClick={onClose}
+      >
+        {panel}
+      </div>
+    );
+  }
+
   return (
     <div className="studio-dm-dialog-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="studio-dm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={labelId ? "Edit label" : "New label"}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="studio-dm-dialog-head">
-          <strong>{labelId ? "Edit label" : "New label"}</strong>
-          <button type="button" onClick={onClose} aria-label="Close">
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </header>
-        <div className="studio-dm-dialog-body">
-          <label className="studio-dm-dialog-field">
-            <span>Name</span>
-            <input
-              value={name}
-              maxLength={40}
-              placeholder="e.g. Clients"
-              autoFocus
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void save();
-              }}
-            />
-          </label>
-          <div className="studio-dm-dialog-field">
-            <span>Icon</span>
-            <div className="studio-dm-icon-grid" role="listbox" aria-label="Label icon">
-              {DM_LABEL_ICON_OPTIONS.map(({ key, Icon, label }) => {
-                const active = icon === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    className={`studio-dm-icon-opt${active ? " is-active" : ""}`}
-                    title={label}
-                    onClick={() => setIcon(key)}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          {error ? <p className="studio-dm-error">{error}</p> : null}
-        </div>
-        <footer className="studio-dm-dialog-foot">
-          {labelId ? (
-            <button
-              type="button"
-              className="studio-dm-dialog-danger"
-              onClick={() => void destroy()}
-              disabled={busy}
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Delete
-            </button>
-          ) : (
-            <span />
-          )}
-          <div className="studio-dm-dialog-actions">
-            <button type="button" className="studio-dm-dialog-ghost" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="studio-dm-dialog-primary"
-              onClick={() => void save()}
-              disabled={busy || !name.trim()}
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : null}
-              {labelId ? "Save" : "Create"}
-            </button>
-          </div>
-        </footer>
-      </div>
+      {panel}
     </div>
   );
 }

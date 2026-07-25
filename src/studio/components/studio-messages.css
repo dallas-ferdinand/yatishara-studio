@@ -99,6 +99,11 @@
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
+.studio-dm-peer-status.is-online {
+  color: color-mix(in srgb, #3dd68c 82%, var(--mos-text));
+  font-weight: 700;
+}
+
 /* Shrink avatar in the 32px chrome head so it fits cleanly. */
 .studio-dm-chat-head .studio-profile-avatar {
   width: 22px !important;
@@ -205,6 +210,12 @@
   flex: 0 0 auto;
 }
 
+/* Delivered = double gray ticks (peer came online). */
+.studio-dm-ticks.is-delivered {
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+/* Read = double colored ticks. */
 .studio-dm-ticks.is-read {
   color: var(--cursor-accent, var(--mos-accent));
 }
@@ -634,25 +645,31 @@
   list-style: none;
 }
 
-.studio-dm-row-shell {
+.studio-dm-row {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
+  gap: 6px;
   width: 100%;
   min-width: 0;
+  padding: 8px 10px;
   border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
   border-radius: var(--cursor-radius-md, 8px);
   background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease;
-  overflow: hidden;
 }
 
-.studio-dm-row-shell:hover {
+.studio-dm-row:hover {
   background: var(--color-cursor-hover, var(--mos-hover));
   border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
 }
 
-.studio-dm-row-shell.is-active {
+.studio-dm-row.is-active {
   border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 46%, var(--mos-border));
   background: color-mix(
     in srgb,
@@ -661,60 +678,39 @@
   );
 }
 
-.studio-dm-row {
-  position: relative;
+/* Avatar vertically centered with name + last-message only. */
+.studio-dm-row-main {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1 1 auto;
   min-width: 0;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* Search / people rows that are still bare .studio-dm-row buttons */
-.studio-dm-conversations > li > .studio-dm-row {
   width: 100%;
-  border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
-  border-radius: var(--cursor-radius-md, 8px);
-  background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
-  transition: background 0.14s ease, border-color 0.14s ease;
 }
 
-.studio-dm-conversations > li > .studio-dm-row:hover {
-  background: var(--color-cursor-hover, var(--mos-hover));
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
-}
-
-.studio-dm-row-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
+.studio-dm-row-avatar-wrap {
+  position: relative;
   flex: 0 0 auto;
-  border: 0;
-  border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  cursor: pointer;
 }
 
-.studio-dm-row-tag:hover {
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  background: color-mix(in srgb, var(--mos-text) 6%, transparent);
+.studio-dm-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #3dd68c;
+  border: 1.5px solid var(--cursor-surface-raised, var(--mos-surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #3dd68c 35%, transparent);
 }
 
+/* Labels: full-width band under the avatar + name/preview cluster. */
 .studio-dm-row-labels {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 3px;
+  width: 100%;
+  min-width: 0;
 }
 
 .studio-dm-row-label {
@@ -791,8 +787,7 @@
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
-.studio-dm-row.is-unread .studio-dm-row-preview,
-.studio-dm-row-shell.is-unread .studio-dm-row-preview {
+.studio-dm-row.is-unread .studio-dm-row-preview {
   color: var(--color-cursor-text, var(--mos-text));
   font-weight: 650;
 }
@@ -813,6 +808,12 @@
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+}
+
+.studio-dm-sidebar-chrome {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 2;
 }
 
 .studio-dm-sidebar-body {
@@ -906,26 +907,6 @@
   display: none;
 }
 
-.studio-dm-label-chip-wrap {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  height: 22px;
-  border-radius: 999px;
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
-  background: var(--cursor-surface-raised, var(--mos-surface));
-  overflow: visible;
-}
-
-.studio-dm-label-chip-wrap:has(.studio-dm-label-chip.is-active) {
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 46%, var(--mos-border));
-  background: color-mix(
-    in srgb,
-    var(--cursor-accent, var(--mos-accent)) 12%,
-    var(--cursor-surface-raised, var(--mos-surface))
-  );
-}
-
 .studio-dm-label-chip {
   display: inline-flex;
   align-items: center;
@@ -944,6 +925,8 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .studio-dm-label-chip > span {
@@ -958,13 +941,6 @@
   width: 11px;
   height: 11px;
   flex: 0 0 auto;
-}
-
-.studio-dm-label-chip-wrap .studio-dm-label-chip {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding-right: 2px;
 }
 
 .studio-dm-label-chip.is-active {
@@ -986,52 +962,74 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-/* ⋯ menu — no divider; sits flush in the chip. */
-.studio-dm-label-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-right: 2px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  cursor: pointer;
+/* New/Edit label overlay over sidebar search + label rail. */
+.studio-dm-label-editor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--mos-bg, #05080f) 72%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
-.studio-dm-label-more svg {
-  display: block;
-  width: 12px;
-  height: 12px;
-}
-
-.studio-dm-label-more:hover,
-.studio-dm-label-more[data-state="open"] {
-  color: var(--color-cursor-text-bright, var(--mos-text));
-  background: color-mix(in srgb, var(--mos-text) 10%, transparent);
-}
-
-.studio-dm-label-menu {
-  min-width: 9rem;
-  z-index: 90;
-  border-color: var(--color-cursor-border, var(--mos-border));
+.studio-dm-label-editor-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 420px);
+  margin: 0;
+  border-bottom: 1px solid var(--color-cursor-border, var(--mos-border));
   background: var(--mos-panel, var(--mos-bg));
-  color: var(--color-cursor-text, var(--mos-text));
-  font-size: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
 }
 
-.studio-dm-label-menu [data-slot="dropdown-menu-item"] {
+/* Right-click / long-press floating menu */
+.studio-dm-context-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 148px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--mos-panel, var(--mos-bg));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.38);
+}
+
+.studio-dm-context-menu-item {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-cursor-text, var(--mos-text));
+  font: inherit;
   font-size: 12px;
   font-weight: 600;
+  text-align: left;
   cursor: pointer;
 }
 
-.studio-dm-label-menu [data-slot="dropdown-menu-item"] svg {
-  width: 13px;
-  height: 13px;
+.studio-dm-context-menu-item svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-context-menu-item:hover {
+  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+}
+
+.studio-dm-context-menu-item.is-danger {
+  color: #ff8f8f;
+}
+
+.studio-dm-context-menu-item.is-danger:hover {
+  background: color-mix(in srgb, #ff8f8f 12%, transparent);
 }
 
 /* —— Label dialogs —— */

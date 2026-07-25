@@ -19,8 +19,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
+import { useLongPress } from "@/desk/hooks/use-long-press";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
+import { StudioDmAssignLabelsDialog } from "./StudioDmLabelDialogs";
+import {
+  StudioDmContextMenu,
+  type StudioDmContextMenuItem,
+} from "./StudioDmContextMenu";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
@@ -52,9 +58,14 @@ function recordingTimeLabel(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** WhatsApp-style ticks: single = sent, double accent = read. */
-function DmReadReceipt({ read }: { read: boolean }) {
-  if (read) {
+type DmReceipt = "sent" | "delivered" | "read";
+
+/**
+ * WhatsApp-style ticks:
+ * 1 gray = sent · 2 gray = delivered (peer ACK) · 2 colored = read.
+ */
+function DmReadReceipt({ receipt }: { receipt: DmReceipt }) {
+  if (receipt === "read") {
     return (
       <CheckCheck
         className="studio-dm-ticks is-read"
@@ -63,30 +74,35 @@ function DmReadReceipt({ read }: { read: boolean }) {
       />
     );
   }
+  if (receipt === "delivered") {
+    return (
+      <CheckCheck
+        className="studio-dm-ticks is-delivered"
+        aria-label="Delivered"
+        strokeWidth={2.5}
+      />
+    );
+  }
   return (
-    <Check
-      className="studio-dm-ticks"
-      aria-label="Sent"
-      strokeWidth={2.5}
-    />
+    <Check className="studio-dm-ticks" aria-label="Sent" strokeWidth={2.5} />
   );
 }
 
 function DmMessageMeta({
   createdAt,
   fromMe,
-  read,
+  receipt,
 }: {
   createdAt: number;
   fromMe: boolean;
-  read: boolean;
+  receipt: DmReceipt;
 }) {
   return (
     <span className="studio-dm-meta">
       <time dateTime={new Date(createdAt).toISOString()}>
         {timeLabel(createdAt)}
       </time>
-      {fromMe ? <DmReadReceipt read={read} /> : null}
+      {fromMe ? <DmReadReceipt receipt={receipt} /> : null}
     </span>
   );
 }
@@ -183,6 +199,7 @@ export function StudioMessagesPane({
   );
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
+  const ackDelivered = useMutation(api.dms.ackDelivered);
   const prepareAttachmentUpload = useMutation(api.dms.prepareAttachmentUpload);
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
@@ -192,6 +209,16 @@ export function StudioMessagesPane({
   const [sendError, setSendError] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [assignPeer, setAssignPeer] = useState<{
+    userId: Id<"users">;
+    label: string;
+  } | null>(null);
+  const [listContext, setListContext] = useState<{
+    x: number;
+    y: number;
+    userId: Id<"users">;
+    label: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -352,6 +379,19 @@ export function StudioMessagesPane({
     void markRead({ conversationId });
   }, [activeRow?.unread, conversationId, lastMessageId, markRead]);
 
+  // Device delivery ACK — when inbound messages arrive over the Convex WS.
+  useEffect(() => {
+    if (!conversationId || !messages?.length) return;
+    let maxInbound = 0;
+    for (const message of messages) {
+      if (!message.fromMe && message.createdAt > maxInbound) {
+        maxInbound = message.createdAt;
+      }
+    }
+    if (maxInbound <= 0) return;
+    void ackDelivered({ conversationId, upToCreatedAt: maxInbound });
+  }, [ackDelivered, conversationId, lastMessageId, messages]);
+
   useEffect(() => {
     setDraft("");
     setSendError("");
@@ -416,6 +456,21 @@ export function StudioMessagesPane({
 
   if (!conversationId) {
     if (showChatListWhenEmpty) {
+      const listMenuItems: StudioDmContextMenuItem[] = listContext
+        ? [
+            {
+              key: "labels",
+              label: "Labels",
+              icon: <Tags aria-hidden="true" />,
+              onSelect: () => {
+                setAssignPeer({
+                  userId: listContext.userId,
+                  label: listContext.label,
+                });
+              },
+            },
+          ]
+        : [];
       return (
         <div className="studio-dm-pane">
           <div className="studio-dm-list-host">
@@ -435,12 +490,35 @@ export function StudioMessagesPane({
                       row={row}
                       active={false}
                       onSelect={() => onSelectConversation(row.conversationId)}
+                      onContextMenu={(coords) =>
+                        setListContext({
+                          ...coords,
+                          userId: row.peer.userId,
+                          label:
+                            row.peer.displayName?.trim() ||
+                            `@${row.peer.username}`,
+                        })
+                      }
                     />
                   </li>
                 ))}
               </ul>
             )}
           </div>
+          <StudioDmAssignLabelsDialog
+            open={Boolean(assignPeer)}
+            peerUserId={assignPeer?.userId ?? null}
+            peerLabel={assignPeer?.label ?? ""}
+            onClose={() => setAssignPeer(null)}
+          />
+          {listContext ? (
+            <StudioDmContextMenu
+              x={listContext.x}
+              y={listContext.y}
+              items={listMenuItems}
+              onClose={() => setListContext(null)}
+            />
+          ) : null}
         </div>
       );
     }
@@ -491,7 +569,19 @@ export function StudioMessagesPane({
           />
           <span className="studio-dm-chat-peer-copy">
             <strong>{peerLabel}</strong>
-            {activeRow ? <span>@{activeRow.peer.username}</span> : null}
+            {activeRow ? (
+              <span
+                className={
+                  activeRow.peerOnline
+                    ? "studio-dm-peer-status is-online"
+                    : undefined
+                }
+              >
+                {activeRow.peerOnline
+                  ? "Online"
+                  : `@${activeRow.peer.username}`}
+              </span>
+            ) : null}
           </span>
         </button>
       </header>
@@ -537,7 +627,7 @@ export function StudioMessagesPane({
                         <DmMessageMeta
                           createdAt={message.createdAt}
                           fromMe={message.fromMe}
-                          read={message.read}
+                          receipt={message.receipt}
                         />
                       </div>
                     ) : message.kind === "image" ? (
@@ -565,7 +655,7 @@ export function StudioMessagesPane({
                         <DmMessageMeta
                           createdAt={message.createdAt}
                           fromMe={message.fromMe}
-                          read={message.read}
+                          receipt={message.receipt}
                         />
                       </div>
                     ) : (
@@ -574,7 +664,7 @@ export function StudioMessagesPane({
                         <DmMessageMeta
                           createdAt={message.createdAt}
                           fromMe={message.fromMe}
-                          read={message.read}
+                          receipt={message.receipt}
                         />
                       </div>
                     )}
@@ -770,41 +860,64 @@ export function StudioDmConversationRow({
   row,
   active,
   onSelect,
-  onEditLabels,
+  onContextMenu,
 }: {
   row: {
     conversationId: DmConversationId;
-    peer: { username: string; displayName?: string; avatarUrl?: string };
+    peer: {
+      username: string;
+      displayName?: string;
+      avatarUrl?: string;
+    };
     labels?: Array<{ labelId: Id<"dmLabels">; name: string; icon: string }>;
     lastMessagePreview?: string;
     lastMessageAt: number;
     lastMessageFromMe: boolean;
-    lastMessageRead: boolean;
+    lastMessageReceipt: DmReceipt;
+    peerOnline?: boolean;
     unread: boolean;
   };
   active: boolean;
   onSelect: () => void;
-  onEditLabels?: () => void;
+  onContextMenu?: (coords: { x: number; y: number }) => void;
 }) {
   const label = row.peer.displayName?.trim() || `@${row.peer.username}`;
   const preview = row.lastMessagePreview || "Tap to start chatting";
   const peerLabels = row.labels ?? [];
+  const { longPressHandlers, longPressFired, clearLongPressFired } =
+    useLongPress(onContextMenu);
+
   return (
-    <div
-      className={`studio-dm-row-shell${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}`}
+    <button
+      type="button"
+      className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}${row.peerOnline ? " is-peer-online" : ""}`}
+      {...longPressHandlers}
+      onClick={() => {
+        if (longPressFired()) {
+          clearLongPressFired();
+          return;
+        }
+        onSelect();
+      }}
+      onContextMenu={(event) => {
+        if (!onContextMenu) return;
+        event.preventDefault();
+        onContextMenu({ x: event.clientX, y: event.clientY });
+      }}
     >
-      <button
-        type="button"
-        className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}`}
-        onClick={onSelect}
-      >
-        <StudioProfileAvatar
-          size="sm"
-          src={row.peer.avatarUrl}
-          displayName={row.peer.displayName}
-          name={row.peer.username}
-          alt=""
-        />
+      <span className="studio-dm-row-main">
+        <span className="studio-dm-row-avatar-wrap">
+          <StudioProfileAvatar
+            size="sm"
+            src={row.peer.avatarUrl}
+            displayName={row.peer.displayName}
+            name={row.peer.username}
+            alt=""
+          />
+          {row.peerOnline ? (
+            <span className="studio-dm-online-dot" aria-label="Online" />
+          ) : null}
+        </span>
         <span className="studio-dm-row-copy">
           <span className="studio-dm-row-top">
             <strong>{label}</strong>
@@ -815,7 +928,7 @@ export function StudioDmConversationRow({
           <span className="studio-dm-row-bottom">
             <span className="studio-dm-row-preview">
               {row.lastMessageFromMe ? (
-                <DmReadReceipt read={row.lastMessageRead} />
+                <DmReadReceipt receipt={row.lastMessageReceipt} />
               ) : null}
               {preview}
             </span>
@@ -823,36 +936,25 @@ export function StudioDmConversationRow({
               <span className="studio-dm-unread-dot" aria-label="Unread" />
             ) : null}
           </span>
-          {peerLabels.length > 0 ? (
-            <span className="studio-dm-row-labels" aria-label="Labels">
-              {peerLabels.slice(0, 4).map((item) => {
-                const Icon = dmLabelIcon(item.icon);
-                return (
-                  <span
-                    key={item.labelId}
-                    className="studio-dm-row-label"
-                    title={item.name}
-                  >
-                    <Icon className="h-2.5 w-2.5" aria-hidden="true" />
-                    {item.name}
-                  </span>
-                );
-              })}
-            </span>
-          ) : null}
         </span>
-      </button>
-      {onEditLabels ? (
-        <button
-          type="button"
-          className="studio-dm-row-tag"
-          onClick={onEditLabels}
-          aria-label={`Edit labels for ${label}`}
-          title="Labels"
-        >
-          <Tags className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
+      </span>
+      {peerLabels.length > 0 ? (
+        <span className="studio-dm-row-labels" aria-label="Labels">
+          {peerLabels.slice(0, 6).map((item) => {
+            const Icon = dmLabelIcon(item.icon);
+            return (
+              <span
+                key={item.labelId}
+                className="studio-dm-row-label"
+                title={item.name}
+              >
+                <Icon className="h-2.5 w-2.5" aria-hidden="true" />
+                {item.name}
+              </span>
+            );
+          })}
+        </span>
       ) : null}
-    </div>
+    </button>
   );
 }
