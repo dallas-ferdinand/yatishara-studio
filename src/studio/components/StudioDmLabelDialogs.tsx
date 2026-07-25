@@ -20,15 +20,15 @@ export function StudioDmLabelEditorDialog({
   initialName,
   initialIcon,
   onClose,
-  /** Overlay covers the messages sidebar; modal is a centered page dialog. */
-  variant = "overlay",
+  /** Inline replaces the chat-list body; modal is a centered page dialog. */
+  variant = "inline",
 }: {
   open: boolean;
   labelId?: LabelId;
   initialName?: string;
   initialIcon?: string;
   onClose: () => void;
-  variant?: "overlay" | "modal";
+  variant?: "inline" | "modal";
 }) {
   const createLabel = useMutation(api.dmLabels.create);
   const updateLabel = useMutation(api.dmLabels.update);
@@ -92,12 +92,14 @@ export function StudioDmLabelEditorDialog({
   const panel = (
     <div
       className={
-        variant === "overlay" ? "studio-dm-label-editor-panel" : "studio-dm-dialog"
+        variant === "inline" ? "studio-dm-label-editor-panel" : "studio-dm-dialog"
       }
       role="dialog"
-      aria-modal="true"
+      aria-modal={variant === "modal"}
       aria-label={labelId ? "Edit label" : "New label"}
-      onClick={(event) => event.stopPropagation()}
+      onClick={
+        variant === "modal" ? (event) => event.stopPropagation() : undefined
+      }
     >
       <header className="studio-dm-dialog-head">
         <strong>{labelId ? "Edit label" : "New label"}</strong>
@@ -176,17 +178,7 @@ export function StudioDmLabelEditorDialog({
     </div>
   );
 
-  if (variant === "overlay") {
-    return (
-      <div
-        className="studio-dm-label-editor-overlay"
-        role="presentation"
-        onClick={onClose}
-      >
-        {panel}
-      </div>
-    );
-  }
+  if (variant === "inline") return panel;
 
   return (
     <div className="studio-dm-dialog-backdrop" role="presentation" onClick={onClose}>

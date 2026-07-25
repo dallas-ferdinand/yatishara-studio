@@ -295,7 +295,19 @@ export function StudioMessagesSidebar({
       </div>
 
       <div className="studio-dm-sidebar-body">
-        {searching ? (
+        {editorOpen ? (
+          <StudioDmLabelEditorDialog
+            open
+            variant="inline"
+            labelId={editingLabel?.labelId}
+            initialName={editingLabel?.name}
+            initialIcon={editingLabel?.icon}
+            onClose={() => {
+              setEditorOpen(false);
+              setEditingLabel(null);
+            }}
+          />
+        ) : searching ? (
           searchResults === undefined ? (
             <p className="studio-dm-empty">Loading…</p>
           ) : searchResults.people.length === 0 &&
@@ -517,18 +529,6 @@ export function StudioMessagesSidebar({
           </ul>
         )}
       </div>
-
-      <StudioDmLabelEditorDialog
-        open={editorOpen}
-        variant="overlay"
-        labelId={editingLabel?.labelId}
-        initialName={editingLabel?.name}
-        initialIcon={editingLabel?.icon}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditingLabel(null);
-        }}
-      />
 
       <StudioDmAssignLabelsDialog
         open={Boolean(assignPeer)}
