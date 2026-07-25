@@ -187,10 +187,11 @@
 
 .public-profile-name {
   margin: 0;
-  font-family: var(--font-bricolage), sans-serif;
-  font-size: clamp(22px, 3.8vw, 28px);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-family: var(--font-onest), system-ui, sans-serif;
+  font-size: clamp(20px, 3.4vw, 26px);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
@@ -777,8 +778,9 @@
 
 .public-profile-empty h1 {
   margin: 0;
-  font-family: var(--font-bricolage), sans-serif;
-  font-size: 24px;
+  font-family: var(--font-onest), system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 650;
   color: var(--pp-ink);
 }
 

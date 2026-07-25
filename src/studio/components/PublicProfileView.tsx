@@ -253,21 +253,16 @@ export function PublicProfileView({
 
             {profile.bio ? <p className="public-profile-bio">{profile.bio}</p> : null}
 
-            {showOffersLink ? (
-              <p className="mt-2">
-                <a
-                  href={`/creative-network/?u=${encodeURIComponent(profile.username)}`}
-                  className="public-profile-follow"
-                  style={{ display: "inline-flex", textDecoration: "none", alignItems: "center", gap: 6 }}
-                >
-                  <Award className="h-3.5 w-3.5" aria-hidden="true" />
-                  Offers
-                </a>
-              </p>
-            ) : null}
-
-            {profile.contactLinks.length ? (
+            {showOffersLink || profile.contactLinks.length ? (
               <ul className="public-profile-links">
+                {showOffersLink ? (
+                  <li>
+                    <a href={`/creative-network/?u=${encodeURIComponent(profile.username)}`}>
+                      <Award className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Offers</span>
+                    </a>
+                  </li>
+                ) : null}
                 {profile.contactLinks.map((link) => (
                   <li key={`${link.type}-${link.label}-${link.value}`}>
                     <a href={link.href} target="_blank" rel="noreferrer">
