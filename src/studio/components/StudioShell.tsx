@@ -5985,7 +5985,8 @@ export function StudioShell({
           padding: 0 6px !important;
           margin: 0 !important;
           box-shadow: none !important;
-          overflow: hidden;
+          /* Visible so the inter-tab hairline (::after) can sit in the gap. */
+          overflow: visible;
           position: relative;
           align-self: center;
           color: color-mix(in srgb, var(--color-cursor-text-bright) 78%, transparent);
@@ -6561,10 +6562,10 @@ export function StudioShell({
           content: "" !important;
           display: block !important;
           position: absolute;
-          right: -2px;
+          right: -2.5px;
           top: 50%;
           transform: translateY(-50%);
-          z-index: 0;
+          z-index: 3;
           width: 1px;
           height: 16px;
           border-radius: 1px;
@@ -6573,6 +6574,7 @@ export function StudioShell({
         }
         .studio-polish .cursor-unified-tab:last-child::after,
         .studio-polish .cursor-unified-tab.cursor-unified-tab-new::after,
+        .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-new)::after,
         .studio-polish .cursor-unified-tab:has(+ .cursor-unified-tab-placeholder)::after,
         .studio-polish .cursor-unified-tabs.is-dragging-strip .cursor-unified-tab::after {
           content: none !important;
@@ -6624,9 +6626,6 @@ export function StudioShell({
           content: none !important;
           display: none !important;
         }
-        .studio-polish .cursor-unified-tab.is-active {
-          overflow: hidden;
-        }
         .studio-polish .cursor-unified-tab:focus,
         .studio-polish .cursor-unified-tab:focus-visible,
         .studio-polish .cursor-unified-tab:focus-within {
@@ -6639,6 +6638,7 @@ export function StudioShell({
           background: var(--studio-chrome-glow-bg-fade) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
+          overflow: visible;
         }
         .studio-polish .cursor-unified-tab.is-active::before {
           content: "" !important;
@@ -6656,10 +6656,6 @@ export function StudioShell({
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           box-shadow: none !important;
-        }
-        .studio-polish .cursor-unified-tab.is-active::after {
-          content: none !important;
-          display: none !important;
         }
         .studio-polish :where(.cursor-tab.active, .cursor-agent-chat-tab.active, .cursor-tab.is-active, .cursor-agent-chat-tab.is-active, .cursor-unified-tab.is-active) svg {
           color: currentColor !important;
@@ -22236,14 +22232,6 @@ function AdminSetupAction({ title, body, actionLabel, onRun }) {
 
 function PaymentStatusPill({ status }) {
   return <span className={`studio-payment-status-pill is-${status}`}>{humanizePaymentStatus(status)}</span>;
-}
-
-function adminTitle(tab) {
-  if (tab === "customers") return "Customers";
-  if (tab === "marketplace") return "Marketplace";
-  if (tab === "setup") return "Admin setup";
-  if (tab === "pricing") return "Pricing";
-  return "Payments";
 }
 
 function paymentCustomerName(payment) {
