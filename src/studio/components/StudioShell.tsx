@@ -4725,7 +4725,8 @@ export function StudioShell({
           --studio-composer-glass-strong: color-mix(in srgb, var(--mos-bg, #05080f) 94%, transparent);
           --studio-composer-glass-muted: color-mix(in srgb, var(--mos-bg, #05080f) 78%, transparent);
           --studio-composer-glass-border: var(--color-cursor-border, var(--mos-border));
-          --studio-composer-glass-blur: saturate(180%) blur(28px);
+          /* Keep frost on fixed chrome only — heavy blur on scroll surfaces = jitter. */
+          --studio-composer-glass-blur: saturate(160%) blur(12px);
           --studio-composer-glass-shadow:
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -4895,8 +4896,8 @@ export function StudioShell({
           border: 1px solid var(--studio-mobile-chrome-border) !important;
           border-radius: 999px !important;
           background: var(--studio-mobile-chrome-glass-foot) !important;
-          backdrop-filter: var(--studio-mobile-chrome-blur);
-          -webkit-backdrop-filter: var(--studio-mobile-chrome-blur);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
           box-shadow: none !important;
           color: color-mix(in srgb, var(--color-cursor-text-bright) 86%, transparent) !important;
         }
@@ -9545,14 +9546,11 @@ export function StudioShell({
         }
         .studio-polish .cursor-composer-box:focus-within {
           border-color: transparent;
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
           box-shadow:
             var(--studio-composer-glass-shadow),
             0 0 28px color-mix(in srgb, var(--cursor-accent) 14%, transparent);
-          transition:
-            box-shadow 1000ms cubic-bezier(0.45, 0, 0.2, 1),
-            backdrop-filter 1000ms cubic-bezier(0.45, 0, 0.2, 1);
+          /* Never animate backdrop-filter — GPU thrash; shadow alone is enough. */
+          transition: box-shadow 280ms cubic-bezier(0.45, 0, 0.2, 1);
         }
         .studio-polish .cursor-composer-box:focus-within::before {
           opacity: 1;
@@ -10079,7 +10077,7 @@ export function StudioShell({
             /* Keep composer + messages in a centered reading column on desktop. */
             --studio-composer-shell-max: min(48rem, 80%);
             --studio-chat-column-max: min(48rem, 80%);
-            --studio-composer-glass-blur: saturate(190%) blur(36px);
+            --studio-composer-glass-blur: saturate(170%) blur(14px);
             --studio-chat-bubble-max: 88%;
           }
           .studio-composer .cursor-composer {
@@ -15116,12 +15114,12 @@ export function StudioShell({
           box-sizing: border-box;
           border: 1px solid var(--studio-composer-glass-border);
           border-radius: 8px 18px 18px 18px;
-          background: var(--studio-composer-glass);
-          backdrop-filter: var(--studio-composer-glass-blur);
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          /* Opaque plate — live backdrop-filter on every bubble janks scroll. */
+          background: var(--studio-composer-glass-strong, var(--studio-composer-glass));
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
           overflow: hidden;
           padding: 11px 14px;
-          /* Do not use content-visibility here — paint containment blanks backdrop-filter glass. */
           box-shadow: var(--studio-composer-glass-shadow);
         }
         .studio-chat-bubble.is-user {
@@ -22199,13 +22197,16 @@ function AdminWorkspacePane({
     }
   }
 
+  // Ops first; launch seeds / price cards live under Tools (not primary tabs).
   const adminTabs = [
     { id: "payments", label: "Payments" },
     { id: "customers", label: "Customers" },
     { id: "marketplace", label: "Marketplace" },
-    { id: "setup", label: "Setup" },
-    { id: "pricing", label: "Pricing" },
+    { id: "tools", label: "Tools" },
   ];
+  // Old open tabs / deep links admin:setup|pricing still land on Tools.
+  const adminSection =
+    tab === "setup" || tab === "pricing" || tab === "tools" ? "tools" : tab;
   const customerRows = customers ?? [];
   const visibleCustomers = useMemo(() => {
     const q = customerQuery.trim().toLowerCase();
@@ -22239,7 +22240,7 @@ function AdminWorkspacePane({
             <button
               key={item.id}
               type="button"
-              className={`studio-admin-head-tab${tab === item.id ? " is-active" : ""}`}
+              className={`studio-admin-head-tab${adminSection === item.id ? " is-active" : ""}`}
               onClick={() => onOpenAdminTab(item.id)}
             >
               {item.label}
@@ -22249,7 +22250,7 @@ function AdminWorkspacePane({
       </header>
       <div className="studio-admin-body">
         <div className="studio-admin-workspace">
-        {tab === "payments" ? (
+        {adminSection === "payments" ? (
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-grid-large">
               <AdminMetricCard label="Pending" value={pendingPayments.length} body="Awaiting PayWise confirmation or bank receipt review." />
@@ -22321,7 +22322,7 @@ function AdminWorkspacePane({
               />
             ) : null}
           </div>
-        ) : tab === "customers" ? (
+        ) : adminSection === "customers" ? (
           <div className="studio-admin-payments-shell">
             <section className="studio-admin-section">
               <div className="studio-admin-section-head">

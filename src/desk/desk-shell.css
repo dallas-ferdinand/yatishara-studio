@@ -9191,10 +9191,17 @@ textarea.cursor-input {
 }
 
 /* --- explorer panels, tree rows, pills, icon buttons --- */
-.studio-polish :where(.cursor-explorer-panel, .cursor-icon-btn) {
+/* No live blur on the explorer scroll surface — solid/transparent plate only. */
+.studio-polish :where(.cursor-explorer-panel) {
   background: transparent !important;
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(12px));
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.studio-polish :where(.cursor-icon-btn) {
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 .studio-polish .studio-credit-pill:hover:not(:disabled) {
@@ -9503,19 +9510,22 @@ textarea.cursor-input {
 
 /* --- empty copy / placeholder --- */
 .studio-empty-copy {
-  -webkit-backdrop-filter: blur(18px) saturate(1.08);
-  backdrop-filter: blur(18px) saturate(1.08);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
-/* --- chat bubbles (dark translucent glass) --- */
+/* --- chat bubbles: plate fill, no live blur (scrolls with the stream) --- */
 .studio-polish .studio-chat-bubble {
   border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11)) !important;
   background: var(
-    --studio-composer-glass,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 58%, transparent)
+    --studio-composer-glass-strong,
+    var(
+      --studio-composer-glass,
+      color-mix(in srgb, var(--color-mos-composer, #07111f) 88%, transparent)
+    )
   ) !important;
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   box-shadow: var(
     --studio-composer-glass-shadow,
     0 20px 48px rgba(0, 0, 0, 0.38),
@@ -9552,11 +9562,11 @@ textarea.cursor-input {
 .studio-polish .studio-chat-bubble.is-system,
 .studio-polish .studio-chat-bubble.is-assistant {
   background: var(
-    --studio-composer-glass,
-    color-mix(in srgb, #05080f 70%, transparent)
+    --studio-composer-glass-strong,
+    var(--studio-composer-glass, color-mix(in srgb, #05080f 90%, transparent))
   ) !important;
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(14px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(14px));
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 [data-appearance="light"] .studio-polish .studio-chat-bubble.is-system,
@@ -9886,11 +9896,11 @@ textarea.cursor-input {
   border-radius: 1rem;
   padding: 0.7rem 0.75rem;
   background: var(
-    --studio-composer-glass,
-    color-mix(in srgb, #05080f 70%, transparent)
+    --studio-composer-glass-strong,
+    var(--studio-composer-glass, color-mix(in srgb, #05080f 90%, transparent))
   );
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(180%) blur(28px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(180%) blur(28px));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
   display: grid;
   gap: 0.55rem;
