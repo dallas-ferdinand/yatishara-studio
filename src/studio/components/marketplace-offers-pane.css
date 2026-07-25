@@ -165,10 +165,85 @@ span.studio-admin-head-tab,
 
 .marketplace-offers-packages {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
-.marketplace-offers-package-card {
+.marketplace-offers-pkg-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.marketplace-offers-pkg-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.marketplace-offers-pkg-tab {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--cursor-surface-raised);
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.marketplace-offers-pkg-tab strong {
+  color: var(--color-cursor-text, var(--mos-text));
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.marketplace-offers-pkg-tab span {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+
+.marketplace-offers-pkg-tab:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 36%,
+    var(--color-cursor-border-soft)
+  );
+  color: var(--color-cursor-text, var(--mos-text));
+  background: var(--color-cursor-hover);
+}
+
+.marketplace-offers-pkg-tab.is-active {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 48%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.marketplace-offers-pkg-tab.is-add {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  align-self: stretch;
+}
+
+.marketplace-offers-pkg-panel {
   display: grid;
   gap: 8px;
   padding: 12px;

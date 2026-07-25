@@ -41,6 +41,7 @@ type View =
 
 type HomeTab = "offers" | "jobs";
 type JobFilter = "all" | "sell" | "buy";
+type OfferEditorTab = "details" | "packages" | "media" | "jobs";
 
 const GOOD_STATUSES = new Set(["published", "completed", "approved", "paid"]);
 const BAD_STATUSES = new Set([
@@ -193,32 +194,109 @@ function PackagesEditor({
   drafts: PackageDraft[];
   onChange: (next: PackageDraft[]) => void;
 }) {
-  function patch(index: number, part: Partial<PackageDraft>) {
-    onChange(drafts.map((d, i) => (i === index ? { ...d, ...part } : d)));
+  const [activeIndex, setActiveIndex] = useState(0);
+  const safeIndex =
+    drafts.length === 0 ? 0 : Math.min(activeIndex, drafts.length - 1);
+  const draft = drafts[safeIndex];
+
+  function patch(part: Partial<PackageDraft>) {
+    onChange(
+      drafts.map((d, i) => (i === safeIndex ? { ...d, ...part } : d)),
+    );
   }
+
+  function addPackage() {
+    if (drafts.length >= 3) return;
+    onChange([...drafts, emptyPackageDraft(drafts.length)]);
+    setActiveIndex(drafts.length);
+  }
+
+  function removeActive() {
+    const next = drafts.filter((_, i) => i !== safeIndex);
+    onChange(next);
+    setActiveIndex(Math.max(0, safeIndex - 1));
+  }
+
+  if (drafts.length === 0) {
+    return (
+      <div className="marketplace-offers-packages">
+        <div className="marketplace-offers-pkg-empty">
+          <p className="marketplace-offers-bar-note">
+            Flat rate on Details right now. Add up to three tiers — Basic,
+            Standard, Premium — each with its own price, delivery, and
+            revisions.
+          </p>
+          <button
+            type="button"
+            className="marketplace-offers-bar-action"
+            onClick={addPackage}
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Add first package
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="marketplace-offers-packages">
-      {drafts.length === 0 ? (
-        <p className="marketplace-offers-bar-note">
-          Flat rate right now — add packages to sell Basic / Standard / Premium
-          tiers with their own price, delivery and revisions.
-        </p>
-      ) : null}
-      {drafts.map((draft, index) => (
-        <div key={index} className="marketplace-offers-package-card">
+      <div
+        className="marketplace-offers-pkg-tabs"
+        role="tablist"
+        aria-label="Package tiers"
+      >
+        {drafts.map((pkg, index) => {
+          const priceLabel =
+            pkg.priceTtd.trim() !== "" && !Number.isNaN(Number(pkg.priceTtd))
+              ? formatTtdCents(Math.round(Number(pkg.priceTtd) * 100))
+              : "—";
+          return (
+            <button
+              key={index}
+              type="button"
+              role="tab"
+              aria-selected={index === safeIndex}
+              className={`marketplace-offers-pkg-tab${index === safeIndex ? " is-active" : ""}`}
+              onClick={() => setActiveIndex(index)}
+            >
+              <strong>{pkg.name.trim() || PACKAGE_PRESET_NAMES[index] || `Tier ${index + 1}`}</strong>
+              <span>{priceLabel}</span>
+            </button>
+          );
+        })}
+        {drafts.length < 3 ? (
+          <button
+            type="button"
+            className="marketplace-offers-pkg-tab is-add"
+            onClick={addPackage}
+            aria-label="Add package"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Add
+          </button>
+        ) : null}
+      </div>
+
+      {draft ? (
+        <div
+          className="marketplace-offers-pkg-panel"
+          role="tabpanel"
+          aria-label={draft.name || `Package ${safeIndex + 1}`}
+        >
           <div className="marketplace-offers-package-head">
             <IconField
               icon={FileBadge}
               value={draft.name}
-              onChange={(e) => patch(index, { name: e.target.value })}
-              placeholder={`Package name — e.g. ${PACKAGE_PRESET_NAMES[index] ?? "Custom"}`}
-              aria-label={`Package ${index + 1} name`}
+              onChange={(e) => patch({ name: e.target.value })}
+              placeholder={`Name — e.g. ${PACKAGE_PRESET_NAMES[safeIndex] ?? "Custom"}`}
+              aria-label="Package name"
             />
             <button
               type="button"
               className="marketplace-offers-bar-action"
-              onClick={() => onChange(drafts.filter((_, i) => i !== index))}
-              aria-label={`Remove package ${index + 1}`}
+              onClick={removeActive}
+              aria-label={`Remove ${draft.name || `package ${safeIndex + 1}`}`}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -226,51 +304,43 @@ function PackagesEditor({
           <IconTextarea
             icon={AlignLeft}
             value={draft.description}
-            onChange={(e) => patch(index, { description: e.target.value })}
+            onChange={(e) => patch({ description: e.target.value })}
             placeholder="What this tier includes"
-            aria-label={`Package ${index + 1} description`}
+            aria-label="Package description"
           />
           <div className="marketplace-optional-row">
             <IconField
               icon={Wallet}
               value={draft.priceTtd}
-              onChange={(e) => patch(index, { priceTtd: e.target.value })}
+              onChange={(e) => patch({ priceTtd: e.target.value })}
               placeholder="Price (TTD)"
-              aria-label={`Package ${index + 1} price in TTD`}
+              aria-label="Package price in TTD"
             />
             <IconField
               icon={CalendarDays}
               value={draft.deliveryDays}
-              onChange={(e) => patch(index, { deliveryDays: e.target.value })}
+              onChange={(e) => patch({ deliveryDays: e.target.value })}
               placeholder="Delivery days"
-              aria-label={`Package ${index + 1} delivery days`}
+              aria-label="Package delivery days"
             />
             <IconField
               icon={RotateCcw}
               value={draft.revisions}
-              onChange={(e) => patch(index, { revisions: e.target.value })}
+              onChange={(e) => patch({ revisions: e.target.value })}
               placeholder="Revisions"
-              aria-label={`Package ${index + 1} revisions`}
+              aria-label="Package revisions"
             />
           </div>
           <IconTextarea
             icon={Plus}
             value={draft.features}
-            onChange={(e) => patch(index, { features: e.target.value })}
-            placeholder={"What's included — one per line\ne.g. Source files\nCommercial rights"}
-            aria-label={`Package ${index + 1} features`}
+            onChange={(e) => patch({ features: e.target.value })}
+            placeholder={
+              "What's included — one per line\ne.g. Source files\nCommercial rights"
+            }
+            aria-label="Package features"
           />
         </div>
-      ))}
-      {drafts.length < 3 ? (
-        <button
-          type="button"
-          className="marketplace-offers-bar-action"
-          onClick={() => onChange([...drafts, emptyPackageDraft(drafts.length)])}
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          {drafts.length === 0 ? "Add packages" : "Add another package"}
-        </button>
       ) : null}
     </div>
   );
@@ -386,6 +456,8 @@ export function MarketplaceOffersPane({
   const [view, setView] = useState<View>({ kind: "home" });
   const [homeTab, setHomeTab] = useState<HomeTab>("offers");
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
+  const [offerEditorTab, setOfferEditorTab] =
+    useState<OfferEditorTab>("details");
   const [busy, setBusy] = useState(false);
   const [reapplyRejected, setReapplyRejected] = useState(false);
 
@@ -562,6 +634,7 @@ export function MarketplaceOffersPane({
       });
       toast.success("Draft offer created");
       setView({ kind: "offer", offerId });
+      setOfferEditorTab("details");
       setCreateForm({
         title: "",
         description: "",
@@ -693,6 +766,17 @@ export function MarketplaceOffersPane({
 
   function goHome() {
     setView({ kind: "home" });
+    setOfferEditorTab("details");
+  }
+
+  function openCreate() {
+    setOfferEditorTab("details");
+    setView({ kind: "create" });
+  }
+
+  function openOffer(offerId: Id<"marketplaceOffers">) {
+    setOfferEditorTab("details");
+    setView({ kind: "offer", offerId });
   }
 
   const isApplyFlow =
@@ -828,7 +912,7 @@ export function MarketplaceOffersPane({
               <button
                 type="button"
                 className="marketplace-offers-bar-action"
-                onClick={() => setView({ kind: "create" })}
+                onClick={openCreate}
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                 New offer
@@ -861,6 +945,76 @@ export function MarketplaceOffersPane({
             Jobs
           </button>
         </OffersHead>
+      ) : view.kind === "create" || view.kind === "offer" ? (
+        <OffersHead
+          action={
+            view.kind === "create" ? (
+              <button
+                type="button"
+                className="marketplace-offers-bar-action"
+                disabled={busy || !createForm.title.trim()}
+                onClick={() => void handleCreateOffer()}
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                Create draft
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="marketplace-offers-bar-action"
+                disabled={busy || !editForm}
+                onClick={() => void handleSaveOffer()}
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : null}
+                Save
+              </button>
+            )
+          }
+        >
+          <button
+            type="button"
+            className="studio-admin-head-tab"
+            onClick={goHome}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Back
+          </button>
+          <button
+            type="button"
+            className={`studio-admin-head-tab${offerEditorTab === "details" ? " is-active" : ""}`}
+            onClick={() => setOfferEditorTab("details")}
+          >
+            Details
+          </button>
+          <button
+            type="button"
+            className={`studio-admin-head-tab${offerEditorTab === "packages" ? " is-active" : ""}`}
+            onClick={() => setOfferEditorTab("packages")}
+          >
+            Packages
+          </button>
+          <button
+            type="button"
+            className={`studio-admin-head-tab${offerEditorTab === "media" ? " is-active" : ""}`}
+            onClick={() => setOfferEditorTab("media")}
+          >
+            Media
+          </button>
+          {view.kind === "offer" ? (
+            <button
+              type="button"
+              className={`studio-admin-head-tab${offerEditorTab === "jobs" ? " is-active" : ""}`}
+              onClick={() => setOfferEditorTab("jobs")}
+            >
+              <Award className="h-3.5 w-3.5" aria-hidden="true" />
+              Jobs
+            </button>
+          ) : null}
+        </OffersHead>
       ) : (
         <OffersHead>
           <button
@@ -871,13 +1025,7 @@ export function MarketplaceOffersPane({
             <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             Back
           </button>
-          <span className="studio-admin-head-tab is-active">
-            {view.kind === "create"
-              ? "New offer"
-              : view.kind === "offer"
-                ? "Offer"
-                : "Job"}
-          </span>
+          <span className="studio-admin-head-tab is-active">Job</span>
         </OffersHead>
       )}
 
@@ -926,9 +1074,7 @@ export function MarketplaceOffersPane({
                         {offers.map((offer) => (
                           <tr
                             key={offer._id}
-                            onClick={() =>
-                              setView({ kind: "offer", offerId: offer._id })
-                            }
+                            onClick={() => openOffer(offer._id)}
                           >
                             <td>
                               <strong>{offer.title}</strong>
@@ -1051,324 +1197,331 @@ export function MarketplaceOffersPane({
 
           {view.kind === "create" ? (
             <div className="studio-admin-stack">
-              <Section title="New offer">
-                <div className="studio-admin-card">
-                  <div className="marketplace-profile-fields">
-                    <IconField
-                      icon={FileBadge}
-                      value={createForm.title}
-                      onChange={(e) =>
-                        setCreateForm((f) => ({ ...f, title: e.target.value }))
-                      }
-                      placeholder="Title — e.g. 15s cartoon ad pack"
-                      aria-label="Title"
-                    />
-                    <IconTextarea
-                      icon={AlignLeft}
-                      value={createForm.description}
-                      onChange={(e) =>
-                        setCreateForm((f) => ({
-                          ...f,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder="What’s included, revisions, delivery notes"
-                      aria-label="Description"
-                    />
-                    {createPackages.length === 0 ? (
-                      <div className="marketplace-optional-row">
-                        <IconField
-                          icon={Wallet}
-                          value={createForm.priceTtd}
-                          onChange={(e) =>
-                            setCreateForm((f) => ({
-                              ...f,
-                              priceTtd: e.target.value,
-                            }))
-                          }
-                          placeholder="Price (TTD)"
-                          aria-label="Price in TTD"
-                        />
-                        <IconField
-                          icon={CalendarDays}
-                          value={createForm.deliveryDays}
-                          onChange={(e) =>
-                            setCreateForm((f) => ({
-                              ...f,
-                              deliveryDays: e.target.value,
-                            }))
-                          }
-                          placeholder="Delivery days"
-                          aria-label="Delivery days"
-                        />
-                      </div>
-                    ) : null}
-                    <IconField
-                      icon={Tag}
-                      value={createForm.category}
-                      onChange={(e) =>
-                        setCreateForm((f) => ({
-                          ...f,
-                          category: e.target.value,
-                        }))
-                      }
-                      placeholder="Category"
-                      aria-label="Category"
+              {offerEditorTab === "details" ? (
+                <Section title="New offer">
+                  <div className="studio-admin-card">
+                    <div className="marketplace-profile-fields">
+                      <IconField
+                        icon={FileBadge}
+                        value={createForm.title}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({
+                            ...f,
+                            title: e.target.value,
+                          }))
+                        }
+                        placeholder="Title — e.g. 15s cartoon ad pack"
+                        aria-label="Title"
+                      />
+                      <IconTextarea
+                        icon={AlignLeft}
+                        value={createForm.description}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({
+                            ...f,
+                            description: e.target.value,
+                          }))
+                        }
+                        placeholder="What’s included, revisions, delivery notes"
+                        aria-label="Description"
+                      />
+                      {createPackages.length === 0 ? (
+                        <div className="marketplace-optional-row">
+                          <IconField
+                            icon={Wallet}
+                            value={createForm.priceTtd}
+                            onChange={(e) =>
+                              setCreateForm((f) => ({
+                                ...f,
+                                priceTtd: e.target.value,
+                              }))
+                            }
+                            placeholder="Price (TTD)"
+                            aria-label="Price in TTD"
+                          />
+                          <IconField
+                            icon={CalendarDays}
+                            value={createForm.deliveryDays}
+                            onChange={(e) =>
+                              setCreateForm((f) => ({
+                                ...f,
+                                deliveryDays: e.target.value,
+                              }))
+                            }
+                            placeholder="Delivery days"
+                            aria-label="Delivery days"
+                          />
+                        </div>
+                      ) : (
+                        <p className="marketplace-offers-bar-note">
+                          Pricing lives on Packages — switch tabs to edit tiers.
+                        </p>
+                      )}
+                      <IconField
+                        icon={Tag}
+                        value={createForm.category}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({
+                            ...f,
+                            category: e.target.value,
+                          }))
+                        }
+                        placeholder="Category"
+                        aria-label="Category"
+                      />
+                    </div>
+                    <div className="marketplace-offers-actions">
+                      <button type="button" onClick={goHome}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </Section>
+              ) : null}
+
+              {offerEditorTab === "packages" ? (
+                <Section title="Packages">
+                  <div className="studio-admin-card">
+                    <PackagesEditor
+                      drafts={createPackages}
+                      onChange={setCreatePackages}
                     />
                   </div>
-                </div>
-              </Section>
+                </Section>
+              ) : null}
 
-              <Section title="Packages">
-                <div className="studio-admin-card">
-                  <PackagesEditor
-                    drafts={createPackages}
-                    onChange={setCreatePackages}
-                  />
-                </div>
-              </Section>
-
-              <Section title="Media">
-                <div className="studio-admin-card">
-                  <OfferMediaEditor
-                    assets={recentAssets}
-                    coverAssetId={createCoverAssetId}
-                    sampleAssetIds={createSampleAssetIds}
-                    onCover={setCreateCoverAssetId}
-                    onToggleSample={(id) =>
-                      setCreateSampleAssetIds((prev) =>
-                        prev.includes(id)
-                          ? prev.filter((x) => x !== id)
-                          : prev.length >= 6
-                            ? prev
-                            : [...prev, id],
-                      )
-                    }
-                  />
-                </div>
-              </Section>
-
-              <div className="marketplace-offers-actions">
-                <button
-                  type="button"
-                  className="is-primary"
-                  disabled={busy || !createForm.title.trim()}
-                  onClick={() => void handleCreateOffer()}
-                >
-                  {busy ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : null}
-                  Create draft
-                </button>
-                <button type="button" onClick={goHome}>
-                  Cancel
-                </button>
-              </div>
+              {offerEditorTab === "media" ? (
+                <Section title="Media">
+                  <div className="studio-admin-card">
+                    <OfferMediaEditor
+                      assets={recentAssets}
+                      coverAssetId={createCoverAssetId}
+                      sampleAssetIds={createSampleAssetIds}
+                      onCover={setCreateCoverAssetId}
+                      onToggleSample={(id) =>
+                        setCreateSampleAssetIds((prev) =>
+                          prev.includes(id)
+                            ? prev.filter((x) => x !== id)
+                            : prev.length >= 6
+                              ? prev
+                              : [...prev, id],
+                        )
+                      }
+                    />
+                  </div>
+                </Section>
+              ) : null}
             </div>
           ) : null}
 
           {view.kind === "offer" && selectedOffer && editForm ? (
             <div className="studio-admin-stack">
-              <Section
-                title={selectedOffer.title}
-                extras={<StatusChip status={selectedOffer.status} />}
-              >
-                <div className="studio-admin-card">
-                  <p className="marketplace-offers-link">
-                    <a
-                      href={`/creative-network/${selectedOffer.slug}/`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      /creative-network/{selectedOffer.slug}/
-                    </a>
-                  </p>
-                  <div className="marketplace-profile-fields">
-                    <IconField
-                      icon={FileBadge}
-                      value={editForm.title}
-                      onChange={(e) =>
-                        setEditForm((f) =>
-                          f ? { ...f, title: e.target.value } : f,
-                        )
-                      }
-                      placeholder="Title"
-                      aria-label="Title"
-                    />
-                    <IconTextarea
-                      icon={AlignLeft}
-                      value={editForm.description}
-                      onChange={(e) =>
-                        setEditForm((f) =>
-                          f ? { ...f, description: e.target.value } : f,
-                        )
-                      }
-                      placeholder="Description"
-                      aria-label="Description"
-                    />
-                    {editForm.packages.length === 0 ? (
-                      <div className="marketplace-optional-row">
-                        <IconField
-                          icon={Wallet}
-                          value={editForm.priceTtd}
-                          onChange={(e) =>
-                            setEditForm((f) =>
-                              f ? { ...f, priceTtd: e.target.value } : f,
-                            )
-                          }
-                          placeholder="Price (TTD)"
-                          aria-label="Price in TTD"
-                        />
-                        <IconField
-                          icon={CalendarDays}
-                          value={editForm.deliveryDays}
-                          onChange={(e) =>
-                            setEditForm((f) =>
-                              f ? { ...f, deliveryDays: e.target.value } : f,
-                            )
-                          }
-                          placeholder="Delivery days"
-                          aria-label="Delivery days"
-                        />
-                      </div>
-                    ) : null}
-                    <IconField
-                      icon={Tag}
-                      value={editForm.category}
-                      onChange={(e) =>
-                        setEditForm((f) =>
-                          f ? { ...f, category: e.target.value } : f,
-                        )
-                      }
-                      placeholder="Category"
-                      aria-label="Category"
-                    />
-                  </div>
-                  <div className="marketplace-offers-actions">
-                    <button
-                      type="button"
-                      className="is-primary"
-                      disabled={busy}
-                      onClick={() => void handleSaveOffer()}
-                    >
-                      Save changes
-                    </button>
-                    {selectedOffer.status !== "published" ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void handlePublish(selectedOffer._id, "published")
-                        }
+              {offerEditorTab === "details" ? (
+                <Section
+                  title={selectedOffer.title}
+                  extras={<StatusChip status={selectedOffer.status} />}
+                >
+                  <div className="studio-admin-card">
+                    <p className="marketplace-offers-link">
+                      <a
+                        href={`/creative-network/${selectedOffer.slug}/`}
+                        target="_blank"
+                        rel="noreferrer"
                       >
-                        Publish
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void handlePublish(selectedOffer._id, "paused")
-                        }
-                      >
-                        Pause
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void handlePublish(selectedOffer._id, "archived")
-                      }
-                    >
-                      Archive
-                    </button>
-                  </div>
-                </div>
-              </Section>
-
-              <Section title="Packages">
-                <div className="studio-admin-card">
-                  <PackagesEditor
-                    drafts={editForm.packages}
-                    onChange={(next) =>
-                      setEditForm((f) => (f ? { ...f, packages: next } : f))
-                    }
-                  />
-                  <p className="marketplace-offers-bar-note">
-                    Package changes apply when you press Save changes.
-                  </p>
-                </div>
-              </Section>
-
-              <Section title="Media">
-                <div className="studio-admin-card">
-                  <OfferMediaEditor
-                    assets={recentAssets}
-                    coverAssetId={editForm.coverAssetId}
-                    sampleAssetIds={editForm.sampleAssetIds}
-                    onCover={(id) =>
-                      setEditForm((f) => (f ? { ...f, coverAssetId: id } : f))
-                    }
-                    onToggleSample={(id) =>
-                      setEditForm((f) =>
-                        f
-                          ? {
-                              ...f,
-                              sampleAssetIds: f.sampleAssetIds.includes(id)
-                                ? f.sampleAssetIds.filter((x) => x !== id)
-                                : f.sampleAssetIds.length >= 6
-                                  ? f.sampleAssetIds
-                                  : [...f.sampleAssetIds, id],
-                            }
-                          : f,
-                      )
-                    }
-                  />
-                </div>
-              </Section>
-
-              <Section title="Jobs on this offer">
-                <div className="studio-admin-table-wrap">
-                  {(sellerJobs ?? []).filter(
-                    (j) => j.offerId === selectedOffer._id,
-                  ).length === 0 ? (
-                    <p className="studio-settings-empty marketplace-offers-table-empty">
-                      No bookings on this offer yet.
+                        /creative-network/{selectedOffer.slug}/
+                      </a>
                     </p>
-                  ) : (
-                    <table className="studio-admin-table">
-                      <thead>
-                        <tr>
-                          <th>Status</th>
-                          <th>Booked</th>
-                          <th>Price</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(sellerJobs ?? [])
-                          .filter((j) => j.offerId === selectedOffer._id)
-                          .map((job) => (
-                            <tr
-                              key={job._id}
-                              onClick={() =>
-                                setView({ kind: "job", jobId: job._id })
+                    <div className="marketplace-profile-fields">
+                      <IconField
+                        icon={FileBadge}
+                        value={editForm.title}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, title: e.target.value } : f,
+                          )
+                        }
+                        placeholder="Title"
+                        aria-label="Title"
+                      />
+                      <IconTextarea
+                        icon={AlignLeft}
+                        value={editForm.description}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, description: e.target.value } : f,
+                          )
+                        }
+                        placeholder="Description"
+                        aria-label="Description"
+                      />
+                      {editForm.packages.length === 0 ? (
+                        <div className="marketplace-optional-row">
+                          <IconField
+                            icon={Wallet}
+                            value={editForm.priceTtd}
+                            onChange={(e) =>
+                              setEditForm((f) =>
+                                f ? { ...f, priceTtd: e.target.value } : f,
+                              )
+                            }
+                            placeholder="Price (TTD)"
+                            aria-label="Price in TTD"
+                          />
+                          <IconField
+                            icon={CalendarDays}
+                            value={editForm.deliveryDays}
+                            onChange={(e) =>
+                              setEditForm((f) =>
+                                f ? { ...f, deliveryDays: e.target.value } : f,
+                              )
+                            }
+                            placeholder="Delivery days"
+                            aria-label="Delivery days"
+                          />
+                        </div>
+                      ) : (
+                        <p className="marketplace-offers-bar-note">
+                          Pricing lives on Packages — switch tabs to edit tiers.
+                        </p>
+                      )}
+                      <IconField
+                        icon={Tag}
+                        value={editForm.category}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, category: e.target.value } : f,
+                          )
+                        }
+                        placeholder="Category"
+                        aria-label="Category"
+                      />
+                    </div>
+                    <div className="marketplace-offers-actions">
+                      {selectedOffer.status !== "published" ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void handlePublish(selectedOffer._id, "published")
+                          }
+                        >
+                          Publish
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            void handlePublish(selectedOffer._id, "paused")
+                          }
+                        >
+                          Pause
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void handlePublish(selectedOffer._id, "archived")
+                        }
+                      >
+                        Archive
+                      </button>
+                    </div>
+                  </div>
+                </Section>
+              ) : null}
+
+              {offerEditorTab === "packages" ? (
+                <Section title="Packages">
+                  <div className="studio-admin-card">
+                    <PackagesEditor
+                      drafts={editForm.packages}
+                      onChange={(next) =>
+                        setEditForm((f) => (f ? { ...f, packages: next } : f))
+                      }
+                    />
+                    <p className="marketplace-offers-bar-note">
+                      Package changes apply when you press Save.
+                    </p>
+                  </div>
+                </Section>
+              ) : null}
+
+              {offerEditorTab === "media" ? (
+                <Section title="Media">
+                  <div className="studio-admin-card">
+                    <OfferMediaEditor
+                      assets={recentAssets}
+                      coverAssetId={editForm.coverAssetId}
+                      sampleAssetIds={editForm.sampleAssetIds}
+                      onCover={(id) =>
+                        setEditForm((f) =>
+                          f ? { ...f, coverAssetId: id } : f,
+                        )
+                      }
+                      onToggleSample={(id) =>
+                        setEditForm((f) =>
+                          f
+                            ? {
+                                ...f,
+                                sampleAssetIds: f.sampleAssetIds.includes(id)
+                                  ? f.sampleAssetIds.filter((x) => x !== id)
+                                  : f.sampleAssetIds.length >= 6
+                                    ? f.sampleAssetIds
+                                    : [...f.sampleAssetIds, id],
                               }
-                            >
-                              <td>
-                                <StatusChip status={job.status} />
-                              </td>
-                              <td>
-                                {new Date(job.createdAt).toLocaleString()}
-                              </td>
-                              <td>{formatTtdCents(job.priceCents)}</td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </Section>
+                            : f,
+                        )
+                      }
+                    />
+                  </div>
+                </Section>
+              ) : null}
+
+              {offerEditorTab === "jobs" ? (
+                <Section title="Jobs on this offer">
+                  <div className="studio-admin-table-wrap">
+                    {(sellerJobs ?? []).filter(
+                      (j) => j.offerId === selectedOffer._id,
+                    ).length === 0 ? (
+                      <p className="studio-settings-empty marketplace-offers-table-empty">
+                        No bookings on this offer yet.
+                      </p>
+                    ) : (
+                      <table className="studio-admin-table">
+                        <thead>
+                          <tr>
+                            <th>Status</th>
+                            <th>Booked</th>
+                            <th>Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(sellerJobs ?? [])
+                            .filter((j) => j.offerId === selectedOffer._id)
+                            .map((job) => (
+                              <tr
+                                key={job._id}
+                                onClick={() =>
+                                  setView({ kind: "job", jobId: job._id })
+                                }
+                              >
+                                <td>
+                                  <StatusChip status={job.status} />
+                                </td>
+                                <td>
+                                  {new Date(job.createdAt).toLocaleString()}
+                                </td>
+                                <td>{formatTtdCents(job.priceCents)}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </Section>
+              ) : null}
             </div>
           ) : null}
 
