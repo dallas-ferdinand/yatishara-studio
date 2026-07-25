@@ -13,9 +13,23 @@ const DM_BODY_MAX = 4000;
 const DM_PREVIEW_MAX = 120;
 const VOICE_NOTE_MAX_SECONDS = 300;
 const VOICE_PREVIEW = "Voice message";
+const IMAGE_PREVIEW = "Photo";
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
 const CONVERSATIONS_MAX = 60;
 const MESSAGES_PAGE_MAX = 200;
 const PUBLIC_URL_TTL_SECONDS = 60 * 60;
+
+function peerReadAt(conversation: Doc<"dmConversations">, me: Id<"users">) {
+  return conversation.userLowId === me
+    ? conversation.highLastReadAt
+    : conversation.lowLastReadAt;
+}
 
 function sortPair(a: Id<"users">, b: Id<"users">) {
   return String(a) < String(b)
@@ -59,6 +73,8 @@ const conversationRowReturn = v.object({
   lastMessagePreview: v.optional(v.string()),
   lastMessageAt: v.number(),
   lastMessageFromMe: v.boolean(),
+  /** Peer has read the latest message (only meaningful when lastMessageFromMe). */
+  lastMessageRead: v.boolean(),
   unread: v.boolean(),
 });
 
@@ -156,12 +172,16 @@ export const listMyConversations = authedQuery({
 
     return visible.map((row, i) => {
       const { conversation } = row;
+      const lastMessageFromMe = conversation.lastMessageSenderId === me;
       return {
         conversationId: conversation._id,
         peer: peers[i]!,
         lastMessagePreview: conversation.lastMessagePreview,
         lastMessageAt: conversation.lastMessageAt,
-        lastMessageFromMe: conversation.lastMessageSenderId === me,
+        lastMessageFromMe,
+        lastMessageRead:
+          lastMessageFromMe &&
+          peerReadAt(conversation, me) >= conversation.lastMessageAt,
         unread: Boolean(
           conversation.lastMessageSenderId &&
             conversation.lastMessageSenderId !== me &&
@@ -182,10 +202,18 @@ export const listMessages = authedQuery({
     v.object({
       _id: v.id("dmMessages"),
       body: v.string(),
-      kind: v.union(v.literal("text"), v.literal("voice")),
+      kind: v.union(
+        v.literal("text"),
+        v.literal("voice"),
+        v.literal("image"),
+      ),
       audioUrl: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+      contentType: v.optional(v.string()),
       durationSec: v.optional(v.number()),
       fromMe: v.boolean(),
+      /** WhatsApp-style: true when peer watermark is past this message (mine only). */
+      read: v.boolean(),
       createdAt: v.number(),
     }),
   ),
@@ -195,6 +223,7 @@ export const listMessages = authedQuery({
       args.conversationId,
       ctx.user._id,
     );
+    const peerWatermark = peerReadAt(conversation, ctx.user._id);
     const limit = Math.min(Math.max(args.limit ?? 120, 1), MESSAGES_PAGE_MAX);
     const rows = await ctx.db
       .query("dmMessages")
@@ -208,13 +237,20 @@ export const listMessages = authedQuery({
         const audioUrl = row.audioStorageId
           ? ((await ctx.storage.getUrl(row.audioStorageId)) ?? undefined)
           : undefined;
+        const imageUrl = row.imageStorageId
+          ? ((await ctx.storage.getUrl(row.imageStorageId)) ?? undefined)
+          : undefined;
+        const fromMe = row.senderId === ctx.user._id;
         return {
           _id: row._id,
           body: row.body,
           kind: row.kind ?? "text",
           audioUrl,
+          imageUrl,
+          contentType: row.contentType,
           durationSec: row.durationSec,
-          fromMe: row.senderId === ctx.user._id,
+          fromMe,
+          read: fromMe && peerWatermark >= row.createdAt,
           createdAt: row.createdAt,
         };
       }),
@@ -245,6 +281,7 @@ export const sendMessage = authedMutation({
       conversationId: conversation._id,
       senderId: ctx.user._id,
       body,
+      kind: "text",
       createdAt: now,
     });
     const isLow = conversation.userLowId === ctx.user._id;
@@ -259,7 +296,20 @@ export const sendMessage = authedMutation({
   },
 });
 
-/** Short-lived Convex storage upload URL for a voice note blob. */
+/**
+ * Short-lived Convex storage upload URL for a DM attachment
+ * (voice note or image).
+ */
+export const prepareAttachmentUpload = authedMutation({
+  args: { conversationId: v.id("dmConversations") },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await requireMemberConversation(ctx, args.conversationId, ctx.user._id);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Alias for voice-note clients — same upload URL as prepareAttachmentUpload. */
 export const prepareVoiceUpload = authedMutation({
   args: { conversationId: v.id("dmConversations") },
   returns: v.string(),
@@ -304,6 +354,59 @@ export const sendVoiceMessage = authedMutation({
     await ctx.db.patch(conversation._id, {
       lastMessageAt: now,
       lastMessagePreview: VOICE_PREVIEW,
+      lastMessageSenderId: ctx.user._id,
+      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+    });
+    return messageId;
+  },
+});
+
+export const sendImageMessage = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    storageId: v.id("_storage"),
+    caption: v.optional(v.string()),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    const meta = await ctx.db.system.get("_storage", args.storageId);
+    if (!meta) throw new Error("Image upload not found");
+    const contentType = (meta.contentType || "").toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+      throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
+    }
+    if (meta.size > IMAGE_MAX_BYTES) {
+      throw new Error("Images must be 10 MB or smaller");
+    }
+    const caption = (args.caption ?? "").trim();
+    if (caption.length > DM_BODY_MAX) {
+      throw new Error(`Caption must be at most ${DM_BODY_MAX} characters`);
+    }
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: ctx.user._id,
+      body: caption,
+      kind: "image",
+      imageStorageId: args.storageId,
+      contentType,
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === ctx.user._id;
+    const preview = caption
+      ? caption.length > DM_PREVIEW_MAX
+        ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+        : caption
+      : IMAGE_PREVIEW;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: preview,
       lastMessageSenderId: ctx.user._id,
       ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
     });

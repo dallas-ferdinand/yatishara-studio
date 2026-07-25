@@ -3,11 +3,16 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  Check,
+  CheckCheck,
+  ImageIcon,
   Loader2,
   MessageCircle,
   Mic,
+  Paperclip,
   SendHorizontal,
   Trash2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
@@ -19,6 +24,18 @@ import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
 
 const VOICE_NOTE_MAX_SECONDS = 300;
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+type PendingImage = {
+  file: File;
+  previewUrl: string;
+};
 
 function pickRecorderMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
@@ -31,6 +48,61 @@ function recordingTimeLabel(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/** WhatsApp-style ticks: single = sent, double accent = read. */
+function DmReadReceipt({ read }: { read: boolean }) {
+  if (read) {
+    return (
+      <CheckCheck
+        className="studio-dm-ticks is-read"
+        aria-label="Read"
+        strokeWidth={2.5}
+      />
+    );
+  }
+  return (
+    <Check
+      className="studio-dm-ticks"
+      aria-label="Sent"
+      strokeWidth={2.5}
+    />
+  );
+}
+
+function DmMessageMeta({
+  createdAt,
+  fromMe,
+  read,
+}: {
+  createdAt: number;
+  fromMe: boolean;
+  read: boolean;
+}) {
+  return (
+    <span className="studio-dm-meta">
+      <time dateTime={new Date(createdAt).toISOString()}>
+        {timeLabel(createdAt)}
+      </time>
+      {fromMe ? <DmReadReceipt read={read} /> : null}
+    </span>
+  );
+}
+
+async function uploadDmBlob(
+  uploadUrl: string,
+  blob: Blob,
+  contentType: string,
+): Promise<Id<"_storage">> {
+  const result = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": contentType || "application/octet-stream" },
+    body: blob,
+  });
+  if (!result.ok) throw new Error("Upload failed");
+  const json = (await result.json()) as { storageId: Id<"_storage"> };
+  if (!json.storageId) throw new Error("Upload failed");
+  return json.storageId;
 }
 
 export type DmConversationId = Id<"dmConversations">;
@@ -109,14 +181,25 @@ export function StudioMessagesPane({
   );
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
-  const prepareVoiceUpload = useMutation(api.dms.prepareVoiceUpload);
+  const prepareAttachmentUpload = useMutation(api.dms.prepareAttachmentUpload);
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
+  const sendImageMessage = useMutation(api.dms.sendImageMessage);
 
   const [draft, setDraft] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const clearPendingImage = useCallback(() => {
+    setPendingImage((prev) => {
+      if (prev) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }, []);
 
   /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
   const [recState, setRecState] = useState<"idle" | "recording" | "sending">(
@@ -198,20 +281,17 @@ export function StudioMessagesPane({
 
       void (async () => {
         try {
-          const uploadUrl = await prepareVoiceUpload({
+          const uploadUrl = await prepareAttachmentUpload({
             conversationId: conversationId!,
           });
-          const result = await fetch(uploadUrl, {
-            method: "POST",
-            headers: { "Content-Type": blob.type || "audio/webm" },
-            body: blob,
-          });
-          if (!result.ok) throw new Error("Upload failed");
-          const json = (await result.json()) as { storageId: Id<"_storage"> };
-          if (!json.storageId) throw new Error("Upload failed");
+          const storageId = await uploadDmBlob(
+            uploadUrl,
+            blob,
+            blob.type || "audio/webm",
+          );
           await sendVoiceMessage({
             conversationId: conversationId!,
-            storageId: json.storageId,
+            storageId,
             durationSec,
           });
         } catch (error) {
@@ -232,7 +312,7 @@ export function StudioMessagesPane({
   }, [
     conversationId,
     finishRecording,
-    prepareVoiceUpload,
+    prepareAttachmentUpload,
     recState,
     sendVoiceMessage,
     teardownRecorder,
@@ -273,17 +353,54 @@ export function StudioMessagesPane({
   useEffect(() => {
     setDraft("");
     setSendError("");
+    clearPendingImage();
+    setLightboxUrl(null);
     if (conversationId) inputRef.current?.focus();
-  }, [conversationId]);
+  }, [clearPendingImage, conversationId]);
+
+  function pickImageFile(file: File | undefined) {
+    if (!file) return;
+    const type = (file.type || "").toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(type)) {
+      setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+      return;
+    }
+    if (file.size > IMAGE_MAX_BYTES) {
+      setSendError("Images must be 10 MB or smaller");
+      return;
+    }
+    setSendError("");
+    clearPendingImage();
+    setPendingImage({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    });
+  }
 
   async function handleSend() {
-    if (!conversationId) return;
+    if (!conversationId || sendBusy || recState !== "idle") return;
     const body = draft.trim();
-    if (!body || sendBusy) return;
+    if (!pendingImage && !body) return;
+
     setSendBusy(true);
     setSendError("");
     try {
-      await send({ conversationId, body });
+      if (pendingImage) {
+        const uploadUrl = await prepareAttachmentUpload({ conversationId });
+        const storageId = await uploadDmBlob(
+          uploadUrl,
+          pendingImage.file,
+          pendingImage.file.type || "image/jpeg",
+        );
+        await sendImageMessage({
+          conversationId,
+          storageId,
+          caption: body || undefined,
+        });
+        clearPendingImage();
+      } else {
+        await send({ conversationId, body });
+      }
       setDraft("");
       inputRef.current?.focus();
     } catch (error) {
@@ -292,6 +409,8 @@ export function StudioMessagesPane({
       setSendBusy(false);
     }
   }
+
+  const canSend = Boolean(pendingImage || draft.trim());
 
   if (!conversationId) {
     if (showChatListWhenEmpty) {
@@ -412,20 +531,48 @@ export function StudioMessagesPane({
                             Voice message unavailable
                           </p>
                         )}
-                        <time
-                          dateTime={new Date(message.createdAt).toISOString()}
-                        >
-                          {timeLabel(message.createdAt)}
-                        </time>
+                        <DmMessageMeta
+                          createdAt={message.createdAt}
+                          fromMe={message.fromMe}
+                          read={message.read}
+                        />
+                      </div>
+                    ) : message.kind === "image" ? (
+                      <div className="studio-dm-bubble is-image">
+                        {message.imageUrl ? (
+                          <button
+                            type="button"
+                            className="studio-dm-image-btn"
+                            onClick={() => setLightboxUrl(message.imageUrl!)}
+                            aria-label="View image"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={message.imageUrl}
+                              alt={message.body || "Photo"}
+                              className="studio-dm-image"
+                            />
+                          </button>
+                        ) : (
+                          <p className="studio-dm-voice-missing">
+                            Photo unavailable
+                          </p>
+                        )}
+                        {message.body ? <p>{message.body}</p> : null}
+                        <DmMessageMeta
+                          createdAt={message.createdAt}
+                          fromMe={message.fromMe}
+                          read={message.read}
+                        />
                       </div>
                     ) : (
                       <div className="studio-dm-bubble">
                         <p>{message.body}</p>
-                        <time
-                          dateTime={new Date(message.createdAt).toISOString()}
-                        >
-                          {timeLabel(message.createdAt)}
-                        </time>
+                        <DmMessageMeta
+                          createdAt={message.createdAt}
+                          fromMe={message.fromMe}
+                          read={message.read}
+                        />
                       </div>
                     )}
                   </div>
@@ -438,7 +585,38 @@ export function StudioMessagesPane({
 
       {sendError ? <p className="studio-dm-error">{sendError}</p> : null}
 
+      {pendingImage && recState === "idle" ? (
+        <div className="studio-dm-attach-preview">
+          <div className="studio-dm-attach-thumb">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={pendingImage.previewUrl} alt="" />
+            <span className="studio-dm-attach-badge" aria-hidden="true">
+              <ImageIcon className="h-3 w-3" />
+            </span>
+          </div>
+          <span className="studio-dm-attach-name">{pendingImage.file.name}</span>
+          <button
+            type="button"
+            className="studio-dm-attach-clear"
+            onClick={clearPendingImage}
+            aria-label="Remove attachment"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
       <footer className="studio-dm-composer">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="studio-dm-file-input"
+          onChange={(event) => {
+            pickImageFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
         {recState !== "idle" ? (
           <div
             className="studio-dm-recording"
@@ -492,11 +670,20 @@ export function StudioMessagesPane({
           </div>
         ) : (
           <>
+            <button
+              type="button"
+              className="studio-dm-attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sendBusy}
+              aria-label="Attach a photo"
+            >
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
+            </button>
             <textarea
               ref={inputRef}
               value={draft}
               rows={1}
-              placeholder="Message…"
+              placeholder={pendingImage ? "Add a caption…" : "Message…"}
               aria-label={`Message ${peerLabel}`}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -505,14 +692,28 @@ export function StudioMessagesPane({
                   void handleSend();
                 }
               }}
+              onPaste={(event) => {
+                const items = event.clipboardData?.items;
+                if (!items) return;
+                for (const item of items) {
+                  if (item.type.startsWith("image/")) {
+                    const file = item.getAsFile();
+                    if (file) {
+                      event.preventDefault();
+                      pickImageFile(file);
+                      return;
+                    }
+                  }
+                }
+              }}
             />
-            {draft.trim() ? (
+            {canSend ? (
               <button
                 type="button"
                 className="studio-dm-send"
                 onClick={() => void handleSend()}
                 disabled={sendBusy}
-                aria-label="Send message"
+                aria-label={pendingImage ? "Send photo" : "Send message"}
               >
                 {sendBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -533,6 +734,31 @@ export function StudioMessagesPane({
           </>
         )}
       </footer>
+
+      {lightboxUrl ? (
+        <div
+          className="studio-dm-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            className="studio-dm-lightbox-close"
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxUrl}
+            alt=""
+            onClick={(event) => event.stopPropagation()}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -548,15 +774,14 @@ export function StudioDmConversationRow({
     lastMessagePreview?: string;
     lastMessageAt: number;
     lastMessageFromMe: boolean;
+    lastMessageRead: boolean;
     unread: boolean;
   };
   active: boolean;
   onSelect: () => void;
 }) {
   const label = row.peer.displayName?.trim() || `@${row.peer.username}`;
-  const preview = row.lastMessagePreview
-    ? `${row.lastMessageFromMe ? "You: " : ""}${row.lastMessagePreview}`
-    : "Tap to start chatting";
+  const preview = row.lastMessagePreview || "Tap to start chatting";
   return (
     <button
       type="button"
@@ -578,7 +803,12 @@ export function StudioDmConversationRow({
           </time>
         </span>
         <span className="studio-dm-row-bottom">
-          <span className="studio-dm-row-preview">{preview}</span>
+          <span className="studio-dm-row-preview">
+            {row.lastMessageFromMe ? (
+              <DmReadReceipt read={row.lastMessageRead} />
+            ) : null}
+            {preview}
+          </span>
           {row.unread ? (
             <span className="studio-dm-unread-dot" aria-label="Unread" />
           ) : null}

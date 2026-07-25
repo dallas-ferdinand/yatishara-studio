@@ -3,6 +3,7 @@
 /* —— Pane —— */
 
 .studio-dm-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -182,13 +183,37 @@
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-dm-bubble time {
+.studio-dm-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   flex: 0 0 auto;
+  transform: translateY(1px);
+}
+
+.studio-dm-meta time {
   font-size: 9.5px;
   font-weight: 600;
   color: var(--color-cursor-muted, var(--mos-muted));
   white-space: nowrap;
-  transform: translateY(1px);
+}
+
+.studio-dm-ticks {
+  width: 14px;
+  height: 14px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  flex: 0 0 auto;
+}
+
+.studio-dm-ticks.is-read {
+  color: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-dm-row-preview .studio-dm-ticks {
+  width: 13px;
+  height: 13px;
+  margin-right: 2px;
+  flex: 0 0 auto;
 }
 
 .studio-dm-error {
@@ -381,6 +406,201 @@
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
+/* —— Image bubbles —— */
+
+.studio-dm-bubble.is-image {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: min(78%, 20rem);
+  padding: 4px;
+}
+
+.studio-dm-bubble.is-image > p {
+  padding: 0 6px;
+}
+
+.studio-dm-bubble.is-image .studio-dm-meta {
+  align-self: flex-end;
+  padding: 0 4px 2px;
+}
+
+.studio-dm-image-btn {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.studio-dm-image {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+/* —— Attach preview + paperclip —— */
+
+.studio-dm-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.studio-dm-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-dm-attach:hover:not(:disabled) {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+}
+
+.studio-dm-attach:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.studio-dm-attach-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+}
+
+[data-appearance="light"] .studio-dm-attach-preview {
+  background: var(--mos-panel, #f5f5f7);
+}
+
+.studio-dm-attach-thumb {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--cursor-surface-raised, var(--mos-surface));
+}
+
+.studio-dm-attach-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-dm-attach-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mos-bg) 70%, transparent);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-attach-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-cursor-text, var(--mos-text));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-dm-attach-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-dm-attach-clear:hover {
+  color: var(--mos-danger, #f87171);
+  background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
+}
+
+/* —— Image lightbox —— */
+
+.studio-dm-lightbox {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 72%, transparent);
+  cursor: zoom-out;
+}
+
+.studio-dm-lightbox img {
+  max-width: min(100%, 720px);
+  max-height: min(100%, 80vh);
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.studio-dm-lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 45%, transparent);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* Voice bubble meta sits like the old time stamp */
+.studio-dm-bubble.is-voice {
+  align-items: flex-end;
+}
+
+.studio-dm-bubble.is-voice .studio-dm-meta {
+  align-self: flex-end;
+}
+
 /* —— Inline list (mobile, no chat selected) —— */
 
 .studio-dm-list-host {
@@ -490,7 +710,10 @@
 }
 
 .studio-dm-row-preview {
+  display: inline-flex;
+  align-items: center;
   flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
