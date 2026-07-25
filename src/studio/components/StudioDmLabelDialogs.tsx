@@ -295,6 +295,10 @@ export function StudioDmAssignLabelsDialog({
                     htmlFor={inputId}
                     className={`studio-dm-assign-row${checked ? " is-on" : ""}`}
                   >
+                    <span className="studio-dm-assign-icon" aria-hidden="true">
+                      <Icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="studio-dm-assign-name">{label.name}</span>
                     <input
                       id={inputId}
                       type="checkbox"
@@ -302,10 +306,6 @@ export function StudioDmAssignLabelsDialog({
                       checked={checked}
                       onChange={() => void toggle(label.labelId)}
                     />
-                    <span className="studio-dm-assign-icon" aria-hidden="true">
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="studio-dm-assign-name">{label.name}</span>
                   </label>
                 </li>
               );
