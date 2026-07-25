@@ -58,6 +58,19 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     message: "That password didn't match. Try again.",
   },
   {
+    match:
+      /could not verify code|invalid (verification )?code|verification code.*(invalid|expired|incorrect)|code (is )?(invalid|expired|incorrect)|invalidsecret/i,
+    message: "That code didn't match or has expired. Request a new code and try again.",
+  },
+  {
+    match: /too many failed|maximum.*attempts|account.*locked/i,
+    message: "Too many attempts. Wait a moment, then request a new code.",
+  },
+  {
+    match: /invalidaccountid|could not sign in|sign ?in failed/i,
+    message: "Sign-in didn't complete. Double-check your details and try again.",
+  },
+  {
     match: /password must be at least 8/i,
     message: "Password must be at least 8 characters.",
   },
