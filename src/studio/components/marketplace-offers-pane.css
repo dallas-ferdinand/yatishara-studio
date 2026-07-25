@@ -725,13 +725,17 @@ span.studio-admin-head-tab,
   padding: 0 12px;
   border-radius: var(--cursor-radius-md, 10px);
   border: 1px solid var(--color-cursor-border-soft);
-  background: #ffffff;
+  background: var(--cursor-surface-raised);
   color: var(--color-cursor-text);
   cursor: text;
   transition:
     border-color var(--cursor-ease, 160ms ease),
     background var(--cursor-ease, 160ms ease),
     box-shadow var(--cursor-ease, 160ms ease);
+}
+
+[data-appearance="light"] .marketplace-icon-input {
+  background: var(--mos-bg, #ececf0);
 }
 
 .marketplace-icon-input.is-multiline {
@@ -803,9 +807,15 @@ span.studio-admin-head-tab,
 .marketplace-icon-input-field:-webkit-autofill:hover,
 .marketplace-icon-input-field:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-cursor-text-bright);
-  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--cursor-surface-raised) inset;
   caret-color: var(--color-cursor-text-bright);
   transition: background-color 100000s ease-in-out 0s;
+}
+
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill,
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:hover,
+[data-appearance="light"] .marketplace-icon-input-field:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--mos-bg, #ececf0) inset;
 }
 
 .marketplace-field-wrap.is-error .marketplace-icon-input {
