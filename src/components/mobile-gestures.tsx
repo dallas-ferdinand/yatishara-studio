@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { mercuryLogoAssets } from "@/lib/brand-assets";
 
 const PULL_START_SLOP = 10;
@@ -113,6 +119,13 @@ export function MobileGestures() {
       if (unwindRafRef.current) cancelAnimationFrame(unwindRafRef.current);
     };
   }, []);
+
+  // First mount after arming — paint current pull before the next touchmove.
+  useLayoutEffect(() => {
+    if (active || refreshing) {
+      paintPull(pullRef.current, { refreshing });
+    }
+  }, [active, refreshing]);
 
   // Pull-down-to-reload.
   useEffect(() => {
