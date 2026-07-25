@@ -91,6 +91,7 @@ import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
 import { Icon } from "@/desk/components/Icons";
 import { ExplorerTypeFilter } from "@/desk/components/ExplorerTypeFilter";
 import { CursorSelect } from "@/desk/components/CursorSelect";
+import { CursorTable } from "@/desk/components/CursorTable";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { matchesExplorerTypeFilter } from "@/desk/lib/file-kind";
 import {
@@ -13391,59 +13392,12 @@ export function StudioShell({
           border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
           background: var(--color-cursor-hover);
         }
-        .studio-admin-table-wrap {
-          overflow: auto;
-          border: 1px solid var(--color-cursor-border);
-          border-radius: var(--cursor-radius-lg, 10px);
-          background: var(--cursor-surface-raised);
-        }
-        [data-appearance="light"] .studio-admin-table-wrap {
-          background: var(--mos-bg, #ececf0);
-        }
-        .studio-admin-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 760px;
-          color: var(--color-cursor-text);
-          font-size: 12px;
-        }
-        .studio-admin-table th,
-        .studio-admin-table td {
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 54%, transparent);
-          padding: 11px 12px;
-          text-align: left;
-          vertical-align: middle;
-        }
-        .studio-admin-table th {
-          color: var(--color-cursor-muted);
-          font-size: 10px;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-        }
-        .studio-admin-table tbody tr {
-          cursor: pointer;
-        }
-        .studio-admin-table tbody tr:hover,
-        .studio-admin-table tbody tr.is-selected {
-          background: var(--color-cursor-hover);
-        }
-        .studio-admin-table td strong,
+        /* Table plate + empty: global .cursor-table* in desk-shell.css */
         .studio-admin-detail-panel h3,
         .studio-admin-setup-card h4 {
           display: block;
           color: var(--color-cursor-text-bright);
           font-weight: 700;
-        }
-        .studio-admin-table td span {
-          display: block;
-          margin-top: 2px;
-          color: var(--color-cursor-muted);
-          font-size: 11px;
-        }
-        .studio-admin-table a {
-          color: var(--cursor-accent);
-          font-weight: 700;
-          text-decoration: none;
         }
         .studio-payment-status-pill {
           display: inline-flex;
@@ -22068,38 +22022,40 @@ function AdminWorkspacePane({
                   />
                 </div>
               </div>
-              <div className="studio-admin-table-wrap">
-                <table className="studio-admin-table">
-                  <thead>
-                    <tr>
-                      <th>Customer</th>
-                      <th>Method</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Created</th>
+              <CursorTable
+                ariaLabel="Payments"
+                empty={!visiblePayments.length}
+                emptyTitle="No payments"
+                emptyHint="Nothing matches this filter."
+              >
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Method</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiblePayments.map((payment) => (
+                    <tr
+                      key={payment._id}
+                      className={selectedPaymentId === payment._id ? "is-selected" : ""}
+                      onClick={() => setSelectedPaymentId(payment._id)}
+                    >
+                      <td>
+                        <strong>{paymentCustomerName(payment)}</strong>
+                        <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
+                      </td>
+                      <td>{payment.method === "paywise" ? "PayWise" : payment.method === "bank" ? "Legacy bank" : payment.method}</td>
+                      <td>{formatMoney(payment.amountCents)}</td>
+                      <td><PaymentStatusPill status={payment.status} /></td>
+                      <td>{formatDate(payment.createdAt)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {visiblePayments.map((payment) => (
-                      <tr
-                        key={payment._id}
-                        className={selectedPaymentId === payment._id ? "is-selected" : ""}
-                        onClick={() => setSelectedPaymentId(payment._id)}
-                      >
-                        <td>
-                          <strong>{paymentCustomerName(payment)}</strong>
-                          <span>{payment.customer?.email ?? payment.customer?.phone ?? payment.userId}</span>
-                        </td>
-                        <td>{payment.method === "paywise" ? "PayWise" : payment.method === "bank" ? "Legacy bank" : payment.method}</td>
-                        <td>{formatMoney(payment.amountCents)}</td>
-                        <td><PaymentStatusPill status={payment.status} /></td>
-                        <td>{formatDate(payment.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!visiblePayments.length ? <p className="studio-settings-empty">No payments match this filter.</p> : null}
-              </div>
+                  ))}
+                </tbody>
+              </CursorTable>
               {reviewStatus ? <p className="studio-settings-payment-status">{reviewStatus}</p> : null}
             </section>
             {selectedPayment ? (
@@ -22119,37 +22075,39 @@ function AdminWorkspacePane({
                 <span className="studio-admin-chip">{customerRows.length} accounts</span>
               </div>
             </div>
-            <div className="studio-admin-table-wrap">
-              <table className="studio-admin-table">
-                <thead>
-                  <tr>
-                    <th>Customer</th>
-                    <th>Role</th>
-                    <th>Balance</th>
-                    <th>Payments</th>
-                    <th>Last seen</th>
+            <CursorTable
+              ariaLabel="Customers"
+              empty={!customerRows.length}
+              emptyTitle="No customers"
+              emptyHint="No customers yet."
+            >
+              <thead>
+                <tr>
+                  <th>Customer</th>
+                  <th>Role</th>
+                  <th>Balance</th>
+                  <th>Payments</th>
+                  <th>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerRows.map((customer) => (
+                  <tr key={customer._id}>
+                    <td>
+                      <strong>{customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer"}</strong>
+                      <span>{customer.email ?? customer.phone ?? customer._id}</span>
+                    </td>
+                    <td>{customer.role}</td>
+                    <td>{formatTtdFromCredits(customer.creditBalance)} <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span></td>
+                    <td>
+                      <strong>{customer.paymentCount}</strong>
+                      <span>{customer.latestPaymentStatus ? humanizePaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
+                    </td>
+                    <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {customerRows.map((customer) => (
-                    <tr key={customer._id}>
-                      <td>
-                        <strong>{customer.name ?? customer.email ?? customer.phone ?? "Unnamed customer"}</strong>
-                        <span>{customer.email ?? customer.phone ?? customer._id}</span>
-                      </td>
-                      <td>{customer.role}</td>
-                      <td>{formatTtdFromCredits(customer.creditBalance)} <span>{formatTtdFromCredits(customer.reservedCredits)} reserved</span></td>
-                      <td>
-                        <strong>{customer.paymentCount}</strong>
-                        <span>{customer.latestPaymentStatus ? humanizePaymentStatus(customer.latestPaymentStatus) : "No payments"}</span>
-                      </td>
-                      <td>{customer.lastSeenAt ? formatDate(customer.lastSeenAt) : "Never"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!customerRows.length ? <p className="studio-settings-empty">No customers yet.</p> : null}
-            </div>
+                ))}
+              </tbody>
+            </CursorTable>
           </section>
         ) : tab === "marketplace" ? (
           <AdminMarketplacePane />
