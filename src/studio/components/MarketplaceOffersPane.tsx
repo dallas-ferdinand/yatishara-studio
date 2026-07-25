@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 import { IconField, IconTextarea } from "./MarketplaceIconField";
@@ -34,27 +35,81 @@ type View =
   | { kind: "job"; jobId: Id<"marketplaceJobs"> }
   | { kind: "create" };
 
+type HomeTab = "offers" | "jobs";
+type JobFilter = "all" | "sell" | "buy";
+
+const GOOD_STATUSES = new Set(["published", "completed", "approved", "paid"]);
+const BAD_STATUSES = new Set([
+  "cancelled",
+  "refunded",
+  "suspended",
+  "archived",
+]);
+
 function humanStatus(status: string): string {
   return status.replace(/_/g, " ");
 }
 
 function StatusChip({ status }: { status: string }) {
-  return <span className="marketplace-status-chip">{humanStatus(status)}</span>;
+  const tone = GOOD_STATUSES.has(status)
+    ? " is-good"
+    : BAD_STATUSES.has(status)
+      ? " is-bad"
+      : "";
+  return (
+    <span className={`marketplace-status-chip${tone}`}>
+      {humanStatus(status)}
+    </span>
+  );
 }
 
-function OffersChromeHead({
-  children,
-  ariaLabel,
-}: {
-  children: ReactNode;
-  ariaLabel: string;
-}) {
+function OffersHead({ children }: { children: ReactNode }) {
   return (
-    <header className="marketplace-apply-head">
-      <nav className="marketplace-offers-head-nav" aria-label={ariaLabel}>
+    <header className="studio-admin-head">
+      <nav className="studio-admin-head-tabs" aria-label="Offers sections">
         {children}
       </nav>
     </header>
+  );
+}
+
+function Section({
+  title,
+  extras,
+  children,
+}: {
+  title: string;
+  extras?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="studio-admin-section">
+      <div className="studio-admin-section-head">
+        <span className="studio-admin-section-title">{title}</span>
+        {extras ? (
+          <div className="studio-admin-section-extras">{extras}</div>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  body,
+}: {
+  label: string;
+  value: ReactNode;
+  body: string;
+}) {
+  return (
+    <article className="studio-admin-card">
+      <p className="studio-admin-card-kicker">{label}</p>
+      <h3>{value}</h3>
+      <p>{body}</p>
+    </article>
   );
 }
 
@@ -63,6 +118,8 @@ export function MarketplaceOffersPane({
   creditPriceCents = 50,
 }: MarketplaceOffersPaneProps) {
   const [view, setView] = useState<View>({ kind: "home" });
+  const [homeTab, setHomeTab] = useState<HomeTab>("offers");
+  const [jobFilter, setJobFilter] = useState<JobFilter>("all");
   const [busy, setBusy] = useState(false);
 
   const seller = useQuery(api.marketplace.getMySellerStatus);
@@ -91,14 +148,20 @@ export function MarketplaceOffersPane({
 
   const jobIdForAssets = view.kind === "job" ? view.jobId : null;
   // Signed-URL window is stamped per job outside render so it stays stable.
-  const [assetUrlExpiresUnix, setAssetUrlExpiresUnix] = useState<number | null>(null);
+  const [assetUrlExpiresUnix, setAssetUrlExpiresUnix] = useState<number | null>(
+    null,
+  );
   useEffect(() => {
-    setAssetUrlExpiresUnix(jobIdForAssets ? Math.floor(Date.now() / 1000) + 60 * 60 : null);
+    setAssetUrlExpiresUnix(
+      jobIdForAssets ? Math.floor(Date.now() / 1000) + 60 * 60 : null,
+    );
   }, [jobIdForAssets]);
 
   const recentAssets = useQuery(
     api.assets.listRecentReady,
-    view.kind === "job" && jobDetail?.job.role === "seller" && assetUrlExpiresUnix !== null
+    view.kind === "job" &&
+      jobDetail?.job.role === "seller" &&
+      assetUrlExpiresUnix !== null
       ? { limit: 24, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
@@ -124,6 +187,26 @@ export function MarketplaceOffersPane({
     if (view.kind !== "offer" || !myOffers) return null;
     return myOffers.find((o) => o._id === view.offerId) ?? null;
   }, [view, myOffers]);
+
+  const allJobs = useMemo(() => {
+    const sell = (sellerJobs ?? []).map((job) => ({
+      ...job,
+      _role: "sell" as const,
+    }));
+    const buy = (buyerJobs ?? []).map((job) => ({
+      ...job,
+      _role: "buy" as const,
+    }));
+    return [...sell, ...buy].sort((a, b) => b.createdAt - a.createdAt);
+  }, [sellerJobs, buyerJobs]);
+
+  const visibleJobs = useMemo(
+    () =>
+      jobFilter === "all"
+        ? allJobs
+        : allJobs.filter((job) => job._role === jobFilter),
+    [allJobs, jobFilter],
+  );
 
   useEffect(() => {
     if (!selectedOffer) {
@@ -277,18 +360,18 @@ export function MarketplaceOffersPane({
     setView({ kind: "home" });
   }
 
-  const showBack = view.kind !== "home";
-  const isApplyFlow = seller === undefined || !seller || seller.status !== "approved";
+  const isApplyFlow =
+    seller === undefined || !seller || seller.status !== "approved";
 
   if (view.kind === "home" && isApplyFlow) {
     if (seller === undefined) {
       return (
         <div className="marketplace-apply-pane">
-          <OffersChromeHead ariaLabel="Offers">
-            <button type="button" className="marketplace-offers-head-pill is-active" disabled>
-              Offers
-            </button>
-          </OffersChromeHead>
+          <header className="marketplace-apply-head">
+            <nav className="studio-admin-head-tabs" aria-label="Offers">
+              <span className="studio-admin-head-tab is-active">Offers</span>
+            </nav>
+          </header>
           <div className="marketplace-apply-body">
             <div className="marketplace-apply-stage">
               <p className="marketplace-status-empty">Loading…</p>
@@ -302,15 +385,20 @@ export function MarketplaceOffersPane({
     }
     return (
       <div className="marketplace-apply-pane">
-        <OffersChromeHead ariaLabel="Seller status">
-          <button type="button" className="marketplace-offers-head-pill is-active" disabled>
-            {seller.status === "pending" ? "In review" : "Seller access"}
-          </button>
-        </OffersChromeHead>
+        <header className="marketplace-apply-head">
+          <nav className="studio-admin-head-tabs" aria-label="Seller status">
+            <span className="studio-admin-head-tab is-active">
+              {seller.status === "pending" ? "In review" : "Seller access"}
+            </span>
+          </nav>
+        </header>
         <div className="marketplace-apply-body">
           <div className="marketplace-apply-stage">
             <div className="marketplace-apply-intro">
-              <HandCoins className="marketplace-apply-intro-icon" aria-hidden="true" />
+              <HandCoins
+                className="marketplace-apply-intro-icon"
+                aria-hidden="true"
+              />
               <h2>{seller.businessName}</h2>
               <p>
                 {seller.status === "pending"
@@ -327,7 +415,9 @@ export function MarketplaceOffersPane({
                   disabled={busy}
                   onClick={() => void handleCancelSellerRequest()}
                 >
-                  {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+                  {busy ? (
+                    <Loader2 className="animate-spin" aria-hidden="true" />
+                  ) : null}
                   Cancel request
                 </button>
               ) : null}
@@ -338,487 +428,700 @@ export function MarketplaceOffersPane({
     );
   }
 
+  const offers = myOffers ?? [];
+  const liveOffers = offers.filter(
+    (offer) => offer.status === "published",
+  ).length;
+  const draftOffers = offers.filter((offer) => offer.status === "draft").length;
+  const openJobs = allJobs.filter(
+    (job) => job.status === "in_escrow" || job.status === "in_progress",
+  ).length;
+  const deliveredJobs = allJobs.filter(
+    (job) => job.status === "delivered",
+  ).length;
+  const completedJobs = allJobs.filter(
+    (job) => job.status === "completed",
+  ).length;
+  const jobsLoading = !sellerJobs || !buyerJobs;
+
   return (
-    <div className="marketplace-offers-pane">
-      {showBack ? (
-        <OffersChromeHead ariaLabel="Offers navigation">
+    <div className="studio-admin-panel">
+      {view.kind === "home" ? (
+        <OffersHead>
           <button
             type="button"
-            className="marketplace-offers-head-pill"
-            onClick={goHome}
-            aria-label="Back"
+            className={`studio-admin-head-tab${homeTab === "offers" ? " is-active" : ""}`}
+            onClick={() => setHomeTab("offers")}
           >
-            <ArrowLeft aria-hidden="true" />
+            Offers
+          </button>
+          <button
+            type="button"
+            className={`studio-admin-head-tab${homeTab === "jobs" ? " is-active" : ""}`}
+            onClick={() => setHomeTab("jobs")}
+          >
+            Jobs
+          </button>
+        </OffersHead>
+      ) : (
+        <OffersHead>
+          <button
+            type="button"
+            className="studio-admin-head-tab"
+            onClick={goHome}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             Back
           </button>
-          <button type="button" className="marketplace-offers-head-pill is-active" disabled>
+          <span className="studio-admin-head-tab is-active">
             {view.kind === "create"
               ? "New offer"
               : view.kind === "offer"
                 ? "Offer"
                 : "Job"}
-          </button>
-        </OffersChromeHead>
-      ) : null}
+          </span>
+        </OffersHead>
+      )}
 
-      <div className="marketplace-offers-body">
-        <div className="marketplace-offers-stack">
-          {view.kind === "home" ? (
-            <>
-              <section className="marketplace-detail-card">
-                <div className="studio-offers-card-head">
-                  <div className="marketplace-detail-title">Your offers</div>
+      <div className="studio-admin-body">
+        <div className="studio-admin-workspace">
+          {view.kind === "home" && homeTab === "offers" ? (
+            <div className="studio-admin-stack">
+              <section className="studio-admin-grid-large">
+                <MetricCard
+                  label="Live"
+                  value={liveOffers}
+                  body="Published packages buyers can book right now."
+                />
+                <MetricCard
+                  label="Drafts"
+                  value={draftOffers}
+                  body="Not visible yet — publish when the copy is ready."
+                />
+                <MetricCard
+                  label="Open jobs"
+                  value={openJobs}
+                  body="Booked work in escrow or in progress."
+                />
+              </section>
+
+              <Section
+                title="Your offers"
+                extras={
                   <button
                     type="button"
-                    className="marketplace-action"
+                    className="marketplace-offers-bar-action"
                     onClick={() => setView({ kind: "create" })}
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                    New
+                    New offer
                   </button>
+                }
+              >
+                <div className="studio-admin-table-wrap">
+                  {!myOffers ? (
+                    <Loader2 className="m-4 h-4 w-4 animate-spin" />
+                  ) : offers.length === 0 ? (
+                    <p className="studio-settings-empty marketplace-offers-table-empty">
+                      No offers yet — create your first package.
+                    </p>
+                  ) : (
+                    <table className="studio-admin-table">
+                      <thead>
+                        <tr>
+                          <th>Offer</th>
+                          <th>Price</th>
+                          <th>Delivery</th>
+                          <th>Status</th>
+                          <th>Public link</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {offers.map((offer) => (
+                          <tr
+                            key={offer._id}
+                            onClick={() =>
+                              setView({ kind: "offer", offerId: offer._id })
+                            }
+                          >
+                            <td>
+                              <strong>{offer.title}</strong>
+                              <span>{offer.category ?? "Uncategorised"}</span>
+                            </td>
+                            <td>{formatTtdCents(offer.priceCents)}</td>
+                            <td>{offer.deliveryDays} days</td>
+                            <td>
+                              <StatusChip status={offer.status} />
+                            </td>
+                            <td>
+                              <a
+                                href={`/offers/${offer.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                /offers/{offer.slug}
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
-                {!myOffers ? (
-                  <p className="marketplace-status-empty">Loading…</p>
-                ) : myOffers.length === 0 ? (
-                  <>
-                    <p className="marketplace-status-empty">No offers yet.</p>
-                    <div className="marketplace-detail-actions">
-                      <button
-                        type="button"
-                        className="marketplace-action"
-                        onClick={() => setView({ kind: "create" })}
-                      >
-                        Create offer
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <ul className="studio-offers-list">
-                    {myOffers.map((offer) => (
-                      <li key={offer._id}>
-                        <button
-                          type="button"
-                          className="studio-offers-list-row"
-                          onClick={() => setView({ kind: "offer", offerId: offer._id })}
-                        >
-                          <span className="studio-offers-list-main">
-                            <strong>{offer.title}</strong>
-                            <span>
-                              /offers/{offer.slug} · {offer.deliveryDays}d
-                            </span>
-                          </span>
-                          <StatusChip status={offer.status} />
-                          <span className="studio-offers-list-price">
-                            {formatTtdCents(offer.priceCents)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              </Section>
+            </div>
+          ) : null}
+
+          {view.kind === "home" && homeTab === "jobs" ? (
+            <div className="studio-admin-stack">
+              <section className="studio-admin-grid-large">
+                <MetricCard
+                  label="Open"
+                  value={openJobs}
+                  body="Credits held in escrow until the work is accepted."
+                />
+                <MetricCard
+                  label="Delivered"
+                  value={deliveredJobs}
+                  body="Waiting on buyer acceptance or auto-accept."
+                />
+                <MetricCard
+                  label="Completed"
+                  value={completedJobs}
+                  body="Escrow released and payout recorded."
+                />
               </section>
 
-              <section className="marketplace-detail-card">
-                <div className="studio-offers-card-head">
-                  <div className="marketplace-detail-title">Jobs</div>
-                  <button
-                    type="button"
-                    className="marketplace-action muted"
-                    onClick={onOpenCredits}
-                  >
-                    <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
-                    Credits
-                  </button>
-                </div>
-                {!sellerJobs || !buyerJobs ? (
-                  <p className="marketplace-status-empty">Loading…</p>
-                ) : sellerJobs.length === 0 && buyerJobs.length === 0 ? (
-                  <p className="marketplace-status-empty">No jobs yet.</p>
-                ) : (
-                  <ul className="studio-offers-list">
-                    {[
-                      ...sellerJobs.map((job) => ({ ...job, _role: "sell" as const })),
-                      ...buyerJobs.map((job) => ({ ...job, _role: "buy" as const })),
-                    ]
-                      .sort((a, b) => b.createdAt - a.createdAt)
-                      .map((job) => (
-                        <li key={`${job._role}-${job._id}`}>
-                          <button
-                            type="button"
-                            className="studio-offers-list-row"
-                            onClick={() => setView({ kind: "job", jobId: job._id })}
+              <Section
+                title="Jobs"
+                extras={
+                  <>
+                    <CursorSelect
+                      ariaLabel="Job side"
+                      value={jobFilter}
+                      onChange={(next) => setJobFilter(next as JobFilter)}
+                      options={[
+                        { value: "all", label: "All" },
+                        { value: "sell", label: "Selling" },
+                        { value: "buy", label: "Buying" },
+                      ]}
+                    />
+                    <button
+                      type="button"
+                      className="marketplace-offers-bar-action"
+                      onClick={onOpenCredits}
+                    >
+                      <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                      Credits
+                    </button>
+                  </>
+                }
+              >
+                <div className="studio-admin-table-wrap">
+                  {jobsLoading ? (
+                    <Loader2 className="m-4 h-4 w-4 animate-spin" />
+                  ) : visibleJobs.length === 0 ? (
+                    <p className="studio-settings-empty marketplace-offers-table-empty">
+                      {allJobs.length === 0
+                        ? "No jobs yet."
+                        : "No jobs on this side of the marketplace."}
+                    </p>
+                  ) : (
+                    <table className="studio-admin-table">
+                      <thead>
+                        <tr>
+                          <th>Job</th>
+                          <th>Side</th>
+                          <th>Booked</th>
+                          <th>Price</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleJobs.map((job) => (
+                          <tr
+                            key={`${job._role}-${job._id}`}
+                            onClick={() =>
+                              setView({ kind: "job", jobId: job._id })
+                            }
                           >
-                            <span className="studio-offers-list-main">
+                            <td>
                               <strong>{job.offerTitle}</strong>
-                              <span>
-                                {job._role === "sell" ? "Selling" : "Buying"} ·{" "}
-                                {new Date(job.createdAt).toLocaleDateString()}
-                              </span>
-                            </span>
-                            <StatusChip status={job.status} />
-                            <span className="studio-offers-list-price">
-                              {formatTtdCents(job.priceCents)}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                )}
-              </section>
-            </>
+                              <span>{job.priceCredits} credits held</span>
+                            </td>
+                            <td>
+                              {job._role === "sell" ? "Selling" : "Buying"}
+                            </td>
+                            <td>
+                              {new Date(job.createdAt).toLocaleDateString()}
+                            </td>
+                            <td>{formatTtdCents(job.priceCents)}</td>
+                            <td>
+                              <StatusChip status={job.status} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Section>
+            </div>
           ) : null}
 
           {view.kind === "create" ? (
-            <section className="marketplace-detail-card">
-              <div className="marketplace-detail-title">Draft a package</div>
-              <div className="marketplace-profile-fields">
-                <IconField
-                  icon={FileBadge}
-                  value={createForm.title}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="Title — e.g. 15s cartoon ad pack"
-                  aria-label="Title"
-                />
-                <IconTextarea
-                  icon={AlignLeft}
-                  value={createForm.description}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="What’s included, revisions, delivery notes"
-                  aria-label="Description"
-                />
-                <div className="marketplace-optional-row">
-                  <IconField
-                    icon={Wallet}
-                    value={createForm.priceTtd}
-                    onChange={(e) => setCreateForm((f) => ({ ...f, priceTtd: e.target.value }))}
-                    placeholder="Price (TTD)"
-                    aria-label="Price in TTD"
-                  />
-                  <IconField
-                    icon={CalendarDays}
-                    value={createForm.deliveryDays}
-                    onChange={(e) =>
-                      setCreateForm((f) => ({ ...f, deliveryDays: e.target.value }))
-                    }
-                    placeholder="Delivery days"
-                    aria-label="Delivery days"
-                  />
+            <div className="studio-admin-stack">
+              <Section title="New offer">
+                <div className="studio-admin-card">
+                  <div className="marketplace-profile-fields">
+                    <IconField
+                      icon={FileBadge}
+                      value={createForm.title}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, title: e.target.value }))
+                      }
+                      placeholder="Title — e.g. 15s cartoon ad pack"
+                      aria-label="Title"
+                    />
+                    <IconTextarea
+                      icon={AlignLeft}
+                      value={createForm.description}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({
+                          ...f,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="What’s included, revisions, delivery notes"
+                      aria-label="Description"
+                    />
+                    <div className="marketplace-optional-row">
+                      <IconField
+                        icon={Wallet}
+                        value={createForm.priceTtd}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({
+                            ...f,
+                            priceTtd: e.target.value,
+                          }))
+                        }
+                        placeholder="Price (TTD)"
+                        aria-label="Price in TTD"
+                      />
+                      <IconField
+                        icon={CalendarDays}
+                        value={createForm.deliveryDays}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({
+                            ...f,
+                            deliveryDays: e.target.value,
+                          }))
+                        }
+                        placeholder="Delivery days"
+                        aria-label="Delivery days"
+                      />
+                    </div>
+                    <IconField
+                      icon={Tag}
+                      value={createForm.category}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({
+                          ...f,
+                          category: e.target.value,
+                        }))
+                      }
+                      placeholder="Category"
+                      aria-label="Category"
+                    />
+                  </div>
+                  <div className="marketplace-offers-actions">
+                    <button
+                      type="button"
+                      className="is-primary"
+                      disabled={busy || !createForm.title.trim()}
+                      onClick={() => void handleCreateOffer()}
+                    >
+                      {busy ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      Create draft
+                    </button>
+                    <button type="button" onClick={goHome}>
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                <IconField
-                  icon={Tag}
-                  value={createForm.category}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, category: e.target.value }))}
-                  placeholder="Category"
-                  aria-label="Category"
-                />
-              </div>
-              <div className="marketplace-detail-actions">
-                <button
-                  type="button"
-                  className="marketplace-action"
-                  disabled={busy || !createForm.title.trim()}
-                  onClick={() => void handleCreateOffer()}
-                >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  Create draft
-                </button>
-                <button type="button" className="marketplace-action muted" onClick={goHome}>
-                  Cancel
-                </button>
-              </div>
-            </section>
+              </Section>
+            </div>
           ) : null}
 
           {view.kind === "offer" && selectedOffer && editForm ? (
-            <section className="marketplace-detail-card">
-              <div className="studio-offers-card-head">
-                <div className="marketplace-detail-title">{selectedOffer.title}</div>
-                <StatusChip status={selectedOffer.status} />
-              </div>
-              <p className="marketplace-status-empty">
-                Public link:{" "}
-                <a href={`/offers/${selectedOffer.slug}`} target="_blank" rel="noreferrer">
-                  /offers/{selectedOffer.slug}
-                </a>
-              </p>
-              <div className="marketplace-profile-fields">
-                <IconField
-                  icon={FileBadge}
-                  value={editForm.title}
-                  onChange={(e) => setEditForm((f) => (f ? { ...f, title: e.target.value } : f))}
-                  placeholder="Title"
-                  aria-label="Title"
-                />
-                <IconTextarea
-                  icon={AlignLeft}
-                  value={editForm.description}
-                  onChange={(e) =>
-                    setEditForm((f) => (f ? { ...f, description: e.target.value } : f))
-                  }
-                  placeholder="Description"
-                  aria-label="Description"
-                />
-                <div className="marketplace-optional-row">
-                  <IconField
-                    icon={Wallet}
-                    value={editForm.priceTtd}
-                    onChange={(e) =>
-                      setEditForm((f) => (f ? { ...f, priceTtd: e.target.value } : f))
-                    }
-                    placeholder="Price (TTD)"
-                    aria-label="Price in TTD"
-                  />
-                  <IconField
-                    icon={CalendarDays}
-                    value={editForm.deliveryDays}
-                    onChange={(e) =>
-                      setEditForm((f) => (f ? { ...f, deliveryDays: e.target.value } : f))
-                    }
-                    placeholder="Delivery days"
-                    aria-label="Delivery days"
-                  />
+            <div className="studio-admin-stack">
+              <Section
+                title={selectedOffer.title}
+                extras={<StatusChip status={selectedOffer.status} />}
+              >
+                <div className="studio-admin-card">
+                  <p className="marketplace-offers-link">
+                    <a
+                      href={`/offers/${selectedOffer.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      /offers/{selectedOffer.slug}
+                    </a>
+                  </p>
+                  <div className="marketplace-profile-fields">
+                    <IconField
+                      icon={FileBadge}
+                      value={editForm.title}
+                      onChange={(e) =>
+                        setEditForm((f) =>
+                          f ? { ...f, title: e.target.value } : f,
+                        )
+                      }
+                      placeholder="Title"
+                      aria-label="Title"
+                    />
+                    <IconTextarea
+                      icon={AlignLeft}
+                      value={editForm.description}
+                      onChange={(e) =>
+                        setEditForm((f) =>
+                          f ? { ...f, description: e.target.value } : f,
+                        )
+                      }
+                      placeholder="Description"
+                      aria-label="Description"
+                    />
+                    <div className="marketplace-optional-row">
+                      <IconField
+                        icon={Wallet}
+                        value={editForm.priceTtd}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, priceTtd: e.target.value } : f,
+                          )
+                        }
+                        placeholder="Price (TTD)"
+                        aria-label="Price in TTD"
+                      />
+                      <IconField
+                        icon={CalendarDays}
+                        value={editForm.deliveryDays}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, deliveryDays: e.target.value } : f,
+                          )
+                        }
+                        placeholder="Delivery days"
+                        aria-label="Delivery days"
+                      />
+                    </div>
+                    <IconField
+                      icon={Tag}
+                      value={editForm.category}
+                      onChange={(e) =>
+                        setEditForm((f) =>
+                          f ? { ...f, category: e.target.value } : f,
+                        )
+                      }
+                      placeholder="Category"
+                      aria-label="Category"
+                    />
+                  </div>
+                  <div className="marketplace-offers-actions">
+                    <button
+                      type="button"
+                      className="is-primary"
+                      disabled={busy}
+                      onClick={() => void handleSaveOffer()}
+                    >
+                      Save changes
+                    </button>
+                    {selectedOffer.status !== "published" ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void handlePublish(selectedOffer._id, "published")
+                        }
+                      >
+                        Publish
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void handlePublish(selectedOffer._id, "paused")
+                        }
+                      >
+                        Pause
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void handlePublish(selectedOffer._id, "archived")
+                      }
+                    >
+                      Archive
+                    </button>
+                  </div>
                 </div>
-                <IconField
-                  icon={Tag}
-                  value={editForm.category}
-                  onChange={(e) =>
-                    setEditForm((f) => (f ? { ...f, category: e.target.value } : f))
-                  }
-                  placeholder="Category"
-                  aria-label="Category"
-                />
-              </div>
-              <div className="marketplace-detail-actions">
-                <button
-                  type="button"
-                  className="marketplace-action"
-                  disabled={busy}
-                  onClick={() => void handleSaveOffer()}
-                >
-                  Save changes
-                </button>
-                {selectedOffer.status !== "published" ? (
-                  <button
-                    type="button"
-                    className="marketplace-action muted"
-                    disabled={busy}
-                    onClick={() => void handlePublish(selectedOffer._id, "published")}
-                  >
-                    Publish
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="marketplace-action muted"
-                    disabled={busy}
-                    onClick={() => void handlePublish(selectedOffer._id, "paused")}
-                  >
-                    Pause
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="marketplace-action muted"
-                  disabled={busy}
-                  onClick={() => void handlePublish(selectedOffer._id, "archived")}
-                >
-                  Archive
-                </button>
-              </div>
-              <div className="studio-offers-subblock">
-                <div className="marketplace-detail-title">Jobs for this offer</div>
-                {(sellerJobs ?? []).filter((j) => j.offerId === selectedOffer._id).length ===
-                0 ? (
-                  <p className="marketplace-status-empty">No jobs on this offer yet.</p>
-                ) : (
-                  <ul className="studio-offers-list">
-                    {(sellerJobs ?? [])
-                      .filter((j) => j.offerId === selectedOffer._id)
-                      .map((job) => (
-                        <li key={job._id}>
-                          <button
-                            type="button"
-                            className="studio-offers-list-row"
-                            onClick={() => setView({ kind: "job", jobId: job._id })}
-                          >
-                            <span className="studio-offers-list-main">
-                              <strong>{humanStatus(job.status)}</strong>
-                              <span>{new Date(job.createdAt).toLocaleDateString()}</span>
-                            </span>
-                            <span className="studio-offers-list-price">
-                              {formatTtdCents(job.priceCents)}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                  </ul>
-                )}
-              </div>
-            </section>
+              </Section>
+
+              <Section title="Jobs on this offer">
+                <div className="studio-admin-table-wrap">
+                  {(sellerJobs ?? []).filter(
+                    (j) => j.offerId === selectedOffer._id,
+                  ).length === 0 ? (
+                    <p className="studio-settings-empty marketplace-offers-table-empty">
+                      No bookings on this offer yet.
+                    </p>
+                  ) : (
+                    <table className="studio-admin-table">
+                      <thead>
+                        <tr>
+                          <th>Status</th>
+                          <th>Booked</th>
+                          <th>Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(sellerJobs ?? [])
+                          .filter((j) => j.offerId === selectedOffer._id)
+                          .map((job) => (
+                            <tr
+                              key={job._id}
+                              onClick={() =>
+                                setView({ kind: "job", jobId: job._id })
+                              }
+                            >
+                              <td>
+                                <StatusChip status={job.status} />
+                              </td>
+                              <td>
+                                {new Date(job.createdAt).toLocaleString()}
+                              </td>
+                              <td>{formatTtdCents(job.priceCents)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Section>
+            </div>
           ) : null}
 
           {view.kind === "job" ? (
             !jobDetail ? (
-              <p className="marketplace-status-empty">Loading job…</p>
+              <p className="studio-settings-empty">Loading job…</p>
             ) : (
-              <section className="marketplace-detail-card">
-                <div className="studio-offers-card-head">
-                  <div>
-                    <p className="marketplace-status-empty" style={{ marginBottom: 4 }}>
-                      {jobDetail.job.role === "seller" ? "Seller job" : "Buyer job"}
-                    </p>
-                    <div className="marketplace-detail-title">{jobDetail.job.offerTitle}</div>
-                  </div>
-                  <StatusChip status={jobDetail.job.status} />
-                </div>
-                <div className="studio-offers-meta">
-                  <div>
-                    <span>Price</span>
-                    <strong>{formatTtdCents(jobDetail.job.priceCents)}</strong>
-                  </div>
-                  <div>
-                    <span>Credits held</span>
-                    <strong>
-                      {jobDetail.job.priceCredits} @ {creditPriceCents}¢
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Booked</span>
-                    <strong>{new Date(jobDetail.job.createdAt).toLocaleString()}</strong>
-                  </div>
-                </div>
+              <div className="studio-admin-stack">
+                <section className="studio-admin-grid-large">
+                  <MetricCard
+                    label="Price"
+                    value={formatTtdCents(jobDetail.job.priceCents)}
+                    body={
+                      jobDetail.job.role === "seller"
+                        ? "Released to you on acceptance."
+                        : "Held in escrow until you accept."
+                    }
+                  />
+                  <MetricCard
+                    label="Credits held"
+                    value={jobDetail.job.priceCredits}
+                    body={`Valued at ${creditPriceCents}¢ per credit.`}
+                  />
+                  <MetricCard
+                    label="Booked"
+                    value={new Date(
+                      jobDetail.job.createdAt,
+                    ).toLocaleDateString()}
+                    body={new Date(
+                      jobDetail.job.createdAt,
+                    ).toLocaleTimeString()}
+                  />
+                </section>
 
-                <div className="studio-offers-subblock">
-                  <div className="marketplace-detail-title">Timeline</div>
-                  <ol className="studio-offers-timeline">
-                    {jobDetail.events.map((e) => (
-                      <li key={e._id}>
-                        <strong>{humanStatus(e.kind)}</strong>
-                        {e.message ? <span>{e.message}</span> : null}
-                        <time dateTime={new Date(e.createdAt).toISOString()}>
-                          {new Date(e.createdAt).toLocaleString()}
-                        </time>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                <div className="studio-offers-subblock">
-                  <div className="marketplace-detail-title">Deliverables</div>
-                  {jobDetail.deliverables.length === 0 ? (
-                    <p className="marketplace-status-empty">None yet.</p>
-                  ) : (
-                    <ul className="studio-offers-deliverables">
-                      {jobDetail.deliverables.map((d) => (
-                        <li key={d._id}>
-                          {d.signedThumbnailUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={d.signedThumbnailUrl} alt="" />
-                          ) : (
-                            <span className="studio-offers-thumb-empty" aria-hidden="true" />
-                          )}
-                          <div>
-                            {d.signedReadUrl ? (
-                              <a href={d.signedReadUrl} target="_blank" rel="noreferrer">
-                                {d.name ?? d.assetId}
-                              </a>
-                            ) : (
-                              <span>{d.name ?? d.assetId}</span>
-                            )}
-                            {d.note ? <p>{d.note}</p> : null}
-                          </div>
+                <Section
+                  title={jobDetail.job.offerTitle}
+                  extras={
+                    <>
+                      <span className="marketplace-offers-bar-note">
+                        {jobDetail.job.role === "seller" ? "Selling" : "Buying"}
+                      </span>
+                      <StatusChip status={jobDetail.job.status} />
+                    </>
+                  }
+                >
+                  <div className="studio-admin-card">
+                    <h3>Timeline</h3>
+                    <ol className="marketplace-offers-timeline">
+                      {jobDetail.events.map((e) => (
+                        <li key={e._id}>
+                          <strong>{humanStatus(e.kind)}</strong>
+                          {e.message ? <span>{e.message}</span> : null}
+                          <time dateTime={new Date(e.createdAt).toISOString()}>
+                            {new Date(e.createdAt).toLocaleString()}
+                          </time>
                         </li>
                       ))}
-                    </ul>
-                  )}
-                </div>
+                    </ol>
+                  </div>
+                </Section>
+
+                <Section title="Deliverables">
+                  <div className="studio-admin-card">
+                    {jobDetail.deliverables.length === 0 ? (
+                      <p className="studio-settings-empty">
+                        Nothing delivered yet.
+                      </p>
+                    ) : (
+                      <ul className="marketplace-offers-deliverables">
+                        {jobDetail.deliverables.map((d) => (
+                          <li key={d._id}>
+                            {d.signedThumbnailUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={d.signedThumbnailUrl} alt="" />
+                            ) : (
+                              <span
+                                className="marketplace-offers-thumb"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <div>
+                              {d.signedReadUrl ? (
+                                <a
+                                  href={d.signedReadUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {d.name ?? d.assetId}
+                                </a>
+                              ) : (
+                                <span>{d.name ?? d.assetId}</span>
+                              )}
+                              {d.note ? <p>{d.note}</p> : null}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </Section>
 
                 {jobDetail.job.role === "seller" &&
                 (jobDetail.job.status === "in_progress" ||
                   jobDetail.job.status === "delivered") ? (
-                  <div className="studio-offers-subblock">
-                    <div className="marketplace-detail-title">Submit delivery</div>
-                    <p className="marketplace-status-empty">
-                      Pick assets from Explorer
-                      {selectedAssetIds.length ? ` · ${selectedAssetIds.length} selected` : ""}.
-                    </p>
-                    {!recentAssets ? (
-                      <p className="marketplace-status-empty">Loading assets…</p>
-                    ) : recentAssets.length === 0 ? (
-                      <p className="marketplace-status-empty">
-                        No ready assets yet — upload in Explorer first.
-                      </p>
-                    ) : (
-                      <div className="studio-offers-asset-grid" role="group" aria-label="Assets">
-                        {recentAssets.map((asset) => {
-                          const selected = selectedAssetIds.includes(asset._id);
-                          return (
-                            <button
-                              key={asset._id}
-                              type="button"
-                              className={selected ? "is-selected" : undefined}
-                              aria-pressed={selected}
-                              onClick={() => toggleAsset(asset._id)}
-                              title={asset.name}
-                            >
-                              {asset.signedThumbnailUrl ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={asset.signedThumbnailUrl} alt="" />
-                              ) : (
-                                <span className="studio-offers-thumb-empty" aria-hidden="true" />
-                              )}
-                              <span>{asset.name}</span>
-                            </button>
-                          );
-                        })}
+                  <Section
+                    title="Submit delivery"
+                    extras={
+                      selectedAssetIds.length ? (
+                        <span className="marketplace-offers-bar-note">
+                          {selectedAssetIds.length} selected
+                        </span>
+                      ) : undefined
+                    }
+                  >
+                    <div className="studio-admin-card">
+                      {!recentAssets ? (
+                        <p className="studio-settings-empty">Loading assets…</p>
+                      ) : recentAssets.length === 0 ? (
+                        <p className="studio-settings-empty">
+                          No ready assets yet — upload in Explorer first.
+                        </p>
+                      ) : (
+                        <div
+                          className="marketplace-offers-asset-grid"
+                          role="group"
+                          aria-label="Assets"
+                        >
+                          {recentAssets.map((asset) => {
+                            const selected = selectedAssetIds.includes(
+                              asset._id,
+                            );
+                            return (
+                              <button
+                                key={asset._id}
+                                type="button"
+                                className={selected ? "is-selected" : undefined}
+                                aria-pressed={selected}
+                                onClick={() => toggleAsset(asset._id)}
+                                title={asset.name}
+                              >
+                                {asset.signedThumbnailUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={asset.signedThumbnailUrl} alt="" />
+                                ) : (
+                                  <span
+                                    className="marketplace-offers-thumb"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span>{asset.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div className="marketplace-profile-fields">
+                        <IconField
+                          icon={MessageSquare}
+                          value={deliverNote}
+                          onChange={(e) => setDeliverNote(e.target.value)}
+                          placeholder="Note (optional)"
+                          aria-label="Delivery note (optional)"
+                        />
                       </div>
-                    )}
-                    <div className="marketplace-profile-fields">
-                      <IconField
-                        icon={MessageSquare}
-                        value={deliverNote}
-                        onChange={(e) => setDeliverNote(e.target.value)}
-                        placeholder="Note (optional)"
-                        aria-label="Delivery note (optional)"
-                      />
+                      <div className="marketplace-offers-actions">
+                        <button
+                          type="button"
+                          className="is-primary"
+                          disabled={busy || selectedAssetIds.length === 0}
+                          onClick={() => void handleDeliver()}
+                        >
+                          Submit delivery
+                        </button>
+                      </div>
                     </div>
-                    <div className="marketplace-detail-actions">
-                      <button
-                        type="button"
-                        className="marketplace-action"
-                        disabled={busy || selectedAssetIds.length === 0}
-                        onClick={() => void handleDeliver()}
-                      >
-                        Submit delivery
-                      </button>
-                    </div>
-                  </div>
+                  </Section>
                 ) : null}
 
-                <div className="marketplace-detail-actions">
-                  {jobDetail.job.role === "buyer" && jobDetail.job.status === "delivered" ? (
-                    <button
-                      type="button"
-                      className="marketplace-action"
-                      disabled={busy}
-                      onClick={() => void handleAccept()}
-                    >
-                      Accept delivery
-                    </button>
-                  ) : null}
-                  {jobDetail.job.status === "in_progress" ||
-                  jobDetail.job.status === "in_escrow" ? (
-                    <button
-                      type="button"
-                      className="marketplace-action muted"
-                      disabled={busy}
-                      onClick={() => void handleCancel()}
-                    >
-                      Cancel &amp; refund escrow
-                    </button>
-                  ) : null}
-                </div>
-              </section>
+                {(jobDetail.job.role === "buyer" &&
+                  jobDetail.job.status === "delivered") ||
+                jobDetail.job.status === "in_progress" ||
+                jobDetail.job.status === "in_escrow" ? (
+                  <div className="marketplace-offers-actions">
+                    {jobDetail.job.role === "buyer" &&
+                    jobDetail.job.status === "delivered" ? (
+                      <button
+                        type="button"
+                        className="is-primary"
+                        disabled={busy}
+                        onClick={() => void handleAccept()}
+                      >
+                        Accept delivery
+                      </button>
+                    ) : null}
+                    {jobDetail.job.status === "in_progress" ||
+                    jobDetail.job.status === "in_escrow" ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleCancel()}
+                      >
+                        Cancel &amp; refund escrow
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             )
           ) : null}
         </div>
