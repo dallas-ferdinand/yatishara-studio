@@ -64,12 +64,17 @@ Supporting tokens (also both modes):
 ### Select / dropdown (locked decision)
 
 - **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** `var(--cursor-shadow-pop)`.
-  Close to the trigger: `4px` gap, `4px` panel padding, rows `7px 10px`, radius `md`.
-  Size with `width: max-content`; parents must `overflow: visible`.
+  Roomier surround, tight options: `6px` panel padding, `1px` gap between rows,
+  rows `5px 8px`, radius `md`. Size with `width: max-content`; parents must
+  `overflow: visible`.
+- **Leading icons** → put an icon **in front of** every option label (and on the
+  trigger when the active option has one). Prefer Lucide; explorer may use `Icon`.
 - **Trigger / button** → level-3 `--mos-plate-strong` at rest; hover/open → `--mos-active`.
 - **Menu item hover / active** → level-3 `--mos-plate-strong`.
 - **Caret icon** → Lucide `ArrowDown` (same as StudioShell / profile chrome). **Not**
   `Icon name="chevDown"` / chevron.
+- Shared classes: `.cursor-dropdown` / `.cursor-dropdown-item` (also type filter,
+  view menu, tab context menus).
 
 ```tsx
 import { ArrowDown } from "lucide-react";
@@ -141,12 +146,13 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Root class **`cursor-select-menu`** — **never `cursor-select`** (that styles native
   `<select>` and double-boxes the control).
 - Variants: `ghost` (default, compact chrome filter) and `field` (full-width taller, forms/sidebars).
-- Props: `value`, `options[{value,label}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
+- Props: `value`, `options[{value,label,icon?}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
+- Prefer a leading `icon` on every option (shows on trigger + menu row).
 - Flat darker fill, no border; caret is Lucide `ArrowDown` (see [select / dropdown](#select--dropdown-locked-decision)).
 
 ```tsx
 <CursorSelect ariaLabel="Status" value={f} onChange={setF}
-  options={[{ value: "all", label: "All" }]} />
+  options={[{ value: "all", label: "All", icon: <LayoutList /> }]} />
 ```
 
 ### `CursorTable` / `CursorTableEmpty` — global table plate
@@ -196,6 +202,7 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 - Use `--mos-page` / `--mos-plate` / `--mos-plate-strong` for chrome surfaces.
 - Use `CursorSelect` and `CursorTable` instead of hand-rolled selects/tables.
 - Use Lucide `ArrowDown` as the select caret (not chevron).
+- Put a leading icon in front of dropdown option text.
 - Keep card/table borders on `--color-cursor-border*` / `--mos-border*`.
 - Mirror every token change in `applyDeskTokens()` **and** the boot inline script.
 - When a pattern solidifies, update this doc **and** MercuryOS memory in the same turn.

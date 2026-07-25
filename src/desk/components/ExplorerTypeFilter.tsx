@@ -69,7 +69,7 @@ export function ExplorerTypeFilter({ value = "all", onChange }) {
         </button>
       ) : null}
       {open ? (
-        <div className="desk-explorer-type-filter-menu" role="menu">
+        <div className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-type-filter-menu" role="menu">
           {EXPLORER_TYPE_FILTERS.map((opt) => (
             <button
               key={opt.id}

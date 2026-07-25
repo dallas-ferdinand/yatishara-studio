@@ -1,6 +1,15 @@
 // @ts-nocheck
 "use client";
 
+import {
+  ExternalLink,
+  FolderOpen,
+  MessageSquarePlus,
+  Pencil,
+  Trash2,
+  X,
+  XCircle,
+} from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useFloatingMenuPosition } from "@/desk/lib/use-floating-menu-position";
@@ -12,6 +21,17 @@ const RENAMABLE_STUDIO_KINDS = new Set([
   "videoEdit",
   "folder",
 ]);
+
+const TAB_MENU_ICONS = {
+  close: X,
+  "close-others": XCircle,
+  rename: Pencil,
+  delete: Trash2,
+  "add-to-composer": MessageSquarePlus,
+  attach: MessageSquarePlus,
+  "reveal-explorer": FolderOpen,
+  "open-external": ExternalLink,
+};
 
 export function tabCanRename(tab) {
   if (!tab) return false;
@@ -151,7 +171,11 @@ export function TabContextMenu({ tab, x, y, onClose, onAction }) {
               onClose();
             }}
           >
-            {item.label}
+            {(() => {
+              const ItemIcon = TAB_MENU_ICONS[item.id];
+              return ItemIcon ? <ItemIcon aria-hidden="true" /> : null;
+            })()}
+            <span>{item.label}</span>
           </button>
         )
       )}

@@ -25,17 +25,22 @@ import { api } from "../../../convex/_generated/api";
 import {
   AudioLines,
   ArrowDown,
+  Ban,
+  CheckCircle2,
   Clapperboard,
   Clock3,
   CreditCard,
   FileText,
+  FileUp,
   Folder,
   Gauge,
   History,
   Image as ImageIcon,
+  Inbox,
   CircleDot,
   KeyRound,
   LayoutGrid,
+  LayoutList,
   List,
   Loader2,
   Lock,
@@ -60,6 +65,7 @@ import {
   Upload,
   Wand2,
   X,
+  XCircle,
   UserCog,
   UserRound,
   Video,
@@ -6839,7 +6845,7 @@ export function StudioShell({
           color: var(--cursor-accent-hover, var(--cursor-accent)) !important;
         }
         /* Menus: fill + shadow only — no stroke / hairline ring. */
-        .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown) {
+        .studio-polish :where(.cursor-tab-context-menu, .cursor-dropdown, .desk-explorer-view-dropdown, .desk-explorer-type-filter-menu) {
           border: none;
           box-shadow: var(--cursor-shadow-pop);
         }
@@ -22057,11 +22063,11 @@ function AdminWorkspacePane({
                     value={paymentFilter}
                     onChange={setPaymentFilter}
                     options={[
-                      { value: "pending", label: "Pending" },
-                      { value: "payment_completed", label: "Completed" },
-                      { value: "rejected", label: "Rejected" },
-                      { value: "cancelled", label: "Cancelled" },
-                      { value: "all", label: "All" },
+                      { value: "pending", label: "Pending", icon: <Clock3 /> },
+                      { value: "payment_completed", label: "Completed", icon: <CheckCircle2 /> },
+                      { value: "rejected", label: "Rejected", icon: <XCircle /> },
+                      { value: "cancelled", label: "Cancelled", icon: <Ban /> },
+                      { value: "all", label: "All", icon: <LayoutList /> },
                     ]}
                   />
                 </div>
@@ -22284,10 +22290,10 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
               align="end"
               variant="field"
               options={[
-                { value: "receipt_uploaded", label: "Receipt uploaded" },
-                { value: "receipt_received", label: "Receipt received" },
-                { value: "payment_completed", label: "Payment approved" },
-                { value: "rejected", label: "Rejected" },
+                { value: "receipt_uploaded", label: "Receipt uploaded", icon: <FileUp /> },
+                { value: "receipt_received", label: "Receipt received", icon: <Inbox /> },
+                { value: "payment_completed", label: "Payment approved", icon: <CheckCircle2 /> },
+                { value: "rejected", label: "Rejected", icon: <XCircle /> },
               ]}
               onChange={(next) => onStatusChange(payment._id, next)}
             />

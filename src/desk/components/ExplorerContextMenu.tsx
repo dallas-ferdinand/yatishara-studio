@@ -1,9 +1,58 @@
 // @ts-nocheck
 "use client";
 
+import {
+  ArrowUpFromLine,
+  Clapperboard,
+  Copy,
+  Download,
+  FilePlus,
+  FolderOpen,
+  FolderPlus,
+  ImagePlus,
+  Link2Off,
+  MessageSquarePlus,
+  Pencil,
+  Pin,
+  PinOff,
+  RefreshCw,
+  Share2,
+  Sparkles,
+  Trash2,
+  Undo2,
+  Wallpaper,
+} from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useFloatingMenuPosition } from "@/desk/lib/use-floating-menu-position";
+
+const EXPLORER_MENU_ICONS = {
+  open: FolderOpen,
+  "go-up": ArrowUpFromLine,
+  "new-file": FilePlus,
+  "new-folder": FolderPlus,
+  "new-note": FilePlus,
+  refresh: RefreshCw,
+  "empty-trash": Trash2,
+  pin: Pin,
+  "pin-root": Pin,
+  "pin-here": Pin,
+  unpin: PinOff,
+  "copy-path": Copy,
+  download: Download,
+  "download-zip": Download,
+  "use-wallpaper": Wallpaper,
+  "set-profile-image": ImagePlus,
+  upscale: Sparkles,
+  "generate-video": Clapperboard,
+  "share-profile": Share2,
+  "unshare-profile": Link2Off,
+  rename: Pencil,
+  attach: MessageSquarePlus,
+  delete: Trash2,
+  "delete-forever": Trash2,
+  restore: Undo2,
+};
 
 function buildMenuItems(entry, {
   pinnedPaths,
@@ -48,7 +97,7 @@ function buildMenuItems(entry, {
     if (creationItems.length) items.push({ id: "sep-blank", sep: true });
     items.push({ id: "refresh", label: "Refresh" });
   } else if (isParent) {
-    items.push({ id: "open", label: "Go up" });
+        items.push({ id: "open", label: "Go up", iconKey: "go-up" });
   } else if (isDir) {
     items.push(...creationItems);
     if (creationItems.length) items.push({ id: "sep-dir-new", sep: true });
@@ -61,7 +110,7 @@ function buildMenuItems(entry, {
     items.push({ id: "copy-path", label: "Copy item link" });
     if (onRequestDelete) {
       items.push({ id: "sep-trash-restore", sep: true });
-      items.push({ id: "delete", label: "Restore" });
+      items.push({ id: "delete", label: "Restore", iconKey: "restore" });
     }
     // Only assets hold billable storage, so only they can be purged from the zone.
     if (entry.studioKind === "asset" && entry.studioId) {
@@ -226,7 +275,13 @@ export function ExplorerContextMenu({
               runAction(item.id);
             }}
           >
-            {item.label}
+            {(() => {
+              const ItemIcon = EXPLORER_MENU_ICONS[item.iconKey || item.id];
+              if (ItemIcon) return <ItemIcon aria-hidden="true" />;
+              if (item.icon) return item.icon;
+              return null;
+            })()}
+            <span>{item.label}</span>
           </button>
         ),
       )}

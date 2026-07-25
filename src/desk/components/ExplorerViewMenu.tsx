@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 
+import { ArrowDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icons";
 
@@ -44,10 +45,10 @@ export function ExplorerViewMenu({ viewMode, onChange, triggerClassName = "", sh
       >
         <Icon name={active.icon} size={15} />
         {showLabel ? <span>{active.label.replace(" view", "")}</span> : null}
-        {showLabel ? <Icon name="chevDown" size={12} /> : null}
+        {showLabel ? <ArrowDown className="cursor-select-arrow" aria-hidden="true" /> : null}
       </button>
       {open ? (
-        <div className="desk-explorer-view-dropdown" role="menu">
+        <div className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-view-dropdown" role="menu">
           {VIEW_OPTIONS.map((opt) => (
             <button
               key={opt.id}

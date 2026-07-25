@@ -1,11 +1,14 @@
 "use client";
 
 import { ArrowDown } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 export type CursorSelectOption = {
   value: string;
   label: string;
+  /** Prefer a Lucide (or Icon) node in front of the label. */
+  icon?: ReactNode;
 };
 
 type CursorSelectProps = {
@@ -25,6 +28,7 @@ type CursorSelectProps = {
  * (.cursor-dropdown / .cursor-dropdown-item).
  * Root class is cursor-select-menu (not cursor-select) so native
  * select.cursor-select styles never paint a second box around it.
+ * Prefer options with a leading icon.
  */
 export function CursorSelect({
   value,
@@ -77,6 +81,11 @@ export function CursorSelect({
           setOpen((v) => !v);
         }}
       >
+        {active?.icon ? (
+          <span className="cursor-select-leading" aria-hidden="true">
+            {active.icon}
+          </span>
+        ) : null}
         <span className="cursor-select-label">{active?.label ?? "Select"}</span>
         <ArrowDown className="cursor-select-arrow" aria-hidden="true" />
       </button>
@@ -101,6 +110,11 @@ export function CursorSelect({
                   setOpen(false);
                 }}
               >
+                {opt.icon ? (
+                  <span className="cursor-dropdown-item-icon" aria-hidden="true">
+                    {opt.icon}
+                  </span>
+                ) : null}
                 <span>{opt.label}</span>
               </button>
             );

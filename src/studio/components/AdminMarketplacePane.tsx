@@ -1,7 +1,15 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { Loader2, Store, Wallet } from "lucide-react";
+import {
+  Ban,
+  CheckCircle2,
+  Clock3,
+  LayoutList,
+  Loader2,
+  Store,
+  Wallet,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
@@ -101,10 +109,10 @@ export function AdminMarketplacePane() {
                 setSellerFilter(next as "all" | "pending" | "approved" | "suspended")
               }
               options={[
-                { value: "pending", label: "Pending" },
-                { value: "approved", label: "Approved" },
-                { value: "suspended", label: "Suspended" },
-                { value: "all", label: "All" },
+                { value: "pending", label: "Pending", icon: <Clock3 /> },
+                { value: "approved", label: "Approved", icon: <CheckCircle2 /> },
+                { value: "suspended", label: "Suspended", icon: <Ban /> },
+                { value: "all", label: "All", icon: <LayoutList /> },
               ]}
             />
           </div>
@@ -198,9 +206,9 @@ export function AdminMarketplacePane() {
               value={payoutFilter}
               onChange={(next) => setPayoutFilter(next as "owed" | "paid" | "all")}
               options={[
-                { value: "owed", label: "Owed" },
-                { value: "paid", label: "Paid" },
-                { value: "all", label: "All" },
+                { value: "owed", label: "Owed", icon: <Wallet /> },
+                { value: "paid", label: "Paid", icon: <CheckCircle2 /> },
+                { value: "all", label: "All", icon: <LayoutList /> },
               ]}
             />
           </div>
