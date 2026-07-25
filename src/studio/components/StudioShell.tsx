@@ -6617,11 +6617,21 @@ export function StudioShell({
           border-radius: 999px;
         }
         .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover,
+        /* Mirror the active pill's left-fading fill so hover doesn't read heavier. */
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent) !important;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 12%,
+            color-mix(in srgb, var(--mos-text-bright) 3%, transparent) 40%,
+            color-mix(in srgb, var(--mos-text-bright) 6%, transparent) 100%
+          ) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
+        }
+        .studio-polish .cursor-unified-tab.is-active:hover {
+          background: var(--studio-chrome-glow-bg-fade-hover) !important;
         }
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new)::before {
           content: none !important;
