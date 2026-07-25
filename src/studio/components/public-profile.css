@@ -59,10 +59,9 @@
   transform: none;
   filter: none;
   isolation: auto;
-  /* Gradient wash only — live full-viewport blur janks profile scroll. */
-  background: color-mix(in srgb, #050608 62%, transparent);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background: color-mix(in srgb, #050608 46%, transparent);
+  -webkit-backdrop-filter: saturate(150%) blur(12px);
+  backdrop-filter: saturate(150%) blur(12px);
 }
 
 .public-profile-shell.is-embedded {
@@ -72,9 +71,9 @@
 }
 
 .public-profile-shell.is-embedded .public-profile-blur {
-  background: color-mix(in srgb, var(--mos-bg, #050608) 58%, transparent);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background: color-mix(in srgb, var(--mos-bg, #050608) 42%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  backdrop-filter: saturate(160%) blur(12px);
 }
 
 [data-appearance="light"] .public-profile-shell {
