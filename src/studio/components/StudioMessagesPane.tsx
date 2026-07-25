@@ -1,13 +1,37 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Loader2, MessageCircle, SendHorizontal } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Loader2,
+  MessageCircle,
+  Mic,
+  SendHorizontal,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
+
+const VOICE_NOTE_MAX_SECONDS = 300;
+
+function pickRecorderMimeType(): string | undefined {
+  if (typeof MediaRecorder === "undefined") return undefined;
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) =>
+    MediaRecorder.isTypeSupported(type),
+  );
+}
+
+function recordingTimeLabel(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
 export type DmConversationId = Id<"dmConversations">;
 
@@ -85,12 +109,144 @@ export function StudioMessagesPane({
   );
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
+  const prepareVoiceUpload = useMutation(api.dms.prepareVoiceUpload);
+  const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
 
   const [draft, setDraft] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
+  const [recState, setRecState] = useState<"idle" | "recording" | "sending">(
+    "idle",
+  );
+  const [recSeconds, setRecSeconds] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recChunksRef = useRef<Blob[]>([]);
+  const recStreamRef = useRef<MediaStream | null>(null);
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recStartedAtRef = useRef(0);
+  const recIntentRef = useRef<"send" | "cancel">("cancel");
+
+  const teardownRecorder = useCallback(() => {
+    if (recTimerRef.current) {
+      clearInterval(recTimerRef.current);
+      recTimerRef.current = null;
+    }
+    recStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recStreamRef.current = null;
+    recorderRef.current = null;
+  }, []);
+
+  const finishRecording = useCallback(
+    (intent: "send" | "cancel") => {
+      const recorder = recorderRef.current;
+      if (!recorder || recorder.state === "inactive") return;
+      recIntentRef.current = intent;
+      setRecState(intent === "send" ? "sending" : "idle");
+      recorder.stop();
+    },
+    [],
+  );
+
+  const startRecording = useCallback(async () => {
+    if (!conversationId || recState !== "idle") return;
+    setSendError("");
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setSendError("Microphone access was blocked");
+      return;
+    }
+    const mimeType = pickRecorderMimeType();
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    recStreamRef.current = stream;
+    recorderRef.current = recorder;
+    recChunksRef.current = [];
+    recIntentRef.current = "cancel";
+    recStartedAtRef.current = Date.now();
+    setRecSeconds(0);
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const durationSec = Math.min(
+        VOICE_NOTE_MAX_SECONDS,
+        (Date.now() - recStartedAtRef.current) / 1000,
+      );
+      const blob = new Blob(recChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      const intent = recIntentRef.current;
+      recChunksRef.current = [];
+      teardownRecorder();
+
+      if (intent !== "send" || durationSec < 1 || blob.size === 0) {
+        setRecState("idle");
+        if (intent === "send" && durationSec < 1) {
+          setSendError("Voice note too short — hold on a bit longer");
+        }
+        return;
+      }
+
+      void (async () => {
+        try {
+          const uploadUrl = await prepareVoiceUpload({
+            conversationId: conversationId!,
+          });
+          const result = await fetch(uploadUrl, {
+            method: "POST",
+            headers: { "Content-Type": blob.type || "audio/webm" },
+            body: blob,
+          });
+          if (!result.ok) throw new Error("Upload failed");
+          const json = (await result.json()) as { storageId: Id<"_storage"> };
+          if (!json.storageId) throw new Error("Upload failed");
+          await sendVoiceMessage({
+            conversationId: conversationId!,
+            storageId: json.storageId,
+            durationSec,
+          });
+        } catch (error) {
+          setSendError(friendlyConvexError(error, "Could not send voice note"));
+        } finally {
+          setRecState("idle");
+        }
+      })();
+    };
+
+    recorder.start(250);
+    setRecState("recording");
+    recTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - recStartedAtRef.current) / 1000;
+      setRecSeconds(elapsed);
+      if (elapsed >= VOICE_NOTE_MAX_SECONDS) finishRecording("send");
+    }, 250);
+  }, [
+    conversationId,
+    finishRecording,
+    prepareVoiceUpload,
+    recState,
+    sendVoiceMessage,
+    teardownRecorder,
+  ]);
+
+  // Discard any in-flight recording when leaving the chat or unmounting.
+  useEffect(() => {
+    return () => {
+      recIntentRef.current = "cancel";
+      const recorder = recorderRef.current;
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+      teardownRecorder();
+    };
+  }, [conversationId, teardownRecorder]);
 
   const activeRow = useMemo(
     () =>
@@ -244,12 +400,34 @@ export function StudioMessagesPane({
                   <div
                     className={`studio-dm-bubble-row${message.fromMe ? " is-mine" : ""}`}
                   >
-                    <div className="studio-dm-bubble">
-                      <p>{message.body}</p>
-                      <time dateTime={new Date(message.createdAt).toISOString()}>
-                        {timeLabel(message.createdAt)}
-                      </time>
-                    </div>
+                    {message.kind === "voice" ? (
+                      <div className="studio-dm-bubble is-voice">
+                        {message.audioUrl ? (
+                          <StudioChatAudioPlayer
+                            src={message.audioUrl}
+                            title="Voice message"
+                          />
+                        ) : (
+                          <p className="studio-dm-voice-missing">
+                            Voice message unavailable
+                          </p>
+                        )}
+                        <time
+                          dateTime={new Date(message.createdAt).toISOString()}
+                        >
+                          {timeLabel(message.createdAt)}
+                        </time>
+                      </div>
+                    ) : (
+                      <div className="studio-dm-bubble">
+                        <p>{message.body}</p>
+                        <time
+                          dateTime={new Date(message.createdAt).toISOString()}
+                        >
+                          {timeLabel(message.createdAt)}
+                        </time>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -261,33 +439,99 @@ export function StudioMessagesPane({
       {sendError ? <p className="studio-dm-error">{sendError}</p> : null}
 
       <footer className="studio-dm-composer">
-        <textarea
-          ref={inputRef}
-          value={draft}
-          rows={1}
-          placeholder="Message…"
-          aria-label={`Message ${peerLabel}`}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void handleSend();
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="studio-dm-send"
-          onClick={() => void handleSend()}
-          disabled={sendBusy || !draft.trim()}
-          aria-label="Send message"
-        >
-          {sendBusy ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <SendHorizontal className="h-4 w-4" aria-hidden="true" />
-          )}
-        </button>
+        {recState !== "idle" ? (
+          <div
+            className="studio-dm-recording"
+            role="status"
+            aria-label="Recording voice note"
+          >
+            <button
+              type="button"
+              className="studio-dm-rec-cancel"
+              onClick={() => finishRecording("cancel")}
+              disabled={recState === "sending"}
+              aria-label="Discard recording"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <span className="studio-dm-rec-meta">
+              <span
+                className={`studio-dm-rec-dot${recState === "recording" ? " is-live" : ""}`}
+                aria-hidden="true"
+              />
+              <span className="studio-dm-rec-time">
+                {recordingTimeLabel(recSeconds)}
+              </span>
+            </span>
+            <MicrophoneWaveform
+              className="studio-dm-rec-wave"
+              active={recState === "recording"}
+              processing={recState === "sending"}
+              height={32}
+              barWidth={3}
+              barGap={2}
+              barRadius={999}
+              barColor="gray"
+              sensitivity={1.6}
+              fadeEdges
+              fadeWidth={20}
+            />
+            <button
+              type="button"
+              className="studio-dm-send"
+              onClick={() => finishRecording("send")}
+              disabled={recState === "sending"}
+              aria-label="Send voice note"
+            >
+              {recState === "sending" ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+              )}
+            </button>
+          </div>
+        ) : (
+          <>
+            <textarea
+              ref={inputRef}
+              value={draft}
+              rows={1}
+              placeholder="Message…"
+              aria-label={`Message ${peerLabel}`}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
+                }
+              }}
+            />
+            {draft.trim() ? (
+              <button
+                type="button"
+                className="studio-dm-send"
+                onClick={() => void handleSend()}
+                disabled={sendBusy}
+                aria-label="Send message"
+              >
+                {sendBusy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="studio-dm-send is-mic"
+                onClick={() => void startRecording()}
+                aria-label="Record a voice note"
+              >
+                <Mic className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </>
+        )}
       </footer>
     </div>
   );

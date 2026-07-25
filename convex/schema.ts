@@ -1194,7 +1194,14 @@ export default defineSchema({
   dmMessages: defineTable({
     conversationId: v.id("dmConversations"),
     senderId: v.id("users"),
+    /** Empty string for voice notes. */
     body: v.string(),
+    /** Absent = "text" (rows pre-dating voice notes). */
+    kind: v.optional(v.union(v.literal("text"), v.literal("voice"))),
+    /** Voice note audio blob in Convex storage. */
+    audioStorageId: v.optional(v.id("_storage")),
+    /** Voice note length in seconds (client-measured). */
+    durationSec: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_conversation_and_created", ["conversationId", "createdAt"]),
 

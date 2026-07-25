@@ -260,6 +260,127 @@
   cursor: default;
 }
 
+/* Mic button (shown while the draft is empty) — quiet until pressed. */
+.studio-dm-send.is-mic {
+  background: var(--cursor-surface-input, var(--mos-surface));
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-dm-send.is-mic:hover:not(:disabled) {
+  filter: none;
+  border-color: var(--cursor-border-focus, var(--cursor-accent));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+/* —— Voice-note recording row (replaces the textarea while recording) —— */
+
+.studio-dm-recording {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px 0 2px;
+  border-radius: 16px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--cursor-surface-input, var(--mos-surface));
+}
+
+.studio-dm-recording .studio-dm-send {
+  width: 26px;
+  height: 26px;
+}
+
+.studio-dm-rec-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+}
+
+.studio-dm-rec-cancel:hover:not(:disabled) {
+  color: var(--mos-danger, #f87171);
+  background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
+}
+
+.studio-dm-rec-cancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.studio-dm-rec-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--mos-danger, #f87171);
+  opacity: 0.5;
+}
+
+.studio-dm-rec-dot.is-live {
+  opacity: 1;
+  animation: studio-dm-rec-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes studio-dm-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.studio-dm-rec-time {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-rec-wave {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* —— Voice-note bubble — the ElevenLabs chat player is the bubble body —— */
+
+.studio-dm-bubble.is-voice {
+  max-width: min(88%, 26rem);
+  padding: 4px 8px 5px 4px;
+}
+
+.studio-dm-bubble.is-voice .studio-chat-audio-player {
+  min-width: 200px;
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+}
+
+.studio-dm-voice-missing {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
 /* —— Inline list (mobile, no chat selected) —— */
 
 .studio-dm-list-host {

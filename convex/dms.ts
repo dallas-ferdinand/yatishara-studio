@@ -11,6 +11,8 @@ import { hydrateSocialPeople } from "./profiles";
 
 const DM_BODY_MAX = 4000;
 const DM_PREVIEW_MAX = 120;
+const VOICE_NOTE_MAX_SECONDS = 300;
+const VOICE_PREVIEW = "Voice message";
 const CONVERSATIONS_MAX = 60;
 const MESSAGES_PAGE_MAX = 200;
 const PUBLIC_URL_TTL_SECONDS = 60 * 60;
@@ -180,6 +182,9 @@ export const listMessages = authedQuery({
     v.object({
       _id: v.id("dmMessages"),
       body: v.string(),
+      kind: v.union(v.literal("text"), v.literal("voice")),
+      audioUrl: v.optional(v.string()),
+      durationSec: v.optional(v.number()),
       fromMe: v.boolean(),
       createdAt: v.number(),
     }),
@@ -198,12 +203,22 @@ export const listMessages = authedQuery({
       )
       .order("desc")
       .take(limit);
-    return rows.reverse().map((row) => ({
-      _id: row._id,
-      body: row.body,
-      fromMe: row.senderId === ctx.user._id,
-      createdAt: row.createdAt,
-    }));
+    return await Promise.all(
+      rows.reverse().map(async (row) => {
+        const audioUrl = row.audioStorageId
+          ? ((await ctx.storage.getUrl(row.audioStorageId)) ?? undefined)
+          : undefined;
+        return {
+          _id: row._id,
+          body: row.body,
+          kind: row.kind ?? "text",
+          audioUrl,
+          durationSec: row.durationSec,
+          fromMe: row.senderId === ctx.user._id,
+          createdAt: row.createdAt,
+        };
+      }),
+    );
   },
 });
 
@@ -237,6 +252,58 @@ export const sendMessage = authedMutation({
       lastMessageAt: now,
       lastMessagePreview:
         body.length > DM_PREVIEW_MAX ? `${body.slice(0, DM_PREVIEW_MAX)}…` : body,
+      lastMessageSenderId: ctx.user._id,
+      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+    });
+    return messageId;
+  },
+});
+
+/** Short-lived Convex storage upload URL for a voice note blob. */
+export const prepareVoiceUpload = authedMutation({
+  args: { conversationId: v.id("dmConversations") },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await requireMemberConversation(ctx, args.conversationId, ctx.user._id);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const sendVoiceMessage = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    storageId: v.id("_storage"),
+    durationSec: v.number(),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    if (
+      !Number.isFinite(args.durationSec) ||
+      args.durationSec <= 0 ||
+      args.durationSec > VOICE_NOTE_MAX_SECONDS
+    ) {
+      throw new Error("Voice notes must be between 1 second and 5 minutes");
+    }
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: ctx.user._id,
+      body: "",
+      kind: "voice",
+      audioStorageId: args.storageId,
+      durationSec: Math.round(args.durationSec * 10) / 10,
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === ctx.user._id;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: VOICE_PREVIEW,
       lastMessageSenderId: ctx.user._id,
       ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
     });
