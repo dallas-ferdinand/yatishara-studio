@@ -38,7 +38,7 @@
 
 .studio-social-list {
   display: grid;
-  gap: 2px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -50,19 +50,20 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 7px 8px;
-  border: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
   border-radius: var(--cursor-radius-md, 8px);
-  background: transparent;
+  background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .studio-social-person:hover {
   background: var(--color-cursor-hover, var(--mos-hover));
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
 }
 
 .studio-social-person-copy {
