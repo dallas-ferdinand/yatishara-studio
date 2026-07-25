@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
   createElement,
+  Fragment,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -445,7 +446,9 @@ export function StudioMessagesSidebar({
                           : message.peer.displayName?.trim() ||
                             `@${message.peer.username}`}
                       </strong>
-                      <span>{message.body}</span>
+                      <span>
+                        {highlightSearchMatches(message.body, deferredSearch)}
+                      </span>
                     </span>
                     <time>{searchTimeLabel(message.createdAt)}</time>
                   </button>
@@ -544,6 +547,36 @@ export function StudioMessagesSidebar({
       ) : null}
     </div>
   );
+}
+
+/** Wrap query matches in the composer mention chip style. */
+function highlightSearchMatches(text: string, query: string): ReactNode {
+  const terms = query
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.replace(/^[@#]+/, ""))
+    .filter((term) => term.length > 0);
+  if (!text || terms.length === 0) return text;
+
+  const escaped = terms
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  const parts = text.split(pattern);
+  if (parts.length <= 1) return text;
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+    const isMatch = terms.some(
+      (term) => part.toLowerCase() === term.toLowerCase(),
+    );
+    if (!isMatch) return <Fragment key={index}>{part}</Fragment>;
+    return (
+      <mark key={index} className="studio-dm-search-hit">
+        {part}
+      </mark>
+    );
+  });
 }
 
 function searchTimeLabel(timestamp: number): string {
