@@ -7114,7 +7114,15 @@ export function StudioShell({
           opacity: 0.64;
         }
         .studio-polish :where(.cursor-tab-context-item, .cursor-dropdown-item):hover {
-          background: var(--studio-surface-hover);
+          background: var(--mos-active, var(--color-cursor-active));
+        }
+        /* Keep select resting fill at level-3; polish button resets must not wash it out. */
+        .studio-polish .cursor-select-menu .cursor-select-trigger {
+          background: var(--mos-plate-strong, var(--mos-raised, #e1e1e7));
+        }
+        .studio-polish .cursor-select-menu .cursor-select-trigger:hover,
+        .studio-polish .cursor-select-menu.is-open .cursor-select-trigger {
+          background: var(--mos-active, var(--color-cursor-active, #dadadf));
         }
         .studio-polish .cursor-settings-tab:hover {
           background: var(--cursor-overlay-subtle);
@@ -13268,6 +13276,8 @@ export function StudioShell({
           background: var(--mos-plate, var(--mos-bg, var(--cursor-surface-raised)));
           box-sizing: border-box;
           line-height: 1;
+          /* Let CursorSelect menus paint outside the bar. */
+          overflow: visible;
         }
         .studio-admin-section-title {
           min-width: 0;
@@ -13284,6 +13294,9 @@ export function StudioShell({
           gap: 8px;
           flex: 0 0 auto;
           margin-left: auto;
+          overflow: visible;
+          position: relative;
+          z-index: 2;
         }
         .studio-admin-payment-layout {
           display: grid;

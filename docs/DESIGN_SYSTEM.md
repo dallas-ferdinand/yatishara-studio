@@ -37,9 +37,9 @@ Three chrome roles, lightest → darkest. Applied to `:root` by the theme engine
 
 | Token | Role | Light | Dark |
 |---|---|---|---|
-| `--mos-page` | App canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
-| `--mos-plate` | Cards, tables, section bars, **open dropdown menus** | `#ececf0` | `mix(page, panel)` |
-| `--mos-plate-strong` | **Select buttons** (darker than plate), empty icon chips, menu item hover | `#e1e1e7` | `deepen(scheme.raised)` |
+| `--mos-page` | Level 1 — app canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
+| `--mos-plate` | Level 2 — cards, tables, section bars | `#ececf0` | `mix(page, panel)` |
+| `--mos-plate-strong` | Level 3 — **select buttons + open dropdown menus**, empty icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
 
 Supporting tokens (also both modes):
 
@@ -54,18 +54,19 @@ Supporting tokens (also both modes):
 **Usage cheatsheet**
 
 ```css
-.app-canvas       { background: var(--mos-page); }
-.card, .table-wrap, .section-bar,
-.dropdown-panel   { background: var(--mos-plate); }       /* + shadow, no border */
-.select-trigger, .empty-icon-chip,
-.menu-item:hover  { background: var(--mos-plate-strong); } /* darker than plate */
+.app-canvas       { background: var(--mos-page); }          /* L1 */
+.card, .table-wrap, .section-bar { background: var(--mos-plate); } /* L2 */
+.select-trigger, .dropdown-panel,
+.empty-icon-chip  { background: var(--mos-plate-strong); } /* L3 + shadow on menus */
+.menu-item:hover  { background: var(--mos-active); }
 ```
 
 ### Select / dropdown (locked decision)
 
-- **Open menu panel** → `--mos-plate` fill, **no border**, **with** `var(--cursor-shadow-pop)`.
-- **Trigger / button** → `--mos-plate-strong` (darker than second-level plate), no border.
-- **Menu item hover / active** → `--mos-plate-strong`.
+- **Open menu panel** → level-3 `--mos-plate-strong`, **no border**, **with** `var(--cursor-shadow-pop)`.
+  Size with `width: max-content` so labels are not clipped; parents must `overflow: visible`.
+- **Trigger / button** → level-3 `--mos-plate-strong` at rest (not only on hover); hover/open → `--mos-active`.
+- **Menu item hover / active** → `--mos-active`.
 - **Caret icon** → Lucide `ArrowDown` (same as StudioShell / profile chrome). **Not**
   `Icon name="chevDown"` / chevron.
 
@@ -169,8 +170,8 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 | Class | Purpose | Key shades |
 |---|---|---|
-| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate` + shadow, no border; item hover `--mos-plate-strong` |
-| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate` + shadow, no border |
+| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel L3 `--mos-plate-strong` + shadow, no border; item hover `--mos-active` |
+| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | L3 + shadow, no border |
 | `.cursor-settings-action` | Standard button/action | border-soft, hover `--color-cursor-hover` |
 | `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
 | `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
