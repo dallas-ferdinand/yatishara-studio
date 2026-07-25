@@ -4,6 +4,7 @@ import Script from "next/script";
 import { MERCURY_LOGO_PRELOAD } from "@/lib/brand-assets";
 import { getThemeBootInlineScript } from "@/mos-app/theme.js";
 import { getDeskBuildGuardInlineScript } from "@/mos-app/desk-build-guard.js";
+import { MobileGestures } from "@/components/mobile-gestures";
 import { MosTooltipLayer } from "@/components/mos-tooltip-layer";
 import { PaintBoot } from "@/components/paint-boot";
 import { PerformanceReporter } from "@/components/performance-reporter";
@@ -60,6 +61,9 @@ export const viewport: Viewport = {
   colorScheme: "dark light",
   width: "device-width",
   initialScale: 1,
+  // App UI never page-zooms; media viewers do their own pinch zoom.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 
@@ -136,6 +140,7 @@ export default function RootLayout({
       </head>
       <body className="h-full overflow-hidden" suppressHydrationWarning>
         <PaintBoot />
+        <MobileGestures />
         <MosTooltipLayer />
         <PerformanceReporter surface="root" />
         <StudioToaster />
