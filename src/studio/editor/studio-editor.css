@@ -90,18 +90,18 @@
 .studio-editor-inspector {
   width: 100%;
   height: 100%;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   display: flex;
   flex-direction: row;
   min-height: 0;
   overflow: hidden;
-  color: #1f2328;
+  color: var(--mos-text, #1f2328);
 }
 
 [data-appearance="light"] .studio-editor-mode-stack,
 [data-appearance="light"] .studio-editor-inspector,
 [data-appearance="light"] .studio-editor-inspector-dock {
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-mode-stack {
@@ -112,8 +112,8 @@
   width: 44px;
   flex-shrink: 0;
   padding: 0.45rem 0.3rem;
-  border-left: 1px solid #eceef2;
-  background: #ffffff;
+  border-left: 1px solid var(--mos-border, #eceef2);
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-mode-stack-spacer {
@@ -136,7 +136,7 @@
 
 .studio-editor-mode-icon:hover:not(:disabled),
 .studio-editor-mode-export:hover:not(:disabled) {
-  background: #f3f4f6;
+  background: var(--mos-hover, #e6e6ec);
   color: #111827;
 }
 
@@ -155,7 +155,7 @@
 
 .studio-editor-mode-export {
   border-color: #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   color: #4f46e5;
 }
 
@@ -169,7 +169,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-inspector-panel-head {
@@ -198,7 +198,7 @@
   border-radius: 999px;
   border: 1px solid #d1d5db;
   overflow: hidden;
-  background: #fff;
+  background: var(--mos-panel, #f5f5f7);
   color: #4b5563;
 }
 
@@ -308,7 +308,7 @@
 }
 
 .studio-editor-inspector-reset:hover {
-  background: #f3f4f6;
+  background: var(--mos-hover, #e6e6ec);
   color: #4b5563;
 }
 
@@ -345,7 +345,7 @@
 }
 
 .studio-editor-slider-reset:hover:not(:disabled) {
-  background: #f3f4f6;
+  background: var(--mos-hover, #e6e6ec);
   color: #4b5563;
 }
 
@@ -380,7 +380,7 @@
   padding: 0.2rem 0.3rem;
   border: 0;
   border-radius: 6px;
-  background: #f3f4f6;
+  background: var(--mos-hover, #e6e6ec);
   color: #4b5563;
   font-size: 0.68rem;
   font-weight: 600;
@@ -391,8 +391,8 @@
 
 .studio-editor-slider-input:focus {
   outline: none;
-  background: #fff;
-  box-shadow: 0 0 0 1px #d1d5db;
+  background: var(--mos-panel, #f5f5f7);
+  box-shadow: 0 0 0 1px var(--mos-border, #d1d5db);
 }
 
 .studio-editor-detail-grid {
@@ -445,7 +445,7 @@
   padding: 0.45rem 0.6rem;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   text-align: left;
   color: #111827;
 }
@@ -641,7 +641,7 @@
   padding: 0.5rem 0.35rem;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   font-size: 0.72rem;
   color: #374151;
 }
@@ -670,7 +670,7 @@
   padding: 0.35rem 0.65rem;
   border-radius: 8px;
   border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   font-size: 0.76rem;
   text-transform: capitalize;
   color: #374151;
@@ -702,7 +702,7 @@
 
 .studio-editor-secondary-btn {
   border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   margin-top: 0.35rem;
 }
 
@@ -749,8 +749,8 @@
   height: 18px;
   border-radius: 6px;
   border: none;
-  background: #ffffff;
-  color: #111314;
+  background: var(--mos-panel, #f5f5f7);
+  color: var(--mos-text, #111314);
   z-index: 6;
   display: grid;
   place-items: center;
@@ -878,7 +878,7 @@
 }
 
 .studio-editor-inspector-btn:hover {
-  background: #f3f4f6;
+  background: var(--mos-hover, #e6e6ec);
 }
 
 .studio-editor-chip-row {
@@ -892,7 +892,7 @@
   padding: 0.2rem 0.45rem;
   border-radius: 999px;
   border: 1px solid #e5e7eb;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   font-size: 0.62rem;
   color: #6b7280;
 }
@@ -924,7 +924,7 @@
 .studio-editor-textarea {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #f9fafb;
+  background: var(--mos-hover, #e6e6ec);
   color: #111827;
   font-size: 0.82rem;
   padding: 0.45rem 0.55rem;
@@ -1573,7 +1573,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   color: var(--mos-text);
 }
 
@@ -1584,7 +1584,7 @@
   display: flex;
   flex-direction: column;
   overscroll-behavior: contain;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-timeline-canvas {
@@ -1605,7 +1605,7 @@
   /* Allow vertical timeline scroll; pointer scrub still handles seek. */
   touch-action: pan-y;
   user-select: none;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
 }
 
 .studio-editor-ruler-mark {
@@ -1648,7 +1648,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: stretch;
   border-bottom: none;
-  background: #ffffff;
+  background: var(--mos-panel, #f5f5f7);
   position: relative;
 }
 
@@ -1675,14 +1675,14 @@
 }
 
 .studio-editor-track-row.is-drop-target .studio-editor-track-lane {
-  background: color-mix(in srgb, #00c2c7 6%, #ffffff);
+  background: color-mix(in srgb, #00c2c7 6%, var(--mos-panel, #f5f5f7));
 }
 
 .studio-editor-track-rail {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fafbfc;
+  background: var(--mos-hover, #e6e6ec);
   border-right: 1px solid #f3f4f6;
   flex-shrink: 0;
 }
@@ -1711,7 +1711,7 @@
 }
 
 .studio-editor-track-btn:hover {
-  background: #f0f2f5;
+  background: var(--mos-bg, #ececf0);
   color: #5c6570;
 }
 
@@ -1720,7 +1720,7 @@
 }
 
 .studio-editor-track-btn.is-active {
-  background: color-mix(in srgb, #00c2c7 12%, #fff);
+  background: color-mix(in srgb, #00c2c7 12%, var(--mos-panel, #f5f5f7));
   color: #0f8f92;
 }
 
@@ -1728,7 +1728,7 @@
   position: relative;
   margin: 3px 6px 3px 0;
   border-radius: 8px;
-  background: #f0f2f5;
+  background: var(--mos-bg, #ececf0);
   cursor: default;
   /* pan-y keeps wheel/touch scrolling the timeline; scrub uses pointer events. */
   touch-action: pan-y;
@@ -1773,7 +1773,7 @@
 .studio-editor-track-row.is-video .studio-editor-track-lane,
 .studio-editor-track-row.is-audio .studio-editor-track-lane,
 .studio-editor-track-row.is-text .studio-editor-track-lane {
-  background: #f0f2f5;
+  background: var(--mos-bg, #ececf0);
 }
 
 .studio-editor-timeline-wrap.is-panning,
@@ -1954,7 +1954,7 @@ body.is-clip-pickup .studio-editor-track-insert-wrap,
 
 .studio-editor-track-rail-inner.is-reordering .studio-editor-track-btn.is-grip {
   color: var(--cursor-accent, #2563eb);
-  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 12%, #fff);
+  background: color-mix(in srgb, var(--cursor-accent, #2563eb) 12%, var(--mos-panel, #f5f5f7));
 }
 
 .studio-editor-clip.is-dragging {
@@ -2059,7 +2059,7 @@ body.is-clip-pickup * {
 }
 
 body.is-clip-pickup .studio-editor-track-row.is-drop-target .studio-editor-track-lane {
-  background: color-mix(in srgb, #00c2c7 8%, #ffffff);
+  background: color-mix(in srgb, #00c2c7 8%, var(--mos-panel, #f5f5f7));
 }
 
 .studio-editor-clip.is-selected {
