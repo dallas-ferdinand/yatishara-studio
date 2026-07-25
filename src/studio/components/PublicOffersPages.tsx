@@ -2,25 +2,32 @@
 
 import { Authenticated, Unauthenticated, useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
+  ArrowDown,
+  ArrowDownWideNarrow,
   ArrowLeft,
+  ArrowUpNarrowWide,
   ArrowUpRight,
   BadgeCheck,
+  CalendarDays,
   Clock,
   PackageCheck,
   PackageSearch,
   Search,
   ShieldCheck,
   Store,
+  Timer,
   Wallet,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Fragment, Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
+import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 import "./public-offers.css";
@@ -28,7 +35,7 @@ import "./public-offers.css";
 function OffersSidebarBrand() {
   const logoSrc = useMercurySidebarLogo();
   return (
-    <Link href="/offers" className="public-offers-sidebar-brand">
+    <Link href="/creative-network/" className="public-offers-sidebar-brand">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={logoSrc} alt="" aria-hidden="true" />
       <span className="public-offers-sidebar-brand-text">
@@ -49,7 +56,7 @@ function OffersTopbar({
   return (
     <header className="public-offers-topbar">
       {showBrand ? (
-        <Link href="/offers" className="public-offers-brand">
+        <Link href="/creative-network/" className="public-offers-brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoSrc} alt="" aria-hidden="true" />
           <strong>Yatishara Studio</strong>
@@ -120,35 +127,142 @@ const VALUE_PROPS = [
   },
 ] as const;
 
-const PRICE_FILTERS = [
-  { value: "any", label: "Any price", min: 0, max: Infinity },
-  { value: "under100", label: "Under $100", min: 0, max: 10_000 },
-  { value: "100to500", label: "$100 – $500", min: 10_000, max: 50_000 },
-  { value: "500to1000", label: "$500 – $1,000", min: 50_000, max: 100_000 },
-  { value: "over1000", label: "Over $1,000", min: 100_000, max: Infinity },
+/** Minimal shape the filter registry needs — every public offer satisfies it. */
+type FilterableOffer = {
+  priceCents: number;
+  deliveryDays: number;
+  category?: string;
+  publishedAt?: number;
+};
+
+type SearchableOffer = FilterableOffer & {
+  title: string;
+  description: string;
+  sellerBusinessName: string;
+  sellerUsername?: string;
+};
+
+type OptionFilterDef = {
+  id: string;
+  label: string;
+  anyValue: string;
+  anyLabel: string;
+  /** How many options render before "Show all" kicks in. */
+  visibleLimit?: number;
+  getOptions: (offers: FilterableOffer[]) => { value: string; label: string }[];
+  matches: (offer: FilterableOffer, value: string) => boolean;
+};
+
+/**
+ * Adding a new sidebar filter = one entry here. Facet counts, active chips,
+ * clearing, and collapse state all derive from this registry.
+ */
+const OPTION_FILTERS: OptionFilterDef[] = [
+  {
+    id: "category",
+    label: "Category",
+    anyValue: "all",
+    anyLabel: "All categories",
+    visibleLimit: 7,
+    getOptions: (offers) => {
+      const names = new Set<string>();
+      for (const offer of offers) {
+        const key = offer.category?.trim();
+        if (key) names.add(key);
+      }
+      return [...names]
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({ value: name, label: name }));
+    },
+    matches: (offer, value) => offer.category?.trim() === value,
+  },
+  {
+    id: "delivery",
+    label: "Delivery time",
+    anyValue: "any",
+    anyLabel: "Any timeline",
+    getOptions: () => [
+      { value: "1", label: "Up to 24 hours" },
+      { value: "3", label: "Up to 3 days" },
+      { value: "7", label: "Up to 7 days" },
+      { value: "14", label: "Up to 14 days" },
+    ],
+    matches: (offer, value) => offer.deliveryDays <= Number(value),
+  },
+];
+
+const PRICE_PRESETS = [
+  { label: "Under $100", min: "", max: "100" },
+  { label: "$100 – $500", min: "100", max: "500" },
+  { label: "$500 – $1k", min: "500", max: "1000" },
+  { label: "$1k+", min: "1000", max: "" },
 ] as const;
 
-const DELIVERY_FILTERS = [
-  { value: "any", label: "Any timeline", maxDays: Infinity },
-  { value: "3", label: "Up to 3 days", maxDays: 3 },
-  { value: "7", label: "Up to 7 days", maxDays: 7 },
-  { value: "14", label: "Up to 14 days", maxDays: 14 },
-] as const;
+type SortKey = "newest" | "price-asc" | "price-desc" | "fastest";
 
-type PriceFilter = (typeof PRICE_FILTERS)[number]["value"];
-type DeliveryFilter = (typeof DELIVERY_FILTERS)[number]["value"];
+const SORT_COMPARATORS: Record<
+  SortKey,
+  (a: FilterableOffer, b: FilterableOffer) => number
+> = {
+  newest: (a, b) => (b.publishedAt ?? 0) - (a.publishedAt ?? 0),
+  "price-asc": (a, b) => a.priceCents - b.priceCents,
+  "price-desc": (a, b) => b.priceCents - a.priceCents,
+  fastest: (a, b) => a.deliveryDays - b.deliveryDays,
+};
 
-function FilterGroup({
+const SORT_SELECT_OPTIONS = [
+  { value: "newest", label: "Newest", icon: <CalendarDays /> },
+  { value: "price-asc", label: "Price: low to high", icon: <ArrowUpNarrowWide /> },
+  { value: "price-desc", label: "Price: high to low", icon: <ArrowDownWideNarrow /> },
+  { value: "fastest", label: "Fastest delivery", icon: <Timer /> },
+];
+
+/** "250" or "$1,250.50" → cents; empty/garbage → null (no bound). */
+function parsePriceToCents(input: string): number | null {
+  const cleaned = input.replace(/[^0-9.]/g, "");
+  if (!cleaned) return null;
+  const dollars = Number(cleaned);
+  if (!Number.isFinite(dollars) || dollars < 0) return null;
+  return Math.round(dollars * 100);
+}
+
+function priceChipLabel(min: string, max: string): string | null {
+  const hasMin = parsePriceToCents(min) !== null;
+  const hasMax = parsePriceToCents(max) !== null;
+  if (hasMin && hasMax) return `$${min} – $${max}`;
+  if (hasMin) return `From $${min}`;
+  if (hasMax) return `Up to $${max}`;
+  return null;
+}
+
+function FilterSection({
   title,
+  activeCount,
+  open,
+  onToggle,
   children,
 }: {
   title: string;
+  activeCount: number;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <section className="public-offers-filter-group">
-      <h3>{title}</h3>
-      <div className="public-offers-filter-options">{children}</div>
+    <section className={`public-offers-filter-group${open ? " is-open" : ""}`}>
+      <button
+        type="button"
+        className="public-offers-filter-head"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span>{title}</span>
+        {activeCount > 0 ? (
+          <em className="public-offers-filter-active">{activeCount}</em>
+        ) : null}
+        <ArrowDown className="public-offers-filter-caret" aria-hidden="true" />
+      </button>
+      {open ? <div className="public-offers-filter-options">{children}</div> : null}
     </section>
   );
 }
@@ -167,7 +281,7 @@ function FilterOption({
   return (
     <button
       type="button"
-      className={`public-offers-filter-btn${active ? " is-active" : ""}`}
+      className={`public-offers-filter-btn${active ? " is-active" : ""}${count === 0 && !active ? " is-empty" : ""}`}
       aria-pressed={active}
       onClick={onClick}
     >
@@ -191,32 +305,27 @@ function OffersCatalogInner() {
   const offers = sellerUsername ? sellerOffers : allOffers;
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("all");
-  const [price, setPrice] = useState<PriceFilter>("any");
-  const [delivery, setDelivery] = useState<DeliveryFilter>("any");
+  const [optionValues, setOptionValues] = useState<Record<string, string>>({});
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [closedSections, setClosedSections] = useState<Record<string, boolean>>({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
-  const categories = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const offer of offers ?? []) {
-      const key = offer.category?.trim();
-      if (!key) continue;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [offers]);
+  const valueFor = (def: OptionFilterDef) => optionValues[def.id] ?? def.anyValue;
+  const setValueFor = (id: string, value: string) =>
+    setOptionValues((prev) => ({ ...prev, [id]: value }));
+  const toggleSection = (id: string) =>
+    setClosedSections((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  const filtered = useMemo(() => {
-    if (!offers) return undefined;
-    const query = search.trim().toLowerCase();
-    const priceRange = PRICE_FILTERS.find((p) => p.value === price) ?? PRICE_FILTERS[0];
-    const deliveryRange =
-      DELIVERY_FILTERS.find((d) => d.value === delivery) ?? DELIVERY_FILTERS[0];
-    return offers.filter((offer) => {
-      if (category !== "all" && offer.category?.trim() !== category) return false;
-      if (offer.priceCents < priceRange.min || offer.priceCents >= priceRange.max) {
-        return false;
-      }
-      if (offer.deliveryDays > deliveryRange.maxDays) return false;
+  const query = search.trim().toLowerCase();
+  const minCents = parsePriceToCents(priceMin);
+  const maxCents = parsePriceToCents(priceMax);
+
+  const baseMatch = useMemo(() => {
+    return (offer: SearchableOffer) => {
+      if (minCents !== null && offer.priceCents < minCents) return false;
+      if (maxCents !== null && offer.priceCents > maxCents) return false;
       if (query) {
         const haystack = [
           offer.title,
@@ -230,17 +339,90 @@ function OffersCatalogInner() {
         if (!haystack.includes(query)) return false;
       }
       return true;
-    });
-  }, [offers, search, category, price, delivery]);
+    };
+  }, [query, minCents, maxCents]);
 
-  const hasFilters =
-    search.trim() !== "" || category !== "all" || price !== "any" || delivery !== "any";
+  // Faceted counts: each group is counted against every *other* active filter,
+  // so numbers always answer "what would I get if I picked this?".
+  const facets = useMemo(() => {
+    if (!offers) return null;
+    const base = offers.filter(baseMatch);
+    const result = new Map<string, Map<string, number>>();
+    for (const def of OPTION_FILTERS) {
+      const others = OPTION_FILTERS.filter((d) => d.id !== def.id);
+      const pool = base.filter((offer) =>
+        others.every((d) => {
+          const value = optionValues[d.id] ?? d.anyValue;
+          return value === d.anyValue || d.matches(offer, value);
+        }),
+      );
+      const counts = new Map<string, number>();
+      counts.set(def.anyValue, pool.length);
+      for (const option of def.getOptions(offers)) {
+        counts.set(
+          option.value,
+          pool.filter((offer) => def.matches(offer, option.value)).length,
+        );
+      }
+      result.set(def.id, counts);
+    }
+    return result;
+  }, [offers, baseMatch, optionValues]);
+
+  const filtered = useMemo(() => {
+    if (!offers) return undefined;
+    const list = offers.filter(
+      (offer) =>
+        baseMatch(offer) &&
+        OPTION_FILTERS.every((def) => {
+          const value = optionValues[def.id] ?? def.anyValue;
+          return value === def.anyValue || def.matches(offer, value);
+        }),
+    );
+    return [...list].sort(SORT_COMPARATORS[sort]);
+  }, [offers, baseMatch, optionValues, sort]);
+
+  const activeChips = useMemo(() => {
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+    if (search.trim()) {
+      chips.push({
+        key: "search",
+        label: `“${search.trim()}”`,
+        clear: () => setSearch(""),
+      });
+    }
+    const priceLabel = priceChipLabel(priceMin, priceMax);
+    if (priceLabel) {
+      chips.push({
+        key: "price",
+        label: priceLabel,
+        clear: () => {
+          setPriceMin("");
+          setPriceMax("");
+        },
+      });
+    }
+    for (const def of OPTION_FILTERS) {
+      const value = optionValues[def.id] ?? def.anyValue;
+      if (value === def.anyValue) continue;
+      const label =
+        def.getOptions(offers ?? []).find((opt) => opt.value === value)?.label ?? value;
+      chips.push({
+        key: def.id,
+        label,
+        clear: () => setValueFor(def.id, def.anyValue),
+      });
+    }
+    return chips;
+  }, [search, priceMin, priceMax, optionValues, offers]);
+
+  const hasFilters = activeChips.length > 0;
 
   function clearFilters() {
     setSearch("");
-    setCategory("all");
-    setPrice("any");
-    setDelivery("any");
+    setPriceMin("");
+    setPriceMax("");
+    setOptionValues({});
   }
 
   return (
@@ -260,45 +442,108 @@ function OffersCatalogInner() {
           />
         </label>
         <div className="public-offers-rail-body">
-          <FilterGroup title="Category">
-            <FilterOption
-              active={category === "all"}
-              onClick={() => setCategory("all")}
-              label="All categories"
-              count={offers?.length}
-            />
-            {categories.map(([name, count]) => (
-              <FilterOption
-                key={name}
-                active={category === name}
-                onClick={() => setCategory(name)}
-                label={name}
-                count={count}
-              />
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title="Price">
-            {PRICE_FILTERS.map((option) => (
-              <FilterOption
-                key={option.value}
-                active={price === option.value}
-                onClick={() => setPrice(option.value)}
-                label={option.label}
-              />
-            ))}
-          </FilterGroup>
-
-          <FilterGroup title="Delivery time">
-            {DELIVERY_FILTERS.map((option) => (
-              <FilterOption
-                key={option.value}
-                active={delivery === option.value}
-                onClick={() => setDelivery(option.value)}
-                label={option.label}
-              />
-            ))}
-          </FilterGroup>
+          {OPTION_FILTERS.map((def) => {
+            const options = def.getOptions(offers ?? []);
+            const value = valueFor(def);
+            const counts = facets?.get(def.id);
+            const limit = def.visibleLimit ?? Infinity;
+            const expanded = expandedSections[def.id] ?? false;
+            const visible =
+              expanded || options.length <= limit ? options : options.slice(0, limit);
+            return (
+              <Fragment key={def.id}>
+                <FilterSection
+                  title={def.label}
+                  activeCount={value === def.anyValue ? 0 : 1}
+                  open={!closedSections[def.id]}
+                  onToggle={() => toggleSection(def.id)}
+                >
+                  <FilterOption
+                    active={value === def.anyValue}
+                    onClick={() => setValueFor(def.id, def.anyValue)}
+                    label={def.anyLabel}
+                    count={counts?.get(def.anyValue)}
+                  />
+                  {visible.map((option) => (
+                    <FilterOption
+                      key={option.value}
+                      active={value === option.value}
+                      onClick={() =>
+                        setValueFor(
+                          def.id,
+                          value === option.value ? def.anyValue : option.value,
+                        )
+                      }
+                      label={option.label}
+                      count={counts?.get(option.value)}
+                    />
+                  ))}
+                  {options.length > limit ? (
+                    <button
+                      type="button"
+                      className="public-offers-show-more"
+                      onClick={() =>
+                        setExpandedSections((prev) => ({
+                          ...prev,
+                          [def.id]: !expanded,
+                        }))
+                      }
+                    >
+                      {expanded ? "Show less" : `Show all (${options.length})`}
+                    </button>
+                  ) : null}
+                </FilterSection>
+                {def.id === "category" ? (
+                  <FilterSection
+                    title="Price (TTD)"
+                    activeCount={priceChipLabel(priceMin, priceMax) ? 1 : 0}
+                    open={!closedSections.price}
+                    onToggle={() => toggleSection("price")}
+                  >
+                    <div className="public-offers-range">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={priceMin}
+                        onChange={(event) => setPriceMin(event.target.value)}
+                        placeholder="Min"
+                        aria-label="Minimum price in TTD"
+                      />
+                      <span aria-hidden="true">–</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={priceMax}
+                        onChange={(event) => setPriceMax(event.target.value)}
+                        placeholder="Max"
+                        aria-label="Maximum price in TTD"
+                      />
+                    </div>
+                    <div className="public-offers-presets">
+                      {PRICE_PRESETS.map((preset) => {
+                        const active =
+                          priceMin === preset.min && priceMax === preset.max;
+                        return (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            className={`public-offers-preset${active ? " is-active" : ""}`}
+                            aria-pressed={active}
+                            onClick={() => {
+                              setPriceMin(active ? "" : preset.min);
+                              setPriceMax(active ? "" : preset.max);
+                            }}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FilterSection>
+                ) : null}
+              </Fragment>
+            );
+          })}
 
           {hasFilters ? (
             <button
@@ -315,7 +560,7 @@ function OffersCatalogInner() {
       <div className="public-offers-main">
         <OffersTopbar
           showBrand={false}
-          back={sellerUsername ? { href: "/offers", label: "All services" } : undefined}
+          back={sellerUsername ? { href: "/creative-network/", label: "All services" } : undefined}
         />
         <div className="public-offers-main-scroll">
           <main className="public-offers-body">
@@ -348,7 +593,42 @@ function OffersCatalogInner() {
               <div className="public-offers-section-head">
                 <h2>Services</h2>
                 {filtered ? <span className="public-offers-chip">{filtered.length}</span> : null}
+                <div className="public-offers-sort">
+                  <CursorSelect
+                    value={sort}
+                    options={SORT_SELECT_OPTIONS}
+                    onChange={(value) => setSort(value as SortKey)}
+                    ariaLabel="Sort services"
+                    align="end"
+                  />
+                </div>
               </div>
+
+              {activeChips.length > 0 ? (
+                <div className="public-offers-active-chips" aria-label="Active filters">
+                  {activeChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      type="button"
+                      className="public-offers-active-chip"
+                      onClick={chip.clear}
+                      title="Remove filter"
+                    >
+                      <span>{chip.label}</span>
+                      <X aria-hidden="true" />
+                    </button>
+                  ))}
+                  {activeChips.length > 1 ? (
+                    <button
+                      type="button"
+                      className="public-offers-active-clear"
+                      onClick={clearFilters}
+                    >
+                      Clear all
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
               {!filtered ? (
                 <OffersState icon={<PackageSearch />} title="Loading services…" />
@@ -379,7 +659,7 @@ function OffersCatalogInner() {
                 <ul className="public-offers-grid">
                   {filtered.map((offer) => (
                     <li key={offer._id}>
-                      <Link href={`/offers/${offer.slug}`} className="public-offers-card">
+                      <Link href={`/creative-network/${offer.slug}/`} className="public-offers-card">
                         <div className="public-offers-card-top">
                           <div>
                             <h3 className="public-offers-card-title">{offer.title}</h3>
@@ -456,7 +736,7 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
     try {
       if (quote && quote.shortfallCredits > 0) {
         toast.message("Top up credits to book this offer");
-        router.push(`/?next=${encodeURIComponent(`/offers/${slug}`)}&settings=billing`);
+        router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
         return;
       }
       const result = await book({ offerId });
@@ -467,7 +747,7 @@ function BookPanel({ offerId, slug }: { offerId: Id<"marketplaceOffers">; slug: 
       const msg = friendlyConvexError(error, "Could not book offer.");
       if (/Insufficient credits/i.test(msg)) {
         toast.message("Top up credits to book this offer");
-        router.push(`/?next=${encodeURIComponent(`/offers/${slug}`)}&settings=billing`);
+        router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
       } else {
         toast.error(msg);
       }
@@ -520,7 +800,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
   if (offer === undefined) {
     return (
       <>
-        <OffersTopbar back={{ href: "/offers", label: "All services" }} />
+        <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
         <main className="public-offers-body is-narrow">
           <OffersState icon={<PackageSearch />} title="Loading service…" />
         </main>
@@ -530,7 +810,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
   if (offer === null) {
     return (
       <>
-        <OffersTopbar back={{ href: "/offers", label: "All services" }} />
+        <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
         <main className="public-offers-body is-narrow">
           <OffersState
             icon={<Store />}
@@ -544,7 +824,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
 
   return (
     <>
-      <OffersTopbar back={{ href: "/offers", label: "All services" }} />
+      <OffersTopbar back={{ href: "/creative-network/", label: "All services" }} />
       <main className="public-offers-body is-narrow">
         <section className="public-offers-hero">
           <div className="public-offers-hero-copy">
@@ -604,7 +884,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
                     Sign in to your Studio account to book this package with credits.
                   </p>
                   <a
-                    href={`/?next=${encodeURIComponent(`/offers/${offer.slug}`)}`}
+                    href={`/?next=${encodeURIComponent(`/creative-network/${offer.slug}/`)}`}
                     className="public-offers-btn is-primary is-block"
                   >
                     <Wallet aria-hidden="true" />
