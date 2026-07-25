@@ -308,7 +308,12 @@ async function toPublicOffer(
     }
     if (opts.media === "full") {
       gallery = gallery ?? [];
+      const seen = new Set<Id<"assets">>(
+        offer.coverAssetId ? [offer.coverAssetId] : [],
+      );
       for (const assetId of offer.sampleAssetIds ?? []) {
+        if (seen.has(assetId)) continue;
+        seen.add(assetId);
         const item = await signOfferGalleryItem(ctx, assetId, expiresUnix);
         if (item) gallery.push(item);
       }

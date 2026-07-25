@@ -1150,7 +1150,7 @@ function OfferGallery({ items }: { items: GalleryItem[] }) {
         <div className="public-offers-gallery-thumbs" role="tablist" aria-label="Gallery items">
           {items.map((item, i) => (
             <button
-              key={`${item.url ?? i}`}
+              key={`gallery-${i}`}
               type="button"
               role="tab"
               aria-selected={i === index}
