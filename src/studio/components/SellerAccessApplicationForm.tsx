@@ -346,10 +346,6 @@ const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
   other: "Other",
 };
 
-function isPhotoIdKind(kind: IdentityDocKind): kind is PhotoIdKind {
-  return kind !== "birth_certificate";
-}
-
 function identityUploadMeta(
   kind: IdentityDocKind,
   side: "front" | "back" = "front",
@@ -366,7 +362,7 @@ function identityUploadMeta(
         title: "Passport",
         tip: "Photo page — clear and readable",
         ariaLabel: "Upload passport",
-        docKind: "primary-id",
+        docKind: "passport",
       };
     case "drivers_permit":
       return {
@@ -375,7 +371,7 @@ function identityUploadMeta(
           ? "Back of permit — address and signature side"
           : "Front of permit — photo side",
         ariaLabel: back ? "Upload back of driver’s permit" : "Upload front of driver’s permit",
-        docKind: back ? "primary-id-back" : "primary-id",
+        docKind: back ? "drivers-permit-back" : "drivers-permit",
       };
     case "birth_certificate":
       return {
@@ -389,7 +385,7 @@ function identityUploadMeta(
         title: back ? "National ID — back" : "National ID — front",
         tip: back ? "Back of ID — barcode side" : "Front of ID — photo side",
         ariaLabel: back ? "Upload back of national ID" : "Upload front of national ID",
-        docKind: back ? "primary-id-back" : "primary-id",
+        docKind: back ? "national-id-back" : "national-id",
       };
   }
 }
@@ -403,30 +399,29 @@ function resolveIdentityForSubmit(
   doc2Back: DocSlot,
 ):
   | {
-      primaryIdKind: PhotoIdKind;
-      primaryIdBunnyPath: string;
-      primaryIdBackBunnyPath?: string;
-      birthCertificateBunnyPath: string;
+      identityDoc1Kind: IdentityDocKind;
+      identityDoc1BunnyPath: string;
+      identityDoc1BackBunnyPath?: string;
+      identityDoc2Kind: IdentityDocKind;
+      identityDoc2BunnyPath: string;
+      identityDoc2BackBunnyPath?: string;
     }
   | string {
-  const items = [
-    { kind: kind1, path: doc1.bunnyPath, backPath: doc1Back.bunnyPath },
-    { kind: kind2, path: doc2.bunnyPath, backPath: doc2Back.bunnyPath },
-  ];
-  if (items.some((item) => !item.path)) return "Upload both identity documents.";
-  const birth = items.find((item) => item.kind === "birth_certificate");
-  const photo = items.find((item) => isPhotoIdKind(item.kind));
-  if (!birth?.path || !photo || !isPhotoIdKind(photo.kind) || !photo.path) {
-    return "Upload one photo ID and your birth certificate.";
+  if (kind1 === kind2) return "Pick two different document types.";
+  if (!doc1.bunnyPath || !doc2.bunnyPath) return "Upload both identity documents.";
+  if (isTwoSided(kind1) && !doc1Back.bunnyPath) {
+    return `Upload the back of your ${IDENTITY_DOC_LABELS[kind1]}.`;
   }
-  if (isTwoSided(photo.kind) && !photo.backPath) {
-    return "Upload the back of your photo ID.";
+  if (isTwoSided(kind2) && !doc2Back.bunnyPath) {
+    return `Upload the back of your ${IDENTITY_DOC_LABELS[kind2]}.`;
   }
   return {
-    primaryIdKind: photo.kind,
-    primaryIdBunnyPath: photo.path,
-    primaryIdBackBunnyPath: photo.backPath ?? undefined,
-    birthCertificateBunnyPath: birth.path,
+    identityDoc1Kind: kind1,
+    identityDoc1BunnyPath: doc1.bunnyPath,
+    identityDoc1BackBunnyPath: doc1Back.bunnyPath ?? undefined,
+    identityDoc2Kind: kind2,
+    identityDoc2BunnyPath: doc2.bunnyPath,
+    identityDoc2BackBunnyPath: doc2Back.bunnyPath ?? undefined,
   };
 }
 
@@ -625,7 +620,7 @@ export function SellerAccessApplicationForm({
         id: "identity",
         label: "ID",
         title: "Your ID",
-        blurb: "One photo ID and your birth certificate. ID cards need front and back.",
+        blurb: "Any two different IDs. Cards need front and back.",
         icon: IdCard,
       },
       {
@@ -968,10 +963,12 @@ export function SellerAccessApplicationForm({
         legalName: legalName.trim(),
         phone: phone.trim(),
         residentialAddress: formatAddress(homeAddress),
-        primaryIdKind: identity.primaryIdKind,
-        primaryIdBunnyPath: identity.primaryIdBunnyPath,
-        primaryIdBackBunnyPath: identity.primaryIdBackBunnyPath,
-        birthCertificateBunnyPath: identity.birthCertificateBunnyPath,
+        identityDoc1Kind: identity.identityDoc1Kind,
+        identityDoc1BunnyPath: identity.identityDoc1BunnyPath,
+        identityDoc1BackBunnyPath: identity.identityDoc1BackBunnyPath,
+        identityDoc2Kind: identity.identityDoc2Kind,
+        identityDoc2BunnyPath: identity.identityDoc2BunnyPath,
+        identityDoc2BackBunnyPath: identity.identityDoc2BackBunnyPath,
         proofOfResidentialAddressBunnyPath: proofAddress.bunnyPath!,
         ...(entityType === "business"
           ? {
@@ -1204,11 +1201,7 @@ export function SellerAccessApplicationForm({
                     <ChoiceCards
                       label="Second document"
                       value={null}
-                      options={
-                        isPhotoIdKind(idKind1)
-                          ? IDENTITY_DOC_OPTIONS.filter((o) => o.value === "birth_certificate")
-                          : IDENTITY_DOC_OPTIONS.filter((o) => isPhotoIdKind(o.value))
-                      }
+                      options={IDENTITY_DOC_OPTIONS.filter((o) => o.value !== idKind1)}
                       error={fieldErrors.idKind2}
                       onChange={(kind) => {
                         setIdKind2(kind);
@@ -1487,6 +1480,20 @@ export function SellerAccessApplicationForm({
               )}
             </div>
           </div>
+
+          {showDraftCue ? (
+            <div className="marketplace-draft-cue">
+              <p>Draft restored — continue where you left off.</p>
+              <div className="marketplace-draft-cue-actions">
+                <button type="button" onClick={() => setShowDraftCue(false)}>
+                  Continue
+                </button>
+                <button type="button" onClick={handleClearDraft}>
+                  Clear draft
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

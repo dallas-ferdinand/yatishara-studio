@@ -3,11 +3,15 @@
 .studio-offers-workspace {
   height: 100%;
   min-height: 0;
-  /* Opaque plate — wallpaper must not show through (same as plan/compose panes). */
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  /* Track-lane grey plate (same family as .studio-editor-track-lane). */
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, var(--mos-bg, #05080f));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   isolation: isolate;
+}
+
+[data-appearance="light"] .studio-offers-workspace {
+  background: #f0f2f5;
 }
 
 .studio-offers-card-head {
@@ -404,11 +408,15 @@
   height: 100%;
   min-height: 0;
   width: 100%;
-  /* Plain dark/light page plate — not studio wallpaper / glass. */
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  /* Lighter grey plate — matches editor track lane, not pure mos-bg. */
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, var(--mos-bg, #05080f));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   isolation: isolate;
+}
+
+[data-appearance="light"] .marketplace-apply-pane {
+  background: #f0f2f5;
 }
 
 .marketplace-apply-head {
@@ -501,6 +509,8 @@
 }
 
 .marketplace-apply-body {
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -513,7 +523,8 @@
   align-items: center;
   gap: 18px;
   width: min(100%, 420px);
-  margin: 0 auto;
+  /* auto vertical margins center the stage but stay scroll-safe on overflow */
+  margin: auto;
 }
 
 .marketplace-apply-intro {
@@ -891,7 +902,8 @@
   padding: 18px 12px;
   border-radius: 16px;
   border: 1px solid var(--color-cursor-border-soft);
-  background: transparent;
+  /* Dark: lifted panel vs --mos-bg; light: solid white (see below) */
+  background: var(--mos-panel, #0a1018);
   cursor: pointer;
   text-align: center;
   transition:
@@ -899,13 +911,26 @@
     background 160ms ease;
 }
 
+[data-appearance="light"] .marketplace-doc-card {
+  background: #ffffff;
+}
+
 .marketplace-doc-card:hover {
   border-color: color-mix(in srgb, var(--cursor-accent) 35%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 4%, var(--mos-panel, #0a1018));
+}
+
+[data-appearance="light"] .marketplace-doc-card:hover {
+  background: color-mix(in srgb, var(--cursor-accent) 4%, #ffffff);
 }
 
 .marketplace-doc-card.is-ready {
   border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--color-cursor-border-soft));
-  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-panel, #0a1018));
+}
+
+[data-appearance="light"] .marketplace-doc-card.is-ready {
+  background: color-mix(in srgb, var(--cursor-accent) 14%, #ffffff);
 }
 
 .marketplace-doc-card.is-uploading {
@@ -1190,8 +1215,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px 12px;
-  width: min(100%, 420px);
-  margin: 0 auto 12px;
+  width: 100%;
+  margin: 0;
   padding: 8px 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 75%, transparent);
@@ -1326,10 +1351,14 @@
   height: 100%;
   min-height: 0;
   width: 100%;
-  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, var(--mos-bg, #05080f));
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   isolation: isolate;
+}
+
+[data-appearance="light"] .marketplace-offers-pane {
+  background: #f0f2f5;
 }
 
 .marketplace-offers-head-nav {

@@ -207,11 +207,15 @@ export function AdminMarketplacePane() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   <DocLink
-                    label={`Primary ID front (${application.primaryIdKind?.replace(/_/g, " ") ?? "doc"})`}
-                    href={application.primaryIdUrl}
+                    label={`ID 1 (${application.identityDoc1Kind?.replace(/_/g, " ") ?? "doc"})`}
+                    href={application.identityDoc1Url}
                   />
-                  <DocLink label="Primary ID back" href={application.primaryIdBackUrl} />
-                  <DocLink label="Birth certificate" href={application.birthCertificateUrl} />
+                  <DocLink label="ID 1 back" href={application.identityDoc1BackUrl} />
+                  <DocLink
+                    label={`ID 2 (${application.identityDoc2Kind?.replace(/_/g, " ") ?? "doc"})`}
+                    href={application.identityDoc2Url}
+                  />
+                  <DocLink label="ID 2 back" href={application.identityDoc2BackUrl} />
                   <DocLink
                     label="Residential address proof"
                     href={application.proofOfResidentialAddressUrl}
