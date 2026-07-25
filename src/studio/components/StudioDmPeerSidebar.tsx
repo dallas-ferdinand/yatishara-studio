@@ -625,6 +625,16 @@ export function StudioDmPeerSidebar({
               <p className="studio-settings-empty">Profile unavailable.</p>
             ) : (
               <ul className="studio-dm-assign-list">
+                <li>
+                  <button
+                    type="button"
+                    className="studio-dm-assign-row studio-dm-peer-new-label"
+                    onClick={() => setLabelEditorOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="studio-dm-assign-name">New label</span>
+                  </button>
+                </li>
                 {panel.labels.map((label) => {
                   const Icon = dmLabelIcon(label.icon);
                   const inputId = `dm-peer-label-${label.labelId}`;
@@ -653,16 +663,6 @@ export function StudioDmPeerSidebar({
                     </li>
                   );
                 })}
-                <li>
-                  <button
-                    type="button"
-                    className="studio-dm-assign-row studio-dm-peer-new-label"
-                    onClick={() => setLabelEditorOpen(true)}
-                  >
-                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span className="studio-dm-assign-name">New label</span>
-                  </button>
-                </li>
               </ul>
             )}
           </div>
