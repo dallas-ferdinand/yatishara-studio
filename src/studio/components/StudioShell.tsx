@@ -6617,11 +6617,21 @@ export function StudioShell({
           border-radius: 999px;
         }
         .studio-polish :where(.cursor-tab, .cursor-agent-chat-tab):hover,
+        /* Mirror the active pill's left-fading fill so hover doesn't read heavier. */
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new) {
           border-color: transparent !important;
-          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent) !important;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 12%,
+            color-mix(in srgb, var(--mos-text-bright) 3%, transparent) 40%,
+            color-mix(in srgb, var(--mos-text-bright) 6%, transparent) 100%
+          ) !important;
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
+        }
+        .studio-polish .cursor-unified-tab.is-active:hover {
+          background: var(--studio-chrome-glow-bg-fade-hover) !important;
         }
         .studio-polish .cursor-unified-tab:hover:not(.is-active):not(.cursor-unified-tab-new)::before {
           content: none !important;
@@ -21375,11 +21385,9 @@ function ActivePane({
     return wrapPane(
       <AdminWorkspacePane
         tab={adminTab}
-        currentUser={currentUser}
         pricing={pricing}
         payments={adminPayments ?? payments}
         customers={adminCustomers}
-        onOpenSettings={onOpenSettings}
         onOpenAdminTab={onOpenAdminTab}
         onSeedStylePresets={onSeedStylePresets}
         onGeneratePresetThumbnails={onGeneratePresetThumbnails}
@@ -21893,7 +21901,6 @@ function AdminWorkspacePane({
   pricing,
   payments,
   customers,
-  onOpenSettings,
   onOpenAdminTab,
   onSeedStylePresets,
   onGeneratePresetThumbnails,
@@ -22006,15 +22013,6 @@ function AdminWorkspacePane({
             </button>
           ))}
         </nav>
-        <button
-          type="button"
-          className="cursor-icon-btn cursor-icon-btn-sm"
-          onClick={onOpenSettings}
-          title="Settings"
-          aria-label="Settings"
-        >
-          <Settings className="h-3.5 w-3.5" />
-        </button>
       </header>
       <div className="studio-admin-body">
         <div className="studio-admin-workspace">
