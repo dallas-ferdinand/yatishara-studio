@@ -558,12 +558,13 @@ body {
   border: 0;
   border-radius: 999px;
   background: #fff;
+  opacity: 0;
   box-shadow:
-    0 6px 18px rgba(0, 0, 0, 0.18),
-    0 1px 4px rgba(0, 0, 0, 0.1);
-  /* No transform transition — position + spin stay 1:1 with the finger. */
-  transition: opacity 0.12s ease;
+    0 4px 14px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  /* Transform driven from JS every frame — no CSS transition on it. */
   will-change: transform, opacity;
+  transform: translate3d(0, 0, 0) scale(0.9);
 }
 
 .ys-ptr-mark {
@@ -574,13 +575,13 @@ body {
   margin: 0;
   object-fit: contain;
   will-change: transform;
-  /* Rotation comes from inline style while scrubbing (bidirectional). */
+  /* Rotation scrubbed from JS while pulling (bidirectional). */
   animation: none;
 }
 
 /* Free-spin only after a reload is actually triggered. */
 .ys-ptr-puck.is-refreshing .ys-ptr-mark {
-  animation: ys-ptr-spin 0.85s linear infinite;
+  animation: ys-ptr-spin 0.9s linear infinite;
 }
 
 @keyframes ys-ptr-spin {

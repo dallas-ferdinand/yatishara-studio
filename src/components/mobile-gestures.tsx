@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { mercuryLogoAssets } from "@/lib/brand-assets";
 
-const PULL_START_SLOP = 12;
+const PULL_START_SLOP = 10;
 const PULL_THRESHOLD = 84;
-const PULL_MAX = 128;
-/** Degrees of mark rotation per px of eased pull — scrubbed both ways with the finger. */
-const SPIN_DEG_PER_PX = 5.5;
+const PULL_MAX = 118;
+/** Degrees of mark rotation per px — still 1:1 with pull, just a touch calmer. */
+const SPIN_DEG_PER_PX = 4.2;
 const MARK_PX = 22;
 const logo = mercuryLogoAssets(MARK_PX, "light");
 
@@ -36,6 +36,20 @@ function anyAncestorScrolled(target: EventTarget | null): boolean {
   return (document.scrollingElement?.scrollTop ?? 0) > 0;
 }
 
+/** Finger travel → pull distance with light rubber-band past the reload line. */
+function mapPull(dy: number): number {
+  const linear = Math.max(0, (dy - PULL_START_SLOP) * 0.52);
+  if (linear <= PULL_THRESHOLD) return linear;
+  const over = linear - PULL_THRESHOLD;
+  // Soft resistance — still increases (and reverses) with the finger.
+  const resisted = PULL_THRESHOLD + (over * 28) / (28 + over);
+  return Math.min(PULL_MAX, resisted);
+}
+
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
+}
+
 /**
  * Mobile gesture layer:
  * - Kills browser pinch/double-tap page zoom everywhere (UI must never scale).
@@ -45,14 +59,34 @@ function anyAncestorScrolled(target: EventTarget | null): boolean {
  *   only after a reload is triggered.
  */
 export function MobileGestures() {
-  const [pull, setPull] = useState(0);
-  const [pulling, setPulling] = useState(false);
+  const [active, setActive] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const pullRef = useRef(0);
   const refreshingRef = useRef(false);
   const unwindRafRef = useRef(0);
-  pullRef.current = pull;
+  const puckRef = useRef<HTMLDivElement | null>(null);
+  const markRef = useRef<HTMLImageElement | null>(null);
   refreshingRef.current = refreshing;
+
+  const paintPull = (px: number, opts?: { refreshing?: boolean }) => {
+    pullRef.current = px;
+    const puck = puckRef.current;
+    const mark = markRef.current;
+    if (!puck) return;
+    const progress = Math.min(1, px / PULL_THRESHOLD);
+    // Tiny grow as you pull — keeps the lock feel without popping.
+    const scale = 0.9 + 0.1 * progress;
+    const opacity = opts?.refreshing
+      ? 1
+      : px <= 0
+        ? 0
+        : Math.min(1, 0.28 + progress * 0.85);
+    puck.style.transform = `translate3d(0, ${px.toFixed(2)}px, 0) scale(${scale.toFixed(4)})`;
+    puck.style.opacity = opacity.toFixed(3);
+    if (mark && !refreshingRef.current) {
+      mark.style.transform = `rotate(${(px * SPIN_DEG_PER_PX).toFixed(2)}deg)`;
+    }
+  };
 
   // Page-zoom guard. iOS Safari tabs ignore user-scalable=no, so block the
   // gesture events too. Multi-touch moves are prevented globally — custom
@@ -88,7 +122,7 @@ export function MobileGestures() {
     let startX = 0;
     let startY = 0;
     let armed = false;
-    let active = false;
+    let dragging = false;
 
     const cancelUnwind = () => {
       if (unwindRafRef.current) {
@@ -97,27 +131,26 @@ export function MobileGestures() {
       }
     };
 
-    /** Snap pull → 0 so the mark unwinds the opposite direction. */
+    /** Settle pull → 0 so the mark unwinds the opposite direction. */
     const unwindPull = () => {
       cancelUnwind();
       const from = pullRef.current;
-      if (from <= 0) {
-        setPull(0);
+      if (from <= 0.5) {
+        paintPull(0);
+        setActive(false);
         return;
       }
       const started = performance.now();
-      const duration = 180;
+      const duration = 260;
       const tick = (now: number) => {
-        const t = Math.min(1, (now - started) / duration);
-        // Ease-out — still scrubbed, just settling.
-        const next = from * (1 - t) * (1 - t);
-        setPull(next);
-        pullRef.current = next;
+        const t = easeOutCubic(Math.min(1, (now - started) / duration));
+        const next = from * (1 - t);
+        paintPull(next);
         if (t < 1) {
           unwindRafRef.current = requestAnimationFrame(tick);
         } else {
-          setPull(0);
-          pullRef.current = 0;
+          paintPull(0);
+          setActive(false);
           unwindRafRef.current = 0;
         }
       };
@@ -125,9 +158,8 @@ export function MobileGestures() {
     };
 
     const reset = () => {
-      active = false;
+      dragging = false;
       armed = false;
-      setPulling(false);
       if (!refreshingRef.current) unwindPull();
     };
 
@@ -141,7 +173,7 @@ export function MobileGestures() {
       const touch = event.touches[0];
       startX = touch.clientX;
       startY = touch.clientY;
-      active = false;
+      dragging = false;
       armed =
         !insideZoomRegion(event.target) &&
         !verticalPanBlocked(event.target) &&
@@ -157,7 +189,7 @@ export function MobileGestures() {
       const touch = event.touches[0];
       const dy = touch.clientY - startY;
       const dx = touch.clientX - startX;
-      if (!active) {
+      if (!dragging) {
         if (dy < -4 || Math.abs(dx) > Math.abs(dy)) {
           armed = false;
           return;
@@ -168,34 +200,32 @@ export function MobileGestures() {
           armed = false;
           return;
         }
-        active = true;
-        setPulling(true);
+        dragging = true;
+        setActive(true);
       }
       if (event.cancelable) event.preventDefault();
-      // Locked to finger: down increases pull/spin, back up decreases (reverse).
-      const eased = Math.min(PULL_MAX, Math.max(0, (dy - PULL_START_SLOP) * 0.55));
-      pullRef.current = eased;
-      setPull(eased);
+      // Locked both ways: paint straight from the finger (no React setState jitter).
+      paintPull(mapPull(dy));
     };
 
     const onTouchEnd = () => {
-      if (!active) {
+      if (!dragging) {
         reset();
         return;
       }
       const distance = pullRef.current;
-      active = false;
+      dragging = false;
       armed = false;
-      setPulling(false);
       if (distance >= PULL_THRESHOLD) {
         cancelUnwind();
         refreshingRef.current = true;
         setRefreshing(true);
-        setPull(PULL_THRESHOLD);
-        pullRef.current = PULL_THRESHOLD;
-        window.location.reload();
+        paintPull(PULL_THRESHOLD, { refreshing: true });
+        // Brief beat so the free-spin is visible before the reload.
+        window.setTimeout(() => {
+          window.location.reload();
+        }, 140);
       } else {
-        // Unwind — mark spins the other way as the puck goes back up.
         unwindPull();
       }
     };
@@ -213,28 +243,20 @@ export function MobileGestures() {
     };
   }, []);
 
-  const visible = pull > 0.5 || refreshing;
-  if (!visible) return null;
+  // Keep the puck mounted while active/refreshing so show/hide isn't a hitch.
+  if (!active && !refreshing) return null;
 
-  const progress = Math.min(1, pull / PULL_THRESHOLD);
-  const spinDeg = pull * SPIN_DEG_PER_PX;
-  const puckStyle = {
-    transform: `translateY(${pull}px)`,
-    opacity: refreshing ? 1 : Math.min(1, 0.45 + progress * 0.8),
-  } as CSSProperties;
-  // Inline rotate so reverse scrub is always live (CSS vars + animation fight this).
-  const markStyle = refreshing
-    ? ({ ["--ys-ptr-spin" as string]: `${spinDeg}deg` } as CSSProperties)
-    : ({ transform: `rotate(${spinDeg}deg)` } as CSSProperties);
+  const spinDeg = pullRef.current * SPIN_DEG_PER_PX;
 
   return (
     <div className="ys-ptr" aria-hidden="true">
       <div
-        className={`ys-ptr-puck${pulling ? " is-pulling" : ""}${refreshing ? " is-refreshing" : ""}`}
-        style={puckStyle}
+        ref={puckRef}
+        className={`ys-ptr-puck${refreshing ? " is-refreshing" : ""}`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          ref={markRef}
           className="ys-ptr-mark"
           src={logo.src}
           srcSet={logo.srcSet}
@@ -244,7 +266,11 @@ export function MobileGestures() {
           height={MARK_PX}
           draggable={false}
           decoding="async"
-          style={markStyle}
+          style={
+            refreshing
+              ? ({ ["--ys-ptr-spin" as string]: `${spinDeg}deg` } as CSSProperties)
+              : undefined
+          }
         />
       </div>
     </div>
