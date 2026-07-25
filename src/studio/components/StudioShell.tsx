@@ -13328,15 +13328,18 @@ export function StudioShell({
           text-transform: uppercase;
           letter-spacing: 0.06em;
         }
-        .studio-admin-status-field select {
-          min-height: 38px;
-          border: 1px solid var(--color-cursor-border-soft);
-          border-radius: var(--cursor-radius-sm, 6px);
-          background: var(--cursor-surface-raised);
-          padding: 0 10px;
-          color: var(--color-cursor-text);
+        .studio-admin-status-field .cursor-select {
+          width: 100%;
+        }
+        .studio-admin-status-field .cursor-select-trigger {
+          width: 100%;
+          max-width: none;
+          height: 34px;
+          justify-content: space-between;
+          padding: 0 8px 0 12px;
+          text-transform: none;
+          letter-spacing: normal;
           font-size: 13px;
-          font-family: inherit;
         }
         .studio-admin-receipt-preview {
           display: grid;
@@ -22274,15 +22277,18 @@ function AdminPaymentSidebar({ payment, onClose, onStatusChange, onRefreshPaywis
         {isLegacyBank ? (
           <label className="studio-admin-status-field">
             <span>Status</span>
-            <select
+            <CursorSelect
               value={payment.status}
-              onChange={(event) => onStatusChange(payment._id, event.target.value)}
-            >
-              <option value="receipt_uploaded">Receipt uploaded</option>
-              <option value="receipt_received">Receipt received</option>
-              <option value="payment_completed">Payment approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
+              ariaLabel="Payment status"
+              align="end"
+              options={[
+                { value: "receipt_uploaded", label: "Receipt uploaded" },
+                { value: "receipt_received", label: "Receipt received" },
+                { value: "payment_completed", label: "Payment approved" },
+                { value: "rejected", label: "Rejected" },
+              ]}
+              onChange={(next) => onStatusChange(payment._id, next)}
+            />
           </label>
         ) : (
           <p className="studio-settings-empty">
