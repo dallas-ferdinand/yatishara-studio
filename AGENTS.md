@@ -11,9 +11,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 Before touching chrome UI, tokens, CSS, or shared components, read
 `docs/DESIGN_SYSTEM.md`. It is the source of truth for shade scale
 (`--mos-page` / `--mos-plate` / `--mos-plate-strong`), borders, radius, typography,
-and the shared components (`CursorSelect`, `CursorTable`). Update that doc **and**
-MercuryOS memory whenever you change a shared pattern. Never bake light-only greys or
-hardcoded `#fff`/`#000` borders into chrome.
+and the shared components (`CursorSelect`, `CursorTable`).
+
+**When a design pattern solidifies** (Dallas confirms a shade/border/component choice),
+update `docs/DESIGN_SYSTEM.md` **and** MercuryOS memory in the same turn — do not leave
+docs/memory stale. Never bake light-only greys or hardcoded `#fff`/`#000` borders into
+chrome. Dropdowns: flat `--mos-plate-strong`, no border; caret = Lucide `ArrowDown`.
 
 ## Micro-commits (mandatory)
 

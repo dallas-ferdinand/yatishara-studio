@@ -38,8 +38,8 @@ Three chrome roles, lightest → darkest. Applied to `:root` by the theme engine
 | Token | Role | Light | Dark |
 |---|---|---|---|
 | `--mos-page` | App canvas / panel background | `#f5f5f7` | `deepen(scheme.bg)` |
-| `--mos-plate` | Cards, tables, **open dropdown panels**, section bars | `#ececf0` | `mix(page, panel)` |
-| `--mos-plate-strong` | **Select/button chips**, menu item hover/active, icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
+| `--mos-plate` | Cards, tables, section bars | `#ececf0` | `mix(page, panel)` |
+| `--mos-plate-strong` | **Selects, open dropdown panels**, empty icon chips | `#e1e1e7` | `deepen(scheme.raised)` |
 
 Supporting tokens (also both modes):
 
@@ -55,20 +55,24 @@ Supporting tokens (also both modes):
 
 ```css
 .app-canvas       { background: var(--mos-page); }
-.card, .table-wrap, .section-bar,
-.dropdown-panel   { background: var(--mos-plate); }
-.select-trigger, .menu-item:hover, .menu-item.active,
+.card, .table-wrap, .section-bar { background: var(--mos-plate); }
+.select-trigger, .dropdown-panel,
 .empty-icon-chip  { background: var(--mos-plate-strong); }
+.menu-item:hover, .menu-item.active { background: var(--mos-active); }
 ```
 
-### Select / dropdown shade split (locked decision)
+### Select / dropdown (locked decision)
 
-- **Closed trigger / button** → `--mos-plate-strong` (the *darker* chip).
-- **Open menu panel** → `--mos-plate` (lighter than the button).
-- **Menu item hover / active** → `--mos-plate-strong` (darker than the panel again).
+- **Trigger + open menu panel** → flat `--mos-plate-strong`, **no border, no shadow**.
+- **Menu item hover / active** → `--mos-active` (one step darker than the panel).
+- **Caret icon** → Lucide `ArrowDown` (same as StudioShell / profile chrome). **Not**
+  `Icon name="chevDown"` / chevron.
 
-Rationale: the resting control reads as a solid button, the open surface reads as a lifted
-sheet, and the highlighted row pops against it.
+```tsx
+import { ArrowDown } from "lucide-react";
+// …inside trigger:
+<ArrowDown className="cursor-select-arrow" aria-hidden="true" />
+```
 
 ---
 
@@ -80,7 +84,7 @@ Hairlines are low-contrast rgba, never lightened hex stripes (`hairlineBorder()`
 |---|---|---|---|
 | `--mos-border` / `--color-cursor-border` | 0.11 | 0.07 | Default control & card borders |
 | `--mos-border-soft` / `--color-cursor-border-soft` | 0.075 | 0.04 | Table row dividers, icon chip rings |
-| `--mos-border-subtle` | 0.09 | 0.05 | Dropdown panels, quiet separators |
+| `--mos-border-subtle` | 0.09 | 0.05 | Quiet separators (not dropdowns — those are borderless) |
 | `--cursor-border-focus` | accent-mixed | accent-mixed | Focus ring border |
 
 Rules:
@@ -133,9 +137,9 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 - Root class **`cursor-select-menu`** — **never `cursor-select`** (that styles native
   `<select>` and double-boxes the control).
-- Variants: `ghost` (default, compact chrome filter) and `field` (full-width bordered, forms/sidebars).
+- Variants: `ghost` (default, compact chrome filter) and `field` (full-width taller, forms/sidebars).
 - Props: `value`, `options[{value,label}]`, `onChange`, `ariaLabel`, `align`, `variant`, `disabled`.
-- Shades follow the [select split](#select--dropdown-shade-split-locked-decision).
+- Flat darker fill, no border; caret is Lucide `ArrowDown` (see [select / dropdown](#select--dropdown-locked-decision)).
 
 ```tsx
 <CursorSelect ariaLabel="Status" value={f} onChange={setF}
@@ -164,8 +168,8 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 | Class | Purpose | Key shades |
 |---|---|---|
-| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate`, item hover `--mos-plate-strong` |
-| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate` |
+| `.cursor-dropdown` / `.cursor-dropdown-item` | Menu panel + rows | panel `--mos-plate-strong` (no border/shadow), item hover `--mos-active` |
+| `.cursor-tab-context-menu`, `.desk-explorer-view-dropdown` | Floating menus | `--mos-plate-strong`, no border/shadow |
 | `.cursor-settings-action` | Standard button/action | border-soft, hover `--color-cursor-hover` |
 | `.cursor-icon-btn` (`-sm`) | 24px icon button | transparent → hover wash |
 | `.cursor-input`, `textarea.cursor-input` | Text field | `--cursor-surface-input`, focus ring |
@@ -188,12 +192,16 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 **Do**
 - Use `--mos-page` / `--mos-plate` / `--mos-plate-strong` for chrome surfaces.
 - Use `CursorSelect` and `CursorTable` instead of hand-rolled selects/tables.
-- Keep borders on `--color-cursor-border*` / `--mos-border*`.
+- Use Lucide `ArrowDown` as the select caret (not chevron).
+- Keep card/table borders on `--color-cursor-border*` / `--mos-border*`.
 - Mirror every token change in `applyDeskTokens()` **and** the boot inline script.
+- When a pattern solidifies, update this doc **and** MercuryOS memory in the same turn.
 
 **Don't**
 - Hardcode light-only greys (`#ececf0`, `#e1e1e7`, `#f5f5f7`) behind `[data-appearance="light"]`.
 - Hardcode `#fff`/`#000` borders on glass or chrome.
+- Put a stroke or pop-shadow on dropdown menus (they are flat).
+- Use `Icon name="chevDown"` on selects.
 - Use `cursor-select` as the CursorSelect root.
 - Put table wraps on `--mos-plate-strong` (that's for chips/menus, not the plate).
 
@@ -204,7 +212,8 @@ Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !importan
 These are mirrored as MercuryOS pinned/namespaced decisions (`namespace: yatishara-studio`).
 Update memory when you change a rule here:
 
-- **698** — Chrome shade steps are semantic tokens in both modes (page/plate/plate-strong; select split).
+- **702** (pinned) — Design system pointer → `docs/DESIGN_SYSTEM.md`.
+- **698** — Shade scale + flat borderless dropdowns + `ArrowDown` caret.
 - **692** — CursorSelect root = `cursor-select-menu`, never `cursor-select`.
 - **700** — Table empty = `CursorTable` empty + centered icon chip.
 - **694** — Glass/chrome borders = `--color-cursor-border`, never hardcoded white.

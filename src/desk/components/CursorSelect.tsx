@@ -1,7 +1,7 @@
 "use client";
 
+import { ArrowDown } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Icon } from "./Icons";
 
 export type CursorSelectOption = {
   value: string;
@@ -78,7 +78,7 @@ export function CursorSelect({
         }}
       >
         <span className="cursor-select-label">{active?.label ?? "Select"}</span>
-        <Icon name="chevDown" size={11} />
+        <ArrowDown className="cursor-select-arrow" aria-hidden="true" />
       </button>
       {open ? (
         <div

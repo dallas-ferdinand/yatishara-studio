@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 
+import { ArrowDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./Icons";
 
@@ -50,7 +51,7 @@ export function ExplorerTypeFilter({ value = "all", onChange }) {
       >
         <Icon name={active.icon} size={13} />
         <span>{active.label}</span>
-        <Icon name="chevDown" size={11} />
+        <ArrowDown className="cursor-select-arrow" aria-hidden="true" />
       </button>
       {filtered ? (
         <button
