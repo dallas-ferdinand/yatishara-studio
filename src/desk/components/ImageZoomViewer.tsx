@@ -23,6 +23,9 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
   const scaleInputRef = useRef(null);
   const scaleRef = useRef(scale);
   const dragRef = useRef({ active: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+  const pointersRef = useRef(new Map());
+  const pinchRef = useRef(null);
+  const lastTapRef = useRef({ time: 0, x: 0, y: 0 });
   scaleRef.current = scale;
 
   const canPan = scale > 1.001;
@@ -108,7 +111,25 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
 
   const onPointerDown = useCallback(
     (e) => {
-      if (!canPan || e.button !== 0) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (pointersRef.current.size === 2) {
+        // Two fingers — switch from drag to pinch.
+        const [a, b] = [...pointersRef.current.values()];
+        pinchRef.current = {
+          startDist: Math.hypot(a.x - b.x, a.y - b.y),
+          startScale: scaleRef.current,
+        };
+        dragRef.current.active = false;
+        e.preventDefault();
+        return;
+      }
+      if (!canPan) return;
       dragRef.current = {
         active: true,
         startX: e.clientX,
@@ -116,29 +137,69 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
         panX: pan.x,
         panY: pan.y,
       };
-      e.currentTarget.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
     [canPan, pan.x, pan.y],
   );
 
   const onPointerMove = useCallback((e) => {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pinchRef.current && pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinchRef.current.startDist > 0) {
+        applyScale(
+          pinchRef.current.startScale * (dist / pinchRef.current.startDist),
+          { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        );
+      }
+      e.preventDefault();
+      return;
+    }
     if (!dragRef.current.active) return;
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     setPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy });
     e.preventDefault();
-  }, []);
+  }, [applyScale]);
 
   const endDrag = useCallback((e) => {
-    if (!dragRef.current.active) return;
-    dragRef.current.active = false;
+    const start = pointersRef.current.get(e.pointerId);
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+
+    // Double-tap toggles zoom (touch/pen only — desktop keeps wheel + buttons).
+    if (
+      e.type === "pointerup" &&
+      e.pointerType !== "mouse" &&
+      start &&
+      Math.hypot(e.clientX - start.x, e.clientY - start.y) < 12 &&
+      pointersRef.current.size === 0 &&
+      !pinchRef.current
+    ) {
+      const now = Date.now();
+      const last = lastTapRef.current;
+      if (
+        now - last.time < 320 &&
+        Math.hypot(e.clientX - last.x, e.clientY - last.y) < 32
+      ) {
+        lastTapRef.current = { time: 0, x: 0, y: 0 };
+        if (scaleRef.current > 1.001) fit();
+        else applyScale(2, { x: e.clientX, y: e.clientY });
+      } else {
+        lastTapRef.current = { time: now, x: e.clientX, y: e.clientY };
+      }
+    }
+
+    if (dragRef.current.active) dragRef.current.active = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [applyScale, fit]);
 
   const commitScaleDraft = useCallback(() => {
     const raw = String(scaleDraft).trim().replace(/%$/, "");
@@ -212,6 +273,7 @@ export function ImageZoomViewer({ thumbUrl, fullUrl, name: _name, onDownload }) 
       <div
         ref={stageRef}
         className={`desk-image-viewer-stage${canPan ? " is-pannable" : ""}`}
+        data-allow-zoom=""
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
