@@ -440,11 +440,13 @@
   padding: 0 2px;
 }
 
+/* Logo-only brand — shown in catalog topbar on mobile only */
 .public-offers-topbar-mobile-brand {
   display: none;
   min-width: 0;
 }
 
+/* Inline header search — desktop: hidden; mobile catalog: shown */
 .public-offers-topbar-search {
   display: none;
   align-items: center;
@@ -452,7 +454,7 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 26px;
-  padding: 0 8px;
+  padding: 0 10px;
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: var(--cursor-radius-pill, 999px);
   background: var(--mos-plate, var(--cursor-surface));
@@ -621,7 +623,7 @@
   min-height: 34px;
 }
 
-/* Mobile filter sheet — Studio floating menu pattern */
+/* Desktop: sheet/filter control stay off; mobile media turns them on */
 .public-offers-filters-sheet {
   display: none;
 }
@@ -1114,6 +1116,8 @@
 }
 
 @media (max-width: 860px) {
+  /* --- Creative Network mobile layout --- */
+
   .public-offers-detail {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1122,10 +1126,12 @@
     flex-direction: column;
   }
 
+  /* Left filter rail becomes a floating sheet instead */
   .public-offers-rail {
-    display: none;
+    display: none !important;
   }
 
+  /* Header: logo + inline search + icon filter + icon Studio */
   .public-offers-topbar-search {
     display: flex;
   }
@@ -1134,7 +1140,22 @@
     display: inline-flex;
   }
 
-  /* Value props: title chips only, centered inline — no long copy on mobile. */
+  .public-offers-topbar-mobile-brand {
+    display: block;
+    min-width: 0;
+  }
+
+  .public-offers-topbar-mobile-brand .public-offers-sidebar-brand-text {
+    display: none;
+  }
+
+  .public-offers-brand strong,
+  .public-offers-brand span,
+  .public-offers-btn-label {
+    display: none;
+  }
+
+  /* Value props → centered inline title chips (no long copy) */
   .public-offers-values {
     display: flex;
     flex-wrap: wrap;
@@ -1148,17 +1169,22 @@
     flex: 0 0 auto;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px 8px 8px;
+    padding: 6px 12px 6px 6px;
+    border-radius: var(--cursor-radius-pill, 999px);
+  }
+
+  .public-offers-value > div {
+    display: contents;
   }
 
   .public-offers-value-icon {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .public-offers-value-icon svg {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
   }
 
   .public-offers-value strong {
@@ -1172,21 +1198,7 @@
     display: none;
   }
 
-  .public-offers-topbar-mobile-brand {
-    display: block;
-    min-width: 0;
-  }
-
-  .public-offers-brand strong,
-  .public-offers-brand span,
-  .public-offers-btn-label {
-    display: none;
-  }
-
-  .public-offers-topbar-mobile-brand .public-offers-sidebar-brand-text {
-    display: none;
-  }
-
+  /* Floating filter sheet (Studio-style inset panel) */
   .public-offers-filters-sheet {
     display: block;
     position: fixed;
@@ -1199,6 +1211,8 @@
     position: absolute;
     inset: 0;
     border: 0;
+    margin: 0;
+    padding: 0;
     background: rgba(0, 0, 0, 0.42);
     cursor: pointer;
   }
@@ -1303,7 +1317,7 @@
   .public-offers-presets {
     width: calc(100% - 16px);
     margin: 0 8px;
-    padding: 0;
+    padding: 0 0 2px;
   }
 
   .public-offers-rail-clear {
