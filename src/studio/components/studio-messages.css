@@ -281,14 +281,14 @@
   display: none;
 }
 
-/* —— Shared rows (sidebar + inline list) — WhatsApp flat list —— */
+/* —— Shared rows (sidebar + inline list) — level-2 grey contained cards —— */
 
 .studio-dm-conversations {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
   margin: 0;
-  padding: 0;
+  padding: 8px;
   list-style: none;
 }
 
@@ -299,24 +299,29 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: 0;
-  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: transparent;
+  padding: 8px 10px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
 
 .studio-dm-row:hover {
   background: var(--color-cursor-hover, var(--mos-hover));
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
 }
 
 .studio-dm-row.is-active {
-  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 10%, transparent);
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 46%, var(--mos-border));
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 8%,
+    var(--cursor-surface-raised, var(--mos-surface))
+  );
 }
 
 .studio-dm-row-copy {
@@ -404,7 +409,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0;
+  padding: 0 0 8px;
   scrollbar-width: none;
 }
 
