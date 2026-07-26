@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
+import { ensureMessagesFolder } from "./folders";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { ensureProfileForUser } from "./lib/profileEnsure";
 import { toNameCase } from "./lib/profileIdentity";
@@ -262,12 +263,16 @@ export const ensureStudioDefaults = authedMutation({
   }),
   handler: async (ctx) => {
     const now = Date.now();
-    const existingRoot = await ctx.db
+    const topFolders = await ctx.db
       .query("folders")
       .withIndex("by_owner_and_parent", (q) =>
         q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
       )
-      .first();
+      .collect();
+    // Prefer a normal workspace root — never treat Messages (system) as the Studio root.
+    const existingRoot = topFolders.find(
+      (folder) => !folder.deletedAt && folder.systemKind !== "messages",
+    );
 
     const rootFolderId =
       existingRoot?._id ??
@@ -281,6 +286,8 @@ export const ensureStudioDefaults = authedMutation({
         createdAt: now,
         updatedAt: now,
       }));
+
+    await ensureMessagesFolder(ctx, ctx.user._id, rootFolderId);
 
     const existingBilling = await ctx.db
       .query("billingAccounts")

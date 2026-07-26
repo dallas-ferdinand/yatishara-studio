@@ -327,6 +327,19 @@ export async function beginAssetPurge(
       updatedAt: now,
     });
   }
+
+  // Orphan DM bubbles that referenced this media — keep the message row.
+  const dmHits = await ctx.db
+    .query("dmMessages")
+    .withIndex("by_asset", (q) => q.eq("assetId", asset._id))
+    .collect();
+  for (const message of dmHits) {
+    await ctx.db.patch(message._id, {
+      assetId: undefined,
+      audioStorageId: undefined,
+      imageStorageId: undefined,
+    });
+  }
 }
 
 export function storageUploadsBlocked(

@@ -2480,9 +2480,17 @@ export function StudioShell({
 
     const rootFolderId = navTrail[0]?.id;
     if (rootFolderId && activeFolderId === rootFolderId) {
+      const rest = [...(entries.entries ?? [])];
+      const messagesIdx = rest.findIndex((entry) => entry.studioKind === "messages");
+      const messagesEntry =
+        messagesIdx >= 0 ? rest.splice(messagesIdx, 1)[0] : null;
       return {
         ...entries,
-        entries: [TRASH_FOLDER_ENTRY, ...(entries.entries ?? [])],
+        entries: [
+          TRASH_FOLDER_ENTRY,
+          ...(messagesEntry ? [messagesEntry] : []),
+          ...rest,
+        ],
       };
     }
     return entries;
@@ -3257,7 +3265,8 @@ export function StudioShell({
           name: entry.name,
           kind,
           mimeType: entry.mimeType || "",
-          signedThumbnailUrl: entry.thumbnailUrl,
+          signedThumbnailUrl:
+            entry.thumbnailUrl || entry.thumbnailLqipUrl || undefined,
           path: entry.path,
         };
         const max = assetPickRequest.maxSelected ?? 10;
@@ -3514,12 +3523,20 @@ export function StudioShell({
   }
 
   function renameEntry(entry) {
-    if (!entry || isTrashNav) return;
+    if (
+      !entry ||
+      isTrashNav ||
+      entry.studioKind === "messages" ||
+      entry.systemKind === "messages"
+    ) {
+      return;
+    }
     setRenameTarget(entry);
   }
 
   async function applyEntryRename(entry, nextName) {
     if (!entry) return;
+    if (entry.studioKind === "messages" || entry.systemKind === "messages") return;
     const trimmed = String(nextName ?? "").trim();
     if (!trimmed) return;
     if (entry.studioKind === "folder") {
@@ -3693,7 +3710,15 @@ export function StudioShell({
   }
 
   async function trashEntry(entry) {
-    if (!entry || isTrashNav || entry.studioKind === "trash") return;
+    if (
+      !entry ||
+      isTrashNav ||
+      entry.studioKind === "trash" ||
+      entry.studioKind === "messages" ||
+      entry.systemKind === "messages"
+    ) {
+      return;
+    }
     const ok = window.confirm(`Move "${entry.name}" to trash?`);
     if (!ok) return;
     if (entry.studioKind === "folder") {
@@ -3768,8 +3793,14 @@ export function StudioShell({
     let source;
     try { source = JSON.parse(raw); } catch { return; }
     if (!source?.studioKind || !source?.studioId) return;
+    // Messages folder itself cannot be moved.
+    if (source.studioKind === "messages" || source.systemKind === "messages") return;
     if (source.studioId === targetEntry.studioId) return;
-    if (targetEntry.type === "dir" || targetEntry.studioKind === "folder") {
+    if (
+      targetEntry.type === "dir" ||
+      targetEntry.studioKind === "folder" ||
+      targetEntry.studioKind === "messages"
+    ) {
       void moveEntryToFolder(source, targetEntry.studioId);
     }
   }
@@ -3780,6 +3811,7 @@ export function StudioShell({
     let source;
     try { source = JSON.parse(raw); } catch { return; }
     if (!source?.studioKind || !source?.studioId) return;
+    if (source.studioKind === "messages" || source.systemKind === "messages") return;
     let targetId;
     if (crumbIndex === 0) {
       targetId = navTrail[0]?.id;
@@ -3793,6 +3825,7 @@ export function StudioShell({
   }
 
   async function moveEntryToFolder(source, targetFolderId) {
+    if (source.studioKind === "messages" || source.systemKind === "messages") return;
     try {
       if (source.studioKind === "folder") {
         await updateFolder({ folderId: source.studioId, parentId: targetFolderId });
@@ -16647,40 +16680,6 @@ export function StudioShell({
           maxSize={STUDIO_MAIN_SIDEBAR_MAX}
         >
       <aside className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}`}>
-        {pickingFromFiles ? (
-          <div className="studio-asset-pick-banner" role="status">
-            <span className="studio-asset-pick-banner-copy">
-              {assetPickSelected.length > 0
-                ? `${assetPickSelected.length} selected`
-                : assetPickRequest.title || "Pick files from your Files"}
-            </span>
-            <button
-              type="button"
-              className="studio-asset-pick-banner-cancel"
-              onClick={() => endAssetPick("cancel", assetPickRequest)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="studio-asset-pick-banner-confirm"
-              disabled={assetPickSelected.length === 0}
-              onClick={() => {
-                const req = assetPickRequest;
-                const picked = assetPickSelected;
-                setAssetPickRequest(null);
-                setAssetPickSelected([]);
-                if (req?.onConfirm) {
-                  req.onConfirm(picked);
-                } else if (picked[0]) {
-                  req?.onPick?.(picked[0]);
-                }
-              }}
-            >
-              Confirm
-            </button>
-          </div>
-        ) : null}
         <div className={STYLE.panelHead}>
           <StudioSidebarBrand />
           {!effectiveSocialRail && !effectiveMessagesRail ? (
@@ -16756,6 +16755,82 @@ export function StudioShell({
             }
           />
         )}
+        {pickingFromFiles ? (
+          <div className="studio-asset-pick-chrome">
+            {assetPickSelected.length > 0 ? (
+              <div
+                className="studio-asset-pick-selected"
+                aria-label={`${assetPickSelected.length} selected`}
+              >
+                <div className="studio-asset-pick-selected-scroller">
+                  {assetPickSelected.map((item) => {
+                    const thumb = item.signedThumbnailUrl;
+                    return (
+                      <div
+                        key={item._id}
+                        className="studio-asset-pick-selected-thumb"
+                        title={item.name}
+                      >
+                        {thumb ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={thumb} alt="" />
+                        ) : item.kind === "video" ? (
+                          <Video aria-hidden="true" />
+                        ) : (
+                          <ImageIcon aria-hidden="true" />
+                        )}
+                        <button
+                          type="button"
+                          className="studio-asset-pick-selected-remove"
+                          aria-label={`Remove ${item.name}`}
+                          onClick={() =>
+                            setAssetPickSelected((prev) =>
+                              prev.filter((picked) => picked._id !== item._id),
+                            )
+                          }
+                        >
+                          <X aria-hidden="true" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <div className="studio-asset-pick-footer" role="status">
+              <span className="studio-asset-pick-footer-copy">
+                {assetPickSelected.length > 0
+                  ? `${assetPickSelected.length} selected`
+                  : assetPickRequest.title || "Pick files from your Files"}
+              </span>
+              <button
+                type="button"
+                className="studio-asset-pick-footer-cancel"
+                onClick={() => endAssetPick("cancel", assetPickRequest)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="studio-asset-pick-footer-confirm"
+                disabled={assetPickSelected.length === 0}
+                onClick={() => {
+                  const req = assetPickRequest;
+                  const picked = assetPickSelected;
+                  setAssetPickRequest(null);
+                  setAssetPickSelected([]);
+                  if (req?.onConfirm) {
+                    req.onConfirm(picked);
+                  } else if (picked[0]) {
+                    req?.onPick?.(picked[0]);
+                  }
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        ) : null}
       </aside>
         </Panel>
         ) : null}
@@ -25087,6 +25162,7 @@ function buildFlatEntries({ folder, parent, loading, folders, assets, documents,
 }
 
 function folderToEntry(folder) {
+  const isMessages = folder.systemKind === "messages";
   return {
     type: "dir",
     name: folder.name,
@@ -25094,8 +25170,9 @@ function folderToEntry(folder) {
     displayPath: displayWorkspacePath(studioPathForFolder(folder)),
     modified: folder.updatedAt,
     mtimeMs: folder.updatedAt,
-    studioKind: "folder",
+    studioKind: isMessages ? "messages" : "folder",
     studioId: folder._id,
+    systemKind: folder.systemKind,
     peekItems: folder.peekItems ?? [],
   };
 }

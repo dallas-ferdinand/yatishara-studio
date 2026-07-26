@@ -1715,7 +1715,10 @@ export const trashItemForApi = internalMutation({
         if (folderId === args.sandboxFolderId) {
           throw new Error("Cannot trash the API workspace root folder");
         }
-        await requireFolderForUser(ctx, args.userId, folderId, args.sandboxFolderId);
+        const folder = await requireFolderForUser(ctx, args.userId, folderId, args.sandboxFolderId);
+        if (folder.systemKind === "messages") {
+          throw new Error("Cannot trash the Messages folder");
+        }
         await ctx.db.patch(folderId, { deletedAt: now, updatedAt: now });
         return null;
       }

@@ -5,12 +5,13 @@
  */
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { peerIdsInLabel } from "./dmLabels";
 import {
   assertCanMessagePeer,
   sellerTagForUser,
 } from "./dmPeerPanel";
+import { signBunnyFullUrl } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { hydrateSocialPeople } from "./profiles";
 
@@ -68,6 +69,73 @@ function replyPreviewBody(row: Doc<"dmMessages">): string {
   return body.length > REPLY_BODY_MAX
     ? `${body.slice(0, REPLY_BODY_MAX)}…`
     : body;
+}
+
+/** Resolve playable URL for a DM media row (asset preferred, legacy storage fallback). */
+async function resolveDmMediaUrls(
+  ctx: QueryCtx,
+  row: Doc<"dmMessages">,
+  expiresUnix: number,
+): Promise<{ audioUrl?: string; imageUrl?: string; contentType?: string }> {
+  const kind = row.kind ?? "text";
+  if (row.assetId) {
+    const asset = await ctx.db.get(row.assetId);
+    if (
+      asset &&
+      !asset.purgedAt &&
+      asset.bunnyPath &&
+      (asset.storageStatus === "ready" || asset.byteSize != null)
+    ) {
+      const url = await signBunnyFullUrl(
+        asset.bunnyPath,
+        expiresUnix,
+        asset.kind,
+      );
+      if (kind === "voice") {
+        return { audioUrl: url, contentType: asset.mimeType };
+      }
+      if (kind === "image") {
+        return {
+          imageUrl: url,
+          contentType: row.contentType ?? asset.mimeType,
+        };
+      }
+    }
+    // Asset missing/purged — orphan stub (no URL).
+    return { contentType: row.contentType };
+  }
+  const audioUrl = row.audioStorageId
+    ? ((await ctx.storage.getUrl(row.audioStorageId)) ?? undefined)
+    : undefined;
+  const imageUrl = row.imageStorageId
+    ? ((await ctx.storage.getUrl(row.imageStorageId)) ?? undefined)
+    : undefined;
+  return { audioUrl, imageUrl, contentType: row.contentType };
+}
+
+async function requireOwnedReadyAsset(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  assetId: Id<"assets">,
+  expectedKind: "image" | "audio",
+): Promise<Doc<"assets">> {
+  const asset = await ctx.db.get(assetId);
+  if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt || asset.purgedAt) {
+    throw new Error("Media not found");
+  }
+  if (asset.kind !== expectedKind) {
+    throw new Error(
+      expectedKind === "image"
+        ? "Only image assets can be sent as photos"
+        : "Only audio assets can be sent as voice notes",
+    );
+  }
+  if (asset.storageStatus === "pending" || asset.storageStatus === "failed") {
+    throw new Error("Upload is not ready yet — try again");
+  }
+  if (!asset.bunnyPath) {
+    throw new Error("Media upload is incomplete");
+  }
+  return asset;
 }
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -699,6 +767,8 @@ export const listMessages = authedQuery({
   args: {
     conversationId: v.id("dmConversations"),
     limit: v.optional(v.number()),
+    /** Bunny URL expiry — membership-signed for peer playback. */
+    expiresUnix: v.number(),
   },
   returns: v.array(
     v.object({
@@ -730,6 +800,7 @@ export const listMessages = authedQuery({
       conversation,
       ctx.user._id,
     );
+    const expiresUnix = args.expiresUnix;
     const limit = Math.min(Math.max(args.limit ?? 120, 1), MESSAGES_PAGE_MAX);
     const rows = await ctx.db
       .query("dmMessages")
@@ -764,39 +835,29 @@ export const listMessages = authedQuery({
     await Promise.all(
       replyDocs.map(async (doc) => {
         if (!doc) return;
-        const audioUrl = doc.audioStorageId
-          ? ((await ctx.storage.getUrl(doc.audioStorageId)) ?? undefined)
-          : undefined;
-        const imageUrl = doc.imageStorageId
-          ? ((await ctx.storage.getUrl(doc.imageStorageId)) ?? undefined)
-          : undefined;
+        const media = await resolveDmMediaUrls(ctx, doc, expiresUnix);
         replyById.set(doc._id, {
           _id: doc._id,
           body: replyPreviewBody(doc),
           kind: doc.kind ?? "text",
           fromMe: doc.senderId === ctx.user._id,
-          audioUrl,
-          imageUrl,
+          audioUrl: media.audioUrl,
+          imageUrl: media.imageUrl,
           durationSec: doc.durationSec,
         });
       }),
     );
     return await Promise.all(
       chronological.map(async (row) => {
-        const audioUrl = row.audioStorageId
-          ? ((await ctx.storage.getUrl(row.audioStorageId)) ?? undefined)
-          : undefined;
-        const imageUrl = row.imageStorageId
-          ? ((await ctx.storage.getUrl(row.imageStorageId)) ?? undefined)
-          : undefined;
+        const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
         const fromMe = row.senderId === ctx.user._id;
         return {
           _id: row._id,
           body: row.body,
           kind: row.kind ?? "text",
-          audioUrl,
-          imageUrl,
-          contentType: row.contentType,
+          audioUrl: media.audioUrl,
+          imageUrl: media.imageUrl,
+          contentType: media.contentType,
           durationSec: row.durationSec,
           fromMe,
           receipt: fromMe
@@ -892,7 +953,10 @@ export const prepareVoiceUpload = authedMutation({
 export const sendVoiceMessage = authedMutation({
   args: {
     conversationId: v.id("dmConversations"),
-    storageId: v.id("_storage"),
+    /** Billable Studio audio asset (preferred). */
+    assetId: v.optional(v.id("assets")),
+    /** Legacy Convex staging blob (pre-Messages-folder clients). */
+    storageId: v.optional(v.id("_storage")),
     durationSec: v.number(),
     replyToMessageId: v.optional(v.id("dmMessages")),
   },
@@ -915,6 +979,15 @@ export const sendVoiceMessage = authedMutation({
     ) {
       throw new Error("Voice notes must be between 1 second and 5 minutes");
     }
+    if (!args.assetId && !args.storageId) {
+      throw new Error("Voice note media is required");
+    }
+    if (args.assetId) {
+      await requireOwnedReadyAsset(ctx, args.assetId, "audio");
+    } else if (args.storageId) {
+      const meta = await ctx.db.system.get("_storage", args.storageId);
+      if (!meta) throw new Error("Voice upload not found");
+    }
     const replyToMessageId = await resolveReplyToMessageId(
       ctx,
       conversation._id,
@@ -927,7 +1000,9 @@ export const sendVoiceMessage = authedMutation({
       senderId: ctx.user._id,
       body: "",
       kind: "voice",
-      audioStorageId: args.storageId,
+      ...(args.assetId
+        ? { assetId: args.assetId }
+        : { audioStorageId: args.storageId! }),
       durationSec: Math.round(args.durationSec * 10) / 10,
       ...(replyToMessageId ? { replyToMessageId } : {}),
       createdAt: now,
@@ -946,7 +1021,10 @@ export const sendVoiceMessage = authedMutation({
 export const sendImageMessage = authedMutation({
   args: {
     conversationId: v.id("dmConversations"),
-    storageId: v.id("_storage"),
+    /** Billable Studio image asset (preferred). */
+    assetId: v.optional(v.id("assets")),
+    /** Legacy Convex staging blob (pre-Messages-folder clients). */
+    storageId: v.optional(v.id("_storage")),
     caption: v.optional(v.string()),
     replyToMessageId: v.optional(v.id("dmMessages")),
   },
@@ -962,14 +1040,29 @@ export const sendImageMessage = authedMutation({
       ctx.user._id,
       peerIdOf(conversation, ctx.user._id),
     );
-    const meta = await ctx.db.system.get("_storage", args.storageId);
-    if (!meta) throw new Error("Image upload not found");
-    const contentType = (meta.contentType || "").toLowerCase();
-    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
-      throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
+    if (!args.assetId && !args.storageId) {
+      throw new Error("Image media is required");
     }
-    if (meta.size > IMAGE_MAX_BYTES) {
-      throw new Error("Images must be 10 MB or smaller");
+    let contentType: string | undefined;
+    if (args.assetId) {
+      const asset = await requireOwnedReadyAsset(ctx, args.assetId, "image");
+      contentType = (asset.mimeType || "").toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+        throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
+      }
+      if ((asset.byteSize ?? 0) > IMAGE_MAX_BYTES) {
+        throw new Error("Images must be 10 MB or smaller");
+      }
+    } else {
+      const meta = await ctx.db.system.get("_storage", args.storageId!);
+      if (!meta) throw new Error("Image upload not found");
+      contentType = (meta.contentType || "").toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+        throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
+      }
+      if (meta.size > IMAGE_MAX_BYTES) {
+        throw new Error("Images must be 10 MB or smaller");
+      }
     }
     const caption = (args.caption ?? "").trim();
     if (caption.length > DM_BODY_MAX) {
@@ -987,7 +1080,9 @@ export const sendImageMessage = authedMutation({
       senderId: ctx.user._id,
       body: caption,
       kind: "image",
-      imageStorageId: args.storageId,
+      ...(args.assetId
+        ? { assetId: args.assetId }
+        : { imageStorageId: args.storageId! }),
       contentType,
       ...(replyToMessageId ? { replyToMessageId } : {}),
       createdAt: now,

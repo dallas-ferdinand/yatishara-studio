@@ -19,6 +19,7 @@ const folderReturn = v.object({
   icon: v.string(),
   color: v.optional(v.string()),
   sortOrder: v.number(),
+  systemKind: v.optional(v.literal("messages")),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -462,6 +463,7 @@ export const update = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const folder = await requireFolderOwner(ctx, args.folderId);
+    assertMessagesFolderMutable(folder);
     if (args.parentId !== undefined && args.parentId !== null) {
       if (args.parentId === folder._id) {
         throw new Error("Folder cannot be moved into itself");
@@ -485,7 +487,8 @@ export const moveToTrash = authedMutation({
   args: { folderId: v.id("folders") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId);
+    const folder = await requireFolderOwner(ctx, args.folderId);
+    assertMessagesFolderMutable(folder);
     await ctx.db.patch(args.folderId, {
       deletedAt: Date.now(),
       updatedAt: Date.now(),
@@ -532,3 +535,78 @@ async function requireFolderOwner(
   }
   return folder;
 }
+
+function assertMessagesFolderMutable(folder: Doc<"folders">) {
+  if (folder.systemKind === "messages") {
+    throw new Error("The Messages folder cannot be renamed, moved, or deleted");
+  }
+}
+
+/**
+ * Idempotent Messages folder for DM media (billable Studio assets).
+ * Lives under the user's Studio workspace root when `parentId` is provided.
+ */
+export async function ensureMessagesFolder(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  parentId?: Id<"folders">,
+): Promise<Id<"folders">> {
+  const existing = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_system_kind", (q) =>
+      q.eq("ownerId", userId).eq("systemKind", "messages"),
+    )
+    .first();
+  if (existing && !existing.deletedAt) {
+    // Keep it under the workspace root when one is known.
+    if (
+      parentId &&
+      existing.parentId !== parentId
+    ) {
+      await ctx.db.patch(existing._id, {
+        parentId,
+        updatedAt: Date.now(),
+      });
+    }
+    return existing._id;
+  }
+  // Revive if somehow soft-deleted (shouldn't happen with guards).
+  if (existing?.deletedAt) {
+    await ctx.db.patch(existing._id, {
+      deletedAt: undefined,
+      name: "Messages",
+      ...(parentId ? { parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return existing._id;
+  }
+  const now = Date.now();
+  return await ctx.db.insert("folders", {
+    ownerId: userId,
+    ...(parentId ? { parentId } : {}),
+    name: "Messages",
+    icon: "message",
+    sortOrder: 0,
+    systemKind: "messages",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/** Public mutation so the DM client can reserve uploads into Messages. */
+export const ensureMessagesFolderForMe = authedMutation({
+  args: {},
+  returns: v.id("folders"),
+  handler: async (ctx) => {
+    const topFolders = await ctx.db
+      .query("folders")
+      .withIndex("by_owner_and_parent", (q) =>
+        q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
+      )
+      .collect();
+    const root = topFolders.find(
+      (folder) => !folder.deletedAt && folder.systemKind !== "messages",
+    );
+    return await ensureMessagesFolder(ctx, ctx.user._id, root?._id);
+  },
+});

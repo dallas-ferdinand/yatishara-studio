@@ -1,6 +1,6 @@
 "use client";
 
-import { useConvex, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Check,
@@ -36,9 +36,9 @@ import { useLongPress } from "@/desk/hooks/use-long-press";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
+import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioDmAssignLabelsDialog } from "./StudioDmLabelDialogs";
-import {
-  StudioDmContextMenu,
+import { StudioDmContextMenu,
   type StudioDmContextMenuItem,
 } from "./StudioDmContextMenu";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
@@ -470,20 +470,29 @@ function DmMessageBubble({
   );
 }
 
-async function uploadDmBlob(
-  uploadUrl: string,
-  blob: Blob,
-  contentType: string,
-): Promise<Id<"_storage">> {
-  const result = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": contentType || "application/octet-stream" },
-    body: blob,
+/** Upload a blob into the user's protected Messages folder (billable Bunny asset). */
+async function uploadDmMediaAsset(args: {
+  blob: Blob;
+  name: string;
+  kind: "image" | "audio";
+  mimeType: string;
+  ensureMessagesFolder: () => Promise<Id<"folders">>;
+  reserveUpload: Parameters<typeof uploadStudioAsset>[0]["reserveUpload"];
+  commitStagingUpload: Parameters<typeof uploadStudioAsset>[0]["commitStagingUpload"];
+}): Promise<Id<"assets">> {
+  const folderId = await args.ensureMessagesFolder();
+  const file =
+    args.blob instanceof File
+      ? args.blob
+      : new File([args.blob], args.name, { type: args.mimeType });
+  return await uploadStudioAsset({
+    file,
+    folderId,
+    kind: args.kind,
+    name: args.name,
+    reserveUpload: args.reserveUpload,
+    commitStagingUpload: args.commitStagingUpload,
   });
-  if (!result.ok) throw new Error("Upload failed");
-  const json = (await result.json()) as { storageId: Id<"_storage"> };
-  if (!json.storageId) throw new Error("Upload failed");
-  return json.storageId;
 }
 
 export type DmConversationId = Id<"dmConversations">;
@@ -589,12 +598,14 @@ export function StudioMessagesPane({
   const conversations = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messages = useQuery(
     api.dms.listMessages,
-    conversationId ? { conversationId } : "skip",
+    conversationId ? { conversationId, expiresUnix } : "skip",
   );
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
   const ackDelivered = useMutation(api.dms.ackDelivered);
-  const prepareAttachmentUpload = useMutation(api.dms.prepareAttachmentUpload);
+  const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
+  const reserveUpload = useMutation(api.assets.reserveUpload);
+  const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
 
@@ -633,7 +644,6 @@ export function StudioMessagesPane({
   const [filesPickerExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
-  const convex = useConvex();
 
   const clearPendingImages = useCallback(() => {
     setPendingImages((prev) => {
@@ -741,18 +751,19 @@ export function StudioMessagesPane({
 
       void (async () => {
         try {
-          const uploadUrl = await prepareAttachmentUpload({
-            conversationId: conversationId!,
-          });
-          const storageId = await uploadDmBlob(
-            uploadUrl,
+          const assetId = await uploadDmMediaAsset({
             blob,
-            blob.type || "audio/webm",
-          );
+            name: `voice-${Date.now()}.webm`,
+            kind: "audio",
+            mimeType: blob.type || "audio/webm",
+            ensureMessagesFolder: () => ensureMessagesFolder({}),
+            reserveUpload,
+            commitStagingUpload,
+          });
           const replyId = replyToRef.current?._id;
           await sendVoiceMessage({
             conversationId: conversationId!,
-            storageId,
+            assetId,
             durationSec,
             replyToMessageId: replyId,
           });
@@ -774,9 +785,11 @@ export function StudioMessagesPane({
     }, 250);
   }, [
     conversationId,
+    commitStagingUpload,
+    ensureMessagesFolder,
     finishRecording,
-    prepareAttachmentUpload,
     recState,
+    reserveUpload,
     sendVoiceMessage,
     teardownRecorder,
   ]);
@@ -896,38 +909,31 @@ export function StudioMessagesPane({
   }
 
   async function pickStudioFileAssets(assets: StudioAssetPick[]) {
-    if (assets.length === 0) return;
+    if (assets.length === 0 || !conversationId) return;
     setFilesPickBusy(true);
     setSendError("");
     try {
-      const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 30;
-      const files: File[] = [];
+      let sent = 0;
       for (const asset of assets) {
         const mime = (asset.mimeType || "").toLowerCase();
         if (!ALLOWED_IMAGE_TYPES.has(mime)) {
           setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
           continue;
         }
-        const url = await convex.query(api.assets.signedReadUrl, {
+        await sendImageMessage({
+          conversationId,
           assetId: asset._id,
-          expiresUnix,
+          caption:
+            sent === 0 && draft.trim() ? draft.trim() : undefined,
+          replyToMessageId: sent === 0 ? replyTo?._id : undefined,
         });
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Could not load that file");
-        const blob = await response.blob();
-        if (blob.size > IMAGE_MAX_BYTES) {
-          setSendError("Images must be 10 MB or smaller");
-          continue;
-        }
-        const type = blob.type || mime || "image/jpeg";
-        if (!ALLOWED_IMAGE_TYPES.has(type.toLowerCase())) {
-          setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
-          continue;
-        }
-        files.push(new File([blob], asset.name || "photo.jpg", { type }));
+        sent += 1;
       }
-      appendImageFiles(files);
-      setFilesPickerOpen(false);
+      if (sent > 0) {
+        setDraft("");
+        setReplyTo(null);
+        setFilesPickerOpen(false);
+      }
     } catch (error) {
       setSendError(friendlyConvexError(error, "Could not load that file"));
     } finally {
@@ -946,15 +952,18 @@ export function StudioMessagesPane({
       if (pendingImages.length > 0) {
         for (let i = 0; i < pendingImages.length; i += 1) {
           const pending = pendingImages[i]!;
-          const uploadUrl = await prepareAttachmentUpload({ conversationId });
-          const storageId = await uploadDmBlob(
-            uploadUrl,
-            pending.file,
-            pending.file.type || "image/jpeg",
-          );
+          const assetId = await uploadDmMediaAsset({
+            blob: pending.file,
+            name: pending.file.name || `photo-${Date.now()}.jpg`,
+            kind: "image",
+            mimeType: pending.file.type || "image/jpeg",
+            ensureMessagesFolder: () => ensureMessagesFolder({}),
+            reserveUpload,
+            commitStagingUpload,
+          });
           await sendImageMessage({
             conversationId,
-            storageId,
+            assetId,
             caption: i === 0 ? body || undefined : undefined,
             replyToMessageId: i === 0 ? replyTo?._id : undefined,
           });

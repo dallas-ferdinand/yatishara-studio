@@ -274,13 +274,19 @@ export default defineSchema({
     icon: v.string(),
     color: v.optional(v.string()),
     sortOrder: v.number(),
+    /**
+     * Protected system folders (e.g. Messages for DM media). Cannot be
+     * renamed, moved, or trashed — contents remain normal soft-trashable assets.
+     */
+    systemKind: v.optional(v.literal("messages")),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_and_parent", ["ownerId", "parentId"])
-    .index("by_owner_and_deleted", ["ownerId", "deletedAt"]),
+    .index("by_owner_and_deleted", ["ownerId", "deletedAt"])
+    .index("by_owner_and_system_kind", ["ownerId", "systemKind"]),
 
   assets: defineTable({
     ownerId: v.id("users"),
@@ -1212,9 +1218,14 @@ export default defineSchema({
     kind: v.optional(
       v.union(v.literal("text"), v.literal("voice"), v.literal("image")),
     ),
-    /** Voice note audio blob in Convex storage. */
+    /**
+     * Billable Studio asset (Bunny). New DM media uses this; legacy rows keep
+     * audioStorageId / imageStorageId only.
+     */
+    assetId: v.optional(v.id("assets")),
+    /** Legacy voice note blob in Convex storage (pre-Messages-folder). */
     audioStorageId: v.optional(v.id("_storage")),
-    /** Image (or other image-like) blob in Convex storage. */
+    /** Legacy image blob in Convex storage (pre-Messages-folder). */
     imageStorageId: v.optional(v.id("_storage")),
     /** MIME type for image attachments (e.g. image/jpeg). */
     contentType: v.optional(v.string()),
@@ -1225,6 +1236,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_conversation_and_created", ["conversationId", "createdAt"])
+    .index("by_asset", ["assetId"])
     .searchIndex("search_body", {
       searchField: "body",
     }),

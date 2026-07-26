@@ -462,14 +462,31 @@ export function FileEntryThumb({
 
   if (kind === "dir" || kind === "parent") {
     const isTrash = entry?.studioKind === "trash";
-    if (isTrash) {
+    const isMessages =
+      entry?.studioKind === "messages" || entry?.systemKind === "messages";
+    if (isTrash || isMessages) {
+      const badgeIcon = isTrash ? "trash" : "message";
       visual = (
-        <div className="desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--trash">
-          <div className="desk-file-thumb-fallback desk-file-thumb-fallback--trash">
-            <Icon name="trash" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+        <div
+          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${
+            isTrash
+              ? " desk-file-thumb-peek-wrap--trash"
+              : " desk-file-thumb-peek-wrap--messages"
+          }`}
+        >
+          <div
+            className={`desk-file-thumb-fallback${
+              isTrash ? " desk-file-thumb-fallback--trash" : " desk-file-thumb-fallback--messages"
+            }`}
+          >
+            <Icon
+              name={badgeIcon}
+              size={size === "preview" ? 36 : 26}
+              className="text-cursor-muted"
+            />
           </div>
           <span className="desk-file-thumb-badge" aria-hidden="true">
-            <Icon name="trash" size={14} />
+            <Icon name={badgeIcon} size={14} />
           </span>
           <ThumbPeekLabel name={label} />
         </div>

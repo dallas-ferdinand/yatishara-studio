@@ -70,6 +70,8 @@ function buildMenuItems(entry, {
   const isBlank = entry.type === "blank";
   const isParent = entry.type === "parent";
   const isTrashFolder = entry.studioKind === "trash";
+  const isMessagesFolder =
+    entry.studioKind === "messages" || entry.systemKind === "messages";
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -82,7 +84,7 @@ function buildMenuItems(entry, {
         ...(canCreateFile ? [{ id: "new-file", label: "New note" }] : []),
         ...(canCreateFolder ? [{ id: "new-folder", label: "New folder" }] : []),
       ];
-  if (isTrashFolder) {
+  if (isTrashFolder || isMessagesFolder) {
     items.push({ id: "open", label: "Open folder" });
     return items;
   }

@@ -83,6 +83,7 @@ export function fileIconName(nameOrPath, { isDir = false } = {}) {
 
 export function explorerEntryIcon(entry) {
   if (entry?.studioKind === "trash") return "trash";
+  if (entry?.studioKind === "messages") return "message";
   if (entry?.type === "dir" || entry?.type === "parent") return entry?.type === "parent" ? "chevL" : "folder";
   if (entry?.studioKind === "videoEdit") return "clapperboard";
   if (entry?.studioKind === "element") {
