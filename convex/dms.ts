@@ -54,9 +54,11 @@ function replyPreviewBody(row: Doc<"dmMessages">): string {
   if (kind === "image") {
     const caption = row.body.trim();
     if (!caption) return IMAGE_PREVIEW;
-    return caption.length > REPLY_BODY_MAX
-      ? `${caption.slice(0, REPLY_BODY_MAX)}…`
-      : caption;
+    const clipped =
+      caption.length > REPLY_BODY_MAX
+        ? `${caption.slice(0, REPLY_BODY_MAX)}…`
+        : caption;
+    return `${IMAGE_PREVIEW} · ${clipped}`;
   }
   const body = row.body.trim();
   if (!body) return "";

@@ -334,7 +334,8 @@
   color: var(--cursor-accent, var(--mos-accent));
 }
 
-.studio-dm-reply-quote span {
+.studio-dm-reply-quote span,
+.studio-dm-reply-snippet {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -342,6 +343,20 @@
   font-size: 11px;
   font-weight: 500;
   color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-reply-snippet {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.studio-dm-reply-snippet svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  opacity: 0.9;
 }
 
 .studio-dm-reply-preview {

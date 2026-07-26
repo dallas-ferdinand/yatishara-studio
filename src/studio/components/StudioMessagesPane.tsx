@@ -149,9 +149,26 @@ function replySnippetLabel(
 ): string {
   if (snippet.kind === "voice") return "Voice message";
   if (snippet.kind === "image") {
-    return snippet.body.trim() || "Photo";
+    const caption = snippet.body.trim();
+    return caption ? `Photo · ${caption}` : "Photo";
   }
   return snippet.body.trim() || "Message";
+}
+
+function ReplyKindIcon({
+  kind,
+  className = "h-3 w-3",
+}: {
+  kind: DmReplySnippet["kind"];
+  className?: string;
+}) {
+  if (kind === "voice") {
+    return <Mic className={className} aria-hidden="true" />;
+  }
+  if (kind === "image") {
+    return <ImageIcon className={className} aria-hidden="true" />;
+  }
+  return null;
 }
 
 function DmReplyQuote({
@@ -173,7 +190,10 @@ function DmReplyQuote({
       }}
     >
       <strong>{snippet.fromMe ? "You" : peerLabel}</strong>
-      <span>{replySnippetLabel(snippet)}</span>
+      <span className="studio-dm-reply-snippet">
+        <ReplyKindIcon kind={snippet.kind} />
+        {replySnippetLabel(snippet)}
+      </span>
     </button>
   );
 }
@@ -723,18 +743,15 @@ export function StudioMessagesPane({
     if (conversationId) inputRef.current?.focus();
   }, [clearPendingImage, conversationId]);
 
-  const armReply = useCallback(
-    (message: DmMessageRow) => {
-      setReplyTo({
-        _id: message._id,
-        body: replySnippetLabel(message),
-        kind: message.kind,
-        fromMe: message.fromMe,
-      });
-      window.setTimeout(() => inputRef.current?.focus(), 0);
-    },
-    [],
-  );
+  const armReply = useCallback((message: DmMessageRow) => {
+    setReplyTo({
+      _id: message._id,
+      body: message.body,
+      kind: message.kind,
+      fromMe: message.fromMe,
+    });
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
 
   function pickImageFile(file: File | undefined) {
     if (!file) return;
@@ -989,13 +1006,20 @@ export function StudioMessagesPane({
       {replyTo && recState === "idle" ? (
         <div className="studio-dm-reply-preview">
           <span className="studio-dm-reply-preview-icon" aria-hidden="true">
-            <Reply className="h-3.5 w-3.5" />
+            {replyTo.kind === "voice" || replyTo.kind === "image" ? (
+              <ReplyKindIcon kind={replyTo.kind} className="h-3.5 w-3.5" />
+            ) : (
+              <Reply className="h-3.5 w-3.5" />
+            )}
           </span>
           <span className="studio-dm-reply-preview-copy">
             <strong>
               Replying to {replyTo.fromMe ? "yourself" : peerLabel}
             </strong>
-            <span>{replySnippetLabel(replyTo)}</span>
+            <span className="studio-dm-reply-snippet">
+              <ReplyKindIcon kind={replyTo.kind} />
+              {replySnippetLabel(replyTo)}
+            </span>
           </span>
           <button
             type="button"
