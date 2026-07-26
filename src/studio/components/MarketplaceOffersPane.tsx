@@ -1406,6 +1406,7 @@ export function MarketplaceOffersPane({
                     <div className="marketplace-profile-fields">
                       <IconField
                         icon={FileBadge}
+                        label="Title"
                         value={createForm.title}
                         onChange={(e) =>
                           setCreateForm((f) => ({
@@ -1413,11 +1414,13 @@ export function MarketplaceOffersPane({
                             title: e.target.value,
                           }))
                         }
-                        placeholder="Title — e.g. 15s cartoon ad pack"
+                        placeholder="e.g. 15s cartoon ad pack"
                         aria-label="Title"
                       />
                       <IconTextarea
                         icon={AlignLeft}
+                        label="Description"
+                        hint="Shown on your public card and offer page."
                         value={createForm.description}
                         onChange={(e) =>
                           setCreateForm((f) => ({
@@ -1432,6 +1435,7 @@ export function MarketplaceOffersPane({
                         <div className="marketplace-optional-row">
                           <IconField
                             icon={Wallet}
+                            label="Price (TTD)"
                             value={createForm.priceTtd}
                             onChange={(e) =>
                               setCreateForm((f) => ({
@@ -1439,11 +1443,12 @@ export function MarketplaceOffersPane({
                                 priceTtd: e.target.value,
                               }))
                             }
-                            placeholder="Price (TTD)"
+                            placeholder="50"
                             aria-label="Price in TTD"
                           />
                           <IconField
                             icon={CalendarDays}
+                            label="Delivery days"
                             value={createForm.deliveryDays}
                             onChange={(e) =>
                               setCreateForm((f) => ({
@@ -1451,17 +1456,20 @@ export function MarketplaceOffersPane({
                                 deliveryDays: e.target.value,
                               }))
                             }
-                            placeholder="Delivery days"
+                            placeholder="5"
                             aria-label="Delivery days"
                           />
                         </div>
                       ) : (
-                        <p className="marketplace-offers-bar-note">
+                        <p className="marketplace-offers-hint">
+                          <Wallet aria-hidden="true" />
                           Pricing lives on Packages — switch tabs to edit tiers.
                         </p>
                       )}
                       <IconField
                         icon={Tag}
+                        label="Category"
+                        hint="Used for Creative Network filters."
                         value={createForm.category}
                         onChange={(e) =>
                           setCreateForm((f) => ({
@@ -1469,7 +1477,7 @@ export function MarketplaceOffersPane({
                             category: e.target.value,
                           }))
                         }
-                        placeholder="Category"
+                        placeholder="e.g. ads"
                         aria-label="Category"
                       />
                     </div>
@@ -1525,111 +1533,149 @@ export function MarketplaceOffersPane({
                   extras={<StatusChip status={selectedOffer.status} />}
                 >
                   <div className="studio-admin-card">
-                    <p className="marketplace-offers-link">
+                    {selectedOffer.status === "published" ? (
                       <a
+                        className="marketplace-offers-public-link"
                         href={`/creative-network/${selectedOffer.slug}/`}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        /creative-network/{selectedOffer.slug}/
+                        <ExternalLink aria-hidden="true" />
+                        <span className="marketplace-offers-public-link-url">
+                          /creative-network/{selectedOffer.slug}/
+                        </span>
+                        <span className="marketplace-offers-public-link-cta">
+                          View
+                        </span>
                       </a>
-                    </p>
+                    ) : (
+                      <p className="marketplace-offers-public-link is-idle">
+                        <ExternalLink aria-hidden="true" />
+                        <span className="marketplace-offers-public-link-url">
+                          Not on the Creative Network yet — publish to get a
+                          public page.
+                        </span>
+                      </p>
+                    )}
                     <div className="marketplace-profile-fields">
                       <IconField
                         icon={FileBadge}
+                        label="Title"
                         value={editForm.title}
                         onChange={(e) =>
                           setEditForm((f) =>
                             f ? { ...f, title: e.target.value } : f,
                           )
                         }
-                        placeholder="Title"
+                        placeholder="e.g. 15s cartoon ad pack"
                         aria-label="Title"
                       />
                       <IconTextarea
                         icon={AlignLeft}
+                        label="Description"
+                        hint="Shown on your public card and offer page."
                         value={editForm.description}
                         onChange={(e) =>
                           setEditForm((f) =>
                             f ? { ...f, description: e.target.value } : f,
                           )
                         }
-                        placeholder="Description"
+                        placeholder="What’s included, revisions, delivery notes"
                         aria-label="Description"
                       />
                       {editForm.packages.length === 0 ? (
                         <div className="marketplace-optional-row">
                           <IconField
                             icon={Wallet}
+                            label="Price (TTD)"
                             value={editForm.priceTtd}
                             onChange={(e) =>
                               setEditForm((f) =>
                                 f ? { ...f, priceTtd: e.target.value } : f,
                               )
                             }
-                            placeholder="Price (TTD)"
+                            placeholder="50"
                             aria-label="Price in TTD"
                           />
                           <IconField
                             icon={CalendarDays}
+                            label="Delivery days"
                             value={editForm.deliveryDays}
                             onChange={(e) =>
                               setEditForm((f) =>
                                 f ? { ...f, deliveryDays: e.target.value } : f,
                               )
                             }
-                            placeholder="Delivery days"
+                            placeholder="5"
                             aria-label="Delivery days"
                           />
                         </div>
                       ) : (
-                        <p className="marketplace-offers-bar-note">
+                        <p className="marketplace-offers-hint">
+                          <Wallet aria-hidden="true" />
                           Pricing lives on Packages — switch tabs to edit tiers.
                         </p>
                       )}
                       <IconField
                         icon={Tag}
+                        label="Category"
+                        hint="Used for Creative Network filters."
                         value={editForm.category}
                         onChange={(e) =>
                           setEditForm((f) =>
                             f ? { ...f, category: e.target.value } : f,
                           )
                         }
-                        placeholder="Category"
+                        placeholder="e.g. ads"
                         aria-label="Category"
                       />
                     </div>
-                    <div className="marketplace-offers-actions">
-                      {selectedOffer.status !== "published" ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void handlePublish(selectedOffer._id, "published")
-                          }
-                        >
-                          Publish
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void handlePublish(selectedOffer._id, "paused")
-                          }
-                        >
-                          Pause
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          void handlePublish(selectedOffer._id, "archived")
-                        }
-                      >
-                        Archive
-                      </button>
+                    <div className="marketplace-offers-footer">
+                      <p className="marketplace-offers-footer-note">
+                        {selectedOffer.status === "published"
+                          ? "Live on the Creative Network."
+                          : selectedOffer.status === "paused"
+                            ? "Paused — hidden from the catalog."
+                            : selectedOffer.status === "archived"
+                              ? "Archived — restore by publishing again."
+                              : "Draft — not visible to buyers yet."}
+                      </p>
+                      <div className="marketplace-offers-actions">
+                        {selectedOffer.status !== "published" ? (
+                          <button
+                            type="button"
+                            className="is-primary"
+                            disabled={busy}
+                            onClick={() =>
+                              void handlePublish(selectedOffer._id, "published")
+                            }
+                          >
+                            Publish
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void handlePublish(selectedOffer._id, "paused")
+                            }
+                          >
+                            Pause
+                          </button>
+                        )}
+                        {selectedOffer.status !== "archived" ? (
+                          <button
+                            type="button"
+                            className="is-danger"
+                            disabled={busy}
+                            onClick={() =>
+                              void handlePublish(selectedOffer._id, "archived")
+                            }
+                          >
+                            Archive
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </Section>

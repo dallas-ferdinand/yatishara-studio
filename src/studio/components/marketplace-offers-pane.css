@@ -255,6 +255,131 @@ span.studio-admin-head-tab,
   text-decoration: none;
 }
 
+/* —— Public-page row above the offer editor fields —— */
+
+.marketplace-offers-public-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.marketplace-offers-public-link > svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--color-cursor-muted);
+  stroke-width: 1.75;
+}
+
+.marketplace-offers-public-link-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketplace-offers-public-link-cta {
+  flex: 0 0 auto;
+  color: var(--cursor-accent);
+  font-weight: 700;
+}
+
+a.marketplace-offers-public-link:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 40%,
+    var(--color-cursor-border-soft)
+  );
+  background: var(--color-cursor-hover);
+}
+
+.marketplace-offers-public-link.is-idle {
+  background: transparent;
+  color: var(--color-cursor-muted);
+  font-weight: 600;
+}
+
+/* —— Field label / hint —— */
+
+.marketplace-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.marketplace-field-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--color-cursor-muted);
+}
+
+.marketplace-field-hint {
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+}
+
+/* Inline hint that replaces a field (e.g. pricing moved to Packages). */
+.marketplace-offers-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px dashed var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-sm, 6px);
+  color: var(--color-cursor-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.marketplace-offers-hint > svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.75;
+}
+
+/* —— Editor footer: status note left, actions right —— */
+
+.marketplace-offers-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-cursor-border-soft);
+}
+
+.marketplace-offers-footer-note {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-cursor-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.marketplace-offers-footer .marketplace-offers-actions {
+  margin-top: 0;
+}
+
 .marketplace-offers-stars {
   display: flex;
   align-items: center;
@@ -459,6 +584,23 @@ span.studio-admin-head-tab,
     var(--color-cursor-border-soft)
   );
   background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+}
+
+.marketplace-offers-actions button.is-danger {
+  color: color-mix(
+    in srgb,
+    var(--mos-danger, #f87171) 82%,
+    var(--color-cursor-text-bright)
+  );
+}
+
+.marketplace-offers-actions button.is-danger:hover:not(:disabled) {
+  border-color: color-mix(
+    in srgb,
+    var(--mos-danger, #f87171) 44%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
 }
 
 .marketplace-offers-actions button:disabled {

@@ -230,6 +230,24 @@ action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
 action as a compact 22px accent pill (`.studio-dm-peer-book`). Status chip tones:
 `is-live` / `is-done` / `is-wait` / `is-off`. Memory: **747**.
 
+### Marketplace form fields (locked)
+
+`IconField` / `IconTextarea` (`MarketplaceIconField.tsx`) take `label` and `hint`. Any
+field the user can *fill and come back to* must carry a `label` — an icon plus a
+placeholder is not a label, because the placeholder disappears once there is a value.
+Placeholders are examples only (`e.g. ads`), never the field name.
+
+- `.marketplace-field` wraps label + control + hint (`4px` grid).
+- `.marketplace-field-label` / `.marketplace-field-hint` — 11px muted; hint carries the
+  "where does this show up" note.
+- `.marketplace-offers-hint` — dashed-border inline note that *replaces* a field
+  (e.g. pricing moved to Packages), so it reads as part of the form, not stray copy.
+- `.marketplace-offers-public-link` — L3 row with `ExternalLink` + ellipsised slug +
+  accent "View". Never a bare accent `<a>`; a lone red URL reads as an error.
+- `.marketplace-offers-footer` — hairline top divider, status sentence left, actions
+  right. Primary = `.is-primary` (accent tint), destructive = `.is-danger`
+  (`--mos-danger` text, tinted hover). Memory: **752**.
+
 ---
 
 ## 6b. Public routes (`/offers`, share links)
