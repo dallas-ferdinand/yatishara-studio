@@ -1061,6 +1061,9 @@ export function StudioShell({
   const [assetUrlExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   // DM chat selection — shared by the chat-list sidebar and the Messages pane.
   const [activeDmConversationId, setActiveDmConversationId] = useState(null);
+  // Desktop "pick from Files" session — forces the owner-scoped file explorer
+  // into the left rail (even on messages:/feed:) so the user can click an asset.
+  const [assetPickRequest, setAssetPickRequest] = useState(null);
   useStudioBackground();
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
