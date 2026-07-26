@@ -103,6 +103,13 @@ import { CursorTable } from "@/desk/components/CursorTable";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { matchesExplorerTypeFilter } from "@/desk/lib/file-kind";
 import {
+  addPinnedFolder,
+  loadPinnedFolders,
+  normalizeExplorerPath,
+  removePinnedFolder,
+  removePinnedFoldersUnder,
+} from "@/desk/lib/explorer-pins";
+import {
   isHiddenStyleSheet,
   StudioStyleSheetPickerPanel,
   StudioStyleSheetTriggerButton,
@@ -1097,6 +1104,14 @@ export function StudioShell({
   const syncedBriefAttachmentsRevisionRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
+  const explorerUserId = currentUser?._id ?? null;
+  const [pinnedFolders, setPinnedFolders] = useState(() =>
+    typeof window === "undefined" ? [] : loadPinnedFolders(null),
+  );
+
+  useEffect(() => {
+    setPinnedFolders(loadPinnedFolders(explorerUserId));
+  }, [explorerUserId]);
 
   // Keep asset wallpaper signed URL fresh after auth / on boot.
   useEffect(() => {
@@ -2676,6 +2691,56 @@ export function StudioShell({
     [navTrail],
   );
 
+  const explorerPinParent = useMemo(() => {
+    const rootId = navTrail[0]?.id;
+    if (!activeFolder || !rootId || activeFolder._id === rootId) return "";
+    return normalizeExplorerPath(studioPathForFolder(activeFolder));
+  }, [activeFolder, navTrail]);
+
+  const visibleExplorerPins = useMemo(() => {
+    const parent = normalizeExplorerPath(explorerPinParent);
+    return pinnedFolders.filter((pin) => pin.parentPath === parent);
+  }, [pinnedFolders, explorerPinParent]);
+
+  const explorerPinnedPaths = useMemo(
+    () => new Set(visibleExplorerPins.map((pin) => pin.path)),
+    [visibleExplorerPins],
+  );
+
+  const explorerPinnedShortcuts = useMemo(
+    () =>
+      visibleExplorerPins.map((pin) => ({
+        type: "dir",
+        path: pin.path.startsWith("/") ? pin.path : `/${pin.path}`,
+        name: pin.label,
+        studioId: pin.studioId,
+        studioKind: "folder",
+        isPinnedShortcut: true,
+      })),
+    [visibleExplorerPins],
+  );
+
+  function handlePinFolder(entry, parentPath) {
+    if (!entry || entry.type === "parent" || entry.type !== "dir") return;
+    if (entry.studioKind === "messages" || entry.studioKind === "trash") return;
+    const next = addPinnedFolder(
+      entry.path,
+      entry.name ?? entry.path?.split("/").pop() ?? "Folder",
+      parentPath,
+      explorerUserId,
+      entry.studioId ? { studioId: entry.studioId } : {},
+    );
+    setPinnedFolders(next);
+    toast.success(parentPath ? "Pinned here" : "Pinned to home");
+  }
+
+  function handleUnpinFolder(entry, parentPath) {
+    if (!entry || entry.type !== "dir") return;
+    const next = removePinnedFolder(entry.path, parentPath, explorerUserId);
+    setPinnedFolders(next);
+    toast.success("Unpinned");
+  }
+
   function replaceTabKey(fromKey, toKey) {
     if (fromKey === toKey) return;
     setOpenTabs((tabs) => {
@@ -3723,6 +3788,7 @@ export function StudioShell({
     if (!ok) return;
     if (entry.studioKind === "folder") {
       await trashFolder({ folderId: entry.studioId });
+      setPinnedFolders(removePinnedFoldersUnder(entry.path, explorerUserId));
     } else if (entry.studioKind === "document") {
       await trashDocument({ documentId: entry.studioId });
     } else if (entry.studioKind === "asset") {
@@ -6731,11 +6797,11 @@ export function StudioShell({
           --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile {
-          --studio-grid-tile-bg: var(--mos-raised, #d4d4da);
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #d4d4da));
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #d4d4da));
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #d4d4da));
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #d4d4da));
+          --studio-grid-tile-bg: var(--mos-plate, #ececf0);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-plate, #ececf0));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-plate, #ececf0));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-plate, #ececf0));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-plate, #ececf0));
         }
         .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual,
         .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual,
@@ -6761,7 +6827,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
-          background: var(--mos-raised, var(--cursor-surface-raised, #d4d4da)) !important;
+          background: var(--mos-plate, var(--cursor-surface-raised, #ececf0)) !important;
         }
         .studio-polish.is-studio-mobile .desk-file-thumb-progressive,
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
@@ -7195,12 +7261,14 @@ export function StudioShell({
           --studio-shell-border: var(--color-cursor-border-soft);
           --studio-chrome-divider: var(--color-cursor-border-soft);
           --studio-surface-hover: var(--color-cursor-hover);
-          /* Neutral greys only — no cool/blue slate mixes in the file grid. */
-          --studio-grid-tile-bg: var(--mos-raised, #d4d4da);
-          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-raised, #d4d4da));
-          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-raised, #d4d4da));
-          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-raised, #d4d4da));
-          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-raised, #d4d4da));
+          /* Neutral greys only — no cool/blue slate mixes in the file grid.
+             Tiles are level-2 plates on the level-1 explorer canvas; hover /
+             selected darken from there. */
+          --studio-grid-tile-bg: var(--mos-plate, #ececf0);
+          --studio-grid-tile-hover: color-mix(in srgb, var(--mos-text) 6%, var(--mos-plate, #ececf0));
+          --studio-grid-folder-tile-bg: color-mix(in srgb, var(--mos-text) 4%, var(--mos-plate, #ececf0));
+          --studio-grid-folder-tile-hover: color-mix(in srgb, var(--mos-text) 7%, var(--mos-plate, #ececf0));
+          --studio-grid-tile-selected: color-mix(in srgb, var(--mos-text) 8%, var(--mos-plate, #ececf0));
           --studio-grid-tile-glow: none;
           --studio-gen-frame-bg: var(--mos-raised, #d4d4da);
           --studio-gen-frame-text: color-mix(in srgb, var(--color-cursor-text) 72%, var(--color-cursor-muted));
@@ -16781,6 +16849,8 @@ export function StudioShell({
             activeFolder={activeFolder}
             onEntryDrop={handleEntryDrop}
             isMobile={false}
+            pinnedPaths={explorerPinnedPaths}
+            pinnedShortcuts={explorerPinnedShortcuts}
             pickedPaths={
               pickingFromFiles
                 ? assetPickSelected.map((item) => item.path).filter(Boolean)
@@ -17343,6 +17413,8 @@ export function StudioShell({
           setContextMenu={setContextMenu}
           activeFolder={activeFolder}
           onEntryDrop={handleEntryDrop}
+          pinnedPaths={explorerPinnedPaths}
+          pinnedShortcuts={explorerPinnedShortcuts}
         />
       ) : null}
 
@@ -17481,6 +17553,10 @@ export function StudioShell({
           inTrashView={isTrashNav}
           createItems={getCreateMenuItems()}
           sharedAssetIds={sharedAssetIds}
+          pinnedPaths={explorerPinnedPaths}
+          currentPath={explorerPinParent}
+          canDownloadZip={false}
+          canPin={!isTrashNav}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashNav) return;
@@ -17495,12 +17571,32 @@ export function StudioShell({
           onAction={(action, entry) => {
             setContextMenu(null);
             if (action === "open") handleEntryOpen(entry);
+            if (action === "refresh") {
+              toast.message("Files stay live — already up to date");
+              return;
+            }
+            if (action === "pin-here") {
+              handlePinFolder(entry, explorerPinParent);
+              return;
+            }
+            if (action === "pin-root") {
+              handlePinFolder(entry, "");
+              return;
+            }
+            if (action === "unpin") {
+              handleUnpinFolder(entry, explorerPinParent);
+              return;
+            }
             if (action === "attach") attachEntry(entry);
             if (action === "delete-forever") void deleteEntryForever(entry);
             if (action === "empty-trash") void handleEmptyTrash();
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
             if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
+            if (action === "download-zip") {
+              toast.message("Folder ZIP download isn’t available in Studio yet");
+              return;
+            }
             if (action === "use-wallpaper") {
               if (!entry?.studioId || entry.studioKind !== "asset" || entry.kind !== "image") return;
               void (async () => {
@@ -23608,6 +23704,8 @@ function StudioFilesExplorerBody({
   showSearch = true,
   showPathbar = true,
   pickedPaths = null,
+  pinnedPaths = null,
+  pinnedShortcuts = [],
 }) {
   const filterActive = typeFilter !== "all";
   const tree = (
@@ -23618,10 +23716,16 @@ function StudioFilesExplorerBody({
         flatEntries={displayCurrentEntries}
         listDir={() => {}}
         pickedPaths={pickedPaths}
+        pinnedPaths={pinnedPaths}
+        pinnedShortcuts={pinnedShortcuts}
         onNavigate={(path, navEntry) => {
           if (navEntry?.type === "parent" && navEntry.studioId) {
             setActiveFolderId(navEntry.studioId);
             setNavTrail((trail) => trail.slice(0, -1));
+            return;
+          }
+          if (navEntry?.isPinnedShortcut && navEntry.studioId) {
+            onEntryOpen(navEntry);
             return;
           }
           const entry = pathToEntry.get(path);

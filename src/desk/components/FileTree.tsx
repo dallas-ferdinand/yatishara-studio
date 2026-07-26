@@ -11,6 +11,7 @@ import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
 import { displayEntryPath } from "@/desk/lib/display-path";
+import { normalizeExplorerPath } from "@/desk/lib/explorer-pins";
 import { useState } from "react";
 import { animate } from "@motionone/dom";
 
@@ -53,7 +54,9 @@ function buildSearchList(searchResults, searchScope, pinnedShortcuts) {
 function isPinnedEntry(entry, pinnedPaths) {
   if (!entry || entry.type === "parent" || entry.type === "search-divider") return false;
   if (entry.isPinnedShortcut) return true;
-  return entry.type === "dir" && pinnedPaths?.has?.(entry.path);
+  if (entry.type !== "dir" || !pinnedPaths?.has) return false;
+  if (pinnedPaths.has(entry.path)) return true;
+  return pinnedPaths.has(normalizeExplorerPath(entry.path));
 }
 
 function isVideoFileUrl(url) {

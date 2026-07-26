@@ -61,6 +61,21 @@ Supporting tokens (also both modes):
 .menu-item:hover  { background: var(--mos-plate-strong); }  /* L3 */
 ```
 
+### File manager tiles (locked)
+
+The explorer canvas is L1 (`--mos-panel` in light = `--mos-page`), so **file / folder
+tiles are L2 plates** — never L3. In light mode L3 (`#d4d4da`) reads as heavy dark-grey
+slabs against the canvas. Both the Studio grid tokens and the desk peek surfaces derive
+from `--mos-plate`:
+
+- `--studio-grid-tile-bg` / `-folder-tile-bg` / `-hover` / `-selected` (StudioShell light
+  block, desktop **and** `.is-studio-mobile`) = `--mos-plate` plus a small `--mos-text`
+  mix for hover/selected (hover darkens in light, lifts in dark).
+- `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
+  `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
+- Active *controls* inside the file manager (breadcrumb `.is-current`, view/type menus)
+  stay L3 — that's the control affordance, not a plate.
+
 ### Select / dropdown (locked decision)
 
 - **One source of truth:** the shared menu block in `desk-shell.css` styles
@@ -70,6 +85,9 @@ Supporting tokens (also both modes):
   New menus must join that selector list (or reuse `.cursor-dropdown` /
   `.cursor-tab-context-menu`), so they are correct by default — including DM
   right-click menus (`.studio-dm-context-menu` + shared classes).
+  Explorer context menus use **flyout submenus** (New / Pin / More) via a second
+  `.cursor-tab-context-menu.desk-explorer-context-submenu` panel — same plate
+  look; caret = Lucide `ChevronRight`.
 - **Open menu panel** → level-2 `--mos-plate`, **no border**, **with** the tight
   `var(--cursor-shadow-menu)` (not the big `--cursor-shadow-pop`).
   Roomier surround, tight options: `6px` panel padding, `1px` gap between rows,
@@ -359,7 +377,7 @@ Update memory when you change a rule here:
 - **692** — CursorSelect root = `cursor-select-menu`, never `cursor-select`.
 - **700** — Table empty = `CursorTable` empty + centered icon chip.
 - **694** — Glass/chrome borders = `--color-cursor-border`, never hardcoded white.
-- **695** — File manager plates = mos greys, never cool slate/teal.
+- **695** — File manager plates = mos greys at **L2 `--mos-plate`** (never cool slate/teal, never L3).
 - **696** — Scrollbars hidden globally.
 - **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
 - **697** — Offers inputs keep raised fill; white/borderless rejected.

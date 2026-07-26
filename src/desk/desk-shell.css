@@ -1030,7 +1030,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-audio {
-  background: var(--mos-raised, #d4d4da);
+  background: var(--mos-plate, #ececf0);
 }
 
 .desk-file-thumb-audio-wave {
@@ -1116,7 +1116,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-card {
-  background: var(--mos-raised, #d4d4da);
+  background: var(--mos-plate, #ececf0);
   box-shadow: none;
 }
 
@@ -1164,7 +1164,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-label {
-  background-color: var(--mos-raised, #d4d4da);
+  background-color: var(--mos-plate, #ececf0);
   color: var(--color-cursor-text);
   box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
@@ -1174,7 +1174,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-folder-peek-card--element .desk-folder-peek-label {
-  background-color: var(--mos-raised, #d4d4da);
+  background-color: var(--mos-plate, #ececf0);
 }
 
 .desk-file-thumb-peek-label {
@@ -1194,7 +1194,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-label {
-  background-color: var(--mos-raised, #d4d4da);
+  background-color: var(--mos-plate, #ececf0);
   color: var(--color-cursor-text);
   box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
 }
@@ -1204,7 +1204,7 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element .desk-file-thumb-peek-label {
-  background-color: var(--mos-raised, #d4d4da);
+  background-color: var(--mos-plate, #ececf0);
 }
 
 .desk-file-thumb-peek-wrap {
@@ -1221,11 +1221,11 @@ select.cursor-select:focus {
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap {
-  background: var(--mos-raised, #d4d4da);
+  background: var(--mos-plate, #ececf0);
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap--element {
-  background: var(--mos-raised, #d4d4da);
+  background: var(--mos-plate, #ececf0);
 }
 
 .desk-file-thumb-peek-wrap .desk-file-thumb-progressive {
@@ -7875,6 +7875,21 @@ textarea.cursor-input {
   white-space: nowrap;
   cursor: pointer;
 }
+.cursor-tab-context-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cursor-tab-context-caret {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  color: var(--color-cursor-muted);
+}
+.cursor-tab-context-item.has-submenu:hover .cursor-tab-context-caret,
+.cursor-tab-context-item.is-active .cursor-tab-context-caret {
+  color: var(--color-cursor-text);
+}
 .cursor-tab-context-item > svg,
 .cursor-tab-context-item .icon-inline svg {
   flex: 0 0 auto;
@@ -7910,8 +7925,12 @@ textarea.cursor-input {
 }
 
 .desk-explorer-context-menu,
+.desk-explorer-context-submenu,
 .desk-explorer-delete-confirm {
   z-index: 650;
+}
+.desk-explorer-context-submenu {
+  z-index: 651;
 }
 
 .desk-explorer-delete-confirm {

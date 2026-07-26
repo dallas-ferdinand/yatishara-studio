@@ -24,6 +24,9 @@ function normalizePin(raw) {
     parentPath: normalizeExplorerPath(raw.parentPath ?? ""),
     label: String(raw.label ?? path.split("/").pop() ?? path).trim() || path,
     pinnedAt: Number(raw.pinnedAt) || 0,
+    ...(typeof raw.studioId === "string" && raw.studioId
+      ? { studioId: raw.studioId }
+      : {}),
   };
 }
 
@@ -59,13 +62,24 @@ export function isFolderPinned(path, userId, parentPath) {
   return loadPinnedFolders(userId).some((x) => x.path === p && x.parentPath === parent);
 }
 
-export function addPinnedFolder(path, label, parentPath, userId) {
+export function addPinnedFolder(path, label, parentPath, userId, extra = {}) {
   const p = normalizeExplorerPath(path);
   if (!p) return loadPinnedFolders(userId);
   const parent = normalizeExplorerPath(parentPath ?? "");
   const pins = loadPinnedFolders(userId).filter((x) => !(x.path === p && x.parentPath === parent));
   return savePinnedFolders(
-    [{ path: p, parentPath: parent, label: label || p.split("/").pop() || p, pinnedAt: Date.now() }, ...pins],
+    [
+      {
+        path: p,
+        parentPath: parent,
+        label: label || p.split("/").pop() || p,
+        pinnedAt: Date.now(),
+        ...(typeof extra.studioId === "string" && extra.studioId
+          ? { studioId: extra.studioId }
+          : {}),
+      },
+      ...pins,
+    ],
     userId,
   );
 }
@@ -80,11 +94,11 @@ export function removePinnedFolder(path, parentPath, userId) {
   );
 }
 
-export function togglePinnedFolder(path, label, userId, parentPath) {
+export function togglePinnedFolder(path, label, userId, parentPath, extra = {}) {
   if (isFolderPinned(path, userId, parentPath)) {
     return removePinnedFolder(path, parentPath, userId);
   }
-  return addPinnedFolder(path, label, parentPath, userId);
+  return addPinnedFolder(path, label, parentPath, userId, extra);
 }
 
 /** Update pinned paths when a folder or file is renamed. */

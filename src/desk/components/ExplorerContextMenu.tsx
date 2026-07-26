@@ -3,6 +3,7 @@
 
 import {
   ArrowUpFromLine,
+  ChevronRight,
   Clapperboard,
   Copy,
   Download,
@@ -23,7 +24,7 @@ import {
   Upload,
   Wallpaper,
 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFloatingMenuPosition } from "@/desk/lib/use-floating-menu-position";
 
@@ -56,6 +57,9 @@ const EXPLORER_MENU_ICONS = {
   delete: Trash2,
   "delete-forever": Trash2,
   restore: Undo2,
+  new: FolderPlus,
+  organize: Pin,
+  more: Sparkles,
 };
 
 function buildMenuItems(entry, {
@@ -68,6 +72,8 @@ function buildMenuItems(entry, {
   onRequestDelete,
   inTrashView = false,
   sharedAssetIds,
+  canDownloadZip = true,
+  canPin = true,
 }) {
   if (!entry) return [];
 
@@ -79,95 +85,136 @@ function buildMenuItems(entry, {
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
-  const items = [];
-  const creationItems = createItems?.length
-    ? createItems.map((item, index) =>
-        item.sep ? { id: `sep-create-${index}`, sep: true } : { ...item, id: item.id ?? item.action },
-      )
+  const creationChildren = createItems?.length
+    ? createItems
+        .filter((item) => !item.sep)
+        .map((item) => ({ ...item, id: item.id ?? item.action }))
     : [
-        ...(canCreateFile ? [{ id: "new-file", label: "New note" }] : []),
-        ...(canCreateFolder ? [{ id: "new-folder", label: "New folder" }] : []),
+        ...(canCreateFile ? [{ id: "new-file", label: "Ad copy" }] : []),
+        ...(canCreateFolder ? [{ id: "new-folder", label: "Folder" }] : []),
       ];
+
   if (isTrashFolder || isMessagesFolder) {
-    items.push({ id: "open", label: "Open folder" });
-    return items;
-  }
-  if (isBlank && inTrashView) {
-    items.push({ id: "refresh", label: "Refresh" });
-    items.push({ id: "sep-trash-empty", sep: true });
-    items.push({ id: "empty-trash", label: "Empty trash", danger: true });
-    return items;
-  }
-  if (isBlank) {
-    items.push(...creationItems);
-    if (creationItems.length) items.push({ id: "sep-blank", sep: true });
-    items.push({ id: "refresh", label: "Refresh" });
-  } else if (isParent) {
-        items.push({ id: "open", label: "Go up", iconKey: "go-up" });
-  } else if (isDir) {
-    items.push(...creationItems);
-    if (creationItems.length) items.push({ id: "sep-dir-new", sep: true });
-    items.push({ id: "open", label: "Open folder" });
-  } else {
-    items.push({ id: "open", label: "Open" });
+    return [{ id: "open", label: "Open folder" }];
   }
 
-  if (inTrashView && !isBlank && !isParent) {
-    items.push({ id: "copy-path", label: "Copy item link" });
+  if (isBlank && inTrashView) {
+    return [
+      { id: "refresh", label: "Refresh" },
+      { id: "sep-trash-empty", sep: true },
+      { id: "empty-trash", label: "Empty trash", danger: true },
+    ];
+  }
+
+  if (isBlank) {
+    const items = [];
+    if (creationChildren.length) {
+      items.push({ id: "new", label: "New", children: creationChildren });
+    }
+    items.push({ id: "refresh", label: "Refresh" });
+    return items;
+  }
+
+  if (isParent) {
+    return [{ id: "open", label: "Go up", iconKey: "go-up" }];
+  }
+
+  if (inTrashView) {
+    const items = [
+      { id: "open", label: isDir ? "Open folder" : "Open" },
+      { id: "copy-path", label: "Copy item link" },
+    ];
     if (onRequestDelete) {
       items.push({ id: "sep-trash-restore", sep: true });
       items.push({ id: "delete", label: "Restore", iconKey: "restore" });
     }
-    // Only assets hold billable storage, so only they can be purged from the zone.
     if (entry.studioKind === "asset" && entry.studioId) {
       items.push({ id: "delete-forever", label: "Delete forever", danger: true });
     }
     return items;
   }
 
-  if (!isBlank) {
-    if (isDir && !isParent) {
-      const pinnedHere = pinnedPaths?.has?.(entry.path);
-      if (pinnedHere) {
-        items.push({ id: "unpin", label: "Unpin folder" });
-      } else {
-        if (currentPath) items.push({ id: "pin-root", label: "Pin to home" });
-        items.push({ id: "pin-here", label: currentPath ? "Pin here" : "Pin folder" });
-      }
-    }
-    items.push({ id: "copy-path", label: "Copy item link" });
-    if (isDir && !isParent) items.push({ id: "download-zip", label: "Download folder" });
-    if (isFile) items.push({ id: "download", label: "Download" });
-    if (
-      isFile &&
-      entry.studioKind === "asset" &&
-      entry.kind === "image" &&
-      entry.studioId
-    ) {
-      items.push({ id: "use-wallpaper", label: "Use as wallpaper" });
-      items.push({ id: "set-profile-image", label: "Set as profile image" });
-      items.push({ id: "upscale", label: "Upscale" });
-      items.push({ id: "generate-video", label: "Generate video" });
-    }
-    if (
-      isFile &&
-      entry.studioKind === "asset" &&
-      (entry.kind === "image" || entry.kind === "video") &&
-      entry.studioId
-    ) {
-      const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
+  const items = [];
+  items.push({ id: "open", label: isDir ? "Open folder" : "Open" });
+
+  if (isDir && creationChildren.length) {
+    items.push({ id: "new", label: "New", children: creationChildren });
+  }
+
+  if (isDir && canPin) {
+      const pinnedHere = pinnedPaths?.has?.(entry.path)
+        || pinnedPaths?.has?.(
+          String(entry.path ?? "")
+            .trim()
+            .replace(/^\/+|\/+$/g, ""),
+        );
+    if (pinnedHere) {
+      items.push({ id: "unpin", label: "Unpin folder" });
+    } else if (currentPath) {
       items.push({
-        id: alreadyShared ? "unshare-profile" : "share-profile",
-        label: alreadyShared ? "Remove from profile" : "Create post",
+        id: "organize",
+        label: "Pin",
+        children: [
+          { id: "pin-here", label: "Pin here" },
+          { id: "pin-root", label: "Pin to home" },
+        ],
       });
+    } else {
+      items.push({ id: "pin-here", label: "Pin folder" });
     }
-    if (!isParent && onRequestRename) items.push({ id: "rename", label: "Rename" });
-    items.push({ id: "sep-1", sep: true });
-    if (!isParent) items.push({ id: "attach", label: isDir ? "Use folder in chat" : "Use in chat" });
-    if (!isParent && onRequestDelete) {
-      items.push({ id: "sep-2", sep: true });
-      items.push({ id: "delete", label: isDir ? "Delete folder" : "Delete", danger: true });
-    }
+  }
+
+  if (onRequestRename) {
+    items.push({ id: "rename", label: "Rename" });
+  }
+
+  const moreChildren = [];
+  moreChildren.push({ id: "copy-path", label: "Copy item link" });
+  if (isDir && canDownloadZip) {
+    moreChildren.push({ id: "download-zip", label: "Download folder" });
+  }
+  if (isFile) {
+    moreChildren.push({ id: "download", label: "Download" });
+  }
+  if (
+    isFile &&
+    entry.studioKind === "asset" &&
+    entry.kind === "image" &&
+    entry.studioId
+  ) {
+    moreChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+    moreChildren.push({ id: "set-profile-image", label: "Set as profile image" });
+    moreChildren.push({ id: "upscale", label: "Upscale" });
+    moreChildren.push({ id: "generate-video", label: "Generate video" });
+  }
+  if (
+    isFile &&
+    entry.studioKind === "asset" &&
+    (entry.kind === "image" || entry.kind === "video") &&
+    entry.studioId
+  ) {
+    const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
+    moreChildren.push({
+      id: alreadyShared ? "unshare-profile" : "share-profile",
+      label: alreadyShared ? "Remove from profile" : "Create post",
+    });
+  }
+  moreChildren.push({
+    id: "attach",
+    label: isDir ? "Use folder in chat" : "Use in chat",
+  });
+
+  if (moreChildren.length) {
+    items.push({ id: "more", label: "More", children: moreChildren });
+  }
+
+  if (onRequestDelete) {
+    items.push({ id: "sep-2", sep: true });
+    items.push({
+      id: "delete",
+      label: isDir ? "Delete folder" : "Delete",
+      danger: true,
+    });
   }
 
   return items;
@@ -178,14 +225,36 @@ function renderMenuIcon(item) {
   if (MappedIcon) return <MappedIcon aria-hidden="true" />;
   const icon = item.icon;
   if (icon == null) return null;
-  // Already a React element (e.g. <Upload />)
   if (typeof icon === "object" && icon.$$typeof) return icon;
-  // Lucide / component reference (e.g. Upload) — must instantiate
   if (typeof icon === "function" || (typeof icon === "object" && icon.render)) {
     const Icon = icon;
     return <Icon aria-hidden="true" />;
   }
   return null;
+}
+
+function MenuItemButton({ item, active, onActivate, onHover }) {
+  const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+  return (
+    <button
+      type="button"
+      className={`cursor-tab-context-item${item.danger ? " is-danger" : ""}${active ? " is-active" : ""}${hasChildren ? " has-submenu" : ""}`}
+      role="menuitem"
+      aria-haspopup={hasChildren ? "menu" : undefined}
+      aria-expanded={hasChildren ? active : undefined}
+      onMouseEnter={() => onHover?.(item)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onActivate(item, e);
+      }}
+    >
+      {renderMenuIcon(item)}
+      <span className="cursor-tab-context-item-label">{item.label}</span>
+      {hasChildren ? (
+        <ChevronRight className="cursor-tab-context-caret" aria-hidden="true" />
+      ) : null}
+    </button>
+  );
 }
 
 export function ExplorerContextMenu({
@@ -203,9 +272,14 @@ export function ExplorerContextMenu({
   createItems,
   inTrashView = false,
   sharedAssetIds,
+  canDownloadZip = true,
+  canPin = true,
 }) {
   const menuRef = useRef(null);
+  const submenuRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
+  const [openSubmenuId, setOpenSubmenuId] = useState(null);
+  const [submenuPos, setSubmenuPos] = useState({ left: 0, top: 0 });
 
   const items = useMemo(
     () =>
@@ -219,6 +293,8 @@ export function ExplorerContextMenu({
         onRequestDelete,
         inTrashView,
         sharedAssetIds,
+        canDownloadZip,
+        canPin,
       }),
     [
       entry,
@@ -231,20 +307,64 @@ export function ExplorerContextMenu({
       onRequestDelete,
       inTrashView,
       sharedAssetIds,
+      canDownloadZip,
+      canPin,
     ],
   );
 
-  const pos = useFloatingMenuPosition(x, y, menuRef, open, [items.length, entry?.path, entry?.type]);
+  const openSubmenuItem = useMemo(
+    () => items.find((item) => item.id === openSubmenuId && item.children?.length) ?? null,
+    [items, openSubmenuId],
+  );
+
+  const pos = useFloatingMenuPosition(x, y, menuRef, open, [
+    items.length,
+    entry?.path,
+    entry?.type,
+    openSubmenuId,
+  ]);
+
+  useEffect(() => {
+    setOpenSubmenuId(null);
+  }, [entry?.path, entry?.type, x, y]);
+
+  useEffect(() => {
+    if (!openSubmenuItem || !menuRef.current) return;
+    const parentBtn = menuRef.current.querySelector(
+      `[data-submenu-id="${openSubmenuItem.id}"]`,
+    );
+    if (!parentBtn) return;
+    const rect = parentBtn.getBoundingClientRect();
+    const gap = 4;
+    const estimatedWidth = 180;
+    const estimatedHeight = Math.min(
+      window.innerHeight - 16,
+      openSubmenuItem.children.length * 28 + 16,
+    );
+    let left = rect.right + gap;
+    let top = rect.top;
+    if (left + estimatedWidth > window.innerWidth - 8) {
+      left = Math.max(8, rect.left - estimatedWidth - gap);
+    }
+    if (top + estimatedHeight > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - estimatedHeight - 8);
+    }
+    setSubmenuPos({ left, top });
+  }, [openSubmenuItem, pos.left, pos.top]);
 
   useEffect(() => {
     if (!entry) return;
     const onDoc = (e) => {
       if (e.type === "contextmenu") return;
       if (menuRef.current?.contains(e.target)) return;
+      if (submenuRef.current?.contains(e.target)) return;
       onClose();
     };
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (openSubmenuId) setOpenSubmenuId(null);
+        else onClose();
+      }
     };
     const t = window.setTimeout(() => {
       document.addEventListener("mousedown", onDoc);
@@ -257,7 +377,7 @@ export function ExplorerContextMenu({
       document.removeEventListener("scroll", onDoc, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [entry, onClose]);
+  }, [entry, onClose, openSubmenuId]);
 
   if (!open) return null;
 
@@ -273,35 +393,65 @@ export function ExplorerContextMenu({
     onAction?.(actionId, entry, { x, y });
   };
 
+  const activateItem = (item) => {
+    if (item.children?.length) {
+      setOpenSubmenuId((prev) => (prev === item.id ? null : item.id));
+      return;
+    }
+    runAction(item.id);
+  };
+
   return createPortal(
-    <div
-      ref={menuRef}
-      className="cursor-tab-context-menu desk-explorer-context-menu"
-      style={{ left: pos.left, top: pos.top }}
-      role="menu"
-      onContextMenu={(e) => e.preventDefault()}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      {items.map((item) =>
-        item.sep ? (
-          <div key={item.id} className="cursor-tab-context-sep" role="separator" />
-        ) : (
-          <button
-            key={item.id}
-            type="button"
-            className={`cursor-tab-context-item${item.danger ? " is-danger" : ""}`}
-            role="menuitem"
-            onClick={(e) => {
-              e.stopPropagation();
-              runAction(item.id);
-            }}
-          >
-            {renderMenuIcon(item)}
-            <span>{item.label}</span>
-          </button>
-        ),
-      )}
-    </div>,
+    <>
+      <div
+        ref={menuRef}
+        className="cursor-tab-context-menu desk-explorer-context-menu"
+        style={{ left: pos.left, top: pos.top }}
+        role="menu"
+        onContextMenu={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {items.map((item) =>
+          item.sep ? (
+            <div key={item.id} className="cursor-tab-context-sep" role="separator" />
+          ) : (
+            <div key={item.id} data-submenu-id={item.id || undefined}>
+              <MenuItemButton
+                item={item}
+                active={openSubmenuId === item.id}
+                onHover={(hovered) => {
+                  if (hovered.children?.length) setOpenSubmenuId(hovered.id);
+                }}
+                onActivate={activateItem}
+              />
+            </div>
+          ),
+        )}
+      </div>
+      {openSubmenuItem ? (
+        <div
+          ref={submenuRef}
+          className="cursor-tab-context-menu desk-explorer-context-menu desk-explorer-context-submenu"
+          style={{ left: submenuPos.left, top: submenuPos.top }}
+          role="menu"
+          onContextMenu={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          {openSubmenuItem.children.map((child) =>
+            child.sep ? (
+              <div key={child.id} className="cursor-tab-context-sep" role="separator" />
+            ) : (
+              <MenuItemButton
+                key={child.id}
+                item={child}
+                active={false}
+                onActivate={(picked) => runAction(picked.id)}
+              />
+            ),
+          )}
+        </div>
+      ) : null}
+    </>,
     document.body,
   );
 }
