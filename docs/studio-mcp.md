@@ -101,7 +101,7 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_generate_image` | Sync image gen |
 | `studio_list_video_models` | seedance-2.0 + MCP-only models |
 | `studio_generate_video` | Async video + poll |
-| `studio_generate_audio` | Voiceover / SFX |
+| `studio_generate_audio` | Voiceover / SFX / Music |
 | `studio_validate_production_gates` | Pre-flight cartoon gate check |
 | `studio_generate_script` | Script → document |
 

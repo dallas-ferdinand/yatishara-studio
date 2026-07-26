@@ -18692,9 +18692,11 @@ function StudioComposer({
                     ? `Describe your ${elementTypeLabel(elementType).toLowerCase()}…`
                     : isAudioMode && audioType === "sfx"
                       ? "Describe the sound effect…"
-                      : isAudioMode
-                        ? "Enter voiceover script…"
-                        : "Describe what you want…"
+                      : isAudioMode && audioType === "music"
+                        ? "Describe the music bed…"
+                        : isAudioMode
+                          ? "Enter voiceover script…"
+                          : "Describe what you want…"
           }
           data-listening={
             (recording || transcribing) && draft.trim() ? "append" : undefined

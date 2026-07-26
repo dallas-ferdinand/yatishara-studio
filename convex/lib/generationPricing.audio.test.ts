@@ -3,6 +3,7 @@ import {
   audioCreditCost,
   audioSellPriceTtd,
   creditCostForGeneration,
+  estimateMusicUsd,
   estimateSfxUsd,
   estimateVoiceoverUsd,
 } from "./generationPricing";
@@ -22,6 +23,12 @@ describe("audio generation pricing (2× ElevenLabs COGS)", () => {
     expect(estimateSfxUsd(30)).toBeCloseTo(0.06, 8);
   });
 
+  it("estimates music USD at $0.15 / minute with 30s default and 5min clamp", () => {
+    expect(estimateMusicUsd(undefined)).toBeCloseTo((30 / 60) * 0.15, 8);
+    expect(estimateMusicUsd(60)).toBeCloseTo(0.15, 8);
+    expect(estimateMusicUsd(600)).toBeCloseTo((300 / 60) * 0.15, 8);
+  });
+
   it("bills voiceover at 2× COGS with half-TTD rounding into credits", () => {
     // 1K chars → $0.10 → ×10 FX ×2 = TT$2.00 → 4 credits
     expect(audioSellPriceTtd({ audioType: "voiceover", characterCount: 1000 })).toBe(2);
@@ -36,6 +43,13 @@ describe("audio generation pricing (2× ElevenLabs COGS)", () => {
     expect(audioCreditCost({ audioType: "sfx" })).toBe(1);
     // 30s max → $0.06 → ×20 = TT$1.20 → ceil to TT$1.50 → 3 credits
     expect(audioCreditCost({ audioType: "sfx", durationSeconds: 30 })).toBe(3);
+  });
+
+  it("bills music at 2× COGS", () => {
+    // 60s → $0.15 → ×10 FX ×2 = TT$3.00 → 6 credits
+    expect(audioCreditCost({ audioType: "music", durationSeconds: 60 })).toBe(6);
+    // 30s default → $0.075 → ×20 = TT$1.50 → 3 credits
+    expect(audioCreditCost({ audioType: "music" })).toBe(3);
   });
 
   it("routes audio tier through creditCostForGeneration", () => {
@@ -53,5 +67,12 @@ describe("audio generation pricing (2× ElevenLabs COGS)", () => {
         durationSeconds: 5,
       }),
     ).toBe(1);
+    expect(
+      creditCostForGeneration({
+        tier: "audio",
+        audioType: "music",
+        durationSeconds: 60,
+      }),
+    ).toBe(6);
   });
 });

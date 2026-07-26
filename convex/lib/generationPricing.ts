@@ -483,8 +483,13 @@ export const ELEVEN_V3_USD_PER_1K_CHARS = 0.1;
 export const ELEVEN_SFX_USD_PER_MINUTE = 0.12;
 /** Default estimate length when SFX duration is Auto. */
 export const ELEVEN_SFX_AUTO_DURATION_SECONDS = 5;
-/** Stub for later Music API — not billed in v1. */
-export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.3;
+/** Eleven Music — USD per minute of output (COGS; sell is 2× via audioSellPriceTtd). */
+export const ELEVEN_MUSIC_USD_PER_MINUTE = 0.15;
+/** Default music length when duration is omitted (ads). */
+export const ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS = 30;
+/** Self-serve Music API billable range (3s–5min). */
+export const ELEVEN_MUSIC_MIN_DURATION_SECONDS = 3;
+export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 300;
 
 export function estimateVoiceoverUsd(characterCount: number): number {
   const chars = Math.max(0, Math.ceil(Number(characterCount) || 0));
@@ -502,8 +507,11 @@ export function estimateSfxUsd(durationSeconds?: number | null): number {
 export function estimateMusicUsd(durationSeconds?: number | null): number {
   const seconds =
     durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0
-      ? 60
-      : Math.max(1, Math.min(180, Number(durationSeconds)));
+      ? ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS
+      : Math.max(
+          ELEVEN_MUSIC_MIN_DURATION_SECONDS,
+          Math.min(ELEVEN_MUSIC_MAX_DURATION_SECONDS, Number(durationSeconds)),
+        );
   return (seconds / 60) * ELEVEN_MUSIC_USD_PER_MINUTE;
 }
 

@@ -225,7 +225,7 @@ Body:
 }
 ```
 
-For `mode: "audio"`: set `audioType` to `voiceover` or `sfx` (music blocked). Voiceover cost uses `characterCount` or `prompt` length. SFX uses `durationSeconds` (omit = Auto ~5s).
+For `mode: "audio"`: set `audioType` to `voiceover`, `sfx`, or `music`. Voiceover cost uses `characterCount` or `prompt` length. SFX uses `durationSeconds` (omit = Auto ~5s). Music uses `durationSeconds` 3–300 (default 30s); optional `forceInstrumental` (default true).
 
 ### Estimate batch (production budget)
 
@@ -304,7 +304,7 @@ GET /api/v1/generations/:id
 }
 ```
 
-**Audio** (voiceover / SFX; music not available):
+**Audio** (voiceover / SFX / music):
 
 ```json
 {
@@ -318,6 +318,8 @@ GET /api/v1/generations/:id
 ```
 
 SFX example: `{ "mode": "audio", "audioType": "sfx", "prompt": "Soft whoosh", "durationSeconds": 2 }`.
+
+Music example: `{ "mode": "audio", "audioType": "music", "prompt": "Upbeat Caribbean soca bed, instrumental", "durationSeconds": 30, "forceInstrumental": true }`.
 
 Job responses include `threadId`, `stylePresetSlug`, and `creditsSpent` when available.
 

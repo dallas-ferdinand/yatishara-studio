@@ -7,7 +7,7 @@ const estimateSchema = {
   resolution: z.string().optional(),
   durationSeconds: z.number().optional(),
   audioEnabled: z.boolean().optional(),
-  audioType: z.enum(["voiceover", "sfx"]).optional(),
+  audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   characterCount: z.number().optional(),
   prompt: z
     .string()
@@ -74,12 +74,13 @@ const batchItemSchema = z.object({
   quality: z.enum(["low", "medium", "high"]).optional(),
   durationSeconds: z.number().optional(),
   audioEnabled: z.boolean().optional(),
-  audioType: z.enum(["voiceover", "sfx"]).optional(),
+  audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
   elevenVoiceId: z.string().optional(),
   elevenVoiceName: z.string().optional(),
   elevenPublicOwnerId: z.string().optional(),
   audioLoop: z.boolean().optional(),
   promptInfluence: z.number().optional(),
+  forceInstrumental: z.boolean().optional(),
   referenceAssetIds: z.array(z.string()).optional(),
   referenceElementIds: z.array(z.string()).optional(),
   startFrameAssetId: z.string().optional(),
@@ -124,6 +125,7 @@ function generationBody(
     body.elevenPublicOwnerId = item.elevenPublicOwnerId;
     body.audioLoop = item.audioLoop;
     body.promptInfluence = item.promptInfluence;
+    body.forceInstrumental = item.forceInstrumental;
   }
   return body;
 }
@@ -172,7 +174,7 @@ export function registerGenerationTools(server: McpServer) {
           resolution: z.string().optional(),
           durationSeconds: z.number().optional(),
           audioEnabled: z.boolean().optional(),
-          audioType: z.enum(["voiceover", "sfx"]).optional(),
+          audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
           characterCount: z.number().optional(),
           hasReferenceInput: z.boolean().optional(),
           referenceAssetIds: z.array(z.string()).optional(),
@@ -282,7 +284,11 @@ Rules:
       for (const [index, item] of args.items.entries()) {
         const label = item.label ?? `${item.mode}-${index + 1}`;
         try {
-          if (item.mode === "audio" && item.audioType !== "sfx" && !item.elevenVoiceId?.trim()) {
+          if (
+            item.mode === "audio" &&
+            (item.audioType ?? "voiceover") === "voiceover" &&
+            !item.elevenVoiceId?.trim()
+          ) {
             throw new Error("elevenVoiceId is required for voiceover");
           }
           if (item.mode === "video") {
@@ -524,21 +530,23 @@ Wait ≥65s between video calls (1 req/min gateway quota). For packs use studio_
 
   server.tool(
     "studio_generate_audio",
-    `[preferred] Generate voiceover (TTS) or SFX and save to a folder. Call studio_estimate_generation with mode=audio first.
+    `[preferred] Generate voiceover (TTS), SFX, or music and save to a folder. Call studio_estimate_generation with mode=audio first.
 
 Voiceover: requires elevenVoiceId (from studio_explore_voices or studio_list_saved_voices). Prompt = spoken text (max ~3000 chars).
 SFX: prompt = sound description; optional durationSeconds 0.5–30 (omit = Auto ~5s).
-Music is not available. Async by default (wait=false) then polls up to 3 min.`,
+Music: prompt = track description; durationSeconds 3–300 (default 30); forceInstrumental defaults true.
+Async by default (wait=false) then polls up to 3 min (music may need longer — raise wait or poll).`,
     {
       prompt: z.string(),
-      audioType: z.enum(["voiceover", "sfx"]),
+      audioType: z.enum(["voiceover", "sfx", "music"]),
       folderId: z.string().optional(),
       elevenVoiceId: z.string().optional().describe("Required for voiceover"),
       elevenVoiceName: z.string().optional(),
       elevenPublicOwnerId: z.string().optional().describe("Library owner id; omit for account/premade voices"),
-      durationSeconds: z.number().optional().describe("SFX only: 0.5–30"),
+      durationSeconds: z.number().optional().describe("SFX: 0.5–30; Music: 3–300"),
       audioLoop: z.boolean().optional(),
       promptInfluence: z.number().optional().describe("SFX only: 0–1"),
+      forceInstrumental: z.boolean().optional().describe("Music only; default true"),
       wait: z.boolean().optional().describe("Default false (poll). Set true for sync wait on server."),
       compact: z.boolean().optional(),
     },
@@ -547,6 +555,7 @@ Music is not available. Async by default (wait=false) then polls up to 3 min.`,
         throw new Error("elevenVoiceId is required for voiceover");
       }
       const wait = args.wait === true;
+      const pollMs = args.audioType === "music" ? 300_000 : 180_000;
       const queued = await studioFetch("/generations", {
         method: "POST",
         body: JSON.stringify({
@@ -561,11 +570,12 @@ Music is not available. Async by default (wait=false) then polls up to 3 min.`,
           durationSeconds: args.durationSeconds,
           audioLoop: args.audioLoop,
           promptInfluence: args.promptInfluence,
+          forceInstrumental: args.forceInstrumental,
         }),
       });
       if (wait) return jsonResult(queued, args.compact);
       const jobId = (queued as { id: string }).id;
-      const result = await pollGeneration(jobId, { timeoutMs: 180_000 });
+      const result = await pollGeneration(jobId, { timeoutMs: pollMs });
       return jsonResult({ ...queued, ...result }, args.compact);
     },
   );

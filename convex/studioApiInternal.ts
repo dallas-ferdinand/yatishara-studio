@@ -627,7 +627,9 @@ export const estimateGenerationCost = internalQuery({
     aspectRatio: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioEnabled: v.optional(v.boolean()),
-    audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
+    audioType: v.optional(
+      v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
+    ),
     characterCount: v.optional(v.number()),
     referenceAssetIds: v.optional(v.array(v.id("assets"))),
     videoModel: v.optional(v.string()),
@@ -641,7 +643,9 @@ export const estimateGenerationCost = internalQuery({
     ),
     resolution: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
-    audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
+    audioType: v.optional(
+      v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
+    ),
     cost: v.number(),
     creditBalance: v.number(),
     canGenerate: v.boolean(),
@@ -796,7 +800,9 @@ export const estimateBatchProduction = internalQuery({
         resolution: v.optional(v.string()),
         durationSeconds: v.optional(v.number()),
         audioEnabled: v.optional(v.boolean()),
-        audioType: v.optional(v.union(v.literal("voiceover"), v.literal("sfx"))),
+        audioType: v.optional(
+          v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
+        ),
         characterCount: v.optional(v.number()),
         hasReferenceInput: v.optional(v.boolean()),
         referenceAssetIds: v.optional(v.array(v.id("assets"))),

@@ -9,6 +9,8 @@ import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { putObject } from "./lib/bunny";
 import {
   addSharedVoice,
+  clampMusicDurationSeconds,
+  composeMusic,
   isAccountVoiceOwnerId,
   libraryVoicesAvailable,
   listAccountVoices,
@@ -64,6 +66,7 @@ const createQueuedJobRef = makeFunctionReference<
     durationSeconds?: number;
     audioLoop?: boolean;
     promptInfluence?: number;
+    forceInstrumental?: boolean;
     folderId?: Id<"folders">;
   },
   Id<"generationJobs">
@@ -117,6 +120,7 @@ const getJobRef = internalQueryRef<
     durationSeconds?: number;
     audioLoop?: boolean;
     promptInfluence?: number;
+    forceInstrumental?: boolean;
   } | null
 >("generation:getJobForAudio");
 
@@ -127,13 +131,14 @@ const prepareApiAudioGenerationRef = internalMutationRef<
     apiKeyId?: Id<"apiKeys">;
     userPrompt: string;
     title?: string;
-    audioType: "voiceover" | "sfx";
+    audioType: "voiceover" | "sfx" | "music";
     elevenVoiceId?: string;
     elevenVoiceName?: string;
     elevenPublicOwnerId?: string;
     durationSeconds?: number;
     audioLoop?: boolean;
     promptInfluence?: number;
+    forceInstrumental?: boolean;
   },
   { threadId: Id<"generationThreads">; jobId: Id<"generationJobs"> }
 >("generation:prepareApiAudioGeneration");
@@ -332,6 +337,7 @@ export const runAudioFlow = action({
     durationSeconds: v.optional(v.number()),
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
+    forceInstrumental: v.optional(v.boolean()),
   },
   returns: v.object({
     jobId: v.id("generationJobs"),
@@ -343,14 +349,18 @@ export const runAudioFlow = action({
   ): Promise<{ jobId: Id<"generationJobs">; assetIds?: Id<"assets">[] }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Sign in to generate audio.");
-    if (args.audioType === "music") {
-      throw new Error("Music generation is coming soon.");
-    }
 
     const resolvedModel =
       args.audioType === "sfx"
         ? "elevenlabs/eleven_text_to_sound_v2"
-        : "elevenlabs/eleven_v3";
+        : args.audioType === "music"
+          ? "elevenlabs/music_v2"
+          : "elevenlabs/eleven_v3";
+
+    const durationSeconds =
+      args.audioType === "music"
+        ? clampMusicDurationSeconds(args.durationSeconds)
+        : args.durationSeconds;
 
     const jobId = await ctx.runMutation(createQueuedJobRef, {
       threadId: args.threadId,
@@ -362,9 +372,11 @@ export const runAudioFlow = action({
       elevenVoiceId: args.elevenVoiceId,
       elevenVoiceName: args.elevenVoiceName,
       elevenPublicOwnerId: args.elevenPublicOwnerId,
-      durationSeconds: args.durationSeconds,
+      durationSeconds,
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
+      forceInstrumental:
+        args.audioType === "music" ? (args.forceInstrumental ?? true) : undefined,
       folderId: args.folderId,
     });
 
@@ -382,13 +394,14 @@ export const runAudioForApi = internalAction({
     folderId: v.id("folders"),
     apiKeyId: v.optional(v.id("apiKeys")),
     prompt: v.string(),
-    audioType: v.union(v.literal("voiceover"), v.literal("sfx")),
+    audioType: v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
     elevenVoiceId: v.optional(v.string()),
     elevenVoiceName: v.optional(v.string()),
     elevenPublicOwnerId: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
+    forceInstrumental: v.optional(v.boolean()),
     wait: v.optional(v.boolean()),
   },
   returns: v.object({
@@ -401,12 +414,19 @@ export const runAudioForApi = internalAction({
       throw new Error(
         args.audioType === "sfx"
           ? "Describe the sound effect to generate."
-          : "Enter voiceover text.",
+          : args.audioType === "music"
+            ? "Describe the music to generate."
+            : "Enter voiceover text.",
       );
     }
     if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
       throw new Error("Select a voice for the voiceover.");
     }
+
+    const durationSeconds =
+      args.audioType === "music"
+        ? clampMusicDurationSeconds(args.durationSeconds)
+        : args.durationSeconds;
 
     const prepared = await ctx.runMutation(prepareApiAudioGenerationRef, {
       userId: args.userId,
@@ -418,9 +438,11 @@ export const runAudioForApi = internalAction({
       elevenVoiceId: args.elevenVoiceId,
       elevenVoiceName: args.elevenVoiceName,
       elevenPublicOwnerId: args.elevenPublicOwnerId,
-      durationSeconds: args.durationSeconds,
+      durationSeconds,
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
+      forceInstrumental:
+        args.audioType === "music" ? (args.forceInstrumental ?? true) : undefined,
     });
 
     await ctx.scheduler.runAfter(0, internal.audioActions.executeAudioJob, {
@@ -465,6 +487,12 @@ export const executeAudioJob = internalAction({
           durationSeconds: job.durationSeconds,
           loop: job.audioLoop,
           promptInfluence: job.promptInfluence,
+        });
+      } else if (job.audioType === "music") {
+        audio = await composeMusic({
+          prompt: job.userPrompt,
+          durationSeconds: job.durationSeconds,
+          forceInstrumental: job.forceInstrumental ?? true,
         });
       } else {
         const voiceId = job.elevenVoiceId?.trim();
@@ -528,7 +556,9 @@ export const executeAudioJob = internalAction({
             ? error
             : "Audio generation failed";
       const message =
-        /voice is unavailable|Select a voice|Enter text|Describe the sound/i.test(raw)
+        /voice is unavailable|Select a voice|Enter text|Describe the sound|Describe the music/i.test(
+          raw,
+        )
           ? raw
           : friendlyGenerationErrorText(raw);
       await ctx.runMutation(markStageRef, {

@@ -1211,7 +1211,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           resolution?: string;
           durationSeconds?: number;
           audioEnabled?: boolean;
-          audioType?: "voiceover" | "sfx";
+          audioType?: "voiceover" | "sfx" | "music";
           characterCount?: number;
           hasReferenceInput?: boolean;
           referenceAssetIds?: Id<"assets">[];
@@ -1222,12 +1222,6 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
 
       if (!body.items?.length) {
         return finish(errorResponse("items array is required"));
-      }
-
-      for (const item of body.items) {
-        if (item.mode === "audio" && (item as { audioType?: string }).audioType === "music") {
-          return finish(errorResponse("Music generation is not available yet"));
-        }
       }
 
       const estimate = await ctx.runQuery(internal.studioApiInternal.estimateBatchProduction, {
@@ -1263,10 +1257,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       }
 
       if (mode === "audio") {
-        if (body.audioType === "music") {
-          return finish(errorResponse("Music generation is not available yet"));
-        }
-        const audioType = body.audioType === "sfx" ? "sfx" : "voiceover";
+        const audioType =
+          body.audioType === "sfx"
+            ? "sfx"
+            : body.audioType === "music"
+              ? "music"
+              : "voiceover";
         const characterCount =
           body.characterCount ?? (typeof body.prompt === "string" ? body.prompt.length : 0);
         const estimate = await ctx.runQuery(internal.studioApiInternal.estimateGenerationCost, {
@@ -1347,6 +1343,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         elevenPublicOwnerId?: string;
         audioLoop?: boolean;
         promptInfluence?: number;
+        forceInstrumental?: boolean;
         referenceAssetIds?: Id<"assets">[];
         referenceElementIds?: Id<"elements">[];
         /** Storyboard / opening still for video — Seedance first_frame. Characters live here, not in face-sheet refs. */
@@ -1369,10 +1366,12 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const folderId = await resolveFolderId(ctx, auth, body.folderId);
 
       if (mode === "audio") {
-        if (body.audioType === "music") {
-          return finish(errorResponse("Music generation is not available yet"));
-        }
-        const audioType = body.audioType === "sfx" ? "sfx" : "voiceover";
+        const audioType =
+          body.audioType === "sfx"
+            ? "sfx"
+            : body.audioType === "music"
+              ? "music"
+              : "voiceover";
         if (audioType === "voiceover" && !body.elevenVoiceId?.trim()) {
           return finish(errorResponse("elevenVoiceId is required for voiceover"));
         }
@@ -1397,6 +1396,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
           durationSeconds: body.durationSeconds,
           audioLoop: body.audioLoop,
           promptInfluence: body.promptInfluence,
+          forceInstrumental: body.forceInstrumental,
           wait,
         });
 

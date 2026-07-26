@@ -769,6 +769,7 @@ export const createQueuedJob = authedMutation({
     elevenPublicOwnerId: v.optional(v.string()),
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
+    forceInstrumental: v.optional(v.boolean()),
     /** Current Studio folder — overrides stale thread.linkedFolderId for this job. */
     folderId: v.optional(v.id("folders")),
   },
@@ -799,9 +800,6 @@ export const createQueuedJob = authedMutation({
       });
     }
     if (args.mode === "audio") {
-      if (args.audioType === "music") {
-        throw new Error("Music generation is coming soon.");
-      }
       if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
         throw new Error("Select a voice for the voiceover.");
       }
@@ -809,7 +807,9 @@ export const createQueuedJob = authedMutation({
         throw new Error(
           args.audioType === "sfx"
             ? "Describe the sound effect to generate."
-            : "Enter voiceover text.",
+            : args.audioType === "music"
+              ? "Describe the music to generate."
+              : "Enter voiceover text.",
         );
       }
     }
@@ -875,6 +875,7 @@ export const createQueuedJob = authedMutation({
       elevenPublicOwnerId: args.elevenPublicOwnerId,
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
+      forceInstrumental: args.forceInstrumental,
       reservedCreditTransactionId,
       skipPromptEnhancement: args.skipPromptEnhancement,
       source: "ui",
@@ -1421,13 +1422,14 @@ export const prepareApiAudioGeneration = internalMutation({
     apiKeyId: v.optional(v.id("apiKeys")),
     userPrompt: v.string(),
     title: v.optional(v.string()),
-    audioType: v.union(v.literal("voiceover"), v.literal("sfx")),
+    audioType: v.union(v.literal("voiceover"), v.literal("sfx"), v.literal("music")),
     elevenVoiceId: v.optional(v.string()),
     elevenVoiceName: v.optional(v.string()),
     elevenPublicOwnerId: v.optional(v.string()),
     durationSeconds: v.optional(v.number()),
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
+    forceInstrumental: v.optional(v.boolean()),
   },
   returns: v.object({
     threadId: v.id("generationThreads"),
@@ -1440,7 +1442,9 @@ export const prepareApiAudioGeneration = internalMutation({
       throw new Error(
         args.audioType === "sfx"
           ? "Describe the sound effect to generate."
-          : "Enter voiceover text.",
+          : args.audioType === "music"
+            ? "Describe the music to generate."
+            : "Enter voiceover text.",
       );
     }
     if (args.audioType === "voiceover" && !args.elevenVoiceId?.trim()) {
@@ -1461,7 +1465,9 @@ export const prepareApiAudioGeneration = internalMutation({
     const resolvedModel =
       args.audioType === "sfx"
         ? "elevenlabs/eleven_text_to_sound_v2"
-        : "elevenlabs/eleven_v3";
+        : args.audioType === "music"
+          ? "elevenlabs/music_v2"
+          : "elevenlabs/eleven_v3";
     const billingTier = billingTierForMode("audio");
     const reservedCreditTransactionId = await reserveCreditsForUser(ctx, args.userId, {
       tier: billingTier,
@@ -1487,6 +1493,7 @@ export const prepareApiAudioGeneration = internalMutation({
       elevenPublicOwnerId: args.elevenPublicOwnerId,
       audioLoop: args.audioLoop,
       promptInfluence: args.promptInfluence,
+      forceInstrumental: args.forceInstrumental,
       reservedCreditTransactionId,
       source: "api",
       apiKeyId: args.apiKeyId,
@@ -1699,6 +1706,7 @@ export const getJobForAudio = internalQuery({
       durationSeconds: v.optional(v.number()),
       audioLoop: v.optional(v.boolean()),
       promptInfluence: v.optional(v.number()),
+      forceInstrumental: v.optional(v.boolean()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1716,6 +1724,7 @@ export const getJobForAudio = internalQuery({
       durationSeconds: job.durationSeconds,
       audioLoop: job.audioLoop,
       promptInfluence: job.promptInfluence,
+      forceInstrumental: job.forceInstrumental,
     };
   },
 });

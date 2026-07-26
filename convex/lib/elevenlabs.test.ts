@@ -90,6 +90,17 @@ describe("sliceVoicePage", () => {
   });
 });
 
+describe("clampMusicDurationSeconds", () => {
+  it("defaults to 30s and clamps to 3–300", async () => {
+    const { clampMusicDurationSeconds } = await import("./elevenlabs");
+    expect(clampMusicDurationSeconds(undefined)).toBe(30);
+    expect(clampMusicDurationSeconds(null)).toBe(30);
+    expect(clampMusicDurationSeconds(1)).toBe(3);
+    expect(clampMusicDurationSeconds(45)).toBe(45);
+    expect(clampMusicDurationSeconds(900)).toBe(300);
+  });
+});
+
 describe("parseElevenLabsError", () => {
   it("maps library paid-plan errors to vague product copy", () => {
     const detail = JSON.stringify({

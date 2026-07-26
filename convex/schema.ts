@@ -663,6 +663,8 @@ export default defineSchema({
     elevenPublicOwnerId: v.optional(v.string()),
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
+    /** Music: force instrumental output (ElevenLabs force_instrumental). */
+    forceInstrumental: v.optional(v.boolean()),
     externalTaskId: v.optional(v.string()),
     error: v.optional(v.string()),
     reservedCreditTransactionId: v.optional(v.id("creditTransactions")),

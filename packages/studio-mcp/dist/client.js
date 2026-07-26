@@ -57,8 +57,11 @@ function hintForError(message, status) {
       nextTool: "studio_generate_image"
     };
   }
-  if (m.includes("music")) {
-    return { hint: "Music generation is not available. Use voiceover or sfx via studio_generate_audio." };
+  if (m.includes("music") && (m.includes("not available") || m.includes("coming soon"))) {
+    return {
+      hint: "Use studio_generate_audio with audioType=music, prompt, and durationSeconds (3\u2013300).",
+      nextTool: "studio_generate_audio"
+    };
   }
   if (m.includes("concurrent") || status === 429) {
     return {

@@ -59,7 +59,7 @@ Generation:
 - `GATEWAY_ASSISTANT_MODEL_ID` — Studio Assistance multimodal co-pilot (default: `google/gemini-3.5-flash`)
 - `GATEWAY_IMAGE_MODEL_ID` — image generation (default: `openai/gpt-image-2`)
 - `GATEWAY_VIDEO_MODEL_ID` — video generation (default: `bytedance/seedance-2.0`)
-- `ELEVENLABS_API_KEY` — audio generation (voiceover `eleven_v3` + sound effects); Convex secrets only
+- `ELEVENLABS_API_KEY` — audio generation (voiceover `eleven_v3`, sound effects, music `music_v2`); Convex secrets only
 - `GUIDED_VIDEO_ASSISTANCE_ENABLED` — set `0`/`false` to hide Assistance UI (default on)
 
 Storage, video, and push:

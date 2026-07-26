@@ -1,7 +1,22 @@
 /**
- * ElevenLabs API helpers (voice library, TTS v3, sound effects).
+ * ElevenLabs API helpers (voice library, TTS v3, sound effects, music).
  * Call only from Node Convex actions — keeps ELEVENLABS_API_KEY server-side.
  */
+
+/** Self-serve Music API length: 3s–5min (API allows up to 10min; we bill/cap at 5). */
+export const ELEVEN_MUSIC_MIN_DURATION_SECONDS = 3;
+export const ELEVEN_MUSIC_MAX_DURATION_SECONDS = 300;
+export const ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS = 30;
+
+export function clampMusicDurationSeconds(durationSeconds?: number | null): number {
+  if (durationSeconds == null || !Number.isFinite(durationSeconds)) {
+    return ELEVEN_MUSIC_DEFAULT_DURATION_SECONDS;
+  }
+  return Math.max(
+    ELEVEN_MUSIC_MIN_DURATION_SECONDS,
+    Math.min(ELEVEN_MUSIC_MAX_DURATION_SECONDS, Math.round(Number(durationSeconds))),
+  );
+}
 
 const ELEVEN_API_BASE = "https://api.elevenlabs.io";
 
@@ -403,6 +418,46 @@ export async function soundGeneration(args: {
     },
     body: JSON.stringify(body),
   });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(parseElevenLabsError(response.status, detail));
+  }
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  return { data: buffer, mediaType: "audio/mpeg" };
+}
+
+/** Eleven Music compose — prompt mode (`music_v2`). */
+export async function composeMusic(args: {
+  prompt: string;
+  durationSeconds?: number | null;
+  forceInstrumental?: boolean;
+}): Promise<{ data: Uint8Array; mediaType: string }> {
+  const prompt = args.prompt.trim();
+  if (!prompt) throw new Error("Describe the music to generate.");
+  if (prompt.length > 4000) {
+    throw new Error("Music prompt must be 4000 characters or less.");
+  }
+  const durationSeconds = clampMusicDurationSeconds(args.durationSeconds);
+  const body: Record<string, unknown> = {
+    prompt,
+    model_id: "music_v2",
+    music_length_ms: durationSeconds * 1000,
+  };
+  if (args.forceInstrumental != null) {
+    body.force_instrumental = Boolean(args.forceInstrumental);
+  }
+  const response = await fetch(
+    `${ELEVEN_API_BASE}/v1/music?output_format=mp3_44100_128`,
+    {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey(),
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify(body),
+    },
+  );
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(parseElevenLabsError(response.status, detail));
