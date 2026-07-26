@@ -464,8 +464,14 @@ export function FileEntryThumb({
     const isTrash = entry?.studioKind === "trash";
     if (isTrash) {
       visual = (
-        <div className="desk-file-thumb-fallback desk-file-thumb-fallback--trash">
-          <Icon name="trash" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+        <div className="desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--trash">
+          <div className="desk-file-thumb-fallback desk-file-thumb-fallback--trash">
+            <Icon name="trash" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+          </div>
+          <span className="desk-file-thumb-badge" aria-hidden="true">
+            <Icon name="trash" size={14} />
+          </span>
+          <ThumbPeekLabel name={label} />
         </div>
       );
     } else {
