@@ -2116,6 +2116,11 @@
 }
 
 .studio-dm-peer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 650;
   color: var(--color-cursor-text, var(--mos-text));
@@ -2148,35 +2153,167 @@
   color: var(--color-cursor-text, var(--mos-text));
 }
 
-.studio-dm-peer-job-row {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-}
+/* —— Job / offer cards (title row + chip meta; never a full-width action) —— */
 
-.studio-dm-peer-offer-row {
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.studio-dm-peer-offer-copy {
+.studio-dm-peer-job-card,
+.studio-dm-peer-offer-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: stretch;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border-soft, var(--mos-border)));
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--cursor-surface-raised, color-mix(in srgb, var(--mos-surface) 92%, var(--mos-bg)));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.studio-dm-peer-job-card {
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.studio-dm-peer-job-card:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 32%,
+    var(--mos-border)
+  );
+  background: var(--color-cursor-hover, var(--mos-hover));
+}
+
+.studio-dm-peer-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  width: 100%;
+}
+
+.studio-dm-peer-card-title {
   flex: 1 1 auto;
-}
-
-.studio-dm-peer-row-meta {
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font-size: 10px;
-  font-weight: 550;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
   line-height: 1.25;
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-dm-peer-book {
+.studio-dm-peer-card-chevron {
+  width: 12px;
+  height: 12px;
   flex: 0 0 auto;
-  min-width: 52px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-peer-job-card:hover .studio-dm-peer-card-chevron {
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-peer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.studio-dm-peer-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  max-width: 100%;
+  height: 17px;
+  padding: 0 6px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mos-bg) 55%, transparent);
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.studio-dm-peer-chip > svg {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-peer-chip.is-live {
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 38%, var(--mos-border));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-peer-chip.is-done {
+  border-color: color-mix(in srgb, #3dd68c 36%, var(--mos-border));
+  background: color-mix(in srgb, #3dd68c 12%, transparent);
+  color: color-mix(in srgb, #3dd68c 78%, var(--mos-text));
+}
+
+.studio-dm-peer-chip.is-wait {
+  border-color: color-mix(in srgb, #f5b544 36%, var(--mos-border));
+  background: color-mix(in srgb, #f5b544 12%, transparent);
+  color: color-mix(in srgb, #f5b544 80%, var(--mos-text));
+}
+
+.studio-dm-peer-chip.is-off {
+  color: var(--color-cursor-muted, var(--mos-muted));
+  opacity: 0.8;
+}
+
+/* Compact accent action — must not inherit the full-width settings-action rule. */
+.studio-dm-peer-book {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 42%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 16%, transparent);
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.studio-dm-peer-book:hover:not(:disabled) {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 60%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 26%, transparent);
+}
+
+.studio-dm-peer-book:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .studio-dm-peer-section-icon {

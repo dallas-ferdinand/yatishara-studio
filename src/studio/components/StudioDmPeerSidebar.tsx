@@ -3,9 +3,13 @@
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  Award,
   Ban,
   Briefcase,
   Building2,
+  ChevronRight,
+  CircleDollarSign,
+  Clock,
   ExternalLink,
   FileText,
   Globe,
@@ -100,6 +104,51 @@ function Section({
       </div>
       {children}
     </section>
+  );
+}
+
+/** Job status → chip tone so live work reads apart from finished/cancelled. */
+function jobStatusTone(status: string): string {
+  if (status === "completed") return "is-done";
+  if (status === "cancelled" || status === "refunded") return "is-off";
+  if (status === "pending_payment") return "is-wait";
+  return "is-live";
+}
+
+function JobCard({
+  title,
+  status,
+  priceCredits,
+  onOpen,
+}: {
+  title: string;
+  status: string;
+  priceCredits: number;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="studio-dm-peer-job-card"
+      onClick={onOpen}
+    >
+      <span className="studio-dm-peer-card-head">
+        <span className="studio-dm-peer-card-title">{title}</span>
+        <ChevronRight
+          className="studio-dm-peer-card-chevron"
+          aria-hidden="true"
+        />
+      </span>
+      <span className="studio-dm-peer-chips">
+        <span className={`studio-dm-peer-chip ${jobStatusTone(status)}`}>
+          {JOB_STATUS_LABEL[status] ?? status}
+        </span>
+        <span className="studio-dm-peer-chip">
+          <CircleDollarSign aria-hidden="true" />
+          {creditsLabel(priceCredits)}
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -482,13 +531,17 @@ export function StudioDmPeerSidebar({
               }
             >
               <div className="studio-dm-peer-plate">
-                <strong className="studio-dm-peer-title">
-                  {jobDetail.job.offerTitle}
-                </strong>
-                <span className="studio-admin-chip">
-                  {JOB_STATUS_LABEL[jobDetail.job.status] ??
-                    jobDetail.job.status}
-                </span>
+                <div className="studio-dm-peer-card-head">
+                  <strong className="studio-dm-peer-title">
+                    {jobDetail.job.offerTitle}
+                  </strong>
+                  <span
+                    className={`studio-dm-peer-chip ${jobStatusTone(jobDetail.job.status)}`}
+                  >
+                    {JOB_STATUS_LABEL[jobDetail.job.status] ??
+                      jobDetail.job.status}
+                  </span>
+                </div>
                 <dl className="studio-dm-peer-facts">
                   <div>
                     <dt>Price</dt>
@@ -522,23 +575,19 @@ export function StudioDmPeerSidebar({
           ) : (
             <>
               {(jobsWithPeer?.asBuyer.length ?? 0) > 0 ? (
-                <Section title="My orders from them">
+                <Section
+                  title="My orders from them"
+                  icon={<Award className="h-3 w-3" aria-hidden="true" />}
+                >
                   <ul className="studio-dm-peer-list">
                     {jobsWithPeer!.asBuyer.map((job) => (
                       <li key={job._id}>
-                        <button
-                          type="button"
-                          className="studio-dm-assign-row studio-dm-peer-job-row"
-                          onClick={() => setJobDetailId(job._id)}
-                        >
-                          <span className="studio-dm-assign-name">
-                            {job.offerTitle}
-                          </span>
-                          <span className="studio-dm-peer-row-meta">
-                            {JOB_STATUS_LABEL[job.status] ?? job.status} ·{" "}
-                            {creditsLabel(job.priceCredits)}
-                          </span>
-                        </button>
+                        <JobCard
+                          title={job.offerTitle}
+                          status={job.status}
+                          priceCredits={job.priceCredits}
+                          onOpen={() => setJobDetailId(job._id)}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -546,37 +595,43 @@ export function StudioDmPeerSidebar({
               ) : null}
 
               {(offers?.length ?? 0) > 0 ? (
-                <Section title="Request a job">
+                <Section
+                  title="Request a job"
+                  icon={<Package className="h-3 w-3" aria-hidden="true" />}
+                >
                   <ul className="studio-dm-peer-list">
                     {offers!.map((offer) => (
-                      <li
-                        key={offer._id}
-                        className="studio-dm-assign-row studio-dm-peer-offer-row"
-                      >
-                        <div className="studio-dm-peer-offer-copy">
-                          <span className="studio-dm-assign-name">
+                      <li key={offer._id} className="studio-dm-peer-offer-card">
+                        <div className="studio-dm-peer-card-head">
+                          <span className="studio-dm-peer-card-title">
                             {offer.title}
                           </span>
-                          <span className="studio-dm-peer-row-meta">
-                            from {centsLabel(offer.priceCents)} ·{" "}
-                            {offer.deliveryDays}d
+                          <button
+                            type="button"
+                            className="studio-dm-peer-book"
+                            disabled={busy}
+                            onClick={() => void handleBook(offer._id)}
+                          >
+                            {bookingOfferId === offer._id ? (
+                              <Loader2
+                                className="h-3 w-3 animate-spin"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              "Book"
+                            )}
+                          </button>
+                        </div>
+                        <div className="studio-dm-peer-chips">
+                          <span className="studio-dm-peer-chip">
+                            <CircleDollarSign aria-hidden="true" />
+                            from {centsLabel(offer.priceCents)}
+                          </span>
+                          <span className="studio-dm-peer-chip">
+                            <Clock aria-hidden="true" />
+                            {offer.deliveryDays}d delivery
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          className="cursor-settings-action studio-dm-peer-book"
-                          disabled={busy}
-                          onClick={() => void handleBook(offer._id)}
-                        >
-                          {bookingOfferId === offer._id ? (
-                            <Loader2
-                              className="h-3.5 w-3.5 animate-spin"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            "Book"
-                          )}
-                        </button>
                       </li>
                     ))}
                   </ul>
@@ -586,9 +641,10 @@ export function StudioDmPeerSidebar({
               {(jobsWithPeer?.asSeller.length ?? 0) > 0 ? (
                 <Section
                   title="Their orders from me"
+                  icon={<Briefcase className="h-3 w-3" aria-hidden="true" />}
                   extras={
                     jobsWithPeer?.sellerTotals ? (
-                      <span className="studio-admin-chip">
+                      <span className="studio-dm-peer-chip">
                         {jobsWithPeer.sellerTotals.jobCount} ·{" "}
                         {creditsLabel(jobsWithPeer.sellerTotals.totalCredits)}
                       </span>
@@ -598,19 +654,12 @@ export function StudioDmPeerSidebar({
                   <ul className="studio-dm-peer-list">
                     {jobsWithPeer!.asSeller.map((job) => (
                       <li key={job._id}>
-                        <button
-                          type="button"
-                          className="studio-dm-assign-row studio-dm-peer-job-row"
-                          onClick={() => setJobDetailId(job._id)}
-                        >
-                          <span className="studio-dm-assign-name">
-                            {job.offerTitle}
-                          </span>
-                          <span className="studio-dm-peer-row-meta">
-                            {JOB_STATUS_LABEL[job.status] ?? job.status} ·{" "}
-                            {creditsLabel(job.priceCredits)}
-                          </span>
-                        </button>
+                        <JobCard
+                          title={job.offerTitle}
+                          status={job.status}
+                          priceCredits={job.priceCredits}
+                          onOpen={() => setJobDetailId(job._id)}
+                        />
                       </li>
                     ))}
                   </ul>
