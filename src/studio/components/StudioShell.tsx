@@ -30,6 +30,7 @@ import {
   Clapperboard,
   Clock3,
   CreditCard,
+  Download,
   FileText,
   FileUp,
   Folder,
@@ -42,6 +43,7 @@ import {
   LayoutGrid,
   LayoutList,
   List,
+  ListChecks,
   Loader2,
   Lock,
   LogOut,
@@ -140,6 +142,13 @@ import {
 } from "@/studio/lib/mediaUrls";
 import { isVideoFileUrl, playableMediaUrl } from "@/studio/lib/mediaPlayback";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
+import {
+  downloadStudioArchive,
+  downloadStudioEntry as downloadStudioFile,
+} from "@/studio/lib/studioFileDownloads";
+import {
+  StudioFileTransferTray,
+} from "@/studio/components/StudioFileTransferTray";
 import {
   IMAGE_UPSCALE_PROMPT,
   aspectRatioFromDimensions,
@@ -398,6 +407,8 @@ function serializeComposerContextsForStorage(contexts) {
       sfxDurationAuto: ctx.sfxDurationAuto,
       sfxDurationSeconds: ctx.sfxDurationSeconds,
       sfxPromptInfluence: ctx.sfxPromptInfluence,
+      musicDurationSeconds: ctx.musicDurationSeconds,
+      musicInstrumental: ctx.musicInstrumental,
     };
   }
   return out;
@@ -451,6 +462,8 @@ function snapshotComposerContextFields({
   sfxDurationAuto,
   sfxDurationSeconds,
   sfxPromptInfluence,
+  musicDurationSeconds,
+  musicInstrumental,
   previous,
 }) {
   return {
@@ -477,6 +490,8 @@ function snapshotComposerContextFields({
     sfxDurationAuto,
     sfxDurationSeconds,
     sfxPromptInfluence,
+    musicDurationSeconds,
+    musicInstrumental,
   };
 }
 
@@ -1024,6 +1039,12 @@ export function StudioShell({
   const [sfxPromptInfluence, setSfxPromptInfluence] = useState(
     () => initialComposerCtx.sfxPromptInfluence ?? 0.3,
   );
+  const [musicDurationSeconds, setMusicDurationSeconds] = useState(
+    () => initialComposerCtx.musicDurationSeconds ?? 30,
+  );
+  const [musicInstrumental, setMusicInstrumental] = useState(
+    () => initialComposerCtx.musicInstrumental ?? true,
+  );
   /** Direct = verbatim handoff; Styled = backend enhancement sticks style + script + elements. */
   const skipPromptEnhancement = composerStyleMode === "direct";
   const [referenceIntent, setReferenceIntent] = useState(
@@ -1057,6 +1078,19 @@ export function StudioShell({
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [fileSelectionMode, setFileSelectionMode] = useState(false);
+  const [selectedFileEntries, setSelectedFileEntries] = useState([]);
+  const [fileTransfers, setFileTransfers] = useState([]);
+  const fileTransferControllersRef = useRef(new Map());
+  const fileTransferPayloadsRef = useRef(new Map());
+  const selectedFilePaths = useMemo(
+    () => new Set(selectedFileEntries.map((entry) => entry.path)),
+    [selectedFileEntries],
+  );
+  useEffect(() => {
+    setSelectedFileEntries([]);
+    setFileSelectionMode(false);
+  }, [activeFolderId]);
   const [renameTarget, setRenameTarget] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
@@ -2207,7 +2241,9 @@ export function StudioShell({
                 ? sfxDurationAuto
                   ? undefined
                   : sfxDurationSeconds
-                : undefined,
+                : mode === "audio" && audioType === "music"
+                  ? musicDurationSeconds
+                  : undefined,
           hasReferenceInput:
             mode === "video" || mode === "image"
               ? generationReferences.length > 0
@@ -2270,6 +2306,8 @@ export function StudioShell({
       sfxDurationAuto,
       sfxDurationSeconds,
       sfxPromptInfluence,
+      musicDurationSeconds,
+      musicInstrumental,
       previous: composerContextsRef.current[key],
     });
     window.clearTimeout(composerPersistTimerRef.current);
@@ -2297,6 +2335,8 @@ export function StudioShell({
     sfxDurationAuto,
     sfxDurationSeconds,
     sfxPromptInfluence,
+    musicDurationSeconds,
+    musicInstrumental,
   ]);
 
   useEffect(() => {
@@ -2334,6 +2374,8 @@ export function StudioShell({
       sfxDurationAuto,
       sfxDurationSeconds,
       sfxPromptInfluence,
+      musicDurationSeconds,
+      musicInstrumental,
       previous: composerContextsRef.current[prevKey],
     });
     writePersistedComposerContexts(composerContextsRef.current);
@@ -2357,6 +2399,8 @@ export function StudioShell({
     setSfxDurationAuto(next.sfxDurationAuto ?? true);
     setSfxDurationSeconds(next.sfxDurationSeconds ?? 5);
     setSfxPromptInfluence(next.sfxPromptInfluence ?? 0.3);
+    setMusicDurationSeconds(next.musicDurationSeconds ?? 30);
+    setMusicInstrumental(next.musicInstrumental ?? true);
     composerKeyRef.current = composerContextKey;
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -3854,6 +3898,17 @@ export function StudioShell({
   function handleEntryDrop(event, targetEntry) {
     if (isTrashNav || targetEntry?.studioKind === "trash") return;
     if (!targetEntry?.studioId) return;
+    if (event.dataTransfer?.files?.length) {
+      if (
+        targetEntry.type === "dir" ||
+        targetEntry.studioKind === "folder" ||
+        targetEntry.studioKind === "messages"
+      ) {
+        event.preventDefault();
+        void uploadFiles(event.dataTransfer.files, targetEntry.studioId);
+      }
+      return;
+    }
     const raw = event.dataTransfer?.getData(EXPLORER_DND_TYPE);
     if (!raw) return;
     let source;
@@ -3909,18 +3964,185 @@ export function StudioShell({
     }
   }
 
-  async function uploadFiles(files) {
-    if (!activeFolder) return;
-    for (const file of Array.from(files ?? [])) {
-      const assetId = await uploadStudioAsset({
-        file,
-        folderId: activeFolder._id,
-        kind: kindFromMime(file.type),
-        reserveUpload,
-        commitStagingUpload,
+  function updateFileTransfer(id, patch) {
+    setFileTransfers((current) =>
+      current.map((transfer) => (transfer.id === id ? { ...transfer, ...patch } : transfer)),
+    );
+  }
+
+  function finishFileTransfer(id, patch) {
+    updateFileTransfer(id, patch);
+    fileTransferControllersRef.current.delete(id);
+    window.setTimeout(() => {
+      setFileTransfers((current) => current.filter((transfer) => transfer.id !== id));
+      fileTransferPayloadsRef.current.delete(id);
+    }, 4500);
+  }
+
+  async function runFileTransfer(id) {
+    const payload = fileTransferPayloadsRef.current.get(id);
+    if (!payload) return;
+    const controller = new AbortController();
+    fileTransferControllersRef.current.set(id, controller);
+    updateFileTransfer(id, {
+      status: "active",
+      loaded: 0,
+      total: payload.file?.size ?? 0,
+      error: "",
+    });
+    try {
+      if (payload.type === "upload") {
+        const assetId = await uploadStudioAsset({
+          file: payload.file,
+          folderId: payload.folderId,
+          kind: kindFromMime(payload.file.type),
+          reserveUpload,
+          commitStagingUpload,
+          signal: controller.signal,
+          onProgress: (loaded, total) =>
+            updateFileTransfer(id, { loaded, total, detail: payload.file.name }),
+        });
+        finishFileTransfer(id, {
+          status: "done",
+          loaded: payload.file.size,
+          total: payload.file.size,
+          name: payload.file.name,
+        });
+        return assetId;
+      }
+
+      const onProgress = ({ loaded, total, fileName, phase }) =>
+        updateFileTransfer(id, {
+          loaded,
+          total,
+          detail:
+            phase === "preparing"
+              ? fileName
+              : phase === "packing"
+                ? `Packing · ${fileName}`
+                : fileName,
+        });
+      if (payload.type === "archive") {
+        const result = await downloadStudioArchive({
+          convex,
+          selections: payload.selections,
+          signal: controller.signal,
+          onProgress,
+        });
+        if (result.truncated) {
+          toast.warning("ZIP reached the 500-file safety limit");
+        }
+        finishFileTransfer(id, {
+          status: "done",
+          name: result.name,
+        });
+      } else {
+        const name = await downloadStudioFile({
+          convex,
+          selection: payload.selection,
+          signal: controller.signal,
+          onProgress,
+        });
+        finishFileTransfer(id, { status: "done", name });
+      }
+    } catch (error) {
+      const canceled = error?.name === "AbortError";
+      updateFileTransfer(id, {
+        status: "error",
+        error: canceled ? "Canceled" : friendlyConvexError(error, "Transfer failed"),
       });
-      openTab(`asset:${assetId}`);
+      fileTransferControllersRef.current.delete(id);
     }
+    return null;
+  }
+
+  function queueFileTransfer(payload, name, direction) {
+    const id = `${direction}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    fileTransferPayloadsRef.current.set(id, payload);
+    setFileTransfers((current) => [
+      ...current,
+      {
+        id,
+        direction,
+        name,
+        status: "queued",
+        loaded: 0,
+        total: payload.file?.size ?? 0,
+      },
+    ]);
+    void runFileTransfer(id);
+    return id;
+  }
+
+  async function uploadFiles(files, folderId = activeFolder?._id) {
+    if (!folderId) return;
+    const incoming = Array.from(files ?? []).filter((file) => file instanceof File);
+    for (const file of incoming) {
+      queueFileTransfer({ type: "upload", file, folderId }, file.name, "upload");
+    }
+  }
+
+  function downloadSelectionForEntry(entry) {
+    if (!entry?.studioId) return null;
+    if (entry.type === "dir" || entry.studioKind === "folder" || entry.studioKind === "messages") {
+      return { kind: "folder", id: entry.studioId };
+    }
+    if (
+      entry.studioKind === "asset" ||
+      entry.studioKind === "document" ||
+      entry.studioKind === "videoEdit" ||
+      entry.studioKind === "element"
+    ) {
+      return { kind: entry.studioKind, id: entry.studioId };
+    }
+    return null;
+  }
+
+  function startEntryDownload(entry) {
+    const selection = downloadSelectionForEntry(entry);
+    if (!selection || selection.kind === "folder") return;
+    queueFileTransfer(
+      { type: "download", selection },
+      entry.name ?? "Download",
+      "download",
+    );
+  }
+
+  function startArchiveDownload(entries) {
+    const selections = entries.map(downloadSelectionForEntry).filter(Boolean);
+    if (!selections.length) {
+      toast.error("Nothing downloadable is selected");
+      return;
+    }
+    const name =
+      selections.length === 1 && entries[0]?.type === "dir"
+        ? `${entries[0].name ?? "Folder"}.zip`
+        : `Studio selection (${selections.length}).zip`;
+    queueFileTransfer({ type: "archive", selections }, name, "download");
+  }
+
+  function toggleFileSelection(entry) {
+    if (!entry || entry.type === "parent") return;
+    setFileSelectionMode(true);
+    setSelectedFileEntries((current) =>
+      current.some((item) => item.path === entry.path)
+        ? current.filter((item) => item.path !== entry.path)
+        : [...current, entry],
+    );
+  }
+
+  function cancelFileTransfer(id) {
+    fileTransferControllersRef.current.get(id)?.abort();
+  }
+
+  function dismissFileTransfer(id) {
+    fileTransferControllersRef.current.delete(id);
+    fileTransferPayloadsRef.current.delete(id);
+    setFileTransfers((current) => current.filter((transfer) => transfer.id !== id));
+  }
+
+  function retryFileTransfer(id) {
+    void runFileTransfer(id);
   }
 
   async function uploadElementFiles(files, folderId = activeFolder?._id) {
@@ -4700,9 +4922,6 @@ export function StudioShell({
       }
 
       if (mode === "audio") {
-        if (audioType === "music") {
-          throw new Error("Music generation is coming soon.");
-        }
         if (audioType === "voiceover" && !selectedVoice?.voiceId) {
           throw new Error("Select a voice for the voiceover.");
         }
@@ -4715,7 +4934,9 @@ export function StudioShell({
               ? sfxDurationAuto
                 ? undefined
                 : sfxDurationSeconds
-              : undefined,
+              : audioType === "music"
+                ? musicDurationSeconds
+                : undefined,
         });
         if (entitlement && entitlement.creditBalance < estimatedCost) {
           openSettingsTab("billing");
@@ -4774,9 +4995,14 @@ export function StudioShell({
           elevenVoiceName: selectedVoice?.name,
           elevenPublicOwnerId: selectedVoice?.publicOwnerId,
           durationSeconds:
-            audioType === "sfx" && !sfxDurationAuto ? sfxDurationSeconds : undefined,
+            audioType === "sfx" && !sfxDurationAuto
+              ? sfxDurationSeconds
+              : audioType === "music"
+                ? musicDurationSeconds
+                : undefined,
           audioLoop: audioType === "sfx" ? sfxLoop : undefined,
           promptInfluence: audioType === "sfx" ? sfxPromptInfluence : undefined,
+          forceInstrumental: audioType === "music" ? musicInstrumental : undefined,
         }).catch((error) => {
           const raw =
             error instanceof Error
@@ -16861,6 +17087,21 @@ export function StudioShell({
             isMobile={false}
             pinnedPaths={explorerPinnedPaths}
             pinnedShortcuts={explorerPinnedShortcuts}
+            onDropFiles={uploadFiles}
+            selectionMode={fileSelectionMode}
+            selectedPaths={selectedFilePaths}
+            selectedCount={selectedFileEntries.length}
+            onToggleSelectionMode={() => {
+              setFileSelectionMode((current) => !current);
+              setSelectedFileEntries([]);
+            }}
+            onEntrySelect={toggleFileSelection}
+            onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+            onClearSelection={() => setSelectedFileEntries([])}
+            transfers={fileTransfers}
+            onCancelTransfer={cancelFileTransfer}
+            onDismissTransfer={dismissFileTransfer}
+            onRetryTransfer={retryFileTransfer}
             pickedPaths={
               pickingFromFiles
                 ? assetPickSelected.map((item) => item.path).filter(Boolean)
@@ -17346,6 +17587,10 @@ export function StudioShell({
             setSfxDurationSeconds={setSfxDurationSeconds}
             sfxPromptInfluence={sfxPromptInfluence}
             setSfxPromptInfluence={setSfxPromptInfluence}
+            musicDurationSeconds={musicDurationSeconds}
+            setMusicDurationSeconds={setMusicDurationSeconds}
+            musicInstrumental={musicInstrumental}
+            setMusicInstrumental={setMusicInstrumental}
             elementType={elementType}
             setElementType={setElementType}
             presets={presets}
@@ -17425,6 +17670,20 @@ export function StudioShell({
           onEntryDrop={handleEntryDrop}
           pinnedPaths={explorerPinnedPaths}
           pinnedShortcuts={explorerPinnedShortcuts}
+          selectionMode={fileSelectionMode}
+          selectedPaths={selectedFilePaths}
+          selectedCount={selectedFileEntries.length}
+          onToggleSelectionMode={() => {
+            setFileSelectionMode((current) => !current);
+            setSelectedFileEntries([]);
+          }}
+          onEntrySelect={toggleFileSelection}
+          onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+          onClearSelection={() => setSelectedFileEntries([])}
+          transfers={fileTransfers}
+          onCancelTransfer={cancelFileTransfer}
+          onDismissTransfer={dismissFileTransfer}
+          onRetryTransfer={retryFileTransfer}
         />
       ) : null}
 
@@ -17565,7 +17824,7 @@ export function StudioShell({
           sharedAssetIds={sharedAssetIds}
           pinnedPaths={explorerPinnedPaths}
           currentPath={explorerPinParent}
-          canDownloadZip={false}
+          canDownloadZip={!isTrashNav}
           canPin={!isTrashNav}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
@@ -17602,9 +17861,9 @@ export function StudioShell({
             if (action === "empty-trash") void handleEmptyTrash();
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
             if (action === "copy-path") void navigator.clipboard?.writeText(displayWorkspacePath(entry.path ?? ""));
-            if (action === "download") void downloadStudioEntry(entry, convex, assetUrlExpiresUnix);
+            if (action === "download") startEntryDownload(entry);
             if (action === "download-zip") {
-              toast.message("Folder ZIP download isn’t available in Studio yet");
+              startArchiveDownload([entry]);
               return;
             }
             if (action === "use-wallpaper") {
@@ -17703,6 +17962,10 @@ function StudioComposer({
   setSfxDurationSeconds,
   sfxPromptInfluence = 0.3,
   setSfxPromptInfluence,
+  musicDurationSeconds = 30,
+  setMusicDurationSeconds,
+  musicInstrumental = true,
+  setMusicInstrumental,
   elementType,
   setElementType,
   presets,
@@ -17945,6 +18208,7 @@ function StudioComposer({
     characterCount: draft.trim().length,
     sfxDurationAuto,
     sfxDurationSeconds,
+    musicDurationSeconds,
   });
   const assistanceOn = Boolean(
     assistanceFeatureEnabled && assistanceEnabled && !isAudioMode,
@@ -18047,17 +18311,14 @@ function StudioComposer({
     (assistanceOn
       ? !canCancelAssist && !draft.trim() && !attachments.length
       : !draft.trim()) ||
-    (isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId) ||
-    (isAudioMode && audioType === "music");
+    (isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId);
   const generateTitle = canCancelAssist
     ? "Stop Assistance"
     : assistanceOn
     ? "Send Assistance message"
     : isElementMode
       ? `Build ${elementSheetLabel(elementType)}`
-      : isAudioMode && audioType === "music"
-        ? "Music coming soon"
-        : isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId
+      : isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId
           ? "Select a voice"
           : "Generate";
 
@@ -18104,6 +18365,10 @@ function StudioComposer({
       setSfxDurationSeconds={setSfxDurationSeconds}
       sfxPromptInfluence={sfxPromptInfluence}
       setSfxPromptInfluence={setSfxPromptInfluence}
+      musicDurationSeconds={musicDurationSeconds}
+      setMusicDurationSeconds={setMusicDurationSeconds}
+      musicInstrumental={musicInstrumental}
+      setMusicInstrumental={setMusicInstrumental}
     />
   );
 
@@ -18495,7 +18760,6 @@ function StudioComposer({
               value={audioType}
               items={AUDIO_TYPE_OPTIONS}
               onChange={(value) => {
-                if (value === "music") return;
                 setAudioType?.(value);
               }}
               hideLabel
@@ -18638,6 +18902,10 @@ function StudioComposerControlStrip({
   setSfxDurationSeconds,
   sfxPromptInfluence = 0.3,
   setSfxPromptInfluence,
+  musicDurationSeconds = 30,
+  setMusicDurationSeconds,
+  musicInstrumental = true,
+  setMusicInstrumental,
 }) {
   const scriptTypeItems = (scriptTypes ?? []).map((item) => ({
     value: item.slug,
@@ -18723,7 +18991,32 @@ function StudioComposerControlStrip({
               </div>
             ) : null}
             {audioType === "music" ? (
-              <p className="studio-audio-disabled-chip">Music generation is coming soon.</p>
+              <div className="studio-audio-sfx-controls">
+                <label className="studio-voice-picker-check">
+                  <input
+                    type="checkbox"
+                    checked={musicInstrumental}
+                    onChange={(event) => setMusicInstrumental?.(event.target.checked)}
+                  />
+                  <span>Instrumental</span>
+                </label>
+                <label>
+                  <span>Duration</span>
+                  <select
+                    className="studio-voice-picker-select"
+                    value={String(musicDurationSeconds)}
+                    onChange={(event) =>
+                      setMusicDurationSeconds?.(Number(event.target.value))
+                    }
+                  >
+                    {[10, 15, 30, 45, 60, 90, 120, 180, 300].map((seconds) => (
+                      <option key={seconds} value={String(seconds)}>
+                        {seconds >= 60 ? `${seconds / 60}m` : `${seconds}s`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             ) : null}
           </>
         ) : (
@@ -19904,7 +20197,7 @@ const ELEMENT_TYPE_OPTIONS = [
 const AUDIO_TYPE_OPTIONS = [
   { value: "voiceover", label: "Voiceover", meta: "ElevenLabs v3" },
   { value: "sfx", label: "Sound effects", meta: "Text to sound" },
-  { value: "music", label: "Music", meta: "Soon", disabled: true },
+  { value: "music", label: "Music", meta: "Eleven Music v2" },
 ];
 
 function CreateStudioTab({ target, onCancel, onCreate }) {
@@ -23716,8 +24009,21 @@ function StudioFilesExplorerBody({
   pickedPaths = null,
   pinnedPaths = null,
   pinnedShortcuts = [],
+  onDropFiles,
+  selectionMode = false,
+  selectedPaths = null,
+  selectedCount = 0,
+  onToggleSelectionMode,
+  onEntrySelect,
+  onDownloadSelected,
+  onClearSelection,
+  transfers = [],
+  onCancelTransfer,
+  onDismissTransfer,
+  onRetryTransfer,
 }) {
   const filterActive = typeFilter !== "all";
+  const [dropOver, setDropOver] = useState(false);
   const tree = (
       <FileTree
         viewMode={isMobile ? "grid" : filterActive ? "grid" : viewMode}
@@ -23726,6 +24032,9 @@ function StudioFilesExplorerBody({
         flatEntries={displayCurrentEntries}
         listDir={() => {}}
         pickedPaths={pickedPaths}
+        selectedPaths={selectedPaths}
+        selectionMode={selectionMode}
+        onEntrySelect={onEntrySelect}
         pinnedPaths={pinnedPaths}
         pinnedShortcuts={pinnedShortcuts}
         onNavigate={(path, navEntry) => {
@@ -23774,7 +24083,24 @@ function StudioFilesExplorerBody({
   );
 
   return (
-    <div className="cursor-explorer-body flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div
+      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}`}
+      onDragOver={(event) => {
+        if (!onDropFiles || !Array.from(event.dataTransfer.types).includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setDropOver(false);
+      }}
+      onDrop={(event) => {
+        setDropOver(false);
+        if (!onDropFiles || !event.dataTransfer.files?.length) return;
+        event.preventDefault();
+        void onDropFiles(event.dataTransfer.files, activeFolder?._id);
+      }}
+    >
       {showSearch ? (
         <PanelSearchBar
           value={search}
@@ -23791,9 +24117,58 @@ function StudioFilesExplorerBody({
       {showPathbar ? (
         <div className="studio-folder-pathbar shrink-0">
           <FileBreadcrumbs path={breadcrumbPath} onNavigate={onBreadcrumbNavigate} onDropEntry={onBreadcrumbDrop} />
+          {onToggleSelectionMode ? (
+            <button
+              type="button"
+              className={`studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
+              onClick={onToggleSelectionMode}
+              aria-pressed={selectionMode}
+              title={selectionMode ? "Exit selection" : "Select multiple"}
+            >
+              <ListChecks size={13} />
+              <span>{selectionMode ? "Done" : "Select"}</span>
+            </button>
+          ) : null}
+        </div>
+      ) : onToggleSelectionMode ? (
+        <div className="studio-file-inline-tools shrink-0">
+          <button
+            type="button"
+            className={`studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
+            onClick={onToggleSelectionMode}
+            aria-pressed={selectionMode}
+          >
+            <ListChecks size={13} />
+            <span>{selectionMode ? "Done" : "Select"}</span>
+          </button>
         </div>
       ) : null}
       {tree}
+      {selectionMode ? (
+        <div className="studio-file-selection-bar shrink-0" aria-live="polite">
+          <span>{selectedCount ? `${selectedCount} selected` : "Select files or folders"}</span>
+          <div>
+            {selectedCount ? (
+              <button type="button" onClick={onClearSelection}>Clear</button>
+            ) : null}
+            <button
+              type="button"
+              className="is-primary"
+              disabled={!selectedCount}
+              onClick={onDownloadSelected}
+            >
+              <Download size={13} />
+              Download ZIP
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <StudioFileTransferTray
+        transfers={transfers}
+        onCancel={onCancelTransfer}
+        onDismiss={onDismissTransfer}
+        onRetry={onRetryTransfer}
+      />
     </div>
   );
 }
@@ -23901,6 +24276,7 @@ function StudioFilesMobileSheet({
           showSearch={false}
           showPathbar={false}
           viewMode="grid"
+          onDropFiles={onUploadFiles}
         />
       </div>
     </div>,
@@ -25062,6 +25438,7 @@ function composerCreditCost({
   characterCount = 0,
   sfxDurationAuto = true,
   sfxDurationSeconds = 5,
+  musicDurationSeconds = 30,
 }) {
   if (mode === "element") {
     return elementSheetCreditCost({
@@ -25080,14 +25457,16 @@ function composerCreditCost({
   }
   if (mode === "audio") {
     return audioCreditCost({
-      audioType: audioType === "music" ? "sfx" : audioType,
+      audioType,
       characterCount: audioType === "voiceover" ? characterCount : undefined,
       durationSeconds:
         audioType === "sfx"
           ? sfxDurationAuto
             ? undefined
             : sfxDurationSeconds
-          : undefined,
+          : audioType === "music"
+            ? musicDurationSeconds
+            : undefined,
     });
   }
   return creditCostForGeneration({

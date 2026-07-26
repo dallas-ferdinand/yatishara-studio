@@ -34,6 +34,8 @@ export async function uploadStudioAsset(args: {
   reserveUpload: ReserveFn;
   commitStagingUpload: CommitFn;
   name?: string;
+  signal?: AbortSignal;
+  onProgress?: (loaded: number, total: number) => void;
 }): Promise<Id<"assets">> {
   const mimeType = args.file.type || "application/octet-stream";
   const reserved = await args.reserveUpload({
@@ -43,15 +45,32 @@ export async function uploadStudioAsset(args: {
     mimeType,
   });
 
-  const staged = await fetch(reserved.uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": mimeType },
-    body: args.file,
+  const stagedJson = await new Promise<{ storageId?: string }>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const abort = () => request.abort();
+    request.open("POST", reserved.uploadUrl);
+    request.setRequestHeader("Content-Type", mimeType);
+    request.responseType = "json";
+    request.upload.onprogress = (event) => {
+      args.onProgress?.(event.loaded, event.lengthComputable ? event.total : args.file.size);
+    };
+    request.onerror = () => reject(new Error("Staging upload failed"));
+    request.onabort = () => reject(new DOMException("Upload canceled", "AbortError"));
+    request.onload = () => {
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(`Staging upload failed (${request.status})`));
+        return;
+      }
+      const response =
+        request.response && typeof request.response === "object"
+          ? (request.response as { storageId?: string })
+          : (JSON.parse(request.responseText || "{}") as { storageId?: string });
+      resolve(response);
+    };
+    args.signal?.addEventListener("abort", abort, { once: true });
+    request.onloadend = () => args.signal?.removeEventListener("abort", abort);
+    request.send(args.file);
   });
-  if (!staged.ok) {
-    throw new Error(`Staging upload failed (${staged.status})`);
-  }
-  const stagedJson = (await staged.json()) as { storageId?: string };
   if (!stagedJson.storageId) {
     throw new Error("Staging upload did not return a storage id.");
   }
@@ -61,5 +80,6 @@ export async function uploadStudioAsset(args: {
     storageId: stagedJson.storageId as Id<"_storage">,
     byteSize: args.file.size,
   });
+  args.onProgress?.(args.file.size, args.file.size);
   return committed.assetId;
 }

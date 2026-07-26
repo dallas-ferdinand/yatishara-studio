@@ -105,6 +105,7 @@ import type * as studioApiActions from "../studioApiActions.js";
 import type * as studioApiContext from "../studioApiContext.js";
 import type * as studioApiHttp from "../studioApiHttp.js";
 import type * as studioApiInternal from "../studioApiInternal.js";
+import type * as studioDownloads from "../studioDownloads.js";
 import type * as stylePresetActions from "../stylePresetActions.js";
 import type * as stylePresets from "../stylePresets.js";
 import type * as users from "../users.js";
@@ -219,6 +220,7 @@ declare const fullApi: ApiFromModules<{
   studioApiContext: typeof studioApiContext;
   studioApiHttp: typeof studioApiHttp;
   studioApiInternal: typeof studioApiInternal;
+  studioDownloads: typeof studioDownloads;
   stylePresetActions: typeof stylePresetActions;
   stylePresets: typeof stylePresets;
   users: typeof users;

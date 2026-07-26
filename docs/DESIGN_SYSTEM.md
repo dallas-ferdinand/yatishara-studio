@@ -79,6 +79,14 @@ from `--mos-plate`:
   not trash/message icons.
 - Active *controls* inside the file manager (breadcrumb `.is-current`, view/type menus)
   stay L3 — that's the control affordance, not a plate.
+- External file drag/drop uses a restrained centered **“Drop to upload”** L2 chip plus
+  a subtle accent inset on the explorer — never a full-panel oversized drop card.
+- Multi-select is an explicit mode (also entered by Ctrl/Cmd-click): selected tiles use
+  the normal selected L2 treatment plus a compact accent check. The action rail sits
+  immediately above transfers.
+- Upload/download progress lives in the **bottom transfer tray**, below file content.
+  Rows are compact L3 plates (28px), show live bytes/progress, and keep cancel/retry
+  controls reachable without displacing breadcrumbs or search.
 
 ### Select / dropdown (locked decision)
 

@@ -818,6 +818,26 @@ export function ExplorerPanel({
 
         <FileBreadcrumbs path={filesPath} onNavigate={onNavigate} />
 
+        <FileTree
+          viewMode={viewMode}
+          rootEntries={rootEntries}
+          flatEntries={fileEntries}
+          listDir={listDir}
+          onNavigate={onNavigate}
+          onOpenFile={onOpenFile}
+          searchQuery={search}
+          searchScope={currentDir}
+          searchResults={searchResults}
+          searchBusy={searchBusy}
+          searchTruncated={searchTruncated}
+          workspaceId={workspaceId}
+          pinnedPaths={pinnedSet}
+          pinnedShortcuts={pinnedShortcuts}
+          enableLongPress={hidePanelHead && Boolean(onAttachEntry || onOpenFile)}
+          onEntryLongPress={setSheetEntry}
+          onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
+          onBlankContextMenu={openBlankContextMenu}
+        />
         {uploadQueue.length || downloads.length ? (
           <div className="cursor-explorer-uploads shrink-0" aria-live="polite">
             {uploadQueue.map((u) => {
@@ -850,27 +870,6 @@ export function ExplorerPanel({
             ))}
           </div>
         ) : null}
-
-        <FileTree
-          viewMode={viewMode}
-          rootEntries={rootEntries}
-          flatEntries={fileEntries}
-          listDir={listDir}
-          onNavigate={onNavigate}
-          onOpenFile={onOpenFile}
-          searchQuery={search}
-          searchScope={currentDir}
-          searchResults={searchResults}
-          searchBusy={searchBusy}
-          searchTruncated={searchTruncated}
-          workspaceId={workspaceId}
-          pinnedPaths={pinnedSet}
-          pinnedShortcuts={pinnedShortcuts}
-          enableLongPress={hidePanelHead && Boolean(onAttachEntry || onOpenFile)}
-          onEntryLongPress={setSheetEntry}
-          onEntryContextMenu={(entry, x, y) => setContextMenu({ entry, x, y })}
-          onBlankContextMenu={openBlankContextMenu}
-        />
       </div>
 
       <ExplorerContextMenu

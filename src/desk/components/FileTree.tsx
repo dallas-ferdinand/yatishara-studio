@@ -14,6 +14,7 @@ import { displayEntryPath } from "@/desk/lib/display-path";
 import { normalizeExplorerPath } from "@/desk/lib/explorer-pins";
 import { useState } from "react";
 import { animate } from "@motionone/dom";
+import { Check } from "lucide-react";
 
 function parentEntry(parent) {
   if (!parent) return null;
@@ -576,6 +577,9 @@ function FileEntryButton({
   onContextMenu,
   onDragStart,
   onDropEntry,
+  selected = false,
+  selectionMode = false,
+  onSelect,
 }) {
   const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
     enableLongPress && onLongPress ? (coords) => onLongPress(entry, coords) : undefined,
@@ -592,29 +596,52 @@ function FileEntryButton({
       data-entry-path={entry.path}
       data-drop-target={isDir && onDropEntry ? "folder" : undefined}
       title={entry.path ? displayEntryPath(entry) : label}
-      onClick={() => {
+      aria-selected={entry.type === "parent" ? undefined : selected}
+      onClick={(event) => {
         if (longPressFired()) {
           clearLongPressFired();
+          return;
+        }
+        if (
+          entry.type !== "parent" &&
+          onSelect &&
+          (selectionMode || event.metaKey || event.ctrlKey || event.shiftKey)
+        ) {
+          onSelect(entry, {
+            additive: event.metaKey || event.ctrlKey,
+            range: event.shiftKey,
+          });
           return;
         }
         onOpen();
       }}
       onContextMenu={onContextMenu}
-      draggable={entry.type !== "parent"}
+      draggable={entry.type !== "parent" && !selectionMode}
       onDragStart={onDragStart}
       onDragOver={isDir && onDropEntry ? (e) => {
         e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
+        e.dataTransfer.dropEffect = Array.from(e.dataTransfer.types).includes("Files")
+          ? "copy"
+          : "move";
         setDragOver(true);
       } : undefined}
       onDragLeave={isDir && onDropEntry ? () => setDragOver(false) : undefined}
       onDrop={isDir && onDropEntry ? (e) => {
         e.preventDefault();
+        e.stopPropagation();
         setDragOver(false);
         onDropEntry(e, entry);
       } : undefined}
       {...longPressHandlers}
     >
+      {selectionMode && entry.type !== "parent" ? (
+        <span
+          className={`desk-file-selection-check${selected ? " is-selected" : ""}`}
+          aria-hidden="true"
+        >
+          {selected ? <Check size={11} strokeWidth={2.5} /> : null}
+        </span>
+      ) : null}
       {children ?? (
         <>
           <Icon
@@ -664,6 +691,9 @@ function renderEntryRows({
   onEntryContextMenu,
   onEntryDragStart,
   onEntryDrop,
+  selectedSet,
+  selectionMode,
+  onEntrySelect,
   enableLongPress,
   longPressDelay,
   rowClass,
@@ -692,6 +722,9 @@ function renderEntryRows({
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
               onDropEntry={onEntryDrop}
+              selected={selectedSet?.has(e.path)}
+              selectionMode={selectionMode}
+              onSelect={onEntrySelect}
             >
               <FileEntryThumb entry={e} workspaceId={workspaceId} size="preview" pinned={isPinnedEntry(e, pinnedPaths)} />
             </FileEntryButton>
@@ -721,6 +754,9 @@ function renderEntryRows({
                 onLongPress={onEntryLongPress}
                 onContextMenu={(ev) => onEntryContextMenu(ev, e)}
                 onDragStart={(ev) => onEntryDragStart(ev, e)}
+                selected={selectedSet?.has(e.path)}
+                selectionMode={selectionMode}
+                onSelect={onEntrySelect}
               >
                 <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" />
               </FileEntryButton>
@@ -739,6 +775,9 @@ function renderEntryRows({
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
               onDropEntry={onEntryDrop}
+              selected={selectedSet?.has(e.path)}
+              selectionMode={selectionMode}
+              onSelect={onEntrySelect}
             >
               <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" pinned={isPinnedEntry(e, pinnedPaths)} />
             </FileEntryButton>
@@ -772,6 +811,9 @@ function renderEntryRows({
             onLongPress={onEntryLongPress}
             onContextMenu={(ev) => onEntryContextMenu(ev, e)}
             onDragStart={(ev) => onEntryDragStart(ev, e)}
+            selected={selectedSet?.has(e.path)}
+            selectionMode={selectionMode}
+            onSelect={onEntrySelect}
           >
             <span className="desk-file-list-name">
               <Icon
@@ -813,6 +855,9 @@ export function FileTree({
   emptyHint,
   /** Paths highlighted while in Studio pick-from-Files mode. */
   pickedPaths = null,
+  selectedPaths = null,
+  selectionMode = false,
+  onEntrySelect,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -822,6 +867,12 @@ export function FileTree({
       ? pickedPaths
       : Array.isArray(pickedPaths)
         ? new Set(pickedPaths)
+        : null;
+  const selectedSet =
+    selectedPaths instanceof Set
+      ? selectedPaths
+      : Array.isArray(selectedPaths)
+        ? new Set(selectedPaths)
         : null;
   if (empty) return empty;
 
@@ -901,7 +952,8 @@ export function FileTree({
   const rowClass = (e, base) => {
     const pinned = isPinnedEntry(e, pinnedPaths);
     const picked = Boolean(pickedSet?.has(e.path));
-    return `${base}${pinned ? " is-folder-pinned" : ""}${e.type === "parent" ? " is-parent-row" : ""}${picked ? " is-picked" : ""}`;
+    const selected = Boolean(selectedSet?.has(e.path));
+    return `${base}${pinned ? " is-folder-pinned" : ""}${e.type === "parent" ? " is-parent-row" : ""}${picked ? " is-picked" : ""}${selected ? " is-selected" : ""}`;
   };
 
   const rows = renderEntryRows({
@@ -916,6 +968,9 @@ export function FileTree({
     onEntryContextMenu: onContext,
     onEntryDragStart,
   onEntryDrop,
+    selectedSet,
+    selectionMode,
+    onEntrySelect,
   enableLongPress,
   longPressDelay,
   rowClass,
