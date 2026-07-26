@@ -142,7 +142,26 @@ export const creditTransactionKind = v.union(
   v.literal("marketplace_escrow_release"),
   v.literal("marketplace_escrow_refund"),
   v.literal("storage_charge"),
+  /** Creative Network stock audio (music/SFX) one-time purchase. */
+  v.literal("asset_purchase"),
 );
+
+/** Protected system folders in the explorer. */
+export const folderSystemKind = v.union(
+  v.literal("messages"),
+  v.literal("purchased_assets"),
+);
+
+/** Buyer copy of a Creative Network listing. */
+export const assetLicenseKind = v.union(v.literal("purchased_network"));
+
+export const assetListingStatus = v.union(
+  v.literal("listed"),
+  v.literal("unlisted"),
+  v.literal("removed"),
+);
+
+export const assetListingAudioType = v.union(v.literal("music"), v.literal("sfx"));
 
 export const marketplaceSellerStatus = v.union(
   v.literal("pending"),
@@ -241,6 +260,20 @@ export default defineSchema({
      * Per-thread value is stored on generationThreads.assistanceEnabled.
      */
     assistanceDefaultEnabled: v.optional(v.boolean()),
+    /**
+     * First Studio workspace tab when no open-tabs session is restored.
+     * Missing → composer (Generate).
+     */
+    defaultStudioTab: v.optional(
+      v.union(
+        v.literal("composer"),
+        v.literal("feed"),
+        v.literal("network"),
+        v.literal("messages"),
+      ),
+    ),
+    /** Set when signup intent chooser (or silent backfill) completes. */
+    studioIntentChosenAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSeenAt: v.optional(v.number()),
@@ -275,10 +308,10 @@ export default defineSchema({
     color: v.optional(v.string()),
     sortOrder: v.number(),
     /**
-     * Protected system folders (e.g. Messages for DM media). Cannot be
-     * renamed, moved, or trashed — contents remain normal soft-trashable assets.
+     * Protected system folders (Messages for DM media, Purchased for Creative
+     * Network audio). Cannot be renamed, moved, or trashed.
      */
-    systemKind: v.optional(v.literal("messages")),
+    systemKind: v.optional(folderSystemKind),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -329,6 +362,10 @@ export default defineSchema({
     editProxyError: v.optional(v.string()),
     editProxyUpdatedAt: v.optional(v.number()),
     sourceGenerationJobId: v.optional(v.id("generationJobs")),
+    /** Creative Network listing this copy was purchased from. */
+    sourceListingId: v.optional(v.id("assetListings")),
+    /** When set, trash/delete/move-out is blocked (pay-once Network license). */
+    licenseKind: v.optional(assetLicenseKind),
     deletedAt: v.optional(v.number()),
     /**
      * Hard-deleted: Bunny objects are being removed and the bytes are already
@@ -749,6 +786,7 @@ export default defineSchema({
     balanceAfter: v.number(),
     generationJobId: v.optional(v.id("generationJobs")),
     marketplaceJobId: v.optional(v.id("marketplaceJobs")),
+    assetPurchaseId: v.optional(v.id("assetPurchases")),
     paymentId: v.optional(v.id("payments")),
     reversesTransactionId: v.optional(v.id("creditTransactions")),
     reason: v.optional(v.string()),
@@ -759,6 +797,7 @@ export default defineSchema({
     .index("by_payment", ["paymentId"])
     .index("by_generation_job", ["generationJobId"])
     .index("by_marketplace_job", ["marketplaceJobId"])
+    .index("by_asset_purchase", ["assetPurchaseId"])
     .index("by_reversed_transaction", ["reversesTransactionId"]),
 
   /**
@@ -1455,7 +1494,10 @@ export default defineSchema({
 
   sellerPayouts: defineTable({
     sellerUserId: v.id("users"),
-    jobId: v.id("marketplaceJobs"),
+    /** Service job payout (Creative Network offers). */
+    jobId: v.optional(v.id("marketplaceJobs")),
+    /** Stock audio purchase payout (music/SFX listings). */
+    assetPurchaseId: v.optional(v.id("assetPurchases")),
     amountCents: v.number(),
     status: sellerPayoutStatus,
     paidAt: v.optional(v.number()),
@@ -1466,5 +1508,53 @@ export default defineSchema({
   })
     .index("by_seller", ["sellerUserId"])
     .index("by_job", ["jobId"])
+    .index("by_asset_purchase", ["assetPurchaseId"])
     .index("by_status", ["status"]),
+
+  /**
+   * Creative Network stock audio listings (music / SFX). Separate from service offers.
+   */
+  assetListings: defineTable({
+    sellerId: v.id("marketplaceSellers"),
+    sellerUserId: v.id("users"),
+    sourceAssetId: v.id("assets"),
+    audioType: assetListingAudioType,
+    title: v.string(),
+    description: v.optional(v.string()),
+    durationSeconds: v.optional(v.number()),
+    /** What generate would cost the buyer (Studio audioCreditCost). */
+    generateCredits: v.number(),
+    /** Fixed list price = generateCredits × 3. */
+    priceCredits: v.number(),
+    status: assetListingStatus,
+    purchaseCount: v.number(),
+    listedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_status_and_listed", ["status", "listedAt"])
+    .index("by_seller", ["sellerId"])
+    .index("by_seller_user", ["sellerUserId"])
+    .index("by_source_asset", ["sourceAssetId"])
+    .index("by_audio_type_and_status", ["audioType", "status"]),
+
+  assetPurchases: defineTable({
+    listingId: v.id("assetListings"),
+    buyerUserId: v.id("users"),
+    sellerUserId: v.id("users"),
+    sellerId: v.id("marketplaceSellers"),
+    priceCredits: v.number(),
+    platformCredits: v.number(),
+    sellerCredits: v.number(),
+    creditPriceCents: v.number(),
+    sellerPayoutCents: v.number(),
+    buyerAssetId: v.id("assets"),
+    creditTransactionId: v.id("creditTransactions"),
+    createdAt: v.number(),
+  })
+    .index("by_listing", ["listingId"])
+    .index("by_buyer", ["buyerUserId"])
+    .index("by_buyer_and_listing", ["buyerUserId", "listingId"])
+    .index("by_seller", ["sellerUserId"]),
 });

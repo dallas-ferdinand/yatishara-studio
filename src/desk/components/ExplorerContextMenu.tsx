@@ -75,6 +75,9 @@ function buildMenuItems(entry, {
   sharedAssetIds,
   canDownloadZip = true,
   canPin = true,
+  canListOnNetwork = false,
+  networkListingId = null,
+  networkListingStatus = null,
 }) {
   if (!entry) return [];
 
@@ -83,6 +86,9 @@ function buildMenuItems(entry, {
   const isTrashFolder = entry.studioKind === "trash";
   const isMessagesFolder =
     entry.studioKind === "messages" || entry.systemKind === "messages";
+  const isPurchasedFolder =
+    entry.studioKind === "purchased" || entry.systemKind === "purchased_assets";
+  const isPurchasedNetworkAsset = entry.licenseKind === "purchased_network";
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -95,7 +101,7 @@ function buildMenuItems(entry, {
         ...(canCreateFolder ? [{ id: "new-folder", label: "Folder" }] : []),
       ];
 
-  if (isTrashFolder || isMessagesFolder) {
+  if (isTrashFolder || isMessagesFolder || isPurchasedFolder) {
     return [{ id: "open", label: "Open folder" }];
   }
 
@@ -220,8 +226,22 @@ function buildMenuItems(entry, {
     }
   }
 
+  const isListableAudio =
+    isFile &&
+    entry.studioKind === "asset" &&
+    entry.kind === "audio" &&
+    !isPurchasedNetworkAsset;
+  if (isListableAudio && canListOnNetwork) {
+    items.push({ id: "sep-network", sep: true });
+    if (networkListingId && networkListingStatus === "listed") {
+      items.push({ id: "unlist-network", label: "Unlist from Creative Network" });
+    } else {
+      items.push({ id: "list-network", label: "List on Creative Network" });
+    }
+  }
+
   // —— Danger ——
-  if (onRequestDelete) {
+  if (onRequestDelete && !isPurchasedNetworkAsset) {
     items.push({ id: "sep-danger", sep: true });
     items.push({
       id: "delete",
@@ -287,6 +307,9 @@ export function ExplorerContextMenu({
   sharedAssetIds,
   canDownloadZip = true,
   canPin = true,
+  canListOnNetwork = false,
+  networkListingId = null,
+  networkListingStatus = null,
 }) {
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
@@ -308,6 +331,9 @@ export function ExplorerContextMenu({
         sharedAssetIds,
         canDownloadZip,
         canPin,
+        canListOnNetwork,
+        networkListingId,
+        networkListingStatus,
       }),
     [
       entry,
@@ -322,6 +348,9 @@ export function ExplorerContextMenu({
       sharedAssetIds,
       canDownloadZip,
       canPin,
+      canListOnNetwork,
+      networkListingId,
+      networkListingStatus,
     ],
   );
 

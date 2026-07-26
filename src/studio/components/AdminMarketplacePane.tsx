@@ -728,17 +728,24 @@ export function AdminMarketplacePane({
                   <tr key={payout._id}>
                     <td>
                       <strong>{payout.businessName ?? payout.sellerUserId}</strong>
-                      <button
-                        type="button"
-                        className="studio-admin-job-link"
-                        onClick={() => {
-                          setJobFilter("all");
-                          if (onOpenJobs) onOpenJobs(payout.jobId);
-                          else setFocusJobId(payout.jobId);
-                        }}
-                      >
-                        {payout.offerTitle ?? "Open job"}
-                      </button>
+                      {payout.assetPurchaseId ? (
+                        <span className="studio-admin-job-link" style={{ cursor: "default" }}>
+                          {payout.listingTitle ?? "Creative Network audio"}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="studio-admin-job-link"
+                          onClick={() => {
+                            if (!payout.jobId) return;
+                            setJobFilter("all");
+                            if (onOpenJobs) onOpenJobs(payout.jobId);
+                            else setFocusJobId(payout.jobId);
+                          }}
+                        >
+                          {payout.offerTitle ?? "Open job"}
+                        </button>
+                      )}
                     </td>
                     <td>
                       <PayoutDestination account={payout.payoutAccount} />

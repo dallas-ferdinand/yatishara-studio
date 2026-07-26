@@ -993,11 +993,13 @@ export const adminListPayouts = adminQuery({
     v.object({
       _id: v.id("sellerPayouts"),
       sellerUserId: v.id("users"),
-      jobId: v.id("marketplaceJobs"),
+      jobId: v.optional(v.id("marketplaceJobs")),
+      assetPurchaseId: v.optional(v.id("assetPurchases")),
       amountCents: v.number(),
       status: v.union(v.literal("owed"), v.literal("paid")),
       businessName: v.optional(v.string()),
       offerTitle: v.optional(v.string()),
+      listingTitle: v.optional(v.string()),
       payoutAccount: v.union(v.null(), payoutAccountShape),
       paidAt: v.optional(v.number()),
       adminNote: v.optional(v.string()),
@@ -1014,18 +1016,34 @@ export const adminListPayouts = adminQuery({
     const out = [];
     for (const payout of rows) {
       const seller = await getMarketplaceSellerForUser(ctx, payout.sellerUserId);
-      const job = await ctx.db.get("marketplaceJobs", payout.jobId);
-      const offer = job
-        ? await ctx.db.get("marketplaceOffers", job.offerId)
-        : null;
+      let offerTitle: string | undefined;
+      let listingTitle: string | undefined;
+      if (payout.jobId) {
+        const job = await ctx.db.get("marketplaceJobs", payout.jobId);
+        const offer = job
+          ? await ctx.db.get("marketplaceOffers", job.offerId)
+          : null;
+        offerTitle = offer?.title;
+      }
+      if (payout.assetPurchaseId) {
+        const purchase = await ctx.db.get("assetPurchases", payout.assetPurchaseId);
+        const listing = purchase
+          ? await ctx.db.get("assetListings", purchase.listingId)
+          : null;
+        listingTitle = listing?.title
+          ? `Audio: ${listing.title}`
+          : "Creative Network audio";
+      }
       out.push({
         _id: payout._id,
         sellerUserId: payout.sellerUserId,
         jobId: payout.jobId,
+        assetPurchaseId: payout.assetPurchaseId,
         amountCents: payout.amountCents,
         status: payout.status,
         businessName: seller?.businessName,
-        offerTitle: offer?.title,
+        offerTitle,
+        listingTitle,
         payoutAccount: toPayoutAccount(seller),
         paidAt: payout.paidAt,
         adminNote: payout.adminNote,

@@ -342,14 +342,30 @@ border, same as `.studio-account-save`). Logo mark comes from `useMercurySidebar
 so its ink follows appearance. The `studio-admin-*` classes are **not** available on public
 routes (they live in the `StudioShell` inline `<style>`) — mirror them with local classes.
 
-The public marketplace brand is **Yatishara Creative Network** ("Creative services from
-verified creators"); listings are *services/packages*, never "offers" in public copy
-(route stays `/offers`). Catalog shell = full-height left rail (248px, `--color-cursor-sidebar`,
-32px brand head + flat search strip + tree-row filters — same chrome family as the Studio
-file-manager sidebar) + main column (workspace head + scrolling page body). Value grid sits
-in the main column (verified creators / secure booking / delivery tracking). Filters are
-client-side (search + category/price/delivery); ≤860px the rail stacks above content with
-pill chips. Memory: **705**.
+**Creative Network** is a normal Studio workspace tab (`network:home`), not a separate
+public catalog site. Deep links (`/creative-network/`, `/creative-network/[slug]/`, legacy
+`/offers/*`) authenticate into Studio with `?network=1` (+ optional `slug` / `u`).
+
+| Mode | Left rail | Main pane |
+|---|---|---|
+| **Network** (all users) | Catalog filters (search, category, delivery, price) | Browse grid + offer detail / book |
+| **My offers** (approved sellers) | Messages-style offer list + Messages quick access | Offer editor / list (`MarketplaceOffersPane`) |
+| **My jobs** (approved sellers) | Messages-style job list + Messages quick access | Job detail / list |
+| Non-sellers | Network filters only | Header CTA: Become a seller / Continue registration |
+
+Messages quick access opens the existing Messages tab (`openChatWith`) — no embedded chat
+in the CN pane. Mobile: CN item on bottom nav; rail opens as a floating sheet (same pattern
+as People on Feed). Signup intent + Settings → General “Default tab” control first-open
+tab (Generate / Feed / Creative Network / Messages). Admin Offers/Jobs ops tabs unchanged.
+Listings are *services/packages* in product copy. CSS: `studio-creative-network.css` +
+shared `public-offers.css` tokens. Memory: Creative Network Studio tab model.
+
+**Stock audio (v1 digital goods)** is separate from service offers/jobs: Files left rail
+toggles **Your files | Creative Network** to browse music/SFX at fixed **3× generate**
+price (TTD UI), purchase once into locked **Purchased** folder (`systemKind:
+purchased_assets`, `licenseKind: purchased_network`). Platform/seller split **30/70**;
+admin Payouts shows both job and audio purchase rows. Backend: `convex/assetStore.ts` +
+`assetStoreActions.ts`. Never say “credits” in buyer/seller copy (memory **715**).
 
 ---
 

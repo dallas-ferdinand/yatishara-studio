@@ -19,7 +19,7 @@ const folderReturn = v.object({
   icon: v.string(),
   color: v.optional(v.string()),
   sortOrder: v.number(),
-  systemKind: v.optional(v.literal("messages")),
+  systemKind: v.optional(v.union(v.literal("messages"), v.literal("purchased_assets"))),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -463,7 +463,7 @@ export const update = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const folder = await requireFolderOwner(ctx, args.folderId);
-    assertMessagesFolderMutable(folder);
+    assertSystemFolderMutable(folder);
     if (args.parentId !== undefined && args.parentId !== null) {
       if (args.parentId === folder._id) {
         throw new Error("Folder cannot be moved into itself");
@@ -488,7 +488,7 @@ export const moveToTrash = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const folder = await requireFolderOwner(ctx, args.folderId);
-    assertMessagesFolderMutable(folder);
+    assertSystemFolderMutable(folder);
     await ctx.db.patch(args.folderId, {
       deletedAt: Date.now(),
       updatedAt: Date.now(),
@@ -536,9 +536,12 @@ async function requireFolderOwner(
   return folder;
 }
 
-function assertMessagesFolderMutable(folder: Doc<"folders">) {
+function assertSystemFolderMutable(folder: Doc<"folders">) {
   if (folder.systemKind === "messages") {
     throw new Error("The Messages folder cannot be renamed, moved, or deleted");
+  }
+  if (folder.systemKind === "purchased_assets") {
+    throw new Error("The Purchased folder cannot be renamed, moved, or deleted");
   }
 }
 
@@ -593,20 +596,86 @@ export async function ensureMessagesFolder(
   });
 }
 
+/**
+ * Idempotent Purchased folder for Creative Network stock audio (pay-once licenses).
+ * Contents cannot be trashed while licenseKind is purchased_network.
+ */
+export async function ensurePurchasedAssetsFolder(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  parentId?: Id<"folders">,
+): Promise<Id<"folders">> {
+  const existing = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_system_kind", (q) =>
+      q.eq("ownerId", userId).eq("systemKind", "purchased_assets"),
+    )
+    .first();
+  if (existing && !existing.deletedAt) {
+    if (parentId && existing.parentId !== parentId) {
+      await ctx.db.patch(existing._id, {
+        parentId,
+        updatedAt: Date.now(),
+      });
+    }
+    return existing._id;
+  }
+  if (existing?.deletedAt) {
+    await ctx.db.patch(existing._id, {
+      deletedAt: undefined,
+      name: "Purchased",
+      ...(parentId ? { parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return existing._id;
+  }
+  const now = Date.now();
+  return await ctx.db.insert("folders", {
+    ownerId: userId,
+    ...(parentId ? { parentId } : {}),
+    name: "Purchased",
+    icon: "library",
+    sortOrder: 1,
+    systemKind: "purchased_assets",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function workspaceRootForUser(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<Id<"folders"> | undefined> {
+  const topFolders = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_parent", (q) =>
+      q.eq("ownerId", userId).eq("parentId", undefined),
+    )
+    .collect();
+  const root = topFolders.find(
+    (folder) =>
+      !folder.deletedAt &&
+      folder.systemKind !== "messages" &&
+      folder.systemKind !== "purchased_assets",
+  );
+  return root?._id;
+}
+
 /** Public mutation so the DM client can reserve uploads into Messages. */
 export const ensureMessagesFolderForMe = authedMutation({
   args: {},
   returns: v.id("folders"),
   handler: async (ctx) => {
-    const topFolders = await ctx.db
-      .query("folders")
-      .withIndex("by_owner_and_parent", (q) =>
-        q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
-      )
-      .collect();
-    const root = topFolders.find(
-      (folder) => !folder.deletedAt && folder.systemKind !== "messages",
-    );
-    return await ensureMessagesFolder(ctx, ctx.user._id, root?._id);
+    const rootId = await workspaceRootForUser(ctx, ctx.user._id);
+    return await ensureMessagesFolder(ctx, ctx.user._id, rootId);
+  },
+});
+
+export const ensurePurchasedAssetsFolderForMe = authedMutation({
+  args: {},
+  returns: v.id("folders"),
+  handler: async (ctx) => {
+    const rootId = await workspaceRootForUser(ctx, ctx.user._id);
+    return await ensurePurchasedAssetsFolder(ctx, ctx.user._id, rootId);
   },
 });

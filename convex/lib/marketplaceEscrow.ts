@@ -1,5 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 const DEFAULT_CREDIT_PRICE_CENTS = 50;
 
@@ -18,7 +18,9 @@ export function creditsFromOfferPriceCents(
   return credits;
 }
 
-export async function getCreditPriceCents(ctx: MutationCtx): Promise<number> {
+export async function getCreditPriceCents(
+  ctx: MutationCtx | QueryCtx,
+): Promise<number> {
   const settings = await ctx.db
     .query("pricingSettings")
     .withIndex("by_key", (q) => q.eq("key", "default"))

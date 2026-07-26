@@ -64,6 +64,8 @@ const assetReturn = v.object({
   editProxyError: v.optional(v.string()),
   editProxyUpdatedAt: v.optional(v.number()),
   sourceGenerationJobId: v.optional(v.id("generationJobs")),
+  sourceListingId: v.optional(v.id("assetListings")),
+  licenseKind: v.optional(v.literal("purchased_network")),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -332,6 +334,13 @@ export const update = authedMutation({
     const asset = await requireAssetOwner(ctx, args.assetId);
     if (args.folderId !== undefined) {
       await requireFolderOwner(ctx, args.folderId);
+      if (asset.licenseKind === "purchased_network") {
+        throw new Error("Purchased Creative Network audio cannot be moved.");
+      }
+      const fromFolder = await ctx.db.get("folders", asset.folderId);
+      if (fromFolder?.systemKind === "purchased_assets") {
+        throw new Error("Files in the Purchased folder cannot be moved.");
+      }
     }
     await ctx.db.patch(asset._id, {
       ...(args.name !== undefined ? { name: args.name.trim() } : {}),
@@ -351,6 +360,11 @@ export const duplicate = authedMutation({
   returns: v.id("assets"),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
+    if (asset.licenseKind === "purchased_network") {
+      throw new Error(
+        "Purchased Creative Network audio cannot be duplicated.",
+      );
+    }
     const folderId = args.targetFolderId ?? asset.folderId;
     await requireFolderOwner(ctx, folderId);
     const now = Date.now();
@@ -393,6 +407,17 @@ export const moveToTrash = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
+    if (asset.licenseKind === "purchased_network") {
+      throw new Error(
+        "Purchased Creative Network audio stays in your Purchased folder and cannot be deleted.",
+      );
+    }
+    const folder = await ctx.db.get("folders", asset.folderId);
+    if (folder?.systemKind === "purchased_assets") {
+      throw new Error(
+        "Files in the Purchased folder cannot be deleted.",
+      );
+    }
     const now = Date.now();
     await ctx.db.patch(asset._id, {
       deletedAt: now,
@@ -455,6 +480,11 @@ export const deleteForever = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const asset = await requireAssetOwner(ctx, args.assetId);
+    if (asset.licenseKind === "purchased_network") {
+      throw new Error(
+        "Purchased Creative Network audio cannot be permanently deleted.",
+      );
+    }
     if (!asset.deletedAt) {
       throw new Error("Move the file to trash before deleting it forever.");
     }

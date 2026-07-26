@@ -464,7 +464,9 @@ export function FileEntryThumb({
     const isTrash = entry?.studioKind === "trash";
     const isMessages =
       entry?.studioKind === "messages" || entry?.systemKind === "messages";
-    if (isTrash || isMessages) {
+    const isPurchased =
+      entry?.studioKind === "purchased" || entry?.systemKind === "purchased_assets";
+    if (isTrash || isMessages || isPurchased) {
       // System folders: lock badge = protected / non-deletable, not trash/message glyphs.
       visual = (
         <div

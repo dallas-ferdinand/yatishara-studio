@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { ensureMessagesFolder } from "./folders";
+import { ensureMessagesFolder, ensurePurchasedAssetsFolder } from "./folders";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { ensureProfileForUser } from "./lib/profileEnsure";
 import { toNameCase } from "./lib/profileIdentity";
@@ -82,6 +82,14 @@ export const current = authedQuery({
     /** Missing → true (Assistance on by default). */
     assistanceDefaultEnabled: v.boolean(),
     activeStyleSheetId: v.optional(v.id("elements")),
+    defaultStudioTab: v.union(
+      v.literal("composer"),
+      v.literal("feed"),
+      v.literal("network"),
+      v.literal("messages"),
+      v.null(),
+    ),
+    studioIntentChosen: v.boolean(),
   }),
   handler: async (ctx) => {
     const names = resolveNameParts(ctx.user);
@@ -100,6 +108,8 @@ export const current = authedQuery({
       hasPassword: await userHasPassword(ctx, ctx.user),
       assistanceDefaultEnabled: ctx.user.assistanceDefaultEnabled !== false,
       activeStyleSheetId: ctx.user.activeStyleSheetId,
+      defaultStudioTab: ctx.user.defaultStudioTab ?? null,
+      studioIntentChosen: ctx.user.studioIntentChosenAt != null,
     };
   },
 });
@@ -117,6 +127,41 @@ export const setAssistanceDefault = authedMutation({
       updatedAt: Date.now(),
     });
     return { assistanceDefaultEnabled: args.enabled };
+  },
+});
+
+const defaultStudioTabValidator = v.union(
+  v.literal("composer"),
+  v.literal("feed"),
+  v.literal("network"),
+  v.literal("messages"),
+);
+
+export const setDefaultStudioTab = authedMutation({
+  args: {
+    tab: defaultStudioTabValidator,
+    /** When true, also marks signup intent as chosen (first-run chooser / silent backfill). */
+    markIntentChosen: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    defaultStudioTab: defaultStudioTabValidator,
+    studioIntentChosen: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const markIntent =
+      Boolean(args.markIntentChosen) || ctx.user.studioIntentChosenAt == null;
+    await ctx.db.patch(ctx.user._id, {
+      defaultStudioTab: args.tab,
+      updatedAt: now,
+      ...(markIntent
+        ? { studioIntentChosenAt: ctx.user.studioIntentChosenAt ?? now }
+        : {}),
+    });
+    return {
+      defaultStudioTab: args.tab,
+      studioIntentChosen: true,
+    };
   },
 });
 
@@ -269,9 +314,12 @@ export const ensureStudioDefaults = authedMutation({
         q.eq("ownerId", ctx.user._id).eq("parentId", undefined),
       )
       .collect();
-    // Prefer a normal workspace root — never treat Messages (system) as the Studio root.
+    // Prefer a normal workspace root — never treat system folders as the Studio root.
     const existingRoot = topFolders.find(
-      (folder) => !folder.deletedAt && folder.systemKind !== "messages",
+      (folder) =>
+        !folder.deletedAt &&
+        folder.systemKind !== "messages" &&
+        folder.systemKind !== "purchased_assets",
     );
 
     const rootFolderId =
@@ -288,6 +336,7 @@ export const ensureStudioDefaults = authedMutation({
       }));
 
     await ensureMessagesFolder(ctx, ctx.user._id, rootFolderId);
+    await ensurePurchasedAssetsFolder(ctx, ctx.user._id, rootFolderId);
 
     const existingBilling = await ctx.db
       .query("billingAccounts")

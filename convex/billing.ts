@@ -51,6 +51,7 @@ const creditTransactionKind = v.union(
   v.literal("marketplace_escrow_release"),
   v.literal("marketplace_escrow_refund"),
   v.literal("storage_charge"),
+  v.literal("asset_purchase"),
 );
 
 const sendPushForNotificationRef = makeFunctionReference<

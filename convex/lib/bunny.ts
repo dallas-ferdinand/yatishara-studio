@@ -138,6 +138,53 @@ export async function deleteObject(path: string): Promise<void> {
   }
 }
 
+/** Read a storage object (for purchase byte-copies). */
+export async function getObject(path: string): Promise<{
+  data: Uint8Array;
+  contentType: string;
+}> {
+  const config = getBunnyConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await fetch(
+      `https://${config.storageHost}/${config.zone}/${normalizeStoragePath(path)}`,
+      {
+        method: "GET",
+        headers: { AccessKey: config.accessKey },
+        signal: controller.signal,
+      },
+    );
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(`Bunny GET failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+    const contentType =
+      response.headers.get("content-type")?.split(";")[0]?.trim() ||
+      "application/octet-stream";
+    const data = new Uint8Array(await response.arrayBuffer());
+    return { data, contentType };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Copy storage bytes to a new path (buyer owns a separate billable object). */
+export async function copyObject(args: {
+  sourcePath: string;
+  destPath: string;
+  contentType?: string;
+}): Promise<{ byteSize: number; contentType: string }> {
+  const source = await getObject(args.sourcePath);
+  const contentType = args.contentType?.trim() || source.contentType;
+  await putObject({
+    path: args.destPath,
+    body: source.data,
+    contentType,
+  });
+  return { byteSize: source.data.byteLength, contentType };
+}
+
 function copyUint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
