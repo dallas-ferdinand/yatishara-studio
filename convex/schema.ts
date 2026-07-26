@@ -1218,15 +1218,8 @@ export default defineSchema({
     kind: v.optional(
       v.union(v.literal("text"), v.literal("voice"), v.literal("image")),
     ),
-    /**
-     * Billable Studio asset (Bunny). New DM media uses this; legacy rows keep
-     * audioStorageId / imageStorageId only.
-     */
+    /** Billable Studio asset (Bunny) in the sender's Messages folder. */
     assetId: v.optional(v.id("assets")),
-    /** Legacy voice note blob in Convex storage (pre-Messages-folder). */
-    audioStorageId: v.optional(v.id("_storage")),
-    /** Legacy image blob in Convex storage (pre-Messages-folder). */
-    imageStorageId: v.optional(v.id("_storage")),
     /** MIME type for image attachments (e.g. image/jpeg). */
     contentType: v.optional(v.string()),
     /** Voice note length in seconds (client-measured). */

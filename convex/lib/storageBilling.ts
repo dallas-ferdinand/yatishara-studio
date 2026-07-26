@@ -336,8 +336,6 @@ export async function beginAssetPurge(
   for (const message of dmHits) {
     await ctx.db.patch(message._id, {
       assetId: undefined,
-      audioStorageId: undefined,
-      imageStorageId: undefined,
     });
   }
 }
