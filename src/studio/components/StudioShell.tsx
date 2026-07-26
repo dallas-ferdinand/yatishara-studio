@@ -10162,20 +10162,30 @@ export function StudioShell({
           width: 20px;
           height: 20px;
           border-radius: 999px;
-          background: rgba(10, 12, 16, 0.62);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
-          color: rgba(255, 255, 255, 0.92);
+          /* Same chip for folders, images, audio, system — white pill + ink glyph. */
+          background: rgba(255, 255, 255, 0.94);
+          backdrop-filter: none;
+          -webkit-backdrop-filter: none;
+          box-shadow:
+            0 0 0 1px rgba(15, 18, 24, 0.08),
+            0 1px 3px rgba(0, 0, 0, 0.18);
+          color: rgba(15, 18, 24, 0.88);
           z-index: 3;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge,
-        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge {
-          color: var(--color-cursor-text);
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap--trash .desk-file-thumb-badge,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--trash .desk-file-thumb-badge,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap--messages .desk-file-thumb-badge,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--messages .desk-file-thumb-badge {
+          color: rgba(15, 18, 24, 0.88);
         }
-        [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge,
-        [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap--folder .desk-file-thumb-badge {
-          background: var(--mos-panel, #f5f5f7);
+        [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge,
+        [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
+          background: #fff;
+          box-shadow:
+            0 0 0 1px var(--color-cursor-border-soft, rgba(15, 18, 24, 0.1)),
+            0 1px 2px rgba(15, 18, 24, 0.08);
           color: var(--color-cursor-text);
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-badge svg,

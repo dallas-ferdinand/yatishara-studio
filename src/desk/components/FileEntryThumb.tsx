@@ -465,10 +465,10 @@ export function FileEntryThumb({
     const isMessages =
       entry?.studioKind === "messages" || entry?.systemKind === "messages";
     if (isTrash || isMessages) {
-      const badgeIcon = isTrash ? "trash" : "message";
+      // System folders: lock badge = protected / non-deletable, not trash/message glyphs.
       visual = (
         <div
-          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${
+          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system${
             isTrash
               ? " desk-file-thumb-peek-wrap--trash"
               : " desk-file-thumb-peek-wrap--messages"
@@ -480,13 +480,13 @@ export function FileEntryThumb({
             }`}
           >
             <Icon
-              name={badgeIcon}
+              name="lock"
               size={size === "preview" ? 36 : 26}
               className="text-cursor-muted"
             />
           </div>
-          <span className="desk-file-thumb-badge" aria-hidden="true">
-            <Icon name={badgeIcon} size={14} />
+          <span className="desk-file-thumb-badge" aria-hidden="true" title="System folder">
+            <Icon name="lock" size={14} />
           </span>
           <ThumbPeekLabel name={label} />
         </div>

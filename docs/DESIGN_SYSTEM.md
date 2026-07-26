@@ -73,6 +73,10 @@ from `--mos-plate`:
   mix for hover/selected (hover darkens in light, lifts in dark).
 - `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
   `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
+- File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
+  pill + ink glyph** for folders, images, audio, and system folders — never dark
+  glass on media only. Trash / Messages use a **lock** badge (system / protected),
+  not trash/message icons.
 - Active *controls* inside the file manager (breadcrumb `.is-current`, view/type menus)
   stay L3 — that's the control affordance, not a plate.
 
