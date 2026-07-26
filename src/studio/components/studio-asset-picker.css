@@ -1,0 +1,196 @@
+/* Shared Studio Files asset picker sheet (DM attach, offer media, …). */
+
+.studio-asset-picker-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin-bottom: 8px;
+}
+
+.studio-asset-picker-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  max-width: 40%;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  padding: 3px 10px 3px 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-asset-picker-back > svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.studio-asset-picker-here {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-picker-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--color-cursor-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.studio-asset-picker-folders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.studio-asset-picker-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-asset-picker-folder > svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75;
+  color: var(--color-cursor-muted);
+}
+
+.studio-asset-picker-folder > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-asset-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.studio-asset-picker-grid button {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 10px);
+  background: transparent;
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.studio-asset-picker-grid button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.studio-asset-picker-grid button.is-selected {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 48%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-picker-grid button img,
+.studio-asset-picker-grid button .studio-asset-picker-thumb {
+  width: 100%;
+  height: 64px;
+  border-radius: var(--cursor-radius-sm, 6px);
+  border: 1px solid var(--color-cursor-border-soft);
+  background: color-mix(in srgb, var(--mos-text-bright, #fff) 4%, transparent);
+  object-fit: cover;
+}
+
+.studio-asset-picker-grid button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-asset-picker-foot {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-cursor-border-soft);
+}
+
+.studio-asset-picker-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-asset-picker-done > svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+/* Desktop: center as a dialog instead of the mobile full-bleed sheet. */
+@media (min-width: 900px) {
+  .studio-asset-picker-sheet.studio-mobile-app-menu-sheet {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    transform: translate(-50%, -50%);
+    width: min(480px, 92vw);
+    height: min(70vh, 640px);
+    max-height: min(70vh, 640px);
+    border-radius: var(--cursor-radius-xl, 12px);
+    box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.28));
+  }
+}

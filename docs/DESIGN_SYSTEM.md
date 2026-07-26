@@ -266,6 +266,19 @@ Offer banner/gallery media is **not** a flat "recent assets" grid. `OfferMediaEd
   `.marketplace-media-banner` (140px cover + L3 name bar + remove), gallery =
   `.marketplace-media-tile` with overlay remove. Memory: **753**.
 
+### Studio Files asset picker (locked)
+
+`StudioAssetPickerSheet` (`StudioAssetPickerSheet.tsx` + `studio-asset-picker.css`)
+is the shared folder browser for picking assets:
+
+- Chrome: `studio-mobile-app-menu-sheet` (mobile full-bleed); desktop centers as a
+  dialog (`@media min-width 900px`). Portal into `.studio-polish`.
+- Browse: `folders.listWithPeeks` + `assets.listByFolder`, filter by `kinds`.
+- Consumers: offer Media slots (mobile Pick), **DM attach** ("Choose from Studio
+  Files"). DM paperclip opens a context menu: Upload photo (device file input) or
+  Choose from Studio Files → picker → `assets.signedReadUrl` → blob → same pending
+  image send path as uploads. Memory: **753**.
+
 ---
 
 ## 6b. Public routes (`/offers`, share links)

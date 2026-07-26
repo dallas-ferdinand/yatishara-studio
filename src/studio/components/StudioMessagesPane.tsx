@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Check,
   CheckCheck,
+  FolderOpen,
   ImageIcon,
   Loader2,
   MessageCircle,
@@ -14,6 +15,7 @@ import {
   SendHorizontal,
   Tags,
   Trash2,
+  Upload,
   Wrench,
   X,
 } from "lucide-react";
@@ -43,6 +45,10 @@ import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { StudioDmPeerSidebar } from "./StudioDmPeerSidebar";
 import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
+import {
+  StudioAssetPickerSheet,
+  type StudioAssetPick,
+} from "./StudioAssetPickerSheet";
 import "./studio-messages.css";
 
 const PEER_SIDEBAR_OPEN_KEY = "studio-dm-peer-sidebar-open";
@@ -600,6 +606,16 @@ export function StudioMessagesPane({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const attachBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [attachMenu, setAttachMenu] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [filesPickerOpen, setFilesPickerOpen] = useState(false);
+  const [filesPickBusy, setFilesPickBusy] = useState(false);
+  const [filesPickerExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60,
+  );
+  const convex = useConvex();
 
   const clearPendingImage = useCallback(() => {
     setPendingImage((prev) => {
@@ -607,6 +623,17 @@ export function StudioMessagesPane({
       return null;
     });
   }, []);
+
+  function openAttachMenu() {
+    const btn = attachBtnRef.current;
+    if (!btn) {
+      setAttachMenu({ x: 16, y: window.innerHeight - 120 });
+      return;
+    }
+    const rect = btn.getBoundingClientRect();
+    // Menu opens upward from the paperclip so it clears the composer.
+    setAttachMenu({ x: rect.left, y: Math.max(8, rect.top - 8) });
+  }
 
   /** Voice-note recorder (WhatsApp-style: mic replaces send while draft is empty). */
   const [recState, setRecState] = useState<"idle" | "recording" | "sending">(
@@ -812,6 +839,42 @@ export function StudioMessagesPane({
       file,
       previewUrl: URL.createObjectURL(file),
     });
+  }
+
+  async function pickStudioFileAsset(asset: StudioAssetPick) {
+    setFilesPickBusy(true);
+    setSendError("");
+    try {
+      const mime = (asset.mimeType || "").toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+        setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+        return;
+      }
+      const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 30;
+      const url = await convex.query(api.assets.signedReadUrl, {
+        assetId: asset._id,
+        expiresUnix,
+      });
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Could not load that file");
+      const blob = await response.blob();
+      if (blob.size > IMAGE_MAX_BYTES) {
+        setSendError("Images must be 10 MB or smaller");
+        return;
+      }
+      const type = blob.type || mime || "image/jpeg";
+      if (!ALLOWED_IMAGE_TYPES.has(type.toLowerCase())) {
+        setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+        return;
+      }
+      const file = new File([blob], asset.name || "photo.jpg", { type });
+      pickImageFile(file);
+      setFilesPickerOpen(false);
+    } catch (error) {
+      setSendError(friendlyConvexError(error, "Could not load that file"));
+    } finally {
+      setFilesPickBusy(false);
+    }
   }
 
   async function handleSend() {
@@ -1179,13 +1242,20 @@ export function StudioMessagesPane({
         ) : (
           <>
             <button
+              ref={attachBtnRef}
               type="button"
               className="studio-dm-attach"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={sendBusy}
+              onClick={openAttachMenu}
+              disabled={sendBusy || filesPickBusy}
               aria-label="Attach a photo"
+              aria-haspopup="menu"
+              aria-expanded={attachMenu != null}
             >
-              <Paperclip className="h-4 w-4" aria-hidden="true" />
+              {filesPickBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Paperclip className="h-4 w-4" aria-hidden="true" />
+              )}
             </button>
             <textarea
               ref={inputRef}
@@ -1242,6 +1312,42 @@ export function StudioMessagesPane({
           </>
         )}
       </footer>
+
+      {attachMenu ? (
+        <StudioDmContextMenu
+          x={attachMenu.x}
+          y={attachMenu.y}
+          onClose={() => setAttachMenu(null)}
+          items={[
+            {
+              key: "upload",
+              label: "Upload photo",
+              icon: <Upload className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: () => fileInputRef.current?.click(),
+            },
+            {
+              key: "studio-files",
+              label: "Choose from Studio Files",
+              icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: () => setFilesPickerOpen(true),
+            },
+          ]}
+        />
+      ) : null}
+
+      {filesPickerOpen ? (
+        <StudioAssetPickerSheet
+          title="Choose a photo to send"
+          kinds={["image"]}
+          expiresUnix={filesPickerExpiresUnix}
+          onPick={(asset) => {
+            void pickStudioFileAsset(asset);
+          }}
+          onClose={() => {
+            if (!filesPickBusy) setFilesPickerOpen(false);
+          }}
+        />
+      ) : null}
 
       {lightboxUrl ? (
         <div

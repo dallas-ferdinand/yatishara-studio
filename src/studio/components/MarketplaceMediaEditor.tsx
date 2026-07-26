@@ -2,17 +2,13 @@
 
 import { useQuery } from "convex/react";
 import {
-  Check,
-  ChevronLeft,
   Film,
-  Folder,
   Image as ImageIcon,
   MousePointerSquareDashed,
   Plus,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useState, type DragEvent } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
@@ -22,6 +18,7 @@ import {
   readExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { StudioAssetPickerSheet } from "./StudioAssetPickerSheet";
 
 type SlotTarget = "banner" | "gallery";
 
@@ -267,8 +264,15 @@ export function OfferMediaEditor({
       </div>
 
       {pickerTarget && expiresUnix !== null ? (
-        <OfferMediaPickerSheet
-          target={pickerTarget}
+        <StudioAssetPickerSheet
+          title={
+            pickerTarget === "banner"
+              ? "Pick banner image"
+              : "Pick gallery media"
+          }
+          kinds={
+            pickerTarget === "banner" ? ["image"] : ["image", "video"]
+          }
           selectedIds={
             pickerTarget === "banner"
               ? coverAssetId
@@ -276,201 +280,30 @@ export function OfferMediaEditor({
                 : []
               : sampleAssetIds
           }
+          multi={pickerTarget === "gallery"}
+          stayOpen={pickerTarget === "gallery"}
+          maxSelected={pickerTarget === "gallery" ? MAX_SAMPLES : undefined}
+          countLabel={
+            pickerTarget === "gallery"
+              ? `${sampleAssetIds.length}/${MAX_SAMPLES}`
+              : undefined
+          }
           expiresUnix={expiresUnix}
-          onPick={(id) => {
+          onPick={(asset) => {
             if (pickerTarget === "banner") {
-              onCover(id);
-              setPickerTarget(null);
+              onCover(asset._id);
               return;
             }
             if (
-              sampleAssetIds.includes(id) ||
+              sampleAssetIds.includes(asset._id) ||
               sampleAssetIds.length < MAX_SAMPLES
             ) {
-              onToggleSample(id);
+              onToggleSample(asset._id);
             }
           }}
           onClose={() => setPickerTarget(null)}
         />
       ) : null}
     </div>
-  );
-}
-
-type FolderCrumb = { id: Id<"folders"> | null; name: string };
-
-/** Mobile file-manager sheet for picking offer media. */
-function OfferMediaPickerSheet({
-  target,
-  selectedIds,
-  expiresUnix,
-  onPick,
-  onClose,
-}: {
-  target: SlotTarget;
-  selectedIds: Id<"assets">[];
-  expiresUnix: number;
-  onPick: (id: Id<"assets">) => void;
-  onClose: () => void;
-}) {
-  const [portalRoot, setPortalRoot] = useState<Element | null>(null);
-  const [stack, setStack] = useState<FolderCrumb[]>([
-    { id: null, name: "Files" },
-  ]);
-  const current = stack[stack.length - 1];
-
-  useEffect(() => {
-    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const folders = useQuery(api.folders.listWithPeeks, {
-    parentId: current.id,
-  });
-  const folderAssets = useQuery(
-    api.assets.listByFolder,
-    current.id ? { folderId: current.id, expiresUnix } : "skip",
-  );
-  const assets = useMemo(
-    () =>
-      (folderAssets ?? []).filter((asset) =>
-        slotAcceptsKind(target, asset.kind),
-      ),
-    [folderAssets, target],
-  );
-
-  const loading =
-    folders === undefined || (current.id !== null && folderAssets === undefined);
-  const empty =
-    !loading && (folders?.length ?? 0) === 0 && assets.length === 0;
-
-  if (!portalRoot) return null;
-
-  return createPortal(
-    <div
-      className="studio-mobile-app-menu-sheet marketplace-media-picker-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-label={target === "banner" ? "Pick banner image" : "Pick gallery media"}
-    >
-      <div className="studio-mobile-app-menu-head">
-        <h2 className="studio-mobile-app-menu-title">
-          {target === "banner" ? "Pick banner image" : "Pick gallery media"}
-        </h2>
-        <button
-          type="button"
-          className="studio-mobile-app-menu-close"
-          aria-label="Close media picker"
-          onClick={onClose}
-        >
-          <X aria-hidden="true" />
-        </button>
-      </div>
-      <div className="studio-mobile-app-menu-body">
-        <div className="marketplace-media-picker-crumbs">
-          {stack.length > 1 ? (
-            <button
-              type="button"
-              className="marketplace-media-picker-back"
-              onClick={() => setStack((s) => s.slice(0, -1))}
-            >
-              <ChevronLeft aria-hidden="true" />
-              {stack[stack.length - 2].name}
-            </button>
-          ) : null}
-          <span className="marketplace-media-picker-here">{current.name}</span>
-          {target === "gallery" ? (
-            <span className="marketplace-media-picker-count">
-              {selectedIds.length}/{MAX_SAMPLES}
-            </span>
-          ) : null}
-        </div>
-
-        {loading ? (
-          <p className="studio-settings-empty">Loading…</p>
-        ) : empty ? (
-          <p className="studio-settings-empty">
-            {current.id === null
-              ? "No folders yet — upload media in Files first."
-              : "Nothing usable in this folder."}
-          </p>
-        ) : (
-          <>
-            {(folders?.length ?? 0) > 0 ? (
-              <div className="marketplace-media-picker-folders">
-                {(folders ?? []).map((folder) => (
-                  <button
-                    key={folder._id}
-                    type="button"
-                    className="marketplace-media-picker-folder"
-                    onClick={() =>
-                      setStack((s) => [
-                        ...s,
-                        { id: folder._id, name: folder.name },
-                      ])
-                    }
-                  >
-                    <Folder aria-hidden="true" />
-                    <span>{folder.name}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {assets.length > 0 ? (
-              <div
-                className="marketplace-offers-asset-grid marketplace-media-picker-grid"
-                role="group"
-                aria-label="Media in this folder"
-              >
-                {assets.map((asset) => {
-                  const selected = selectedIds.includes(asset._id);
-                  return (
-                    <button
-                      key={asset._id}
-                      type="button"
-                      className={selected ? "is-selected" : undefined}
-                      aria-pressed={selected}
-                      onClick={() => onPick(asset._id)}
-                      title={asset.name}
-                    >
-                      {asset.signedThumbnailUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={asset.signedThumbnailUrl} alt="" />
-                      ) : (
-                        <span
-                          className="marketplace-offers-thumb"
-                          aria-hidden="true"
-                        />
-                      )}
-                      <span>{asset.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
-      {target === "gallery" ? (
-        <div className="marketplace-media-picker-foot">
-          <button
-            type="button"
-            className="marketplace-media-picker-done"
-            onClick={onClose}
-          >
-            <Check aria-hidden="true" />
-            Done
-          </button>
-        </div>
-      ) : null}
-    </div>,
-    portalRoot,
   );
 }
