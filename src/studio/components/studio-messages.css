@@ -221,9 +221,47 @@
   text-transform: uppercase;
 }
 
-.studio-dm-bubble-row {
+.studio-dm-swipe-shell {
+  position: relative;
   display: flex;
   justify-content: flex-start;
+  width: 100%;
+  overflow: hidden;
+}
+
+.studio-dm-swipe-shell.is-mine {
+  justify-content: flex-end;
+}
+
+.studio-dm-swipe-reply {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: 999px;
+  background: var(--mos-plate-strong, var(--mos-raised));
+  color: var(--color-cursor-text, var(--mos-text));
+  pointer-events: none;
+}
+
+.studio-dm-swipe-reply svg {
+  width: 14px;
+  height: 14px;
+}
+
+.studio-dm-bubble-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  will-change: transform;
+  touch-action: pan-y;
 }
 
 .studio-dm-bubble-row.is-mine {
@@ -242,6 +280,19 @@
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
+.studio-dm-bubble.has-reply {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.studio-dm-bubble-body {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .studio-dm-bubble-row.is-mine .studio-dm-bubble {
   border-radius: 14px;
   border-bottom-right-radius: 5px;
@@ -257,6 +308,87 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-reply-quote {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  border-left: 2px solid var(--cursor-accent, var(--mos-accent));
+  background: color-mix(in srgb, var(--mos-text) 6%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-dm-reply-quote strong {
+  font-size: 10px;
+  font-weight: 750;
+  color: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-dm-reply-quote span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-reply-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+}
+
+[data-appearance="light"] .studio-dm-reply-preview {
+  background: var(--mos-panel, #f5f5f7);
+}
+
+.studio-dm-reply-preview-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--mos-plate-strong, var(--mos-raised));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-dm-reply-preview-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio-dm-reply-preview-copy strong {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-reply-preview-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-cursor-muted, var(--mos-muted));
 }
 
 .studio-dm-meta {
@@ -487,6 +619,10 @@
 .studio-dm-bubble.is-voice {
   max-width: min(88%, 26rem);
   padding: 4px 8px 5px 4px;
+}
+
+.studio-dm-bubble.is-voice .studio-dm-bubble-body {
+  width: 100%;
 }
 
 .studio-dm-bubble.is-voice .studio-chat-audio-player {

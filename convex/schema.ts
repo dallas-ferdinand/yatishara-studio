@@ -1220,6 +1220,8 @@ export default defineSchema({
     contentType: v.optional(v.string()),
     /** Voice note length in seconds (client-measured). */
     durationSec: v.optional(v.number()),
+    /** WhatsApp-style reply target in the same conversation. */
+    replyToMessageId: v.optional(v.id("dmMessages")),
     createdAt: v.number(),
   })
     .index("by_conversation_and_created", ["conversationId", "createdAt"])

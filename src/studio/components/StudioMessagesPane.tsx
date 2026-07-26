@@ -10,13 +10,22 @@ import {
   MessageCircle,
   Mic,
   Paperclip,
+  Reply,
   SendHorizontal,
   Tags,
   Trash2,
   Wrench,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -111,6 +120,286 @@ function DmMessageMeta({
       </time>
       {fromMe ? <DmReadReceipt receipt={receipt} /> : null}
     </span>
+  );
+}
+
+type DmReplySnippet = {
+  _id: Id<"dmMessages">;
+  body: string;
+  kind: "text" | "voice" | "image";
+  fromMe: boolean;
+};
+
+type DmMessageRow = {
+  _id: Id<"dmMessages">;
+  body: string;
+  kind: "text" | "voice" | "image";
+  audioUrl?: string;
+  imageUrl?: string;
+  contentType?: string;
+  durationSec?: number;
+  fromMe: boolean;
+  receipt: DmReceipt;
+  replyTo?: DmReplySnippet;
+  createdAt: number;
+};
+
+function replySnippetLabel(
+  snippet: Pick<DmReplySnippet, "body" | "kind">,
+): string {
+  if (snippet.kind === "voice") return "Voice message";
+  if (snippet.kind === "image") {
+    return snippet.body.trim() || "Photo";
+  }
+  return snippet.body.trim() || "Message";
+}
+
+function DmReplyQuote({
+  snippet,
+  peerLabel,
+  onJump,
+}: {
+  snippet: DmReplySnippet;
+  peerLabel: string;
+  onJump?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="studio-dm-reply-quote"
+      onClick={(event) => {
+        event.stopPropagation();
+        onJump?.();
+      }}
+    >
+      <strong>{snippet.fromMe ? "You" : peerLabel}</strong>
+      <span>{replySnippetLabel(snippet)}</span>
+    </button>
+  );
+}
+
+const SWIPE_REPLY_THRESHOLD = 56;
+const SWIPE_REPLY_MAX = 72;
+
+function DmMessageBubble({
+  message,
+  peerLabel,
+  onReply,
+  onOpenImage,
+}: {
+  message: DmMessageRow;
+  peerLabel: string;
+  onReply: (message: DmMessageRow) => void;
+  onOpenImage: (url: string) => void;
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const swipeRef = useRef<{
+    startX: number;
+    startY: number;
+    tracking: boolean;
+    horizontal: boolean;
+    dx: number;
+  } | null>(null);
+
+  const openMenu = useCallback((coords: { x: number; y: number }) => {
+    setMenu(coords);
+  }, []);
+
+  const { longPressHandlers, longPressFired, clearLongPressFired } =
+    useLongPress(openMenu);
+
+  const jumpToReply = useCallback(() => {
+    if (!message.replyTo) return;
+    const el = document.getElementById(`dm-msg-${message.replyTo._id}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [message.replyTo]);
+
+  const menuItems: StudioDmContextMenuItem[] = [
+    {
+      key: "reply",
+      label: "Reply",
+      icon: <Reply aria-hidden="true" />,
+      onSelect: () => onReply(message),
+    },
+  ];
+
+  const bubbleClass = [
+    "studio-dm-bubble",
+    message.kind === "voice" ? "is-voice" : "",
+    message.kind === "image" ? "is-image" : "",
+    message.replyTo ? "has-reply" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const rowStyle: CSSProperties | undefined = swipeX
+    ? {
+        transform: `translateX(${swipeX}px)`,
+        transition: swipeRef.current?.tracking ? "none" : "transform 160ms ease",
+      }
+    : undefined;
+
+  return (
+    <>
+      <div
+        id={`dm-msg-${message._id}`}
+        className={`studio-dm-swipe-shell${message.fromMe ? " is-mine" : ""}`}
+      >
+        <span
+          className="studio-dm-swipe-reply"
+          style={{ opacity: Math.min(1, swipeX / SWIPE_REPLY_THRESHOLD) }}
+          aria-hidden="true"
+        >
+          <Reply />
+        </span>
+        <div
+          className={`studio-dm-bubble-row${message.fromMe ? " is-mine" : ""}`}
+          style={rowStyle}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            openMenu({ x: event.clientX, y: event.clientY });
+          }}
+          onTouchStart={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchStart?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchStart?.(event);
+            const touch = event.touches[0];
+            if (!touch) return;
+            swipeRef.current = {
+              startX: touch.clientX,
+              startY: touch.clientY,
+              tracking: true,
+              horizontal: false,
+              dx: 0,
+            };
+            setSwipeX(0);
+          }}
+          onTouchMove={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchMove?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchMove?.(event);
+            const state = swipeRef.current;
+            const touch = event.touches[0];
+            if (!state?.tracking || !touch) return;
+            const dx = touch.clientX - state.startX;
+            const dy = touch.clientY - state.startY;
+            if (!state.horizontal) {
+              if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+              if (Math.abs(dx) <= Math.abs(dy)) {
+                swipeRef.current = null;
+                setSwipeX(0);
+                return;
+              }
+              state.horizontal = true;
+            }
+            const next = Math.max(0, Math.min(SWIPE_REPLY_MAX, dx));
+            state.dx = next;
+            setSwipeX(next);
+          }}
+          onTouchEnd={() => {
+            const lp = longPressHandlers as {
+              onTouchEnd?: () => void;
+            };
+            lp.onTouchEnd?.();
+            const state = swipeRef.current;
+            swipeRef.current = null;
+            if (state?.horizontal && state.dx >= SWIPE_REPLY_THRESHOLD) {
+              onReply(message);
+            }
+            setSwipeX(0);
+          }}
+          onTouchCancel={() => {
+            const lp = longPressHandlers as {
+              onTouchCancel?: () => void;
+            };
+            lp.onTouchCancel?.();
+            swipeRef.current = null;
+            setSwipeX(0);
+          }}
+          onClick={() => {
+            if (longPressFired()) {
+              clearLongPressFired();
+            }
+          }}
+        >
+          <div className={bubbleClass}>
+            {message.replyTo ? (
+              <DmReplyQuote
+                snippet={message.replyTo}
+                peerLabel={peerLabel}
+                onJump={jumpToReply}
+              />
+            ) : null}
+            {message.kind === "voice" ? (
+              <div className="studio-dm-bubble-body">
+                {message.audioUrl ? (
+                  <StudioChatAudioPlayer
+                    src={message.audioUrl}
+                    title="Voice message"
+                    durationHint={message.durationSec}
+                  />
+                ) : (
+                  <p className="studio-dm-voice-missing">
+                    Voice message unavailable
+                  </p>
+                )}
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                />
+              </div>
+            ) : message.kind === "image" ? (
+              <>
+                {message.imageUrl ? (
+                  <button
+                    type="button"
+                    className="studio-dm-image-btn"
+                    onClick={() => onOpenImage(message.imageUrl!)}
+                    aria-label="View image"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={message.imageUrl}
+                      alt={message.body || "Photo"}
+                      className="studio-dm-image"
+                    />
+                  </button>
+                ) : (
+                  <p className="studio-dm-voice-missing">Photo unavailable</p>
+                )}
+                {message.body ? <p>{message.body}</p> : null}
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                />
+              </>
+            ) : (
+              <div className="studio-dm-bubble-body">
+                <p>{message.body}</p>
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      {menu ? (
+        <StudioDmContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -234,6 +523,9 @@ export function StudioMessagesPane({
   const [sendError, setSendError] = useState("");
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<DmReplySnippet | null>(null);
+  const replyToRef = useRef<DmReplySnippet | null>(null);
+  replyToRef.current = replyTo;
   const [assignPeer, setAssignPeer] = useState<{
     userId: Id<"users">;
     label: string;
@@ -345,11 +637,14 @@ export function StudioMessagesPane({
             blob,
             blob.type || "audio/webm",
           );
+          const replyId = replyToRef.current?._id;
           await sendVoiceMessage({
             conversationId: conversationId!,
             storageId,
             durationSec,
+            replyToMessageId: replyId,
           });
+          setReplyTo(null);
         } catch (error) {
           setSendError(friendlyConvexError(error, "Could not send voice note"));
         } finally {
@@ -424,8 +719,22 @@ export function StudioMessagesPane({
     setSendError("");
     clearPendingImage();
     setLightboxUrl(null);
+    setReplyTo(null);
     if (conversationId) inputRef.current?.focus();
   }, [clearPendingImage, conversationId]);
+
+  const armReply = useCallback(
+    (message: DmMessageRow) => {
+      setReplyTo({
+        _id: message._id,
+        body: replySnippetLabel(message),
+        kind: message.kind,
+        fromMe: message.fromMe,
+      });
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    [],
+  );
 
   function pickImageFile(file: File | undefined) {
     if (!file) return;
@@ -465,12 +774,18 @@ export function StudioMessagesPane({
           conversationId,
           storageId,
           caption: body || undefined,
+          replyToMessageId: replyTo?._id,
         });
         clearPendingImage();
       } else {
-        await send({ conversationId, body });
+        await send({
+          conversationId,
+          body,
+          replyToMessageId: replyTo?._id,
+        });
       }
       setDraft("");
+      setReplyTo(null);
       inputRef.current?.focus();
     } catch (error) {
       setSendError(friendlyConvexError(error, "Could not send message"));
@@ -656,67 +971,12 @@ export function StudioMessagesPane({
                       <span>{day}</span>
                     </div>
                   ) : null}
-                  <div
-                    className={`studio-dm-bubble-row${message.fromMe ? " is-mine" : ""}`}
-                  >
-                    {message.kind === "voice" ? (
-                      <div className="studio-dm-bubble is-voice">
-                        {message.audioUrl ? (
-                          <StudioChatAudioPlayer
-                            src={message.audioUrl}
-                            title="Voice message"
-                            durationHint={message.durationSec}
-                          />
-                        ) : (
-                          <p className="studio-dm-voice-missing">
-                            Voice message unavailable
-                          </p>
-                        )}
-                        <DmMessageMeta
-                          createdAt={message.createdAt}
-                          fromMe={message.fromMe}
-                          receipt={message.receipt}
-                        />
-                      </div>
-                    ) : message.kind === "image" ? (
-                      <div className="studio-dm-bubble is-image">
-                        {message.imageUrl ? (
-                          <button
-                            type="button"
-                            className="studio-dm-image-btn"
-                            onClick={() => setLightboxUrl(message.imageUrl!)}
-                            aria-label="View image"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={message.imageUrl}
-                              alt={message.body || "Photo"}
-                              className="studio-dm-image"
-                            />
-                          </button>
-                        ) : (
-                          <p className="studio-dm-voice-missing">
-                            Photo unavailable
-                          </p>
-                        )}
-                        {message.body ? <p>{message.body}</p> : null}
-                        <DmMessageMeta
-                          createdAt={message.createdAt}
-                          fromMe={message.fromMe}
-                          receipt={message.receipt}
-                        />
-                      </div>
-                    ) : (
-                      <div className="studio-dm-bubble">
-                        <p>{message.body}</p>
-                        <DmMessageMeta
-                          createdAt={message.createdAt}
-                          fromMe={message.fromMe}
-                          receipt={message.receipt}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <DmMessageBubble
+                    message={message}
+                    peerLabel={peerLabel}
+                    onReply={armReply}
+                    onOpenImage={setLightboxUrl}
+                  />
                 </div>
               );
             })}
@@ -725,6 +985,28 @@ export function StudioMessagesPane({
       </div>
 
       {sendError ? <p className="studio-dm-error">{sendError}</p> : null}
+
+      {replyTo && recState === "idle" ? (
+        <div className="studio-dm-reply-preview">
+          <span className="studio-dm-reply-preview-icon" aria-hidden="true">
+            <Reply className="h-3.5 w-3.5" />
+          </span>
+          <span className="studio-dm-reply-preview-copy">
+            <strong>
+              Replying to {replyTo.fromMe ? "yourself" : peerLabel}
+            </strong>
+            <span>{replySnippetLabel(replyTo)}</span>
+          </span>
+          <button
+            type="button"
+            className="studio-dm-attach-clear"
+            onClick={() => setReplyTo(null)}
+            aria-label="Cancel reply"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
 
       {pendingImage && recState === "idle" ? (
         <div className="studio-dm-attach-preview">

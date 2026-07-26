@@ -16,10 +16,54 @@ import { hydrateSocialPeople } from "./profiles";
 
 const DM_BODY_MAX = 4000;
 const DM_PREVIEW_MAX = 120;
+const REPLY_BODY_MAX = 120;
 const VOICE_NOTE_MAX_SECONDS = 300;
 const VOICE_PREVIEW = "Voice message";
 const IMAGE_PREVIEW = "Photo";
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+const dmMessageKind = v.union(
+  v.literal("text"),
+  v.literal("voice"),
+  v.literal("image"),
+);
+
+const replySnippet = v.object({
+  _id: v.id("dmMessages"),
+  body: v.string(),
+  kind: dmMessageKind,
+  fromMe: v.boolean(),
+});
+
+async function resolveReplyToMessageId(
+  ctx: { db: QueryCtx["db"] },
+  conversationId: Id<"dmConversations">,
+  replyToMessageId: Id<"dmMessages"> | undefined,
+): Promise<Id<"dmMessages"> | undefined> {
+  if (!replyToMessageId) return undefined;
+  const target = await ctx.db.get(replyToMessageId);
+  if (!target || target.conversationId !== conversationId) {
+    throw new Error("Reply target not found in this chat");
+  }
+  return replyToMessageId;
+}
+
+function replyPreviewBody(row: Doc<"dmMessages">): string {
+  const kind = row.kind ?? "text";
+  if (kind === "voice") return VOICE_PREVIEW;
+  if (kind === "image") {
+    const caption = row.body.trim();
+    if (!caption) return IMAGE_PREVIEW;
+    return caption.length > REPLY_BODY_MAX
+      ? `${caption.slice(0, REPLY_BODY_MAX)}…`
+      : caption;
+  }
+  const body = row.body.trim();
+  if (!body) return "";
+  return body.length > REPLY_BODY_MAX
+    ? `${body.slice(0, REPLY_BODY_MAX)}…`
+    : body;
+}
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -655,11 +699,7 @@ export const listMessages = authedQuery({
     v.object({
       _id: v.id("dmMessages"),
       body: v.string(),
-      kind: v.union(
-        v.literal("text"),
-        v.literal("voice"),
-        v.literal("image"),
-      ),
+      kind: dmMessageKind,
       audioUrl: v.optional(v.string()),
       imageUrl: v.optional(v.string()),
       contentType: v.optional(v.string()),
@@ -670,6 +710,7 @@ export const listMessages = authedQuery({
        * sent (1 tick) → delivered (2 gray, peer ACK) → read (2 colored).
        */
       receipt: receiptStatus,
+      replyTo: v.optional(replySnippet),
       createdAt: v.number(),
     }),
   ),
@@ -692,8 +733,24 @@ export const listMessages = authedQuery({
       )
       .order("desc")
       .take(limit);
+    const chronological = rows.reverse();
+    const replyIds = [
+      ...new Set(
+        chronological
+          .map((row) => row.replyToMessageId)
+          .filter((id): id is Id<"dmMessages"> => Boolean(id)),
+      ),
+    ];
+    const replyDocs = await Promise.all(
+      replyIds.map((id) => ctx.db.get(id)),
+    );
+    const replyById = new Map(
+      replyDocs
+        .filter((doc): doc is Doc<"dmMessages"> => doc !== null)
+        .map((doc) => [doc._id, doc]),
+    );
     return await Promise.all(
-      rows.reverse().map(async (row) => {
+      chronological.map(async (row) => {
         const audioUrl = row.audioStorageId
           ? ((await ctx.storage.getUrl(row.audioStorageId)) ?? undefined)
           : undefined;
@@ -701,6 +758,9 @@ export const listMessages = authedQuery({
           ? ((await ctx.storage.getUrl(row.imageStorageId)) ?? undefined)
           : undefined;
         const fromMe = row.senderId === ctx.user._id;
+        const replyDoc = row.replyToMessageId
+          ? replyById.get(row.replyToMessageId)
+          : undefined;
         return {
           _id: row._id,
           body: row.body,
@@ -717,6 +777,14 @@ export const listMessages = authedQuery({
                 peerDeliveredWatermark,
               )
             : "sent",
+          replyTo: replyDoc
+            ? {
+                _id: replyDoc._id,
+                body: replyPreviewBody(replyDoc),
+                kind: replyDoc.kind ?? "text",
+                fromMe: replyDoc.senderId === ctx.user._id,
+              }
+            : undefined,
           createdAt: row.createdAt,
         };
       }),
@@ -728,6 +796,7 @@ export const sendMessage = authedMutation({
   args: {
     conversationId: v.id("dmConversations"),
     body: v.string(),
+    replyToMessageId: v.optional(v.id("dmMessages")),
   },
   returns: v.id("dmMessages"),
   handler: async (ctx, args) => {
@@ -746,6 +815,11 @@ export const sendMessage = authedMutation({
     if (body.length > DM_BODY_MAX) {
       throw new Error(`Message must be at most ${DM_BODY_MAX} characters`);
     }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
 
     const now = Date.now();
     const messageId = await ctx.db.insert("dmMessages", {
@@ -753,6 +827,7 @@ export const sendMessage = authedMutation({
       senderId: ctx.user._id,
       body,
       kind: "text",
+      ...(replyToMessageId ? { replyToMessageId } : {}),
       createdAt: now,
     });
     const isLow = conversation.userLowId === ctx.user._id;
@@ -795,6 +870,7 @@ export const sendVoiceMessage = authedMutation({
     conversationId: v.id("dmConversations"),
     storageId: v.id("_storage"),
     durationSec: v.number(),
+    replyToMessageId: v.optional(v.id("dmMessages")),
   },
   returns: v.id("dmMessages"),
   handler: async (ctx, args) => {
@@ -815,6 +891,11 @@ export const sendVoiceMessage = authedMutation({
     ) {
       throw new Error("Voice notes must be between 1 second and 5 minutes");
     }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
 
     const now = Date.now();
     const messageId = await ctx.db.insert("dmMessages", {
@@ -824,6 +905,7 @@ export const sendVoiceMessage = authedMutation({
       kind: "voice",
       audioStorageId: args.storageId,
       durationSec: Math.round(args.durationSec * 10) / 10,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
       createdAt: now,
     });
     const isLow = conversation.userLowId === ctx.user._id;
@@ -842,6 +924,7 @@ export const sendImageMessage = authedMutation({
     conversationId: v.id("dmConversations"),
     storageId: v.id("_storage"),
     caption: v.optional(v.string()),
+    replyToMessageId: v.optional(v.id("dmMessages")),
   },
   returns: v.id("dmMessages"),
   handler: async (ctx, args) => {
@@ -868,6 +951,11 @@ export const sendImageMessage = authedMutation({
     if (caption.length > DM_BODY_MAX) {
       throw new Error(`Caption must be at most ${DM_BODY_MAX} characters`);
     }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
 
     const now = Date.now();
     const messageId = await ctx.db.insert("dmMessages", {
@@ -877,6 +965,7 @@ export const sendImageMessage = authedMutation({
       kind: "image",
       imageStorageId: args.storageId,
       contentType,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
       createdAt: now,
     });
     const isLow = conversation.userLowId === ctx.user._id;
