@@ -142,7 +142,7 @@ function buildMenuItems(entry, {
   }
 
   if (isDir && canPin) {
-      const pinnedHere = pinnedPaths?.has?.(entry.path)
+    const pinnedHere = pinnedPaths?.has?.(entry.path)
         || pinnedPaths?.has?.(
           String(entry.path ?? "")
             .trim()
@@ -164,28 +164,32 @@ function buildMenuItems(entry, {
     }
   }
 
+  // The heavy hitters stay top-level.
+  if (isFile) items.push({ id: "download", label: "Download" });
+  if (isDir && canDownloadZip) {
+    items.push({ id: "download-zip", label: "Download folder" });
+  }
+  items.push({
+    id: "attach",
+    label: isDir ? "Use folder in chat" : "Use in chat",
+  });
   if (onRequestRename) {
     items.push({ id: "rename", label: "Rename" });
   }
+  items.push({ id: "copy-path", label: "Copy item link" });
 
-  const moreChildren = [];
-  moreChildren.push({ id: "copy-path", label: "Copy item link" });
-  if (isDir && canDownloadZip) {
-    moreChildren.push({ id: "download-zip", label: "Download folder" });
-  }
-  if (isFile) {
-    moreChildren.push({ id: "download", label: "Download" });
-  }
+  // Image-only extras fold into one submenu.
+  const imageChildren = [];
   if (
     isFile &&
     entry.studioKind === "asset" &&
     entry.kind === "image" &&
     entry.studioId
   ) {
-    moreChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
-    moreChildren.push({ id: "set-profile-image", label: "Set as profile image" });
-    moreChildren.push({ id: "upscale", label: "Upscale" });
-    moreChildren.push({ id: "generate-video", label: "Generate video" });
+    imageChildren.push({ id: "upscale", label: "Upscale" });
+    imageChildren.push({ id: "generate-video", label: "Generate video" });
+    imageChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+    imageChildren.push({ id: "set-profile-image", label: "Set as profile image" });
   }
   if (
     isFile &&
@@ -194,18 +198,17 @@ function buildMenuItems(entry, {
     entry.studioId
   ) {
     const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
-    moreChildren.push({
+    imageChildren.push({
       id: alreadyShared ? "unshare-profile" : "share-profile",
       label: alreadyShared ? "Remove from profile" : "Create post",
     });
   }
-  moreChildren.push({
-    id: "attach",
-    label: isDir ? "Use folder in chat" : "Use in chat",
-  });
-
-  if (moreChildren.length) {
-    items.push({ id: "more", label: "More", children: moreChildren });
+  if (imageChildren.length) {
+    items.push({
+      id: "more",
+      label: entry.kind === "video" ? "Share" : "Image tools",
+      children: imageChildren,
+    });
   }
 
   if (onRequestDelete) {
