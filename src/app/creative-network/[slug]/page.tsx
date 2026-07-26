@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PublicOfferDetail } from "@/studio/components/PublicOffersPages";
+import { redirect } from "next/navigation";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -13,7 +13,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+/** Public offer detail removed — deep links open Studio Creative Network. */
 export default async function CreativeNetworkDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  return <PublicOfferDetail slug={slug?.trim().toLowerCase() || ""} />;
+  const clean = slug?.trim().toLowerCase() || "";
+  if (!clean) redirect("/?network=1");
+  redirect(`/?network=1&slug=${encodeURIComponent(clean)}`);
 }

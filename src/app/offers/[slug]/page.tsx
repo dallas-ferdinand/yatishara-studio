@@ -4,9 +4,10 @@ type PageProps = {
   params: Promise<{ slug: string }>;
 };
 
-/** Legacy path — permanent home is /creative-network/[slug]/. */
+/** Legacy path — opens Studio Creative Network offer. */
 export default async function OfferSlugRedirectPage({ params }: PageProps) {
   const { slug } = await params;
   const clean = slug?.trim().toLowerCase() || "";
-  redirect(clean ? `/creative-network/${clean}/` : "/creative-network/");
+  if (!clean) redirect("/?network=1");
+  redirect(`/?network=1&slug=${encodeURIComponent(clean)}`);
 }

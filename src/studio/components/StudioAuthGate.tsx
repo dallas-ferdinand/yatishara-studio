@@ -40,6 +40,13 @@ import {
   resetStudioClient,
   studioResetHref,
 } from "@/studio/lib/studio-client-reset";
+import {
+  STUDIO_DEFAULT_TAB_LABELS,
+  STUDIO_START_SELLER_APPLY_KEY,
+  readStoredStudioDefaultTab,
+  writeStoredStudioDefaultTab,
+  type StudioDefaultTab,
+} from "@/studio/lib/studio-default-tab";
 
 type StudioShellBootProps = {
   initialProfileUsername?: string;
@@ -253,10 +260,60 @@ export function StudioAuthGate({
     Boolean(auth?.isAuthenticated) &&
     currentUser != null &&
     !currentUser.accountComplete;
+  const needsStudioIntent =
+    Boolean(auth?.isAuthenticated) &&
+    currentUser != null &&
+    Boolean(currentUser.accountComplete) &&
+    !currentUser.studioIntentChosen;
   const showShell =
     Boolean(auth?.isAuthenticated) &&
     currentUser != null &&
-    Boolean(currentUser.accountComplete);
+    Boolean(currentUser.accountComplete) &&
+    Boolean(currentUser.studioIntentChosen);
+
+  const setDefaultStudioTab = useMutation(api.users.setDefaultStudioTab);
+  const [intentBackfilling, setIntentBackfilling] = useState(false);
+  const [intentGateReady, setIntentGateReady] = useState(false);
+  const [showIntentChooser, setShowIntentChooser] = useState(false);
+  const intentHandledRef = useRef(false);
+
+  // Existing users already have a workspace session — skip the chooser silently.
+  // Brand-new accounts (no tab session) see the first-run intent picker.
+  useEffect(() => {
+    if (!needsStudioIntent) {
+      intentHandledRef.current = false;
+      setIntentGateReady(true);
+      setShowIntentChooser(false);
+      return;
+    }
+    if (intentHandledRef.current) return;
+    intentHandledRef.current = true;
+    try {
+      const hasTabs = Boolean(
+        window.localStorage.getItem("yatishara-studio-open-tabs-v1"),
+      );
+      if (hasTabs) {
+        setIntentBackfilling(true);
+        setShowIntentChooser(false);
+        const tab = readStoredStudioDefaultTab() ?? "composer";
+        writeStoredStudioDefaultTab(tab);
+        void setDefaultStudioTab({ tab, markIntentChosen: true })
+          .catch(() => {
+            intentHandledRef.current = false;
+          })
+          .finally(() => {
+            setIntentBackfilling(false);
+            setIntentGateReady(true);
+          });
+        return;
+      }
+      setShowIntentChooser(true);
+      setIntentGateReady(true);
+    } catch {
+      setShowIntentChooser(true);
+      setIntentGateReady(true);
+    }
+  }, [needsStudioIntent, setDefaultStudioTab]);
 
   // Drive the single layout PaintBoot overlay across auth → user → shell-chunk.
   // Do not mount a second StudioBootLoader here — that remount restarted the spin.
@@ -264,7 +321,12 @@ export function StudioAuthGate({
     !shellFailed &&
     !showSignInScreen &&
     !showCompleteAccount &&
-    (authPending || userPending || (showShell && !shellReady));
+    !showIntentChooser &&
+    (authPending ||
+      userPending ||
+      intentBackfilling ||
+      (needsStudioIntent && !intentGateReady) ||
+      (showShell && !shellReady));
 
   useEffect(() => {
     if (!paintBootClaimedRef.current) return;
@@ -276,6 +338,7 @@ export function StudioAuthGate({
     <>
       {showSignInScreen ? <StudioSignIn /> : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
+      {showIntentChooser ? <StudioIntentChooser /> : null}
       {showShell ? (
         <StudioShellErrorBoundary onFailed={markShellFailed}>
           <StudioShell
@@ -285,6 +348,95 @@ export function StudioAuthGate({
         </StudioShellErrorBoundary>
       ) : null}
     </>
+  );
+}
+
+function StudioIntentChooser() {
+  const setDefaultStudioTab = useMutation(api.users.setDefaultStudioTab);
+  const [pending, setPending] = useState<StudioDefaultTab | "sell" | null>(null);
+  const [error, setError] = useState("");
+
+  async function choose(tab: StudioDefaultTab, startSeller = false) {
+    setPending(startSeller ? "sell" : tab);
+    setError("");
+    try {
+      writeStoredStudioDefaultTab(tab);
+      if (startSeller) {
+        window.localStorage.setItem(STUDIO_START_SELLER_APPLY_KEY, "1");
+      }
+      // Seed first open so boot lands on the chosen tab.
+      window.localStorage.removeItem("yatishara-studio-open-tabs-v1");
+      await setDefaultStudioTab({ tab, markIntentChosen: true });
+    } catch (err: unknown) {
+      setError(friendlyConvexError(err, "Could not save your choice"));
+      setPending(null);
+    }
+  }
+
+  const options: Array<{
+    id: StudioDefaultTab | "sell";
+    title: string;
+    body: string;
+    tab: StudioDefaultTab;
+    startSeller?: boolean;
+  }> = [
+    {
+      id: "network",
+      title: "Hire / marketplace",
+      body: "Browse Creative Network and book verified creators.",
+      tab: "network",
+    },
+    {
+      id: "composer",
+      title: "Create media",
+      body: "Jump into Generate and make images, video, or audio.",
+      tab: "composer",
+    },
+    {
+      id: "feed",
+      title: "Social",
+      body: "See what people are posting on the Feed.",
+      tab: "feed",
+    },
+    {
+      id: "sell",
+      title: "Sell services",
+      body: "Open Creative Network and start seller registration.",
+      tab: "network",
+      startSeller: true,
+    },
+  ];
+
+  return (
+    <AuthFrame eyebrow="Yatishara Studio" title="What brings you here?">
+      <p className="studio-auth-copy mt-3 text-sm">
+        Pick a starting point. You can change your default tab anytime in Settings → General.
+      </p>
+      <div className="mt-6 grid gap-2">
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className="studio-auth-field flex w-full flex-col items-start gap-1 rounded-2xl border bg-transparent px-4 py-3.5 text-left backdrop-blur-xl transition disabled:opacity-60"
+            disabled={pending != null}
+            onClick={() => void choose(option.tab, Boolean(option.startSeller))}
+          >
+            <span className="font-medium text-white">
+              {option.title}
+              {pending === option.id || (option.startSeller && pending === "sell")
+                ? "…"
+                : ""}
+            </span>
+            <span className="text-sm opacity-70">{option.body}</span>
+            <span className="text-xs opacity-50">
+              Opens {STUDIO_DEFAULT_TAB_LABELS[option.tab]}
+              {option.startSeller ? " · seller signup" : ""}
+            </span>
+          </button>
+        ))}
+      </div>
+      {error ? <p className="studio-auth-error mt-3 text-sm">{error}</p> : null}
+    </AuthFrame>
   );
 }
 

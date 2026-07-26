@@ -295,7 +295,9 @@ export function PublicProfileView({
               <ul className="public-profile-links">
                 {hireCta ? (
                   <li>
-                    <a href={`/creative-network/?u=${encodeURIComponent(profile.username)}`}>
+                    <a
+                      href={`/?network=1&u=${encodeURIComponent(profile.username)}`}
+                    >
                       <Award className="h-3.5 w-3.5" aria-hidden="true" />
                       <span>{hireCta.label}</span>
                     </a>

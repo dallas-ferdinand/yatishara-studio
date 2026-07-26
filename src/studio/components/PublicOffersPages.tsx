@@ -1062,18 +1062,22 @@ function BookPanel({
     try {
       if (quote && quote.shortfallCredits > 0) {
         toast.message("Top up your balance to book this package");
-        router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
+        router.push(
+          `/?next=${encodeURIComponent(`/?network=1&slug=${encodeURIComponent(slug)}`)}&settings=billing`,
+        );
         return;
       }
       const result = await book({ offerId, packageIndex });
       toast.success("Job booked — payment held until you accept delivery");
-      router.push(`/?next=${encodeURIComponent("/")}&offers=1`);
+      router.push(`/?network=1`);
       void result;
     } catch (error) {
       const msg = friendlyConvexError(error, "Could not book offer.");
       if (/Insufficient credits/i.test(msg)) {
         toast.message("Top up your balance to book this package");
-        router.push(`/?next=${encodeURIComponent(`/creative-network/${slug}/`)}&settings=billing`);
+        router.push(
+          `/?next=${encodeURIComponent(`/?network=1&slug=${encodeURIComponent(slug)}`)}&settings=billing`,
+        );
       } else {
         toast.error(msg);
       }
@@ -1315,7 +1319,7 @@ function OfferDetailInner({ slug }: { slug: string }) {
                 Sign in to your Studio account to book this package in TTD.
               </p>
               <a
-                href={`/?next=${encodeURIComponent(`/creative-network/${offer.slug}/`)}`}
+                href={`/?network=1&slug=${encodeURIComponent(offer.slug)}`}
                 className="public-offers-btn is-primary is-block"
               >
                 <Wallet aria-hidden="true" />
@@ -1511,6 +1515,143 @@ function OfferDetailInner({ slug }: { slug: string }) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Offer detail for the in-Studio Creative Network tab — no public shell rail;
+ * packages + booking sit in the main column.
+ */
+export function StudioOfferDetailEmbed({
+  slug,
+  onBack,
+}: {
+  slug: string;
+  onBack: () => void;
+}) {
+  const offer = useQuery(api.marketplace.getPublicOfferBySlug, { slug });
+  const { isAuthenticated } = useConvexAuth();
+  const [pkgIndex, setPkgIndex] = useState(0);
+  const packages = offer?.packages ?? [];
+  const hasPackages = packages.length > 0;
+  const activePkg = hasPackages
+    ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
+    : null;
+
+  if (offer === undefined) {
+    return (
+      <div className="studio-cn-browse">
+        <button type="button" className="studio-cn-detail-back" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" />
+          Back to Network
+        </button>
+        <OffersState icon={<PackageSearch />} title="Loading service…" />
+      </div>
+    );
+  }
+  if (offer === null) {
+    return (
+      <div className="studio-cn-browse">
+        <button type="button" className="studio-cn-detail-back" onClick={onBack}>
+          <ArrowLeft aria-hidden="true" />
+          Back to Network
+        </button>
+        <OffersState
+          icon={<Store />}
+          title="Service not found"
+          hint="This package is no longer published."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-cn-browse">
+      <button type="button" className="studio-cn-detail-back" onClick={onBack}>
+        <ArrowLeft aria-hidden="true" />
+        Back to Network
+      </button>
+      <div className="studio-cn-detail-layout">
+        <div className="studio-cn-detail-main">
+          {offer.gallery && offer.gallery.length > 0 ? (
+            <OfferGallery items={offer.gallery} />
+          ) : null}
+          <section className="public-offers-detail-intro">
+            <div className="public-offers-detail-intro-copy">
+              {offer.category ? (
+                <p className="public-offers-kicker">{offer.category}</p>
+              ) : (
+                <p className="public-offers-kicker">Creative Network</p>
+              )}
+              <h1>{offer.title}</h1>
+              <p>
+                {offer.sellerBusinessName}
+                {offer.sellerUsername ? (
+                  <>
+                    {" · "}
+                    <Link href={`/u/${offer.sellerUsername}`}>
+                      @{offer.sellerUsername}
+                    </Link>
+                  </>
+                ) : null}
+              </p>
+            </div>
+            <div className="public-offers-detail-intro-meta">
+              <span className="public-offers-chip">
+                <Clock aria-hidden="true" />
+                {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
+              </span>
+              <span className="public-offers-chip">
+                {hasPackages && packages.length > 1 ? "From " : ""}
+                {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
+              </span>
+              <OfferStatsChips
+                ratingAvg={offer.ratingAvg}
+                ratingCount={offer.ratingCount}
+                purchaseCount={offer.purchaseCount}
+              />
+            </div>
+          </section>
+          <section className="public-offers-panel">
+            <h2>What you get</h2>
+            <p className="public-offers-prose">{offer.description}</p>
+          </section>
+          <OfferReviewsList offerId={offer._id} />
+        </div>
+        <div className="studio-cn-detail-aside">
+          {hasPackages ? (
+            <PackagePicker
+              packages={packages}
+              index={pkgIndex}
+              onIndex={setPkgIndex}
+            />
+          ) : (
+            <section className="public-offers-panel">
+              <h2>Package</h2>
+              <p className="public-offers-price">
+                {formatTtdCents(offer.priceCents)}
+              </p>
+            </section>
+          )}
+          {isAuthenticated ? (
+            <Authenticated>
+              <BookPanel
+                offerId={offer._id}
+                slug={offer.slug}
+                packageIndex={hasPackages ? pkgIndex : undefined}
+              />
+            </Authenticated>
+          ) : (
+            <Unauthenticated>
+              <section className="public-offers-panel">
+                <h2>Booking</h2>
+                <p className="public-offers-note">Sign in to book this package.</p>
+              </section>
+            </Unauthenticated>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

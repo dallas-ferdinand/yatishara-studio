@@ -97,6 +97,13 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import {
+  STUDIO_DEFAULT_TAB_LABELS,
+  STUDIO_DEFAULT_TAB_VALUES,
+  readStoredStudioDefaultTab,
+  studioTabKeyForDefault,
+  writeStoredStudioDefaultTab,
+} from "@/studio/lib/studio-default-tab";
 import { FileBreadcrumbs } from "@/desk/components/FileBreadcrumbs";
 import { FileTree } from "@/desk/components/FileTree";
 import { DeskMediaPlayer } from "@/desk/components/DeskMediaPlayer";
@@ -128,6 +135,7 @@ import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
 import { StudioCreativeNetworkProvider } from "./StudioCreativeNetworkContext";
 import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
+import { StudioCreativeNetworkStore } from "./StudioCreativeNetworkStore";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
@@ -594,7 +602,12 @@ function sanitizePersistedOpenTabs(tabs) {
     const at = feedSlot >= 0 ? Math.min(feedSlot, cleaned.length) : cleaned.length;
     cleaned.splice(at, 0, lastFeed);
   }
-  return cleaned.length ? cleaned : [COMPOSER_TAB];
+  if (cleaned.length) return cleaned;
+  const preferred =
+    typeof window !== "undefined"
+      ? studioTabKeyForDefault(readStoredStudioDefaultTab())
+      : COMPOSER_TAB;
+  return [preferred];
 }
 
 function slimTabEntrySnapshots(snapshots) {
@@ -616,9 +629,13 @@ function slimTabEntrySnapshots(snapshots) {
 let cachedInitialTabSession = null;
 function readPersistedTabSession() {
   if (cachedInitialTabSession) return cachedInitialTabSession;
+  const preferredDefault =
+    typeof window !== "undefined"
+      ? studioTabKeyForDefault(readStoredStudioDefaultTab())
+      : COMPOSER_TAB;
   const fallback = {
-    openTabs: [COMPOSER_TAB],
-    activeTab: COMPOSER_TAB,
+    openTabs: [preferredDefault],
+    activeTab: preferredDefault,
     activeFolderId: null,
     navTrail: [],
     snapshots: {},
@@ -927,6 +944,11 @@ export function StudioShell({
   const patchBriefProduction = useMutation(api.guidedVideo.patchBriefProduction);
   const setThreadAssistance = useMutation(api.generation.setThreadAssistance);
   const decideAssistanceApproval = useMutation(api.assistanceApprovals.decide);
+  const listOnNetwork = useMutation(api.assetStore.listOnNetwork);
+  const unlistFromNetwork = useMutation(api.assetStore.unlistFromNetwork);
+  const ensurePurchasedAssetsFolderForMe = useMutation(
+    api.folders.ensurePurchasedAssetsFolderForMe,
+  );
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
@@ -946,6 +968,7 @@ export function StudioShell({
   const [browserFullscreen, setBrowserFullscreen] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [filesBrowseMode, setFilesBrowseMode] = useState("yours");
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const composerContextsRef = useRef(
     typeof window !== "undefined" ? readPersistedComposerContexts() : {},
@@ -1130,6 +1153,8 @@ export function StudioShell({
   const [assetPickSelected, setAssetPickSelected] = useState([]);
   /** Deep-link slug for Creative Network offer detail inside Studio. */
   const [networkInitialSlug, setNetworkInitialSlug] = useState(null);
+  /** Deep-link seller filter for Creative Network browse. */
+  const [networkInitialSeller, setNetworkInitialSeller] = useState(null);
   useStudioBackground();
 
   const endAssetPick = useCallback(
@@ -1161,6 +1186,14 @@ export function StudioShell({
   const syncedBriefAttachmentsRevisionRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
+  const mySellerStatus = useQuery(
+    api.marketplace.getMySellerStatus,
+    hasCurrentUser ? {} : "skip",
+  );
+  const myAssetListings = useQuery(
+    api.assetStore.listMyListings,
+    hasCurrentUser ? {} : "skip",
+  );
   const explorerUserId = currentUser?._id ?? null;
   const [pinnedFolders, setPinnedFolders] = useState(() =>
     typeof window === "undefined" ? [] : loadPinnedFolders(null),
@@ -1314,6 +1347,10 @@ export function StudioShell({
   }, [isMobile, mobileSocialOpen]);
 
   useEffect(() => {
+    if (!isMobile && mobileNetworkOpen) setMobileNetworkOpen(false);
+  }, [isMobile, mobileNetworkOpen]);
+
+  useEffect(() => {
     const onSocial =
       typeof activeTab === "string" &&
       (activeTab.startsWith("feed:") ||
@@ -1321,6 +1358,13 @@ export function StudioShell({
         activeTab.startsWith("profilePost:"));
     if (!onSocial && mobileSocialOpen) setMobileSocialOpen(false);
   }, [activeTab, mobileSocialOpen]);
+
+  useEffect(() => {
+    const onNetwork =
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
+    if (!onNetwork && mobileNetworkOpen) setMobileNetworkOpen(false);
+  }, [activeTab, mobileNetworkOpen]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -1736,6 +1780,12 @@ export function StudioShell({
       setAssistanceEnabled((current) => (current === true ? current : true));
     }
   }, [activeThreadId, threads, currentUser, mode]);
+
+  useEffect(() => {
+    const tab = currentUser?.defaultStudioTab;
+    if (!tab || !STUDIO_DEFAULT_TAB_VALUES.includes(tab)) return;
+    writeStoredStudioDefaultTab(tab);
+  }, [currentUser?.defaultStudioTab]);
 
   useEffect(() => {
     if (!activeThreadId || !events?.length) return;
@@ -2566,11 +2616,15 @@ export function StudioShell({
       const messagesIdx = rest.findIndex((entry) => entry.studioKind === "messages");
       const messagesEntry =
         messagesIdx >= 0 ? rest.splice(messagesIdx, 1)[0] : null;
+      const purchasedIdx = rest.findIndex((entry) => entry.studioKind === "purchased");
+      const purchasedEntry =
+        purchasedIdx >= 0 ? rest.splice(purchasedIdx, 1)[0] : null;
       return {
         ...entries,
         entries: [
           TRASH_FOLDER_ENTRY,
           ...(messagesEntry ? [messagesEntry] : []),
+          ...(purchasedEntry ? [purchasedEntry] : []),
           ...rest,
         ],
       };
@@ -2789,7 +2843,13 @@ export function StudioShell({
 
   function handlePinFolder(entry, parentPath) {
     if (!entry || entry.type === "parent" || entry.type !== "dir") return;
-    if (entry.studioKind === "messages" || entry.studioKind === "trash") return;
+    if (
+      entry.studioKind === "messages" ||
+      entry.studioKind === "purchased" ||
+      entry.studioKind === "trash"
+    ) {
+      return;
+    }
     const next = addPinnedFolder(
       entry.path,
       entry.name ?? entry.path?.split("/").pop() ?? "Folder",
@@ -3165,6 +3225,33 @@ export function StudioShell({
     setHistoryOpen,
   ]);
 
+  const openPurchasedFolder = useCallback(
+    async (buyerAssetId) => {
+      setFilesBrowseMode("yours");
+      try {
+        const folderId = await ensurePurchasedAssetsFolderForMe({});
+        const folder =
+          (topFolders ?? []).find((item) => item._id === folderId) ??
+          (topFolders ?? []).find((item) => item.systemKind === "purchased_assets");
+        if (folder) {
+          setActiveFolderId(folder._id);
+          setNavTrail((trail) => {
+            const root = trail[0];
+            return root
+              ? [root, { id: folder._id, name: folder.name }]
+              : [{ id: folder._id, name: folder.name }];
+          });
+        }
+        if (buyerAssetId) {
+          openTab(`asset:${buyerAssetId}`);
+        }
+      } catch (error) {
+        toast.error(friendlyConvexError(error, "Could not open Purchased folder."));
+      }
+    },
+    [ensurePurchasedAssetsFolderForMe, topFolders],
+  );
+
   function openAdminTab(tab) {
     if (!isAdminUser) return;
     setSettingsOpen(false);
@@ -3185,6 +3272,11 @@ export function StudioShell({
     openTab(NETWORK_TAB);
     if (opts.slug) {
       setNetworkInitialSlug(String(opts.slug).trim().toLowerCase());
+    }
+    if (opts.sellerUsername) {
+      setNetworkInitialSeller(
+        String(opts.sellerUsername).replace(/^@/, "").trim().toLowerCase(),
+      );
     }
   }
 
@@ -3209,12 +3301,17 @@ export function StudioShell({
     const networkParam = params.get("network");
     const offersParam = params.get("offers");
     const slugParam = params.get("slug");
+    const sellerParam = params.get("u");
     if (networkParam === "1" || offersParam === "1") {
-      openNetworkTab(slugParam ? { slug: slugParam } : {});
+      openNetworkTab({
+        slug: slugParam || undefined,
+        sellerUsername: sellerParam || undefined,
+      });
       const url = new URL(window.location.href);
       url.searchParams.delete("network");
       url.searchParams.delete("offers");
       url.searchParams.delete("slug");
+      url.searchParams.delete("u");
       const next = `${url.pathname}${url.search}${url.hash}`;
       window.history.replaceState({}, "", next || "/");
     }
@@ -3226,16 +3323,28 @@ export function StudioShell({
         setMobileAppMenuOpen(false);
         setHistoryOpen(false);
         setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
         setSettingsOpen(true);
         return;
       }
       if (section === "feed") {
         setMobileSection("composer");
         setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
         openFeed();
+        return;
+      }
+      if (section === "network") {
+        setMobileSection("composer");
+        setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        openNetworkTab();
         return;
       }
       setMobileSection(section);
@@ -3244,6 +3353,7 @@ export function StudioShell({
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
         setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
         if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
           openTab(lastChatTabRef.current || COMPOSER_TAB);
         }
@@ -3254,6 +3364,7 @@ export function StudioShell({
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
         setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
       }
     });
   }
@@ -3264,13 +3375,28 @@ export function StudioShell({
       (activeTab.startsWith("feed:") ||
         activeTab.startsWith("profile:") ||
         activeTab.startsWith("profilePost:"));
+    const onNetwork =
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
     if (onSocial) {
       startMobileTransition(() => {
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
+        setMobileNetworkOpen(false);
         if (mobileSection === "files") setMobileSection("composer");
         setMobileSocialOpen((open) => !open);
+      });
+      return;
+    }
+    if (onNetwork) {
+      startMobileTransition(() => {
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        setMobileSocialOpen(false);
+        if (mobileSection === "files") setMobileSection("composer");
+        setMobileNetworkOpen((open) => !open);
       });
       return;
     }
@@ -3668,12 +3794,7 @@ export function StudioShell({
   }
 
   function renameEntry(entry) {
-    if (
-      !entry ||
-      isTrashNav ||
-      entry.studioKind === "messages" ||
-      entry.systemKind === "messages"
-    ) {
+    if (!entry || isTrashNav || isLockedSystemFolder(entry)) {
       return;
     }
     setRenameTarget(entry);
@@ -3681,7 +3802,7 @@ export function StudioShell({
 
   async function applyEntryRename(entry, nextName) {
     if (!entry) return;
-    if (entry.studioKind === "messages" || entry.systemKind === "messages") return;
+    if (isLockedSystemFolder(entry)) return;
     const trimmed = String(nextName ?? "").trim();
     if (!trimmed) return;
     if (entry.studioKind === "folder") {
@@ -3859,8 +3980,8 @@ export function StudioShell({
       !entry ||
       isTrashNav ||
       entry.studioKind === "trash" ||
-      entry.studioKind === "messages" ||
-      entry.systemKind === "messages"
+      isLockedSystemFolder(entry) ||
+      isPurchasedNetworkAsset(entry)
     ) {
       return;
     }
@@ -3901,6 +4022,10 @@ export function StudioShell({
   /** Removes the files from Bunny, which is what actually lowers the storage bill. */
   async function deleteEntryForever(entry) {
     if (entry?.studioKind !== "asset" || !entry.studioId) return;
+    if (isPurchasedNetworkAsset(entry)) {
+      toast.error("Purchased Creative Network audio cannot be permanently deleted.");
+      return;
+    }
     const ok = window.confirm(
       `Permanently delete "${entry.name}"? This frees the storage it uses and cannot be undone.`,
     );
@@ -3934,6 +4059,12 @@ export function StudioShell({
   function handleEntryDrop(event, targetEntry) {
     if (isTrashNav || targetEntry?.studioKind === "trash") return;
     if (!targetEntry?.studioId) return;
+    if (
+      targetEntry.studioKind === "purchased" ||
+      targetEntry.systemKind === "purchased_assets"
+    ) {
+      return;
+    }
     if (event.dataTransfer?.files?.length) {
       if (
         targetEntry.type === "dir" ||
@@ -3950,8 +4081,8 @@ export function StudioShell({
     let source;
     try { source = JSON.parse(raw); } catch { return; }
     if (!source?.studioKind || !source?.studioId) return;
-    // Messages folder itself cannot be moved.
-    if (source.studioKind === "messages" || source.systemKind === "messages") return;
+    // System folders and purchased Network copies cannot be moved.
+    if (isLockedSystemFolder(source) || isPurchasedNetworkAsset(source)) return;
     if (source.studioId === targetEntry.studioId) return;
     if (
       targetEntry.type === "dir" ||
@@ -3968,7 +4099,7 @@ export function StudioShell({
     let source;
     try { source = JSON.parse(raw); } catch { return; }
     if (!source?.studioKind || !source?.studioId) return;
-    if (source.studioKind === "messages" || source.systemKind === "messages") return;
+    if (isLockedSystemFolder(source) || isPurchasedNetworkAsset(source)) return;
     let targetId;
     if (crumbIndex === 0) {
       targetId = navTrail[0]?.id;
@@ -3982,7 +4113,7 @@ export function StudioShell({
   }
 
   async function moveEntryToFolder(source, targetFolderId) {
-    if (source.studioKind === "messages" || source.systemKind === "messages") return;
+    if (isLockedSystemFolder(source) || isPurchasedNetworkAsset(source)) return;
     try {
       if (source.studioKind === "folder") {
         await updateFolder({ folderId: source.studioId, parentId: targetFolderId });
@@ -4216,7 +4347,12 @@ export function StudioShell({
 
   function downloadSelectionForEntry(entry) {
     if (!entry?.studioId) return null;
-    if (entry.type === "dir" || entry.studioKind === "folder" || entry.studioKind === "messages") {
+    if (
+      entry.type === "dir" ||
+      entry.studioKind === "folder" ||
+      entry.studioKind === "messages" ||
+      entry.studioKind === "purchased"
+    ) {
       return { kind: "folder", id: entry.studioId };
     }
     if (
@@ -5394,7 +5530,9 @@ export function StudioShell({
   return (
     <StudioCreativeNetworkProvider
       initialSlug={networkInitialSlug}
+      initialSellerUsername={networkInitialSeller}
       onInitialSlugConsumed={() => setNetworkInitialSlug(null)}
+      onInitialSellerConsumed={() => setNetworkInitialSeller(null)}
     >
     <div
       ref={shellRef}
@@ -17255,6 +17393,13 @@ export function StudioShell({
                 ? assetPickSelected.map((item) => item.path).filter(Boolean)
                 : null
             }
+            filesBrowseMode={filesBrowseMode}
+            onFilesBrowseModeChange={setFilesBrowseMode}
+            assetUrlExpiresUnix={assetUrlExpiresUnix}
+            onOpenPurchasedAsset={(buyerAssetId) => {
+              void openPurchasedFolder(buyerAssetId);
+            }}
+            onNeedTopUp={openCreditsPane}
           />
         )}
         {pickingFromFiles ? (
@@ -17438,6 +17583,16 @@ export function StudioShell({
                   aria-pressed={activeTab.startsWith("feed:")}
                 >
                   <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isNetworkRail ? " is-active" : ""}`}
+                  onClick={() => openNetworkTab()}
+                  aria-label="Open Creative Network"
+                  title="Creative Network"
+                  aria-pressed={isNetworkRail}
+                >
+                  <Store className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
@@ -17832,6 +17987,13 @@ export function StudioShell({
           onCancelTransfer={cancelFileTransfer}
           onDismissTransfer={dismissFileTransfer}
           onRetryTransfer={retryFileTransfer}
+          filesBrowseMode={filesBrowseMode}
+          onFilesBrowseModeChange={setFilesBrowseMode}
+          assetUrlExpiresUnix={assetUrlExpiresUnix}
+          onOpenPurchasedAsset={(buyerAssetId) => {
+            void openPurchasedFolder(buyerAssetId);
+          }}
+          onNeedTopUp={openCreditsPane}
         />
       ) : null}
 
@@ -17846,13 +18008,32 @@ export function StudioShell({
         />
       ) : null}
 
+      {isMobile && mobileNetworkOpen ? (
+        <StudioNetworkMobileSheet
+          onClose={() => setMobileNetworkOpen(false)}
+          expiresUnix={assetUrlExpiresUnix}
+          onOpenMessages={() => {
+            setMobileNetworkOpen(false);
+            openMessages();
+          }}
+          onOpenChatWithUsername={(username) => {
+            setMobileNetworkOpen(false);
+            openChatWith(username);
+          }}
+        />
+      ) : null}
+
       {isMobile ? (
         <StudioMobileBottomNav
           section={resolveMobileBottomNavSection(activeTab, mobileSection)}
           onSelect={openMobileSection}
           action={{
-            id: isSocialRail ? "social" : "files",
-            active: isSocialRail ? mobileSocialOpen : mobileSection === "files",
+            id: isNetworkRail ? "cnRail" : isSocialRail ? "social" : "files",
+            active: isNetworkRail
+              ? mobileNetworkOpen
+              : isSocialRail
+                ? mobileSocialOpen
+                : mobileSection === "files",
             onClick: toggleMobileNavAction,
           }}
           tools={
@@ -17967,8 +18148,8 @@ export function StudioShell({
           entry={contextMenu.entry}
           x={contextMenu.x}
           y={contextMenu.y}
-          canCreateFile={!isTrashNav}
-          canCreateFolder={!isTrashNav}
+          canCreateFile={!isTrashNav && activeFolder?.systemKind !== "purchased_assets" && activeFolder?.systemKind !== "messages"}
+          canCreateFolder={!isTrashNav && activeFolder?.systemKind !== "purchased_assets" && activeFolder?.systemKind !== "messages"}
           inTrashView={isTrashNav}
           createItems={getCreateMenuItems()}
           sharedAssetIds={sharedAssetIds}
@@ -17976,6 +18157,17 @@ export function StudioShell({
           currentPath={explorerPinParent}
           canDownloadZip={!isTrashNav}
           canPin={!isTrashNav}
+          canListOnNetwork={mySellerStatus?.status === "approved"}
+          networkListingId={
+            (myAssetListings ?? []).find(
+              (row) => row.sourceAssetId === contextMenu.entry?.studioId,
+            )?._id ?? null
+          }
+          networkListingStatus={
+            (myAssetListings ?? []).find(
+              (row) => row.sourceAssetId === contextMenu.entry?.studioId,
+            )?.status ?? null
+          }
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashNav) return;
@@ -18066,6 +18258,43 @@ export function StudioShell({
                 .catch((error) => {
                   toast.error(friendlyConvexError(error, "Could not update profile"));
                 });
+            }
+            if (action === "list-network") {
+              if (!entry?.studioId || entry.studioKind !== "asset" || entry.kind !== "audio") return;
+              void (async () => {
+                try {
+                  const quote = await convex.query(api.assetStore.quoteListPrice, {
+                    assetId: entry.studioId,
+                  });
+                  if (!quote.canList) {
+                    toast.error(quote.reason || "Cannot list this audio");
+                    return;
+                  }
+                  const price = formatTtdCents(quote.priceCents);
+                  const ok = window.confirm(
+                    `List "${entry.name}" on Creative Network for ${price}? Buyers pay once and get a personal copy. You earn 70%.`,
+                  );
+                  if (!ok) return;
+                  await listOnNetwork({ assetId: entry.studioId });
+                  toast.success(`Listed for ${price}`);
+                } catch (error) {
+                  toast.error(friendlyConvexError(error, "Could not list on Creative Network"));
+                }
+              })();
+            }
+            if (action === "unlist-network") {
+              const listing = (myAssetListings ?? []).find(
+                (row) => row.sourceAssetId === entry?.studioId,
+              );
+              if (!listing) return;
+              void (async () => {
+                try {
+                  await unlistFromNetwork({ listingId: listing._id });
+                  toast.success("Unlisted from Creative Network");
+                } catch (error) {
+                  toast.error(friendlyConvexError(error, "Could not unlist"));
+                }
+              })();
             }
           }}
         />
@@ -24177,10 +24406,16 @@ function StudioFilesExplorerBody({
   onCancelTransfer,
   onDismissTransfer,
   onRetryTransfer,
+  filesBrowseMode = "yours",
+  onFilesBrowseModeChange,
+  assetUrlExpiresUnix,
+  onOpenPurchasedAsset,
+  onNeedTopUp,
 }) {
   const filterActive = typeFilter !== "all";
+  const isNetworkMode = filesBrowseMode === "network";
   const [dropOver, setDropOver] = useState(false);
-  const tree = (
+  const tree = isNetworkMode ? null : (
       <FileTree
         viewMode={isMobile ? "grid" : filterActive ? "grid" : viewMode}
         workspaceId={WORKSPACE_ID}
@@ -24240,9 +24475,9 @@ function StudioFilesExplorerBody({
 
   return (
     <div
-      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}`}
+      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}${isNetworkMode ? " is-network-store" : ""}`}
       onDragOver={(event) => {
-        if (!onDropFiles || !Array.from(event.dataTransfer.types).includes("Files")) return;
+        if (isNetworkMode || !onDropFiles || !Array.from(event.dataTransfer.types).includes("Files")) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
         setDropOver(true);
@@ -24252,25 +24487,55 @@ function StudioFilesExplorerBody({
       }}
       onDrop={(event) => {
         setDropOver(false);
-        if (!onDropFiles || !event.dataTransfer.files?.length) return;
+        if (isNetworkMode || !onDropFiles || !event.dataTransfer.files?.length) return;
         event.preventDefault();
         void onDropFiles(event.dataTransfer.files, activeFolder?._id);
       }}
     >
+      {onFilesBrowseModeChange ? (
+        <div className="studio-files-source-toggle" role="tablist" aria-label="Files source">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!isNetworkMode}
+            className={!isNetworkMode ? "is-active" : undefined}
+            onClick={() => onFilesBrowseModeChange("yours")}
+          >
+            Your files
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={isNetworkMode}
+            className={isNetworkMode ? "is-active" : undefined}
+            onClick={() => onFilesBrowseModeChange("network")}
+          >
+            Creative Network
+          </button>
+        </div>
+      ) : null}
       {showSearch ? (
         <PanelSearchBar
           value={search}
           onChange={setSearch}
-          placeholder="Search your content"
-          aria-label="Search your content"
+          placeholder={isNetworkMode ? "Search music and sound effects" : "Search your content"}
+          aria-label={isNetworkMode ? "Search music and sound effects" : "Search your content"}
           end={
-            setTypeFilter ? (
+            !isNetworkMode && setTypeFilter ? (
               <ExplorerTypeFilter value={typeFilter} onChange={setTypeFilter} />
             ) : null
           }
         />
       ) : null}
-      {showPathbar ? (
+      {isNetworkMode ? (
+        <StudioCreativeNetworkStore
+          expiresUnix={assetUrlExpiresUnix}
+          search={search}
+          onOpenPurchased={onOpenPurchasedAsset}
+          onNeedTopUp={onNeedTopUp}
+        />
+      ) : null}
+      {!isNetworkMode && showPathbar ? (
         <div className="studio-folder-pathbar shrink-0">
           <FileBreadcrumbs path={breadcrumbPath} onNavigate={onBreadcrumbNavigate} onDropEntry={onBreadcrumbDrop} />
           {onToggleSelectionMode ? (
@@ -24290,7 +24555,7 @@ function StudioFilesExplorerBody({
             </button>
           ) : null}
         </div>
-      ) : onToggleSelectionMode ? (
+      ) : !isNetworkMode && onToggleSelectionMode ? (
         <div className="studio-file-inline-tools shrink-0">
           <button
             type="button"
@@ -24308,8 +24573,8 @@ function StudioFilesExplorerBody({
           </button>
         </div>
       ) : null}
-      {tree}
-      {selectionMode ? (
+      {!isNetworkMode ? tree : null}
+      {!isNetworkMode && selectionMode ? (
         <div className="studio-file-selection-bar shrink-0" aria-live="polite">
           <span>{selectedCount ? `${selectedCount} selected` : "Select files or folders"}</span>
           <div>
@@ -24488,6 +24753,58 @@ function StudioSocialMobileSheet({ onClose, onOpenProfile, expiresUnix }) {
         <StudioSocialSidebar
           onOpenProfile={onOpenProfile}
           expiresUnix={expiresUnix}
+        />
+      </div>
+    </div>,
+    portalRoot,
+  );
+}
+
+function StudioNetworkMobileSheet({
+  onClose,
+  expiresUnix,
+  onOpenMessages,
+  onOpenChatWithUsername,
+}) {
+  const [portalRoot, setPortalRoot] = useState(null);
+
+  useEffect(() => {
+    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div
+      className="studio-mobile-app-menu-sheet studio-network-mobile-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Creative Network"
+    >
+      <div className="studio-mobile-app-menu-head">
+        <h2 className="studio-mobile-app-menu-title">Creative Network</h2>
+        <button
+          type="button"
+          className="studio-mobile-app-menu-close"
+          aria-label="Close Creative Network filters"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+      <div className="studio-mobile-app-menu-body">
+        <StudioCreativeNetworkSidebar
+          expiresUnix={expiresUnix}
+          onOpenMessages={onOpenMessages}
+          onOpenChatWithUsername={onOpenChatWithUsername}
         />
       </div>
     </div>,
@@ -24999,6 +25316,9 @@ function SettingsWorkspacePane({
           <div className="studio-settings-appearance-card">
             <ThemeSettings />
             <CustomCursorSettings enabled={customCursorEnabled} onChange={onCustomCursorChange} />
+            <DefaultStudioTabSettings
+              value={currentUser?.defaultStudioTab ?? readStoredStudioDefaultTab() ?? "composer"}
+            />
           </div>
         ) : null}
         </div>
@@ -25016,6 +25336,7 @@ const LEDGER_KIND_LABELS = {
   marketplace_escrow_hold: "Marketplace booking",
   marketplace_escrow_release: "Marketplace delivered",
   marketplace_escrow_refund: "Marketplace refund",
+  asset_purchase: "Creative Network audio",
   storage_charge: "Storage",
 };
 
@@ -25239,6 +25560,43 @@ function CustomCursorSettings({ enabled, onChange }) {
         aria-checked={enabled}
         aria-label="Toggle modern cursor"
         onClick={() => onChange?.(!enabled)}
+      />
+    </div>
+  );
+}
+
+function DefaultStudioTabSettings({ value }) {
+  const setDefaultStudioTab = useMutation(api.users.setDefaultStudioTab);
+  const [busy, setBusy] = useState(false);
+  const current =
+    STUDIO_DEFAULT_TAB_VALUES.includes(value) ? value : "composer";
+  return (
+    <div className="studio-settings-cursor-row studio-settings-default-tab">
+      <div className="studio-settings-cursor-copy">
+        <strong>Default tab when you open Studio</strong>
+        <p className="text-xs text-cursor-muted mt-1">
+          Used when you have no restored workspace tabs.
+        </p>
+      </div>
+      <CursorSelect
+        value={current}
+        options={STUDIO_DEFAULT_TAB_VALUES.map((tab) => ({
+          value: tab,
+          label: STUDIO_DEFAULT_TAB_LABELS[tab],
+        }))}
+        onChange={(next) => {
+          if (!STUDIO_DEFAULT_TAB_VALUES.includes(next)) return;
+          writeStoredStudioDefaultTab(next);
+          setBusy(true);
+          void setDefaultStudioTab({ tab: next })
+            .catch((error) => {
+              toast.error(friendlyConvexError(error, "Could not save default tab"));
+            })
+            .finally(() => setBusy(false));
+        }}
+        ariaLabel="Default Studio tab"
+        disabled={busy}
+        align="end"
       />
     </div>
   );
@@ -25852,8 +26210,23 @@ function buildFlatEntries({ folder, parent, loading, folders, assets, documents,
   };
 }
 
+
+function isLockedSystemFolder(entry) {
+  return (
+    entry?.studioKind === "messages" ||
+    entry?.studioKind === "purchased" ||
+    entry?.systemKind === "messages" ||
+    entry?.systemKind === "purchased_assets"
+  );
+}
+
+function isPurchasedNetworkAsset(entry) {
+  return entry?.licenseKind === "purchased_network";
+}
+
 function folderToEntry(folder) {
   const isMessages = folder.systemKind === "messages";
+  const isPurchased = folder.systemKind === "purchased_assets";
   return {
     type: "dir",
     name: folder.name,
@@ -25861,7 +26234,7 @@ function folderToEntry(folder) {
     displayPath: displayWorkspacePath(studioPathForFolder(folder)),
     modified: folder.updatedAt,
     mtimeMs: folder.updatedAt,
-    studioKind: isMessages ? "messages" : "folder",
+    studioKind: isMessages ? "messages" : isPurchased ? "purchased" : "folder",
     studioId: folder._id,
     systemKind: folder.systemKind,
     peekItems: folder.peekItems ?? [],
@@ -25964,6 +26337,8 @@ function assetToEntry(asset) {
     durationSeconds: asset.durationSeconds,
     width: asset.width,
     height: asset.height,
+    licenseKind: asset.licenseKind,
+    sourceListingId: asset.sourceListingId,
   };
 }
 

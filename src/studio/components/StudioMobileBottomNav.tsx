@@ -1,13 +1,15 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, Sparkles, Users } from "lucide-react";
+import { Cloud, Folder, Sparkles, Store, Users } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-/** Context action in the middle slot — Files on Generate, People on Social. */
+/** Context action in the middle slot — Files on Generate, People on Social, Filters on CN. */
 export const MOBILE_NAV_ACTION = {
   files: { id: "files", label: "Files", Icon: Folder },
   social: { id: "social", label: "People", Icon: Users },
+  /** Opens CN left-rail sheet while the Network section is active. */
+  cnRail: { id: "cnRail", label: "Browse", Icon: Store },
 };
 
 export function StudioMobileBottomNav({
@@ -52,9 +54,11 @@ export function StudioMobileBottomNav({
   const actionDef =
     action?.id === "social"
       ? MOBILE_NAV_ACTION.social
-      : action?.id === "files"
-        ? MOBILE_NAV_ACTION.files
-        : null;
+      : action?.id === "cnRail"
+        ? MOBILE_NAV_ACTION.cnRail
+        : action?.id === "files"
+          ? MOBILE_NAV_ACTION.files
+          : null;
   const ActionIcon = actionDef?.Icon;
 
   return (
@@ -80,6 +84,19 @@ export function StudioMobileBottomNav({
           onClick={() => onSelect("feed")}
         >
           <Cloud aria-hidden="true" />
+        </button>
+        <button
+          ref={(node) => {
+            itemRefs.current.network = node;
+          }}
+          type="button"
+          className={`studio-mobile-nav-btn${section === "network" ? " is-active" : ""} is-icon-only`}
+          aria-current={section === "network" ? "page" : undefined}
+          aria-label="Creative Network"
+          title="Creative Network"
+          onClick={() => onSelect("network")}
+        >
+          <Store aria-hidden="true" />
         </button>
         {actionDef && ActionIcon ? (
           <button

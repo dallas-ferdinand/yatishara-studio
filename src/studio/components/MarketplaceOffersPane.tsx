@@ -31,11 +31,6 @@ import { SellerAccessApplicationForm } from "./SellerAccessApplicationForm";
 import "./marketplace-offers-pane.css";
 import "./public-offers.css";
 
-type MarketplaceOffersPaneProps = {
-  onOpenCredits: () => void;
-  creditPriceCents?: number;
-};
-
 type View =
   | { kind: "home" }
   | { kind: "offer"; offerId: Id<"marketplaceOffers"> }
@@ -43,6 +38,19 @@ type View =
   | { kind: "create" };
 
 type HomeTab = "offers" | "jobs";
+
+type MarketplaceOffersPaneProps = {
+  onOpenCredits: () => void;
+  creditPriceCents?: number;
+  /** When embedded in Creative Network tab — skip seller-apply gate & optional chrome. */
+  embedInNetwork?: boolean;
+  homeTab?: HomeTab;
+  hideHomeTabs?: boolean;
+  externalOfferId?: Id<"marketplaceOffers"> | null;
+  externalJobId?: Id<"marketplaceJobs"> | null;
+  onOfferSelect?: (id: Id<"marketplaceOffers"> | null) => void;
+  onJobSelect?: (id: Id<"marketplaceJobs"> | null) => void;
+};
 type JobFilter = "all" | "sell" | "buy";
 type OfferTypeFilter =
   | "all"
@@ -570,9 +578,20 @@ function PackagesEditor({
 export function MarketplaceOffersPane({
   onOpenCredits,
   creditPriceCents: _creditPriceCents = 50,
+  embedInNetwork = false,
+  homeTab: controlledHomeTab,
+  hideHomeTabs = false,
+  externalOfferId = null,
+  externalJobId = null,
+  onOfferSelect,
+  onJobSelect,
 }: MarketplaceOffersPaneProps) {
   const [view, setView] = useState<View>({ kind: "home" });
-  const [homeTab, setHomeTab] = useState<HomeTab>("offers");
+  const [homeTabState, setHomeTabState] = useState<HomeTab>("offers");
+  const homeTab = controlledHomeTab ?? homeTabState;
+  const setHomeTab = (tab: HomeTab) => {
+    if (controlledHomeTab === undefined) setHomeTabState(tab);
+  };
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
   const [offerTypeFilter, setOfferTypeFilter] =
     useState<OfferTypeFilter>("all");
@@ -895,20 +914,49 @@ export function MarketplaceOffersPane({
   function goHome() {
     setView({ kind: "home" });
     setOfferEditorTab("details");
+    onOfferSelect?.(null);
+    onJobSelect?.(null);
   }
 
   function openCreate() {
     setOfferEditorTab("details");
     setView({ kind: "create" });
+    onOfferSelect?.(null);
+    onJobSelect?.(null);
   }
 
   function openOffer(offerId: Id<"marketplaceOffers">) {
     setOfferEditorTab("details");
     setView({ kind: "offer", offerId });
+    onOfferSelect?.(offerId);
+    onJobSelect?.(null);
   }
 
+  function openJob(jobId: Id<"marketplaceJobs">) {
+    setView({ kind: "job", jobId });
+    onJobSelect?.(jobId);
+    onOfferSelect?.(null);
+  }
+
+  useEffect(() => {
+    if (!embedInNetwork) return;
+    if (externalJobId) {
+      setView({ kind: "job", jobId: externalJobId });
+      return;
+    }
+    if (externalOfferId) {
+      setOfferEditorTab("details");
+      setView({ kind: "offer", offerId: externalOfferId });
+      return;
+    }
+    if (controlledHomeTab) {
+      setView({ kind: "home" });
+    }
+  }, [embedInNetwork, externalOfferId, externalJobId, controlledHomeTab]);
+
   const isApplyFlow =
-    seller === undefined || !seller || seller.status !== "approved";
+    !embedInNetwork &&
+    (seller === undefined || !seller || seller.status !== "approved");
 
   if (view.kind === "home" && isApplyFlow) {
     if (seller === undefined) {
@@ -1034,6 +1082,35 @@ export function MarketplaceOffersPane({
   return (
     <div className="studio-admin-panel">
       {view.kind === "home" ? (
+        hideHomeTabs ? (
+          <OffersHead
+            action={
+              homeTab === "offers" ? (
+                <button
+                  type="button"
+                  className="marketplace-offers-bar-action"
+                  onClick={openCreate}
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                  New offer
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="marketplace-offers-bar-action"
+                  onClick={onOpenCredits}
+                >
+                  <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                  Balance
+                </button>
+              )
+            }
+          >
+            <span className="studio-admin-head-tab is-active">
+              {homeTab === "jobs" ? "My jobs" : "My offers"}
+            </span>
+          </OffersHead>
+        ) : (
         <OffersHead
           action={
             homeTab === "offers" ? (
@@ -1073,6 +1150,7 @@ export function MarketplaceOffersPane({
             Jobs
           </button>
         </OffersHead>
+        )
       ) : view.kind === "create" || view.kind === "offer" ? (
         <OffersHead
           action={
@@ -1290,7 +1368,7 @@ export function MarketplaceOffersPane({
                       sideLabel:
                         job._role === "sell" ? "Selling" : "Buying",
                     }))}
-                    onOpen={(jobId) => setView({ kind: "job", jobId })}
+                    onOpen={(jobId) => openJob(jobId)}
                   />
                 )}
               </Section>
@@ -1649,7 +1727,7 @@ export function MarketplaceOffersPane({
                           createdAt: job.createdAt,
                           sideLabel: "Selling",
                         }))}
-                      onOpen={(jobId) => setView({ kind: "job", jobId })}
+                      onOpen={(jobId) => openJob(jobId)}
                     />
                   )}
                 </Section>

@@ -4,16 +4,13 @@ type PageProps = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-/** Legacy path — permanent home is /creative-network/. */
+/** Legacy path — opens Studio Creative Network. */
 export default async function OffersRedirectPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") query.set(key, value);
-    else if (Array.isArray(value)) {
-      for (const item of value) query.append(key, item);
-    }
-  }
-  const qs = query.toString();
-  redirect(qs ? `/creative-network/?${qs}` : "/creative-network/");
+  const qs = new URLSearchParams({ network: "1" });
+  const uRaw = params.u;
+  const u = Array.isArray(uRaw) ? uRaw[0] : uRaw;
+  const handle = u?.replace(/^@/, "").trim().toLowerCase();
+  if (handle) qs.set("u", handle);
+  redirect(`/?${qs.toString()}`);
 }
