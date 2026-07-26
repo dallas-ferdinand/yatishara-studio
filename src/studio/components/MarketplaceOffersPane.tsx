@@ -5,6 +5,7 @@ import {
   AlignLeft,
   ArrowLeft,
   CalendarDays,
+  ExternalLink,
   FileBadge,
   Image as ImageIcon,
   Loader2,
@@ -42,6 +43,12 @@ type View =
 
 type HomeTab = "offers" | "jobs";
 type JobFilter = "all" | "sell" | "buy";
+type OfferTypeFilter =
+  | "all"
+  | "published"
+  | "draft"
+  | "paused"
+  | "archived";
 type OfferEditorTab = "details" | "packages" | "media" | "jobs";
 
 const GOOD_STATUSES = new Set(["published", "completed", "approved", "paid"]);
@@ -140,6 +147,18 @@ type JobCardModel = {
   sideLabel: string;
 };
 
+type OfferCardModel = {
+  _id: Id<"marketplaceOffers">;
+  title: string;
+  description: string;
+  slug: string;
+  priceCents: number;
+  category?: string;
+  status: string;
+  deliveryDays: number;
+  packageCount: number;
+};
+
 function JobCard({
   job,
   onOpen,
@@ -181,6 +200,70 @@ function JobCard({
   );
 }
 
+function OfferCard({
+  offer,
+  onOpen,
+}: {
+  offer: OfferCardModel;
+  onOpen: () => void;
+}) {
+  const publicHref = `/creative-network/${offer.slug}/`;
+  return (
+    <div
+      className="marketplace-job-card marketplace-offer-card"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <div className="marketplace-job-card-top">
+        <div>
+          <h3 className="marketplace-job-card-title">{offer.title}</h3>
+          <p className="marketplace-job-card-sub">
+            {offer.category?.trim() || "Uncategorised"}
+          </p>
+        </div>
+        <span className="marketplace-job-card-price">
+          {offer.packageCount > 1 ? <em>From</em> : null}
+          {formatTtdCents(offer.priceCents)}
+        </span>
+      </div>
+      {offer.description.trim() ? (
+        <p className="marketplace-offer-card-desc">{offer.description}</p>
+      ) : null}
+      <div className="marketplace-job-card-meta">
+        <StatusChip status={offer.status} />
+        <span className="marketplace-job-chip">
+          <Clock aria-hidden="true" />
+          {offer.deliveryDays} day delivery
+        </span>
+        {offer.packageCount > 0 ? (
+          <span className="marketplace-job-chip">
+            {offer.packageCount} package{offer.packageCount === 1 ? "" : "s"}
+          </span>
+        ) : null}
+        {offer.status === "published" ? (
+          <a
+            className="marketplace-job-chip marketplace-offer-card-link"
+            href={publicHref}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ExternalLink aria-hidden="true" />
+            Public page
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function JobsCardGrid({
   jobs,
   onOpen,
@@ -193,6 +276,24 @@ function JobsCardGrid({
       {jobs.map((job) => (
         <li key={job._id}>
           <JobCard job={job} onOpen={() => onOpen(job._id)} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OffersCardGrid({
+  offers,
+  onOpen,
+}: {
+  offers: OfferCardModel[];
+  onOpen: (offerId: Id<"marketplaceOffers">) => void;
+}) {
+  return (
+    <ul className="marketplace-job-grid">
+      {offers.map((offer) => (
+        <li key={offer._id}>
+          <OfferCard offer={offer} onOpen={() => onOpen(offer._id)} />
         </li>
       ))}
     </ul>
@@ -527,6 +628,8 @@ export function MarketplaceOffersPane({
   const [view, setView] = useState<View>({ kind: "home" });
   const [homeTab, setHomeTab] = useState<HomeTab>("offers");
   const [jobFilter, setJobFilter] = useState<JobFilter>("all");
+  const [offerTypeFilter, setOfferTypeFilter] =
+    useState<OfferTypeFilter>("all");
   const [offerEditorTab, setOfferEditorTab] =
     useState<OfferEditorTab>("details");
   const [busy, setBusy] = useState(false);
@@ -638,6 +741,12 @@ export function MarketplaceOffersPane({
         : allJobs.filter((job) => job._role === jobFilter),
     [allJobs, jobFilter],
   );
+
+  const visibleOffers = useMemo(() => {
+    const rows = myOffers ?? [];
+    if (offerTypeFilter === "all") return rows;
+    return rows.filter((offer) => offer.status === offerTypeFilter);
+  }, [myOffers, offerTypeFilter]);
 
   useEffect(() => {
     if (!selectedOffer) {
@@ -1122,56 +1231,51 @@ export function MarketplaceOffersPane({
                 />
               </SummaryRow>
 
-              <Section title="Your offers">
-                <div className="studio-admin-table-wrap">
-                  {!myOffers ? (
-                    <Loader2 className="m-4 h-4 w-4 animate-spin" />
-                  ) : offers.length === 0 ? (
-                    <p className="studio-settings-empty marketplace-offers-table-empty">
-                      No offers yet — create your first package.
-                    </p>
-                  ) : (
-                    <table className="studio-admin-table">
-                      <thead>
-                        <tr>
-                          <th>Offer</th>
-                          <th>Price</th>
-                          <th>Delivery</th>
-                          <th>Status</th>
-                          <th>Public link</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {offers.map((offer) => (
-                          <tr
-                            key={offer._id}
-                            onClick={() => openOffer(offer._id)}
-                          >
-                            <td>
-                              <strong>{offer.title}</strong>
-                              <span>{offer.category ?? "Uncategorised"}</span>
-                            </td>
-                            <td>{formatTtdCents(offer.priceCents)}</td>
-                            <td>{offer.deliveryDays} days</td>
-                            <td>
-                              <StatusChip status={offer.status} />
-                            </td>
-                            <td>
-                              <a
-                                href={`/creative-network/${offer.slug}/`}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                /creative-network/{offer.slug}/
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
+              <Section
+                title="Your offers"
+                extras={
+                  <CursorSelect
+                    ariaLabel="Offer type"
+                    value={offerTypeFilter}
+                    onChange={(next) =>
+                      setOfferTypeFilter(next as OfferTypeFilter)
+                    }
+                    options={[
+                      { value: "all", label: "All types" },
+                      { value: "published", label: "Live" },
+                      { value: "draft", label: "Draft" },
+                      { value: "paused", label: "Paused" },
+                      { value: "archived", label: "Archived" },
+                    ]}
+                  />
+                }
+              >
+                {!myOffers ? (
+                  <Loader2 className="m-4 h-4 w-4 animate-spin" />
+                ) : offers.length === 0 ? (
+                  <p className="studio-settings-empty marketplace-offers-table-empty">
+                    No offers yet — create your first package.
+                  </p>
+                ) : visibleOffers.length === 0 ? (
+                  <p className="studio-settings-empty marketplace-offers-table-empty">
+                    No offers of this type.
+                  </p>
+                ) : (
+                  <OffersCardGrid
+                    offers={visibleOffers.map((offer) => ({
+                      _id: offer._id,
+                      title: offer.title,
+                      description: offer.description,
+                      slug: offer.slug,
+                      priceCents: offer.priceCents,
+                      category: offer.category,
+                      status: offer.status,
+                      deliveryDays: offer.deliveryDays,
+                      packageCount: offer.packages?.length ?? 0,
+                    }))}
+                    onOpen={openOffer}
+                  />
+                )}
               </Section>
             </div>
           ) : null}
@@ -1197,14 +1301,14 @@ export function MarketplaceOffersPane({
               </SummaryRow>
 
               <Section
-                title="Jobs"
+                title="Your jobs"
                 extras={
                   <CursorSelect
-                    ariaLabel="Job side"
+                    ariaLabel="Job type"
                     value={jobFilter}
                     onChange={(next) => setJobFilter(next as JobFilter)}
                     options={[
-                      { value: "all", label: "All" },
+                      { value: "all", label: "All types" },
                       { value: "sell", label: "Selling" },
                       { value: "buy", label: "Buying" },
                     ]}

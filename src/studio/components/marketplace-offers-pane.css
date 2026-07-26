@@ -2,7 +2,7 @@
    Only marketplace-specific pieces live here: status chips, the section-bar
    action, and the job timeline / deliverables / asset picker. */
 
-/* Job listings — card grid matching Creative Network public catalog cards */
+/* Offer/job listings — card grid matching Creative Network public catalog cards */
 .marketplace-job-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
@@ -66,11 +66,51 @@
 }
 
 .marketplace-job-card-price {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
   flex: 0 0 auto;
   font-size: var(--desk-text-ui, 13px);
   font-weight: 700;
   white-space: nowrap;
+  line-height: 1.15;
   color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.marketplace-job-card-price > em {
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.marketplace-offer-card-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--desk-text-ui, 13px);
+  line-height: 1.5;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  text-align: left;
+}
+
+.marketplace-offer-card-link {
+  text-decoration: none;
+  color: var(--cursor-accent, var(--mos-accent));
+}
+
+.marketplace-offer-card-link:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 40%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--cursor-accent) 10%, transparent);
 }
 
 .marketplace-job-card-meta {
