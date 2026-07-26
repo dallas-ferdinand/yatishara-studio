@@ -248,6 +248,24 @@ Placeholders are examples only (`e.g. ads`), never the field name.
   right. Primary = `.is-primary` (accent tint), destructive = `.is-danger`
   (`--mos-danger` text, tinted hover). Memory: **752**.
 
+### Offer media slots (locked)
+
+Offer banner/gallery media is **not** a flat "recent assets" grid. `OfferMediaEditor`
+(`MarketplaceMediaEditor.tsx`):
+
+- **Desktop** — empty dashed `.marketplace-media-slot` drop zones; drag assets from the
+  file manager (standard explorer DnD: `EXPLORER_DND_TYPE`, `studioKind === "asset"`,
+  `peekActiveExplorerDrag()` during dragOver). Active target = `.is-drop-target`
+  (accent border + 10% tint). Banner accepts images; gallery accepts image/video, ≤6.
+- **Mobile** (`useMobileLayout`) — slot shows a `.marketplace-media-pick-btn` pill that
+  opens `OfferMediaPickerSheet`: `studio-mobile-app-menu-sheet` chrome portaled into
+  `.studio-polish`, folder browsing via `folders.listWithPeeks` +
+  `assets.listByFolder`, back-crumb row, asset tiles reuse
+  `.marketplace-offers-asset-grid`, gallery mode gets an accent Done footer.
+- Selected media resolves thumbs via `assets.listByIds`; filled banner =
+  `.marketplace-media-banner` (140px cover + L3 name bar + remove), gallery =
+  `.marketplace-media-tile` with overlay remove. Memory: **753**.
+
 ---
 
 ## 6b. Public routes (`/offers`, share links)

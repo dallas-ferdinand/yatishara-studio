@@ -7,7 +7,6 @@ import {
   CalendarDays,
   ExternalLink,
   FileBadge,
-  Image as ImageIcon,
   Loader2,
   MessageSquare,
   Plus,
@@ -27,6 +26,7 @@ import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
 import { IconField, IconTextarea } from "./MarketplaceIconField";
+import { OfferMediaEditor } from "./MarketplaceMediaEditor";
 import { SellerAccessApplicationForm } from "./SellerAccessApplicationForm";
 import "./marketplace-offers-pane.css";
 import "./public-offers.css";
@@ -567,109 +567,6 @@ function PackagesEditor({
   );
 }
 
-type PickerAsset = {
-  _id: Id<"assets">;
-  name: string;
-  kind: string;
-  signedThumbnailUrl?: string;
-};
-
-function MediaAssetGrid({
-  assets,
-  isSelected,
-  onPick,
-  ariaLabel,
-}: {
-  assets: PickerAsset[];
-  isSelected: (id: Id<"assets">) => boolean;
-  onPick: (id: Id<"assets">) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div
-      className="marketplace-offers-asset-grid"
-      role="group"
-      aria-label={ariaLabel}
-    >
-      {assets.map((asset) => {
-        const selected = isSelected(asset._id);
-        return (
-          <button
-            key={asset._id}
-            type="button"
-            className={selected ? "is-selected" : undefined}
-            aria-pressed={selected}
-            onClick={() => onPick(asset._id)}
-            title={asset.name}
-          >
-            {asset.signedThumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={asset.signedThumbnailUrl} alt="" />
-            ) : (
-              <span className="marketplace-offers-thumb" aria-hidden="true" />
-            )}
-            <span>{asset.name}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function OfferMediaEditor({
-  assets,
-  coverAssetId,
-  sampleAssetIds,
-  onCover,
-  onToggleSample,
-}: {
-  assets: PickerAsset[] | undefined;
-  coverAssetId: Id<"assets"> | null;
-  sampleAssetIds: Id<"assets">[];
-  onCover: (id: Id<"assets"> | null) => void;
-  onToggleSample: (id: Id<"assets">) => void;
-}) {
-  if (!assets) {
-    return <p className="studio-settings-empty">Loading assets…</p>;
-  }
-  if (assets.length === 0) {
-    return (
-      <p className="studio-settings-empty">
-        No ready assets yet — upload images or video in Explorer first.
-      </p>
-    );
-  }
-  return (
-    <div className="marketplace-offers-media">
-      <div>
-        <p className="marketplace-offers-media-label">
-          <ImageIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          Banner — the main image buyers see first
-        </p>
-        <MediaAssetGrid
-          assets={assets}
-          ariaLabel="Banner image"
-          isSelected={(id) => id === coverAssetId}
-          onPick={(id) => onCover(id === coverAssetId ? null : id)}
-        />
-      </div>
-      <div>
-        <p className="marketplace-offers-media-label">
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          Gallery — up to 6 samples, images or video ({sampleAssetIds.length}
-          /6)
-        </p>
-        <MediaAssetGrid
-          assets={assets}
-          ariaLabel="Gallery samples"
-          isSelected={(id) => sampleAssetIds.includes(id)}
-          onPick={onToggleSample}
-        />
-      </div>
-    </div>
-  );
-}
-
 export function MarketplaceOffersPane({
   onOpenCredits,
   creditPriceCents: _creditPriceCents = 50,
@@ -729,11 +626,13 @@ export function MarketplaceOffersPane({
     );
   }, [assetPickerKey]);
 
+  // Only job delivery still uses the flat recent grid — offer media is
+  // drag-from-Files / mobile picker now (OfferMediaEditor).
   const recentAssets = useQuery(
     api.assets.listRecentReady,
-    assetPickerKey !== null &&
+    view.kind === "job" &&
       assetUrlExpiresUnix !== null &&
-      (view.kind !== "job" || jobDetail?.job.role === "seller")
+      jobDetail?.job.role === "seller"
       ? { limit: 24, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
@@ -1505,7 +1404,7 @@ export function MarketplaceOffersPane({
                 <Section title="Media">
                   <div className="studio-admin-card">
                     <OfferMediaEditor
-                      assets={recentAssets}
+                      expiresUnix={assetUrlExpiresUnix}
                       coverAssetId={createCoverAssetId}
                       sampleAssetIds={createSampleAssetIds}
                       onCover={setCreateCoverAssetId}
@@ -1701,7 +1600,7 @@ export function MarketplaceOffersPane({
                 <Section title="Media">
                   <div className="studio-admin-card">
                     <OfferMediaEditor
-                      assets={recentAssets}
+                      expiresUnix={assetUrlExpiresUnix}
                       coverAssetId={editForm.coverAssetId}
                       sampleAssetIds={editForm.sampleAssetIds}
                       onCover={(id) =>
