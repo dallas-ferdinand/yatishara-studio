@@ -243,8 +243,10 @@ export function StudioDmPeerSidebar({
     setError("");
   }, [peerUserId]);
 
+  // Keep hidden until both queries resolve — showing it optimistically makes the
+  // Jobs tab flash in and then disappear for peers who have no jobs/offers.
   const showJobsTab = useMemo(() => {
-    if (jobsWithPeer === undefined || offers === undefined) return true;
+    if (jobsWithPeer === undefined || offers === undefined) return false;
     return (
       (offers?.length ?? 0) > 0 ||
       (jobsWithPeer?.asBuyer.length ?? 0) > 0 ||
