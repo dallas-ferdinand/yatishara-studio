@@ -26,6 +26,7 @@ import {
   AudioLines,
   ArrowDown,
   Ban,
+  Check,
   CheckCircle2,
   Clapperboard,
   Clock3,
@@ -218,8 +219,9 @@ const PostComposeTab = dynamic(
   () => import("./PostComposeTab").then((m) => m.PostComposeTab),
   { ssr: false },
 );
-const MarketplaceOffersPane = dynamic(
-  () => import("./MarketplaceOffersPane").then((m) => m.MarketplaceOffersPane),
+const StudioCreativeNetworkPane = dynamic(
+  () =>
+    import("./StudioCreativeNetworkPane").then((m) => m.StudioCreativeNetworkPane),
   { ssr: false },
 );
 const AdminMarketplacePane = dynamic(
@@ -259,6 +261,8 @@ const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
 /** Single Messages tab — the chat window; the sidebar becomes the chat list. */
 const MESSAGES_TAB = "messages:main";
+/** Creative Network marketplace + seller manage (replaces offers:). */
+const NETWORK_TAB = "network:home";
 const TRASH_FOLDER_ID = "__trash__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
 const CHAT_LIVE_EVENT_LIMIT = 80;
@@ -508,6 +512,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "admin:",
   "billing:",
   "offers:",
+  "network:",
   "create:",
   "post:",
   "videoEdit:",
@@ -10589,6 +10594,7 @@ export function StudioShell({
           display: flex;
           align-items: center;
           gap: 4px;
+          padding-right: 2px;
           border-bottom: 1px solid var(--studio-chrome-divider);
           background: var(--mos-bg);
         }
@@ -24122,13 +24128,17 @@ function StudioFilesExplorerBody({
           {onToggleSelectionMode ? (
             <button
               type="button"
-              className={`studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
+              className={`studio-settings-pill studio-settings-trigger studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
               onClick={onToggleSelectionMode}
               aria-pressed={selectionMode}
+              aria-label={selectionMode ? "Exit selection" : "Select multiple"}
               title={selectionMode ? "Exit selection" : "Select multiple"}
             >
-              <ListChecks size={13} />
-              <span>{selectionMode ? "Done" : "Select"}</span>
+              {selectionMode ? (
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
             </button>
           ) : null}
         </div>
@@ -24136,12 +24146,17 @@ function StudioFilesExplorerBody({
         <div className="studio-file-inline-tools shrink-0">
           <button
             type="button"
-            className={`studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
+            className={`studio-settings-pill studio-settings-trigger studio-file-select-toggle${selectionMode ? " is-active" : ""}`}
             onClick={onToggleSelectionMode}
             aria-pressed={selectionMode}
+            aria-label={selectionMode ? "Exit selection" : "Select multiple"}
+            title={selectionMode ? "Exit selection" : "Select multiple"}
           >
-            <ListChecks size={13} />
-            <span>{selectionMode ? "Done" : "Select"}</span>
+            {selectionMode ? (
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
           </button>
         </div>
       ) : null}
