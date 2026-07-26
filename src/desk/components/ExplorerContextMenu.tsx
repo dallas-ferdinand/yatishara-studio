@@ -20,6 +20,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Upload,
   Wallpaper,
 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
@@ -32,6 +33,9 @@ const EXPLORER_MENU_ICONS = {
   "new-file": FilePlus,
   "new-folder": FolderPlus,
   "new-note": FilePlus,
+  "new-video-edit": Clapperboard,
+  "new-element": Sparkles,
+  upload: Upload,
   refresh: RefreshCw,
   "empty-trash": Trash2,
   pin: Pin,
@@ -169,6 +173,21 @@ function buildMenuItems(entry, {
   return items;
 }
 
+function renderMenuIcon(item) {
+  const MappedIcon = EXPLORER_MENU_ICONS[item.iconKey || item.id];
+  if (MappedIcon) return <MappedIcon aria-hidden="true" />;
+  const icon = item.icon;
+  if (icon == null) return null;
+  // Already a React element (e.g. <Upload />)
+  if (typeof icon === "object" && icon.$$typeof) return icon;
+  // Lucide / component reference (e.g. Upload) — must instantiate
+  if (typeof icon === "function" || (typeof icon === "object" && icon.render)) {
+    const Icon = icon;
+    return <Icon aria-hidden="true" />;
+  }
+  return null;
+}
+
 export function ExplorerContextMenu({
   entry,
   x,
@@ -277,12 +296,7 @@ export function ExplorerContextMenu({
               runAction(item.id);
             }}
           >
-            {(() => {
-              const ItemIcon = EXPLORER_MENU_ICONS[item.iconKey || item.id];
-              if (ItemIcon) return <ItemIcon aria-hidden="true" />;
-              if (item.icon) return item.icon;
-              return null;
-            })()}
+            {renderMenuIcon(item)}
             <span>{item.label}</span>
           </button>
         ),
