@@ -2188,6 +2188,17 @@ export function StudioShell({
     }
   }, [activeTab]);
 
+  // Generation history only belongs to Generate-type tabs.
+  const showHistory =
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("composer:") ||
+      activeTab.startsWith("thread:") ||
+      activeTab.startsWith("create:"));
+
+  useEffect(() => {
+    if (!showHistory && historyOpen) setHistoryOpen(false);
+  }, [showHistory, historyOpen]);
+
   // Keep the active chat's composer snapshot hot while typing / attaching.
   // Composer unmounts when leaving chat tabs, so we cannot rely on reading the
   // editor DOM during the tab-switch effect.
@@ -14770,6 +14781,56 @@ export function StudioShell({
           padding: 0 0 8px;
           scrollbar-gutter: auto;
         }
+        /* History popup: flush full-height panel between header and bottom nav,
+           squared edges, and a chrome-height head with an accent underline. */
+        .studio-mobile-app-menu-sheet.studio-history-mobile-sheet {
+          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
+          left: 0;
+          right: 0;
+          height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+          );
+          max-height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+          );
+          border-radius: 0;
+          border-left: 0;
+          border-right: 0;
+          border-top: 0;
+        }
+        .studio-mobile-app-menu-sheet.studio-history-mobile-sheet::before {
+          border-radius: 0;
+        }
+        .studio-history-mobile-sheet .studio-mobile-app-menu-head {
+          min-height: var(--studio-mobile-nav-height, 44px);
+          height: var(--studio-mobile-nav-height, 44px);
+          padding: 0 6px 0 12px;
+          border-bottom: 2px solid
+            color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 55%, transparent);
+        }
+        .studio-history-mobile-sheet .studio-mobile-app-menu-title {
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+        }
+        .studio-history-mobile-sheet .studio-mobile-app-menu-close {
+          width: 26px;
+          height: 26px;
+          border-radius: var(--cursor-radius-sm, 6px);
+          border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-history-mobile-sheet .studio-mobile-app-menu-close svg {
+          width: 15px;
+          height: 15px;
+        }
         .studio-history-floating-head {
           display: flex;
           align-items: center;
@@ -16582,7 +16643,7 @@ export function StudioShell({
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
-              {isMobile ? (
+              {isMobile && showHistory ? (
                 <button
                   type="button"
                   className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
@@ -16630,19 +16691,21 @@ export function StudioShell({
                   onOpenMessages={openMessages}
                   onSignOut={() => void signOut()}
                 />
-                <button
-                  className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                  onClick={() => {
-                    setMobileAppMenuOpen(false);
-                    setSettingsOpen(false);
-                    setHistoryOpen((open) => !open);
-                  }}
-                  aria-label="Generation history"
-                  title="Generation history"
-                  aria-pressed={historyOpen}
-                >
-                  <History className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
+                {showHistory ? (
+                  <button
+                    className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
+                    onClick={() => {
+                      setMobileAppMenuOpen(false);
+                      setSettingsOpen(false);
+                      setHistoryOpen((open) => !open);
+                    }}
+                    aria-label="Generation history"
+                    title="Generation history"
+                    aria-pressed={historyOpen}
+                  >
+                    <History className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
                 <StudioSettingsLauncher
                   isActive={settingsOpen}
                   onOpenSettingsTab={openSettingsTab}
@@ -16998,6 +17061,7 @@ export function StudioShell({
       {isMobile && mobileAppMenuOpen ? (
         <StudioMobileAppMenu
           isAdminUser={isAdminUser}
+          showHistory={showHistory}
           onClose={() => setMobileAppMenuOpen(false)}
           onViewProfile={() => {
             setMobileAppMenuOpen(false);
@@ -19148,6 +19212,7 @@ function StudioProfileMenu({
 
 function StudioMobileAppMenu({
   isAdminUser,
+  showHistory = true,
   onClose,
   onViewProfile,
   onEditProfile,
@@ -19199,7 +19264,9 @@ function StudioMobileAppMenu({
         },
         { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
         { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
-        { label: "History", Icon: History, onClick: onOpenHistory },
+        ...(showHistory
+          ? [{ label: "History", Icon: History, onClick: onOpenHistory }]
+          : []),
       ],
     },
     {
