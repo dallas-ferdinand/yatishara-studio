@@ -14,7 +14,12 @@ export function getDeskBuildGuardInlineScript() {
       host.includes("preview.") ||
       host === "localhost" ||
       host === "127.0.0.1";
+    let pendingReset = "";
+    try {
+      pendingReset = sessionStorage.getItem("yatishara-studio-reset-pending") || "";
+    } catch {}
     const wantsReset =
+      Boolean(pendingReset) ||
       params.has("resetStudio") ||
       params.has("clearStudioCache") ||
       params.has("resetDesk") ||
@@ -22,7 +27,8 @@ export function getDeskBuildGuardInlineScript() {
     const dirty =
       wantsReset ||
       params.has("_ysFresh") ||
-      params.has("_mosFresh");
+      params.has("_mosFresh") ||
+      params.has("_ysReset");
     const metaBuild = (
       document.querySelector('meta[name="x-studio-build"]')?.getAttribute("content") ||
       ""
@@ -33,6 +39,7 @@ export function getDeskBuildGuardInlineScript() {
       [
         "_ysFresh",
         "_mosFresh",
+        "_ysReset",
         "resetStudio",
         "clearStudioCache",
         "resetDesk",
@@ -42,6 +49,10 @@ export function getDeskBuildGuardInlineScript() {
       if (next !== location.pathname + location.search + location.hash) {
         history.replaceState(null, "", next);
       }
+    };
+
+    const clearPendingReset = () => {
+      try { sessionStorage.removeItem("yatishara-studio-reset-pending"); } catch {}
     };
 
     const clearStudioLocalState = () => {
@@ -119,6 +130,7 @@ export function getDeskBuildGuardInlineScript() {
     if (isPreview) {
       void purge().finally(() => {
         rememberBuild(metaBuild);
+        clearPendingReset();
         if (dirty) cleanUrl();
       });
       return;
@@ -143,8 +155,8 @@ export function getDeskBuildGuardInlineScript() {
         } catch {}
         void purgeCaches().finally(() => {
           rememberBuild(metaBuild);
-          // Keep reset query params through this reload so the next pass also
-          // runs the full purge + cleanUrl path below.
+          // Keep pending reset / legacy query params through this reload so the
+          // next pass also runs the full purge + cleanUrl path below.
           location.reload();
         });
         return;
@@ -160,6 +172,7 @@ export function getDeskBuildGuardInlineScript() {
 
     void purge().finally(() => {
       rememberBuild(metaBuild);
+      clearPendingReset();
       cleanUrl();
       location.reload();
     });

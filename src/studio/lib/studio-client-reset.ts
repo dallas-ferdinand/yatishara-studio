@@ -24,6 +24,9 @@ const STUDIO_SESSION_KEYS = [
   "mos-desk-purged-build",
 ] as const;
 
+/** Survives clearStudioClientState so the build-guard can finish a Reset. */
+export const STUDIO_RESET_PENDING_KEY = "yatishara-studio-reset-pending";
+
 function storageKeyMatches(key: string): boolean {
   if (STUDIO_STORAGE_EXACT.includes(key as (typeof STUDIO_STORAGE_EXACT)[number])) {
     return true;
@@ -59,18 +62,21 @@ export function clearStudioClientState(): void {
   }
 }
 
-/** Full recovery navigation: clear state, bust caches via build-guard params. */
+/**
+ * Full recovery navigation: clear sticky state, signal build-guard via
+ * sessionStorage (no dirty query string left in the address bar).
+ */
 export function resetStudioClient(reason = "manual"): void {
   clearStudioClientState();
-  const url = new URL(window.location.origin);
-  url.pathname = "/";
-  url.searchParams.set("resetStudio", "1");
-  url.searchParams.set("clearStudioCache", "1");
-  url.searchParams.set("_ysFresh", `${Date.now()}`);
-  url.searchParams.set("_ysReset", reason);
-  window.location.replace(url.toString());
+  try {
+    sessionStorage.setItem(STUDIO_RESET_PENDING_KEY, reason);
+  } catch {
+    /* ignore */
+  }
+  window.location.replace(`${window.location.origin}/`);
 }
 
+/** Fallback href for Reset links (JS onClick runs the real reset). */
 export function studioResetHref(): string {
-  return `/?resetStudio=1&clearStudioCache=1&_ysFresh=1`;
+  return "/";
 }
