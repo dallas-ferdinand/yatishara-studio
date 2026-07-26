@@ -223,6 +223,13 @@ second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
 `studio-dm-assign-row` + checkbox (same as Assign labels). Layout-only helpers live in
 `studio-messages.css` under `.studio-dm-peer-*`. Memory: **745**.
 
+Inside that sidebar `cursor-settings-action` is **full-width** — never use it for an inline
+action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
+`.studio-dm-peer-offer-card`: an ellipsised title row (`.studio-dm-peer-card-head` +
+`.studio-dm-peer-card-title`) over a `.studio-dm-peer-chips` meta row, with the primary
+action as a compact 22px accent pill (`.studio-dm-peer-book`). Status chip tones:
+`is-live` / `is-done` / `is-wait` / `is-off`. Memory: **747**.
+
 ---
 
 ## 6b. Public routes (`/offers`, share links)
