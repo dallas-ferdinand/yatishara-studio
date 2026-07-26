@@ -36,6 +36,10 @@ import { useLongPress } from "@/desk/hooks/use-long-press";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
+import {
+  dmPhotoAssetName,
+  dmVoiceAssetName,
+} from "@/studio/lib/dmMediaNames";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioDmAssignLabelsDialog } from "./StudioDmLabelDialogs";
 import { StudioDmContextMenu,
@@ -617,6 +621,7 @@ export function StudioMessagesPane({
   const [replyTo, setReplyTo] = useState<DmReplySnippet | null>(null);
   const replyToRef = useRef<DmReplySnippet | null>(null);
   replyToRef.current = replyTo;
+  const peerLabelRef = useRef("Chat");
   const [assignPeer, setAssignPeer] = useState<{
     userId: Id<"users">;
     label: string;
@@ -753,7 +758,11 @@ export function StudioMessagesPane({
         try {
           const assetId = await uploadDmMediaAsset({
             blob,
-            name: `voice-${Date.now()}.webm`,
+            name: dmVoiceAssetName({
+              peerLabel: peerLabelRef.current,
+              durationSec,
+              mimeType: blob.type || "audio/webm",
+            }),
             kind: "audio",
             mimeType: blob.type || "audio/webm",
             ensureMessagesFolder: () => ensureMessagesFolder({}),
@@ -954,7 +963,11 @@ export function StudioMessagesPane({
           const pending = pendingImages[i]!;
           const assetId = await uploadDmMediaAsset({
             blob: pending.file,
-            name: pending.file.name || `photo-${Date.now()}.jpg`,
+            name: dmPhotoAssetName({
+              peerLabel: peerLabelRef.current,
+              fileName: pending.file.name,
+              mimeType: pending.file.type || "image/jpeg",
+            }),
             kind: "image",
             mimeType: pending.file.type || "image/jpeg",
             ensureMessagesFolder: () => ensureMessagesFolder({}),
@@ -1075,6 +1088,7 @@ export function StudioMessagesPane({
   const peerLabel =
     activeRow?.peer.displayName?.trim() ||
     (activeRow ? `@${activeRow.peer.username}` : "Chat");
+  peerLabelRef.current = peerLabel;
 
   let lastDay = "";
 
