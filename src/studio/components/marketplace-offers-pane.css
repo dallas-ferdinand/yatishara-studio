@@ -86,17 +86,13 @@
   color: var(--color-cursor-muted, var(--mos-muted));
 }
 
-.marketplace-offer-card-desc {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-  margin: 0;
-  font-size: var(--desk-text-ui, 13px);
-  line-height: 1.5;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  text-align: left;
+/* Studio Offers home reuses .public-offers-card; keep keyboard focus readable. */
+.studio-admin-panel .public-offers-card:focus-visible {
+  outline: none;
+  box-shadow: var(
+    --studio-focus-ring,
+    0 0 0 3px color-mix(in srgb, var(--cursor-accent) 16%, transparent)
+  );
 }
 
 .marketplace-offer-card-link {

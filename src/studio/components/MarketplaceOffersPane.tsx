@@ -29,6 +29,7 @@ import { formatTtdCents } from "@/studio/lib/money";
 import { IconField, IconTextarea } from "./MarketplaceIconField";
 import { SellerAccessApplicationForm } from "./SellerAccessApplicationForm";
 import "./marketplace-offers-pane.css";
+import "./public-offers.css";
 
 type MarketplaceOffersPaneProps = {
   onOpenCredits: () => void;
@@ -157,7 +158,37 @@ type OfferCardModel = {
   status: string;
   deliveryDays: number;
   packageCount: number;
+  bannerThumbUrl?: string;
+  purchaseCount: number;
+  ratingCount: number;
+  ratingAvg: number | null;
+  sellerBusinessName: string;
+  sellerUsername?: string;
 };
+
+function OfferRatingStars({ value }: { value: number }) {
+  const rounded = Math.round(value * 2) / 2;
+  return (
+    <span
+      className="public-offers-stars"
+      aria-label={`${value.toFixed(1)} out of 5`}
+    >
+      {([1, 2, 3, 4, 5] as const).map((star) => {
+        const filled = rounded >= star;
+        const half = !filled && rounded >= star - 0.5;
+        return (
+          <Star
+            key={star}
+            aria-hidden="true"
+            className={filled || half ? "is-filled" : undefined}
+            style={{ width: 14, height: 14 }}
+            fill={filled ? "currentColor" : "none"}
+          />
+        );
+      })}
+    </span>
+  );
+}
 
 function JobCard({
   job,
@@ -210,7 +241,7 @@ function OfferCard({
   const publicHref = `/creative-network/${offer.slug}/`;
   return (
     <div
-      className="marketplace-job-card marketplace-offer-card"
+      className="public-offers-card"
       role="button"
       tabIndex={0}
       onClick={onOpen}
@@ -221,35 +252,53 @@ function OfferCard({
         }
       }}
     >
-      <div className="marketplace-job-card-top">
+      {offer.bannerThumbUrl ? (
+        <div className="public-offers-card-media" aria-hidden="true">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={offer.bannerThumbUrl} alt="" loading="lazy" />
+        </div>
+      ) : null}
+      <div className="public-offers-card-top">
         <div>
-          <h3 className="marketplace-job-card-title">{offer.title}</h3>
-          <p className="marketplace-job-card-sub">
-            {offer.category?.trim() || "Uncategorised"}
+          <h3 className="public-offers-card-title">{offer.title}</h3>
+          <p className="public-offers-card-seller">
+            {offer.sellerBusinessName}
+            {offer.sellerUsername ? ` · @${offer.sellerUsername}` : ""}
           </p>
         </div>
-        <span className="marketplace-job-card-price">
+        <span className="public-offers-card-price">
           {offer.packageCount > 1 ? <em>From</em> : null}
           {formatTtdCents(offer.priceCents)}
         </span>
       </div>
       {offer.description.trim() ? (
-        <p className="marketplace-offer-card-desc">{offer.description}</p>
+        <p className="public-offers-card-desc">{offer.description}</p>
       ) : null}
-      <div className="marketplace-job-card-meta">
+      <div className="public-offers-card-meta">
         <StatusChip status={offer.status} />
-        <span className="marketplace-job-chip">
+        <span className="public-offers-chip">
           <Clock aria-hidden="true" />
           {offer.deliveryDays} day delivery
         </span>
-        {offer.packageCount > 0 ? (
-          <span className="marketplace-job-chip">
-            {offer.packageCount} package{offer.packageCount === 1 ? "" : "s"}
+        {offer.ratingCount > 0 && offer.ratingAvg != null ? (
+          <span className="public-offers-chip">
+            <OfferRatingStars value={offer.ratingAvg} />
+            <strong>{offer.ratingAvg.toFixed(1)}</strong>
+            <em>({offer.ratingCount})</em>
           </span>
+        ) : (
+          <span className="public-offers-chip">No ratings yet</span>
+        )}
+        <span className="public-offers-chip">
+          {offer.purchaseCount} purchase
+          {offer.purchaseCount === 1 ? "" : "s"}
+        </span>
+        {offer.category ? (
+          <span className="public-offers-chip">{offer.category}</span>
         ) : null}
         {offer.status === "published" ? (
           <a
-            className="marketplace-job-chip marketplace-offer-card-link"
+            className="public-offers-chip marketplace-offer-card-link"
             href={publicHref}
             target="_blank"
             rel="noreferrer"
@@ -290,7 +339,7 @@ function OffersCardGrid({
   onOpen: (offerId: Id<"marketplaceOffers">) => void;
 }) {
   return (
-    <ul className="marketplace-job-grid">
+    <ul className="public-offers-grid">
       {offers.map((offer) => (
         <li key={offer._id}>
           <OfferCard offer={offer} onOpen={() => onOpen(offer._id)} />
@@ -1272,6 +1321,12 @@ export function MarketplaceOffersPane({
                       status: offer.status,
                       deliveryDays: offer.deliveryDays,
                       packageCount: offer.packages?.length ?? 0,
+                      bannerThumbUrl: offer.bannerThumbUrl,
+                      purchaseCount: offer.purchaseCount,
+                      ratingCount: offer.ratingCount,
+                      ratingAvg: offer.ratingAvg,
+                      sellerBusinessName: offer.sellerBusinessName,
+                      sellerUsername: offer.sellerUsername,
                     }))}
                     onOpen={openOffer}
                   />

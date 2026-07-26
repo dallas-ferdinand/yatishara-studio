@@ -1111,6 +1111,13 @@ export const listMyOffers = sellerQuery({
       sampleAssetIds: v.optional(v.array(v.id("assets"))),
       publishedAt: v.optional(v.number()),
       updatedAt: v.number(),
+      /** Same signed cover thumb the public Creative Network cards use. */
+      bannerThumbUrl: v.optional(v.string()),
+      purchaseCount: v.number(),
+      ratingCount: v.number(),
+      ratingAvg: v.union(v.number(), v.null()),
+      sellerBusinessName: v.string(),
+      sellerUsername: v.optional(v.string()),
     }),
   ),
   handler: async (ctx) => {
@@ -1118,23 +1125,33 @@ export const listMyOffers = sellerQuery({
       .query("marketplaceOffers")
       .withIndex("by_seller", (q) => q.eq("sellerId", ctx.seller._id))
       .collect();
-    return offers
-      .map((o) => ({
-        _id: o._id,
-        title: o.title,
-        slug: o.slug,
-        description: o.description,
-        priceCents: o.priceCents,
-        category: o.category,
-        status: o.status,
-        deliveryDays: o.deliveryDays,
-        packages: o.packages,
-        coverAssetId: o.coverAssetId,
-        sampleAssetIds: o.sampleAssetIds,
-        publishedAt: o.publishedAt,
-        updatedAt: o.updatedAt,
-      }))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const sorted = offers.sort((a, b) => b.updatedAt - a.updatedAt);
+    const out = [];
+    for (const offer of sorted) {
+      const pub = await toPublicOffer(ctx, offer, { media: "thumb" });
+      out.push({
+        _id: offer._id,
+        title: offer.title,
+        slug: offer.slug,
+        description: offer.description,
+        priceCents: pub.priceCents,
+        category: offer.category,
+        status: offer.status,
+        deliveryDays: pub.deliveryDays,
+        packages: offer.packages,
+        coverAssetId: offer.coverAssetId,
+        sampleAssetIds: offer.sampleAssetIds,
+        publishedAt: offer.publishedAt,
+        updatedAt: offer.updatedAt,
+        bannerThumbUrl: pub.bannerThumbUrl,
+        purchaseCount: pub.purchaseCount,
+        ratingCount: pub.ratingCount,
+        ratingAvg: pub.ratingAvg,
+        sellerBusinessName: pub.sellerBusinessName,
+        sellerUsername: pub.sellerUsername,
+      });
+    }
+    return out;
   },
 });
 
