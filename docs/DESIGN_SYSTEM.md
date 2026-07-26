@@ -284,7 +284,7 @@ sheet for DM attach — it opens the left Files rail instead.
   (both owner-scoped — clients never see another user's root).
 - Consumers: DM attach ("Choose from Studio Files"), offer Media slots (mobile Pick).
   DM: picker → `assets.signedReadUrl` → blob → same pending image send path as
-  uploads. Memory: **753**.
+  uploads. Memory: **758** (desktop rail), **753** (sheet + attach menu).
 
 ---
 
