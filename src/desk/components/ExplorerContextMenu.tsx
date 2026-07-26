@@ -59,6 +59,7 @@ const EXPLORER_MENU_ICONS = {
   restore: Undo2,
   new: FolderPlus,
   organize: Pin,
+  share: Share2,
   more: Sparkles,
 };
 
@@ -135,19 +136,41 @@ function buildMenuItems(entry, {
   }
 
   const items = [];
-  items.push({ id: "open", label: isDir ? "Open folder" : "Open" });
+  const isImageAsset =
+    isFile &&
+    entry.studioKind === "asset" &&
+    entry.kind === "image" &&
+    entry.studioId;
+  const isShareableMedia =
+    isFile &&
+    entry.studioKind === "asset" &&
+    (entry.kind === "image" || entry.kind === "video") &&
+    entry.studioId;
 
+  // —— Primary ——
+  items.push({ id: "open", label: isDir ? "Open folder" : "Open" });
   if (isDir && creationChildren.length) {
     items.push({ id: "new", label: "New", children: creationChildren });
   }
+  if (isFile) items.push({ id: "download", label: "Download" });
+  if (isDir && canDownloadZip) {
+    items.push({ id: "download-zip", label: "Download folder" });
+  }
+  items.push({
+    id: "attach",
+    label: isDir ? "Use folder in chat" : "Use in chat",
+  });
 
+  // —— Organize ——
+  items.push({ id: "sep-organize", sep: true });
   if (isDir && canPin) {
-    const pinnedHere = pinnedPaths?.has?.(entry.path)
-        || pinnedPaths?.has?.(
-          String(entry.path ?? "")
-            .trim()
-            .replace(/^\/+|\/+$/g, ""),
-        );
+    const pinnedHere =
+      pinnedPaths?.has?.(entry.path) ||
+      pinnedPaths?.has?.(
+        String(entry.path ?? "")
+          .trim()
+          .replace(/^\/+|\/+$/g, ""),
+      );
     if (pinnedHere) {
       items.push({ id: "unpin", label: "Unpin folder" });
     } else if (currentPath) {
@@ -163,56 +186,43 @@ function buildMenuItems(entry, {
       items.push({ id: "pin-here", label: "Pin folder" });
     }
   }
-
-  // The heavy hitters stay top-level.
-  if (isFile) items.push({ id: "download", label: "Download" });
-  if (isDir && canDownloadZip) {
-    items.push({ id: "download-zip", label: "Download folder" });
-  }
-  items.push({
-    id: "attach",
-    label: isDir ? "Use folder in chat" : "Use in chat",
-  });
   if (onRequestRename) {
     items.push({ id: "rename", label: "Rename" });
   }
   items.push({ id: "copy-path", label: "Copy item link" });
 
-  // Image-only extras fold into one submenu.
-  const imageChildren = [];
-  if (
-    isFile &&
-    entry.studioKind === "asset" &&
-    entry.kind === "image" &&
-    entry.studioId
-  ) {
-    imageChildren.push({ id: "upscale", label: "Upscale" });
-    imageChildren.push({ id: "generate-video", label: "Generate video" });
-    imageChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
-    imageChildren.push({ id: "set-profile-image", label: "Set as profile image" });
-  }
-  if (
-    isFile &&
-    entry.studioKind === "asset" &&
-    (entry.kind === "image" || entry.kind === "video") &&
-    entry.studioId
-  ) {
-    const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
-    imageChildren.push({
-      id: alreadyShared ? "unshare-profile" : "share-profile",
-      label: alreadyShared ? "Remove from profile" : "Create post",
-    });
-  }
-  if (imageChildren.length) {
-    items.push({
-      id: "more",
-      label: entry.kind === "video" ? "Share" : "Image tools",
-      children: imageChildren,
-    });
+  // —— Media extras (images/videos only) ——
+  if (isImageAsset || isShareableMedia) {
+    items.push({ id: "sep-media", sep: true });
+    if (isImageAsset) {
+      items.push({ id: "upscale", label: "Upscale" });
+      items.push({ id: "generate-video", label: "Generate video" });
+    }
+    const shareChildren = [];
+    if (isImageAsset) {
+      shareChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+      shareChildren.push({ id: "set-profile-image", label: "Set as profile image" });
+    }
+    if (isShareableMedia) {
+      const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
+      shareChildren.push({
+        id: alreadyShared ? "unshare-profile" : "share-profile",
+        label: alreadyShared ? "Remove from profile" : "Create post",
+      });
+    }
+    if (shareChildren.length) {
+      items.push({
+        id: "share",
+        label: "Share",
+        iconKey: "share-profile",
+        children: shareChildren,
+      });
+    }
   }
 
+  // —— Danger ——
   if (onRequestDelete) {
-    items.push({ id: "sep-2", sep: true });
+    items.push({ id: "sep-danger", sep: true });
     items.push({
       id: "delete",
       label: isDir ? "Delete folder" : "Delete",
