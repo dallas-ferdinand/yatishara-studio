@@ -194,3 +194,58 @@
     box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.28));
   }
 }
+
+/* —— Desktop left-rail pick banner (Messages/Feed temporarily show Files) —— */
+
+.studio-asset-pick-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-plate, var(--cursor-surface-raised)));
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-pick-banner-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.studio-asset-pick-banner-cancel {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-asset-pick-banner-cancel:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 40%,
+    var(--color-cursor-border-soft)
+  );
+  background: var(--color-cursor-hover);
+}
+
+/* Soft highlight on the Files rail while picking. */
+.cursor-sidebar.is-asset-picking,
+aside.is-asset-picking {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+}

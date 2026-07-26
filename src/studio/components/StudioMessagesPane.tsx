@@ -494,6 +494,16 @@ type StudioMessagesPaneProps = {
   onOpenOffersJobs?: () => void;
   /** When true (mobile), empty pane shows the chat list instead of the select prompt. */
   showChatListWhenEmpty?: boolean;
+  /**
+   * Desktop: open the left Files rail in pick mode (owner-scoped root).
+   * When omitted (mobile), the sheet picker is used instead.
+   */
+  onRequestPickAsset?: (request: {
+    kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
+    title?: string;
+    onPick: (asset: StudioAssetPick) => void;
+    onCancel?: () => void;
+  }) => void;
 };
 
 function timeLabel(value: number): string {
@@ -552,6 +562,7 @@ export function StudioMessagesPane({
   onOpenProfile,
   onOpenOffersJobs,
   showChatListWhenEmpty = false,
+  onRequestPickAsset,
 }: StudioMessagesPaneProps) {
   const { isMobile } = useMobileLayout();
   const [expiresUnix] = useState(
@@ -1329,7 +1340,21 @@ export function StudioMessagesPane({
               key: "studio-files",
               label: "Choose from Studio Files",
               icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
-              onSelect: () => setFilesPickerOpen(true),
+              onSelect: () => {
+                // Desktop: open the left Files rail in pick mode (owner root only).
+                // Mobile: keep the sheet picker.
+                if (onRequestPickAsset && !isMobile) {
+                  onRequestPickAsset({
+                    kinds: ["image"],
+                    title: "Pick a photo to send",
+                    onPick: (asset) => {
+                      void pickStudioFileAsset(asset);
+                    },
+                  });
+                  return;
+                }
+                setFilesPickerOpen(true);
+              },
             },
           ]}
         />

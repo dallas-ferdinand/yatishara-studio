@@ -269,15 +269,22 @@ Offer banner/gallery media is **not** a flat "recent assets" grid. `OfferMediaEd
 ### Studio Files asset picker (locked)
 
 `StudioAssetPickerSheet` (`StudioAssetPickerSheet.tsx` + `studio-asset-picker.css`)
-is the shared folder browser for picking assets:
+is the **mobile** folder browser for picking assets. Desktop does **not** use the
+sheet for DM attach — it opens the left Files rail instead.
 
-- Chrome: `studio-mobile-app-menu-sheet` (mobile full-bleed); desktop centers as a
-  dialog (`@media min-width 900px`). Portal into `.studio-polish`.
-- Browse: `folders.listWithPeeks` + `assets.listByFolder`, filter by `kinds`.
-- Consumers: offer Media slots (mobile Pick), **DM attach** ("Choose from Studio
-  Files"). DM paperclip opens a context menu: Upload photo (device file input) or
-  Choose from Studio Files → picker → `assets.signedReadUrl` → blob → same pending
-  image send path as uploads. Memory: **753**.
+- **Desktop pick mode** (`StudioShell` `assetPickRequest`): forces the owner-scoped
+  file explorer into the left rail even on `messages:` / social tabs, resets the
+  trail to the signed-in user's root folder, shows `.studio-asset-pick-banner`
+  ("Pick a photo to send — Cancel"), intercepts asset clicks in `handleEntryOpen`
+  (folders still navigate; wrong kinds toast). Escape / Cancel / tab change ends
+  the session. Main pane stays on the DM. Wired via
+  `onRequestPickAsset` → `ActivePane` → `StudioMessagesPane`.
+- **Mobile**: sheet chrome (`studio-mobile-app-menu-sheet`); portal into
+  `.studio-polish`. Browse: `folders.listWithPeeks` + `assets.listByFolder`
+  (both owner-scoped — clients never see another user's root).
+- Consumers: DM attach ("Choose from Studio Files"), offer Media slots (mobile Pick).
+  DM: picker → `assets.signedReadUrl` → blob → same pending image send path as
+  uploads. Memory: **753**.
 
 ---
 

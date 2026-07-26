@@ -310,7 +310,8 @@ function getCreateMenuItems() {
   return CREATE_MENU_ITEMS_BASE.filter((item) => !item.previewOnly || allowVideoEdit);
 }
 
-/** Bottom nav highlight — Create only when a create/chat tab is active. */
+/** Bottom nav highlight — Create only when a create/chat tab is active.
+ *  Files / People are a middle *action* (not a section), so they never win here. */
 function resolveMobileBottomNavSection(activeTab, mobileSection) {
   const tab = String(activeTab ?? "");
   if (tab.startsWith("feed:")) return "feed";
@@ -322,9 +323,8 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   ) {
     return "composer";
   }
-  if (mobileSection === "files") return "files";
   if (mobileSection === "feed") return "feed";
-  if (mobileSection === "composer") return "composer";
+  if (mobileSection === "composer" || mobileSection === "files") return "composer";
   return mobileSection || null;
 }
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
@@ -1043,6 +1043,7 @@ export function StudioShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
   const [mobileSection, setMobileSection] = useState("composer");
+  const [mobileSocialOpen, setMobileSocialOpen] = useState(false);
   const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1220,6 +1221,19 @@ export function StudioShell({
   useEffect(() => {
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
+
+  useEffect(() => {
+    if (!isMobile && mobileSocialOpen) setMobileSocialOpen(false);
+  }, [isMobile, mobileSocialOpen]);
+
+  useEffect(() => {
+    const onSocial =
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("feed:") ||
+        activeTab.startsWith("profile:") ||
+        activeTab.startsWith("profilePost:"));
+    if (!onSocial && mobileSocialOpen) setMobileSocialOpen(false);
+  }, [activeTab, mobileSocialOpen]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -3043,10 +3057,16 @@ export function StudioShell({
       if (section === "settings") {
         setMobileAppMenuOpen(false);
         setHistoryOpen(false);
+        setMobileSocialOpen(false);
         setSettingsOpen(true);
         return;
       }
       if (section === "feed") {
+        setMobileSection("composer");
+        setMobileSocialOpen(false);
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
         openFeed();
         return;
       }
@@ -3055,6 +3075,7 @@ export function StudioShell({
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
+        setMobileSocialOpen(false);
         if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
           openTab(lastChatTabRef.current || COMPOSER_TAB);
         }
@@ -3064,8 +3085,32 @@ export function StudioShell({
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
+        setMobileSocialOpen(false);
       }
     });
+  }
+
+  function toggleMobileNavAction() {
+    const onSocial =
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("feed:") ||
+        activeTab.startsWith("profile:") ||
+        activeTab.startsWith("profilePost:"));
+    if (onSocial) {
+      startMobileTransition(() => {
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        if (mobileSection === "files") setMobileSection("composer");
+        setMobileSocialOpen((open) => !open);
+      });
+      return;
+    }
+    if (mobileSection === "files") {
+      openMobileSection("composer");
+      return;
+    }
+    openMobileSection("files");
   }
 
   const handleTabSelect = useCallback((key) => {
@@ -3167,6 +3212,49 @@ export function StudioShell({
 
   function handleEntryOpen(entry) {
     if (entry.studioKind === "videoEdit" && !isVideoEditorPreviewEnabled()) return;
+    // Desktop pick-from-Files: folders still navigate; matching assets resolve
+    // the pick and never open a tab. Explorer queries are owner-scoped so this
+    // can only surface the signed-in user's own tree from their root.
+    if (assetPickRequest) {
+      if (entry.studioKind === "trash") {
+        setActiveFolderId(TRASH_FOLDER_ID);
+        setNavTrail((trail) => {
+          const existing = trail.findIndex((crumb) => crumb.id === TRASH_FOLDER_ID);
+          if (existing >= 0) return trail.slice(0, existing + 1);
+          return [...trail, { id: TRASH_FOLDER_ID, name: "Trash" }];
+        });
+        return;
+      }
+      if (entry.type === "dir") {
+        setActiveFolderId(entry.studioId);
+        setNavTrail((trail) => {
+          const existing = trail.findIndex((crumb) => crumb.id === entry.studioId);
+          if (existing >= 0) return trail.slice(0, existing + 1);
+          return [...trail, { id: entry.studioId, name: entry.name }];
+        });
+        return;
+      }
+      const kind = entry.kind ?? entry.mediaKind;
+      const kinds = assetPickRequest.kinds ?? ["image"];
+      if (entry.studioKind === "asset" && kinds.includes(kind)) {
+        const req = assetPickRequest;
+        setAssetPickRequest(null);
+        req.onPick?.({
+          _id: entry.studioId,
+          name: entry.name,
+          kind,
+          mimeType: entry.mimeType || "",
+          signedThumbnailUrl: entry.thumbnailUrl,
+        });
+        return;
+      }
+      toast.message(
+        kinds.includes("image") && kinds.length === 1
+          ? "Pick an image from your Files"
+          : "That file type isn’t allowed here",
+      );
+      return;
+    }
     if (entry.studioKind === "trash") {
       setActiveFolderId(TRASH_FOLDER_ID);
       setNavTrail((trail) => {
@@ -4793,6 +4881,36 @@ export function StudioShell({
   const isMessagesRail =
     typeof activeTab === "string" && activeTab.startsWith("messages:");
 
+  // Desktop pick-from-Files temporarily restores the owner file explorer in the
+  // left rail even while Messages/Feed is the active pane.
+  const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
+  const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
+  const effectiveSocialRail = isSocialRail && !pickingFromFiles;
+
+  // Leaving the tab that started pick cancels the session so the rail resets.
+  useEffect(() => {
+    if (!assetPickRequest) return;
+    const startedOn = assetPickRequest.startedOnTab;
+    if (startedOn && activeTab !== startedOn) {
+      const req = assetPickRequest;
+      setAssetPickRequest(null);
+      req.onCancel?.();
+    }
+  }, [activeTab, assetPickRequest]);
+
+  useEffect(() => {
+    if (!assetPickRequest) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        const req = assetPickRequest;
+        setAssetPickRequest(null);
+        req.onCancel?.();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [assetPickRequest]);
+
   return (
     <div
       ref={shellRef}
@@ -6370,6 +6488,20 @@ export function StudioShell({
           overflow: hidden;
           padding: 0 0 10px;
           gap: 0;
+        }
+        .studio-social-mobile-sheet .studio-mobile-app-menu-body {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0;
+          gap: 0;
+        }
+        .studio-social-mobile-sheet .studio-social-sidebar {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .studio-social-mobile-sheet .studio-social-body {
+          padding-bottom: 12px;
         }
         .studio-files-mobile-toolbar {
           position: relative;
@@ -16496,10 +16628,28 @@ export function StudioShell({
           minSize={STUDIO_MAIN_SIDEBAR_MIN}
           maxSize={STUDIO_MAIN_SIDEBAR_MAX}
         >
-      <aside className={STYLE.sidebar}>
+      <aside className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}`}>
+        {pickingFromFiles ? (
+          <div className="studio-asset-pick-banner" role="status">
+            <span className="studio-asset-pick-banner-copy">
+              {assetPickRequest.title || "Pick a file from your Files"}
+            </span>
+            <button
+              type="button"
+              className="studio-asset-pick-banner-cancel"
+              onClick={() => {
+                const req = assetPickRequest;
+                setAssetPickRequest(null);
+                req.onCancel?.();
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : null}
         <div className={STYLE.panelHead}>
           <StudioSidebarBrand />
-          {!isSocialRail && !isMessagesRail ? (
+          {!effectiveSocialRail && !effectiveMessagesRail ? (
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -16528,14 +16678,14 @@ export function StudioShell({
             }}
           />
         </div>
-        {isMessagesRail ? (
+        {effectiveMessagesRail ? (
           <StudioMessagesSidebar
             activeConversationId={activeDmConversationId}
             onSelectConversation={setActiveDmConversationId}
             onStartChat={openChatWith}
             expiresUnix={assetUrlExpiresUnix}
           />
-        ) : isSocialRail ? (
+        ) : effectiveSocialRail ? (
           <StudioSocialSidebar
             onOpenProfile={openPublicProfile}
             expiresUnix={assetUrlExpiresUnix}
@@ -16650,6 +16800,7 @@ export function StudioShell({
                   onClick={() => {
                     setMobileAppMenuOpen(false);
                     setSettingsOpen(false);
+                    setMobileSocialOpen(false);
                     setHistoryOpen((open) => !open);
                   }}
                   aria-label="Generation history"
@@ -16897,6 +17048,32 @@ export function StudioShell({
             onOpenChat={openChatWith}
             onOpenOffersJobs={() => openOffersTab("home")}
             showDmChatListWhenEmpty={isMobile}
+            onRequestPickAsset={
+              isMobile
+                ? undefined
+                : (request) => {
+                    // Always start at the signed-in user's root — never another
+                    // client's tree (queries are owner-scoped; root resets the trail).
+                    const rootFolder = topFolders?.[0];
+                    if (rootFolder) {
+                      setActiveFolderId(rootFolder._id);
+                      setNavTrail([{ id: rootFolder._id, name: rootFolder.name }]);
+                    }
+                    setAssetPickRequest({
+                      kinds: request.kinds ?? ["image"],
+                      title: request.title,
+                      startedOnTab: activeTab,
+                      onPick: (asset) => {
+                        setAssetPickRequest(null);
+                        request.onPick?.(asset);
+                      },
+                      onCancel: () => {
+                        setAssetPickRequest(null);
+                        request.onCancel?.();
+                      },
+                    });
+                  }
+            }
           />
         </section>
         {typeof activeTab === "string" &&
@@ -17013,10 +17190,26 @@ export function StudioShell({
         />
       ) : null}
 
+      {isMobile && mobileSocialOpen ? (
+        <StudioSocialMobileSheet
+          onClose={() => setMobileSocialOpen(false)}
+          onOpenProfile={(username) => {
+            setMobileSocialOpen(false);
+            openPublicProfile(username);
+          }}
+          expiresUnix={assetUrlExpiresUnix}
+        />
+      ) : null}
+
       {isMobile ? (
         <StudioMobileBottomNav
           section={resolveMobileBottomNavSection(activeTab, mobileSection)}
           onSelect={openMobileSection}
+          action={{
+            id: isSocialRail ? "social" : "files",
+            active: isSocialRail ? mobileSocialOpen : mobileSection === "files",
+            onClick: toggleMobileNavAction,
+          }}
           tools={
             <>
               <CreditPill
@@ -17041,6 +17234,7 @@ export function StudioShell({
                 onClick={() => {
                   setHistoryOpen(false);
                   setSettingsOpen(false);
+                  setMobileSocialOpen(false);
                   setMobileAppMenuOpen((open) => !open);
                 }}
                 aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
@@ -17094,6 +17288,7 @@ export function StudioShell({
           onOpenHistory={() => {
             setMobileAppMenuOpen(false);
             setSettingsOpen(false);
+            setMobileSocialOpen(false);
             setHistoryOpen(true);
           }}
           onOpenAdmin={() => {
@@ -21577,6 +21772,7 @@ function ActivePane({
   onOpenChat,
   onOpenOffersJobs,
   showDmChatListWhenEmpty = false,
+  onRequestPickAsset,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -21830,6 +22026,7 @@ function ActivePane({
         onOpenProfile={onOpenPublicProfile}
         onOpenOffersJobs={onOpenOffersJobs}
         showChatListWhenEmpty={showDmChatListWhenEmpty}
+        onRequestPickAsset={onRequestPickAsset}
       />,
     );
   }
@@ -23432,6 +23629,52 @@ function StudioFilesMobileSheet({
           showSearch={false}
           showPathbar={false}
           viewMode="grid"
+        />
+      </div>
+    </div>,
+    portalRoot,
+  );
+}
+
+function StudioSocialMobileSheet({ onClose, onOpenProfile, expiresUnix }) {
+  const [portalRoot, setPortalRoot] = useState(null);
+
+  useEffect(() => {
+    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div
+      className="studio-mobile-app-menu-sheet studio-social-mobile-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label="People"
+    >
+      <div className="studio-mobile-app-menu-head">
+        <h2 className="studio-mobile-app-menu-title">People</h2>
+        <button
+          type="button"
+          className="studio-mobile-app-menu-close"
+          aria-label="Close people"
+          onClick={onClose}
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+      <div className="studio-mobile-app-menu-body">
+        <StudioSocialSidebar
+          onOpenProfile={onOpenProfile}
+          expiresUnix={expiresUnix}
         />
       </div>
     </div>,
