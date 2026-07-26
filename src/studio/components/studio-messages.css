@@ -395,6 +395,23 @@
   transform-origin: left center;
 }
 
+/* Pastel Orb + white glyph washes out in DM bubbles — use ink play mark. */
+.studio-dm-reply-voice .studio-orb-play-glyph,
+.studio-dm-bubble.is-voice .studio-orb-play-glyph {
+  color: var(--color-cursor-text-bright, var(--mos-text, #0f172a));
+  filter: none;
+}
+
+.studio-dm-reply-voice .studio-orb-play-spinner,
+.studio-dm-bubble.is-voice .studio-orb-play-spinner {
+  border-color: color-mix(
+    in srgb,
+    var(--color-cursor-text-bright, var(--mos-text, #0f172a)) 35%,
+    transparent
+  );
+  border-top-color: var(--color-cursor-text-bright, var(--mos-text, #0f172a));
+}
+
 .studio-dm-reply-image {
   display: block;
   width: 72px;
