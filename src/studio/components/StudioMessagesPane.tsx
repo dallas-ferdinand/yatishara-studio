@@ -128,6 +128,9 @@ type DmReplySnippet = {
   body: string;
   kind: "text" | "voice" | "image";
   fromMe: boolean;
+  audioUrl?: string;
+  imageUrl?: string;
+  durationSec?: number;
 };
 
 type DmMessageRow = {
@@ -150,6 +153,8 @@ function replySnippetLabel(
   if (snippet.kind === "voice") return "Voice message";
   if (snippet.kind === "image") {
     const caption = snippet.body.trim();
+    // Server may already prefix "Photo · …"
+    if (caption.startsWith("Photo")) return caption;
     return caption ? `Photo · ${caption}` : "Photo";
   }
   return snippet.body.trim() || "Message";
@@ -180,21 +185,55 @@ function DmReplyQuote({
   peerLabel: string;
   onJump?: () => void;
 }) {
+  const hasVoice = snippet.kind === "voice" && Boolean(snippet.audioUrl);
+  const hasImage = snippet.kind === "image" && Boolean(snippet.imageUrl);
+
   return (
-    <button
-      type="button"
-      className="studio-dm-reply-quote"
-      onClick={(event) => {
-        event.stopPropagation();
-        onJump?.();
-      }}
-    >
-      <strong>{snippet.fromMe ? "You" : peerLabel}</strong>
-      <span className="studio-dm-reply-snippet">
-        <ReplyKindIcon kind={snippet.kind} />
-        {replySnippetLabel(snippet)}
-      </span>
-    </button>
+    <div className={`studio-dm-reply-quote${hasVoice ? " is-voice" : ""}${hasImage ? " is-image" : ""}`}>
+      <button
+        type="button"
+        className="studio-dm-reply-quote-head"
+        onClick={(event) => {
+          event.stopPropagation();
+          onJump?.();
+        }}
+      >
+        <strong>{snippet.fromMe ? "You" : peerLabel}</strong>
+        {!hasVoice ? (
+          <span className="studio-dm-reply-snippet">
+            <ReplyKindIcon kind={snippet.kind} />
+            {replySnippetLabel(snippet)}
+          </span>
+        ) : null}
+      </button>
+      {hasVoice ? (
+        <div
+          className="studio-dm-reply-voice"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <StudioChatAudioPlayer
+            src={snippet.audioUrl!}
+            title="Voice message"
+            durationHint={snippet.durationSec}
+          />
+        </div>
+      ) : null}
+      {hasImage ? (
+        <button
+          type="button"
+          className="studio-dm-reply-image"
+          onClick={(event) => {
+            event.stopPropagation();
+            onJump?.();
+          }}
+          aria-label="View original photo"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={snippet.imageUrl} alt="" />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -749,6 +788,9 @@ export function StudioMessagesPane({
       body: message.body,
       kind: message.kind,
       fromMe: message.fromMe,
+      audioUrl: message.audioUrl,
+      imageUrl: message.imageUrl,
+      durationSec: message.durationSec,
     });
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
@@ -1004,22 +1046,41 @@ export function StudioMessagesPane({
       {sendError ? <p className="studio-dm-error">{sendError}</p> : null}
 
       {replyTo && recState === "idle" ? (
-        <div className="studio-dm-reply-preview">
-          <span className="studio-dm-reply-preview-icon" aria-hidden="true">
-            {replyTo.kind === "voice" || replyTo.kind === "image" ? (
-              <ReplyKindIcon kind={replyTo.kind} className="h-3.5 w-3.5" />
-            ) : (
-              <Reply className="h-3.5 w-3.5" />
-            )}
-          </span>
+        <div
+          className={`studio-dm-reply-preview${replyTo.kind === "voice" && replyTo.audioUrl ? " is-voice" : ""}${replyTo.kind === "image" && replyTo.imageUrl ? " is-image" : ""}`}
+        >
+          {replyTo.kind === "image" && replyTo.imageUrl ? (
+            <div className="studio-dm-reply-preview-thumb">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={replyTo.imageUrl} alt="" />
+            </div>
+          ) : (
+            <span className="studio-dm-reply-preview-icon" aria-hidden="true">
+              {replyTo.kind === "voice" || replyTo.kind === "image" ? (
+                <ReplyKindIcon kind={replyTo.kind} className="h-3.5 w-3.5" />
+              ) : (
+                <Reply className="h-3.5 w-3.5" />
+              )}
+            </span>
+          )}
           <span className="studio-dm-reply-preview-copy">
             <strong>
               Replying to {replyTo.fromMe ? "yourself" : peerLabel}
             </strong>
-            <span className="studio-dm-reply-snippet">
-              <ReplyKindIcon kind={replyTo.kind} />
-              {replySnippetLabel(replyTo)}
-            </span>
+            {replyTo.kind === "voice" && replyTo.audioUrl ? (
+              <div className="studio-dm-reply-voice">
+                <StudioChatAudioPlayer
+                  src={replyTo.audioUrl}
+                  title="Voice message"
+                  durationHint={replyTo.durationSec}
+                />
+              </div>
+            ) : (
+              <span className="studio-dm-reply-snippet">
+                <ReplyKindIcon kind={replyTo.kind} />
+                {replySnippetLabel(replyTo)}
+              </span>
+            )}
           </span>
           <button
             type="button"

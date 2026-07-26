@@ -33,6 +33,9 @@ const replySnippet = v.object({
   body: v.string(),
   kind: dmMessageKind,
   fromMe: v.boolean(),
+  audioUrl: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  durationSec: v.optional(v.number()),
 });
 
 async function resolveReplyToMessageId(
@@ -746,10 +749,37 @@ export const listMessages = authedQuery({
     const replyDocs = await Promise.all(
       replyIds.map((id) => ctx.db.get(id)),
     );
-    const replyById = new Map(
-      replyDocs
-        .filter((doc): doc is Doc<"dmMessages"> => doc !== null)
-        .map((doc) => [doc._id, doc]),
+    const replyById = new Map<
+      Id<"dmMessages">,
+      {
+        _id: Id<"dmMessages">;
+        body: string;
+        kind: "text" | "voice" | "image";
+        fromMe: boolean;
+        audioUrl?: string;
+        imageUrl?: string;
+        durationSec?: number;
+      }
+    >();
+    await Promise.all(
+      replyDocs.map(async (doc) => {
+        if (!doc) return;
+        const audioUrl = doc.audioStorageId
+          ? ((await ctx.storage.getUrl(doc.audioStorageId)) ?? undefined)
+          : undefined;
+        const imageUrl = doc.imageStorageId
+          ? ((await ctx.storage.getUrl(doc.imageStorageId)) ?? undefined)
+          : undefined;
+        replyById.set(doc._id, {
+          _id: doc._id,
+          body: replyPreviewBody(doc),
+          kind: doc.kind ?? "text",
+          fromMe: doc.senderId === ctx.user._id,
+          audioUrl,
+          imageUrl,
+          durationSec: doc.durationSec,
+        });
+      }),
     );
     return await Promise.all(
       chronological.map(async (row) => {
@@ -760,9 +790,6 @@ export const listMessages = authedQuery({
           ? ((await ctx.storage.getUrl(row.imageStorageId)) ?? undefined)
           : undefined;
         const fromMe = row.senderId === ctx.user._id;
-        const replyDoc = row.replyToMessageId
-          ? replyById.get(row.replyToMessageId)
-          : undefined;
         return {
           _id: row._id,
           body: row.body,
@@ -779,13 +806,8 @@ export const listMessages = authedQuery({
                 peerDeliveredWatermark,
               )
             : "sent",
-          replyTo: replyDoc
-            ? {
-                _id: replyDoc._id,
-                body: replyPreviewBody(replyDoc),
-                kind: replyDoc.kind ?? "text",
-                fromMe: replyDoc.senderId === ctx.user._id,
-              }
+          replyTo: row.replyToMessageId
+            ? replyById.get(row.replyToMessageId)
             : undefined,
           createdAt: row.createdAt,
         };
