@@ -1,27 +1,31 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, Sparkles } from "lucide-react";
+import { Cloud, Folder, Sparkles, Users } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-const NAV_ITEMS = [
-  { id: "feed", label: "Feed", Icon: Cloud, iconOnly: true },
-  { id: "files", label: "Files", Icon: Folder },
-  { id: "composer", label: "Create", Icon: Sparkles },
-];
+/** Context action in the middle slot — Files on Generate, People on Social. */
+export const MOBILE_NAV_ACTION = {
+  files: { id: "files", label: "Files", Icon: Folder },
+  social: { id: "social", label: "People", Icon: Users },
+};
 
-export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
+export function StudioMobileBottomNav({
+  section,
+  onSelect,
+  action = null,
+  tools = null,
+}) {
   const navRef = useRef(null);
   const sectionsRef = useRef(null);
-  const itemRefs = useRef([]);
+  const itemRefs = useRef({});
   const [indicator, setIndicator] = useState({ width: 0, x: 0 });
 
   const measureIndicator = useCallback(() => {
     const nav = navRef.current;
     const sections = sectionsRef.current;
-    const index = NAV_ITEMS.findIndex((item) => item.id === section);
-    const button = itemRefs.current[index];
-    if (!nav || !sections || !button || index < 0) {
+    const button = section ? itemRefs.current[section] : null;
+    if (!nav || !sections || !button) {
       setIndicator((prev) =>
         prev.width === 0 && prev.x === 0 ? prev : { width: 0, x: 0 },
       );
@@ -38,12 +42,20 @@ export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
 
   useLayoutEffect(() => {
     measureIndicator();
-  }, [measureIndicator]);
+  }, [measureIndicator, action?.id, action?.active]);
 
   useEffect(() => {
     window.addEventListener("resize", measureIndicator);
     return () => window.removeEventListener("resize", measureIndicator);
   }, [measureIndicator]);
+
+  const actionDef =
+    action?.id === "social"
+      ? MOBILE_NAV_ACTION.social
+      : action?.id === "files"
+        ? MOBILE_NAV_ACTION.files
+        : null;
+  const ActionIcon = actionDef?.Icon;
 
   return (
     <nav ref={navRef} className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
@@ -56,27 +68,49 @@ export function StudioMobileBottomNav({ section, onSelect, tools = null }) {
         aria-hidden="true"
       />
       <div ref={sectionsRef} className="studio-mobile-nav-sections">
-        {NAV_ITEMS.map((item, index) => {
-          const Icon = item.Icon;
-          const active = section === item.id;
-          return (
-            <button
-              key={item.id}
-              ref={(node) => {
-                itemRefs.current[index] = node;
-              }}
-              type="button"
-              className={`studio-mobile-nav-btn${active ? " is-active" : ""}${item.iconOnly ? " is-icon-only" : ""}`}
-              aria-current={active ? "page" : undefined}
-              aria-label={item.label}
-              title={item.label}
-              onClick={() => onSelect(item.id)}
-            >
-              <Icon aria-hidden="true" />
-              {item.iconOnly ? null : <span>{item.label}</span>}
-            </button>
-          );
-        })}
+        <button
+          ref={(node) => {
+            itemRefs.current.feed = node;
+          }}
+          type="button"
+          className={`studio-mobile-nav-btn${section === "feed" ? " is-active" : ""} is-icon-only`}
+          aria-current={section === "feed" ? "page" : undefined}
+          aria-label="Feed"
+          title="Feed"
+          onClick={() => onSelect("feed")}
+        >
+          <Cloud aria-hidden="true" />
+        </button>
+        {actionDef && ActionIcon ? (
+          <button
+            ref={(node) => {
+              itemRefs.current[actionDef.id] = node;
+            }}
+            type="button"
+            className={`studio-mobile-nav-btn studio-mobile-nav-action${action?.active ? " is-active" : ""}`}
+            aria-label={actionDef.label}
+            title={actionDef.label}
+            aria-pressed={action?.active ? true : undefined}
+            onClick={() => action?.onClick?.()}
+          >
+            <ActionIcon aria-hidden="true" />
+            <span>{actionDef.label}</span>
+          </button>
+        ) : null}
+        <button
+          ref={(node) => {
+            itemRefs.current.composer = node;
+          }}
+          type="button"
+          className={`studio-mobile-nav-btn${section === "composer" ? " is-active" : ""}`}
+          aria-current={section === "composer" ? "page" : undefined}
+          aria-label="Create"
+          title="Create"
+          onClick={() => onSelect("composer")}
+        >
+          <Sparkles aria-hidden="true" />
+          <span>Create</span>
+        </button>
       </div>
       {tools ? <div className="studio-mobile-nav-tools">{tools}</div> : null}
     </nav>
