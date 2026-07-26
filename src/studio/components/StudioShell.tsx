@@ -6012,6 +6012,15 @@ export function StudioShell({
           min-width: 0;
           background: var(--mos-sidebar);
         }
+        /* Pixel floors so the resizable rails can't crush card content —
+           react-resizable-panels min sizes are % of the group, which gets
+           tiny on small windows. The vw guard keeps very narrow windows sane. */
+        .studio-workspace-panels > [data-panel-id="studio-settings-side"] {
+          min-width: min(320px, 46vw);
+        }
+        .studio-main-panels > [data-panel-id="studio-sidebar"] {
+          min-width: min(248px, 40vw);
+        }
         .studio-settings-sidebar .studio-settings-workspace {
           display: flex;
           min-height: 0;
@@ -7663,6 +7672,24 @@ export function StudioShell({
           width: 0;
           height: 0;
         }
+        .studio-settings-workspace-body {
+          container-type: inline-size;
+        }
+        /* Narrow settings rail: tighten card chrome instead of squishing copy. */
+        @container (max-width: 340px) {
+          .studio-settings-workspace .studio-settings-plans,
+          .studio-settings-workspace .studio-settings-storage-card {
+            padding: 14px 14px 10px !important;
+          }
+          .studio-settings-stat-row {
+            gap: 10px;
+            min-height: 40px;
+            padding: 6px 14px;
+          }
+          .studio-settings-balance-pill {
+            padding: 6px 10px;
+          }
+        }
         .studio-polish .studio-settings-sidebar,
         .studio-polish .cursor-settings-body,
         .studio-polish .cursor-settings-sheet {
@@ -7777,11 +7804,13 @@ export function StudioShell({
         }
         .studio-settings-stat-row {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          /* Label keeps its natural width; the value column shrinks and wraps
+             instead of shredding the label at narrow rail widths. */
+          grid-template-columns: auto minmax(0, 1fr);
           align-items: center;
           gap: 12px;
           min-height: 46px;
-          padding: 0 18px;
+          padding: 6px 18px;
         }
         .studio-settings-stat-row dt,
         .studio-settings-stat-row span:first-child {
@@ -7789,14 +7818,18 @@ export function StudioShell({
           color: var(--color-cursor-muted);
           font-size: 12px;
           font-weight: 500;
+          white-space: nowrap;
         }
         .studio-settings-stat-row dd,
         .studio-settings-stat-row strong {
           margin: 0;
+          min-width: 0;
           color: var(--color-cursor-text-bright);
           font-size: 13px;
           font-weight: 650;
+          line-height: 1.35;
           text-align: right;
+          overflow-wrap: anywhere;
           font-variant-numeric: tabular-nums;
         }
         .studio-settings-workspace .studio-settings-plans,

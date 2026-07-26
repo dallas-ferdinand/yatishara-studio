@@ -274,8 +274,11 @@ sheet for DM attach — it opens the left Files rail instead.
 
 - **Desktop pick mode** (`StudioShell` `assetPickRequest`): forces the owner-scoped
   file explorer into the left rail even on `messages:` / social tabs, resets the
-  trail to the signed-in user's root folder, shows `.studio-asset-pick-banner`
-  ("N selected — Cancel — Confirm"). Clicks **toggle** selection (`.is-picked` on
+  trail to the signed-in user's root folder, and pins `.studio-asset-pick-chrome`
+  at the bottom of the Files rail: a **selected-preview strip**
+  (`.studio-asset-pick-selected` — thumbs with remove) above the action bar
+  (`.studio-asset-pick-footer`: "N selected — Cancel — Confirm", same language
+  as the mobile sheet foot). Clicks **toggle** selection (`.is-picked` on
   FileTree rows via `pickedPaths`); Confirm calls `onConfirm(assets[])`. Folders
   still navigate; wrong kinds toast. Escape / Cancel / tab change ends the session.
   Main pane stays on the DM. Wired via `onRequestPickAsset` → `ActivePane` →
