@@ -3,6 +3,8 @@ import { unzip } from "fflate";
 const SKIP_NAME =
   /(?:^|\/)(?:__MACOSX|\.DS_Store|Thumbs\.db)(?:\/|$)/i;
 const MAX_FILES = 500;
+/** Nested A.zip → B.zip → … depth cap against zip bombs. */
+const MAX_NESTED_ZIP_DEPTH = 8;
 
 function folderNameFromZip(fileName: string): string {
   const base = fileName.replace(/\.zip$/i, "").trim();
@@ -37,7 +39,8 @@ function mimeFromName(name: string): string {
   return "application/octet-stream";
 }
 
-function normalizeZipPath(raw: string): string | null {
+/** Safe zip entry path parts, or null if junk / traversal. */
+function zipPathParts(raw: string): string[] | null {
   const cleaned = raw.replace(/\\/g, "/").replace(/^\/+/, "");
   if (!cleaned || cleaned.endsWith("/")) return null;
   if (SKIP_NAME.test(cleaned)) return null;
@@ -48,10 +51,22 @@ function normalizeZipPath(raw: string): string | null {
   if (!parts.length || parts.some((part) => part === ".." || part === ".")) {
     return null;
   }
-  // Nested archives stay transport-only — skip storing .zip blobs.
-  const leaf = parts[parts.length - 1] ?? "";
-  if (/\.zip$/i.test(leaf)) return null;
-  return parts.join("/");
+  return parts;
+}
+
+function joinRelative(prefix: string, path: string): string {
+  if (!prefix) return path;
+  if (!path) return prefix;
+  return `${prefix}/${path}`;
+}
+
+function unzipBytes(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
+  return new Promise((resolve, reject) => {
+    unzip(bytes, (error, data) => {
+      if (error) reject(error);
+      else resolve(data);
+    });
+  });
 }
 
 export type ExtractedZipEntry = {
@@ -67,50 +82,88 @@ export type ExtractedZipImport = {
   skipped: number;
 };
 
-/** Unpack a dropped/uploaded ZIP into uploadable Studio files. Never returns the archive itself. */
-export async function extractStudioZipImport(file: File): Promise<ExtractedZipImport> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const unzipped = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
-    unzip(bytes, (error, data) => {
-      if (error) reject(error);
-      else resolve(data);
-    });
-  });
+type UnpackState = {
+  entries: ExtractedZipEntry[];
+  skipped: number;
+  truncated: boolean;
+};
 
-  const entries: ExtractedZipEntry[] = [];
-  let skipped = 0;
-  let truncated = false;
+/**
+ * Unpack zip bytes into `state.entries`, placing nested archives as folders
+ * named after the zip (A.zip containing B.zip → A/… and A/B/…).
+ */
+async function unpackZipTree(
+  bytes: Uint8Array,
+  pathPrefix: string,
+  depth: number,
+  state: UnpackState,
+): Promise<void> {
+  if (state.truncated) return;
+  let unzipped: Record<string, Uint8Array>;
+  try {
+    unzipped = await unzipBytes(bytes);
+  } catch {
+    state.skipped += 1;
+    return;
+  }
 
   const keys = Object.keys(unzipped).sort();
   for (const key of keys) {
-    const path = normalizeZipPath(key);
-    if (!path) {
-      skipped += 1;
-      continue;
+    if (state.truncated || state.entries.length >= MAX_FILES) {
+      state.truncated = true;
+      return;
     }
-    if (entries.length >= MAX_FILES) {
-      truncated = true;
-      break;
+    const parts = zipPathParts(key);
+    if (!parts) {
+      state.skipped += 1;
+      continue;
     }
     const data = unzipped[key];
     if (!data || data.byteLength === 0) {
-      skipped += 1;
+      state.skipped += 1;
       continue;
     }
-    const name = path.split("/").pop() || "file";
-    const mime = mimeFromName(name);
+
+    const leaf = parts[parts.length - 1] ?? "file";
+    const parentParts = parts.slice(0, -1);
+    const parentRel = parentParts.join("/");
+    const underPrefix = joinRelative(pathPrefix, parentRel);
+
+    if (/\.zip$/i.test(leaf)) {
+      if (depth >= MAX_NESTED_ZIP_DEPTH) {
+        state.skipped += 1;
+        continue;
+      }
+      const nestedFolder = folderNameFromZip(leaf);
+      await unpackZipTree(
+        data,
+        joinRelative(underPrefix, nestedFolder),
+        depth + 1,
+        state,
+      );
+      continue;
+    }
+
+    const relativePath = joinRelative(underPrefix, leaf);
     const copy = new Uint8Array(data);
-    entries.push({
-      relativePath: path,
-      file: new File([copy], name, { type: mime }),
+    state.entries.push({
+      relativePath,
+      file: new File([copy], leaf, { type: mimeFromName(leaf) }),
     });
   }
+}
+
+/** Unpack a dropped/uploaded ZIP into uploadable Studio files. Never returns the archive itself. */
+export async function extractStudioZipImport(file: File): Promise<ExtractedZipImport> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const state: UnpackState = { entries: [], skipped: 0, truncated: false };
+  await unpackZipTree(bytes, "", 0, state);
 
   return {
     folderName: folderNameFromZip(file.name || "archive.zip"),
-    entries,
-    truncated,
-    skipped,
+    entries: state.entries,
+    truncated: state.truncated,
+    skipped: state.skipped,
   };
 }
 

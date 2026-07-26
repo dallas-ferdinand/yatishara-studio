@@ -88,8 +88,10 @@ from `--mos-plate`:
   Rows are compact L3 plates (28px), show live bytes/progress, and keep cancel/retry
   controls reachable without displacing breadcrumbs or search.
 - **ZIP is transport only:** dropping/uploading a `.zip` unpacks into a new folder
-  named after the archive (nested paths preserved). The zip blob is never stored as
-  an asset. Folder/multi-select **Download ZIP** remains export-only.
+  named after the archive (nested paths preserved). Nested `.zip`s inside unpack
+  recursively into folders of the same name (`A.zip` containing `B.zip` → folder
+  `A` with folder `B` inside). The zip blob is never stored as an asset.
+  Folder/multi-select **Download ZIP** remains export-only.
 
 ### Select / dropdown (locked decision)
 
