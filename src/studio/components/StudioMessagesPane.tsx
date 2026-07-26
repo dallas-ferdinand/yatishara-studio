@@ -67,6 +67,8 @@ type PendingImage = {
   previewUrl: string;
 };
 
+const MAX_PENDING_IMAGES = 10;
+
 function pickRecorderMimeType(): string | undefined {
   if (typeof MediaRecorder === "undefined") return undefined;
   return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) =>
@@ -501,7 +503,9 @@ type StudioMessagesPaneProps = {
   onRequestPickAsset?: (request: {
     kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
     title?: string;
-    onPick: (asset: StudioAssetPick) => void;
+    maxSelected?: number;
+    onConfirm?: (assets: StudioAssetPick[]) => void;
+    onPick?: (asset: StudioAssetPick) => void;
     onCancel?: () => void;
   }) => void;
 };
@@ -597,7 +601,7 @@ export function StudioMessagesPane({
   const [draft, setDraft] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
-  const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<DmReplySnippet | null>(null);
   const replyToRef = useRef<DmReplySnippet | null>(null);
@@ -623,15 +627,26 @@ export function StudioMessagesPane({
   );
   const [filesPickerOpen, setFilesPickerOpen] = useState(false);
   const [filesPickBusy, setFilesPickBusy] = useState(false);
+  const [mobilePickSelected, setMobilePickSelected] = useState<
+    StudioAssetPick[]
+  >([]);
   const [filesPickerExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
   const convex = useConvex();
 
-  const clearPendingImage = useCallback(() => {
-    setPendingImage((prev) => {
-      if (prev) URL.revokeObjectURL(prev.previewUrl);
-      return null;
+  const clearPendingImages = useCallback(() => {
+    setPendingImages((prev) => {
+      for (const item of prev) URL.revokeObjectURL(item.previewUrl);
+      return [];
+    });
+  }, []);
+
+  const removePendingImageAt = useCallback((index: number) => {
+    setPendingImages((prev) => {
+      const target = prev[index];
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== index);
     });
   }, []);
 
@@ -814,11 +829,11 @@ export function StudioMessagesPane({
   useEffect(() => {
     setDraft("");
     setSendError("");
-    clearPendingImage();
+    clearPendingImages();
     setLightboxUrl(null);
     setReplyTo(null);
     if (conversationId) inputRef.current?.focus();
-  }, [clearPendingImage, conversationId]);
+  }, [clearPendingImages, conversationId]);
 
   const armReply = useCallback((message: DmMessageRow) => {
     setReplyTo({
@@ -833,53 +848,85 @@ export function StudioMessagesPane({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
-  function pickImageFile(file: File | undefined) {
-    if (!file) return;
-    const type = (file.type || "").toLowerCase();
-    if (!ALLOWED_IMAGE_TYPES.has(type)) {
-      setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+  function appendImageFiles(files: File[]) {
+    if (files.length === 0) return;
+    const accepted: PendingImage[] = [];
+    let error = "";
+    for (const file of files) {
+      const type = (file.type || "").toLowerCase();
+      if (!ALLOWED_IMAGE_TYPES.has(type)) {
+        error = "Only JPEG, PNG, WebP, or GIF images are allowed";
+        continue;
+      }
+      if (file.size > IMAGE_MAX_BYTES) {
+        error = "Images must be 10 MB or smaller";
+        continue;
+      }
+      accepted.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+      });
+    }
+    if (accepted.length === 0) {
+      if (error) setSendError(error);
       return;
     }
-    if (file.size > IMAGE_MAX_BYTES) {
-      setSendError("Images must be 10 MB or smaller");
-      return;
-    }
-    setSendError("");
-    clearPendingImage();
-    setPendingImage({
-      file,
-      previewUrl: URL.createObjectURL(file),
+    setSendError(error);
+    setPendingImages((prev) => {
+      const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
+      if (room <= 0) {
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        for (const item of accepted) URL.revokeObjectURL(item.previewUrl);
+        return prev;
+      }
+      const next = accepted.slice(0, room);
+      for (const item of accepted.slice(room)) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      if (accepted.length > room) {
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+      }
+      return [...prev, ...next];
     });
   }
 
-  async function pickStudioFileAsset(asset: StudioAssetPick) {
+  function pickImageFile(file: File | undefined) {
+    if (!file) return;
+    appendImageFiles([file]);
+  }
+
+  async function pickStudioFileAssets(assets: StudioAssetPick[]) {
+    if (assets.length === 0) return;
     setFilesPickBusy(true);
     setSendError("");
     try {
-      const mime = (asset.mimeType || "").toLowerCase();
-      if (!ALLOWED_IMAGE_TYPES.has(mime)) {
-        setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
-        return;
-      }
       const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 30;
-      const url = await convex.query(api.assets.signedReadUrl, {
-        assetId: asset._id,
-        expiresUnix,
-      });
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Could not load that file");
-      const blob = await response.blob();
-      if (blob.size > IMAGE_MAX_BYTES) {
-        setSendError("Images must be 10 MB or smaller");
-        return;
+      const files: File[] = [];
+      for (const asset of assets) {
+        const mime = (asset.mimeType || "").toLowerCase();
+        if (!ALLOWED_IMAGE_TYPES.has(mime)) {
+          setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+          continue;
+        }
+        const url = await convex.query(api.assets.signedReadUrl, {
+          assetId: asset._id,
+          expiresUnix,
+        });
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Could not load that file");
+        const blob = await response.blob();
+        if (blob.size > IMAGE_MAX_BYTES) {
+          setSendError("Images must be 10 MB or smaller");
+          continue;
+        }
+        const type = blob.type || mime || "image/jpeg";
+        if (!ALLOWED_IMAGE_TYPES.has(type.toLowerCase())) {
+          setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
+          continue;
+        }
+        files.push(new File([blob], asset.name || "photo.jpg", { type }));
       }
-      const type = blob.type || mime || "image/jpeg";
-      if (!ALLOWED_IMAGE_TYPES.has(type.toLowerCase())) {
-        setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
-        return;
-      }
-      const file = new File([blob], asset.name || "photo.jpg", { type });
-      pickImageFile(file);
+      appendImageFiles(files);
       setFilesPickerOpen(false);
     } catch (error) {
       setSendError(friendlyConvexError(error, "Could not load that file"));
@@ -891,25 +938,28 @@ export function StudioMessagesPane({
   async function handleSend() {
     if (!conversationId || sendBusy || recState !== "idle") return;
     const body = draft.trim();
-    if (!pendingImage && !body) return;
+    if (pendingImages.length === 0 && !body) return;
 
     setSendBusy(true);
     setSendError("");
     try {
-      if (pendingImage) {
-        const uploadUrl = await prepareAttachmentUpload({ conversationId });
-        const storageId = await uploadDmBlob(
-          uploadUrl,
-          pendingImage.file,
-          pendingImage.file.type || "image/jpeg",
-        );
-        await sendImageMessage({
-          conversationId,
-          storageId,
-          caption: body || undefined,
-          replyToMessageId: replyTo?._id,
-        });
-        clearPendingImage();
+      if (pendingImages.length > 0) {
+        for (let i = 0; i < pendingImages.length; i += 1) {
+          const pending = pendingImages[i]!;
+          const uploadUrl = await prepareAttachmentUpload({ conversationId });
+          const storageId = await uploadDmBlob(
+            uploadUrl,
+            pending.file,
+            pending.file.type || "image/jpeg",
+          );
+          await sendImageMessage({
+            conversationId,
+            storageId,
+            caption: i === 0 ? body || undefined : undefined,
+            replyToMessageId: i === 0 ? replyTo?._id : undefined,
+          });
+        }
+        clearPendingImages();
       } else {
         await send({
           conversationId,
@@ -927,7 +977,7 @@ export function StudioMessagesPane({
     }
   }
 
-  const canSend = Boolean(pendingImage || draft.trim());
+  const canSend = Boolean(pendingImages.length > 0 || draft.trim());
 
   if (!conversationId) {
     if (showChatListWhenEmpty) {
@@ -1167,21 +1217,34 @@ export function StudioMessagesPane({
         </div>
       ) : null}
 
-      {pendingImage && recState === "idle" ? (
-        <div className="studio-dm-attach-preview">
-          <div className="studio-dm-attach-thumb">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={pendingImage.previewUrl} alt="" />
-            <span className="studio-dm-attach-badge" aria-hidden="true">
-              <ImageIcon className="h-3 w-3" />
-            </span>
+      {pendingImages.length > 0 && recState === "idle" ? (
+        <div className="studio-dm-attach-preview is-multi">
+          <div className="studio-dm-attach-thumbs">
+            {pendingImages.map((pending, index) => (
+              <div key={`${pending.file.name}-${index}`} className="studio-dm-attach-thumb">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={pending.previewUrl} alt="" />
+                <button
+                  type="button"
+                  className="studio-dm-attach-clear is-overlay"
+                  onClick={() => removePendingImageAt(index)}
+                  aria-label={`Remove ${pending.file.name}`}
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
           </div>
-          <span className="studio-dm-attach-name">{pendingImage.file.name}</span>
+          <span className="studio-dm-attach-name">
+            {pendingImages.length === 1
+              ? pendingImages[0]!.file.name
+              : `${pendingImages.length} photos`}
+          </span>
           <button
             type="button"
             className="studio-dm-attach-clear"
-            onClick={clearPendingImage}
-            aria-label="Remove attachment"
+            onClick={clearPendingImages}
+            aria-label="Remove all attachments"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -1193,9 +1256,10 @@ export function StudioMessagesPane({
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp,image/gif"
+          multiple
           className="studio-dm-file-input"
           onChange={(event) => {
-            pickImageFile(event.target.files?.[0]);
+            appendImageFiles(Array.from(event.target.files ?? []));
             event.target.value = "";
           }}
         />
@@ -1272,7 +1336,9 @@ export function StudioMessagesPane({
               ref={inputRef}
               value={draft}
               rows={1}
-              placeholder={pendingImage ? "Add a caption…" : "Message…"}
+              placeholder={
+                pendingImages.length > 0 ? "Add a caption…" : "Message…"
+              }
               aria-label={`Message ${peerLabel}`}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -1302,7 +1368,13 @@ export function StudioMessagesPane({
                 className="studio-dm-send"
                 onClick={() => void handleSend()}
                 disabled={sendBusy}
-                aria-label={pendingImage ? "Send photo" : "Send message"}
+                aria-label={
+                  pendingImages.length > 1
+                    ? "Send photos"
+                    : pendingImages.length === 1
+                      ? "Send photo"
+                      : "Send message"
+                }
               >
                 {sendBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -1346,13 +1418,15 @@ export function StudioMessagesPane({
                 if (onRequestPickAsset && !isMobile) {
                   onRequestPickAsset({
                     kinds: ["image"],
-                    title: "Pick a photo to send",
-                    onPick: (asset) => {
-                      void pickStudioFileAsset(asset);
+                    title: "Pick photos to send",
+                    maxSelected: MAX_PENDING_IMAGES,
+                    onConfirm: (assets) => {
+                      void pickStudioFileAssets(assets);
                     },
                   });
                   return;
                 }
+                setMobilePickSelected([]);
                 setFilesPickerOpen(true);
               },
             },
@@ -1362,14 +1436,34 @@ export function StudioMessagesPane({
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet
-          title="Choose a photo to send"
+          title="Choose photos to send"
           kinds={["image"]}
+          multi
+          stayOpen
+          maxSelected={MAX_PENDING_IMAGES}
+          countLabel={`${mobilePickSelected.length}/${MAX_PENDING_IMAGES}`}
+          doneLabel="Confirm"
           expiresUnix={filesPickerExpiresUnix}
+          selectedIds={mobilePickSelected.map((item) => item._id)}
           onPick={(asset) => {
-            void pickStudioFileAsset(asset);
+            setMobilePickSelected((prev) => {
+              const exists = prev.some((item) => item._id === asset._id);
+              if (exists) return prev.filter((item) => item._id !== asset._id);
+              if (prev.length >= MAX_PENDING_IMAGES) return prev;
+              return [...prev, asset];
+            });
+          }}
+          onDone={() => {
+            if (filesPickBusy) return;
+            const picked = mobilePickSelected;
+            setMobilePickSelected([]);
+            setFilesPickerOpen(false);
+            if (picked.length > 0) void pickStudioFileAssets(picked);
           }}
           onClose={() => {
-            if (!filesPickBusy) setFilesPickerOpen(false);
+            if (filesPickBusy) return;
+            setMobilePickSelected([]);
+            setFilesPickerOpen(false);
           }}
         />
       ) : null}

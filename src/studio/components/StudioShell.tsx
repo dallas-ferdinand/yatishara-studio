@@ -1062,9 +1062,21 @@ export function StudioShell({
   // DM chat selection — shared by the chat-list sidebar and the Messages pane.
   const [activeDmConversationId, setActiveDmConversationId] = useState(null);
   // Desktop "pick from Files" session — forces the owner-scoped file explorer
-  // into the left rail (even on messages:/feed:) so the user can click an asset.
+  // into the left rail (even on messages:/feed:) so the user can multi-select
+  // assets and Confirm. Cleared on confirm / cancel / tab change.
   const [assetPickRequest, setAssetPickRequest] = useState(null);
+  const [assetPickSelected, setAssetPickSelected] = useState([]);
   useStudioBackground();
+
+  const endAssetPick = useCallback(
+    (reason = "cancel", request = assetPickRequest) => {
+      const req = request;
+      setAssetPickRequest(null);
+      setAssetPickSelected([]);
+      if (reason === "cancel") req?.onCancel?.();
+    },
+    [assetPickRequest],
+  );
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
   const composerUploadInputRef = useRef(null);
@@ -3240,14 +3252,23 @@ export function StudioShell({
       const kind = entry.kind ?? entry.mediaKind;
       const kinds = assetPickRequest.kinds ?? ["image"];
       if (entry.studioKind === "asset" && kinds.includes(kind)) {
-        const req = assetPickRequest;
-        setAssetPickRequest(null);
-        req.onPick?.({
+        const pick = {
           _id: entry.studioId,
           name: entry.name,
           kind,
           mimeType: entry.mimeType || "",
           signedThumbnailUrl: entry.thumbnailUrl,
+          path: entry.path,
+        };
+        const max = assetPickRequest.maxSelected ?? 10;
+        setAssetPickSelected((prev) => {
+          const exists = prev.some((item) => item._id === pick._id);
+          if (exists) return prev.filter((item) => item._id !== pick._id);
+          if (prev.length >= max) {
+            toast.message(`You can pick up to ${max} files`);
+            return prev;
+          }
+          return [...prev, pick];
         });
         return;
       }
@@ -4895,24 +4916,18 @@ export function StudioShell({
     if (!assetPickRequest) return;
     const startedOn = assetPickRequest.startedOnTab;
     if (startedOn && activeTab !== startedOn) {
-      const req = assetPickRequest;
-      setAssetPickRequest(null);
-      req.onCancel?.();
+      endAssetPick("cancel", assetPickRequest);
     }
-  }, [activeTab, assetPickRequest]);
+  }, [activeTab, assetPickRequest, endAssetPick]);
 
   useEffect(() => {
     if (!assetPickRequest) return undefined;
     const onKey = (event) => {
-      if (event.key === "Escape") {
-        const req = assetPickRequest;
-        setAssetPickRequest(null);
-        req.onCancel?.();
-      }
+      if (event.key === "Escape") endAssetPick("cancel", assetPickRequest);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [assetPickRequest]);
+  }, [assetPickRequest, endAssetPick]);
 
   return (
     <div
@@ -16635,18 +16650,34 @@ export function StudioShell({
         {pickingFromFiles ? (
           <div className="studio-asset-pick-banner" role="status">
             <span className="studio-asset-pick-banner-copy">
-              {assetPickRequest.title || "Pick a file from your Files"}
+              {assetPickSelected.length > 0
+                ? `${assetPickSelected.length} selected`
+                : assetPickRequest.title || "Pick files from your Files"}
             </span>
             <button
               type="button"
               className="studio-asset-pick-banner-cancel"
-              onClick={() => {
-                const req = assetPickRequest;
-                setAssetPickRequest(null);
-                req.onCancel?.();
-              }}
+              onClick={() => endAssetPick("cancel", assetPickRequest)}
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              className="studio-asset-pick-banner-confirm"
+              disabled={assetPickSelected.length === 0}
+              onClick={() => {
+                const req = assetPickRequest;
+                const picked = assetPickSelected;
+                setAssetPickRequest(null);
+                setAssetPickSelected([]);
+                if (req?.onConfirm) {
+                  req.onConfirm(picked);
+                } else if (picked[0]) {
+                  req?.onPick?.(picked[0]);
+                }
+              }}
+            >
+              Confirm
             </button>
           </div>
         ) : null}
@@ -16718,6 +16749,11 @@ export function StudioShell({
             activeFolder={activeFolder}
             onEntryDrop={handleEntryDrop}
             isMobile={false}
+            pickedPaths={
+              pickingFromFiles
+                ? assetPickSelected.map((item) => item.path).filter(Boolean)
+                : null
+            }
           />
         )}
       </aside>
@@ -17062,16 +17098,25 @@ export function StudioShell({
                       setActiveFolderId(rootFolder._id);
                       setNavTrail([{ id: rootFolder._id, name: rootFolder.name }]);
                     }
+                    setAssetPickSelected([]);
                     setAssetPickRequest({
                       kinds: request.kinds ?? ["image"],
-                      title: request.title,
+                      title: request.title ?? "Pick files to send",
+                      maxSelected: request.maxSelected ?? 10,
                       startedOnTab: activeTab,
-                      onPick: (asset) => {
+                      onConfirm: (assets) => {
                         setAssetPickRequest(null);
-                        request.onPick?.(asset);
+                        setAssetPickSelected([]);
+                        if (request.onConfirm) {
+                          request.onConfirm(assets);
+                        } else if (assets[0]) {
+                          request.onPick?.(assets[0]);
+                        }
                       },
+                      onPick: request.onPick,
                       onCancel: () => {
                         setAssetPickRequest(null);
+                        setAssetPickSelected([]);
                         request.onCancel?.();
                       },
                     });
@@ -23454,6 +23499,7 @@ function StudioFilesExplorerBody({
   isMobile,
   showSearch = true,
   showPathbar = true,
+  pickedPaths = null,
 }) {
   const filterActive = typeFilter !== "all";
   const tree = (
@@ -23463,6 +23509,7 @@ function StudioFilesExplorerBody({
         rootEntries={displayRootEntries}
         flatEntries={displayCurrentEntries}
         listDir={() => {}}
+        pickedPaths={pickedPaths}
         onNavigate={(path, navEntry) => {
           if (navEntry?.type === "parent" && navEntry.studioId) {
             setActiveFolderId(navEntry.studioId);

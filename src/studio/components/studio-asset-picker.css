@@ -220,7 +220,8 @@
   font-weight: 650;
 }
 
-.studio-asset-pick-banner-cancel {
+.studio-asset-pick-banner-cancel,
+.studio-asset-pick-banner-confirm {
   flex: 0 0 auto;
   min-height: 22px;
   padding: 0 8px;
@@ -234,7 +235,8 @@
   cursor: pointer;
 }
 
-.studio-asset-pick-banner-cancel:hover {
+.studio-asset-pick-banner-cancel:hover,
+.studio-asset-pick-banner-confirm:hover:not(:disabled) {
   border-color: color-mix(
     in srgb,
     var(--cursor-accent) 40%,
@@ -243,9 +245,38 @@
   background: var(--color-cursor-hover);
 }
 
+.studio-asset-pick-banner-confirm {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 42%,
+    var(--color-cursor-border-soft)
+  );
+  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+}
+
+.studio-asset-pick-banner-confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* Soft highlight on the Files rail while picking. */
 .cursor-sidebar.is-asset-picking,
 aside.is-asset-picking {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--cursor-accent) 28%, transparent);
+}
+
+/* Selected tiles during pick mode. */
+.desk-file-grid-item.is-picked,
+.desk-file-list-row.is-picked,
+.desk-file-preview-item.is-picked,
+.cursor-tree-row.is-picked {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent) 48%,
+    var(--color-cursor-border-soft)
+  ) !important;
+  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent) !important;
   box-shadow: inset 0 0 0 1px
     color-mix(in srgb, var(--cursor-accent) 28%, transparent);
 }

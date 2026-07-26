@@ -808,10 +808,18 @@ export function FileTree({
   onBlankContextMenu,
   onEntryDrop,
   emptyHint,
+  /** Paths highlighted while in Studio pick-from-Files mode. */
+  pickedPaths = null,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
   const empty = ExplorerEmpty({ flatEntries, rootEntries });
+  const pickedSet =
+    pickedPaths instanceof Set
+      ? pickedPaths
+      : Array.isArray(pickedPaths)
+        ? new Set(pickedPaths)
+        : null;
   if (empty) return empty;
 
   const list = searchActive
@@ -889,7 +897,8 @@ export function FileTree({
 
   const rowClass = (e, base) => {
     const pinned = isPinnedEntry(e, pinnedPaths);
-    return `${base}${pinned ? " is-folder-pinned" : ""}${e.type === "parent" ? " is-parent-row" : ""}`;
+    const picked = Boolean(pickedSet?.has(e.path));
+    return `${base}${pinned ? " is-folder-pinned" : ""}${e.type === "parent" ? " is-parent-row" : ""}${picked ? " is-picked" : ""}`;
   };
 
   const rows = renderEntryRows({

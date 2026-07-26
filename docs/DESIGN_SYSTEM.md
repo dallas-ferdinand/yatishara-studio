@@ -275,16 +275,18 @@ sheet for DM attach — it opens the left Files rail instead.
 - **Desktop pick mode** (`StudioShell` `assetPickRequest`): forces the owner-scoped
   file explorer into the left rail even on `messages:` / social tabs, resets the
   trail to the signed-in user's root folder, shows `.studio-asset-pick-banner`
-  ("Pick a photo to send — Cancel"), intercepts asset clicks in `handleEntryOpen`
-  (folders still navigate; wrong kinds toast). Escape / Cancel / tab change ends
-  the session. Main pane stays on the DM. Wired via
-  `onRequestPickAsset` → `ActivePane` → `StudioMessagesPane`.
+  ("N selected — Cancel — Confirm"). Clicks **toggle** selection (`.is-picked` on
+  FileTree rows via `pickedPaths`); Confirm calls `onConfirm(assets[])`. Folders
+  still navigate; wrong kinds toast. Escape / Cancel / tab change ends the session.
+  Main pane stays on the DM. Wired via `onRequestPickAsset` → `ActivePane` →
+  `StudioMessagesPane`.
 - **Mobile**: sheet chrome (`studio-mobile-app-menu-sheet`); portal into
-  `.studio-polish`. Browse: `folders.listWithPeeks` + `assets.listByFolder`
-  (both owner-scoped — clients never see another user's root).
+  `.studio-polish`. Multi-select + Confirm footer (`onDone`). Browse:
+  `folders.listWithPeeks` + `assets.listByFolder` (owner-scoped — clients never
+  see another user's root).
 - Consumers: DM attach ("Choose from Studio Files"), offer Media slots (mobile Pick).
-  DM: picker → `assets.signedReadUrl` → blob → same pending image send path as
-  uploads. Memory: **758** (desktop rail), **753** (sheet + attach menu).
+  DM: confirm → `assets.signedReadUrl` → blobs → pending images queue (up to 10)
+  → send as separate image messages (caption on the first). Memory: **758**.
 
 ---
 

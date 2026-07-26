@@ -35,6 +35,8 @@ type StudioAssetPickerSheetProps = {
   expiresUnix: number;
   onPick: (asset: StudioAssetPick) => void;
   onClose: () => void;
+  /** Footer Confirm/Done — defaults to onClose when omitted. */
+  onDone?: () => void;
 };
 
 /**
@@ -54,6 +56,7 @@ export function StudioAssetPickerSheet({
   expiresUnix,
   onPick,
   onClose,
+  onDone,
 }: StudioAssetPickerSheetProps) {
   const [portalRoot, setPortalRoot] = useState<Element | null>(null);
   const [stack, setStack] = useState<FolderCrumb[]>([
@@ -214,7 +217,7 @@ export function StudioAssetPickerSheet({
           <button
             type="button"
             className="studio-asset-picker-done"
-            onClick={onClose}
+            onClick={() => (onDone ?? onClose)()}
           >
             <Check aria-hidden="true" />
             {doneLabel}
