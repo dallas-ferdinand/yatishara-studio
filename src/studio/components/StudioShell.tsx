@@ -67,6 +67,7 @@ import {
   Settings,
   Sparkles,
   Square,
+  Store,
   Upload,
   Wand2,
   X,
@@ -125,6 +126,8 @@ import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { StudioSocialSidebar } from "./StudioSocialSidebar";
 import { StudioMessagesPane } from "./StudioMessagesPane";
 import { StudioMessagesSidebar } from "./StudioMessagesSidebar";
+import { StudioCreativeNetworkProvider } from "./StudioCreativeNetworkContext";
+import { StudioCreativeNetworkSidebar } from "./StudioCreativeNetworkSidebar";
 import { StudioOnlinePresence } from "./StudioOnlinePresence";
 import {
   DEFAULT_CREDIT_PRICE_CENTS,
@@ -147,6 +150,10 @@ import {
   downloadStudioArchive,
   downloadStudioEntry as downloadStudioFile,
 } from "@/studio/lib/studioFileDownloads";
+import {
+  extractStudioZipImport,
+  isZipFile,
+} from "@/studio/lib/studioZipImport";
 import {
   StudioFileTransferTray,
 } from "@/studio/components/StudioFileTransferTray";
@@ -335,6 +342,7 @@ function getCreateMenuItems() {
 function resolveMobileBottomNavSection(activeTab, mobileSection) {
   const tab = String(activeTab ?? "");
   if (tab.startsWith("feed:")) return "feed";
+  if (tab.startsWith("network:") || tab.startsWith("offers:")) return "network";
   if (tab.startsWith("profile:") || tab.startsWith("profilePost:")) return null;
   if (
     tab.startsWith("composer:") ||
@@ -570,12 +578,17 @@ function sanitizePersistedOpenTabs(tabs) {
   for (const tab of list) {
     if (!isPersistableTabKey(tab)) continue;
     if (!isVideoEditorPreviewEnabled() && isVideoEditTabKey(tab)) continue;
-    if (tab.startsWith("feed:")) {
-      lastFeed = normalizeFeedTabKey(tab);
+    // Legacy Offers tab → Creative Network
+    const normalized =
+      typeof tab === "string" && tab.startsWith("offers:")
+        ? NETWORK_TAB
+        : tab;
+    if (normalized.startsWith("feed:")) {
+      lastFeed = normalizeFeedTabKey(normalized);
       if (feedSlot < 0) feedSlot = cleaned.length;
       continue;
     }
-    if (!cleaned.includes(tab)) cleaned.push(tab);
+    if (!cleaned.includes(normalized)) cleaned.push(normalized);
   }
   if (lastFeed) {
     const at = feedSlot >= 0 ? Math.min(feedSlot, cleaned.length) : cleaned.length;
@@ -626,7 +639,9 @@ function readPersistedTabSession() {
       typeof parsed?.activeTab === "string" ? parsed.activeTab : "";
     const normalizedActive = rawActive.startsWith("feed:")
       ? normalizeFeedTabKey(rawActive)
-      : rawActive;
+      : rawActive.startsWith("offers:")
+        ? NETWORK_TAB
+        : rawActive;
     let activeTab = openTabs.includes(normalizedActive)
       ? normalizedActive
       : openTabs[openTabs.length - 1] || COMPOSER_TAB;
@@ -1077,6 +1092,7 @@ export function StudioShell({
   const [settingsSection, setSettingsSection] = useState("general");
   const [mobileSection, setMobileSection] = useState("composer");
   const [mobileSocialOpen, setMobileSocialOpen] = useState(false);
+  const [mobileNetworkOpen, setMobileNetworkOpen] = useState(false);
   const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
@@ -1112,6 +1128,8 @@ export function StudioShell({
   // assets and Confirm. Cleared on confirm / cancel / tab change.
   const [assetPickRequest, setAssetPickRequest] = useState(null);
   const [assetPickSelected, setAssetPickSelected] = useState([]);
+  /** Deep-link slug for Creative Network offer detail inside Studio. */
+  const [networkInitialSlug, setNetworkInitialSlug] = useState(null);
   useStudioBackground();
 
   const endAssetPick = useCallback(
@@ -3161,10 +3179,18 @@ export function StudioShell({
     openTab(`admin:${section}`);
   }
 
-  function openOffersTab(section = "home") {
+  function openNetworkTab(opts = {}) {
     setSettingsOpen(false);
-    if (isMobile) setMobileSection("composer");
-    openTab(`offers:${section}`);
+    if (isMobile) setMobileSection("network");
+    openTab(NETWORK_TAB);
+    if (opts.slug) {
+      setNetworkInitialSlug(String(opts.slug).trim().toLowerCase());
+    }
+  }
+
+  /** @deprecated Use openNetworkTab — kept for call-site compatibility. */
+  function openOffersTab(_section = "home") {
+    openNetworkTab();
   }
 
   useEffect(() => {
@@ -3180,10 +3206,15 @@ export function StudioShell({
       openCreditsPane();
       return;
     }
-    if (params.get("offers") === "1") {
-      openOffersTab();
+    const networkParam = params.get("network");
+    const offersParam = params.get("offers");
+    const slugParam = params.get("slug");
+    if (networkParam === "1" || offersParam === "1") {
+      openNetworkTab(slugParam ? { slug: slugParam } : {});
       const url = new URL(window.location.href);
+      url.searchParams.delete("network");
       url.searchParams.delete("offers");
+      url.searchParams.delete("slug");
       const next = `${url.pathname}${url.search}${url.hash}`;
       window.history.replaceState({}, "", next || "/");
     }
@@ -4016,6 +4047,94 @@ export function StudioShell({
         return assetId;
       }
 
+      if (payload.type === "zip-import") {
+        updateFileTransfer(id, {
+          detail: `Unpacking · ${payload.file.name}`,
+          total: payload.file.size,
+        });
+        const extracted = await extractStudioZipImport(payload.file);
+        if (controller.signal.aborted) {
+          throw new DOMException("Upload canceled", "AbortError");
+        }
+        if (!extracted.entries.length) {
+          throw new Error("That ZIP had no importable files");
+        }
+        const rootFolderId = await createFolder({
+          parentId: payload.folderId,
+          name: extracted.folderName,
+          icon: "Folder",
+          color: "#22c55e",
+        });
+        const folderIds = new Map([["", rootFolderId]]);
+        const ensureFolder = async (relativeDir) => {
+          if (folderIds.has(relativeDir)) return folderIds.get(relativeDir);
+          const parts = relativeDir.split("/").filter(Boolean);
+          let parentId = rootFolderId;
+          let walked = "";
+          for (const part of parts) {
+            walked = walked ? `${walked}/${part}` : part;
+            if (folderIds.has(walked)) {
+              parentId = folderIds.get(walked);
+              continue;
+            }
+            const createdId = await createFolder({
+              parentId,
+              name: part,
+              icon: "Folder",
+              color: "#22c55e",
+            });
+            folderIds.set(walked, createdId);
+            parentId = createdId;
+          }
+          return parentId;
+        };
+
+        let uploaded = 0;
+        const totalFiles = extracted.entries.length;
+        for (const entry of extracted.entries) {
+          if (controller.signal.aborted) {
+            throw new DOMException("Upload canceled", "AbortError");
+          }
+          const slash = entry.relativePath.lastIndexOf("/");
+          const dir = slash >= 0 ? entry.relativePath.slice(0, slash) : "";
+          const targetFolderId = await ensureFolder(dir);
+          updateFileTransfer(id, {
+            loaded: uploaded,
+            total: totalFiles,
+            detail: `${uploaded + 1}/${totalFiles} · ${entry.relativePath}`,
+          });
+          await uploadStudioAsset({
+            file: entry.file,
+            folderId: targetFolderId,
+            kind: kindFromMime(entry.file.type),
+            reserveUpload,
+            commitStagingUpload,
+            signal: controller.signal,
+          });
+          uploaded += 1;
+        }
+
+        if (extracted.truncated) {
+          toast.warning(`Imported first ${totalFiles} files from ${payload.file.name}`);
+        } else if (extracted.skipped > 0) {
+          toast.message(
+            `Imported ${uploaded} file${uploaded === 1 ? "" : "s"} into “${extracted.folderName}”`,
+          );
+        } else {
+          toast.success(
+            `Imported ${uploaded} file${uploaded === 1 ? "" : "s"} into “${extracted.folderName}”`,
+          );
+        }
+        finishFileTransfer(id, {
+          status: "done",
+          loaded: totalFiles,
+          total: totalFiles,
+          name: extracted.folderName,
+          detail: `Imported · ${extracted.folderName}`,
+        });
+        return rootFolderId;
+      }
+
       const onProgress = ({ loaded, total, fileName, phase }) =>
         updateFileTransfer(id, {
           loaded,
@@ -4083,6 +4202,14 @@ export function StudioShell({
     if (!folderId) return;
     const incoming = Array.from(files ?? []).filter((file) => file instanceof File);
     for (const file of incoming) {
+      if (isZipFile(file)) {
+        queueFileTransfer(
+          { type: "zip-import", file, folderId },
+          `Import · ${file.name}`,
+          "upload",
+        );
+        continue;
+      }
       queueFileTransfer({ type: "upload", file, folderId }, file.name, "upload");
     }
   }
@@ -5235,11 +5362,16 @@ export function StudioShell({
   const isMessagesRail =
     typeof activeTab === "string" && activeTab.startsWith("messages:");
 
+  const isNetworkRail =
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
+
   // Desktop pick-from-Files temporarily restores the owner file explorer in the
   // left rail even while Messages/Feed is the active pane.
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
+  const effectiveNetworkRail = isNetworkRail && !pickingFromFiles;
 
   // Leaving the tab that started pick cancels the session so the rail resets.
   useEffect(() => {
@@ -5260,6 +5392,10 @@ export function StudioShell({
   }, [assetPickRequest, endAssetPick]);
 
   return (
+    <StudioCreativeNetworkProvider
+      initialSlug={networkInitialSlug}
+      onInitialSlugConsumed={() => setNetworkInitialSlug(null)}
+    >
     <div
       ref={shellRef}
       className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
@@ -17025,7 +17161,7 @@ export function StudioShell({
       <aside className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}`}>
         <div className={STYLE.panelHead}>
           <StudioSidebarBrand />
-          {!effectiveSocialRail && !effectiveMessagesRail ? (
+          {!effectiveSocialRail && !effectiveMessagesRail && !effectiveNetworkRail ? (
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -17060,6 +17196,12 @@ export function StudioShell({
             onSelectConversation={setActiveDmConversationId}
             onStartChat={openChatWith}
             expiresUnix={assetUrlExpiresUnix}
+          />
+        ) : effectiveNetworkRail ? (
+          <StudioCreativeNetworkSidebar
+            expiresUnix={assetUrlExpiresUnix}
+            onOpenMessages={openMessages}
+            onOpenChatWithUsername={openChatWith}
           />
         ) : effectiveSocialRail ? (
           <StudioSocialSidebar
@@ -17312,7 +17454,7 @@ export function StudioShell({
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
                   onEditProfile={() => openSettingsTab("profile")}
-                  onOpenOffers={() => openOffersTab()}
+                  onOpenOffers={() => openNetworkTab()}
                   onOpenMessages={openMessages}
                   onSignOut={() => void signOut()}
                 />
@@ -17520,7 +17662,7 @@ export function StudioShell({
             dmConversationId={activeDmConversationId}
             onSelectDmConversation={setActiveDmConversationId}
             onOpenChat={openChatWith}
-            onOpenOffersJobs={() => openOffersTab("home")}
+            onOpenOffersJobs={() => openNetworkTab()}
             showDmChatListWhenEmpty={isMobile}
             onRequestPickAsset={
               isMobile
@@ -17728,7 +17870,7 @@ export function StudioShell({
                 mode="direct"
                 onViewProfile={openOwnProfile}
                 onEditProfile={() => openSettingsTab("profile")}
-                onOpenOffers={() => openOffersTab()}
+                onOpenOffers={() => openNetworkTab()}
                 onSignOut={() => void signOut()}
               />
               <button
@@ -17738,6 +17880,7 @@ export function StudioShell({
                   setHistoryOpen(false);
                   setSettingsOpen(false);
                   setMobileSocialOpen(false);
+                  setMobileNetworkOpen(false);
                   setMobileAppMenuOpen((open) => !open);
                 }}
                 aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
@@ -17770,7 +17913,7 @@ export function StudioShell({
           }}
           onOpenOffers={() => {
             setMobileAppMenuOpen(false);
-            openOffersTab();
+            openNetworkTab();
           }}
           onOpenMessages={() => {
             setMobileAppMenuOpen(false);
@@ -17792,6 +17935,7 @@ export function StudioShell({
             setMobileAppMenuOpen(false);
             setSettingsOpen(false);
             setMobileSocialOpen(false);
+            setMobileNetworkOpen(false);
             setHistoryOpen(true);
           }}
           onOpenAdmin={() => {
@@ -17933,6 +18077,7 @@ export function StudioShell({
         onRename={confirmRenameEntry}
       />
     </div>
+    </StudioCreativeNetworkProvider>
   );
 }
 
@@ -19930,7 +20075,7 @@ function StudioProfileMenu({
           >
             <span className="inline-flex items-center gap-2">
               <Award className="h-3.5 w-3.5" aria-hidden="true" />
-              Offers &amp; jobs
+              Creative Network
             </span>
           </button>
           <button
@@ -19998,8 +20143,8 @@ function StudioMobileAppMenu({
         { label: "View profile", Icon: UserRound, onClick: onViewProfile },
         { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
         {
-          label: "Offers & jobs",
-          Icon: Award,
+          label: "Creative Network",
+          Icon: Store,
           onClick: () => {
             onClose?.();
             onOpenOffers?.();
@@ -22651,9 +22796,12 @@ function ActivePane({
       />,
     );
   }
-  if (typeof activeTab === "string" && activeTab.startsWith("offers:")) {
+  if (
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("network:") || activeTab.startsWith("offers:"))
+  ) {
     return wrapPane(
-      <MarketplaceOffersPane
+      <StudioCreativeNetworkPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
       />,
@@ -26066,8 +26214,8 @@ function tabDescriptor({
                     : "Admin";
     return { key, kind: "settings", title, status: "ready" };
   }
-  if (key.startsWith("offers:")) {
-    return { key, kind: "settings", title: "Offers", status: "ready" };
+  if (key.startsWith("network:") || key.startsWith("offers:")) {
+    return { key, kind: "settings", title: "Creative Network", status: "ready" };
   }
   if (key.startsWith("billing:")) {
     const kind = key.slice("billing:".length);

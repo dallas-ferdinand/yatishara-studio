@@ -87,6 +87,9 @@ from `--mos-plate`:
 - Upload/download progress lives in the **bottom transfer tray**, below file content.
   Rows are compact L3 plates (28px), show live bytes/progress, and keep cancel/retry
   controls reachable without displacing breadcrumbs or search.
+- **ZIP is transport only:** dropping/uploading a `.zip` unpacks into a new folder
+  named after the archive (nested paths preserved). The zip blob is never stored as
+  an asset. Folder/multi-select **Download ZIP** remains export-only.
 
 ### Select / dropdown (locked decision)
 
