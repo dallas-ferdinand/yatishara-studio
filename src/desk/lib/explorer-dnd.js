@@ -147,6 +147,28 @@ export function deliverMobileComposerDrop(entry, clientX = 0, clientY = 0) {
   return result !== false;
 }
 
+/**
+ * Live drop-caret preview during touch drag (desktop uses HTML5 dragover;
+ * mobile has no dragover, so FileTree publishes finger coords here).
+ * StudioComposer registers the same updateComposerDropMarker path.
+ */
+let composerTouchDragPreviewHandler = null;
+
+export function setComposerTouchDragPreviewHandler(handler) {
+  composerTouchDragPreviewHandler =
+    typeof handler === "function" ? handler : null;
+}
+
+/** @param {number} clientX @param {number} clientY @param {boolean} active */
+export function publishComposerTouchDragPreview(clientX, clientY, active) {
+  if (!composerTouchDragPreviewHandler) return;
+  composerTouchDragPreviewHandler({
+    clientX: Number(clientX) || 0,
+    clientY: Number(clientY) || 0,
+    active: Boolean(active),
+  });
+}
+
 export function inferMediaKind(entry) {
   if (!entry) return null;
   const direct = entry.mediaKind ?? entry.kind;

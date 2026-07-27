@@ -180,6 +180,7 @@ import {
   EXPLORER_DND_TYPE,
   clearActiveExplorerDrag,
   readExplorerDragData,
+  setComposerTouchDragPreviewHandler,
   setMobileComposerDropHandler,
   writeExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
@@ -3689,7 +3690,9 @@ export function StudioShell({
     if (already && composerHtmlHasAttachments(baseHtml, nextAttachments)) {
       nextHtml = baseHtml;
       nextDraft = baseDraft;
-    } else if (!isMobile && liveEditor) {
+    } else if (liveEditor) {
+      // Desktop: HTML5 drop. Mobile: only called AFTER the gesture (rAF+timeout),
+      // so Range insert is safe — same caret placement as desktop.
       insertComposerAttachmentToken(liveEditor, attachment, insertRange);
       nextHtml = liveEditor.innerHTML;
       nextDraft = readComposerEditorText(liveEditor);
@@ -5648,12 +5651,16 @@ export function StudioShell({
   // Fallback Files→composer bridge (primary path is onMobileAttach on FileTree).
   // Same deferral rule: never attach on the touchend stack.
   useEffect(() => {
-    setMobileComposerDropHandler(({ entry }) => {
+    setMobileComposerDropHandler(({ entry, clientX, clientY }) => {
       if (!entry) return false;
       const snapshot = { ...entry };
+      const x = Number(clientX) || 0;
+      const y = Number(clientY) || 0;
       window.requestAnimationFrame(() => {
         window.setTimeout(() => {
-          attachEntryRef.current?.(snapshot, null);
+          const editor = editorRef.current;
+          const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
+          attachEntryRef.current?.(snapshot, range);
         }, 0);
       });
       return true;
@@ -18508,17 +18515,20 @@ export function StudioShell({
           setNavTrail={setNavTrail}
           onOpenPath={handleOpenPath}
           onEntryOpen={handleEntryOpen}
-          onMobileAttach={(entry) => {
+          onMobileAttach={(entry, clientX, clientY) => {
             // Never attach synchronously from touchend — Android Chrome drops
-            // that work. One rAF + timeout is enough; attachEntry dedupes by id.
+            // that work. After deferral, insert at the same caret desktop uses.
             if (!entry) return false;
             const snapshot = { ...entry };
-            const run = () => {
-              const ok = attachEntryRef.current?.(snapshot, null);
-              if (ok) setMobileSection("composer");
-            };
+            const x = Number(clientX) || 0;
+            const y = Number(clientY) || 0;
             window.requestAnimationFrame(() => {
-              window.setTimeout(run, 0);
+              window.setTimeout(() => {
+                const editor = editorRef.current;
+                const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
+                const ok = attachEntryRef.current?.(snapshot, range);
+                if (ok) setMobileSection("composer");
+              }, 0);
             });
             return true;
           }}
@@ -19085,8 +19095,39 @@ function StudioComposer({
     }
   }, [isMobile]);
 
-  // Touch-drop attach is handled at StudioShell (document studioexplorerdrop)
-  // so pointer-events on this shell cannot miss the chip insert.
+  // Mobile touch-drag has no HTML5 dragover — FileTree publishes finger coords
+  // so we can drive the same pulsing drop caret desktop shows.
+  useEffect(() => {
+    setComposerTouchDragPreviewHandler(({ clientX, clientY, active }) => {
+      if (!active) {
+        setDragOver(false);
+        setDropMarker(null);
+        return;
+      }
+      setDragOver(true);
+      const editor = editorRef.current;
+      let x = clientX;
+      let y = clientY;
+      // Finger often stays in the Files dock under the composer. Project onto
+      // the editor band so the caret still tracks horizontally like desktop.
+      if (editor) {
+        const rect = editor.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          x = Math.min(rect.right - 2, Math.max(rect.left + 2, x));
+          if (y < rect.top || y > rect.bottom) {
+            y = rect.bottom - 6;
+          }
+        }
+      }
+      updateComposerDropMarker(
+        { clientX: x, clientY: y },
+        editor,
+        inputLineRef.current,
+        setDropMarker,
+      );
+    });
+    return () => setComposerTouchDragPreviewHandler(null);
+  }, [editorRef]);
 
   useEffect(() => {
     setPresetGridOpen(false);

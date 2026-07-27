@@ -15,6 +15,7 @@ import {
   endTouchFileGesture,
   peekActiveExplorerDrag,
   promoteTouchFileDrag,
+  publishComposerTouchDragPreview,
   writeExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
@@ -556,20 +557,40 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   let lastX = event.clientX;
   let lastY = event.clientY;
   let rafId = 0;
+  let previewRafId = 0;
   let pickupSettled = reduceMotion || mode === "touch";
   let hoverTarget = null;
+
+  const publishDropCaret = (active) => {
+    if (mode !== "touch") return;
+    if (!active) {
+      if (previewRafId) {
+        window.cancelAnimationFrame(previewRafId);
+        previewRafId = 0;
+      }
+      publishComposerTouchDragPreview(0, 0, false);
+      return;
+    }
+    // Same caret as desktop dragover — throttled to one publish per frame.
+    if (previewRafId) return;
+    previewRafId = window.requestAnimationFrame(() => {
+      previewRafId = 0;
+      publishComposerTouchDragPreview(lastX, lastY, true);
+    });
+  };
 
   const applyFollow = () => {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
     if (mode !== "touch") return;
-    // Files dock always targets composer — skip elementsFromPoint every frame
-    // (that was a major Android drag-lag source).
+    // Files dock: composer is always the drop target (folder rows would steal
+    // elementFromPoint). Still drive the desktop-style drop caret via publish.
     if (fromFilesDock) {
       if (!hoverTarget) {
         hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
         if (hoverTarget) highlightDropTarget(hoverTarget);
       }
+      publishDropCaret(true);
       return;
     }
     const under = findDropTargetUnder(lastX, lastY, chip);
@@ -577,6 +598,7 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       hoverTarget = under;
       highlightDropTarget(under);
     }
+    publishDropCaret(Boolean(under?.getAttribute?.("data-drop-target") === "composer" || fromFilesDock));
   };
 
   const queueFollow = (clientX, clientY) => {
@@ -613,6 +635,7 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     if (finished) return;
     finished = true;
     if (rafId) window.cancelAnimationFrame(rafId);
+    if (previewRafId) window.cancelAnimationFrame(previewRafId);
     if (pickupControls) pickupControls.stop();
     document.removeEventListener("dragover", handleMove);
     document.removeEventListener("drag", handleMove);
@@ -628,6 +651,17 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       document.removeEventListener("touchcancel", handleTouchCancel, true);
     }
 
+    // Snapshot the live caret BEFORE clearing preview — drop animation aims here.
+    let caretLandX = null;
+    let caretLandY = null;
+    const liveCaret = document.querySelector(".studio-composer-drop-caret");
+    if (liveCaret instanceof HTMLElement) {
+      const caretRect = liveCaret.getBoundingClientRect();
+      caretLandX = caretRect.left + caretRect.width / 2;
+      caretLandY = caretRect.top + caretRect.height / 2;
+    }
+    publishDropCaret(false);
+
     try {
       const shouldDrop = didDrop || forceDrop;
       let targetEl = null;
@@ -636,7 +670,8 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       if (shouldDrop && mode === "touch" && fromFilesDock) {
         // Direct tree→Shell callback is the primary path. The module-global
         // bridge remains only as an HMR/legacy fallback. Callbacks must only
-        // *schedule* attach (never sync during touchend).
+        // *schedule* attach (never sync during touchend). Pass finger coords
+        // so Shell can insert at the same caret desktop uses.
         const dropEntry = { ...dragEntry };
         attached = onTouchDrop
           ? onTouchDrop(dropEntry, lastX, lastY) !== false
@@ -677,34 +712,32 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
             (targetEl && targetEl !== source && !source.contains(targetEl)));
 
       if (isValidDrop) {
-        // Composer: fly toward the attach rail / composer header (where chips land).
-        // Desktop HTML5 can still aim at the caret when not coming from the Files dock.
+        // Same as desktop: fly the ghost to the drop caret in the composer.
         let dropEndX = lastX;
         let dropEndY = lastY;
         const isComposerDrop =
           attached ||
           targetEl?.dataset?.dropTarget === "composer" ||
           Boolean(targetEl?.closest?.('[data-drop-target="composer"]'));
-        if (isComposerDrop && (mode === "touch" || fromFilesDock || !targetEl)) {
+        if (isComposerDrop) {
           if (!targetEl) targetEl = findComposerShell();
-          const land = resolveComposerDropLandingPoint(targetEl);
-          if (land) {
-            dropEndX = land.x;
-            dropEndY = land.y;
-          }
-        } else if (targetEl?.dataset?.dropTarget === "composer") {
-          const editorEl = targetEl.querySelector(
-            "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
-          );
-          const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
-          if (caretPos) {
-            dropEndX = caretPos.x;
-            dropEndY = caretPos.y + caretPos.height / 2;
+          if (caretLandX != null && caretLandY != null) {
+            dropEndX = caretLandX;
+            dropEndY = caretLandY;
           } else {
-            const land = resolveComposerDropLandingPoint(targetEl);
-            if (land) {
-              dropEndX = land.x;
-              dropEndY = land.y;
+            const editorEl = targetEl?.querySelector?.(
+              "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
+            );
+            const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
+            if (caretPos) {
+              dropEndX = caretPos.x;
+              dropEndY = caretPos.y + caretPos.height / 2;
+            } else {
+              const land = resolveComposerDropLandingPoint(targetEl);
+              if (land) {
+                dropEndX = land.x;
+                dropEndY = land.y;
+              }
             }
           }
         }
@@ -844,6 +877,12 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     }
     // Direct transform (no RAF) — keeps the ghost under the finger on Android.
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
+    // Drive the same pulsing drop caret desktop shows on dragover.
+    if (fromFilesDock && !hoverTarget) {
+      hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
+      if (hoverTarget) highlightDropTarget(hoverTarget);
+    }
+    publishDropCaret(true);
   };
   handleTouchEnd = (endEvent) => {
     const t = endEvent.changedTouches?.[0];
@@ -864,9 +903,10 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd, { capture: true });
     document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
-    // Seed composer highlight once; follow loop skips hit-testing.
+    // Seed composer highlight + desktop-style drop caret immediately.
     hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
     if (hoverTarget) highlightDropTarget(hoverTarget);
+    publishDropCaret(true);
   } else {
     document.addEventListener("dragover", handleMove);
     document.addEventListener("drag", handleMove);
