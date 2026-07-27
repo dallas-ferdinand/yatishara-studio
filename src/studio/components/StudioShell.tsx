@@ -16231,6 +16231,7 @@ export function StudioShell({
         }
         .studio-history-floating-panel {
           width: 100%;
+          background: var(--mos-plate, var(--mos-panel));
         }
         /* Mobile history: landing-menu-style bottom overlay (handle + height drag). */
         .studio-history-mobile-sheet {
@@ -16246,6 +16247,7 @@ export function StudioShell({
           padding: 0;
           border: none;
           border-radius: 18px 18px 0 0;
+          /* L2 plate — same shade language as landing menu / section bars. */
           background: var(--mos-plate, var(--mos-panel, #ececf0));
           box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
           overflow: hidden;
@@ -16314,7 +16316,7 @@ export function StudioShell({
           overflow: hidden;
         }
         .studio-history-mobile-sheet .studio-history-search-wrap {
-          margin: 0 12px 8px;
+          margin: 0;
           flex: 0 0 auto;
         }
         .studio-history-mobile-sheet .studio-history-list {
@@ -16325,7 +16327,7 @@ export function StudioShell({
           overscroll-behavior: contain;
           touch-action: pan-y;
           -webkit-overflow-scrolling: touch;
-          padding: 0 0 8px;
+          padding: 0;
           scrollbar-gutter: auto;
         }
         .studio-history-floating-head {
@@ -16335,7 +16337,8 @@ export function StudioShell({
           gap: 8px;
           flex: 0 0 auto;
           padding: 12px 10px 12px 14px;
-          border-bottom: 1px solid var(--color-cursor-border);
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
+          background: var(--mos-plate, var(--mos-panel));
         }
         .studio-history-head-title {
           margin: 0;
@@ -16345,23 +16348,29 @@ export function StudioShell({
           line-height: 1.2;
           letter-spacing: -0.02em;
         }
+        /* Full-width sidebar search strip — same language as .cursor-panel-search. */
         .studio-history-search-wrap {
           position: relative;
           display: flex;
           align-items: center;
+          gap: 8px;
           flex: 0 0 auto;
-          margin: 10px 12px 8px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
-          border-radius: 12px;
-          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
-          transition: border-color 120ms ease, box-shadow 120ms ease;
+          margin: 0;
+          min-height: 32px;
+          height: 32px;
+          padding: 0 8px 0 10px;
+          border: 0;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
+          border-radius: 0;
+          background: transparent;
+          transition: none;
         }
         .studio-history-search-wrap:focus-within {
-          border-color: color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
+          border-color: var(--studio-chrome-divider, var(--color-cursor-border));
           box-shadow: none;
         }
         .studio-history-search-icon {
-          margin-left: 11px;
+          margin: 0;
           width: 14px;
           height: 14px;
           flex-shrink: 0;
@@ -16371,32 +16380,50 @@ export function StudioShell({
         .studio-history-search {
           flex: 1;
           min-width: 0;
+          width: 100%;
+          height: 100%;
           margin: 0;
-          padding: 9px 10px;
+          padding: 0;
           border: 0;
-          border-radius: 12px;
+          border-radius: 0;
           background: transparent;
           color: var(--color-cursor-text);
           font-size: 12px;
+          font-weight: 500;
+          line-height: 1;
           outline: none;
+          box-shadow: none;
+          -webkit-appearance: none;
+          appearance: none;
         }
         .studio-history-search::placeholder {
           color: color-mix(in srgb, var(--color-cursor-text) 36%, transparent);
           opacity: 1;
         }
+        .studio-history-search:focus,
+        .studio-history-search:focus-visible {
+          outline: none;
+          box-shadow: none;
+        }
+        .studio-history-search::-webkit-search-decoration,
+        .studio-history-search::-webkit-search-cancel-button {
+          -webkit-appearance: none;
+          appearance: none;
+        }
         .studio-history-search-clear {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 28px;
-          height: 28px;
-          margin-right: 6px;
+          width: 24px;
+          height: 24px;
+          margin: 0;
           padding: 0;
           border: 0;
-          border-radius: 999px;
+          border-radius: var(--cursor-radius-sm, 6px);
           background: transparent;
           color: var(--color-cursor-muted);
           cursor: pointer;
+          flex-shrink: 0;
         }
         .studio-history-search-clear svg {
           width: 14px;
@@ -16413,16 +16440,18 @@ export function StudioShell({
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
-          padding: 4px 10px 16px;
+          padding: 0;
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 0;
+          background: transparent;
         }
+        /* Full-bleed sections — no floating rounded cards. */
         .studio-history-group {
           flex: 0 0 auto;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 80%, transparent);
-          border-radius: 16px;
-          background: color-mix(in srgb, var(--color-cursor-panel) 42%, transparent);
+          border: 0;
+          border-radius: 0;
+          background: transparent;
           overflow: hidden;
         }
         .studio-history-group-toggle {
@@ -16432,16 +16461,17 @@ export function StudioShell({
           align-items: center;
           gap: 4px;
           margin: 0;
-          padding: 10px 12px 8px;
+          padding: 8px 12px;
           border: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border) 70%, transparent);
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-radius: 0;
           background: transparent;
           color: inherit;
           font: inherit;
           cursor: pointer;
         }
         .studio-history-group:not(.is-open) .studio-history-group-toggle {
-          border-bottom-color: transparent;
+          border-bottom-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
         .studio-history-group-toggle:hover {
           background: color-mix(in srgb, var(--cursor-accent) 6%, transparent);
@@ -16481,12 +16511,12 @@ export function StudioShell({
           transform: rotate(180deg);
         }
         .studio-history-group-body {
-          padding: 4px;
+          padding: 0;
         }
         .studio-history-group-items {
           display: grid;
-          gap: 6px;
-          padding: 6px;
+          gap: 0;
+          padding: 0;
         }
         .studio-history-item {
           display: flex;
@@ -16494,24 +16524,25 @@ export function StudioShell({
           align-items: flex-start;
           gap: 10px;
           padding: 10px 12px;
-          border: 1px solid color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
-          border-radius: 14px;
-          background: color-mix(in srgb, var(--mos-text-bright) 6%, transparent);
+          border: 0;
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-radius: 0;
+          background: transparent;
           color: inherit;
           font-family: inherit;
           font-size: inherit;
           text-align: left;
           cursor: pointer;
-          transition: background 120ms ease, border-color 120ms ease;
+          transition: background 120ms ease;
         }
         .studio-history-item:hover,
         .studio-history-item:active {
-          background: color-mix(in srgb, var(--cursor-accent) 10%, color-mix(in srgb, var(--mos-text-bright) 5%, transparent));
-          border-color: color-mix(in srgb, var(--cursor-accent) 22%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
+          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
         .studio-history-item.is-active {
-          background: color-mix(in srgb, var(--cursor-accent) 14%, color-mix(in srgb, var(--mos-text-bright) 4%, transparent));
-          border-color: color-mix(in srgb, var(--cursor-accent) 36%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
           box-shadow: inset 2px 0 0 var(--cursor-accent);
         }
         .studio-history-item-main {
