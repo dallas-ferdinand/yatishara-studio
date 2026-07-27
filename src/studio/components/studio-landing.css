@@ -11,13 +11,21 @@
   --studio-landing-faint: color-mix(in srgb, #1c1c1e 38%, transparent);
   --studio-landing-line: #d8d8de;
   color-scheme: light;
-  min-height: 100dvh;
+  /* Body/html are overflow:hidden (app shell) — landing must own scroll. */
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: var(--mos-page);
   color: var(--studio-landing-ink);
   font-family: inherit;
   overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .studio-landing-head {
