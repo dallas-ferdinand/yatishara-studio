@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const DEFAULT_DELAY = 450;
 const DEFAULT_PICKUP_DELAY = 220;
@@ -77,6 +77,10 @@ export function useLongPress(
     clearMenu();
     clearPickup();
   }, [clearMenu, clearPickup]);
+
+  // If the row unmounts mid-hold (live list data), pending timers must not
+  // fire onPickup/onMenuArmed against a dead component.
+  useEffect(() => clear, [clear]);
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent) => {

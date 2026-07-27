@@ -18,7 +18,7 @@ import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
 import { displayEntryPath } from "@/desk/lib/display-path";
 import { normalizeExplorerPath } from "@/desk/lib/explorer-pins";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { animate } from "@motionone/dom";
 import { Check } from "lucide-react";
 
@@ -933,11 +933,10 @@ function FileEntryButton({
     enableLongPress && entry.type !== "parent" && !selectionMode;
 
   const unlockScrollDuringHold = () => {
+    if (!scrollLockMoveRef.current) return;
     document.body.classList.remove("is-touch-file-drag-armed");
-    if (scrollLockMoveRef.current) {
-      document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
-      scrollLockMoveRef.current = null;
-    }
+    document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
+    scrollLockMoveRef.current = null;
   };
 
   const lockScrollDuringHold = () => {
@@ -951,6 +950,18 @@ function FileEntryButton({
     document.addEventListener("touchmove", onMove, { capture: true, passive: false });
     scrollLockMoveRef.current = onMove;
   };
+
+  // The Files list is live data — a row can unmount mid-hold. Without this,
+  // the document-level scroll lock leaks with no owner and scrolling dies
+  // app-wide until reload.
+  useEffect(() => {
+    return () => {
+      if (!scrollLockMoveRef.current) return;
+      document.body.classList.remove("is-touch-file-drag-armed");
+      document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
+      scrollLockMoveRef.current = null;
+    };
+  }, []);
 
   const { longPressHandlers, longPressFired, clearLongPressFired, dragIntentFired } =
     useLongPress(
@@ -986,9 +997,10 @@ function FileEntryButton({
           ? () => {
               setDragArmed(true);
               armExplorerDrag(entry);
+              // Scroll lock is the native non-passive listener + body class.
+              // (Inline touch-action flips mid-gesture are latched too late to
+              // matter on Android and only add cleanup hazards.)
               lockScrollDuringHold();
-              // Block scroll competing with still-hold → context menu.
-              if (buttonRef.current) buttonRef.current.style.touchAction = "none";
               try {
                 navigator.vibrate?.(8);
               } catch {
@@ -1077,35 +1089,26 @@ function FileEntryButton({
       onDragEnd={() => setDragArmed(false)}
       onTouchStart={(event) => {
         touchDragActiveRef.current = false;
-        // Claim the gesture before the scroll parent steals it.
-        if (canTouchDrag && buttonRef.current) {
-          buttonRef.current.style.touchAction = "none";
-        }
         longPressHandlers.onTouchStart?.(event);
       }}
+      // Scroll suppression lives in the native non-passive lock (armed at
+      // pickup) — React touch handlers are passive, preventDefault is a no-op.
       onTouchMove={(event) => {
         longPressHandlers.onTouchMove?.(event);
-        // After pickup, keep the scroll parent from cancelling the still-hold.
-        if (canTouchDrag && (dragArmed || dragIntentFired() || touchDragActiveRef.current)) {
-          event.preventDefault();
-        }
       }}
       onTouchEnd={(event) => {
         // If a touch-drag is active, document listeners own end — don't open
         // the long-press menu from the button's touchend.
         if (touchDragActiveRef.current || document.body.classList.contains("is-touch-file-drag")) {
           clearLongPressFired();
-          if (buttonRef.current) buttonRef.current.style.touchAction = "";
           return;
         }
         unlockScrollDuringHold();
         longPressHandlers.onTouchEnd?.(event);
-        if (buttonRef.current) buttonRef.current.style.touchAction = "";
         window.setTimeout(() => setDragArmed(false), 80);
       }}
       onTouchCancel={(event) => {
         longPressHandlers.onTouchCancel?.(event);
-        if (buttonRef.current) buttonRef.current.style.touchAction = "";
         if (!touchDragActiveRef.current) {
           unlockScrollDuringHold();
           setDragArmed(false);
