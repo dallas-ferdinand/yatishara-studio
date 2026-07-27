@@ -422,7 +422,8 @@
   justify-content: center;
   padding: clamp(20px, 4vh, 40px) clamp(28px, 5vw, 48px) clamp(20px, 4vh, 40px)
     clamp(16px, 4vw, 40px);
-  overflow: hidden;
+  /* Visible so mock/button Caveat tips aren’t clipped at the section edge. */
+  overflow: visible;
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
