@@ -179,7 +179,7 @@ function findComposerShell() {
   );
 }
 
-/** Where the ghost should land — chip rail / top of composer, not mid-textarea. */
+/** Last-resort fly land when caret snapshot is unavailable — end of editor text. */
 function resolveComposerDropLandingPoint(targetEl) {
   const shell =
     (targetEl instanceof HTMLElement
@@ -188,16 +188,17 @@ function resolveComposerDropLandingPoint(targetEl) {
       : null) || findComposerShell();
   if (!(shell instanceof HTMLElement)) return null;
 
-  const rail = shell.querySelector(".studio-composer-attach-rail");
-  if (rail instanceof HTMLElement) {
-    const chips = rail.querySelectorAll(".studio-inline-tag");
-    const last = chips[chips.length - 1];
-    if (last instanceof HTMLElement) {
-      const rect = last.getBoundingClientRect();
-      return { x: rect.right + 16, y: rect.top + rect.height / 2 };
+  const editor = shell.querySelector(
+    "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
+  );
+  if (editor instanceof HTMLElement) {
+    const rect = editor.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return {
+        x: Math.min(rect.right - 8, rect.left + Math.max(12, rect.width * 0.5)),
+        y: Math.min(rect.bottom - 8, rect.top + Math.max(14, rect.height * 0.5)),
+      };
     }
-    const rect = rail.getBoundingClientRect();
-    return { x: rect.left + 22, y: rect.top + Math.max(14, rect.height / 2) };
   }
 
   const box =
@@ -205,11 +206,52 @@ function resolveComposerDropLandingPoint(targetEl) {
       ? shell.querySelector(".cursor-composer-box")
       : shell;
   const rect = box.getBoundingClientRect();
-  // Top of the composer chrome — matches the mobile attach-rail / header zone.
   return {
     x: rect.left + Math.min(28, Math.max(16, rect.width * 0.08)),
-    y: rect.top + 16,
+    y: rect.top + Math.min(40, Math.max(20, rect.height * 0.35)),
   };
+}
+
+function findComposerEditor(shell = findComposerShell()) {
+  if (!(shell instanceof HTMLElement)) return null;
+  const editor = shell.querySelector(
+    "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
+  );
+  return editor instanceof HTMLElement ? editor : null;
+}
+
+/** Project finger coords onto the editor for insert + caret (desktop-parity). */
+function projectComposerDropPoint(clientX, clientY) {
+  const editor = findComposerEditor();
+  if (!(editor instanceof HTMLElement)) {
+    return { clientX, clientY };
+  }
+  const rect = editor.getBoundingClientRect();
+  if (!(rect.width > 0 && rect.height > 0)) {
+    return { clientX, clientY };
+  }
+  const inside =
+    clientX >= rect.left &&
+    clientX <= rect.right &&
+    clientY >= rect.top &&
+    clientY <= rect.bottom;
+  if (inside) {
+    return { clientX, clientY };
+  }
+  // Finger still in Files dock / chrome: clamp X; prefer live caret Y, else end.
+  const x = Math.min(rect.right - 2, Math.max(rect.left + 2, clientX));
+  const liveCaret = document.querySelector(".studio-composer-drop-caret");
+  let y = rect.bottom - 6;
+  if (liveCaret instanceof HTMLElement) {
+    const caretRect = liveCaret.getBoundingClientRect();
+    if (caretRect.height > 0) {
+      y = Math.min(
+        rect.bottom - 6,
+        Math.max(rect.top + 6, caretRect.top + caretRect.height / 2),
+      );
+    }
+  }
+  return { clientX: x, clientY: y };
 }
 
 /** Geometry composer hit — does not depend on pointer-events. */
@@ -248,19 +290,17 @@ function findFolderDropTargetAt(x, y, excludeEl) {
 }
 
 /**
- * Mobile Files dock model: release always attaches to composer.
- * Folder rows fill the dock, so elementFromPoint("folder") steals almost every
- * release (animation looks like a drop, composer never gets the chip). Folder
- * moves stay on long-press / desktop HTML5 DnD.
+ * Mobile drop hit-test. Desktop parity: composer only when finger is over it.
+ * Files dock folder rows must not steal composer drops; folder moves stay on
+ * long-press / desktop HTML5 DnD (not release-anywhere attach).
  */
 function resolveTouchDropTarget(x, y, source, chip, hoverTarget) {
   const fromFilesDock = Boolean(
     source?.closest?.(".studio-files-dock, .studio-files-mobile-sheet"),
   );
-
-  if (fromFilesDock) {
-    return findComposerShell() || findComposerDropTargetAt(x, y, 48);
-  }
+  const composer = findComposerDropTargetAt(x, y, fromFilesDock ? 36 : 28);
+  if (composer) return composer;
+  if (fromFilesDock) return null;
 
   const folder =
     findFolderDropTargetAt(x, y, chip) ||
@@ -268,11 +308,7 @@ function resolveTouchDropTarget(x, y, source, chip, hoverTarget) {
       ? hoverTarget
       : null);
 
-  return (
-    findComposerDropTargetAt(x, y, 28) ||
-    folder ||
-    (hoverTarget?.isConnected ? hoverTarget : null)
-  );
+  return folder || (hoverTarget?.isConnected ? hoverTarget : null);
 }
 
 function findDropTargetUnder(x, y, excludeEl) {
@@ -583,22 +619,21 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
     if (mode !== "touch") return;
-    // Files dock: composer is always the drop target (folder rows would steal
-    // elementFromPoint). Still drive the desktop-style drop caret via publish.
-    if (fromFilesDock) {
-      if (!hoverTarget) {
-        hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
-        if (hoverTarget) highlightDropTarget(hoverTarget);
-      }
-      publishDropCaret(true);
-      return;
-    }
-    const under = findDropTargetUnder(lastX, lastY, chip);
+    // Desktop parity: highlight only when finger is over a real drop target.
+    // Still publish caret while dragging from Files so projected insert point tracks.
+    const under = fromFilesDock
+      ? findComposerDropTargetAt(lastX, lastY, 36)
+      : findDropTargetUnder(lastX, lastY, chip);
     if (under !== hoverTarget) {
       hoverTarget = under;
       highlightDropTarget(under);
     }
-    publishDropCaret(Boolean(under?.getAttribute?.("data-drop-target") === "composer" || fromFilesDock));
+    publishDropCaret(
+      Boolean(
+        fromFilesDock ||
+          under?.getAttribute?.("data-drop-target") === "composer",
+      ),
+    );
   };
 
   const queueFollow = (clientX, clientY) => {
@@ -660,6 +695,25 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       caretLandX = caretRect.left + caretRect.width / 2;
       caretLandY = caretRect.top + caretRect.height / 2;
     }
+    const projected = projectComposerDropPoint(lastX, lastY);
+    if (caretLandX == null || caretLandY == null) {
+      const editorEl = findComposerEditor();
+      const caretPos = getCaretPixelInEditor(
+        editorEl,
+        projected.clientX,
+        projected.clientY,
+      );
+      if (caretPos) {
+        caretLandX = caretPos.x;
+        caretLandY = caretPos.y + caretPos.height / 2;
+      }
+    }
+    const dropIntent = {
+      clientX: projected.clientX,
+      clientY: projected.clientY,
+      landX: caretLandX,
+      landY: caretLandY,
+    };
     publishDropCaret(false);
 
     try {
@@ -667,68 +721,79 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       let targetEl = null;
       let attached = false;
 
-      if (shouldDrop && mode === "touch" && fromFilesDock) {
-        // Direct tree→Shell callback is the primary path. The module-global
-        // bridge remains only as an HMR/legacy fallback. Callbacks must only
-        // *schedule* attach (never sync during touchend). Pass finger coords
-        // so Shell can insert at the same caret desktop uses.
-        const dropEntry = { ...dragEntry };
-        attached = onTouchDrop
-          ? onTouchDrop(dropEntry, lastX, lastY) !== false
-          : deliverMobileComposerDrop(dropEntry, lastX, lastY);
-        targetEl =
-          findComposerShell() ||
-          findComposerDropTargetAt(lastX, lastY, 48) ||
-          targetEl;
-        if (!attached) {
-          // Handler missing (HMR) — last-resort CustomEvent.
+      if (shouldDrop && mode === "touch") {
+        targetEl = resolveTouchDropTarget(
+          lastX,
+          lastY,
+          source,
+          chip,
+          hoverTarget,
+        );
+        const isComposerTarget =
+          targetEl?.getAttribute?.("data-drop-target") === "composer" ||
+          Boolean(targetEl?.closest?.('[data-drop-target="composer"]'));
+        if (isComposerTarget) {
+          // Schedule attach only — never sync during touchend. Pass one drop
+          // intent so Shell insert + fly share the same projected caret.
+          const dropEntry = { ...dragEntry };
+          attached = onTouchDrop
+            ? onTouchDrop(dropEntry, dropIntent) !== false
+            : deliverMobileComposerDrop(dropEntry, dropIntent);
+          if (!attached) {
+            attached = commitTouchDrop(
+              targetEl || findComposerShell(),
+              dropEntry,
+              dropIntent.clientX,
+              dropIntent.clientY,
+            );
+          }
+        } else if (
+          targetEl &&
+          targetEl !== source &&
+          !source.contains(targetEl)
+        ) {
           attached = commitTouchDrop(
-            targetEl || findComposerShell(),
-            dropEntry,
+            targetEl,
+            dragEntry,
             lastX,
             lastY,
           );
         }
       } else if (shouldDrop) {
         targetEl =
-          mode === "touch"
-            ? resolveTouchDropTarget(lastX, lastY, source, chip, hoverTarget)
-            : findDropTargetUnder(lastX, lastY, chip) ||
-              (hoverTarget?.isConnected ? hoverTarget : null);
-        if (targetEl && targetEl !== source && !source.contains(targetEl) && mode === "touch") {
-          attached = commitTouchDrop(targetEl, dragEntry, lastX, lastY);
-        }
+          findDropTargetUnder(lastX, lastY, chip) ||
+          (hoverTarget?.isConnected ? hoverTarget : null);
       }
 
       clearDropTargetHighlight();
 
-      // Files dock: only celebrate when attach was actually scheduled. Composer
-      // shell geometry alone used to fake a successful drop with no chip.
+      const isComposerDrop =
+        targetEl?.dataset?.dropTarget === "composer" ||
+        Boolean(targetEl?.closest?.('[data-drop-target="composer"]'));
       const isValidDrop =
         shouldDrop &&
-        (fromFilesDock
-          ? attached
-          : attached ||
-            (targetEl && targetEl !== source && !source.contains(targetEl)));
+        (attached ||
+          (mode !== "touch" &&
+            targetEl &&
+            targetEl !== source &&
+            !source.contains(targetEl)));
 
       if (isValidDrop) {
-        // Same as desktop: fly the ghost to the drop caret in the composer.
+        // Same as desktop: fly the ghost to the snapshotted drop caret.
         let dropEndX = lastX;
         let dropEndY = lastY;
-        const isComposerDrop =
-          attached ||
-          targetEl?.dataset?.dropTarget === "composer" ||
-          Boolean(targetEl?.closest?.('[data-drop-target="composer"]'));
-        if (isComposerDrop) {
+        if (isComposerDrop && attached) {
           if (!targetEl) targetEl = findComposerShell();
-          if (caretLandX != null && caretLandY != null) {
-            dropEndX = caretLandX;
-            dropEndY = caretLandY;
+          if (dropIntent.landX != null && dropIntent.landY != null) {
+            dropEndX = dropIntent.landX;
+            dropEndY = dropIntent.landY;
           } else {
-            const editorEl = targetEl?.querySelector?.(
-              "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
+            const editorEl = findComposerEditor(targetEl);
+            const caretPos = getCaretPixelInEditor(
+              editorEl,
+              dropIntent.clientX,
+              dropIntent.clientY,
             );
-            const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
             if (caretPos) {
               dropEndX = caretPos.x;
               dropEndY = caretPos.y + caretPos.height / 2;
@@ -877,12 +942,20 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     }
     // Direct transform (no RAF) — keeps the ghost under the finger on Android.
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
-    // Drive the same pulsing drop caret desktop shows on dragover.
-    if (fromFilesDock && !hoverTarget) {
-      hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
-      if (hoverTarget) highlightDropTarget(hoverTarget);
+    const under = fromFilesDock
+      ? findComposerDropTargetAt(lastX, lastY, 36)
+      : findDropTargetUnder(lastX, lastY, chip);
+    if (under !== hoverTarget) {
+      hoverTarget = under;
+      highlightDropTarget(under);
     }
-    publishDropCaret(true);
+    // Drive the same pulsing drop caret desktop shows on dragover.
+    publishDropCaret(
+      Boolean(
+        fromFilesDock ||
+          under?.getAttribute?.("data-drop-target") === "composer",
+      ),
+    );
   };
   handleTouchEnd = (endEvent) => {
     const t = endEvent.changedTouches?.[0];
@@ -890,12 +963,15 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       lastX = t.clientX;
       lastY = t.clientY;
     }
-    void finish(true);
+    // Desktop parity: drop only when finger is over composer (or folder outside dock).
+    const overDrop = Boolean(
+      resolveTouchDropTarget(lastX, lastY, source, chip, hoverTarget),
+    );
+    void finish(overDrop);
   };
   handleTouchCancel = () => {
-    // Android often cancels the gesture mid Files-dock drag (scroll / native
-    // drag competition). Product model is still "release → attach".
-    void finish(Boolean(fromFilesDock));
+    // OS cancel = return to source, never auto-attach.
+    void finish(false);
   };
 
   if (mode === "touch") {
@@ -903,10 +979,12 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd, { capture: true });
     document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
-    // Seed composer highlight + desktop-style drop caret immediately.
-    hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
+    // Seed highlight only if already over a real target; always seed caret from Files.
+    hoverTarget = fromFilesDock
+      ? findComposerDropTargetAt(lastX, lastY, 36)
+      : findDropTargetUnder(lastX, lastY, chip);
     if (hoverTarget) highlightDropTarget(hoverTarget);
-    publishDropCaret(true);
+    publishDropCaret(Boolean(fromFilesDock || hoverTarget));
   } else {
     document.addEventListener("dragover", handleMove);
     document.addEventListener("drag", handleMove);
@@ -970,6 +1048,9 @@ function FileEntryButton({
   const touchDragActiveRef = useRef(false);
   /** Generation from beginTouchFileHold — cancel only matches this hold. */
   const holdGenerationRef = useRef(0);
+  const pointerSelectHandledRef = useRef(false);
+  const pointerStartRef = useRef({ x: 0, y: 0 });
+  const pointerMovedRef = useRef(false);
   const [dragArmed, setDragArmed] = useState(false);
   const canTouchDrag =
     enableLongPress && entry.type !== "parent" && !selectionMode;
@@ -1068,6 +1149,10 @@ function FileEntryButton({
           setDragArmed(false);
           return;
         }
+        if (pointerSelectHandledRef.current) {
+          pointerSelectHandledRef.current = false;
+          return;
+        }
         if (
           entry.type !== "parent" &&
           onSelect &&
@@ -1120,7 +1205,8 @@ function FileEntryButton({
         }
         cancelTouchFileHold(holdGenerationRef.current);
         longPressHandlers.onTouchEnd?.(event);
-        window.setTimeout(() => setDragArmed(false), 80);
+        // Clear armed paint immediately — delayed clear left sticky opacity after short holds.
+        setDragArmed(false);
       }}
       onTouchCancel={(event) => {
         longPressHandlers.onTouchCancel?.(event);
@@ -1129,6 +1215,44 @@ function FileEntryButton({
           setDragArmed(false);
           clearActiveExplorerDrag();
         }
+      }}
+      onPointerDown={(event) => {
+        if (event.button != null && event.button !== 0) return;
+        pointerSelectHandledRef.current = false;
+        pointerMovedRef.current = false;
+        pointerStartRef.current = { x: event.clientX, y: event.clientY };
+        buttonRef.current?.classList.add("is-pressed");
+      }}
+      onPointerMove={(event) => {
+        if (pointerMovedRef.current) return;
+        const dx = Math.abs(event.clientX - pointerStartRef.current.x);
+        const dy = Math.abs(event.clientY - pointerStartRef.current.y);
+        if (Math.max(dx, dy) > 14) pointerMovedRef.current = true;
+      }}
+      onPointerUp={(event) => {
+        buttonRef.current?.classList.remove("is-pressed");
+        if (event.button != null && event.button !== 0) return;
+        if (
+          pointerMovedRef.current ||
+          longPressFired() ||
+          dragIntentFired() ||
+          touchDragActiveRef.current ||
+          dragArmed
+        ) {
+          return;
+        }
+        // Modifier/selection clicks stay on the click path.
+        if (event.metaKey || event.ctrlKey || event.shiftKey || selectionMode) {
+          return;
+        }
+        pointerSelectHandledRef.current = true;
+        onOpen();
+      }}
+      onPointerCancel={() => {
+        buttonRef.current?.classList.remove("is-pressed");
+      }}
+      onPointerLeave={() => {
+        buttonRef.current?.classList.remove("is-pressed");
       }}
       onDragOver={isDir && onDropEntry ? (e) => {
         e.preventDefault();

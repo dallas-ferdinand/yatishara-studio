@@ -40,6 +40,16 @@ import {
   dmPhotoAssetName,
   dmVoiceAssetName,
 } from "@/studio/lib/dmMediaNames";
+import {
+  clearPendingDmFeedShare,
+  feedShareDragTypes,
+  looksLikeFeedShareJson,
+  parseFeedSharePayload,
+  readFeedShareDataTransfer,
+  setPendingDmFeedShare,
+  usePendingDmFeedShare,
+  type StudioFeedSharePayload,
+} from "@/studio/lib/studioFeedShare";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioDmAssignLabelsDialog } from "./StudioDmLabelDialogs";
 import { StudioDmContextMenu,
@@ -138,17 +148,29 @@ function DmMessageMeta({
 type DmReplySnippet = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image";
+  kind: "text" | "voice" | "image" | "post" | "comment";
   fromMe: boolean;
   audioUrl?: string;
   imageUrl?: string;
   durationSec?: number;
 };
 
+type DmFeedShare = {
+  type: "post" | "comment";
+  postId: Id<"profilePosts">;
+  commentId?: Id<"profileComments">;
+  username?: string;
+  displayName?: string;
+  caption?: string;
+  body?: string;
+  thumbnailUrl?: string;
+  unavailable?: boolean;
+};
+
 type DmMessageRow = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image";
+  kind: "text" | "voice" | "image" | "post" | "comment";
   audioUrl?: string;
   imageUrl?: string;
   contentType?: string;
@@ -156,6 +178,7 @@ type DmMessageRow = {
   fromMe: boolean;
   receipt: DmReceipt;
   replyTo?: DmReplySnippet;
+  feedShare?: DmFeedShare;
   createdAt: number;
 };
 
@@ -163,6 +186,12 @@ function replySnippetLabel(
   snippet: Pick<DmReplySnippet, "body" | "kind">,
 ): string {
   if (snippet.kind === "voice") return "Voice message";
+  if (snippet.kind === "post") return snippet.body.trim() || "Post";
+  if (snippet.kind === "comment") {
+    const body = snippet.body.trim();
+    if (body.startsWith("Comment")) return body;
+    return body ? `Comment · ${body}` : "Comment";
+  }
   if (snippet.kind === "image") {
     const caption = snippet.body.trim();
     // Server may already prefix "Photo · …"
@@ -170,6 +199,23 @@ function replySnippetLabel(
     return caption ? `Photo · ${caption}` : "Photo";
   }
   return snippet.body.trim() || "Message";
+}
+
+/**
+ * Optional note under a feed share card (same role as an image caption).
+ * Hides legacy rows where body was filled with the post caption / comment text.
+ */
+function feedShareNote(
+  message: Pick<DmMessageRow, "body" | "kind" | "feedShare">,
+): string | null {
+  const note = message.body.trim();
+  if (!note || !message.feedShare) return null;
+  const shared =
+    message.kind === "comment"
+      ? (message.feedShare.body ?? "").trim()
+      : (message.feedShare.caption ?? "").trim();
+  if (shared && note === shared) return null;
+  return note;
 }
 
 function ReplyKindIcon({
@@ -185,7 +231,95 @@ function ReplyKindIcon({
   if (kind === "image") {
     return <ImageIcon className={className} aria-hidden="true" />;
   }
+  if (kind === "post" || kind === "comment") {
+    return <MessageCircle className={className} aria-hidden="true" />;
+  }
   return null;
+}
+
+function DmFeedShareCard({
+  share,
+  onOpen,
+  compact = false,
+}: {
+  share: DmFeedShare | StudioFeedSharePayload;
+  onOpen?: (postId: Id<"profilePosts">) => void;
+  /** Smaller tile for the composer attach strip. */
+  compact?: boolean;
+}) {
+  const unavailable = "unavailable" in share ? Boolean(share.unavailable) : false;
+  const author =
+    share.displayName?.trim() ||
+    (share.username ? `@${share.username}` : "Post");
+  const isComment = share.type === "comment";
+  const caption = share.caption?.trim() || "";
+  const commentBody =
+    ("body" in share ? share.body?.trim() : undefined) || caption || "Comment";
+
+  if (isComment) {
+    return (
+      <button
+        type="button"
+        className={`studio-dm-feed-share is-comment${compact ? " is-compact" : ""}${unavailable ? " is-unavailable" : ""}`}
+        disabled={unavailable || !onOpen}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!unavailable) onOpen?.(share.postId as Id<"profilePosts">);
+        }}
+      >
+        {share.thumbnailUrl ? (
+          <span className="studio-dm-feed-share-thumb">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={share.thumbnailUrl} alt="" />
+          </span>
+        ) : (
+          <span className="studio-dm-feed-share-thumb is-empty" aria-hidden="true">
+            <MessageCircle className="h-4 w-4" />
+          </span>
+        )}
+        <span className="studio-dm-feed-share-copy">
+          <strong>
+            {unavailable ? "Unavailable" : `Comment · ${author}`}
+          </strong>
+          <span>
+            {unavailable ? "This post is no longer available" : commentBody}
+          </span>
+        </span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={`studio-dm-feed-share is-post${compact ? " is-compact" : ""}${unavailable ? " is-unavailable" : ""}`}
+      disabled={unavailable || !onOpen}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (!unavailable) onOpen?.(share.postId as Id<"profilePosts">);
+      }}
+    >
+      <span className="studio-dm-feed-share-media">
+        {share.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={share.thumbnailUrl} alt="" />
+        ) : (
+          <span className="studio-dm-feed-share-media-empty" aria-hidden="true">
+            <ImageIcon className="h-6 w-6" />
+          </span>
+        )}
+        <span className="studio-dm-feed-share-media-scrim" aria-hidden="true" />
+        <span className="studio-dm-feed-share-media-meta">
+          <strong>{unavailable ? "Unavailable" : author}</strong>
+          <span>
+            {unavailable
+              ? "This post is no longer available"
+              : caption || "Post"}
+          </span>
+        </span>
+      </span>
+    </button>
+  );
 }
 
 function DmReplyQuote({
@@ -257,11 +391,13 @@ function DmMessageBubble({
   peerLabel,
   onReply,
   onOpenImage,
+  onOpenFeedPost,
 }: {
   message: DmMessageRow;
   peerLabel: string;
   onReply: (message: DmMessageRow) => void;
   onOpenImage: (url: string) => void;
+  onOpenFeedPost?: (postId: Id<"profilePosts">) => void;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [swipeX, setSwipeX] = useState(0);
@@ -299,6 +435,7 @@ function DmMessageBubble({
     "studio-dm-bubble",
     message.kind === "voice" ? "is-voice" : "",
     message.kind === "image" ? "is-image" : "",
+    message.kind === "post" || message.kind === "comment" ? "is-feed-share" : "",
     message.replyTo ? "has-reply" : "",
   ]
     .filter(Boolean)
@@ -449,6 +586,25 @@ function DmMessageBubble({
                   receipt={message.receipt}
                 />
               </>
+            ) : message.kind === "post" || message.kind === "comment" ? (
+              <div className="studio-dm-bubble-body">
+                {message.feedShare ? (
+                  <DmFeedShareCard
+                    share={message.feedShare}
+                    onOpen={onOpenFeedPost}
+                  />
+                ) : (
+                  <p className="studio-dm-voice-missing">Post unavailable</p>
+                )}
+                {feedShareNote(message) ? (
+                  <p>{feedShareNote(message)}</p>
+                ) : null}
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                />
+              </div>
             ) : (
               <div className="studio-dm-bubble-body">
                 <p>{message.body}</p>
@@ -505,10 +661,17 @@ type StudioMessagesPaneProps = {
   conversationId: DmConversationId | null;
   onSelectConversation: (conversationId: DmConversationId | null) => void;
   onOpenProfile?: (username: string) => void;
+  /** Open a shared feed post from a DM share card. */
+  onOpenFeedPost?: (postId: Id<"profilePosts">) => void;
   /** Jump to Offers → Jobs for deliver/manage. */
   onOpenOffersJobs?: () => void;
   /** When true (mobile), empty pane shows the chat list instead of the select prompt. */
   showChatListWhenEmpty?: boolean;
+  /**
+   * Chat fills the left rail (e.g. Creative Network Messages). Shows back,
+   * never opens a Messages tab, and skips the peer-details split.
+   */
+  embeddedInRail?: boolean;
   /**
    * Desktop: open the left Files rail in pick mode (owner-scoped root).
    * When omitted (mobile), the sheet picker is used instead.
@@ -577,28 +740,36 @@ export function StudioMessagesPane({
   conversationId,
   onSelectConversation,
   onOpenProfile,
+  onOpenFeedPost,
   onOpenOffersJobs,
   showChatListWhenEmpty = false,
+  embeddedInRail = false,
   onRequestPickAsset,
 }: StudioMessagesPaneProps) {
   const { isMobile } = useMobileLayout();
+  const showBack = showChatListWhenEmpty || embeddedInRail;
   const [expiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
   );
   const [peerSidebarOpen, setPeerSidebarOpen] = useState(() => {
     if (typeof window === "undefined") return true;
+    if (embeddedInRail) return false;
     const stored = window.localStorage.getItem(PEER_SIDEBAR_OPEN_KEY);
     if (stored === null) return true;
     return stored === "1";
   });
 
   useEffect(() => {
+    if (embeddedInRail) {
+      setPeerSidebarOpen(false);
+      return;
+    }
     if (typeof window === "undefined") return;
     window.localStorage.setItem(
       PEER_SIDEBAR_OPEN_KEY,
       peerSidebarOpen ? "1" : "0",
     );
-  }, [peerSidebarOpen]);
+  }, [embeddedInRail, peerSidebarOpen]);
   const conversations = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messages = useQuery(
     api.dms.listMessages,
@@ -612,6 +783,7 @@ export function StudioMessagesPane({
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
+  const sendFeedShare = useMutation(api.dms.sendFeedShare);
 
   const [draft, setDraft] = useState("");
   const [sendBusy, setSendBusy] = useState(false);
@@ -621,6 +793,12 @@ export function StudioMessagesPane({
   const [replyTo, setReplyTo] = useState<DmReplySnippet | null>(null);
   const replyToRef = useRef<DmReplySnippet | null>(null);
   replyToRef.current = replyTo;
+  const pendingFeedShareStore = usePendingDmFeedShare();
+  const pendingFeedShare =
+    conversationId &&
+    pendingFeedShareStore?.conversationId === conversationId
+      ? pendingFeedShareStore.payload
+      : null;
   const peerLabelRef = useRef("Chat");
   const [assignPeer, setAssignPeer] = useState<{
     userId: Id<"users">;
@@ -857,6 +1035,14 @@ export function StudioMessagesPane({
     if (conversationId) inputRef.current?.focus();
   }, [clearPendingImages, conversationId]);
 
+  useEffect(() => {
+    if (!pendingFeedShare) return;
+    clearPendingImages();
+    // Strip accidental JSON paste from older drag MIME.
+    setDraft((prev) => (looksLikeFeedShareJson(prev) ? "" : prev));
+    window.setTimeout(() => inputRef.current?.focus(), 0);
+  }, [clearPendingImages, pendingFeedShare]);
+
   const armReply = useCallback((message: DmMessageRow) => {
     setReplyTo({
       _id: message._id,
@@ -872,6 +1058,7 @@ export function StudioMessagesPane({
 
   function appendImageFiles(files: File[]) {
     if (files.length === 0) return;
+    clearPendingDmFeedShare();
     const accepted: PendingImage[] = [];
     let error = "";
     for (const file of files) {
@@ -953,12 +1140,22 @@ export function StudioMessagesPane({
   async function handleSend() {
     if (!conversationId || sendBusy || recState !== "idle") return;
     const body = draft.trim();
-    if (pendingImages.length === 0 && !body) return;
+    if (pendingImages.length === 0 && !pendingFeedShare && !body) return;
 
     setSendBusy(true);
     setSendError("");
     try {
-      if (pendingImages.length > 0) {
+      if (pendingFeedShare) {
+        await sendFeedShare({
+          conversationId,
+          postId: pendingFeedShare.postId as Id<"profilePosts">,
+          commentId: pendingFeedShare.commentId
+            ? (pendingFeedShare.commentId as Id<"profileComments">)
+            : undefined,
+          note: body || undefined,
+        });
+        clearPendingDmFeedShare();
+      } else if (pendingImages.length > 0) {
         for (let i = 0; i < pendingImages.length; i += 1) {
           const pending = pendingImages[i]!;
           const assetId = await uploadDmMediaAsset({
@@ -999,7 +1196,9 @@ export function StudioMessagesPane({
     }
   }
 
-  const canSend = Boolean(pendingImages.length > 0 || draft.trim());
+  const canSend = Boolean(
+    pendingImages.length > 0 || pendingFeedShare || draft.trim(),
+  );
 
   if (!conversationId) {
     if (showChatListWhenEmpty) {
@@ -1095,7 +1294,7 @@ export function StudioMessagesPane({
   const chatColumn = (
     <div className="studio-dm-chat-column">
       <header className="studio-dm-chat-head">
-        {showChatListWhenEmpty ? (
+        {showBack ? (
           <button
             type="button"
             className="studio-dm-back"
@@ -1139,20 +1338,22 @@ export function StudioMessagesPane({
             ) : null}
           </span>
         </button>
-        <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
-          <button
-            type="button"
-            className={`studio-composer-circle-btn studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
-            aria-label={
-              peerSidebarOpen ? "Close chat details" : "Open chat details"
-            }
-            aria-pressed={peerSidebarOpen}
-            title={peerSidebarOpen ? "Close chat details" : "Chat details"}
-            onClick={() => setPeerSidebarOpen((open) => !open)}
-          >
-            <Wrench size={14} strokeWidth={2.25} aria-hidden="true" />
-          </button>
-        </div>
+        {!embeddedInRail ? (
+          <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
+            <button
+              type="button"
+              className={`studio-composer-circle-btn studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
+              aria-label={
+                peerSidebarOpen ? "Close chat details" : "Open chat details"
+              }
+              aria-pressed={peerSidebarOpen}
+              title={peerSidebarOpen ? "Close chat details" : "Chat details"}
+              onClick={() => setPeerSidebarOpen((open) => !open)}
+            >
+              <Wrench size={14} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <div className="studio-dm-scroll" ref={scrollRef}>
@@ -1182,6 +1383,7 @@ export function StudioMessagesPane({
                     peerLabel={peerLabel}
                     onReply={armReply}
                     onOpenImage={setLightboxUrl}
+                    onOpenFeedPost={onOpenFeedPost}
                   />
                 </div>
               );
@@ -1234,6 +1436,24 @@ export function StudioMessagesPane({
             className="studio-dm-attach-clear"
             onClick={() => setReplyTo(null)}
             aria-label="Cancel reply"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
+      {pendingFeedShare && recState === "idle" ? (
+        <div className="studio-dm-attach-preview is-feed-share">
+          <DmFeedShareCard
+            share={pendingFeedShare}
+            compact
+            onOpen={onOpenFeedPost}
+          />
+          <button
+            type="button"
+            className="studio-dm-attach-clear"
+            onClick={() => clearPendingDmFeedShare()}
+            aria-label="Remove shared post"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -1360,17 +1580,28 @@ export function StudioMessagesPane({
               value={draft}
               rows={1}
               placeholder={
-                pendingImages.length > 0 ? "Add a caption…" : "Message…"
+                pendingFeedShare
+                  ? "Add a note…"
+                  : pendingImages.length > 0
+                    ? "Add a caption…"
+                    : "Message…"
               }
               aria-label={`Message ${peerLabel}`}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSend();
-                }
+              onChange={(event) => {
+                const next = event.target.value;
+                setDraft(looksLikeFeedShareJson(next) ? "" : next);
               }}
               onPaste={(event) => {
+                const text = event.clipboardData.getData("text/plain");
+                if (looksLikeFeedShareJson(text)) {
+                  event.preventDefault();
+                  const payload = parseFeedSharePayload(text.trim());
+                  if (payload && conversationId) {
+                    clearPendingImages();
+                    setPendingDmFeedShare({ conversationId, payload });
+                  }
+                  return;
+                }
                 const items = event.clipboardData?.items;
                 if (!items) return;
                 for (const item of items) {
@@ -1382,6 +1613,26 @@ export function StudioMessagesPane({
                       return;
                     }
                   }
+                }
+              }}
+              onDrop={(event) => {
+                const payload = readFeedShareDataTransfer(event.dataTransfer);
+                if (!payload || !conversationId) return;
+                event.preventDefault();
+                clearPendingImages();
+                setPendingDmFeedShare({ conversationId, payload });
+              }}
+              onDragOver={(event) => {
+                if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) {
+                  return;
+                }
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void handleSend();
                 }
               }}
             />
@@ -1519,7 +1770,7 @@ export function StudioMessagesPane({
   );
 
   const peerSidebar =
-    activeRow && peerSidebarOpen ? (
+    !embeddedInRail && activeRow && peerSidebarOpen ? (
       <StudioDmPeerSidebar
         peerUserId={activeRow.peer.userId}
         peerUsername={activeRow.peer.username}
@@ -1531,9 +1782,11 @@ export function StudioMessagesPane({
       />
     ) : null;
 
-  if (isMobile || !peerSidebarOpen || !activeRow) {
+  if (embeddedInRail || isMobile || !peerSidebarOpen || !activeRow) {
     return (
-      <div className="studio-dm-pane">
+      <div
+        className={`studio-dm-pane${embeddedInRail ? " is-rail-embedded" : ""}`}
+      >
         {chatColumn}
         {peerSidebar}
       </div>
@@ -1577,6 +1830,7 @@ export function StudioDmConversationRow({
   active,
   onSelect,
   onContextMenu,
+  onFeedShareDrop,
 }: {
   row: {
     conversationId: DmConversationId;
@@ -1598,21 +1852,52 @@ export function StudioDmConversationRow({
   active: boolean;
   onSelect: () => void;
   onContextMenu?: (coords: { x: number; y: number }) => void;
+  onFeedShareDrop?: (
+    conversationId: DmConversationId,
+    payload: StudioFeedSharePayload,
+  ) => void;
 }) {
   const label = row.peer.displayName?.trim() || `@${row.peer.username}`;
   const preview = row.lastMessagePreview || "Tap to start chatting";
   const peerLabels = row.labels ?? [];
   const { longPressHandlers, longPressFired, clearLongPressFired } =
     useLongPress(onContextMenu);
+  const [dropActive, setDropActive] = useState(false);
+  const selectHandledRef = useRef(false);
+  const pointerStartRef = useRef({ x: 0, y: 0 });
+  const pointerMovedRef = useRef(false);
 
   return (
     <button
       type="button"
-      className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}${row.peerOnline ? " is-peer-online" : ""}`}
+      className={`studio-dm-row${active ? " is-active" : ""}${row.unread ? " is-unread" : ""}${row.peerOnline ? " is-peer-online" : ""}${dropActive ? " is-feed-drop" : ""}`}
       {...longPressHandlers}
+      onPointerDown={(event) => {
+        if (event.button != null && event.button !== 0) return;
+        selectHandledRef.current = false;
+        pointerMovedRef.current = false;
+        pointerStartRef.current = { x: event.clientX, y: event.clientY };
+      }}
+      onPointerMove={(event) => {
+        if (pointerMovedRef.current) return;
+        const dx = Math.abs(event.clientX - pointerStartRef.current.x);
+        const dy = Math.abs(event.clientY - pointerStartRef.current.y);
+        if (Math.max(dx, dy) > 14) pointerMovedRef.current = true;
+      }}
+      onPointerUp={(event) => {
+        if (event.button != null && event.button !== 0) return;
+        if (pointerMovedRef.current || longPressFired()) return;
+        selectHandledRef.current = true;
+        onSelect();
+      }}
       onClick={() => {
         if (longPressFired()) {
           clearLongPressFired();
+          selectHandledRef.current = false;
+          return;
+        }
+        if (selectHandledRef.current) {
+          selectHandledRef.current = false;
           return;
         }
         onSelect();
@@ -1621,6 +1906,31 @@ export function StudioDmConversationRow({
         if (!onContextMenu) return;
         event.preventDefault();
         onContextMenu({ x: event.clientX, y: event.clientY });
+      }}
+      onDragEnter={(event) => {
+        if (!onFeedShareDrop) return;
+        if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) return;
+        event.preventDefault();
+        setDropActive(true);
+      }}
+      onDragOver={(event) => {
+        if (!onFeedShareDrop) return;
+        if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropActive(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDropActive(false);
+      }}
+      onDrop={(event) => {
+        if (!onFeedShareDrop) return;
+        event.preventDefault();
+        setDropActive(false);
+        const payload = readFeedShareDataTransfer(event.dataTransfer);
+        if (!payload) return;
+        onFeedShareDrop(row.conversationId, payload);
       }}
     >
       <span className="studio-dm-row-main">

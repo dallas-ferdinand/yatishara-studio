@@ -1,16 +1,81 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, Sparkles, Store, Users } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Cloud, Folder, MessageCircle, Sparkles, Store } from "lucide-react";
+import { useRef } from "react";
 
-/** Context action in the middle slot — Files on Generate, People on Social, Filters on CN. */
+/** Context action in the middle slot — Files on Generate, Messages on Social/CN. */
 export const MOBILE_NAV_ACTION = {
   files: { id: "files", label: "Files", Icon: Folder },
-  social: { id: "social", label: "People", Icon: Users },
-  /** Opens CN left-rail sheet while the Network section is active. */
-  cnRail: { id: "cnRail", label: "Browse", Icon: Store },
+  social: { id: "social", label: "Messages", Icon: MessageCircle },
+  /** Opens CN Messages/filters rail sheet while Creative Network is active. */
+  cnRail: { id: "cnRail", label: "Messages", Icon: MessageCircle },
 };
+
+/** Cancel pointer→action if the finger slides (scroll intent). */
+const POINTER_MOVE_CANCEL = 14;
+
+/**
+ * Fire primary nav actions on pointerdown so is-active paints immediately.
+ * onClick remains as keyboard / synthetic fallback when pointer path already ran.
+ */
+function useInstantTap(onActivate) {
+  const handledRef = useRef(false);
+  const startRef = useRef({ x: 0, y: 0 });
+  const cancelledRef = useRef(false);
+
+  return {
+    onPointerDown: (event) => {
+      if (event.button != null && event.button !== 0) return;
+      handledRef.current = false;
+      cancelledRef.current = false;
+      startRef.current = { x: event.clientX, y: event.clientY };
+      handledRef.current = true;
+      onActivate?.();
+    },
+    onPointerMove: (event) => {
+      if (!handledRef.current || cancelledRef.current) return;
+      const dx = Math.abs(event.clientX - startRef.current.x);
+      const dy = Math.abs(event.clientY - startRef.current.y);
+      if (Math.max(dx, dy) > POINTER_MOVE_CANCEL) {
+        cancelledRef.current = true;
+      }
+    },
+    onClick: (event) => {
+      if (handledRef.current) {
+        event.preventDefault();
+        handledRef.current = false;
+        return;
+      }
+      onActivate?.();
+    },
+  };
+}
+
+function NavButton({
+  className,
+  ariaCurrent,
+  ariaLabel,
+  ariaPressed,
+  title,
+  onActivate,
+  children,
+}) {
+  const tap = useInstantTap(onActivate);
+  return (
+    <button
+      type="button"
+      className={className}
+      aria-current={ariaCurrent}
+      aria-label={ariaLabel}
+      aria-pressed={ariaPressed}
+      title={title}
+      {...tap}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function StudioMobileBottomNav({
   section,
@@ -18,39 +83,6 @@ export function StudioMobileBottomNav({
   action = null,
   tools = null,
 }) {
-  const navRef = useRef(null);
-  const sectionsRef = useRef(null);
-  const itemRefs = useRef({});
-  const [indicator, setIndicator] = useState({ width: 0, x: 0 });
-
-  const measureIndicator = useCallback(() => {
-    const nav = navRef.current;
-    const sections = sectionsRef.current;
-    const button = section ? itemRefs.current[section] : null;
-    if (!nav || !sections || !button) {
-      setIndicator((prev) =>
-        prev.width === 0 && prev.x === 0 ? prev : { width: 0, x: 0 },
-      );
-      return;
-    }
-    const navRect = nav.getBoundingClientRect();
-    const buttonRect = button.getBoundingClientRect();
-    const width = buttonRect.width;
-    const x = buttonRect.left - navRect.left;
-    setIndicator((prev) =>
-      prev.width === width && prev.x === x ? prev : { width, x },
-    );
-  }, [section]);
-
-  useLayoutEffect(() => {
-    measureIndicator();
-  }, [measureIndicator, action?.id, action?.active]);
-
-  useEffect(() => {
-    window.addEventListener("resize", measureIndicator);
-    return () => window.removeEventListener("resize", measureIndicator);
-  }, [measureIndicator]);
-
   const actionDef =
     action?.id === "social"
       ? MOBILE_NAV_ACTION.social
@@ -62,72 +94,46 @@ export function StudioMobileBottomNav({
   const ActionIcon = actionDef?.Icon;
 
   return (
-    <nav ref={navRef} className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
-      <span
-        className="studio-mobile-nav-indicator"
-        style={{
-          width: `${indicator.width}px`,
-          transform: `translate3d(${indicator.x}px, 0, 0)`,
-        }}
-        aria-hidden="true"
-      />
-      <div ref={sectionsRef} className="studio-mobile-nav-sections">
-        <button
-          ref={(node) => {
-            itemRefs.current.feed = node;
-          }}
-          type="button"
+    <nav className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
+      <div className="studio-mobile-nav-sections">
+        <NavButton
           className={`studio-mobile-nav-btn${section === "feed" ? " is-active" : ""} is-icon-only`}
-          aria-current={section === "feed" ? "page" : undefined}
-          aria-label="Feed"
+          ariaCurrent={section === "feed" ? "page" : undefined}
+          ariaLabel="Feed"
           title="Feed"
-          onClick={() => onSelect("feed")}
+          onActivate={() => onSelect("feed")}
         >
           <Cloud aria-hidden="true" />
-        </button>
-        <button
-          ref={(node) => {
-            itemRefs.current.network = node;
-          }}
-          type="button"
+        </NavButton>
+        <NavButton
           className={`studio-mobile-nav-btn${section === "network" ? " is-active" : ""} is-icon-only`}
-          aria-current={section === "network" ? "page" : undefined}
-          aria-label="Creative Network"
+          ariaCurrent={section === "network" ? "page" : undefined}
+          ariaLabel="Creative Network"
           title="Creative Network"
-          onClick={() => onSelect("network")}
+          onActivate={() => onSelect("network")}
         >
           <Store aria-hidden="true" />
-        </button>
+        </NavButton>
         {actionDef && ActionIcon ? (
-          <button
-            ref={(node) => {
-              itemRefs.current[actionDef.id] = node;
-            }}
-            type="button"
-            className={`studio-mobile-nav-btn studio-mobile-nav-action${action?.active ? " is-active" : ""}`}
-            aria-label={actionDef.label}
+          <NavButton
+            className={`studio-mobile-nav-btn studio-mobile-nav-action is-icon-only${action?.active ? " is-active" : ""}`}
+            ariaLabel={actionDef.label}
             title={actionDef.label}
-            aria-pressed={action?.active ? true : undefined}
-            onClick={() => action?.onClick?.()}
+            ariaPressed={action?.active ? true : undefined}
+            onActivate={() => action?.onClick?.()}
           >
             <ActionIcon aria-hidden="true" />
-            <span>{actionDef.label}</span>
-          </button>
+          </NavButton>
         ) : null}
-        <button
-          ref={(node) => {
-            itemRefs.current.composer = node;
-          }}
-          type="button"
-          className={`studio-mobile-nav-btn${section === "composer" ? " is-active" : ""}`}
-          aria-current={section === "composer" ? "page" : undefined}
-          aria-label="Create"
+        <NavButton
+          className={`studio-mobile-nav-btn${section === "composer" ? " is-active" : ""} is-icon-only`}
+          ariaCurrent={section === "composer" ? "page" : undefined}
+          ariaLabel="Create"
           title="Create"
-          onClick={() => onSelect("composer")}
+          onActivate={() => onSelect("composer")}
         >
           <Sparkles aria-hidden="true" />
-          <span>Create</span>
-        </button>
+        </NavButton>
       </div>
       {tools ? <div className="studio-mobile-nav-tools">{tools}</div> : null}
     </nav>

@@ -342,10 +342,10 @@ Structure:
 | `--studio-mobile-files-sheet-height` | **60%** of that band |
 
 - **Motion**: animate **only** `.studio-files-dock` `height` (`0` ↔ sheet token) with
-  `--studio-mobile-files-dock-duration` / `--studio-mobile-files-dock-ease`. Generate is
-  `flex: 1` and shrinks/grows automatically — no separate Generate height tween, no
-  `translateY` slide for the push relationship.
-- Mount collapsed → next-frame expand; close collapses height then unmounts on
+  `--studio-mobile-files-dock-duration` (~120ms) / `--studio-mobile-files-dock-ease`.
+  Generate is `flex: 1` and shrinks/grows automatically — no separate Generate height
+  tween, no `translateY` slide for the push relationship.
+- Mount + expand same turn (no 2× rAF delay); close collapses height then unmounts on
   `transitionend` (`height`).
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
@@ -353,7 +353,7 @@ Structure:
   select + view toggle + Add. Pathbar tools = ghost **circle** icon buttons
   (transparent, soft grey border, no shadow). Your files / Asset library = L1
   `--mos-page` fill + border-soft; active = accent wash/border. Bottom nav
-  **Files** and **Create** are icon-only. Memory: **757**.
+  **Files** and **Create** are icon-only. Memory: **757**, instant taps **786**.
 
 ### Studio Files asset picker (locked)
 

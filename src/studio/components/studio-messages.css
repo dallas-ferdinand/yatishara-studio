@@ -15,6 +15,16 @@
   font-family: var(--font-onest), system-ui, sans-serif;
 }
 
+/* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there. */
+.studio-dm-pane.is-rail-embedded {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.studio-dm-pane.is-rail-embedded .studio-dm-chat-column {
+  min-height: 0;
+}
+
 .studio-dm-pane.is-split {
   overflow: hidden;
 }
@@ -327,6 +337,242 @@
   text-align: left;
 }
 
+.studio-dm-feed-share {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.studio-dm-feed-share:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.studio-dm-feed-share.is-post .studio-dm-feed-share-media {
+  position: relative;
+  display: block;
+  width: min(220px, 72vw);
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 18%, transparent);
+}
+
+.studio-dm-feed-share.is-post.is-compact .studio-dm-feed-share-media {
+  width: 96px;
+  border-radius: 10px;
+}
+
+.studio-dm-feed-share-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-dm-feed-share-media-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-feed-share-media-scrim {
+  position: absolute;
+  inset: auto 0 0;
+  height: 52%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, #050608 45%, transparent) 42%,
+    color-mix(in srgb, #050608 82%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+.studio-dm-feed-share-media-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  gap: 2px;
+  padding: 10px 10px 9px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  min-width: 0;
+}
+
+.studio-dm-feed-share-media-meta strong {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-feed-share-media-meta span {
+  font-size: 11px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  opacity: 0.92;
+}
+
+.studio-dm-feed-share.is-compact .studio-dm-feed-share-media-meta {
+  padding: 7px 8px 6px;
+}
+
+.studio-dm-feed-share.is-compact .studio-dm-feed-share-media-meta strong {
+  font-size: 11px;
+}
+
+.studio-dm-feed-share.is-compact .studio-dm-feed-share-media-meta span {
+  font-size: 10px;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.studio-dm-feed-share.is-comment {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  width: min(280px, 78vw);
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--mos-text) 12%, transparent);
+  background: color-mix(in srgb, var(--mos-text) 5%, var(--mos-panel, transparent));
+  box-shadow: none;
+}
+
+.studio-dm-feed-share.is-comment.is-compact {
+  width: min(240px, 70vw);
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px;
+}
+
+.studio-dm-feed-share.is-comment .studio-dm-feed-share-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-text) 8%, transparent);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.studio-dm-feed-share.is-comment .studio-dm-feed-share-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-dm-feed-share-thumb.is-empty {
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-feed-share-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  align-content: center;
+}
+
+.studio-dm-feed-share-copy strong {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-feed-share-copy span {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+/* Feed share bubbles — same containment as image bubbles (card + optional note). */
+.studio-dm-bubble.is-feed-share {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: min(78%, 20rem);
+  padding: 4px;
+}
+
+.studio-dm-bubble.is-feed-share .studio-dm-bubble-body {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  align-items: stretch;
+}
+
+.studio-dm-bubble.is-feed-share .studio-dm-bubble-body > p {
+  margin: 0;
+  padding: 2px 6px 0;
+}
+
+.studio-dm-bubble.is-feed-share .studio-dm-meta {
+  align-self: flex-end;
+  padding: 0 4px 2px;
+}
+
+.studio-dm-bubble.is-feed-share .studio-dm-feed-share.is-post .studio-dm-feed-share-media {
+  width: 100%;
+}
+
+.studio-dm-bubble.is-feed-share .studio-dm-feed-share.is-comment {
+  width: 100%;
+}
+
+.studio-dm-attach-preview.is-feed-share {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+
+.studio-dm-attach-preview.is-feed-share .studio-dm-attach-clear {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.studio-dm-row.is-feed-drop,
+.studio-dm-search-result.is-feed-drop {
+  outline: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 70%, transparent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, var(--mos-panel, transparent));
+}
+
+
 .studio-dm-reply-quote.is-voice {
   padding-bottom: 4px;
 }
@@ -395,21 +641,18 @@
   transform-origin: left center;
 }
 
-/* Pastel Orb + white glyph washes out in DM bubbles — use ink play mark. */
+/* DM voice play/pause: white glyph on Orb (shadow keeps it readable on pastel seeds). */
 .studio-dm-reply-voice .studio-orb-play-glyph,
 .studio-dm-bubble.is-voice .studio-orb-play-glyph {
-  color: var(--color-cursor-text-bright, var(--mos-text, #0f172a));
-  filter: none;
+  color: #fff;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.45));
 }
 
 .studio-dm-reply-voice .studio-orb-play-spinner,
 .studio-dm-bubble.is-voice .studio-orb-play-spinner {
-  border-color: color-mix(
-    in srgb,
-    var(--color-cursor-text-bright, var(--mos-text, #0f172a)) 35%,
-    transparent
-  );
-  border-top-color: var(--color-cursor-text-bright, var(--mos-text, #0f172a));
+  border-color: color-mix(in srgb, #fff 35%, transparent);
+  border-top-color: #fff;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
 }
 
 .studio-dm-reply-image {
@@ -1020,9 +1263,11 @@
   transition: background 0.14s ease, border-color 0.14s ease;
 }
 
-.studio-dm-row:hover {
-  background: var(--color-cursor-hover, var(--mos-hover));
-  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
+@media (hover: hover) {
+  .studio-dm-row:hover {
+    background: var(--color-cursor-hover, var(--mos-hover));
+    border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 32%, var(--mos-border));
+  }
 }
 
 .studio-dm-row.is-active {
@@ -1169,6 +1414,13 @@
 .studio-dm-sidebar-chrome {
   flex: 0 0 auto;
   z-index: 2;
+}
+
+/* Brand head already draws the divider above — don't stack a second top border.
+   Beat `.studio-polish .cursor-panel-search` (same 0,2,0) which re-adds border-top. */
+.studio-polish .studio-dm-sidebar .cursor-panel-search,
+.studio-dm-sidebar .cursor-panel-search {
+  border-top: none;
 }
 
 .studio-dm-sidebar-body {

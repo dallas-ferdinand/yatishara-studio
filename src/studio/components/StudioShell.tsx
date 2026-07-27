@@ -2921,36 +2921,50 @@ export function StudioShell({
     const toKey = `videoEdit:${projectId}`;
     // Keep edit:asset: tabs stable. Swapping the key remounts the editor and
     // briefly wipes the timeline (looks like media vanished on ratio change).
+    // Prefer the folder baked into the tab / prior snapshot — never the Files
+    // rail browse folder (switching folders must not relocate the .edit).
+    const folderFromAssetTab = fromTabKey?.startsWith("edit:asset:")
+      ? fromTabKey.split(":").slice(2).join(":")
+      : null;
     if (fromTabKey?.startsWith("edit:asset:")) {
-      setTabEntrySnapshots((snapshots) => ({
-        ...snapshots,
-        [fromTabKey]: videoEditToEntry({
+      setTabEntrySnapshots((snapshots) => {
+        const folderId =
+          folderFromAssetTab ||
+          snapshots[fromTabKey]?.folderId ||
+          snapshots[toKey]?.folderId ||
+          activeFolder?._id;
+        const entry = videoEditToEntry({
           _id: projectId,
           name,
-          folderId: activeFolder?._id,
+          folderId,
           updatedAt: wallClockMs(),
-        }),
-        [toKey]: videoEditToEntry({
-          _id: projectId,
-          name,
-          folderId: activeFolder?._id,
-          updatedAt: wallClockMs(),
-        }),
-      }));
+        });
+        return {
+          ...snapshots,
+          [fromTabKey]: entry,
+          [toKey]: entry,
+        };
+      });
       return;
     }
     if (fromTabKey && fromTabKey !== toKey) {
       replaceTabKey(fromTabKey, toKey);
     }
-    setTabEntrySnapshots((snapshots) => ({
-      ...snapshots,
-      [toKey]: videoEditToEntry({
-        _id: projectId,
-        name,
-        folderId: activeFolder?._id,
-        updatedAt: wallClockMs(),
-      }),
-    }));
+    setTabEntrySnapshots((snapshots) => {
+      const folderId =
+        snapshots[fromTabKey]?.folderId ||
+        snapshots[toKey]?.folderId ||
+        activeFolder?._id;
+      return {
+        ...snapshots,
+        [toKey]: videoEditToEntry({
+          _id: projectId,
+          name,
+          folderId,
+          updatedAt: wallClockMs(),
+        }),
+      };
+    });
   }
 
   function openTab(key) {
@@ -3334,55 +3348,54 @@ export function StudioShell({
   }, [isMobile, openCreditsPane]);
 
   function openMobileSection(section) {
-    startMobileTransition(() => {
-      if (section === "settings") {
-        setMobileAppMenuOpen(false);
-        setHistoryOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-        setSettingsOpen(true);
-        return;
+    // Sync — do not wrap in useTransition; nav is-active must paint on pointerdown.
+    if (section === "settings") {
+      setMobileAppMenuOpen(false);
+      setHistoryOpen(false);
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      setSettingsOpen(true);
+      return;
+    }
+    if (section === "feed") {
+      setMobileSection("composer");
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      openFeed();
+      return;
+    }
+    if (section === "network") {
+      setMobileSection("composer");
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      openNetworkTab();
+      return;
+    }
+    setMobileSection(section);
+    if (section === "composer") {
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
+        openTab(lastChatTabRef.current || COMPOSER_TAB);
       }
-      if (section === "feed") {
-        setMobileSection("composer");
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        openFeed();
-        return;
-      }
-      if (section === "network") {
-        setMobileSection("composer");
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        openNetworkTab();
-        return;
-      }
-      setMobileSection(section);
-      if (section === "composer") {
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-        if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
-          openTab(lastChatTabRef.current || COMPOSER_TAB);
-        }
-        return;
-      }
-      if (section === "files") {
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-      }
-    });
+      return;
+    }
+    if (section === "files") {
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+    }
   }
 
   function toggleMobileNavAction() {
@@ -3400,36 +3413,30 @@ export function StudioShell({
         openMobileSection("composer");
         return;
       }
-      startMobileTransition(() => {
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
-        openMobileSection("files");
-      });
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      openMobileSection("files");
       return;
     }
     if (onSocial) {
-      startMobileTransition(() => {
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        setMobileNetworkOpen(false);
-        if (mobileSection === "files") setMobileSection("composer");
-        setMobileSocialOpen((open) => !open);
-      });
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileNetworkOpen(false);
+      if (mobileSection === "files") setMobileSection("composer");
+      setMobileSocialOpen((open) => !open);
       return;
     }
     if (onNetwork) {
-      startMobileTransition(() => {
-        setSettingsOpen(false);
-        setHistoryOpen(false);
-        setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        if (mobileSection === "files") setMobileSection("composer");
-        setMobileNetworkOpen((open) => !open);
-      });
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileSocialOpen(false);
+      if (mobileSection === "files") setMobileSection("composer");
+      setMobileNetworkOpen((open) => !open);
       return;
     }
     if (mobileSection === "files") {
@@ -3671,8 +3678,8 @@ export function StudioShell({
     const nextAttachments = already ? existing : [...existing, attachment];
     const stayOnFiles = isMobile && mobileSection === "files";
 
-    // Mobile (Android): never Range-insert during the gesture. Build HTML offline,
-    // commit React attachments (chip rail), then paint contenteditable after release.
+    // Mobile (Android): never Range-insert during the gesture — deferred attach
+    // after touchend inserts inline tokens like desktop.
     const liveEditor =
       composerContextKey === targetTab ? editorRef.current : null;
     const baseDraft =
@@ -3726,9 +3733,9 @@ export function StudioShell({
       });
     };
 
-    // Live React attachments power the mobile chip rail. If the active composer
-    // context isn't the target chat, open that tab so state hydrates from ref
-    // (Files dock can stay open — openTab does not close it).
+    // Live React attachments stay in sync with editor tokens. If the active
+    // composer context isn't the target chat, open that tab so state hydrates
+    // from ref (Files dock can stay open — openTab does not close it).
     if (composerContextKey === targetTab) {
       // Functional update: deferred mobile attaches can fire twice before re-render.
       setAttachments((prev) => {
@@ -5649,7 +5656,9 @@ export function StudioShell({
   }, [isMobile]);
 
   // Fallback Files→composer bridge (primary path is onMobileAttach on FileTree).
-  // Same deferral rule: never attach on the touchend stack.
+  // Same deferral rule: never attach on the touchend stack. Uses snapshotted
+  // drop-intent coords from FileTree (not live finger after layout shift).
+  // Files dock stays open after drop — user closes it explicitly.
   useEffect(() => {
     setMobileComposerDropHandler(({ entry, clientX, clientY }) => {
       if (!entry) return false;
@@ -5668,7 +5677,8 @@ export function StudioShell({
     return () => setMobileComposerDropHandler(null);
   }, []);
 
-  // Legacy CustomEvent path (folder drops / older callers).
+  // Legacy CustomEvent path (folder drops / older callers). Prefer detail coords
+  // for composer inserts — never null-range always-append.
   useEffect(() => {
     if (!isMobile) return undefined;
     const onTouchDrop = (event) => {
@@ -5676,7 +5686,13 @@ export function StudioShell({
       const entry = event.detail?.entry;
       if (!entry) return;
       const snapshot = { ...entry };
-      const attach = () => attachEntryRef.current?.(snapshot, null);
+      const x = Number(event.detail?.clientX) || 0;
+      const y = Number(event.detail?.clientY) || 0;
+      const attach = () => {
+        const editor = editorRef.current;
+        const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
+        attachEntryRef.current?.(snapshot, range);
+      };
       queueMicrotask(attach);
       window.setTimeout(attach, 0);
     };
@@ -5932,9 +5948,6 @@ export function StudioShell({
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
-        .studio-mobile-nav-indicator {
-          display: none;
-        }
         .studio-mobile-nav-btn {
           display: inline-flex;
           flex: 1 1 0;
@@ -5951,7 +5964,13 @@ export function StudioShell({
           letter-spacing: 0.01em;
           font-family: inherit;
           cursor: pointer;
+          touch-action: manipulation;
           -webkit-tap-highlight-color: transparent;
+          transition: transform var(--studio-motion-fast) var(--studio-motion-ease);
+        }
+        .studio-mobile-nav-btn:active,
+        .studio-mobile-nav-btn.is-pressed {
+          transform: scale(var(--studio-press-scale));
         }
         .studio-mobile-nav-btn.is-icon-only {
           flex: 0 0 auto;
@@ -6618,8 +6637,10 @@ export function StudioShell({
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn) {
           color: color-mix(in srgb, var(--color-cursor-text-bright) 90%, transparent) !important;
         }
-        .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover) :where(svg, .icon-inline) {
-          color: var(--color-cursor-text-bright) !important;
+        @media (hover: hover) {
+          .studio-polish :where(button:hover, [role="button"]:hover, .cursor-icon-btn:hover, .cursor-toolbar-icon:hover, .studio-pill-btn:hover) :where(svg, .icon-inline) {
+            color: var(--color-cursor-text-bright) !important;
+          }
         }
         .studio-polish :where(aside, .cursor-panel-head, .cursor-settings-panel, .border-cursor-border) {
           border-color: var(--studio-shell-border) !important;
@@ -6707,6 +6728,28 @@ export function StudioShell({
         }
         .studio-polish :where(button, [role="button"], .cursor-tree-row, .desk-file-list-row, .desk-file-grid-item, .desk-file-preview-item, .desk-file-breadcrumbs-chip) {
           -webkit-tap-highlight-color: transparent;
+        }
+        .studio-polish.is-studio-mobile :where(
+          button,
+          [role="button"],
+          .cursor-tree-row,
+          .desk-file-list-row,
+          .desk-file-grid-item,
+          .desk-file-preview-item,
+          .desk-file-breadcrumbs-chip,
+          .studio-dm-row,
+          .studio-cn-list-item,
+          .studio-cn-messages-row
+        ) {
+          /* Instant press paint — no color tween lag on finger down */
+          transition: transform var(--studio-motion-fast) var(--studio-motion-ease) !important;
+          touch-action: manipulation;
+        }
+        .studio-polish.is-studio-mobile .studio-dm-row:active,
+        .studio-polish.is-studio-mobile .desk-file-list-row.is-pressed,
+        .studio-polish.is-studio-mobile .desk-file-grid-item.is-pressed,
+        .studio-polish.is-studio-mobile .desk-file-preview-item.is-pressed {
+          transform: scale(var(--studio-press-scale));
         }
         .studio-polish :where(.cursor-icon-btn, .cursor-toolbar-icon, .studio-pill-btn, .studio-settings-pill) {
           position: relative;
@@ -7057,11 +7100,17 @@ export function StudioShell({
           position: relative;
           overflow: visible;
         }
-        .studio-polish .cursor-tree-row:hover {
-          background: var(--studio-surface-hover);
-          border-color: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-shell-border));
-          box-shadow: none;
-          transform: none;
+        @media (hover: hover) {
+          .studio-polish .cursor-tree-row:hover {
+            background: var(--studio-surface-hover);
+            border-color: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-shell-border));
+            box-shadow: none;
+            transform: none;
+          }
+          .studio-polish .desk-file-breadcrumbs-chip:hover {
+            background: var(--studio-grid-tile-hover);
+            box-shadow: none;
+          }
         }
         .studio-polish .cursor-tree-row[aria-selected="true"],
         .studio-polish .cursor-tree-row.is-selected {
@@ -7069,10 +7118,6 @@ export function StudioShell({
           box-shadow:
             inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
             0 0 16px color-mix(in srgb, var(--cursor-accent) 10%, transparent);
-        }
-        .studio-polish .desk-file-breadcrumbs-chip:hover {
-          background: var(--studio-grid-tile-hover);
-          box-shadow: none;
         }
         .studio-polish .cursor-workspace-head {
           padding: 0 2px 0 4px !important;
@@ -7432,7 +7477,7 @@ export function StudioShell({
               - var(--studio-mobile-bottom-chrome)
           );
           --studio-mobile-files-sheet-height: calc(0.6 * var(--studio-mobile-files-band));
-          --studio-mobile-files-dock-duration: 340ms;
+          --studio-mobile-files-dock-duration: 120ms;
           --studio-mobile-files-dock-ease: cubic-bezier(0.32, 0.72, 0, 1);
         }
         .studio-mobile-stage {
@@ -7770,7 +7815,11 @@ export function StudioShell({
           text-align: left;
           cursor: pointer;
         }
-        .studio-mobile-app-menu-item:hover,
+        @media (hover: hover) {
+          .studio-mobile-app-menu-item:hover {
+            background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
+          }
+        }
         .studio-mobile-app-menu-item:active {
           background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
         }
@@ -10941,15 +10990,27 @@ export function StudioShell({
         .studio-polish .desk-file-list-row {
           border: 1px solid transparent;
         }
-        .studio-polish .desk-file-list-row:hover {
-          border-color: color-mix(
-            in srgb,
-            var(--cursor-accent, var(--mos-accent)) 58%,
-            transparent
-          ) !important;
-          background: var(--studio-grid-tile-hover) !important;
-          box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
-          transform: none;
+        @media (hover: hover) {
+          .studio-polish .desk-file-list-row:hover {
+            border-color: color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 58%,
+              transparent
+            ) !important;
+            background: var(--studio-grid-tile-hover) !important;
+            box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
+            transform: none;
+          }
+          .studio-polish .desk-file-list-row.is-parent-row:hover {
+            border-color: color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 58%,
+              transparent
+            ) !important;
+            background: var(--studio-grid-tile-hover) !important;
+            box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
+            transform: none;
+          }
         }
         .studio-polish .desk-file-list-row.is-parent-row {
           min-height: 28px;
@@ -10958,16 +11019,6 @@ export function StudioShell({
           border-radius: 8px;
           background: var(--studio-grid-tile-bg) !important;
           box-shadow: none;
-        }
-        .studio-polish .desk-file-list-row.is-parent-row:hover {
-          border-color: color-mix(
-            in srgb,
-            var(--cursor-accent, var(--mos-accent)) 58%,
-            transparent
-          ) !important;
-          background: var(--studio-grid-tile-hover) !important;
-          box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
-          transform: none;
         }
         .studio-polish .cursor-file-grid,
         .studio-polish .desk-file-preview-grid {
@@ -11096,13 +11147,15 @@ export function StudioShell({
           opacity: 0.54;
           transition: opacity var(--studio-motion-fast) var(--studio-motion-ease);
         }
-        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
-        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
-          opacity: 1;
-        }
-        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
-        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
-          opacity: 0.82;
+        @media (hover: hover) {
+          .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
+          .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
+            opacity: 1;
+          }
+          .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
+          .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
+            opacity: 0.82;
+          }
         }
         [data-appearance="light"] .studio-polish .desk-file-grid-item .desk-file-thumb-folder svg,
         [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-folder svg {
@@ -11117,13 +11170,15 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .desk-file-preview-item .desk-file-thumb-fallback svg {
           opacity: 0.46;
         }
-        [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
-        [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
-          opacity: 1;
-        }
-        [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
-        [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
-          opacity: 0.78;
+        @media (hover: hover) {
+          [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-folder svg,
+          [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-folder svg {
+            opacity: 1;
+          }
+          [data-appearance="light"] .studio-polish .desk-file-grid-item:hover .desk-file-thumb-fallback svg,
+          [data-appearance="light"] .studio-polish .desk-file-preview-item:hover .desk-file-thumb-fallback svg {
+            opacity: 0.78;
+          }
         }
         [data-appearance="light"] .studio-polish .desk-file-breadcrumbs-chip {
           opacity: 0.82;
@@ -11148,53 +11203,48 @@ export function StudioShell({
           text-shadow: none;
           transition: color var(--studio-motion-fast) var(--studio-motion-ease);
         }
-        .studio-polish .desk-file-grid-item:hover,
-        .studio-polish .desk-file-preview-item:hover {
-          border: none !important;
-          background: transparent !important;
-          box-shadow: none !important;
-          transform: none;
-        }
-        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual {
-          background: var(--studio-grid-tile-hover) !important;
-          box-shadow:
-            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
-            0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
-        }
-        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-bg) !important;
-          box-shadow:
-            inset 0 0 0 1px var(--desk-transparency-border),
-            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
-            0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
-        }
-        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-bg) !important;
-          box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent) !important;
-        }
-        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          background: var(--desk-transparency-bg) !important;
-          box-shadow:
-            inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent),
-            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
-            0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
-        }
-        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
-          background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
-        }
-        .studio-polish .desk-file-grid-item:hover .desk-file-thumb-label,
-        .studio-polish .desk-file-preview-item:hover .desk-file-thumb-label {
-          color: var(--color-cursor-text);
-          opacity: 1;
+        @media (hover: hover) {
+          .studio-polish .desk-file-grid-item:hover,
+          .studio-polish .desk-file-preview-item:hover {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            transform: none;
+          }
+          .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual,
+          .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual {
+            background: var(--studio-grid-tile-hover) !important;
+            box-shadow:
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-grid-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+            background: var(--desk-transparency-bg) !important;
+            box-shadow:
+              inset 0 0 0 1px var(--desk-transparency-border),
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+            background: var(--desk-transparency-bg) !important;
+            box-shadow:
+              inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent),
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
+          .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
+            background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
+          }
+          .studio-polish .desk-file-grid-item:hover .desk-file-thumb-label,
+          .studio-polish .desk-file-preview-item:hover .desk-file-thumb-label {
+            color: var(--color-cursor-text);
+            opacity: 1;
+          }
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"],
         .studio-polish .desk-file-preview-item[aria-selected="true"],
@@ -11224,23 +11274,6 @@ export function StudioShell({
         .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-label {
           color: var(--color-cursor-text);
         }
-        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual,
-        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual {
-          box-shadow:
-            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 70%, transparent),
-            0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
-        }
-        .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
-        .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
-          box-shadow:
-            inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent),
-            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
-            0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
-        }
         .studio-polish .desk-file-list-row[aria-selected="true"],
         .studio-polish .desk-file-list-row.is-selected {
           border-color: color-mix(
@@ -11251,14 +11284,33 @@ export function StudioShell({
           background: var(--studio-grid-tile-selected) !important;
           box-shadow: none;
         }
-        .studio-polish .desk-file-list-row[aria-selected="true"]:hover,
-        .studio-polish .desk-file-list-row.is-selected:hover {
-          border-color: color-mix(
-            in srgb,
-            var(--cursor-accent, var(--mos-accent)) 62%,
-            transparent
-          ) !important;
-          box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
+        @media (hover: hover) {
+          .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual,
+          .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual,
+          .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual,
+          .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual {
+            box-shadow:
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 70%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image),
+          .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
+            box-shadow:
+              inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent),
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-list-row[aria-selected="true"]:hover,
+          .studio-polish .desk-file-list-row.is-selected:hover {
+            border-color: color-mix(
+              in srgb,
+              var(--cursor-accent, var(--mos-accent)) 62%,
+              transparent
+            ) !important;
+            box-shadow: 0 2px 8px color-mix(in srgb, #000 12%, transparent);
+          }
         }
         .studio-polish .desk-file-grid-item.is-drag-over,
         .studio-polish .desk-file-preview-item.is-drag-over {
@@ -12318,45 +12370,7 @@ export function StudioShell({
           -webkit-user-select: none;
           box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
         }
-        /* Mobile: chips render in the React rail (Android-safe). Hide duplicates
-           that may also exist inside the contenteditable. */
-        .studio-polish.is-studio-mobile .cursor-composer-mention-editor .studio-inline-tag {
-          display: none !important;
-        }
-        .studio-composer-attach-rail {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-          flex: 0 0 auto;
-          width: 100%;
-          padding: 8px 10px 0;
-          box-sizing: border-box;
-        }
-        .studio-composer-attach-rail .studio-inline-tag {
-          cursor: default;
-          margin: 0;
-          max-width: min(160px, 42vw);
-        }
-        /* Same chip chrome as desktop — no separate remove control. */
-        .studio-composer-attach-rail .studio-inline-tag--image-only {
-          width: var(--studio-composer-chip-size, 28px);
-          min-width: var(--studio-composer-chip-size, 28px);
-          max-width: var(--studio-composer-chip-size, 28px);
-          padding: 0;
-          gap: 0;
-        }
-        .studio-composer-attach-rail .studio-inline-tag--image-only .studio-inline-tag-kind {
-          position: relative;
-          inset: auto;
-          width: var(--studio-composer-chip-size, 28px);
-          height: var(--studio-composer-chip-size, 28px);
-          flex: 0 0 auto;
-        }
-        .studio-composer-attach-rail .studio-inline-tag--image-only .studio-inline-tag-overlay {
-          inset: 0;
-          width: var(--studio-composer-chip-size, 28px);
-          height: var(--studio-composer-chip-size, 28px);
-        }
+        /* Mobile chips are inline in the contenteditable — same as desktop. */
         .studio-inline-tag.is-dragging {
           opacity: 0.55;
           cursor: grabbing;
@@ -18515,19 +18529,23 @@ export function StudioShell({
           setNavTrail={setNavTrail}
           onOpenPath={handleOpenPath}
           onEntryOpen={handleEntryOpen}
-          onMobileAttach={(entry, clientX, clientY) => {
+          onMobileAttach={(entry, intentOrX, maybeY) => {
             // Never attach synchronously from touchend — Android Chrome drops
-            // that work. After deferral, insert at the same caret desktop uses.
+            // that work. Use FileTree's snapshotted drop intent (projected
+            // caret coords). Files dock stays open so multi-attach is easy.
             if (!entry) return false;
             const snapshot = { ...entry };
-            const x = Number(clientX) || 0;
-            const y = Number(clientY) || 0;
+            const intent =
+              intentOrX && typeof intentOrX === "object"
+                ? intentOrX
+                : { clientX: intentOrX, clientY: maybeY };
+            const x = Number(intent.clientX) || 0;
+            const y = Number(intent.clientY) || 0;
             window.requestAnimationFrame(() => {
               window.setTimeout(() => {
                 const editor = editorRef.current;
                 const range = editor ? rangeFromPointInEditor(editor, x, y) : null;
-                const ok = attachEntryRef.current?.(snapshot, range);
-                if (ok) setMobileSection("composer");
+                attachEntryRef.current?.(snapshot, range);
               }, 0);
             });
             return true;
@@ -19098,24 +19116,37 @@ function StudioComposer({
   // Mobile touch-drag has no HTML5 dragover — FileTree publishes finger coords
   // so we can drive the same pulsing drop caret desktop shows.
   useEffect(() => {
+    let lastInComposerY = null;
     setComposerTouchDragPreviewHandler(({ clientX, clientY, active }) => {
       if (!active) {
         setDragOver(false);
         setDropMarker(null);
+        lastInComposerY = null;
         return;
       }
       setDragOver(true);
       const editor = editorRef.current;
       let x = clientX;
       let y = clientY;
-      // Finger often stays in the Files dock under the composer. Project onto
-      // the editor band so the caret still tracks horizontally like desktop.
       if (editor) {
         const rect = editor.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
-          x = Math.min(rect.right - 2, Math.max(rect.left + 2, x));
-          if (y < rect.top || y > rect.bottom) {
-            y = rect.bottom - 6;
+          const inside =
+            clientX >= rect.left &&
+            clientX <= rect.right &&
+            clientY >= rect.top &&
+            clientY <= rect.bottom;
+          if (inside) {
+            // Raw coords when finger is over the editor — same as desktop dragover.
+            lastInComposerY = clientY;
+          } else {
+            // Still in Files dock / chrome: project X; keep last in-composer Y
+            // (or end-of-content), never always clamp to bottom.
+            x = Math.min(rect.right - 2, Math.max(rect.left + 2, clientX));
+            y =
+              lastInComposerY != null
+                ? Math.min(rect.bottom - 6, Math.max(rect.top + 6, lastInComposerY))
+                : rect.bottom - 6;
           }
         }
       }
@@ -19709,9 +19740,6 @@ function StudioComposer({
         <div className="studio-composer-row">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
-      {isMobile && attachments.length > 0 ? (
-        <StudioComposerMobileAttachRail attachments={attachments} />
-      ) : null}
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -19956,84 +19984,6 @@ function StudioComposer({
         }}
       />
       </div>
-    </div>
-  );
-}
-
-function composerRailIconName(kind) {
-  if (kind === "map-pin") return "mapPin";
-  if (kind === "video") return "film";
-  if (kind === "audio") return "audioWaveform";
-  if (kind === "context" || kind === "element") return "sparkles";
-  if (
-    kind === "image" ||
-    kind === "folder" ||
-    kind === "sparkles" ||
-    kind === "user" ||
-    kind === "package" ||
-    kind === "file"
-  ) {
-    return kind;
-  }
-  return "file";
-}
-
-/** Android-safe chip rail: React state → visible UI (same chips as desktop; backspace to remove). */
-function StudioComposerMobileAttachRail({ attachments }) {
-  if (!Array.isArray(attachments) || attachments.length === 0) return null;
-  return (
-    <div className="studio-composer-attach-rail" aria-label="Attachments">
-      {attachments.map((attachment) => {
-        const id = String(attachment?.id ?? "");
-        if (!id) return null;
-        const label = String(attachment.label ?? attachment.filename ?? "Reference");
-        const isElement = attachment.studioKind === "element";
-        const thumb = attachment.thumbnailUrl;
-        const isPreview =
-          Boolean(thumb) &&
-          (isElement || attachment.kind === "image" || attachment.kind === "video");
-        const overlayName = composerRailIconName(
-          isElement
-            ? elementTokenIconKind(attachment.elementType)
-            : attachment.kind === "video"
-              ? "video"
-              : "image",
-        );
-        return (
-          <span
-            key={id}
-            className={`studio-inline-tag${isPreview ? " studio-inline-tag--preview studio-inline-tag--image-only" : ""}`}
-            data-attachment-id={id}
-            title={label}
-          >
-            <span className="studio-inline-tag-kind">
-              {isPreview ? (
-                attachment.kind === "video" && !isElement ? (
-                  <video
-                    className="studio-inline-tag-media"
-                    src={attachment.mediaUrl ?? thumb}
-                    muted
-                    playsInline
-                    preload="metadata"
-                  />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img className="studio-inline-tag-media" src={thumb} alt="" />
-                )
-              ) : (
-                <Icon name={composerRailIconName(composerTokenIconKind(attachment))} size={11} />
-              )}
-            </span>
-            {isPreview ? (
-              <span className="studio-inline-tag-overlay" aria-hidden="true">
-                <Icon name={overlayName} size={11} />
-              </span>
-            ) : (
-              <span className="studio-inline-tag-label">{label}</span>
-            )}
-          </span>
-        );
-      })}
     </div>
   );
 }
@@ -21965,18 +21915,48 @@ function setSelectionToRange(range) {
 function updateComposerDropMarker(event, editor, inputLine, setDropMarker) {
   const range = rangeFromPointInEditor(editor, event.clientX, event.clientY);
   if (!range || !inputLine) return;
-  const markerRect = range.getClientRects?.()[0] ?? range.startContainer?.parentElement?.getBoundingClientRect?.();
+  const markerRect =
+    range.getClientRects?.()[0] ??
+    range.startContainer?.parentElement?.getBoundingClientRect?.();
   const hostRect = inputLine.getBoundingClientRect();
-  const emptyComposer = !readComposerEditorText(editor).trim() && !editor.querySelector(".studio-inline-tag");
+  const emptyComposer =
+    !readComposerEditorText(editor).trim() &&
+    !editor.querySelector(".studio-inline-tag");
   const textCaretHeight = 22;
   if (!markerRect) {
-    setDropMarker({ left: Math.max(12, event.clientX - hostRect.left), top: 10, height: textCaretHeight });
+    // End-of-content fallback — never jump to a phantom top-of-box caret.
+    const editorRect = editor.getBoundingClientRect();
+    const endRange = document.createRange();
+    endRange.selectNodeContents(editor);
+    endRange.collapse(false);
+    const endRect =
+      endRange.getClientRects?.()[0] ??
+      (editorRect.width > 0 ? editorRect : null);
+    if (endRect) {
+      setDropMarker({
+        left: Math.max(8, endRect.left - hostRect.left),
+        top: Math.max(8, endRect.top - hostRect.top),
+        height: Math.min(
+          24,
+          Math.max(18, emptyComposer ? textCaretHeight : endRect.height || textCaretHeight),
+        ),
+      });
+      return;
+    }
+    setDropMarker({
+      left: Math.max(12, event.clientX - hostRect.left),
+      top: Math.max(8, editorRect.bottom - hostRect.top - textCaretHeight),
+      height: textCaretHeight,
+    });
     return;
   }
   setDropMarker({
     left: Math.max(8, markerRect.left - hostRect.left),
     top: Math.max(8, markerRect.top - hostRect.top),
-    height: Math.min(24, Math.max(18, emptyComposer ? textCaretHeight : markerRect.height || textCaretHeight)),
+    height: Math.min(
+      24,
+      Math.max(18, emptyComposer ? textCaretHeight : markerRect.height || textCaretHeight),
+    ),
   });
 }
 
@@ -22140,6 +22120,12 @@ function playStudioTapFeedback() {
     navigator.vibrate?.(8);
   } catch {
     // best-effort tactile feedback
+  }
+  // Coarse pointer: vibrate only — AudioContext oscillator work adds tap lag.
+  try {
+    if (window.matchMedia?.("(pointer: coarse)").matches) return;
+  } catch {
+    // continue to audio on desktop
   }
   try {
     studioTapAudioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
@@ -23772,7 +23758,12 @@ function ActivePane({
     );
   }
   if (videoEditContext && (videoEditContext.projectId || videoEditContext.sourceAssetId)) {
-    const folderId = videoEditContext.folderId ?? activeFolderId;
+    // Prefer the edit's own folder (tab key / entry). Fall back to the browse
+    // folder only for brand-new edits that have not been placed yet.
+    const folderId =
+      videoEditContext.folderId ??
+      (activeEntry?.studioKind === "videoEdit" ? activeEntry.folderId : null) ??
+      activeFolderId;
     if (!folderId || folderId === TRASH_FOLDER_ID) {
       return wrapPane(
         <div className="p-6 text-sm text-cursor-muted">Choose a folder with clips to edit.</div>,

@@ -18,6 +18,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { ReactNode } from "react";
@@ -25,6 +26,12 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { useLongPress } from "@/desk/hooks/use-long-press";
+import type { StudioFeedSharePayload } from "@/studio/lib/studioFeedShare";
+import {
+  feedShareDragTypes,
+  readFeedShareDataTransfer,
+  setPendingDmFeedShare,
+} from "@/studio/lib/studioFeedShare";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
@@ -116,6 +123,15 @@ export function StudioMessagesSidebar({
           now: searchNow,
         }
       : "skip",
+  );
+
+  const handleFeedShareDrop = useCallback(
+    (conversationId: DmConversationId, payload: StudioFeedSharePayload) => {
+      // Attach like a photo draft — user can type a note, then send.
+      setPendingDmFeedShare({ conversationId, payload });
+      onSelectConversation(conversationId);
+    },
+    [onSelectConversation],
   );
 
   // Drop the filter if the active label was deleted.
@@ -392,13 +408,16 @@ export function StudioMessagesSidebar({
                 icon={<MessageCircle aria-hidden="true" />}
               >
                 {searchResults.chats.map((chat) => (
-                  <button
+                  <FeedShareDropTarget
                     key={chat.conversationId}
-                    type="button"
                     className="studio-dm-search-result is-chat"
-                    onClick={() => {
+                    onActivate={() => {
                       setSearch("");
                       onSelectConversation(chat.conversationId);
+                    }}
+                    onFeedShareDrop={(payload) => {
+                      handleFeedShareDrop(chat.conversationId, payload);
+                      setSearch("");
                     }}
                   >
                     <span className="studio-dm-row-avatar-wrap">
@@ -441,7 +460,7 @@ export function StudioMessagesSidebar({
                         ))}
                       </span>
                     ) : null}
-                  </button>
+                  </FeedShareDropTarget>
                 ))}
               </SearchResultSection>
 
@@ -543,6 +562,9 @@ export function StudioMessagesSidebar({
                   row={row}
                   active={row.conversationId === activeConversationId}
                   onSelect={() => onSelectConversation(row.conversationId)}
+                  onFeedShareDrop={(conversationId, payload) => {
+                    handleFeedShareDrop(conversationId, payload);
+                  }}
                   onContextMenu={(coords) =>
                     openChatMenu(coords, {
                       userId: row.peer.userId,
@@ -691,6 +713,79 @@ function LabelChip({
     >
       {createElement(dmLabelIcon(label.icon), { "aria-hidden": true })}
       <span>{label.name}</span>
+    </button>
+  );
+}
+
+/** Chat search row that also accepts feed post/comment drops. */
+function FeedShareDropTarget({
+  className,
+  children,
+  onActivate,
+  onFeedShareDrop,
+}: {
+  className?: string;
+  children: ReactNode;
+  onActivate: () => void;
+  onFeedShareDrop: (payload: StudioFeedSharePayload) => void;
+}) {
+  const [dropActive, setDropActive] = useState(false);
+  const selectHandledRef = useRef(false);
+  const pointerStartRef = useRef({ x: 0, y: 0 });
+  const pointerMovedRef = useRef(false);
+  return (
+    <button
+      type="button"
+      className={`${className ?? ""}${dropActive ? " is-feed-drop" : ""}`}
+      onPointerDown={(event) => {
+        if (event.button != null && event.button !== 0) return;
+        selectHandledRef.current = false;
+        pointerMovedRef.current = false;
+        pointerStartRef.current = { x: event.clientX, y: event.clientY };
+      }}
+      onPointerMove={(event) => {
+        if (pointerMovedRef.current) return;
+        const dx = Math.abs(event.clientX - pointerStartRef.current.x);
+        const dy = Math.abs(event.clientY - pointerStartRef.current.y);
+        if (Math.max(dx, dy) > 14) pointerMovedRef.current = true;
+      }}
+      onPointerUp={(event) => {
+        if (event.button != null && event.button !== 0) return;
+        if (pointerMovedRef.current) return;
+        selectHandledRef.current = true;
+        onActivate();
+      }}
+      onClick={() => {
+        if (selectHandledRef.current) {
+          selectHandledRef.current = false;
+          return;
+        }
+        onActivate();
+      }}
+      onDragEnter={(event) => {
+        if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) return;
+        event.preventDefault();
+        setDropActive(true);
+      }}
+      onDragOver={(event) => {
+        if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDropActive(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+        setDropActive(false);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        setDropActive(false);
+        const payload = readFeedShareDataTransfer(event.dataTransfer);
+        if (!payload) return;
+        onFeedShareDrop(payload);
+      }}
+    >
+      {children}
     </button>
   );
 }

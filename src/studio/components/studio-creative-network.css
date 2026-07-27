@@ -85,8 +85,10 @@
   cursor: pointer;
 }
 
-.studio-cn-list-item:hover {
-  background: var(--color-cursor-hover);
+@media (hover: hover) {
+  .studio-cn-list-item:hover {
+    background: var(--color-cursor-hover);
+  }
 }
 
 .studio-cn-list-item.is-active {
@@ -204,8 +206,10 @@
   cursor: pointer;
 }
 
-.studio-cn-messages-row:hover {
-  background: var(--color-cursor-hover);
+@media (hover: hover) {
+  .studio-cn-messages-row:hover {
+    background: var(--color-cursor-hover);
+  }
 }
 
 .studio-cn-messages-row span {

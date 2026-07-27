@@ -2568,9 +2568,11 @@
   box-shadow: 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 4%, transparent) inset;
 }
 
-.desk-file-grid-item:hover {
-  border-color: var(--color-cursor-border, var(--mos-border));
-  background: color-mix(in srgb, var(--mos-text) 5%, var(--mos-panel));
+@media (hover: hover) {
+  .desk-file-grid-item:hover {
+    border-color: var(--color-cursor-border, var(--mos-border));
+    background: color-mix(in srgb, var(--mos-text) 5%, var(--mos-panel));
+  }
 }
 
 .desk-file-thumb-visual {
@@ -2578,7 +2580,7 @@
 }
 
 [data-appearance="light"] .desk-file-thumb-visual {
-  background: var(--mos-raised, var(--cursor-surface-raised, #d4d4da));
+  background: var(--mos-plate, var(--cursor-surface-raised, #ececf0));
 }
 
 .desk-file-thumb-visual:has(.desk-file-thumb-image),
