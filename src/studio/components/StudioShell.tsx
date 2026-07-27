@@ -3670,8 +3670,9 @@ export function StudioShell({
     const nextAttachments = already ? existing : [...existing, attachment];
     const stayOnFiles = isMobile && mobileSection === "files";
 
-    // iOS: Range/selection insert during touchend is unreliable. Always build HTML
-    // offline from state, then paint the contenteditable — never depend on insertNode.
+    // Mobile (Android Chrome especially): Range/selection insert during touchend
+    // is unreliable. Always build HTML offline from state, then paint the
+    // contenteditable — never depend on insertNode.
     const liveEditor =
       composerContextKey === targetTab ? editorRef.current : null;
     const baseDraft =
@@ -3727,10 +3728,13 @@ export function StudioShell({
       setAttachments(nextAttachments);
       setDraft(nextDraft);
       paint();
-      // Second paint after iOS touchend / keyboard settles.
+      // Android Chrome often ignores sync contenteditable writes during touchend.
+      // Repaint after the gesture fully releases.
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(paint);
       });
+      window.setTimeout(paint, 0);
+      window.setTimeout(paint, 48);
     }
 
     if (stayOnFiles) return;
