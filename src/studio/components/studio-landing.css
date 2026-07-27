@@ -164,8 +164,8 @@
   z-index: 50;
   display: flex;
   flex-direction: column;
-  height: min(38dvh, 300px);
-  max-height: min(38dvh, 300px);
+  height: min(62dvh, 480px);
+  max-height: min(62dvh, 480px);
   padding: 0;
   border: none;
   border-radius: 18px 18px 0 0;
@@ -972,9 +972,6 @@
     font-size: clamp(2rem, 8vw, 2.8rem);
   }
 
-  .studio-landing-faq {
-    max-height: min(42vh, 280px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
