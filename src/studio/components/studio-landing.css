@@ -546,7 +546,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  /* Visible so mock/button Caveat tips can hang off-frame. */
+  overflow: visible;
 }
 
 .studio-landing-section-inner.is-narrow {
@@ -653,12 +654,39 @@
   transform: none;
 }
 
+.studio-landing-mock-frame {
+  position: relative;
+  width: min(100%, 560px);
+  margin: clamp(16px, 3vh, 28px) 0 0;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.studio-landing-mock-frame.has-aside {
+  /* Room for the Caveat tip hanging off the mock. */
+  overflow: visible;
+}
+
+.studio-landing-mock-frame .studio-landing-laptop {
+  width: 100%;
+  margin: 0;
+}
+
 .studio-landing-laptop {
   width: min(100%, 560px);
   margin: clamp(16px, 3vh, 28px) 0 0;
   flex-shrink: 1;
   min-height: 0;
   filter: drop-shadow(0 18px 40px rgba(28, 28, 30, 0.12));
+}
+
+.studio-landing-cta-with-aside {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: 24px;
+  overflow: visible;
 }
 
 .studio-landing-laptop-chrome {
@@ -793,23 +821,16 @@
   stroke: currentColor;
 }
 
-/* Odoo-style annotation: curve from title accent → Caveat tip. */
+/* Odoo-style annotation — from mock or button into Caveat tip. */
 .studio-landing-aside {
-  position: relative;
+  position: absolute;
+  z-index: 2;
   display: grid;
-  grid-template-columns: 78px auto;
-  grid-template-rows: 58px auto;
-  align-items: end;
-  justify-content: start;
-  column-gap: 0;
   width: max-content;
-  max-width: min(100%, 340px);
-  margin: -4px auto 0;
-  /* Sit under/right of the accent word, like Odoo’s price callout. */
-  transform: translateX(clamp(20px, 7vw, 96px));
+  max-width: min(220px, 46vw);
   color: #5c5368;
   font-family: "Caveat", cursive;
-  font-size: clamp(22px, 2.6vw, 26px);
+  font-size: clamp(20px, 2.4vw, 24px);
   font-weight: 600;
   line-height: 1.15;
   text-align: left;
@@ -817,23 +838,89 @@
 }
 
 .studio-landing-aside-arrow {
-  grid-column: 1;
-  grid-row: 1 / -1;
-  width: 78px;
-  height: 104px;
+  width: 88px;
+  height: 72px;
   color: #5c5368;
   overflow: visible;
-  align-self: stretch;
 }
 
 .studio-landing-aside-text {
+  display: block;
+  max-width: 11em;
+}
+
+/* Creative / hero: out of the mock → tip on the right. */
+.studio-landing-aside.is-from-image-right {
+  top: 6%;
+  left: calc(100% - 28px);
+  grid-template-columns: 72px auto;
+  align-items: start;
+  transform: none;
+}
+
+.studio-landing-aside.is-from-image-right .studio-landing-aside-arrow {
+  grid-column: 1;
+  grid-row: 1;
+  width: 72px;
+  height: 64px;
+}
+
+.studio-landing-aside.is-from-image-right .studio-landing-aside-text {
+  grid-column: 2;
+  grid-row: 1;
+  margin-top: 0;
+  transform: rotate(-4deg);
+  transform-origin: left top;
+}
+
+/* Money moves: opposite side — out of the mock → tip on the left. */
+.studio-landing-aside.is-from-image-left {
+  top: 6%;
+  right: calc(100% - 28px);
+  left: auto;
+  grid-template-columns: auto 72px;
+  align-items: start;
+  text-align: right;
+}
+
+.studio-landing-aside.is-from-image-left .studio-landing-aside-arrow {
+  grid-column: 2;
+  grid-row: 1;
+  width: 72px;
+  height: 64px;
+}
+
+.studio-landing-aside.is-from-image-left .studio-landing-aside-text {
+  grid-column: 1;
+  grid-row: 1;
+  transform: rotate(3deg);
+  transform-origin: right top;
+}
+
+/* Final CTA: rainbow arch up from the button’s right edge. */
+.studio-landing-aside.is-from-button {
+  top: calc(100% - 10px);
+  left: 62%;
+  grid-template-columns: 96px auto;
+  align-items: end;
+  margin: 0;
+  transform: none;
+}
+
+.studio-landing-aside.is-from-button .studio-landing-aside-arrow {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 110px;
+  height: 56px;
+  margin-bottom: -6px;
+}
+
+.studio-landing-aside.is-from-button .studio-landing-aside-text {
   grid-column: 2;
   grid-row: 2;
-  display: block;
-  max-width: 12em;
-  margin: 0 0 4px;
-  transform: rotate(-3deg);
-  transform-origin: left bottom;
+  margin-top: 0;
+  transform: rotate(-2deg);
+  transform-origin: left top;
 }
 
 .studio-landing-laptop-base {
@@ -1126,15 +1213,25 @@
   }
 
   .studio-landing-aside {
-    grid-template-columns: 64px auto;
-    grid-template-rows: 44px auto;
-    transform: translateX(clamp(8px, 4vw, 36px));
-    font-size: 22px;
+    font-size: 18px;
+    max-width: min(160px, 42vw);
+  }
+
+  .studio-landing-aside.is-from-image-right {
+    left: calc(100% - 48px);
+  }
+
+  .studio-landing-aside.is-from-image-left {
+    right: calc(100% - 48px);
+  }
+
+  .studio-landing-aside.is-from-button {
+    left: 48%;
   }
 
   .studio-landing-aside-arrow {
     width: 64px;
-    height: 86px;
+    height: 52px;
   }
 }
 

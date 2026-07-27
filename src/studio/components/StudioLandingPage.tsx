@@ -155,34 +155,85 @@ function Wavy({
   );
 }
 
+type AsideVariant = "from-image-right" | "from-image-left" | "from-button";
+
 /**
- * Odoo-style callout: thick curve from the title accent down into Caveat text.
- * Clear from → to (accent above, annotation at the tip).
+ * Odoo-style callout with a clear from → to.
+ * - from-image-*: curve out of the mock into Caveat text
+ * - from-button: rainbow arch up from the button’s right edge
  */
-function AsideCallout({ children }: { children: ReactNode }) {
+function AsideCallout({
+  children,
+  variant,
+}: {
+  children: ReactNode;
+  variant: AsideVariant;
+}) {
   return (
-    <div className="studio-landing-aside" aria-hidden="true">
+    <div
+      className={`studio-landing-aside is-${variant}`}
+      aria-hidden="true"
+    >
       <svg
-        viewBox="0 0 100 120"
+        viewBox="0 0 120 100"
         className="studio-landing-aside-arrow"
         fill="none"
         shapeRendering="geometricPrecision"
       >
-        {/* Under accent → arc down-right → tip at the Caveat line */}
-        <path
-          d="M38 5c0 38 8 68 42 92"
-          stroke="currentColor"
-          strokeWidth="3.8"
-          strokeLinecap="round"
-        />
-        {/* Open V head, same weight as shaft, pointing into the text */}
-        <path
-          d="M66 84 82 98 64 106"
-          stroke="currentColor"
-          strokeWidth="3.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {variant === "from-image-right" ? (
+          <>
+            {/* Image (left) → out and into text on the right */}
+            <path
+              d="M8 78c8-36 28-58 72-62"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M68 8 84 14 76 30"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
+        {variant === "from-image-left" ? (
+          <>
+            {/* Image (right) → out and into text on the left */}
+            <path
+              d="M112 78c-8-36-28-58-72-62"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M52 8 36 14 44 30"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
+        {variant === "from-button" ? (
+          <>
+            {/* Right edge of button → arch UP → tip at Caveat text */}
+            <path
+              d="M18 18c18-22 52-22 78 8"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M82 14 98 28 84 36"
+              stroke="currentColor"
+              strokeWidth="3.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </>
+        ) : null}
       </svg>
       <span className="studio-landing-aside-text">{children}</span>
     </div>
@@ -193,29 +244,44 @@ function LaptopMock({
   src,
   alt,
   priority = false,
+  aside,
+  asideSide = "right",
 }: {
   src: string;
   alt: string;
   priority?: boolean;
+  aside?: string;
+  asideSide?: "right" | "left";
 }) {
   return (
-    <figure className="studio-landing-laptop">
-      <div className="studio-landing-laptop-chrome" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      <div className="studio-landing-laptop-screen">
-        <img
-          src={src}
-          alt={alt}
-          decoding="async"
-          loading={priority ? "eager" : "lazy"}
-          fetchPriority={priority ? "high" : "auto"}
-        />
-      </div>
-      <div className="studio-landing-laptop-base" aria-hidden="true" />
-    </figure>
+    <div
+      className={`studio-landing-mock-frame${aside ? ` has-aside is-aside-${asideSide}` : ""}`}
+    >
+      <figure className="studio-landing-laptop">
+        <div className="studio-landing-laptop-chrome" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="studio-landing-laptop-screen">
+          <img
+            src={src}
+            alt={alt}
+            decoding="async"
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+          />
+        </div>
+        <div className="studio-landing-laptop-base" aria-hidden="true" />
+      </figure>
+      {aside ? (
+        <AsideCallout
+          variant={asideSide === "left" ? "from-image-left" : "from-image-right"}
+        >
+          {aside}
+        </AsideCallout>
+      ) : null}
+    </div>
   );
 }
 
@@ -225,14 +291,12 @@ function LandingSection({
   lead,
   children,
   tone = "page",
-  aside,
 }: {
   id: string;
   title: ReactNode;
   lead: string;
   children?: ReactNode;
   tone?: "page" | "plate";
-  aside?: string;
 }) {
   return (
     <section
@@ -244,7 +308,6 @@ function LandingSection({
         <h2 id={`${id}-title`} className="studio-landing-section-title">
           {title}
         </h2>
-        {aside ? <AsideCallout>{aside}</AsideCallout> : null}
         <p className="studio-landing-section-lead">{lead}</p>
         {children}
       </div>
@@ -802,7 +865,6 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             <h1 id="overview-title" className="studio-landing-hero-title">
               Your ads, made under <Circled>one roof</Circled>.
             </h1>
-            <AsideCallout>everything finally in one place</AsideCallout>
             <p className="studio-landing-section-lead">
               Describe what you're selling and Studio shapes it into a flyer, a
               video, a voice. When you want human hands on it,{" "}
@@ -825,6 +887,8 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               src="/landing/mock-flyer.jpg"
               alt="Studio generating a product flyer from a brief"
               priority
+              aside="everything finally in one place"
+              asideSide="right"
             />
           </div>
         </section>
@@ -838,11 +902,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             </>
           }
           lead="Type the brief the way you'd say it out loud. Studio answers with the flyer, the video, or the voiceover."
-          aside="just say what you need"
         >
           <LaptopMock
             src="/landing/mock-generate-chat.jpg"
             alt="Studio assistant chat turning a brief into a video ad"
+            aside="just say what you need"
+            asideSide="right"
           />
         </LandingSection>
 
@@ -887,11 +952,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             </>
           }
           lead="Book a package and payment waits in your wallet until the work arrives and you accept it."
-          aside="your wallet, your call"
         >
           <LaptopMock
             src="/landing/mock-book.jpg"
             alt="Booking a Creative Network package with wallet balance"
+            aside="your wallet, your call"
+            asideSide="left"
           />
         </LandingSection>
 
@@ -984,13 +1050,15 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Sign in and start with whatever you have, even if it's just a
               sentence.
             </p>
-            <div className="studio-landing-cta-row">
+            <div className="studio-landing-cta-with-aside">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
                 Sign in to Studio
                 <ArrowRight aria-hidden="true" />
               </button>
+              <AsideCallout variant="from-button">
+                your first flyer is minutes away
+              </AsideCallout>
             </div>
-            <AsideCallout>your first flyer is minutes away</AsideCallout>
           </div>
         </section>
 
