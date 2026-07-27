@@ -321,6 +321,40 @@ Offer banner/gallery media is **not** a flat "recent assets" grid. `OfferMediaEd
   `.marketplace-media-banner` (140px cover + L3 name bar + remove), gallery =
   `.marketplace-media-tile` with overlay remove. Memory: **753**.
 
+### Mobile Generate Files dock (locked)
+
+Bottom-nav **Files** on Generate is an **in-flow flex dock** under Generate — not a
+floating/absolute overlay sheet.
+
+Structure:
+
+```
+.studio-mobile-stage (flex column, clears bottom nav)
+  .studio-main-panels (flex: 1)   ← Generate
+  .studio-files-dock (height 0 → sheet)  ← Files
+```
+
+| Token | Role |
+|---|---|
+| `--studio-mobile-bottom-chrome` | nav height + safe-bottom |
+| `--studio-mobile-top-chrome` | header height + safe-top |
+| `--studio-mobile-files-band` | viewport between header and nav |
+| `--studio-mobile-files-sheet-height` | **60%** of that band |
+
+- **Motion**: animate **only** `.studio-files-dock` `height` (`0` ↔ sheet token) with
+  `--studio-mobile-files-dock-duration` / `--studio-mobile-files-dock-ease`. Generate is
+  `flex: 1` and shrinks/grows automatically — no separate Generate height tween, no
+  `translateY` slide for the push relationship.
+- Mount collapsed → next-frame expand; close collapses height then unmounts on
+  `transitionend` (`height`).
+- Composer stays absolute in Generate and rides the flex shrink.
+- z-index: Files dock `25` < Generate content; bottom nav `60`.
+- No "Files" title bar. Chrome = search + pathbar (desktop layout): breadcrumbs +
+  select + view toggle + Add. Pathbar tools = ghost **circle** icon buttons
+  (transparent, soft grey border, no shadow). Your files / Asset library = L1
+  `--mos-page` fill + border-soft; active = accent wash/border. Bottom nav
+  **Files** and **Create** are icon-only. Memory: **757**.
+
 ### Studio Files asset picker (locked)
 
 `StudioAssetPickerSheet` (`StudioAssetPickerSheet.tsx` + `studio-asset-picker.css`)
