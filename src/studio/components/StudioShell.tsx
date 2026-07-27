@@ -180,6 +180,7 @@ import {
   EXPLORER_DND_TYPE,
   clearActiveExplorerDrag,
   readExplorerDragData,
+  setMobileComposerDropHandler,
   writeExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
@@ -3720,6 +3721,7 @@ export function StudioShell({
       editor.focus();
     });
   }
+  attachEntryRef.current = attachEntry;
 
   async function referenceInputsForAssetIds(assetMetas = []) {
     const expiresUnix = wallClockUnixSeconds() + 60 * 60 * 12;
@@ -5600,9 +5602,19 @@ export function StudioShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [assetPickRequest, endAssetPick]);
 
-  // Belt-and-suspenders: mobile Files touch-drop broadcasts on document.
-  // StudioComposer also listens; this catches the case where the shell must
-  // attach even if the composer listener missed the event.
+  // Mobile Files touch-drop: FileTree calls deliverMobileComposerDrop → this handler.
+  // (Animation can succeed without this; chips cannot.)
+  useEffect(() => {
+    setMobileComposerDropHandler(({ entry, clientX = 0, clientY = 0 }) => {
+      if (!entry) return;
+      const range = rangeFromPointInEditor(editorRef.current, clientX, clientY);
+      if (range) setSelectionToRange(range);
+      attachEntryRef.current?.(entry, range);
+    });
+    return () => setMobileComposerDropHandler(null);
+  }, []);
+
+  // Legacy CustomEvent path (folder drops / older callers).
   useEffect(() => {
     if (!isMobile) return undefined;
     const onTouchDrop = (event) => {
@@ -5613,7 +5625,7 @@ export function StudioShell({
       const y = event.detail?.clientY ?? 0;
       const range = rangeFromPointInEditor(editorRef.current, x, y);
       if (range) setSelectionToRange(range);
-      attachEntry(entry, range);
+      attachEntryRef.current?.(entry, range);
     };
     document.addEventListener("studioexplorerdrop", onTouchDrop);
     return () => document.removeEventListener("studioexplorerdrop", onTouchDrop);

@@ -9,6 +9,7 @@ import { formatFileDate } from "@/desk/lib/explorer-file-actions";
 import {
   armExplorerDrag,
   clearActiveExplorerDrag,
+  deliverMobileComposerDrop,
   peekActiveExplorerDrag,
   writeExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
@@ -162,17 +163,22 @@ function pointInRect(x, y, rect, pad = 0) {
   );
 }
 
-/** Geometry-first composer hit — does not depend on pointer-events. */
-function findComposerDropTargetAt(x, y, pad = 16) {
+function findComposerShell() {
   if (typeof document === "undefined") return null;
-  const shells = document.querySelectorAll(
-    '.cursor-composer-shell[data-drop-target="composer"], [data-drop-target="composer"].cursor-composer-shell',
+  return (
+    document.querySelector('.cursor-composer-shell[data-drop-target="composer"]') ||
+    document.querySelector("[data-drop-target='composer'].cursor-composer-shell") ||
+    document.querySelector(".cursor-composer-shell.studio-composer")
   );
-  for (const shell of shells) {
-    if (!(shell instanceof HTMLElement) || !shell.isConnected) continue;
-    if (pointInRect(x, y, shell.getBoundingClientRect(), pad)) return shell;
+}
+
+/** Geometry composer hit — does not depend on pointer-events. */
+function findComposerDropTargetAt(x, y, pad = 16) {
+  const shell = findComposerShell();
+  if (shell instanceof HTMLElement && pointInRect(x, y, shell.getBoundingClientRect(), pad)) {
+    return shell;
   }
-  // Also accept the glass box if shell rect is oddly padded.
+  if (typeof document === "undefined") return null;
   const boxes = document.querySelectorAll(
     '.cursor-composer-box[data-drop-target="composer"]',
   );
@@ -185,13 +191,8 @@ function findComposerDropTargetAt(x, y, pad = 16) {
   return null;
 }
 
-function findDropTargetUnder(x, y, excludeEl) {
+function findFolderDropTargetAt(x, y, excludeEl) {
   if (typeof document === "undefined") return null;
-
-  // Composer wins by geometry first (shell is pointer-events:none normally).
-  const composer = findComposerDropTargetAt(x, y);
-  if (composer) return composer;
-
   const prevVisibility = excludeEl?.style?.visibility;
   if (excludeEl) excludeEl.style.visibility = "hidden";
   const stack =
@@ -199,17 +200,48 @@ function findDropTargetUnder(x, y, excludeEl) {
       ? document.elementsFromPoint(x, y)
       : [document.elementFromPoint(x, y)].filter(Boolean);
   if (excludeEl) excludeEl.style.visibility = prevVisibility ?? "";
-
-  let fallback = null;
   for (const el of stack) {
-    const target = el?.closest?.("[data-drop-target]");
-    if (!target) continue;
-    if (target.getAttribute("data-drop-target") === "composer") {
-      return target.closest?.(".cursor-composer-shell") ?? target;
-    }
-    if (!fallback) fallback = target;
+    const target = el?.closest?.('[data-drop-target="folder"]');
+    if (target) return target;
   }
-  return fallback;
+  return null;
+}
+
+/**
+ * Mobile Files dock model: after pickup+drag, release attaches to composer
+ * unless the finger is clearly over a folder row. Do NOT require hitting the
+ * small composer glass — that hit-test model fails in the flex dock layout.
+ */
+function resolveTouchDropTarget(x, y, source, chip, hoverTarget) {
+  const fromFilesDock = Boolean(
+    source?.closest?.(".studio-files-dock, .studio-files-mobile-sheet"),
+  );
+
+  const folder =
+    findFolderDropTargetAt(x, y, chip) ||
+    (hoverTarget?.getAttribute?.("data-drop-target") === "folder" && hoverTarget.isConnected
+      ? hoverTarget
+      : null);
+
+  if (fromFilesDock) {
+    // Explicit folder drop inside the dock wins; everything else → composer.
+    if (folder && folder !== source && !source.contains(folder)) return folder;
+    const composer = findComposerShell() || findComposerDropTargetAt(x, y, 48);
+    if (composer) return composer;
+  }
+
+  return (
+    findComposerDropTargetAt(x, y, 28) ||
+    folder ||
+    (hoverTarget?.isConnected ? hoverTarget : null)
+  );
+}
+
+function findDropTargetUnder(x, y, excludeEl) {
+  // Kept for html5 / hover highlighting helpers.
+  const composer = findComposerDropTargetAt(x, y);
+  if (composer) return composer;
+  return findFolderDropTargetAt(x, y, excludeEl);
 }
 
 function highlightDropTarget(el) {
@@ -229,14 +261,19 @@ function clearDropTargetHighlight() {
   });
 }
 
-function dispatchExplorerTouchDrop(targetEl, clientX, clientY) {
-  if (!targetEl) return false;
-  const entry = peekActiveExplorerDrag();
+function commitTouchDrop(targetEl, entry, clientX, clientY) {
   if (!entry) return false;
-  const dropTarget = targetEl.getAttribute("data-drop-target") || null;
+  const dropTarget = targetEl?.getAttribute?.("data-drop-target") || null;
+
+  // Composer: call Shell directly — no CustomEvent / pointer-events dependency.
+  if (dropTarget === "composer" || !targetEl) {
+    if (deliverMobileComposerDrop(entry, clientX, clientY)) return true;
+  }
+
+  if (!targetEl) return false;
+
+  // Folder (or composer fallback if handler missing): document/target events.
   const detail = { entry, clientX, clientY, dropTarget };
-  // Document broadcast — composer listens here so we don't depend on the
-  // event landing on a pointer-events:none shell.
   document.dispatchEvent(
     new CustomEvent("studioexplorerdrop", {
       bubbles: true,
@@ -244,15 +281,13 @@ function dispatchExplorerTouchDrop(targetEl, clientX, clientY) {
       detail,
     }),
   );
-  if (dropTarget !== "composer") {
-    targetEl.dispatchEvent(
-      new CustomEvent("studioexplorerdrop", {
-        bubbles: true,
-        cancelable: true,
-        detail,
-      }),
-    );
-  }
+  targetEl.dispatchEvent(
+    new CustomEvent("studioexplorerdrop", {
+      bubbles: true,
+      cancelable: true,
+      detail,
+    }),
+  );
   return true;
 }
 
@@ -267,6 +302,11 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   const source = event.currentTarget;
   if (!source) return;
   const mode = options.mode === "touch" ? "touch" : "html5";
+  const fromFilesDock = Boolean(
+    source.closest?.(".studio-files-dock, .studio-files-mobile-sheet"),
+  );
+  // Capture entry for the whole drag — peekActiveExplorerDrag can be cleared mid-flight.
+  const dragEntry = peekActiveExplorerDrag() || armExplorerDrag(entry) || entry;
 
   const rect = source.getBoundingClientRect();
   const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
@@ -481,7 +521,16 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
     if (mode === "touch") {
-      const under = findDropTargetUnder(lastX, lastY, chip);
+      let under = null;
+      if (fromFilesDock) {
+        const folder = findFolderDropTargetAt(lastX, lastY, chip);
+        under =
+          folder ||
+          findComposerShell() ||
+          findComposerDropTargetAt(lastX, lastY, 48);
+      } else {
+        under = findDropTargetUnder(lastX, lastY, chip);
+      }
       if (under !== hoverTarget) {
         hoverTarget = under;
         highlightDropTarget(under);
@@ -539,37 +588,64 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     }
 
     try {
-      // Resolve the drop target BEFORE removing is-touch-file-drag — that class
-      // enables composer hit-testing (shell is normally pointer-events:none).
       const shouldDrop = didDrop || forceDrop;
       let targetEl = null;
-      if (shouldDrop) {
+      let attached = false;
+
+      if (shouldDrop && mode === "touch" && fromFilesDock) {
+        // Product model: drag from mobile Files dock → composer, unless over a folder.
+        const folder = findFolderDropTargetAt(lastX, lastY, chip);
+        if (folder && folder !== source && !source.contains(folder)) {
+          targetEl = folder;
+          attached = commitTouchDrop(folder, dragEntry, lastX, lastY);
+        } else {
+          targetEl = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
+          // Always deliver to Shell — do not gate chip insert on hit-testing.
+          attached = deliverMobileComposerDrop(dragEntry, lastX, lastY);
+          if (!attached) {
+            attached = commitTouchDrop(targetEl, dragEntry, lastX, lastY);
+          }
+          if (!targetEl && attached) {
+            targetEl = findComposerShell();
+          }
+        }
+      } else if (shouldDrop) {
         targetEl =
-          findDropTargetUnder(lastX, lastY, chip) ||
-          (hoverTarget?.isConnected ? hoverTarget : null) ||
-          findComposerDropTargetAt(lastX, lastY, 28);
+          mode === "touch"
+            ? resolveTouchDropTarget(lastX, lastY, source, chip, hoverTarget)
+            : findDropTargetUnder(lastX, lastY, chip) ||
+              (hoverTarget?.isConnected ? hoverTarget : null);
+        if (targetEl && targetEl !== source && !source.contains(targetEl) && mode === "touch") {
+          attached = commitTouchDrop(targetEl, dragEntry, lastX, lastY);
+        }
       }
 
       clearDropTargetHighlight();
       document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
 
       const isValidDrop =
-        shouldDrop && targetEl && targetEl !== source && !source.contains(targetEl);
-
-      if (isValidDrop && mode === "touch") {
-        dispatchExplorerTouchDrop(targetEl, lastX, lastY);
-      }
+        shouldDrop &&
+        (attached ||
+          (targetEl && targetEl !== source && !source.contains(targetEl)));
 
       if (isValidDrop) {
         // For composer targets, animate to the text caret position instead of mouse position
         let dropEndX = lastX;
         let dropEndY = lastY;
-        if (targetEl.dataset.dropTarget === "composer") {
+        if (targetEl?.dataset?.dropTarget === "composer") {
           const editorEl = targetEl.querySelector("[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor");
           const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
           if (caretPos) {
             dropEndX = caretPos.x;
             dropEndY = caretPos.y + caretPos.height / 2;
+          }
+        } else if (!targetEl && attached) {
+          const shell = findComposerShell();
+          if (shell) {
+            const rect = shell.getBoundingClientRect();
+            dropEndX = rect.left + rect.width / 2;
+            dropEndY = rect.top + rect.height / 2;
+            targetEl = shell;
           }
         }
         if (reduceMotion) {
@@ -589,10 +665,10 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
           const midX = (startX + endX) / 2;
           const midY = Math.min(startY, endY) - arcHeight;
           const reactionTimer = setTimeout(() => {
-            if (targetEl.isConnected) {
+            if (targetEl?.isConnected) {
               targetEl.classList.add("is-drop-target-hit");
               setTimeout(() => {
-                if (targetEl.isConnected) targetEl.classList.remove("is-drop-target-hit");
+                if (targetEl?.isConnected) targetEl.classList.remove("is-drop-target-hit");
               }, 600);
             }
           }, DROP_DURATION * 1000 * 0.68);

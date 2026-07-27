@@ -4,6 +4,22 @@ export const EXPLORER_DND_TYPE = "application/x-mercuryos-path";
 /** Active drag entry — readable during dragOver (getData is blocked until drop). */
 let activeExplorerDrag = null;
 
+/**
+ * Direct mobile Files→composer attach handler (bypasses DOM CustomEvent / hit-testing).
+ * StudioShell registers this; FileTree invokes it on touch-drag release from the dock.
+ */
+let mobileComposerDropHandler = null;
+
+export function setMobileComposerDropHandler(handler) {
+  mobileComposerDropHandler = typeof handler === "function" ? handler : null;
+}
+
+export function deliverMobileComposerDrop(entry, clientX = 0, clientY = 0) {
+  if (!entry || !mobileComposerDropHandler) return false;
+  mobileComposerDropHandler({ entry, clientX, clientY });
+  return true;
+}
+
 export function inferMediaKind(entry) {
   if (!entry) return null;
   const direct = entry.mediaKind ?? entry.kind;
@@ -82,7 +98,7 @@ export function writeExplorerDragData(dataTransfer, entry) {
   if (!dataTransfer) return;
   const payload = buildExplorerDragPayload(entry);
   if (!payload) return;
-  activeExplorerDrag = payload;
+  activeExplorerDrag = payload ? { ...entry, ...payload } : { ...entry };
   dataTransfer.setData(EXPLORER_DND_TYPE, JSON.stringify(payload));
   dataTransfer.effectAllowed = "all";
 }
