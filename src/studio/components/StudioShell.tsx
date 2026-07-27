@@ -12334,15 +12334,14 @@ export function StudioShell({
           cursor: default;
           margin: 0;
           max-width: min(160px, 42vw);
-          overflow: visible;
         }
-        /* Preview chips in the rail need room for the remove control. */
+        /* Same chip chrome as desktop — no separate remove control. */
         .studio-composer-attach-rail .studio-inline-tag--image-only {
-          width: auto;
+          width: var(--studio-composer-chip-size, 28px);
           min-width: var(--studio-composer-chip-size, 28px);
-          max-width: none;
-          padding-right: 2px;
-          gap: 2px;
+          max-width: var(--studio-composer-chip-size, 28px);
+          padding: 0;
+          gap: 0;
         }
         .studio-composer-attach-rail .studio-inline-tag--image-only .studio-inline-tag-kind {
           position: relative;
@@ -12355,26 +12354,6 @@ export function StudioShell({
           inset: 0;
           width: var(--studio-composer-chip-size, 28px);
           height: var(--studio-composer-chip-size, 28px);
-        }
-        .studio-composer-attach-rail-remove {
-          position: relative;
-          z-index: 2;
-          flex: 0 0 auto;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          margin-left: 2px;
-          border: 0;
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--mos-text-bright, #fff) 10%, transparent);
-          color: var(--color-cursor-text-bright);
-          cursor: pointer;
-          padding: 0;
-        }
-        .studio-composer-attach-rail-remove:active {
-          transform: scale(0.96);
         }
         .studio-inline-tag.is-dragging {
           opacity: 0.55;
@@ -19695,24 +19674,7 @@ function StudioComposer({
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
       {isMobile && attachments.length > 0 ? (
-        <StudioComposerMobileAttachRail
-          attachments={attachments}
-          onRemove={(id) => {
-            const nextAttachments = attachments.filter((item) => item.id !== id);
-            setAttachments(nextAttachments);
-            const editor = editorRef.current;
-            const plain = String(draft ?? "").replace(/\uFFFC/g, "").replace(/\s+$/g, "");
-            if (editor) {
-              applyComposerContextToEditor(editor, {
-                draft: plain,
-                attachments: nextAttachments,
-              });
-              setDraft(readComposerEditorText(editor));
-            } else {
-              setDraft(plain);
-            }
-          }}
-        />
+        <StudioComposerMobileAttachRail attachments={attachments} />
       ) : null}
       <div
         className="studio-composer-inputline"
@@ -19785,10 +19747,38 @@ function StudioComposer({
               event.preventDefault();
               return;
             }
-            if (event.key === "Backspace" && removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
-              event.preventDefault();
-              setDraft(readComposerEditorText(editorRef.current));
-              return;
+            if (event.key === "Backspace") {
+              if (removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
+                event.preventDefault();
+                setDraft(readComposerEditorText(editorRef.current));
+                return;
+              }
+              // Mobile rail mirrors desktop chips (no ×). When typed text is empty,
+              // backspace pops the last attachment even if the hidden CE token
+              // wasn't found by caret walk.
+              if (
+                isMobile &&
+                attachments.length > 0 &&
+                !String(readComposerEditorText(editorRef.current) ?? "")
+                  .replace(/\uFFFC/g, "")
+                  .trim()
+              ) {
+                event.preventDefault();
+                const nextAttachments = attachments.slice(0, -1);
+                const plain = "";
+                setAttachments(nextAttachments);
+                const editor = editorRef.current;
+                if (editor) {
+                  applyComposerContextToEditor(editor, {
+                    draft: plain,
+                    attachments: nextAttachments,
+                  });
+                  setDraft(readComposerEditorText(editor));
+                } else {
+                  setDraft(plain);
+                }
+                return;
+              }
             }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
@@ -19952,8 +19942,8 @@ function composerRailIconName(kind) {
   return "file";
 }
 
-/** Android-safe chip rail: React state → visible UI (no contenteditable Range insert). */
-function StudioComposerMobileAttachRail({ attachments, onRemove }) {
+/** Android-safe chip rail: React state → visible UI (same chips as desktop; backspace to remove). */
+function StudioComposerMobileAttachRail({ attachments }) {
   if (!Array.isArray(attachments) || attachments.length === 0) return null;
   return (
     <div className="studio-composer-attach-rail" aria-label="Attachments">
@@ -20005,18 +19995,6 @@ function StudioComposerMobileAttachRail({ attachments, onRemove }) {
             ) : (
               <span className="studio-inline-tag-label">{label}</span>
             )}
-            <button
-              type="button"
-              className="studio-composer-attach-rail-remove"
-              aria-label={`Remove ${label}`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onRemove?.(id);
-              }}
-            >
-              <X className="h-3 w-3" aria-hidden="true" />
-            </button>
           </span>
         );
       })}

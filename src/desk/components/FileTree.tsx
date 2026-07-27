@@ -174,6 +174,39 @@ function findComposerShell() {
   );
 }
 
+/** Where the ghost should land — chip rail / top of composer, not mid-textarea. */
+function resolveComposerDropLandingPoint(targetEl) {
+  const shell =
+    (targetEl instanceof HTMLElement
+      ? targetEl.closest(".cursor-composer-shell") ||
+        targetEl.closest(".cursor-composer-box")
+      : null) || findComposerShell();
+  if (!(shell instanceof HTMLElement)) return null;
+
+  const rail = shell.querySelector(".studio-composer-attach-rail");
+  if (rail instanceof HTMLElement) {
+    const chips = rail.querySelectorAll(".studio-inline-tag");
+    const last = chips[chips.length - 1];
+    if (last instanceof HTMLElement) {
+      const rect = last.getBoundingClientRect();
+      return { x: rect.right + 16, y: rect.top + rect.height / 2 };
+    }
+    const rect = rail.getBoundingClientRect();
+    return { x: rect.left + 22, y: rect.top + Math.max(14, rect.height / 2) };
+  }
+
+  const box =
+    shell.querySelector(".cursor-composer-box") instanceof HTMLElement
+      ? shell.querySelector(".cursor-composer-box")
+      : shell;
+  const rect = box.getBoundingClientRect();
+  // Top of the composer chrome — matches the mobile attach-rail / header zone.
+  return {
+    x: rect.left + Math.min(28, Math.max(16, rect.width * 0.08)),
+    y: rect.top + 16,
+  };
+}
+
 /** Geometry composer hit — does not depend on pointer-events. */
 function findComposerDropTargetAt(x, y, pad = 16) {
   const shell = findComposerShell();
@@ -645,23 +678,35 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
             (targetEl && targetEl !== source && !source.contains(targetEl)));
 
       if (isValidDrop) {
-        // For composer targets, animate to the text caret position instead of mouse position
+        // Composer: fly toward the attach rail / composer header (where chips land).
+        // Desktop HTML5 can still aim at the caret when not coming from the Files dock.
         let dropEndX = lastX;
         let dropEndY = lastY;
-        if (targetEl?.dataset?.dropTarget === "composer") {
-          const editorEl = targetEl.querySelector("[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor");
+        const isComposerDrop =
+          attached ||
+          targetEl?.dataset?.dropTarget === "composer" ||
+          Boolean(targetEl?.closest?.('[data-drop-target="composer"]'));
+        if (isComposerDrop && (mode === "touch" || fromFilesDock || !targetEl)) {
+          if (!targetEl) targetEl = findComposerShell();
+          const land = resolveComposerDropLandingPoint(targetEl);
+          if (land) {
+            dropEndX = land.x;
+            dropEndY = land.y;
+          }
+        } else if (targetEl?.dataset?.dropTarget === "composer") {
+          const editorEl = targetEl.querySelector(
+            "[contenteditable], .cursor-composer-textarea, .cursor-composer-mention-editor",
+          );
           const caretPos = getCaretPixelInEditor(editorEl, lastX, lastY);
           if (caretPos) {
             dropEndX = caretPos.x;
             dropEndY = caretPos.y + caretPos.height / 2;
-          }
-        } else if (!targetEl && attached) {
-          const shell = findComposerShell();
-          if (shell) {
-            const rect = shell.getBoundingClientRect();
-            dropEndX = rect.left + rect.width / 2;
-            dropEndY = rect.top + rect.height / 2;
-            targetEl = shell;
+          } else {
+            const land = resolveComposerDropLandingPoint(targetEl);
+            if (land) {
+              dropEndX = land.x;
+              dropEndY = land.y;
+            }
           }
         }
         if (reduceMotion) {
