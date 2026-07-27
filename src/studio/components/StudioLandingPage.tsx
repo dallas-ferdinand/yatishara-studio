@@ -223,16 +223,17 @@ function AsideCallout({
               Leaves the button's right edge at mid-height, hunches up
               (no belly), then drops into a down-pointing V tip.
             */}
+            {/* Rendered 1:1 (no viewBox downscale), so 2 ≈ the image arrows' effective weight */}
             <path
               d="M4 14c24-16 50 0 58 50"
               stroke="currentColor"
-              strokeWidth="3.6"
+              strokeWidth="2"
               strokeLinecap="round"
             />
             <path
               d="M70 49 62 64 48 55"
               stroke="currentColor"
-              strokeWidth="3.6"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
