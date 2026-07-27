@@ -21389,9 +21389,6 @@ function composerDomAttachmentCount(editor) {
 /** Offline append — safe on iOS where Range insert during touchend often no-ops. */
 function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttachments, attachment) {
   const existing = Array.isArray(existingAttachments) ? existingAttachments : [];
-  const all = existing.some((item) => item.id === attachment.id)
-    ? existing
-    : [...existing, attachment];
   const shell = document.createElement("div");
 
   if (baseHtml && composerHtmlHasAttachments(baseHtml, existing)) {
@@ -21412,7 +21409,6 @@ function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttach
     shell.appendChild(createComposerAttachmentToken(attachment));
   }
 
-  void all;
   return {
     editorHtml: shell.innerHTML,
     draft: readComposerEditorText(shell),
