@@ -7120,29 +7120,32 @@ export function StudioShell({
           padding: 0 0 10px;
           gap: 0;
         }
-        /* Files action: flush between header and bottom nav (no inset card gaps). */
+        /* Files action: bottom sheet from the nav (~75% of chrome band). */
+        .studio-polish.is-mobile-files,
+        .studio-polish.is-mobile-files-composer {
+          --studio-mobile-files-sheet-height: calc(
+            0.75 * (
+              100dvh
+                - var(--studio-mobile-nav-height, 44px)
+                - env(safe-area-inset-top, 0px)
+                - var(--studio-mobile-nav-height, 44px)
+                - env(safe-area-inset-bottom, 0px)
+            )
+          );
+        }
         .studio-mobile-app-menu-sheet.studio-files-mobile-sheet {
-          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
+          top: auto;
           left: 0;
           right: 0;
-          height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
+          bottom: calc(
+            var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px)
           );
-          max-height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-          );
+          height: var(--studio-mobile-files-sheet-height, 75dvh);
+          max-height: var(--studio-mobile-files-sheet-height, 75dvh);
           border-radius: 0;
           border-left: 0;
           border-right: 0;
-          border-top: 0;
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
         .studio-mobile-app-menu-sheet.studio-files-mobile-sheet::before {
           border-radius: 0;
@@ -7169,34 +7172,13 @@ export function StudioShell({
           width: 15px;
           height: 15px;
         }
-        /* Generate: keep composer docked below the sheet (keyboard-style push). */
-        .studio-polish.is-mobile-files-composer {
-          --studio-mobile-files-composer-reserve: calc(
-            var(--studio-composer-min-height, 96px)
-              + var(--studio-mobile-composer-gap, 8px)
-              + 44px
-          );
-        }
-        .studio-polish.is-mobile-files-composer .studio-mobile-app-menu-sheet.studio-files-mobile-sheet {
-          height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - var(--studio-mobile-files-composer-reserve, 148px)
-          );
-          max-height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - var(--studio-mobile-files-composer-reserve, 148px)
-          );
-        }
+        /* Generate: lift composer above the sheet so chat pads up (keyboard-style). */
         .studio-polish.is-mobile-files-composer .studio-composer.cursor-composer-shell {
           z-index: 130;
+          bottom: calc(
+            var(--studio-mobile-files-sheet-height, 75dvh)
+              + var(--studio-mobile-composer-gap, 8px)
+          );
         }
         .studio-social-mobile-sheet .studio-mobile-app-menu-body {
           display: flex;
@@ -18015,6 +17997,7 @@ export function StudioShell({
               !hasActiveGenerationJob
             }
             onCancelAssist={() => void handleCancelAssistanceTurn()}
+            filesSheetOpen={isMobile && mobileSection === "files"}
           />
         ) : null}
       </main>
@@ -18462,6 +18445,7 @@ function StudioComposer({
   assistBusy = false,
   canCancelAssist = false,
   onCancelAssist,
+  filesSheetOpen = false,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
@@ -18646,7 +18630,7 @@ function StudioComposer({
       if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
     };
-  }, [isMobile, presetGridOpen, videoTypeGridOpen, voicePickerOpen, composerOptionsOpen]);
+  }, [isMobile, presetGridOpen, videoTypeGridOpen, voicePickerOpen, composerOptionsOpen, filesSheetOpen]);
 
   const generationCost = composerCreditCost({
     mode,
