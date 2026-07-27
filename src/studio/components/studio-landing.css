@@ -874,30 +874,30 @@
   transform-origin: left top;
 }
 
-/* Generate: lower, same clean tip join, angled down-left. */
+/* Generate: same hunched curve as hero, mirrored on the left. */
 .studio-landing-aside.is-from-image-left {
-  top: 52%;
+  top: 48%;
   right: calc(100% - 10px);
   left: auto;
-  grid-template-columns: auto 68px;
-  grid-template-rows: auto auto;
-  align-items: end;
+  grid-template-columns: auto 64px;
+  align-items: start;
   text-align: right;
 }
 
 .studio-landing-aside.is-from-image-left .studio-landing-aside-arrow {
   grid-column: 2;
-  grid-row: 1 / -1;
-  width: 68px;
-  height: 72px;
+  grid-row: 1;
+  width: 64px;
+  height: 58px;
   transform: none;
 }
 
 .studio-landing-aside.is-from-image-left .studio-landing-aside-text {
   grid-column: 1;
-  grid-row: 2;
-  transform: rotate(5deg);
-  transform-origin: right bottom;
+  grid-row: 1;
+  margin-top: 0;
+  transform: rotate(4deg);
+  transform-origin: right top;
 }
 
 /* Final CTA: rainbow arch up from the button’s right edge. */
@@ -1221,12 +1221,12 @@
   }
 
   .studio-landing-aside.is-from-image-right {
-    left: calc(100% - 8px);
+    left: calc(100% - 14px);
   }
 
   .studio-landing-aside.is-from-image-left {
     top: 48%;
-    right: calc(100% - 8px);
+    right: calc(100% - 14px);
   }
 
   .studio-landing-aside.is-from-button {

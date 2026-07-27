@@ -201,15 +201,15 @@ function AsideCallout({
         ) : null}
         {variant === "from-image-left" ? (
           <>
-            {/* Same clean tip join as hero, mirrored + angled down-left */}
+            {/* Exact mirror of the hero hunch + tip join */}
             <path
-              d="M102 22c-14 22-42 48-74 56"
+              d="M98 70c-10-28-28-48-68-52"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M42 64 28 78 44 86"
+              d="M44 10 28 16 36 32"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
