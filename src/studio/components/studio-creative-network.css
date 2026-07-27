@@ -17,35 +17,15 @@
   overflow: hidden;
 }
 
-.studio-cn-rail-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.studio-cn-sidebar-chrome {
   flex: 0 0 auto;
-  margin: 8px 10px 0;
-  padding: 0 10px;
-  min-height: 32px;
-  border: 1px solid var(--color-cursor-border-soft);
-  border-radius: var(--cursor-radius-pill, 999px);
-  background: var(--mos-plate, var(--cursor-surface-raised));
-  color: var(--color-cursor-muted);
+  z-index: 2;
 }
 
-.studio-cn-rail-search > svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
-.studio-cn-rail-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-cursor-text-bright);
-  font: inherit;
-  font-size: 12px;
-  outline: none;
+/* Match Messages rail: no stacked top border on search. */
+.studio-polish .studio-cn-sidebar .cursor-panel-search,
+.studio-cn-sidebar .cursor-panel-search {
+  border-top: none;
 }
 
 .studio-cn-rail-scroll {
@@ -53,12 +33,34 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 8px 10px 12px;
+  padding: 4px 6px 8px;
   scrollbar-width: none;
 }
 
 .studio-cn-rail-scroll::-webkit-scrollbar {
   display: none;
+}
+
+/* Tighter filter chrome inside Studio CN left rail. */
+.studio-cn-sidebar .public-offers-filter-head,
+.studio-cn-sidebar .public-offers-filter-btn,
+.studio-cn-sidebar .public-offers-price-preset,
+.studio-cn-sidebar .public-offers-price-inputs,
+.studio-cn-sidebar .public-offers-rail-clear {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.studio-cn-sidebar .public-offers-filter-head {
+  padding: 3px 6px;
+}
+
+.studio-cn-sidebar .public-offers-filter-btn {
+  padding: 3px 8px 3px 10px;
+}
+
+.studio-cn-sidebar .public-offers-rail-body {
+  padding: 4px 0 8px;
 }
 
 .studio-cn-list {
@@ -234,7 +236,8 @@
   height: var(--cursor-head-h, 32px);
   padding: 0 12px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
-  background: var(--mos-bg, var(--color-cursor-bg));
+  /* L1 — match workspace / panel heads (not L2 mos-bg/plate). */
+  background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
 }
 
 .studio-cn-head-tabs {
@@ -310,55 +313,96 @@
 .studio-cn-body {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.studio-cn-browse {
-  padding: 14px 16px 24px;
+.studio-cn-body.is-catalog {
+  background: var(--mos-page, #f5f5f7);
+}
+
+/* In-Studio catalog reuses public-offers page chrome (hero banner, L1 page fill). */
+.studio-cn-catalog.public-offers-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Filters live in the main Network browse pane — left rail is Messages. */
+.studio-cn-main-filters {
   display: grid;
-  gap: 14px;
-  align-content: start;
+  gap: 8px;
+  min-width: 0;
 }
 
-.studio-cn-browse-hero h1 {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--color-cursor-text-bright);
-}
-
-.studio-cn-browse-hero p {
-  margin: 0;
-  max-width: 52ch;
-  color: var(--color-cursor-muted);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.studio-cn-browse-toolbar {
+.studio-cn-main-filters-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
 }
 
-.studio-cn-browse-toolbar h2 {
+.studio-cn-main-search {
+  flex: 1 1 auto;
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-cursor-text-bright);
+  min-width: 0;
 }
 
-.studio-cn-card-btn {
-  display: block;
+.studio-cn-filters-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-pill, 999px);
+  background: var(--mos-plate, var(--cursor-surface));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-cn-filters-toggle > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.studio-cn-filters-toggle > em {
+  font-style: normal;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--cursor-accent) 18%, transparent);
+  font-size: 11px;
+  text-align: center;
+}
+
+.studio-cn-filters-toggle.is-active,
+.studio-cn-filters-toggle[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--cursor-accent) 36%, var(--color-cursor-border-soft));
+  background: color-mix(in srgb, var(--cursor-accent) 12%, var(--mos-plate));
+}
+
+.studio-cn-main-filters-panel {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-lg, 10px);
+  background: var(--mos-plate, var(--cursor-surface));
+}
+
+/* Button cards must keep public-offers-card plate/border — only normalize control chrome. */
+button.studio-cn-card-btn.public-offers-card {
   width: 100%;
   text-align: left;
-  border: 0;
-  background: transparent;
-  padding: 0;
   font: inherit;
-  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
 }
 
@@ -366,7 +410,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-bottom: 10px;
+  width: fit-content;
+  margin: 0 0 4px;
   border: 0;
   background: transparent;
   color: var(--color-cursor-muted);
@@ -386,15 +431,117 @@
   height: 14px;
 }
 
-.studio-cn-detail-layout {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
+.studio-cn-offer-detail {
+  min-height: 0;
 }
 
-@media (min-width: 960px) {
-  .studio-cn-detail-layout {
-    grid-template-columns: minmax(0, 1fr) min(320px, 34%);
-  }
+.studio-cn-offer-detail.is-split {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-cn-offer-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.studio-cn-detail-scroll {
+  height: 100%;
+}
+
+.studio-cn-detail-main {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Right book dock — secondary panel chrome (settings / DM peer language). */
+.studio-cn-book-panel {
+  min-width: 240px;
+}
+
+.studio-cn-offer-panels > [data-panel-id="studio-cn-offer-book"] {
+  min-width: 240px;
+}
+
+.studio-cn-book-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
+  border-left: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-cn-book-sidebar-head {
+  flex: 0 0 auto;
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-cn-book-sidebar-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 0 12px;
+  scrollbar-width: none;
+}
+
+.studio-cn-book-sidebar-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Studio mobile book bar is JS-gated; force visible when rendered. */
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  z-index: 40;
+  min-height: calc(52px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: var(--mos-bg, var(--mos-panel, var(--color-cursor-bg, #f5f5f7)));
+  box-sizing: border-box;
+}
+
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta span {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav .public-offers-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 14px;
+}
+
+/* Sheet already has a Book head — flush nested book body. */
+.studio-cn-offer-detail .public-offers-filters-body .public-offers-rail-detail {
+  padding-top: 4px;
 }

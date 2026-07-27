@@ -74,11 +74,31 @@ from `--mos-plate`:
 - `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
   `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
 - File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
-  pill + ink glyph** for folders, images, audio, and system folders — never dark
-  glass on media only. Trash / Messages use a **lock** badge (system / protected),
-  not trash/message icons.
-- Active *controls* inside the file manager (breadcrumb `.is-current`, view/type menus)
-  stay L3 — that's the control affordance, not a plate.
+  pill + ink glyph** for folders, images, and audio — never dark glass on media
+  only. **System folders** (Trash / Messages / Purchased / My Public): center glyph
+  only (`trash` / `message` / `shoppingBag` / `globe`) — **no** bottom-left type
+  chip.
+- File-manager **search strip** (`.cursor-panel-search`): chrome divider on
+  **top and bottom** when it is the first chrome after the brand head. When it
+  follows `.studio-files-source-toggle` (Your files / Asset library) or sits
+  under a brand head that already drew a line (Messages `.studio-dm-sidebar`),
+  **no top border** — only the bottom hairline. Never stack two adjacent lines
+  (reads as a thick double border). Type filter is a **labeled dropdown** in the
+  search end (`.desk-explorer-type-filter`) with leading icons on the trigger and
+  every menu row — same CursorSelect language (`ArrowDown`, plate menu). Creative
+  Network Files mode uses the same control for All / Music / SFX (no pill row).
+- **Messages rail** search (Feed / My offers / My jobs `.studio-dm-sidebar
+  .cursor-panel-search`): **no top border** — brand head already draws that
+  divider; only the bottom hairline.
+- Files source toggle (`.studio-files-source-toggle`): **same height as other chrome
+  heads** (`--cursor-head-h` / 32px) — horizontal `8px` pad only, 24px pills, bottom
+  hairline. Folder = Your files, Library = **Asset library** (stock music/SFX browse).
+  Never a taller padded strip. Owned library cards are HTML5-draggable onto the
+  timeline (same explorer/asset payload as files); play/scrub row stays interactive.
+- Active *controls* inside the file manager (breadcrumb `.is-current`) stay L3
+  — that's the control affordance, not a plate.
+- File / folder **hover** (grid tile visual, preview tile, list row): accent
+  border ring + slight drop shadow — never flat hover-only fill.
 - External file drag/drop uses a restrained centered **“Drop to upload”** L2 chip plus
   a subtle accent inset on the explorer — never a full-panel oversized drop card.
 - Multi-select is an explicit mode (also entered by Ctrl/Cmd-click): selected tiles use
@@ -342,30 +362,79 @@ border, same as `.studio-account-save`). Logo mark comes from `useMercurySidebar
 so its ink follows appearance. The `studio-admin-*` classes are **not** available on public
 routes (they live in the `StudioShell` inline `<style>`) — mirror them with local classes.
 
+**Feed / Profile** left rail uses the same Messages list ↔ inline chat as My offers /
+My jobs (`StudioMessagesSidebar` / `StudioMessagesPane` `embeddedInRail`) — not a
+global People directory search. Mobile Social sheet matches (Messages, not People).
+Memory: **727**.
+
+**Desktop post + comments** (`ProfilePostViewer` / `profile-post-viewer.css`): edge-flush,
+full-height, square — no inset padding, no 18px floating cards. Post media fills the
+main pane; comments rail is a flat `--mos-panel` column with a left hairline (like other
+Studio sidebars). Light mode: post stage L1 `--mos-page` (never hardcoded black);
+comments rail solid `--mos-panel` (excluded from StudioShell transparent/`aside`
+!important). Divider between post ↔ comments (and between swipe posts) = L2
+`--mos-plate`. Memory: **775**. Caption username/body ink is **backdrop-
+sampled** (`captionBackdropContrast.ts` → `.is-on-light` / `.is-on-dark` on caption
+**and** action rail), not tied to appearance — letterbox vs media luminance.
+Caption uses mean luma; the action rail always uses white ink (`.is-on-dark`)
+so candle/neon posts don’t flip icons black — comments dock stays theme panel.
+Comments/description dock stays theme ink.
+Mobile comments stay a bottom glass sheet.
+Post timestamps always show relative ago · short date
+(`formatPostWhen`, e.g. `12d ago · Jul 14`); caption edits set `editedAt` and
+append “· edited”. Memory: **774**.
+
 **Creative Network** is a normal Studio workspace tab (`network:home`), not a separate
 public catalog site. Deep links (`/creative-network/`, `/creative-network/[slug]/`, legacy
 `/offers/*`) authenticate into Studio with `?network=1` (+ optional `slug` / `u`).
 
-| Mode | Left rail | Main pane |
-|---|---|---|
-| **Network** (all users) | Catalog filters (search, category, delivery, price) | Browse grid + offer detail / book |
-| **My offers** (approved sellers) | Messages-style offer list + Messages quick access | Offer editor / list (`MarketplaceOffersPane`) |
-| **My jobs** (approved sellers) | Messages-style job list + Messages quick access | Job detail / list |
-| Non-sellers | Network filters only | Header CTA: Become a seller / Continue registration |
+| Mode | Left rail | Main pane | Right (when open) |
+|---|---|---|---|
+| **Network** (all users) | Catalog filters (`StudioCreativeNetworkSidebar`) — search = shared `PanelSearchBar` (no pill; **no top border** under brand/rail edge, same Messages rule) | Browse + banner; offer detail (gallery / intro / description / reviews) | Offer **Book** dock (`PackagePicker` + `BookPanel` via PanelGroup). Mobile: bottom Book bar → sheet — not a cramped right column |
+| **My offers** (approved sellers) | Messages list ↔ inline chat | Offer list (no duplicate Offers head — CN tabs only) | — |
+| **My jobs** (approved sellers) | Messages list ↔ inline chat | Job list (no duplicate Jobs head — CN tabs only) | — |
+| **Assets** (approved sellers) | File manager (Your files — list audio from Files) | Summary + listings table | — |
+| Non-sellers | Catalog filters | Network browse + Become seller / Continue registration CTA | — |
 
-Messages quick access opens the existing Messages tab (`openChatWith`) — no embedded chat
-in the CN pane. Mobile: CN item on bottom nav; rail opens as a floating sheet (same pattern
-as People on Feed). Signup intent + Settings → General “Default tab” control first-open
-tab (Generate / Feed / Creative Network / Messages). Admin Offers/Jobs ops tabs unchanged.
+On **Network** (and seller-apply), the left rail is the catalog filter rail like the
+public Creative Network page — including **Sort** (not in the main results head).
+Studio Network filter search uses `PanelSearchBar` (Messages language), not a pill
+input. Public `/creative-network/` keeps its existing left book rail on offer detail;
+in-Studio offer book is the **right** secondary dock (`--mos-panel`).
+On **My offers / My jobs**, the rail is Messages with inline chat (Back stays in the
+rail — no Messages tab). On **Assets**, the rail is the normal file manager (Your files)
+so sellers can List on Creative Network from context menu — not filters or Messages.
+Mobile CN sheet mirrors Filters vs Messages; Assets middle action is Files. Signup
+intent + Settings → General “Default tab” control first-open tab. Admin Offers/Jobs
+ops tabs unchanged.
+`.studio-cn-head` (and nested `.studio-admin-head`) use **L1** `--mos-panel` /
+`--mos-page` — same fill as `cursor-workspace-head`, never `--mos-bg`/plate (reads as a
+deeper second bar in light). Memory: **712**.
 Listings are *services/packages* in product copy. CSS: `studio-creative-network.css` +
 shared `public-offers.css` tokens. Memory: Creative Network Studio tab model.
 
 **Stock audio (v1 digital goods)** is separate from service offers/jobs: Files left rail
-toggles **Your files | Creative Network** to browse music/SFX at fixed **3× generate**
-price (TTD UI), purchase once into locked **Purchased** folder (`systemKind:
-purchased_assets`, `licenseKind: purchased_network`). Platform/seller split **30/70**;
-admin Payouts shows both job and audio purchase rows. Backend: `convex/assetStore.ts` +
-`assetStoreActions.ts`. Never say “credits” in buyer/seller copy (memory **715**).
+toggles **Your files | Asset library** to browse music/SFX at fixed **3× generate**
+price (TTD UI). Store listing cards = **one** L2 `--mos-plate` **`StudioChatAudioPlayer`**
+with **`compact`** density (tighter pad, 28px wave, sm orb — not chat height), not
+native `<audio>` or a plain play button. Head: **`Music|SFX · title`** left, compact
+**Buy** pill (`ShoppingBag` + TTD price, ~22px) right — first click → **Confirm**
+(same pill, no modal); second click purchases and jumps to **Your files → Purchased**
+(no success toast / asset tab). **Owned** cards drag onto the timeline like files.
+**No** download count. **Seller list flow:** workspace tab
+`listAsset:<assetId>` (Details head tab + Submit — same chrome as create offer, not a
+dialog) → Bunny copy into locked **My Public** (`systemKind: public_assets`,
+`licenseKind: listed_network`) → `pending_review` → admin **Assets** tab listens /
+approves (live) or rejects with reason (seller resubmits same file with a new name).
+CN **Assets** pill: summary chips + listings table only — **no** “Your assets” section
+bar / Balance button (credits stay in the workspace credit pill). **Once purchased:**
+seller cannot unlist; they may **release to platform** (stays live; future profits 100%
+platform). Unpaid storage: seller share of sales auto-covers `storageBilling` debt;
+after **90 days** still owed, live seller-owned listings are removed and profit-banned.
+Public / Purchased copies cannot be trashed. Platform/seller split **30/70** when
+seller-owned; admin Payouts shows job and audio rows. Backend: `convex/assetStore.ts` +
+`assetStoreActions.listOnNetwork` / `purchaseListing`. Never say “credits” in
+buyer/seller copy (memory **715** / **769**).
 
 ---
 

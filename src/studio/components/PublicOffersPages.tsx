@@ -26,16 +26,27 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  Fragment,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
 import "./public-offers.css";
+import "./studio-creative-network.css";
 
 function RatingStars({
   value,
@@ -631,16 +642,40 @@ function CatalogFiltersBody({
 
 function OffersCatalogInner() {
   const searchParams = useSearchParams();
+  const mediaExpiresUnix = useStickySignedUrlExpiry();
   const sellerUsername = searchParams.get("u")?.replace(/^@/, "").trim() || undefined;
   const allOffers = useQuery(
     api.marketplace.listPublicOffers,
-    sellerUsername ? "skip" : {},
+    sellerUsername ? "skip" : { expiresUnix: mediaExpiresUnix },
   );
   const sellerOffers = useQuery(
     api.marketplace.listPublicOffersByUsername,
-    sellerUsername ? { username: sellerUsername } : "skip",
+    sellerUsername
+      ? { username: sellerUsername, expiresUnix: mediaExpiresUnix }
+      : "skip",
   );
   const offers = sellerUsername ? sellerOffers : allOffers;
+
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = "/branding/creative-network-banner-4k.webp";
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!offers?.length) return;
+    for (const offer of offers.slice(0, 8)) {
+      if (!offer.bannerThumbUrl) continue;
+      const img = new Image();
+      img.decoding = "async";
+      img.src = offer.bannerThumbUrl;
+    }
+  }, [offers]);
 
   const [search, setSearch] = useState("");
   const [optionValues, setOptionValues] = useState<Record<string, string>>({});
@@ -929,13 +964,19 @@ function OffersCatalogInner() {
                 )
               ) : (
                 <ul className="public-offers-grid">
-                  {filtered.map((offer) => (
+                  {filtered.map((offer, index) => (
                     <li key={offer._id}>
                       <Link href={`/creative-network/${offer.slug}/`} className="public-offers-card">
                         {offer.bannerThumbUrl ? (
                           <div className="public-offers-card-media" aria-hidden="true">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={offer.bannerThumbUrl} alt="" loading="lazy" />
+                            <img
+                              src={offer.bannerThumbUrl}
+                              alt=""
+                              loading={index < 8 ? "eager" : "lazy"}
+                              fetchPriority={index < 4 ? "high" : "auto"}
+                              decoding="async"
+                            />
                           </div>
                         ) : null}
                         <div className="public-offers-card-top">
@@ -1244,7 +1285,11 @@ function PackagePicker({
 }
 
 function OfferDetailInner({ slug }: { slug: string }) {
-  const offer = useQuery(api.marketplace.getPublicOfferBySlug, { slug });
+  const mediaExpiresUnix = useStickySignedUrlExpiry();
+  const offer = useQuery(api.marketplace.getPublicOfferBySlug, {
+    slug,
+    expiresUnix: mediaExpiresUnix,
+  });
   const { isAuthenticated } = useConvexAuth();
   const [pkgIndex, setPkgIndex] = useState(0);
   const [bookSheetOpen, setBookSheetOpen] = useState(false);
@@ -1519,9 +1564,98 @@ function OfferDetailInner({ slug }: { slug: string }) {
   );
 }
 
+type StudioOfferBookProps = {
+  offer: {
+    _id: Id<"marketplaceOffers">;
+    slug: string;
+    priceCents: number;
+    deliveryDays: number;
+    category?: string | null;
+    packages?: OfferPackageView[] | null;
+  };
+  pkgIndex: number;
+  onPkgIndex: (index: number) => void;
+  isAuthenticated: boolean;
+  /** Hide the dock head when nested in the mobile filters sheet (sheet already titles Book). */
+  showHead?: boolean;
+};
+
 /**
- * Offer detail for the in-Studio Creative Network tab — no public shell rail;
- * packages + booking sit in the main column.
+ * Packages + BookPanel for Studio CN offer detail — right dock on desktop,
+ * bottom sheet on mobile. Keeps pkgIndex owned by the parent embed.
+ */
+function StudioCnOfferBookSidebar({
+  offer,
+  pkgIndex,
+  onPkgIndex,
+  isAuthenticated,
+  showHead = true,
+}: StudioOfferBookProps) {
+  const packages = offer.packages ?? [];
+  const hasPackages = packages.length > 0;
+
+  const body = (
+    <div className="public-offers-rail-detail">
+      {hasPackages ? (
+        <PackagePicker
+          packages={packages}
+          index={pkgIndex}
+          onIndex={onPkgIndex}
+        />
+      ) : (
+        <section className="public-offers-panel">
+          <h2>Package</h2>
+          <p className="public-offers-price">
+            {formatTtdCents(offer.priceCents)}
+          </p>
+          <dl className="public-offers-rows">
+            <div className="public-offers-row">
+              <dt>Delivery</dt>
+              <dd>{offer.deliveryDays} days</dd>
+            </div>
+            {offer.category ? (
+              <div className="public-offers-row">
+                <dt>Category</dt>
+                <dd>{offer.category}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </section>
+      )}
+      {isAuthenticated ? (
+        <Authenticated>
+          <BookPanel
+            offerId={offer._id}
+            slug={offer.slug}
+            packageIndex={hasPackages ? pkgIndex : undefined}
+          />
+        </Authenticated>
+      ) : (
+        <Unauthenticated>
+          <section className="public-offers-panel">
+            <h2>Booking</h2>
+            <p className="public-offers-note">Sign in to book this package.</p>
+          </section>
+        </Unauthenticated>
+      )}
+    </div>
+  );
+
+  if (!showHead) return body;
+
+  return (
+    <aside className="studio-cn-book-sidebar" aria-label="Packages and booking">
+      <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
+        <strong>Book</strong>
+      </div>
+      <div className="studio-cn-book-sidebar-body">{body}</div>
+    </aside>
+  );
+}
+
+/**
+ * Offer detail for the in-Studio Creative Network tab — left filters stay in the
+ * shell rail; packages + booking dock in a right sidebar (mobile: bottom sheet).
  */
 export function StudioOfferDetailEmbed({
   slug,
@@ -1530,128 +1664,250 @@ export function StudioOfferDetailEmbed({
   slug: string;
   onBack: () => void;
 }) {
-  const offer = useQuery(api.marketplace.getPublicOfferBySlug, { slug });
+  const { isMobile } = useMobileLayout();
+  const mediaExpiresUnix = useStickySignedUrlExpiry();
+  const offer = useQuery(api.marketplace.getPublicOfferBySlug, {
+    slug,
+    expiresUnix: mediaExpiresUnix,
+  });
   const { isAuthenticated } = useConvexAuth();
   const [pkgIndex, setPkgIndex] = useState(0);
-  const packages = offer?.packages ?? [];
+  const [bookSheetOpen, setBookSheetOpen] = useState(false);
+  const packages = (offer?.packages ?? []) as OfferPackageView[];
   const hasPackages = packages.length > 0;
   const activePkg = hasPackages
     ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
     : null;
 
+  useEffect(() => {
+    setPkgIndex(0);
+    setBookSheetOpen(false);
+  }, [slug]);
+
+  useEffect(() => {
+    if (!bookSheetOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setBookSheetOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [bookSheetOpen]);
+
+  useEffect(() => {
+    if (!isMobile) setBookSheetOpen(false);
+  }, [isMobile]);
+
+  const backControl = (
+    <button type="button" className="studio-cn-detail-back" onClick={onBack}>
+      <ArrowLeft aria-hidden="true" />
+      Back to Network
+    </button>
+  );
+
+  let detailBody: ReactNode;
   if (offer === undefined) {
-    return (
-      <div className="studio-cn-browse">
-        <button type="button" className="studio-cn-detail-back" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" />
-          Back to Network
-        </button>
-        <OffersState icon={<PackageSearch />} title="Loading service…" />
+    detailBody = <OffersState icon={<PackageSearch />} title="Loading service…" />;
+  } else if (offer === null) {
+    detailBody = (
+      <OffersState
+        icon={<Store />}
+        title="Service not found"
+        hint="This package is no longer published."
+      />
+    );
+  } else {
+    detailBody = (
+      <div className="studio-cn-detail-main">
+        {offer.gallery && offer.gallery.length > 0 ? (
+          <OfferGallery items={offer.gallery} />
+        ) : null}
+        <section className="public-offers-detail-intro">
+          <div className="public-offers-detail-intro-copy">
+            {offer.category ? (
+              <p className="public-offers-kicker">{offer.category}</p>
+            ) : (
+              <p className="public-offers-kicker">Creative Network</p>
+            )}
+            <h1>{offer.title}</h1>
+            <p>
+              {offer.sellerBusinessName}
+              {offer.sellerUsername ? (
+                <>
+                  {" · "}
+                  <Link href={`/u/${offer.sellerUsername}`}>
+                    @{offer.sellerUsername}
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          </div>
+          <div className="public-offers-detail-intro-meta">
+            <span className="public-offers-chip">
+              <Clock aria-hidden="true" />
+              {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
+            </span>
+            <span className="public-offers-chip">
+              {hasPackages && packages.length > 1 ? "From " : ""}
+              {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
+            </span>
+            <OfferStatsChips
+              ratingAvg={offer.ratingAvg}
+              ratingCount={offer.ratingCount}
+              purchaseCount={offer.purchaseCount}
+            />
+          </div>
+        </section>
+        <section className="public-offers-panel">
+          <h2>What you get</h2>
+          <p className="public-offers-prose">{offer.description}</p>
+        </section>
+        <OfferReviewsList offerId={offer._id} />
       </div>
     );
   }
-  if (offer === null) {
+
+  const mainColumn = (
+    <div className="public-offers-main-scroll studio-cn-detail-scroll">
+      <main className="public-offers-body">
+        {backControl}
+        {detailBody}
+      </main>
+    </div>
+  );
+
+  const bookSidebar =
+    offer != null ? (
+      <StudioCnOfferBookSidebar
+        offer={{
+          _id: offer._id,
+          slug: offer.slug,
+          priceCents: offer.priceCents,
+          deliveryDays: offer.deliveryDays,
+          category: offer.category,
+          packages,
+        }}
+        pkgIndex={pkgIndex}
+        onPkgIndex={setPkgIndex}
+        isAuthenticated={isAuthenticated}
+      />
+    ) : (
+      <aside className="studio-cn-book-sidebar" aria-label="Packages and booking">
+        <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
+          <strong>Book</strong>
+        </div>
+        <div className="studio-cn-book-sidebar-body">
+          <p className="public-offers-note" style={{ padding: "0 12px" }}>
+            {offer === undefined ? "Loading…" : "This package is no longer published."}
+          </p>
+        </div>
+      </aside>
+    );
+
+  if (isMobile) {
     return (
-      <div className="studio-cn-browse">
-        <button type="button" className="studio-cn-detail-back" onClick={onBack}>
-          <ArrowLeft aria-hidden="true" />
-          Back to Network
-        </button>
-        <OffersState
-          icon={<Store />}
-          title="Service not found"
-          hint="This package is no longer published."
-        />
+      <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-mobile">
+        {mainColumn}
+        {offer != null ? (
+          <nav
+            className="public-offers-mobile-book-nav"
+            aria-label="Book this service"
+          >
+            <div className="public-offers-mobile-book-meta">
+              <strong>
+                {hasPackages && packages.length > 1 ? "From " : ""}
+                {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
+              </strong>
+              <span>
+                {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
+              </span>
+            </div>
+            <button
+              type="button"
+              className="public-offers-btn is-primary"
+              aria-expanded={bookSheetOpen}
+              onClick={() => setBookSheetOpen(true)}
+            >
+              <Wallet aria-hidden="true" />
+              {hasPackages ? "Choose package" : "Book"}
+            </button>
+          </nav>
+        ) : null}
+        {bookSheetOpen && offer != null ? (
+          <div
+            className="public-offers-filters-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Packages and booking"
+          >
+            <button
+              type="button"
+              className="public-offers-filters-backdrop"
+              aria-label="Dismiss booking"
+              onClick={() => setBookSheetOpen(false)}
+            />
+            <div className="public-offers-filters-panel">
+              <div className="public-offers-filters-head">
+                <strong>Book</strong>
+                <button
+                  type="button"
+                  className="public-offers-btn is-icon is-quiet"
+                  aria-label="Close booking"
+                  onClick={() => setBookSheetOpen(false)}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              </div>
+              <div className="public-offers-filters-body">
+                <StudioCnOfferBookSidebar
+                  offer={{
+                    _id: offer._id,
+                    slug: offer.slug,
+                    priceCents: offer.priceCents,
+                    deliveryDays: offer.deliveryDays,
+                    category: offer.category,
+                    packages,
+                  }}
+                  pkgIndex={pkgIndex}
+                  onPkgIndex={setPkgIndex}
+                  isAuthenticated={isAuthenticated}
+                  showHead={false}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="studio-cn-browse">
-      <button type="button" className="studio-cn-detail-back" onClick={onBack}>
-        <ArrowLeft aria-hidden="true" />
-        Back to Network
-      </button>
-      <div className="studio-cn-detail-layout">
-        <div className="studio-cn-detail-main">
-          {offer.gallery && offer.gallery.length > 0 ? (
-            <OfferGallery items={offer.gallery} />
-          ) : null}
-          <section className="public-offers-detail-intro">
-            <div className="public-offers-detail-intro-copy">
-              {offer.category ? (
-                <p className="public-offers-kicker">{offer.category}</p>
-              ) : (
-                <p className="public-offers-kicker">Creative Network</p>
-              )}
-              <h1>{offer.title}</h1>
-              <p>
-                {offer.sellerBusinessName}
-                {offer.sellerUsername ? (
-                  <>
-                    {" · "}
-                    <Link href={`/u/${offer.sellerUsername}`}>
-                      @{offer.sellerUsername}
-                    </Link>
-                  </>
-                ) : null}
-              </p>
-            </div>
-            <div className="public-offers-detail-intro-meta">
-              <span className="public-offers-chip">
-                <Clock aria-hidden="true" />
-                {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
-              </span>
-              <span className="public-offers-chip">
-                {hasPackages && packages.length > 1 ? "From " : ""}
-                {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
-              </span>
-              <OfferStatsChips
-                ratingAvg={offer.ratingAvg}
-                ratingCount={offer.ratingCount}
-                purchaseCount={offer.purchaseCount}
-              />
-            </div>
-          </section>
-          <section className="public-offers-panel">
-            <h2>What you get</h2>
-            <p className="public-offers-prose">{offer.description}</p>
-          </section>
-          <OfferReviewsList offerId={offer._id} />
-        </div>
-        <div className="studio-cn-detail-aside">
-          {hasPackages ? (
-            <PackagePicker
-              packages={packages}
-              index={pkgIndex}
-              onIndex={setPkgIndex}
-            />
-          ) : (
-            <section className="public-offers-panel">
-              <h2>Package</h2>
-              <p className="public-offers-price">
-                {formatTtdCents(offer.priceCents)}
-              </p>
-            </section>
-          )}
-          {isAuthenticated ? (
-            <Authenticated>
-              <BookPanel
-                offerId={offer._id}
-                slug={offer.slug}
-                packageIndex={hasPackages ? pkgIndex : undefined}
-              />
-            </Authenticated>
-          ) : (
-            <Unauthenticated>
-              <section className="public-offers-panel">
-                <h2>Booking</h2>
-                <p className="public-offers-note">Sign in to book this package.</p>
-              </section>
-            </Unauthenticated>
-          )}
-        </div>
-      </div>
+    <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-split">
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="studio-cn-offer-book-h"
+        className="studio-cn-offer-panels h-full min-h-0 min-w-0 overflow-hidden"
+      >
+        <Panel
+          id="studio-cn-offer-main"
+          order={1}
+          defaultSize={72}
+          minSize={45}
+          className="min-h-0 min-w-0"
+        >
+          {mainColumn}
+        </Panel>
+        <PanelResizeHandle className="cursor-resize" />
+        <Panel
+          id="studio-cn-offer-book"
+          order={2}
+          defaultSize={28}
+          minSize={20}
+          maxSize={40}
+          className="min-h-0 min-w-0 studio-cn-book-panel"
+        >
+          {bookSidebar}
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }

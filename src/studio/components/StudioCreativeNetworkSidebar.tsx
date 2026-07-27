@@ -6,18 +6,26 @@ import {
   Briefcase,
   MessageCircle,
   Package,
-  Search,
 } from "lucide-react";
 import { Fragment } from "react";
 import { api } from "../../../convex/_generated/api";
+import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import {
   NETWORK_OPTION_FILTERS,
   NETWORK_PRICE_PRESETS,
   useCreativeNetwork,
+  type NetworkSortKey,
 } from "./StudioCreativeNetworkContext";
 import "./public-offers.css";
 import "./studio-creative-network.css";
+
+const NETWORK_SORT_OPTIONS: Array<{ value: NetworkSortKey; label: string }> = [
+  { value: "newest", label: "Newest" },
+  { value: "price-asc", label: "Price: low to high" },
+  { value: "price-desc", label: "Price: high to low" },
+  { value: "fastest", label: "Fastest delivery" },
+];
 
 type StudioCreativeNetworkSidebarProps = {
   expiresUnix: number;
@@ -92,17 +100,31 @@ function NetworkFiltersRail() {
 
   return (
     <div className="studio-cn-sidebar-body">
-      <label className="studio-cn-rail-search">
-        <Search aria-hidden="true" />
-        <input
-          type="search"
+      <div className="studio-cn-sidebar-chrome">
+        <PanelSearchBar
           value={cn.search}
-          onChange={(event) => cn.setSearch(event.target.value)}
+          onChange={cn.setSearch}
           placeholder="Search services"
           aria-label="Search services"
         />
-      </label>
+      </div>
       <div className="studio-cn-rail-scroll public-offers-rail-body">
+        <FilterSection
+          title="Sort"
+          activeCount={cn.sort === "newest" ? 0 : 1}
+          open={!cn.closedSections.sort}
+          onToggle={() => cn.toggleSection("sort")}
+        >
+          {NETWORK_SORT_OPTIONS.map((option) => (
+            <FilterOption
+              key={option.value}
+              active={cn.sort === option.value}
+              onClick={() => cn.setSort(option.value)}
+              label={option.label}
+            />
+          ))}
+        </FilterSection>
+
         {NETWORK_OPTION_FILTERS.map((def) => {
           const options = def.getOptions(offers);
           const value = cn.valueFor(def);
@@ -264,9 +286,9 @@ function MessagesQuickAccess({
               }}
             >
               <StudioProfileAvatar
-                size={22}
+                size="sm"
                 name={label}
-                imageUrl={row.peer.avatarUrl}
+                src={row.peer.avatarUrl}
               />
               <span>{label}</span>
               <MessageCircle
@@ -289,7 +311,7 @@ function MyOffersRail({
   const cn = useCreativeNetwork();
   const myOffers = useQuery(
     api.marketplace.listMyOffers,
-    cn.isSellerApproved ? {} : "skip",
+    cn.isSellerApproved ? { expiresUnix } : "skip",
   );
 
   return (
