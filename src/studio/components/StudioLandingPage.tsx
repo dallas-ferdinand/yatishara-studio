@@ -251,7 +251,7 @@ function LaptopMock({
   src: string;
   alt: string;
   priority?: boolean;
-  aside?: string;
+  aside?: ReactNode;
   asideSide?: "right" | "left";
 }) {
   return (
@@ -959,7 +959,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-book.jpg"
             alt="Booking a Creative Network package with wallet balance"
-            aside="held until you say so"
+            aside={
+              <>
+                held until you
+                <br />
+                say so
+              </>
+            }
             asideSide="right"
           />
         </LandingSection>
