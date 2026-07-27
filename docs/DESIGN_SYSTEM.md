@@ -345,7 +345,16 @@ Structure:
   tween** on mobile (layout thrash). Token `--studio-mobile-files-dock-duration`
   stays `0ms`. Generate is `flex: 1` and shrinks/grows in the same frame.
 - Keep dock **mounted** at height 0 after close; warm-mount ASAP on mobile enter.
-  Open expands in the same pointerdown as `setMobileSection("files")`.
+  **Open/close paint path**: `paintMobileFilesDock` sets `data-files-open` on the
+  tap frame (CSS expands/collapses), then React `setMobileSection` /
+  `setFilesDockExpanded` run in `setTimeout(0)` — a sync Shell re-render on the
+  pointer frame is what made both directions feel like “load/init”.
+- Do **not** re-apply composer editor HTML when `mobileSection` flips (only on
+  real `composerContextKey` change). Do **not** tear down composer
+  ResizeObserver / visualViewport listeners when Files opens — read
+  `data-files-open` inside the keyboard inset sync instead.
+- Keep dock body laid out while collapsed (`height:0` + `overflow:hidden`);
+  avoid `visibility:hidden` (cold reveal of `content-visibility` thumbs).
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
 - No "Files" title bar. Chrome = search + pathbar (desktop layout): breadcrumbs +

@@ -80,7 +80,7 @@ import {
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
-import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -1144,9 +1144,16 @@ export function StudioShell({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
   const [mobileSection, setMobileSection] = useState("composer");
-  /** Files dock stays mounted through open/close so Generate + sheet can share one transition. */
-  const [filesDockMounted, setFilesDockMounted] = useState(false);
+  /**
+   * Files dock stays mounted on mobile so open is height-only.
+   * Seed from the viewport so the first Files tap isn't a cold FileTree mount.
+   */
+  const [filesDockMounted, setFilesDockMounted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`).matches;
+  });
   const [filesDockExpanded, setFilesDockExpanded] = useState(false);
+  const filesDockOpenGenRef = useRef(0);
   const [mobileSocialOpen, setMobileSocialOpen] = useState(false);
   const [mobileNetworkOpen, setMobileNetworkOpen] = useState(false);
   /** Synced from Creative Network context — openChatWith can't call the hook. */
@@ -1381,35 +1388,24 @@ export function StudioShell({
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
 
-  // Keep dock state in sync with mobileSection for callers that only
-  // setMobileSection (not openMobileSection). Open path also sets these
-  // synchronously in the tap handler so the sheet paints in the same frame.
+  // Keep React dock flags in sync for callers that only setMobileSection.
+  // Visual open/close is driven by data-files-open (see paintMobileFilesDock).
   useEffect(() => {
     if (!isMobile) {
       setFilesDockMounted(false);
       setFilesDockExpanded(false);
+      shellRef.current?.removeAttribute("data-files-open");
       return;
     }
+    setFilesDockMounted(true);
     if (mobileSection === "files") {
-      setFilesDockMounted(true);
       setFilesDockExpanded(true);
+      shellRef.current?.setAttribute("data-files-open", "1");
       return;
     }
     setFilesDockExpanded(false);
+    shellRef.current?.removeAttribute("data-files-open");
   }, [isMobile, mobileSection]);
-
-  // Warm-mount FileTree at height 0 ASAP so the first Files tap only expands
-  // (no cold remount hitch). Low priority so it doesn't steal first paint.
-  useEffect(() => {
-    if (!isMobile || filesDockMounted) return;
-    let cancelled = false;
-    startMobileTransition(() => {
-      if (!cancelled) setFilesDockMounted(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [isMobile, filesDockMounted, startMobileTransition]);
 
   useEffect(() => {
     if (!isMobile && mobileSocialOpen) setMobileSocialOpen(false);
@@ -2416,14 +2412,8 @@ export function StudioShell({
   useEffect(() => {
     const prevKey = composerKeyRef.current;
     if (prevKey === composerContextKey) {
-      // Same chat tab — remount composer (e.g. mobile files → create) and
-      // re-apply saved HTML once the editor exists again.
-      requestAnimationFrame(() => {
-        const el = editorRef.current;
-        const ctx = composerContextsRef.current[composerContextKey];
-        if (!el || !ctx) return;
-        applyComposerContextToEditor(el, ctx);
-      });
+      // Same chat — do NOT re-apply editor HTML on mobileSection toggles
+      // (Files open/close). That was main-thread work on every Files tap.
       return;
     }
 
@@ -2482,7 +2472,7 @@ export function StudioShell({
       if (!el || !ctx) return;
       applyComposerContextToEditor(el, ctx);
     });
-  }, [composerContextKey, mobileSection]);
+  }, [composerContextKey]);
 
   useEffect(() => {
     return () => {
@@ -3267,6 +3257,7 @@ export function StudioShell({
     async (buyerAssetId) => {
       setFilesBrowseMode("yours");
       if (isMobile) {
+        paintMobileFilesDock(true);
         setFilesDockMounted(true);
         setFilesDockExpanded(true);
         setMobileSection("files");
@@ -3372,13 +3363,21 @@ export function StudioShell({
   function restoreComposerKeyboardIfWanted() {
     if (!composerWantedKeyboardRef.current) return;
     composerWantedKeyboardRef.current = false;
-    const focus = () => focusComposerEditorEnd(editorRef.current);
+    // One focus after paint — multi timeouts felt like a delayed second beat on close.
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(focus);
-      // Soft keyboards often need a beat after the Files dock height transition.
-      window.setTimeout(focus, 80);
-      window.setTimeout(focus, 220);
+      focusComposerEditorEnd(editorRef.current);
     });
+  }
+
+  /**
+   * Paint Files dock open/close before React re-renders StudioShell.
+   * data-files-open is imperative so a giant Shell render can't wipe the snap.
+   */
+  function paintMobileFilesDock(open) {
+    const root = shellRef.current;
+    if (!(root instanceof HTMLElement)) return;
+    if (open) root.setAttribute("data-files-open", "1");
+    else root.removeAttribute("data-files-open");
   }
 
   function openMobileSection(section) {
@@ -3392,6 +3391,8 @@ export function StudioShell({
       return;
     }
     if (section === "feed") {
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
       setMobileSection("composer");
       setMobileSocialOpen(false);
       setMobileNetworkOpen(false);
@@ -3402,6 +3403,8 @@ export function StudioShell({
       return;
     }
     if (section === "network") {
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
       setMobileSection("composer");
       setMobileSocialOpen(false);
       setMobileNetworkOpen(false);
@@ -3416,48 +3419,65 @@ export function StudioShell({
       composerWantedKeyboardRef.current =
         (editor instanceof HTMLElement && document.activeElement === editor) ||
         isStudioMobileKeyboardOpen();
-      // Snap KB chrome down immediately — don't wait for vv settle before the dock opens.
       const root = shellRef.current;
       if (root) {
         root.style.setProperty("--studio-keyboard-inset", "0px");
         root.removeAttribute("data-keyboard-open");
       }
-      // Same event as the tap — dock expands in this paint, not a post-effect frame.
-      setFilesDockMounted(true);
-      setFilesDockExpanded(true);
-      setMobileSection(section);
-      setSettingsOpen(false);
-      setHistoryOpen(false);
-      setMobileAppMenuOpen(false);
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
-      // Blur after dock state commits so soft-keyboard dismiss doesn't steal the frame.
-      if (editor) {
-        window.requestAnimationFrame(() => {
+      // Imperative snap first — StudioShell setState is too heavy to run before paint.
+      const openGen = (filesDockOpenGenRef.current += 1);
+      paintMobileFilesDock(true);
+      void root?.offsetHeight;
+      window.setTimeout(() => {
+        if (filesDockOpenGenRef.current !== openGen) return;
+        setFilesDockMounted(true);
+        setFilesDockExpanded(true);
+        setMobileSection("files");
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
+        if (editor) {
           try {
             editor.blur?.();
           } catch {
             /* ignore */
           }
-        });
-      }
+        }
+      }, 0);
       return;
-    } else if (isMobile && section !== "files") {
+    }
+    if (section === "composer") {
+      // Paint close first (same as open) — sync Shell setState on the tap frame
+      // is what made close feel like it "loads".
+      const closeGen = (filesDockOpenGenRef.current += 1);
+      paintMobileFilesDock(false);
+      window.setTimeout(() => {
+        if (filesDockOpenGenRef.current !== closeGen) return;
+        setFilesDockExpanded(false);
+        setMobileSection("composer");
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        setMobileSocialOpen(false);
+        setMobileNetworkOpen(false);
+        if (
+          !activeTab.startsWith("composer:") &&
+          !activeTab.startsWith("thread:")
+        ) {
+          openTab(lastChatTabRef.current || COMPOSER_TAB);
+        }
+        if (isMobile) restoreComposerKeyboardIfWanted();
+      }, 0);
+      return;
+    }
+    if (isMobile && section !== "files") {
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
       setFilesDockExpanded(false);
     }
     setMobileSection(section);
-    if (section === "composer") {
-      setSettingsOpen(false);
-      setHistoryOpen(false);
-      setMobileAppMenuOpen(false);
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
-      if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
-        openTab(lastChatTabRef.current || COMPOSER_TAB);
-      }
-      if (isMobile) restoreComposerKeyboardIfWanted();
-      return;
-    }
     if (section === "files") {
       setSettingsOpen(false);
       setHistoryOpen(false);
@@ -6021,6 +6041,13 @@ export function StudioShell({
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
+        /* Optimistic Files open — matches nav is-active before React catches up. */
+        .studio-polish[data-files-open="1"] .studio-mobile-nav-action {
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border)) !important;
+          background: color-mix(in srgb, var(--cursor-accent) 14%, var(--studio-mobile-chrome-glass-foot)) !important;
+          color: var(--color-cursor-text-bright) !important;
+          box-shadow: none !important;
+        }
         .studio-mobile-nav-btn {
           display: inline-flex;
           flex: 1 1 0;
@@ -7606,16 +7633,21 @@ export function StudioShell({
           /* Instant snap — height tween forced layout on Generate + dock every frame. */
           transition: none;
         }
-        .studio-files-dock.is-expanded {
+        .studio-files-dock.is-expanded,
+        .studio-polish[data-files-open="1"] .studio-files-dock {
           height: var(--studio-mobile-files-sheet-height);
         }
         .studio-files-dock:not(.is-expanded) {
           border-top-color: transparent;
           pointer-events: none;
         }
-        .studio-files-dock:not(.is-expanded) .studio-files-dock-body {
-          visibility: hidden;
+        .studio-polish[data-files-open="1"] .studio-files-dock {
+          border-top-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          pointer-events: auto;
         }
+        /* Keep body laid out while collapsed (height:0 + overflow:hidden).
+           visibility:hidden made first open pay a cold "reveal" layout for
+           content-visibility tiles / thumbs — felt like init on tap. */
         .studio-files-dock-body {
           display: flex;
           flex-direction: column;
@@ -11016,7 +11048,8 @@ export function StudioShell({
           }
           /* Files open: composer keeps the normal gap above the dock (same token as above nav). */
           .studio-polish.is-studio-mobile.is-mobile-files .studio-composer.cursor-composer-shell,
-          .studio-polish.is-studio-mobile.is-mobile-files-composer .studio-composer.cursor-composer-shell {
+          .studio-polish.is-studio-mobile.is-mobile-files-composer .studio-composer.cursor-composer-shell,
+          .studio-polish.is-studio-mobile[data-files-open="1"] .studio-composer.cursor-composer-shell {
             bottom: var(--studio-mobile-composer-gap, 8px);
             transform: none;
             z-index: 30;
@@ -18593,7 +18626,6 @@ export function StudioShell({
               !hasActiveGenerationJob
             }
             onCancelAssist={() => void handleCancelAssistanceTurn()}
-            filesSheetOpen={isMobile && mobileSection === "files"}
           />
         ) : null}
       </main>
@@ -19138,7 +19170,6 @@ function StudioComposer({
   assistBusy = false,
   canCancelAssist = false,
   onCancelAssist,
-  filesSheetOpen = false,
 }) {
   const transcribeVoice = useAction(api.voiceActions.transcribe);
   const [recording, setRecording] = useState(false);
@@ -19317,7 +19348,7 @@ function StudioComposer({
         keyboardRafId = 0;
         const vv = window.visualViewport;
         let inset = 0;
-        if (isMobile && vv && !filesSheetOpen) {
+        if (isMobile && vv && root.getAttribute("data-files-open") !== "1") {
           const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
           // Noise floor only — no 80px cliff (that caused the jump mid-animation).
           inset = raw < 6 ? 0 : Math.round(raw);
@@ -19456,7 +19487,7 @@ function StudioComposer({
       if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
     };
-  }, [isMobile, presetGridOpen, videoTypeGridOpen, voicePickerOpen, composerOptionsOpen, filesSheetOpen]);
+  }, [isMobile, presetGridOpen, videoTypeGridOpen, voicePickerOpen, composerOptionsOpen]);
 
   const generationCost = composerCreditCost({
     mode,
