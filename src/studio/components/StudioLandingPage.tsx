@@ -1,14 +1,13 @@
 "use client";
 
-import { ArrowRight, Menu, X } from "lucide-react";
+import { ArrowRight, Mail, MapPin, Menu, MessageCircle, Phone, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import "./studio-landing.css";
 
 /**
  * Landing story (business creative ecosystem):
- * Overview → Generate → Edit → Hire → Book → Messages → Profiles → Earn → Start
- * Each full-height section = one idea + one real product laptop mock.
+ * Overview → Generate → Edit → Hire → Book → Messages → Profiles → Earn → FAQ → Visit → Start
  */
 const NAV_LINKS = [
   { id: "overview", label: "Overview" },
@@ -16,17 +15,89 @@ const NAV_LINKS = [
   { id: "edit", label: "Edit" },
   { id: "hire", label: "Hire" },
   { id: "messages", label: "Messages" },
-  { id: "profiles", label: "Profiles" },
+  { id: "faq", label: "FAQ" },
 ] as const;
+
+type Callout = {
+  /** % from left of screen */
+  x: number;
+  /** % from top of screen */
+  y: number;
+  /** ellipse width % */
+  w: number;
+  /** ellipse height % */
+  h: number;
+  label: string;
+  /** label placement relative to circle */
+  place?: "top" | "bottom" | "left" | "right";
+};
+
+const FAQ_ITEMS = [
+  {
+    q: "What is Yatishara Studio?",
+    a: "A business creative ecosystem — generate ads, edit them, hire creators, message the job, and pay safely in one workspace.",
+  },
+  {
+    q: "Who is it for?",
+    a: "Businesses that need ads and creatives done, plus creators who want to sell offers or assets beside the same tools.",
+  },
+  {
+    q: "Do I have to hire someone?",
+    a: "No. Generate and edit on your own, or book a verified creator on Creative Network when you need a partner.",
+  },
+  {
+    q: "How does booking payment work?",
+    a: "You pick a package and top up your Studio wallet. Payment stays protected until you accept the delivery.",
+  },
+  {
+    q: "What currencies do you use?",
+    a: "Studio wallets and listings use TTD (Trinidad & Tobago dollars).",
+  },
+  {
+    q: "Where are you based?",
+    a: "Yatishara operates from Trinidad & Tobago. Reach us on WhatsApp or email — details in Visit below.",
+  },
+] as const;
+
+function PencilCallouts({ callouts }: { callouts: Callout[] }) {
+  return (
+    <div className="studio-landing-callouts" aria-hidden="true">
+      <svg className="studio-landing-callouts-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {callouts.map((c) => (
+          <ellipse
+            key={`${c.label}-${c.x}-${c.y}`}
+            className="studio-landing-callout-ring"
+            cx={c.x}
+            cy={c.y}
+            rx={c.w / 2}
+            ry={c.h / 2}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+      </svg>
+      {callouts.map((c) => (
+        <span
+          key={`label-${c.label}-${c.x}`}
+          className={`studio-landing-callout-label is-${c.place ?? "bottom"}`}
+          style={{ left: `${c.x}%`, top: `${c.y}%` }}
+        >
+          {c.label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function LaptopMock({
   src,
   alt,
   priority = false,
+  callouts,
 }: {
   src: string;
   alt: string;
   priority?: boolean;
+  callouts?: Callout[];
 }) {
   return (
     <figure className="studio-landing-laptop">
@@ -43,6 +114,7 @@ function LaptopMock({
           loading={priority ? "eager" : "lazy"}
           fetchPriority={priority ? "high" : "auto"}
         />
+        {callouts?.length ? <PencilCallouts callouts={callouts} /> : null}
       </div>
       <div className="studio-landing-laptop-base" aria-hidden="true" />
     </figure>
@@ -77,6 +149,45 @@ function LandingSection({
         </h2>
         <p className="studio-landing-section-lead">{lead}</p>
         {children}
+      </div>
+    </section>
+  );
+}
+
+function FaqSection() {
+  const [open, setOpen] = useState<number | null>(0);
+
+  return (
+    <section id="faq" className="studio-landing-section is-plate" aria-labelledby="faq-title">
+      <div className="studio-landing-section-inner is-narrow">
+        <p className="studio-landing-kicker">FAQ</p>
+        <h2 id="faq-title" className="studio-landing-section-title">
+          Quick answers.
+        </h2>
+        <p className="studio-landing-section-lead">
+          The short version of how Studio fits a business that needs ads done.
+        </p>
+        <div className="studio-landing-faq">
+          {FAQ_ITEMS.map((item, index) => {
+            const isOpen = open === index;
+            return (
+              <div key={item.q} className={`studio-landing-faq-item${isOpen ? " is-open" : ""}`}>
+                <button
+                  type="button"
+                  className="studio-landing-faq-q"
+                  aria-expanded={isOpen}
+                  onClick={() => setOpen(isOpen ? null : index)}
+                >
+                  <span>{item.q}</span>
+                  <span className="studio-landing-faq-mark" aria-hidden="true">
+                    {isOpen ? "−" : "+"}
+                  </span>
+                </button>
+                {isOpen ? <p className="studio-landing-faq-a">{item.a}</p> : null}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -173,7 +284,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             role="menu"
             aria-label="Page sections"
           >
-            {NAV_LINKS.map((link) => (
+            {[
+              ...NAV_LINKS,
+              { id: "book", label: "Book" },
+              { id: "profiles", label: "Profiles" },
+              { id: "earn", label: "Earn" },
+              { id: "visit", label: "Visit" },
+            ].map((link) => (
               <button
                 key={link.id}
                 type="button"
@@ -184,22 +301,6 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 {link.label}
               </button>
             ))}
-            <button
-              type="button"
-              role="menuitem"
-              className="studio-landing-mobile-link"
-              onClick={() => scrollToId("book")}
-            >
-              Book
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="studio-landing-mobile-link"
-              onClick={() => scrollToId("earn")}
-            >
-              Earn
-            </button>
           </div>
         ) : null}
       </header>
@@ -236,6 +337,24 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               src="/landing/mock-flyer.jpg"
               alt="Studio generating a product flyer from a brief"
               priority
+              callouts={[
+                {
+                  x: 52,
+                  y: 58,
+                  w: 34,
+                  h: 28,
+                  label: "Brief → finished flyer",
+                  place: "top",
+                },
+                {
+                  x: 52,
+                  y: 78,
+                  w: 28,
+                  h: 12,
+                  label: "Upscale or make video next",
+                  place: "bottom",
+                },
+              ]}
             />
           </div>
         </section>
@@ -250,6 +369,16 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-generate-chat.jpg"
             alt="Studio assistant chat turning a brief into a video ad"
+            callouts={[
+              {
+                x: 54,
+                y: 82,
+                w: 36,
+                h: 10,
+                label: "Pick Image / Video / Audio",
+                place: "top",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -263,6 +392,24 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-edit.jpg"
             alt="Studio video editor with asset library sound effects"
+            callouts={[
+              {
+                x: 18,
+                y: 48,
+                w: 22,
+                h: 36,
+                label: "Stock SFX in the same app",
+                place: "right",
+              },
+              {
+                x: 58,
+                y: 78,
+                w: 42,
+                h: 18,
+                label: "Timeline + voiceover",
+                place: "top",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -276,6 +423,16 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-network.jpg"
             alt="Creative Network marketplace for booking creators"
+            callouts={[
+              {
+                x: 58,
+                y: 28,
+                w: 48,
+                h: 22,
+                label: "Browse verified creators",
+                place: "bottom",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -289,6 +446,16 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-book.jpg"
             alt="Booking a Creative Network package with wallet balance"
+            callouts={[
+              {
+                x: 82,
+                y: 48,
+                w: 22,
+                h: 40,
+                label: "Packages + wallet",
+                place: "left",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -302,6 +469,24 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-messages.jpg"
             alt="Studio messages with a paid creator and shared storyboard"
+            callouts={[
+              {
+                x: 14,
+                y: 36,
+                w: 18,
+                h: 14,
+                label: "Paid jobs",
+                place: "right",
+              },
+              {
+                x: 48,
+                y: 52,
+                w: 28,
+                h: 30,
+                label: "Share the board in-thread",
+                place: "bottom",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -315,6 +500,16 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-profile.jpg"
             alt="Creator profile with Hire Us and portfolio grid"
+            callouts={[
+              {
+                x: 48,
+                y: 32,
+                w: 18,
+                h: 12,
+                label: "Hire Us",
+                place: "bottom",
+              },
+            ]}
           />
         </LandingSection>
 
@@ -328,8 +523,59 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-assets-sell.jpg"
             alt="My assets dashboard with listed sound effects and earnings"
+            callouts={[
+              {
+                x: 48,
+                y: 28,
+                w: 55,
+                h: 14,
+                label: "Funds + live listings",
+                place: "bottom",
+              },
+            ]}
           />
         </LandingSection>
+
+        <FaqSection />
+
+        <section
+          id="visit"
+          className="studio-landing-section is-page"
+          aria-labelledby="visit-title"
+        >
+          <div className="studio-landing-section-inner is-narrow">
+            <p className="studio-landing-kicker">Visit</p>
+            <h2 id="visit-title" className="studio-landing-section-title">
+              Trinidad &amp; Tobago.
+            </h2>
+            <p className="studio-landing-section-lead">
+              Yatishara Studio is built and operated from Trinidad &amp; Tobago —
+              wallets and listings in TTD.
+            </p>
+            <ul className="studio-landing-visit">
+              <li>
+                <MapPin aria-hidden="true" />
+                <span>Trinidad &amp; Tobago</span>
+              </li>
+              <li>
+                <Phone aria-hidden="true" />
+                <a href="https://wa.me/18683034621" target="_blank" rel="noreferrer">
+                  +1 (868) 303-4621
+                </a>
+              </li>
+              <li>
+                <MessageCircle aria-hidden="true" />
+                <a href="https://wa.me/18683034621" target="_blank" rel="noreferrer">
+                  WhatsApp
+                </a>
+              </li>
+              <li>
+                <Mail aria-hidden="true" />
+                <a href="mailto:yatishara.com@gmail.com">yatishara.com@gmail.com</a>
+              </li>
+            </ul>
+          </div>
+        </section>
 
         <section
           id="start"
@@ -355,7 +601,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         </section>
 
         <footer className="studio-landing-foot">
-          <span>Yatishara Studio</span>
+          <span>Yatishara Studio · Trinidad &amp; Tobago</span>
           <span>Generate · Edit · Hire · Message</span>
         </footer>
       </main>
