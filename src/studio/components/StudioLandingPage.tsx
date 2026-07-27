@@ -1075,7 +1075,9 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 <ArrowRight aria-hidden="true" />
               </button>
               <AsideCallout variant="from-button">
-                your next ad is minutes away
+                your next ad is
+                <br />
+                minutes away
               </AsideCallout>
             </div>
           </div>
