@@ -5536,7 +5536,7 @@ export function StudioShell({
     >
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
+      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && isComposerContextTabKey(activeTab) ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
         if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
@@ -7119,6 +7119,84 @@ export function StudioShell({
           overflow: hidden;
           padding: 0 0 10px;
           gap: 0;
+        }
+        /* Files action: flush between header and bottom nav (no inset card gaps). */
+        .studio-mobile-app-menu-sheet.studio-files-mobile-sheet {
+          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
+          left: 0;
+          right: 0;
+          height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+          );
+          max-height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+          );
+          border-radius: 0;
+          border-left: 0;
+          border-right: 0;
+          border-top: 0;
+        }
+        .studio-mobile-app-menu-sheet.studio-files-mobile-sheet::before {
+          border-radius: 0;
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-head {
+          min-height: var(--studio-mobile-nav-height, 44px);
+          height: var(--studio-mobile-nav-height, 44px);
+          padding: 0 6px 0 12px;
+          border-bottom: 2px solid
+            color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 55%, transparent);
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-title {
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-close {
+          width: 26px;
+          height: 26px;
+          border-radius: var(--cursor-radius-sm, 6px);
+          border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-close svg {
+          width: 15px;
+          height: 15px;
+        }
+        /* Generate: keep composer docked below the sheet (keyboard-style push). */
+        .studio-polish.is-mobile-files-composer {
+          --studio-mobile-files-composer-reserve: calc(
+            var(--studio-composer-min-height, 96px)
+              + var(--studio-mobile-composer-gap, 8px)
+              + 44px
+          );
+        }
+        .studio-polish.is-mobile-files-composer .studio-mobile-app-menu-sheet.studio-files-mobile-sheet {
+          height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - var(--studio-mobile-files-composer-reserve, 148px)
+          );
+          max-height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - var(--studio-mobile-files-composer-reserve, 148px)
+          );
+        }
+        .studio-polish.is-mobile-files-composer .studio-composer.cursor-composer-shell {
+          z-index: 130;
         }
         .studio-social-mobile-sheet .studio-mobile-app-menu-body {
           display: flex;
