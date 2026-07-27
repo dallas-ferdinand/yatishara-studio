@@ -341,12 +341,11 @@ Structure:
 | `--studio-mobile-files-band` | viewport between header and nav |
 | `--studio-mobile-files-sheet-height` | **60%** of that band |
 
-- **Motion**: animate **only** `.studio-files-dock` `height` (`0` ↔ sheet token) with
-  `--studio-mobile-files-dock-duration` (~120ms) / `--studio-mobile-files-dock-ease`.
-  Generate is `flex: 1` and shrinks/grows automatically — no separate Generate height
-  tween, no `translateY` slide for the push relationship.
-- Mount + expand same turn (no 2× rAF delay); close collapses height then unmounts on
-  `transitionend` (`height`).
+- **Motion**: snap `.studio-files-dock` `height` (`0` ↔ sheet token) — **no height
+  tween** on mobile (layout thrash). Token `--studio-mobile-files-dock-duration`
+  stays `0ms`. Generate is `flex: 1` and shrinks/grows in the same frame.
+- Keep dock **mounted** at height 0 after close; warm-mount ASAP on mobile enter.
+  Open expands in the same pointerdown as `setMobileSection("files")`.
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
 - No "Files" title bar. Chrome = search + pathbar (desktop layout): breadcrumbs +

@@ -1208,6 +1208,8 @@ export function StudioShell({
   const shellRef = useRef(null);
   const editorRef = useRef(null);
   const attachEntryRef = useRef(null);
+  /** Mobile: restore keyboard when Files closes if composer had focus/keyboard before. */
+  const composerWantedKeyboardRef = useRef(false);
   const composerKeyRef = useRef(initialComposerKey);
   const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
@@ -1379,6 +1381,9 @@ export function StudioShell({
     if (!isMobile && mobileSection !== "composer") setMobileSection("composer");
   }, [isMobile, mobileSection]);
 
+  // Keep dock state in sync with mobileSection for callers that only
+  // setMobileSection (not openMobileSection). Open path also sets these
+  // synchronously in the tap handler so the sheet paints in the same frame.
   useEffect(() => {
     if (!isMobile) {
       setFilesDockMounted(false);
@@ -1387,18 +1392,24 @@ export function StudioShell({
     }
     if (mobileSection === "files") {
       setFilesDockMounted(true);
-      // Mount collapsed, then expand next frame so transform+height share one transition.
-      let raf2 = 0;
-      const raf1 = window.requestAnimationFrame(() => {
-        raf2 = window.requestAnimationFrame(() => setFilesDockExpanded(true));
-      });
-      return () => {
-        window.cancelAnimationFrame(raf1);
-        window.cancelAnimationFrame(raf2);
-      };
+      setFilesDockExpanded(true);
+      return;
     }
-    if (filesDockMounted) setFilesDockExpanded(false);
-  }, [isMobile, mobileSection, filesDockMounted]);
+    setFilesDockExpanded(false);
+  }, [isMobile, mobileSection]);
+
+  // Warm-mount FileTree at height 0 ASAP so the first Files tap only expands
+  // (no cold remount hitch). Low priority so it doesn't steal first paint.
+  useEffect(() => {
+    if (!isMobile || filesDockMounted) return;
+    let cancelled = false;
+    startMobileTransition(() => {
+      if (!cancelled) setFilesDockMounted(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isMobile, filesDockMounted, startMobileTransition]);
 
   useEffect(() => {
     if (!isMobile && mobileSocialOpen) setMobileSocialOpen(false);
@@ -3255,7 +3266,11 @@ export function StudioShell({
   const openPurchasedFolder = useCallback(
     async (buyerAssetId) => {
       setFilesBrowseMode("yours");
-      if (isMobile) setMobileSection("files");
+      if (isMobile) {
+        setFilesDockMounted(true);
+        setFilesDockExpanded(true);
+        setMobileSection("files");
+      }
       try {
         const folderId = await ensurePurchasedAssetsFolderForMe({});
         const folder =
@@ -3347,6 +3362,25 @@ export function StudioShell({
     }
   }, [isMobile, openCreditsPane]);
 
+  function isStudioMobileKeyboardOpen() {
+    if (typeof window === "undefined") return false;
+    const vv = window.visualViewport;
+    if (!vv) return false;
+    return window.innerHeight - vv.height > 80;
+  }
+
+  function restoreComposerKeyboardIfWanted() {
+    if (!composerWantedKeyboardRef.current) return;
+    composerWantedKeyboardRef.current = false;
+    const focus = () => focusComposerEditorEnd(editorRef.current);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(focus);
+      // Soft keyboards often need a beat after the Files dock height transition.
+      window.setTimeout(focus, 80);
+      window.setTimeout(focus, 220);
+    });
+  }
+
   function openMobileSection(section) {
     // Sync — do not wrap in useTransition; nav is-active must paint on pointerdown.
     if (section === "settings") {
@@ -3377,6 +3411,40 @@ export function StudioShell({
       openNetworkTab();
       return;
     }
+    if (section === "files" && isMobile) {
+      const editor = editorRef.current;
+      composerWantedKeyboardRef.current =
+        (editor instanceof HTMLElement && document.activeElement === editor) ||
+        isStudioMobileKeyboardOpen();
+      // Snap KB chrome down immediately — don't wait for vv settle before the dock opens.
+      const root = shellRef.current;
+      if (root) {
+        root.style.setProperty("--studio-keyboard-inset", "0px");
+        root.removeAttribute("data-keyboard-open");
+      }
+      // Same event as the tap — dock expands in this paint, not a post-effect frame.
+      setFilesDockMounted(true);
+      setFilesDockExpanded(true);
+      setMobileSection(section);
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      setMobileSocialOpen(false);
+      setMobileNetworkOpen(false);
+      // Blur after dock state commits so soft-keyboard dismiss doesn't steal the frame.
+      if (editor) {
+        window.requestAnimationFrame(() => {
+          try {
+            editor.blur?.();
+          } catch {
+            /* ignore */
+          }
+        });
+      }
+      return;
+    } else if (isMobile && section !== "files") {
+      setFilesDockExpanded(false);
+    }
     setMobileSection(section);
     if (section === "composer") {
       setSettingsOpen(false);
@@ -3387,6 +3455,7 @@ export function StudioShell({
       if (!activeTab.startsWith("composer:") && !activeTab.startsWith("thread:")) {
         openTab(lastChatTabRef.current || COMPOSER_TAB);
       }
+      if (isMobile) restoreComposerKeyboardIfWanted();
       return;
     }
     if (section === "files") {
@@ -3426,7 +3495,7 @@ export function StudioShell({
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
       setMobileNetworkOpen(false);
-      if (mobileSection === "files") setMobileSection("composer");
+      if (mobileSection === "files") openMobileSection("composer");
       setMobileSocialOpen((open) => !open);
       return;
     }
@@ -3435,7 +3504,7 @@ export function StudioShell({
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
       setMobileSocialOpen(false);
-      if (mobileSection === "files") setMobileSection("composer");
+      if (mobileSection === "files") openMobileSection("composer");
       setMobileNetworkOpen((open) => !open);
       return;
     }
@@ -5717,7 +5786,7 @@ export function StudioShell({
     />
     <div
       ref={shellRef}
-      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && filesDockMounted ? " is-mobile-files" : ""}${isMobile && filesDockMounted && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
+      className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
         if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
@@ -5890,8 +5959,8 @@ export function StudioShell({
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          box-shadow: none !important;
-          transform: none;
+          /* Shared KB lift with composer — compositor transform, not layout bottom. */
+          transform: translate3d(0, calc(-1 * var(--studio-keyboard-inset, 0px)), 0);
           filter: none;
           isolation: auto;
           contain: none;
@@ -6029,7 +6098,8 @@ export function StudioShell({
             border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
-            transform: none !important;
+            /* Keep KB translate — do not force transform:none (jumps the lift). */
+            transform: translate3d(0, calc(-1 * var(--studio-keyboard-inset, 0px)), 0) !important;
             filter: none !important;
             isolation: auto !important;
             contain: none !important;
@@ -7480,7 +7550,7 @@ export function StudioShell({
           Animate ONLY dock height; Generate is flex:1 and follows for free.
             .studio-mobile-stage
               .studio-main-panels (flex:1)
-              .studio-files-dock (height 0 → sheet token)
+              .studio-files-dock (height 0 ↔ sheet — snap, no tween)
             bottom nav absolute below stage padding
         */
         .studio-polish.is-studio-mobile {
@@ -7496,8 +7566,8 @@ export function StudioShell({
               - var(--studio-mobile-bottom-chrome)
           );
           --studio-mobile-files-sheet-height: calc(0.6 * var(--studio-mobile-files-band));
-          --studio-mobile-files-dock-duration: 120ms;
-          --studio-mobile-files-dock-ease: cubic-bezier(0.32, 0.72, 0, 1);
+          --studio-mobile-files-dock-duration: 0ms;
+          --studio-mobile-files-dock-ease: linear;
         }
         .studio-mobile-stage {
           display: flex;
@@ -7533,11 +7603,18 @@ export function StudioShell({
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           z-index: 25;
-          transition: height var(--studio-mobile-files-dock-duration)
-            var(--studio-mobile-files-dock-ease);
+          /* Instant snap — height tween forced layout on Generate + dock every frame. */
+          transition: none;
         }
         .studio-files-dock.is-expanded {
           height: var(--studio-mobile-files-sheet-height);
+        }
+        .studio-files-dock:not(.is-expanded) {
+          border-top-color: transparent;
+          pointer-events: none;
+        }
+        .studio-files-dock:not(.is-expanded) .studio-files-dock-body {
+          visibility: hidden;
         }
         .studio-files-dock-body {
           display: flex;
@@ -10933,12 +11010,15 @@ export function StudioShell({
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .studio-composer.cursor-composer-shell,
           .studio-polish .studio-composer.cursor-composer-shell {
+            /* Rest above nav; same translate as nav so they ride the KB as one unit. */
             bottom: var(--studio-mobile-composer-gap, 8px);
+            transform: translate3d(0, calc(-1 * var(--studio-keyboard-inset, 0px)), 0);
           }
           /* Files open: composer keeps the normal gap above the dock (same token as above nav). */
           .studio-polish.is-studio-mobile.is-mobile-files .studio-composer.cursor-composer-shell,
           .studio-polish.is-studio-mobile.is-mobile-files-composer .studio-composer.cursor-composer-shell {
             bottom: var(--studio-mobile-composer-gap, 8px);
+            transform: none;
             z-index: 30;
           }
         }
@@ -18524,11 +18604,7 @@ export function StudioShell({
       {isMobile && filesDockMounted ? (
         <StudioFilesMobileSheet
           expanded={filesDockExpanded}
-          onExitComplete={() => {
-            setFilesDockMounted(false);
-            setFilesDockExpanded(false);
-          }}
-          onClose={() => setMobileSection("composer")}
+          onClose={() => openMobileSection("composer")}
           addMenuOpen={addMenuOpen}
           setAddMenuOpen={setAddMenuOpen}
           onCreateAction={runCreateAction}
@@ -19229,10 +19305,46 @@ function StudioComposer({
     if (!root) return;
 
     let rafId = 0;
+    let keyboardRafId = 0;
+    let lastKeyboardInset = -1;
+    let keyboardSettledTimer = 0;
+
+    // Lightweight — tracks OS keyboard every frame. No React state, no layout reads
+    // beyond vv metrics, so nav + composer ride the same compositor transform.
+    const syncKeyboardInset = () => {
+      if (keyboardRafId) return;
+      keyboardRafId = window.requestAnimationFrame(() => {
+        keyboardRafId = 0;
+        const vv = window.visualViewport;
+        let inset = 0;
+        if (isMobile && vv && !filesSheetOpen) {
+          const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          // Noise floor only — no 80px cliff (that caused the jump mid-animation).
+          inset = raw < 6 ? 0 : Math.round(raw);
+        }
+        if (inset === lastKeyboardInset) return;
+        lastKeyboardInset = inset;
+        root.style.setProperty("--studio-keyboard-inset", `${inset}px`);
+        if (inset > 0) root.setAttribute("data-keyboard-open", "1");
+        else root.removeAttribute("data-keyboard-open");
+        // Clearance layout can wait until the KB motion settles — running it every
+        // vv tick reflows chat padding and fights the lift.
+        if (keyboardSettledTimer) window.clearTimeout(keyboardSettledTimer);
+        keyboardSettledTimer = window.setTimeout(() => {
+          keyboardSettledTimer = 0;
+          syncClearance();
+        }, inset > 0 ? 120 : 0);
+      });
+    };
+
     const syncClearance = () => {
       if (rafId) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = 0;
+        const vv = window.visualViewport;
+        const layoutBottom = vv
+          ? Math.round(vv.height + vv.offsetTop)
+          : window.innerHeight;
         const chat = root.querySelector(".studio-chat-render-area");
         const row =
           composer.querySelector(".studio-composer-row")
@@ -19252,14 +19364,14 @@ function StudioComposer({
         const bandBox = band.getBoundingClientRect();
         root.style.setProperty(
           "--studio-composer-stack-height",
-          `${Math.max(96, Math.round(window.innerHeight - rowBox.top))}px`,
+          `${Math.max(96, Math.round(layoutBottom - rowBox.top))}px`,
         );
         const head = root.querySelector(".cursor-workspace-head");
         const headBottom = head
           ? head.getBoundingClientRect().bottom
           : (Number.parseFloat(getComputedStyle(root).getPropertyValue("--cursor-head-h")) || 52);
         const top = Math.max(8, Math.round(headBottom + 8));
-        const bottom = Math.max(8, Math.round(window.innerHeight - rowBox.top + 8));
+        const bottom = Math.max(8, Math.round(layoutBottom - rowBox.top + 8));
         const nextBox = {
           top,
           bottom,
@@ -19313,7 +19425,10 @@ function StudioComposer({
     const modeSwitcher = composer.querySelector(".studio-mode-switcher");
     if (modeSwitcher) observer.observe(modeSwitcher);
     window.addEventListener("resize", syncClearance);
-    window.visualViewport?.addEventListener("resize", syncClearance);
+    window.visualViewport?.addEventListener("resize", syncKeyboardInset);
+    window.visualViewport?.addEventListener("scroll", syncKeyboardInset);
+    window.addEventListener("resize", syncKeyboardInset);
+    syncKeyboardInset();
     syncClearance();
     const raf = window.requestAnimationFrame(syncClearance);
     // Chat mount can lag the composer on tab switches — resync a couple frames later.
@@ -19325,12 +19440,18 @@ function StudioComposer({
       window.cancelAnimationFrame(raf);
       window.cancelAnimationFrame(raf2);
       if (rafId) window.cancelAnimationFrame(rafId);
+      if (keyboardRafId) window.cancelAnimationFrame(keyboardRafId);
+      if (keyboardSettledTimer) window.clearTimeout(keyboardSettledTimer);
       observer.disconnect();
       window.removeEventListener("resize", syncClearance);
-      window.visualViewport?.removeEventListener("resize", syncClearance);
+      window.removeEventListener("resize", syncKeyboardInset);
+      window.visualViewport?.removeEventListener("resize", syncKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", syncKeyboardInset);
       root.style.removeProperty("--studio-chat-empty-clearance");
       root.style.removeProperty("--studio-chat-stream-end-pad");
       root.style.removeProperty("--studio-composer-stack-height");
+      root.style.removeProperty("--studio-keyboard-inset");
+      root.removeAttribute("data-keyboard-open");
       const chatEl = root.querySelector(".studio-chat-render-area");
       if (chatEl instanceof HTMLElement) chatEl.style.removeProperty("padding-bottom");
       setOverlayPanelBox(null);
@@ -19371,9 +19492,13 @@ function StudioComposer({
       if (el.textContent) el.replaceChildren();
       return;
     }
-    // If React has more attachments than the DOM, always repaint — even when
-    // draft text matches (Android touch-drop used to early-return here with no chips).
+    // DOM has fewer chips than React — either a pending paint, or the user
+    // deleted chips (backspace / select-all). Never clobber a focused editor.
     if (composerDomAttachmentCount(el) < attachments.length) {
+      if (document.activeElement === el) {
+        pruneComposerAttachmentsFromDom(el, setAttachments);
+        return;
+      }
       applyComposerContextToEditor(el, { draft, attachments });
       return;
     }
@@ -19381,7 +19506,7 @@ function StudioComposer({
     const current = readComposerEditorText(el);
     if (current === draft) return;
     applyComposerContextToEditor(el, { draft, attachments });
-  }, [attachments, draft, editorRef]);
+  }, [attachments, draft, editorRef, setAttachments]);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -19870,6 +19995,35 @@ function StudioComposer({
           onInput={(event) => {
             const next = readComposerEditorText(event.currentTarget);
             pushDraftToParent(next);
+            pruneComposerAttachmentsFromDom(event.currentTarget, setAttachments);
+          }}
+          onBeforeInput={(event) => {
+            const editor = editorRef.current;
+            if (!editor) return;
+            const inputType = event.inputType;
+            if (
+              inputType !== "deleteContentBackward" &&
+              inputType !== "deleteContentForward" &&
+              inputType !== "deleteByCut"
+            ) {
+              return;
+            }
+            const selection = window.getSelection();
+            if (selection && !selection.isCollapsed && editor.contains(selection.anchorNode)) {
+              if (removeComposerTokensInSelection(editor, setAttachments)) {
+                // Let native delete clear the text range; chips already pruned.
+                pushDraftToParent(readComposerEditorText(editor), { immediate: true });
+              }
+              return;
+            }
+            if (inputType === "deleteContentBackward") {
+              if (deleteComposerCharOrTokenBeforeCaret(editor, setAttachments)) {
+                event.preventDefault();
+                pushDraftToParent(readComposerEditorText(editor), {
+                  immediate: true,
+                });
+              }
+            }
           }}
           onKeyDown={(event) => {
             if (
@@ -19879,17 +20033,41 @@ function StudioComposer({
               event.preventDefault();
               return;
             }
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+              event.preventDefault();
+              selectAllComposerContents(editorRef.current, inputLineRef.current, setSelectionHighlights);
+              return;
+            }
+            if (event.key === "Backspace" || event.key === "Delete") {
+              const editor = editorRef.current;
+              const selection = window.getSelection();
+              if (
+                editor &&
+                selection &&
+                !selection.isCollapsed &&
+                editor.contains(selection.anchorNode)
+              ) {
+                removeComposerTokensInSelection(editor, setAttachments);
+                // Native delete clears the range; sync draft after.
+                window.requestAnimationFrame(() => {
+                  pushDraftToParent(readComposerEditorText(editor), {
+                    immediate: true,
+                  });
+                  pruneComposerAttachmentsFromDom(editor, setAttachments);
+                });
+                return;
+              }
+            }
             if (event.key === "Backspace") {
-              if (removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
+              if (deleteComposerCharOrTokenBeforeCaret(editorRef.current, setAttachments)) {
                 event.preventDefault();
                 pushDraftToParent(readComposerEditorText(editorRef.current), {
                   immediate: true,
                 });
                 return;
               }
-              // Mobile rail mirrors desktop chips (no ×). When typed text is empty,
-              // backspace pops the last attachment even if the hidden CE token
-              // wasn't found by caret walk.
+              // Mobile: when typed text is empty, backspace pops the last
+              // attachment even if the CE token wasn't found by caret walk.
               if (
                 isMobile &&
                 attachments.length > 0 &&
@@ -21609,8 +21787,8 @@ function buildComposerEditorHtmlFromState(draft, attachments = []) {
       const attachment = tokens[tokenIndex];
       tokenIndex += 1;
       if (attachment) {
-        shell.appendChild(document.createTextNode(" "));
         shell.appendChild(createComposerAttachmentToken(attachment));
+        shell.appendChild(document.createTextNode(" "));
       }
       continue;
     }
@@ -21621,8 +21799,8 @@ function buildComposerEditorHtmlFromState(draft, attachments = []) {
     const attachment = tokens[tokenIndex];
     tokenIndex += 1;
     if (!attachment) continue;
-    shell.appendChild(document.createTextNode(" "));
     shell.appendChild(createComposerAttachmentToken(attachment));
+    shell.appendChild(document.createTextNode(" "));
   }
   return shell.innerHTML;
 }
@@ -21670,14 +21848,14 @@ function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttach
     if (plain) shell.appendChild(document.createTextNode(plain));
     for (const item of existing) {
       if (!item?.id) continue;
-      shell.appendChild(document.createTextNode(" "));
       shell.appendChild(createComposerAttachmentToken(item));
+      shell.appendChild(document.createTextNode(" "));
     }
   }
 
   if (!shell.querySelector(`[data-attachment-id="${CSS.escape(String(attachment.id))}"]`)) {
-    shell.appendChild(document.createTextNode(" "));
     shell.appendChild(createComposerAttachmentToken(attachment));
+    shell.appendChild(document.createTextNode(" "));
   }
 
   return {
@@ -21830,9 +22008,17 @@ function getStudioComposerSelectionHighlights(editor, inputLine) {
   const editorRect = editor.getBoundingClientRect();
   const pills = [];
 
+  // Select-all / near-full selection: include every chip (labeled audio chips
+  // often fail range.intersectsNode with user-select:none).
+  const fullSelect =
+    range.startContainer === editor &&
+    range.endContainer === editor &&
+    range.startOffset === 0 &&
+    range.endOffset >= editor.childNodes.length;
+
   editor.querySelectorAll(".studio-inline-tag").forEach((token) => {
     try {
-      if (range.intersectsNode(token)) {
+      if (fullSelect || range.intersectsNode(token)) {
         token.classList.add("is-selection-highlighted");
         const tokenRect = token.getBoundingClientRect();
         pills.push({
@@ -21907,8 +22093,8 @@ function appendAttachmentChipToComposerContext(contextsRef, contextKey, attachme
   }
   const token = createComposerAttachmentToken(attachment);
   const spacer = document.createTextNode(" ");
-  shell.appendChild(spacer);
   shell.appendChild(token);
+  shell.appendChild(spacer);
   contextsRef.current[contextKey] = {
     ...ctx,
     editorHtml: shell.innerHTML,
@@ -22132,18 +22318,60 @@ function previousTokenFromSelection(editor) {
     return editor.childNodes[anchorOffset - 1] ?? null;
   }
   if (anchorNode?.nodeType === Node.TEXT_NODE) {
-    const textBeforeCaret = anchorNode.nodeValue?.slice(0, anchorOffset) ?? "";
-    if (textBeforeCaret.length && !/^\s+$/.test(textBeforeCaret)) return null;
+    // Only treat as "before token" when caret is at the start of this text node.
+    // Whitespace after a chip must delete as text first (not jump-delete the chip).
+    if (anchorOffset > 0) return null;
     let node = anchorNode.previousSibling;
     if (!node && anchorNode.parentNode !== editor) node = anchorNode.parentNode?.previousSibling;
     if (isComposerAttachmentToken(node)) return node;
-    if (anchorOffset === 0 && isComposerAttachmentToken(anchorNode.previousSibling)) return anchorNode.previousSibling;
     return null;
   }
   if (anchorNode?.nodeType === Node.ELEMENT_NODE) {
     return anchorNode.childNodes?.[anchorOffset - 1] ?? anchorNode.previousSibling ?? null;
   }
   return null;
+}
+
+/** Delete one character before caret, or the attachment chip if caret is flush after it. */
+function deleteComposerCharOrTokenBeforeCaret(editor, setAttachments) {
+  if (!editor) return false;
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !selection.isCollapsed || !editor.contains(selection.anchorNode)) {
+    return false;
+  }
+  const { anchorNode, anchorOffset } = selection;
+
+  // Text before caret → delete one char (including trailing space after a chip).
+  if (anchorNode?.nodeType === Node.TEXT_NODE && anchorOffset > 0) {
+    const range = document.createRange();
+    range.setStart(anchorNode, anchorOffset - 1);
+    range.setEnd(anchorNode, anchorOffset);
+    range.deleteContents();
+    if (!(anchorNode.nodeValue?.length)) {
+      const prev = anchorNode.previousSibling;
+      const parent = anchorNode.parentNode;
+      anchorNode.remove();
+      const nextRange = document.createRange();
+      if (prev) {
+        if (prev.nodeType === Node.TEXT_NODE) {
+          nextRange.setStart(prev, prev.nodeValue?.length ?? 0);
+        } else {
+          nextRange.setStartAfter(prev);
+        }
+      } else if (parent) {
+        nextRange.setStart(parent, 0);
+      } else {
+        nextRange.selectNodeContents(editor);
+        nextRange.collapse(false);
+      }
+      nextRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(nextRange);
+    }
+    return true;
+  }
+
+  return removeComposerTokenBeforeCaret(editor, setAttachments);
 }
 
 function removeComposerTokenBeforeCaret(editor, setAttachments) {
@@ -22165,6 +22393,87 @@ function removeComposerTokenBeforeCaret(editor, setAttachments) {
     setAttachments((items) => items.filter((item) => item.id !== id));
   }
   return true;
+}
+
+function pruneComposerAttachmentsFromDom(editor, setAttachments) {
+  if (!editor || typeof setAttachments !== "function") return;
+  const ids = new Set(
+    [...editor.querySelectorAll(".studio-inline-tag[data-attachment-id]")].map((node) =>
+      node.getAttribute("data-attachment-id"),
+    ),
+  );
+  setAttachments((items) => {
+    if (!Array.isArray(items) || !items.length) return items;
+    const next = items.filter((item) => item?.id && ids.has(String(item.id)));
+    return next.length === items.length ? items : next;
+  });
+}
+
+function removeComposerTokensInSelection(editor, setAttachments) {
+  if (!editor) return false;
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed) return false;
+  const range = selection.getRangeAt(0);
+  if (!editor.contains(range.commonAncestorContainer) && !range.intersectsNode(editor)) {
+    return false;
+  }
+  const doomed = [];
+  editor.querySelectorAll(".studio-inline-tag[data-attachment-id]").forEach((token) => {
+    try {
+      if (range.intersectsNode(token)) doomed.push(token);
+    } catch {
+      // Detached while mutating.
+    }
+  });
+  if (!doomed.length) return false;
+  const ids = new Set(doomed.map((token) => token.getAttribute("data-attachment-id")).filter(Boolean));
+  for (const token of doomed) {
+    const after = token.nextSibling;
+    token.remove();
+    if (after?.nodeType === Node.TEXT_NODE && /^\s*$/.test(after.nodeValue ?? "")) {
+      after.remove();
+    }
+  }
+  setAttachments((items) => items.filter((item) => !ids.has(String(item.id))));
+  return true;
+}
+
+function selectAllComposerContents(editor, inputLine, setSelectionHighlights) {
+  if (!editor) return;
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editor.focus();
+  // Force every chip into the selection highlight — labeled audio/mp3 chips are
+  // often skipped by native intersectsNode with user-select:none.
+  clearStudioComposerSelectedTags(editor);
+  const pills = [];
+  const inputRect = inputLine?.getBoundingClientRect?.() ?? editor.getBoundingClientRect();
+  editor.querySelectorAll(".studio-inline-tag").forEach((token) => {
+    token.classList.add("is-selection-highlighted");
+    const tokenRect = token.getBoundingClientRect();
+    pills.push({
+      left: Math.round(tokenRect.left - inputRect.left - 1),
+      top: Math.round(tokenRect.top - inputRect.top),
+      width: Math.round(tokenRect.width + 2),
+      height: Math.round(tokenRect.height),
+    });
+  });
+  for (const rect of range.getClientRects()) {
+    pills.push({
+      left: Math.round(rect.left - inputRect.left - 1),
+      top: Math.round(rect.top - inputRect.top),
+      width: Math.round(rect.width + 2),
+      height: Math.round(rect.height),
+    });
+  }
+  if (typeof setSelectionHighlights === "function") {
+    setSelectionHighlights(
+      mergeComposerSelectionRects(pills.filter((rect) => rect.width > 1 && rect.height > 1)),
+    );
+  }
 }
 
 function readComposerEditorText(editor) {
@@ -25568,10 +25877,9 @@ function StudioMobileStage({ enabled, children }) {
   return <div className="studio-mobile-stage">{children}</div>;
 }
 
-/** In-flow Files dock under Generate — height 0↔sheet token; Generate flexes with it. */
+/** In-flow Files dock under Generate — height 0↔sheet snap; Generate flexes with it. */
 function StudioFilesMobileSheet({
   expanded = false,
-  onExitComplete,
   onClose,
   addMenuOpen,
   setAddMenuOpen,
@@ -25597,41 +25905,13 @@ function StudioFilesMobileSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, expanded]);
 
-  const onExitCompleteRef = useRef(onExitComplete);
-  onExitCompleteRef.current = onExitComplete;
-  const exitDoneRef = useRef(false);
-
-  useEffect(() => {
-    if (expanded) {
-      exitDoneRef.current = false;
-      return;
-    }
-    const finish = () => {
-      if (exitDoneRef.current) return;
-      exitDoneRef.current = true;
-      onExitCompleteRef.current?.();
-    };
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    const t = window.setTimeout(finish, reduce ? 0 : 400);
-    return () => window.clearTimeout(t);
-  }, [expanded]);
-
   return (
     <div
       className={`studio-files-dock studio-files-mobile-sheet${expanded ? " is-expanded" : ""}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal={expanded ? "true" : undefined}
+      aria-hidden={expanded ? undefined : "true"}
       aria-label="Files"
-      onTransitionEnd={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.propertyName !== "height") return;
-        if (expanded) return;
-        if (exitDoneRef.current) return;
-        exitDoneRef.current = true;
-        onExitCompleteRef.current?.();
-      }}
     >
       <div className="studio-files-dock-body">
         <StudioFilesExplorerBody
