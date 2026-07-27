@@ -1,36 +1,80 @@
 "use client";
 
 import { ArrowRight, Menu, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import "./studio-landing.css";
 
-const LANDING_IMAGES = [
-  "/studio-cinematic-mint-meadow-light-4k.webp",
-  "/studio-scene-ocean-depth-light-4k.webp",
-  "/studio-cinematic-gold-archive-light-4k.webp",
-] as const;
-
 const NAV_LINKS = [
   { id: "overview", label: "Overview" },
-  { id: "features", label: "Features" },
-  { id: "network", label: "Network" },
+  { id: "generate", label: "Generate" },
+  { id: "edit", label: "Edit" },
+  { id: "hire", label: "Hire" },
+  { id: "review", label: "Review" },
 ] as const;
 
-const POINTS = [
-  {
-    title: "Generate",
-    body: "Images, video, and audio from one composer — keep every take in your files.",
-  },
-  {
-    title: "Edit",
-    body: "Cut clips, captions, and exports without leaving the Studio workspace.",
-  },
-  {
-    title: "Network",
-    body: "Browse Creative Network, book creators, and manage offers beside your work.",
-  },
-] as const;
+function LaptopMock({
+  src,
+  alt,
+  priority = false,
+}: {
+  src: string;
+  alt: string;
+  priority?: boolean;
+}) {
+  return (
+    <figure className="studio-landing-laptop">
+      <div className="studio-landing-laptop-chrome" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div className="studio-landing-laptop-screen">
+        <img
+          src={src}
+          alt={alt}
+          decoding="async"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+        />
+      </div>
+      <div className="studio-landing-laptop-base" aria-hidden="true" />
+    </figure>
+  );
+}
+
+function LandingSection({
+  id,
+  kicker,
+  title,
+  lead,
+  children,
+  tone = "page",
+}: {
+  id: string;
+  kicker: string;
+  title: string;
+  lead: string;
+  children?: ReactNode;
+  tone?: "page" | "plate";
+}) {
+  return (
+    <section
+      id={id}
+      className={`studio-landing-section is-${tone}`}
+      aria-labelledby={`${id}-title`}
+    >
+      <div className="studio-landing-section-inner">
+        <p className="studio-landing-kicker">{kicker}</p>
+        <h2 id={`${id}-title`} className="studio-landing-section-title">
+          {title}
+        </h2>
+        <p className="studio-landing-section-lead">{lead}</p>
+        {children}
+      </div>
+    </section>
+  );
+}
 
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -76,11 +120,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   }, [menuOpen]);
 
   return (
-    <div
-      ref={rootRef}
-      className="studio-landing"
-      data-appearance="light"
-    >
+    <div ref={rootRef} className="studio-landing" data-appearance="light">
       <header className="studio-landing-head" ref={menuRef}>
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
           <BrandMark size={18} subtle appearance="light" />
@@ -109,11 +149,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             aria-controls="studio-landing-mobile-menu"
             onClick={() => setMenuOpen((open) => !open)}
           >
-            {menuOpen ? (
-              <X aria-hidden="true" />
-            ) : (
-              <Menu aria-hidden="true" />
-            )}
+            {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
           </button>
           <button
             type="button"
@@ -149,77 +185,117 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       <main className="studio-landing-main">
         <section
           id="overview"
-          className="studio-landing-hero"
-          aria-labelledby="studio-landing-title"
+          className="studio-landing-section is-hero"
+          aria-labelledby="overview-title"
         >
-          <div className="studio-landing-hero-visual" aria-hidden="true">
-            <img
-              src={LANDING_IMAGES[0]}
-              alt=""
-              decoding="async"
-              fetchPriority="high"
-            />
-          </div>
-
-          <div className="studio-landing-hero-copy">
-            <p className="studio-landing-kicker">Creative workspace</p>
-            <h1 id="studio-landing-title" className="studio-landing-title">
+          <div className="studio-landing-section-inner">
+            <p className="studio-landing-kicker">For businesses that need ads</p>
+            <h1 id="overview-title" className="studio-landing-hero-title">
               Yatishara Studio
             </h1>
-            <p className="studio-landing-lead">
-              Generate media, edit video, hire creators, and keep everything in one
-              place — files, feed, and Creative Network included.
+            <p className="studio-landing-section-lead">
+              One ecosystem to generate creatives, edit them, hire partners, and
+              review the work — without hopping between tools.
+            </p>
+            <div className="studio-landing-cta-row">
+              <button type="button" className="studio-landing-cta" onClick={onSignIn}>
+                Enter Studio
+                <ArrowRight aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="studio-landing-cta-ghost"
+                onClick={() => scrollToId("generate")}
+              >
+                See how it works
+              </button>
+            </div>
+            <LaptopMock
+              src="/landing/mock-generate.jpg"
+              alt="Studio generate workspace"
+              priority
+            />
+          </div>
+        </section>
+
+        <LandingSection
+          id="generate"
+          tone="plate"
+          kicker="Generate"
+          title="Make the ad."
+          lead="Images, video, audio, and scripts — brief once, generate in Studio."
+        >
+          <LaptopMock
+            src="/landing/mock-assist.jpg"
+            alt="Studio assistant generating ad creatives"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="edit"
+          tone="page"
+          kicker="Edit"
+          title="Cut. Caption. Ship."
+          lead="Open the timeline, refine the take, export without leaving your files."
+        >
+          <LaptopMock
+            src="/landing/mock-edit.jpg"
+            alt="Studio video editor timeline"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="hire"
+          tone="plate"
+          kicker="Hire"
+          title="Book the creator."
+          lead="Creative Network keeps payment safe until you accept delivery."
+        >
+          <LaptopMock
+            src="/landing/mock-network.jpg"
+            alt="Creative Network marketplace in Studio"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="review"
+          tone="page"
+          kicker="Review"
+          title="Approve together."
+          lead="Share cuts on the feed, collect comments, and lock the next revision."
+        >
+          <LaptopMock
+            src="/landing/mock-feed.jpg"
+            alt="Studio feed for creative review"
+          />
+        </LandingSection>
+
+        <section
+          id="start"
+          className="studio-landing-section is-cta"
+          aria-labelledby="start-title"
+        >
+          <div className="studio-landing-section-inner">
+            <p className="studio-landing-kicker">One workspace</p>
+            <h2 id="start-title" className="studio-landing-section-title">
+              Generate. Edit. Hire. Review.
+            </h2>
+            <p className="studio-landing-section-lead">
+              Studio is the operating layer for businesses that need ads done —
+              not another disconnected tool.
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
                 Sign in to Studio
                 <ArrowRight aria-hidden="true" />
               </button>
-              <a className="studio-landing-cta-ghost" href="/creative-network">
-                Browse Creative Network
-              </a>
             </div>
           </div>
-
-          <div className="studio-landing-strip" aria-hidden="true">
-            {LANDING_IMAGES.map((src) => (
-              <figure key={src}>
-                <img src={src} alt="" loading="lazy" decoding="async" />
-              </figure>
-            ))}
-          </div>
-        </section>
-
-        <section
-          id="features"
-          className="studio-landing-points"
-          aria-label="What Studio includes"
-        >
-          {POINTS.map((point) => (
-            <div key={point.title} className="studio-landing-point">
-              <h2>{point.title}</h2>
-              <p>{point.body}</p>
-            </div>
-          ))}
-        </section>
-
-        <section id="network" className="studio-landing-network" aria-labelledby="studio-landing-network-title">
-          <div className="studio-landing-network-copy">
-            <h2 id="studio-landing-network-title">Creative Network</h2>
-            <p>
-              Hire verified creators, browse offers, and keep jobs next to your
-              Studio files.
-            </p>
-          </div>
-          <a className="studio-landing-cta" href="/creative-network">
-            Open Network
-            <ArrowRight aria-hidden="true" />
-          </a>
         </section>
 
         <footer className="studio-landing-foot">
           <span>Yatishara Studio</span>
-          <span>Create · Edit · Hire</span>
+          <span>Business creative ecosystem</span>
         </footer>
       </main>
     </div>
