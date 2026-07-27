@@ -599,14 +599,20 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
           targetEl = folder;
           attached = commitTouchDrop(folder, dragEntry, lastX, lastY);
         } else {
-          targetEl = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
-          // Always deliver to Shell — do not gate chip insert on hit-testing.
+          // Attach is state-first in Shell — always deliver the entry.
           attached = deliverMobileComposerDrop(dragEntry, lastX, lastY);
+          targetEl =
+            findComposerShell() ||
+            findComposerDropTargetAt(lastX, lastY, 48) ||
+            targetEl;
           if (!attached) {
-            attached = commitTouchDrop(targetEl, dragEntry, lastX, lastY);
-          }
-          if (!targetEl && attached) {
-            targetEl = findComposerShell();
+            // Handler missing (HMR) — last-resort CustomEvent.
+            attached = commitTouchDrop(
+              targetEl || findComposerShell(),
+              dragEntry,
+              lastX,
+              lastY,
+            );
           }
         }
       } else if (shouldDrop) {

@@ -3659,66 +3659,88 @@ export function StudioShell({
     const fullEntry = pathToEntry.get(entry.path) ?? entry;
     const attachment = entryToAttachment(fullEntry);
     if (!attachment?.id) return;
+
     const targetTab = resolveAttachTargetTab();
+    const prevCtx = composerContextsRef.current[targetTab] ?? {};
     const existing =
       composerContextKey === targetTab
         ? attachments
-        : (composerContextsRef.current[targetTab]?.attachments ?? []);
-    const nextAttachments = existing.some((item) => item.id === attachment.id)
-      ? existing
-      : [...existing, attachment];
+        : (Array.isArray(prevCtx.attachments) ? prevCtx.attachments : []);
+    const already = existing.some((item) => item.id === attachment.id);
+    const nextAttachments = already ? existing : [...existing, attachment];
     const stayOnFiles = isMobile && mobileSection === "files";
 
+    // iOS: Range/selection insert during touchend is unreliable. Always build HTML
+    // offline from state, then paint the contenteditable — never depend on insertNode.
+    const liveEditor =
+      composerContextKey === targetTab ? editorRef.current : null;
+    const baseDraft =
+      (liveEditor ? readComposerEditorText(liveEditor) : null) ??
+      prevCtx.draft ??
+      (composerContextKey === targetTab ? draft : "") ??
+      "";
+    const baseHtml =
+      liveEditor?.innerHTML ||
+      prevCtx.editorHtml ||
+      buildComposerEditorHtmlFromState(baseDraft, existing);
+
+    let nextHtml;
+    let nextDraft;
+    if (already && composerHtmlHasAttachments(baseHtml, nextAttachments)) {
+      nextHtml = baseHtml;
+      nextDraft = baseDraft;
+    } else if (!isMobile && liveEditor) {
+      // Desktop caret drop can still use live Range insert.
+      insertComposerAttachmentToken(liveEditor, attachment, insertRange);
+      nextHtml = liveEditor.innerHTML;
+      nextDraft = readComposerEditorText(liveEditor);
+    } else {
+      const built = buildComposerHtmlWithAppendedAttachment(
+        baseHtml,
+        baseDraft,
+        existing,
+        attachment,
+      );
+      nextHtml = built.editorHtml;
+      nextDraft = built.draft;
+    }
+
     composerContextsRef.current[targetTab] = {
-      ...(composerContextsRef.current[targetTab] ?? {}),
+      ...prevCtx,
       attachments: nextAttachments,
+      editorHtml: nextHtml,
+      draft: nextDraft,
     };
 
-    const liveEditor =
-      composerContextKey === targetTab && editorRef.current ? editorRef.current : null;
-    if (liveEditor) {
-      insertComposerAttachmentToken(liveEditor, attachment, insertRange);
-      composerContextsRef.current[targetTab] = {
-        ...composerContextsRef.current[targetTab],
-        editorHtml: liveEditor.innerHTML,
-        draft: readComposerEditorText(liveEditor),
-      };
-      if (composerContextKey === targetTab) {
-        setAttachments(nextAttachments);
-        setDraft(composerContextsRef.current[targetTab].draft ?? "");
-      }
-    } else {
-      appendAttachmentChipToComposerContext(composerContextsRef, targetTab, attachment);
-      if (composerContextKey === targetTab) {
-        setAttachments(nextAttachments);
-        setDraft(composerContextsRef.current[targetTab]?.draft ?? "");
-        // Editor may exist but context key race — force chip paint next frame.
-        window.requestAnimationFrame(() => {
-          const editor = editorRef.current;
-          const ctx = composerContextsRef.current[targetTab];
-          if (!editor || !ctx) return;
-          applyComposerContextToEditor(editor, ctx);
-        });
-      }
-    }
-
-    if (stayOnFiles) {
-      // Keep Files dock open; still ensure the live editor shows the chip.
-      window.requestAnimationFrame(() => {
-        const editor = editorRef.current;
-        const ctx = composerContextsRef.current[targetTab];
-        if (!editor || !ctx || composerContextKey !== targetTab) return;
-        applyComposerContextToEditor(editor, ctx);
+    const paint = () => {
+      if (composerContextKey !== targetTab) return;
+      const editor = editorRef.current;
+      if (!editor) return;
+      applyComposerContextToEditor(editor, {
+        editorHtml: nextHtml,
+        draft: nextDraft,
+        attachments: nextAttachments,
       });
-      return;
+    };
+
+    if (composerContextKey === targetTab) {
+      setAttachments(nextAttachments);
+      setDraft(nextDraft);
+      paint();
+      // Second paint after iOS touchend / keyboard settles.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(paint);
+      });
     }
 
-    // Ensure a chat tab exists (including when the workspace had no tabs open).
+    if (stayOnFiles) return;
+
     openTab(targetTab);
     window.requestAnimationFrame(() => {
       const editor = editorRef.current;
       if (!editor) return;
       editor.focus();
+      paint();
     });
   }
   attachEntryRef.current = attachEntry;
@@ -19123,6 +19145,12 @@ function StudioComposer({
       if (el.textContent) el.replaceChildren();
       return;
     }
+    // If React has more attachments than the DOM, always repaint — even when
+    // draft text matches (iOS touch-drop used to early-return here with no chips).
+    if (composerDomAttachmentCount(el) < attachments.length) {
+      applyComposerContextToEditor(el, { draft, attachments });
+      return;
+    }
     if (document.activeElement === el) return;
     const current = readComposerEditorText(el);
     if (current === draft) return;
@@ -21330,9 +21358,12 @@ function buildComposerEditorHtmlFromState(draft, attachments = []) {
 
 function applyComposerContextToEditor(editor, ctx) {
   if (!editor || !ctx) return;
-  const html =
-    (typeof ctx.editorHtml === "string" && ctx.editorHtml) ||
-    buildComposerEditorHtmlFromState(ctx.draft, ctx.attachments);
+  const attachments = Array.isArray(ctx.attachments) ? ctx.attachments : [];
+  let html = typeof ctx.editorHtml === "string" ? ctx.editorHtml : "";
+  // Stale editorHtml (common after failed iOS Range inserts) must not win over attachments.
+  if (!html || !composerHtmlHasAttachments(html, attachments)) {
+    html = buildComposerEditorHtmlFromState(ctx.draft, attachments);
+  }
   if (!html) {
     if (editor.textContent) editor.replaceChildren();
     return;
@@ -21340,6 +21371,52 @@ function applyComposerContextToEditor(editor, ctx) {
   if (editor.innerHTML !== html) {
     editor.innerHTML = html;
   }
+}
+
+function composerHtmlHasAttachments(html, attachments) {
+  if (!attachments.length) return true;
+  const source = String(html ?? "");
+  return attachments.every(
+    (item) => item?.id && source.includes(`data-attachment-id="${item.id}"`),
+  );
+}
+
+function composerDomAttachmentCount(editor) {
+  if (!editor) return 0;
+  return editor.querySelectorAll(".studio-inline-tag[data-attachment-id]").length;
+}
+
+/** Offline append — safe on iOS where Range insert during touchend often no-ops. */
+function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttachments, attachment) {
+  const existing = Array.isArray(existingAttachments) ? existingAttachments : [];
+  const all = existing.some((item) => item.id === attachment.id)
+    ? existing
+    : [...existing, attachment];
+  const shell = document.createElement("div");
+
+  if (baseHtml && composerHtmlHasAttachments(baseHtml, existing)) {
+    shell.innerHTML = baseHtml;
+  } else {
+    // Rebuild: keep plain text, re-materialize every attachment chip.
+    const plain = String(draft ?? "").replace(/\uFFFC/g, "").replace(/\s+$/g, "");
+    if (plain) shell.appendChild(document.createTextNode(plain));
+    for (const item of existing) {
+      if (!item?.id) continue;
+      shell.appendChild(document.createTextNode(" "));
+      shell.appendChild(createComposerAttachmentToken(item));
+    }
+  }
+
+  if (!shell.querySelector(`[data-attachment-id="${CSS.escape(String(attachment.id))}"]`)) {
+    shell.appendChild(document.createTextNode(" "));
+    shell.appendChild(createComposerAttachmentToken(attachment));
+  }
+
+  void all;
+  return {
+    editorHtml: shell.innerHTML,
+    draft: readComposerEditorText(shell),
+  };
 }
 
 function elementTokenIconKind(elementType) {
