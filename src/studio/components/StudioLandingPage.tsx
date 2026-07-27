@@ -2,12 +2,22 @@
 
 import {
   ArrowRight,
+  BadgeDollarSign,
   ChevronDown,
   ChevronUp,
+  CircleHelp,
+  Clapperboard,
+  Home,
   Mail,
   MapPin,
   Menu,
+  MessageCircle,
+  Sparkles,
+  UserCircle,
+  Users,
+  Wallet,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
@@ -36,13 +46,22 @@ const DECK_IDS = [
   "start",
 ] as const;
 
-const MENU_LINKS = [
-  ...NAV_LINKS,
-  { id: "book", label: "Book" },
-  { id: "profiles", label: "Profiles" },
-  { id: "earn", label: "Earn" },
-  { id: "visit", label: "Visit" },
-] as const;
+const MENU_LINKS: ReadonlyArray<{
+  id: string;
+  label: string;
+  Icon: LucideIcon;
+}> = [
+  { id: "overview", label: "Overview", Icon: Home },
+  { id: "generate", label: "Generate", Icon: Sparkles },
+  { id: "edit", label: "Edit", Icon: Clapperboard },
+  { id: "hire", label: "Hire", Icon: Users },
+  { id: "book", label: "Book", Icon: Wallet },
+  { id: "messages", label: "Messages", Icon: MessageCircle },
+  { id: "profiles", label: "Profiles", Icon: UserCircle },
+  { id: "earn", label: "Earn", Icon: BadgeDollarSign },
+  { id: "faq", label: "FAQ", Icon: CircleHelp },
+  { id: "visit", label: "Visit", Icon: MapPin },
+];
 
 const FAQ_ITEMS = [
   {
@@ -315,7 +334,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   }, []);
 
   return (
-    <div ref={rootRef} className="studio-landing is-deck" data-appearance="light">
+    <div
+      ref={rootRef}
+      className={`studio-landing is-deck${menuOpen ? " is-menu-open" : ""}`}
+      data-appearance="light"
+    >
       <header className="studio-landing-head">
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
           <BrandMark size={18} subtle appearance="light" />
@@ -418,17 +441,33 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               </button>
             </div>
             <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
-              {MENU_LINKS.map((link) => (
-                <button
-                  key={link.id}
-                  type="button"
-                  className="studio-landing-menu-sheet-link"
-                  onClick={() => scrollToId(link.id)}
-                >
-                  {link.label}
-                </button>
-              ))}
+              {MENU_LINKS.map((link) => {
+                const Icon = link.Icon;
+                return (
+                  <button
+                    key={link.id}
+                    type="button"
+                    className="studio-landing-menu-sheet-link"
+                    onClick={() => scrollToId(link.id)}
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{link.label}</span>
+                  </button>
+                );
+              })}
             </nav>
+            <div className="studio-landing-menu-sheet-foot">
+              <button
+                type="button"
+                className="studio-landing-menu-sheet-cta"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onSignIn();
+                }}
+              >
+                Sign in
+              </button>
+            </div>
           </div>
         </>
       ) : null}
