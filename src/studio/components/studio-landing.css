@@ -900,11 +900,11 @@
   transform-origin: right top;
 }
 
-/* Final CTA: arch up from the button’s end into the Caveat tip. */
+/* Final CTA: origin on the button’s right end → hunched tip into Caveat. */
 .studio-landing-aside.is-from-button {
-  top: calc(100% - 4px);
-  left: 78%;
-  grid-template-columns: 72px auto;
+  top: calc(100% - 16px);
+  left: calc(100% - 22px);
+  grid-template-columns: 76px auto;
   align-items: start;
   margin: 0;
   transform: none;
@@ -913,15 +913,17 @@
 .studio-landing-aside.is-from-button .studio-landing-aside-arrow {
   grid-column: 1;
   grid-row: 1;
-  width: 72px;
-  height: 58px;
+  width: 76px;
+  height: 76px;
   margin: 0;
+  overflow: visible;
 }
 
 .studio-landing-aside.is-from-button .studio-landing-aside-text {
   grid-column: 2;
   grid-row: 1;
-  margin-top: 28px;
+  margin-top: 44px;
+  margin-left: -6px;
   transform: rotate(-3deg);
   transform-origin: left top;
 }
