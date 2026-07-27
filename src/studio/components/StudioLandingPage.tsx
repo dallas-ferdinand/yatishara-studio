@@ -279,7 +279,7 @@ function readLandingMenuChrome(root: HTMLElement | null) {
   return (
     chromeEl?.getBoundingClientRect().height ??
     (typeof window !== "undefined" && window.matchMedia("(max-width: 979px)").matches
-      ? 52
+      ? 38
       : 32)
   );
 }
@@ -322,6 +322,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const menuHeightRef = useRef<number | null>(null);
   const menuDragRafRef = useRef<number | null>(null);
   const menuSettleTimerRef = useRef<number | null>(null);
+  /** Ignore link activation after a finger scroll inside the sheet. */
+  const menuListGestureRef = useRef<{
+    startY: number;
+    startX: number;
+    moved: boolean;
+  } | null>(null);
+  const menuScrollSuppressClickRef = useRef(false);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
 
@@ -349,6 +356,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   };
 
   const scrollToId = (id: string) => {
+    if (menuScrollSuppressClickRef.current) {
+      menuScrollSuppressClickRef.current = false;
+      return;
+    }
     const scroller = mainRef.current;
     const target = scroller?.querySelector<HTMLElement>(`#${id}`);
     if (!scroller || !target) return;
@@ -362,6 +373,35 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       behavior: reduceMotion ? "auto" : "smooth",
     });
     closeMenu();
+  };
+
+  const onMenuListPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    menuListGestureRef.current = {
+      startY: event.clientY,
+      startX: event.clientX,
+      moved: false,
+    };
+    menuScrollSuppressClickRef.current = false;
+  };
+
+  const onMenuListPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const g = menuListGestureRef.current;
+    if (!g || g.moved) return;
+    if (
+      Math.abs(event.clientY - g.startY) > 8 ||
+      Math.abs(event.clientX - g.startX) > 8
+    ) {
+      g.moved = true;
+      menuScrollSuppressClickRef.current = true;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement && event.currentTarget.contains(active)) {
+        active.blur();
+      }
+    }
+  };
+
+  const onMenuListPointerUp = () => {
+    menuListGestureRef.current = null;
   };
 
   const scrollDeckBy = (delta: number) => {
@@ -635,7 +675,24 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               <div className="studio-landing-menu-sheet-grab" aria-hidden="true" />
             </div>
             <div className="studio-landing-menu-sheet-scroll">
-              <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
+              <nav
+                className="studio-landing-menu-sheet-body"
+                aria-label="Page sections"
+                onPointerDown={onMenuListPointerDown}
+                onPointerMove={onMenuListPointerMove}
+                onPointerUp={onMenuListPointerUp}
+                onPointerCancel={onMenuListPointerUp}
+                onScroll={() => {
+                  menuScrollSuppressClickRef.current = true;
+                  const active = document.activeElement;
+                  if (
+                    active instanceof HTMLElement &&
+                    active.classList.contains("studio-landing-menu-sheet-link")
+                  ) {
+                    active.blur();
+                  }
+                }}
+              >
                 {MENU_LINKS.map((link) => {
                   const Icon = link.Icon;
                   return (
