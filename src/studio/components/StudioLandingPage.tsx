@@ -227,9 +227,16 @@ function FaqSection() {
 
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const year = new Date().getFullYear();
+
+  const menuLinks = [
+    ...NAV_LINKS,
+    { id: "book", label: "Book" },
+    { id: "profiles", label: "Profiles" },
+    { id: "earn", label: "Earn" },
+    { id: "visit", label: "Visit" },
+  ] as const;
 
   const scrollToId = (id: string) => {
     const root = rootRef.current;
@@ -253,25 +260,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMenuOpen(false);
     };
-    const onPointer = (event: MouseEvent | TouchEvent) => {
-      const node = event.target as Node | null;
-      if (menuRef.current && node && !menuRef.current.contains(node)) {
-        setMenuOpen(false);
-      }
-    };
     window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onPointer);
-    window.addEventListener("touchstart", onPointer, { passive: true });
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onPointer);
-      window.removeEventListener("touchstart", onPointer);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
   return (
     <div ref={rootRef} className="studio-landing" data-appearance="light">
-      <header className="studio-landing-head" ref={menuRef}>
+      <header className="studio-landing-head">
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
           <BrandMark size={18} subtle appearance="light" />
           <span className="studio-landing-brand-name">Yatishara Studio</span>
@@ -293,50 +288,66 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <div className="studio-landing-head-end">
           <button
             type="button"
-            className="studio-landing-menu-btn"
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={menuOpen}
-            aria-controls="studio-landing-mobile-menu"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
-          </button>
-          <button
-            type="button"
             className="studio-landing-head-btn is-primary"
             onClick={onSignIn}
           >
             Sign in
           </button>
+          <button
+            type="button"
+            className="studio-landing-menu-btn"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
+            aria-controls="studio-landing-menu-sheet"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+          </button>
         </div>
+      </header>
 
-        {menuOpen ? (
+      {menuOpen ? (
+        <>
+          <button
+            type="button"
+            className="studio-landing-menu-backdrop"
+            aria-label="Close menu"
+            onClick={() => setMenuOpen(false)}
+          />
           <div
-            id="studio-landing-mobile-menu"
-            className="studio-landing-mobile-menu"
-            role="menu"
+            id="studio-landing-menu-sheet"
+            className="studio-landing-menu-sheet"
+            role="dialog"
+            aria-modal="true"
             aria-label="Page sections"
           >
-            {[
-              ...NAV_LINKS,
-              { id: "book", label: "Book" },
-              { id: "profiles", label: "Profiles" },
-              { id: "earn", label: "Earn" },
-              { id: "visit", label: "Visit" },
-            ].map((link) => (
+            <div className="studio-landing-menu-sheet-grab" aria-hidden="true" />
+            <div className="studio-landing-menu-sheet-head">
+              <h2 className="studio-landing-menu-sheet-title">Menu</h2>
               <button
-                key={link.id}
                 type="button"
-                role="menuitem"
-                className="studio-landing-mobile-link"
-                onClick={() => scrollToId(link.id)}
+                className="studio-landing-menu-btn"
+                aria-label="Close menu"
+                onClick={() => setMenuOpen(false)}
               >
-                {link.label}
+                <X aria-hidden="true" />
               </button>
-            ))}
+            </div>
+            <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
+              {menuLinks.map((link) => (
+                <button
+                  key={link.id}
+                  type="button"
+                  className="studio-landing-menu-sheet-link"
+                  onClick={() => scrollToId(link.id)}
+                >
+                  {link.label}
+                </button>
+              ))}
+            </nav>
           </div>
-        ) : null}
-      </header>
+        </>
+      ) : null}
 
       <main className="studio-landing-main">
         <section
