@@ -21,10 +21,12 @@ import {
 } from "lucide-react";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
   useState,
+  memo,
   type CSSProperties,
   type TouchEvent as ReactTouchEvent,
 } from "react";
@@ -386,7 +388,7 @@ function DmReplyQuote({
 const SWIPE_REPLY_THRESHOLD = 56;
 const SWIPE_REPLY_MAX = 72;
 
-function DmMessageBubble({
+const DmMessageBubble = memo(function DmMessageBubble({
   message,
   peerLabel,
   onReply,
@@ -628,7 +630,7 @@ function DmMessageBubble({
       ) : null}
     </>
   );
-}
+});
 
 /** Upload a blob into the user's protected Messages folder (billable Bunny asset). */
 async function uploadDmMediaAsset(args: {
@@ -775,6 +777,8 @@ export function StudioMessagesPane({
     api.dms.listMessages,
     conversationId ? { conversationId, expiresUnix } : "skip",
   );
+  // Keep typing urgent — defer re-painting the message list while the draft updates.
+  const deferredMessages = useDeferredValue(messages);
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
   const ackDelivered = useMutation(api.dms.ackDelivered);
@@ -1367,7 +1371,7 @@ export function StudioMessagesPane({
           </div>
         ) : (
           <div className="studio-dm-messages">
-            {messages.map((message) => {
+            {(deferredMessages ?? messages).map((message) => {
               const day = dayLabel(message.createdAt);
               const showDay = day !== lastDay;
               lastDay = day;

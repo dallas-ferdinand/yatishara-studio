@@ -5139,10 +5139,14 @@ export function StudioShell({
 
   async function handleSubmit() {
     if (!activeFolder) return;
+    // Contenteditable is source of truth while typing (shell draft is coalesced).
+    const liveDraft =
+      (editorRef.current ? readComposerEditorText(editorRef.current) : null) ?? draft;
+    if (liveDraft !== draft) setDraft(liveDraft);
     const assistanceOn =
       Boolean(assistanceFeatureEnabled) && assistanceEnabled && mode !== "audio";
-    if (!assistanceOn && !draft.trim()) return;
-    if (assistanceOn && !draft.trim() && !attachments.length) return;
+    if (!assistanceOn && !liveDraft.trim()) return;
+    if (assistanceOn && !liveDraft.trim() && !attachments.length) return;
     setFlowPending(true);
     try {
       if (assistanceOn) {
@@ -5157,10 +5161,10 @@ export function StudioShell({
           activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
             ? activeThreadId
             : null;
-        const capturedDraft = draft;
+        const capturedDraft = liveDraft;
         const capturedAttachments = attachments;
         const capturedEditorHtml = editorRef.current?.innerHTML ?? "";
-        const userPrompt = buildPromptWithAttachments(draft, attachments);
+        const userPrompt = buildPromptWithAttachments(liveDraft, attachments);
         const briefAttachments = composerAttachmentsForBrief();
         const clientTurnId = newClientTurnId();
         const editingEventId = editingPromptEventId;
@@ -5304,7 +5308,7 @@ export function StudioShell({
         if (audioType === "voiceover" && !selectedVoice?.voiceId) {
           throw new Error("Select a voice for the voiceover.");
         }
-        const userPrompt = draft.trim();
+        const userPrompt = liveDraft.trim();
         const estimatedCost = audioCreditCost({
           audioType,
           characterCount: audioType === "voiceover" ? userPrompt.length : undefined,
@@ -5437,7 +5441,7 @@ export function StudioShell({
         }
         await createAndAttachElement({
           elementType,
-          name: draft.trim(),
+          name: liveDraft.trim(),
           sourceAssetIds: uploadedAssets.map((asset) => asset.assetId),
           uploadedAssets,
           generateSheet: true,
@@ -5464,7 +5468,7 @@ export function StudioShell({
           folderId: activeFolder._id,
           stylePresetId: directPreset._id,
           styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
-          userPrompt: buildPromptWithAttachments(draft, attachments),
+          userPrompt: buildPromptWithAttachments(liveDraft, attachments),
           attachedScriptMarkdown: attachedScriptMarkdown.length ? attachedScriptMarkdown : undefined,
           referenceInputs: generationReferences,
           skipPromptEnhancement,
@@ -5503,7 +5507,7 @@ export function StudioShell({
         activeThreadId && threads?.some((thread) => thread._id === activeThreadId)
           ? activeThreadId
           : null;
-      const userPrompt = buildPromptWithAttachments(draft, attachments);
+      const userPrompt = buildPromptWithAttachments(liveDraft, attachments);
       const genMode = mode;
 
       let threadId = reuseThreadId;
@@ -6031,17 +6035,32 @@ export function StudioShell({
             contain: none !important;
           }
           .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box {
-            background: var(--studio-composer-glass) !important;
-            backdrop-filter: var(--studio-composer-glass-blur) !important;
-            -webkit-backdrop-filter: var(--studio-composer-glass-blur) !important;
+            background: var(--studio-composer-glass-strong, var(--studio-composer-glass)) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
+            /* No focus-line width/height GPU tween while typing */
+            transition: none !important;
+          }
+          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box::before,
+          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box::after {
+            transition: opacity 180ms ease !important;
+            width: 0 !important;
+            height: 0 !important;
+            opacity: 0 !important;
+          }
+          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box:focus-within::before,
+          .studio-polish.is-studio-mobile .studio-composer .cursor-composer-box:focus-within::after {
+            width: 0 !important;
+            height: 0 !important;
+            opacity: 0 !important;
           }
           .studio-polish.is-studio-mobile .studio-mode-row {
-            background: color-mix(in srgb, var(--mos-bg, #05080f) 48%, transparent) !important;
-            backdrop-filter: saturate(140%) blur(8px) !important;
-            -webkit-backdrop-filter: saturate(140%) blur(8px) !important;
+            background: color-mix(in srgb, var(--mos-bg, #05080f) 88%, transparent) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
             transform: none !important;
             filter: none !important;
             isolation: auto !important;
@@ -19059,7 +19078,42 @@ function StudioComposer({
   const [voicePickerOpen, setVoicePickerOpen] = useState(false);
   const [composerOptionsOpen, setComposerOptionsOpen] = useState(false);
   const [overlayPanelBox, setOverlayPanelBox] = useState(null);
+  /** Local mirror so typing doesn't re-render the giant StudioShell every key. */
+  const [liveDraft, setLiveDraft] = useState(draft);
+  const draftPersistTimerRef = useRef(null);
   const { isMobile } = useMobileLayout();
+
+  useEffect(() => {
+    setLiveDraft(draft);
+  }, [draft]);
+
+  useEffect(() => {
+    return () => {
+      if (draftPersistTimerRef.current) {
+        window.clearTimeout(draftPersistTimerRef.current);
+      }
+    };
+  }, []);
+
+  const pushDraftToParent = useCallback(
+    (next, { immediate = false } = {}) => {
+      setLiveDraft(next);
+      if (draftPersistTimerRef.current) {
+        window.clearTimeout(draftPersistTimerRef.current);
+        draftPersistTimerRef.current = null;
+      }
+      if (immediate) {
+        setDraft(next);
+        return;
+      }
+      // Coalesce shell/canGenerate/persist updates — contenteditable already shows text.
+      draftPersistTimerRef.current = window.setTimeout(() => {
+        draftPersistTimerRef.current = null;
+        setDraft(next);
+      }, isMobile ? 160 : 80);
+    },
+    [isMobile, setDraft],
+  );
   const styleSheetAssetsWithThumbs = useMemo(
     () =>
       (styleSheetAssets ?? []).map((asset) => {
@@ -19174,72 +19228,77 @@ function StudioComposer({
     const main = composer.closest("main");
     if (!root) return;
 
+    let rafId = 0;
     const syncClearance = () => {
-      const chat = root.querySelector(".studio-chat-render-area");
-      const row =
-        composer.querySelector(".studio-composer-row")
-        || composer.querySelector(".cursor-composer-box")
-        || composer;
-      // Input glass only — never the mode-switcher row above it.
-      const inputBox = composer.querySelector(".cursor-composer-box");
-      // Align overlays to the visible composer glass (inside padding), not the
-      // padded .cursor-composer outer box — that looked left-shifted on mobile.
-      const band =
-        inputBox
-        || composer.querySelector(".studio-composer-row")
-        || root.querySelector(".studio-chat-composer-align")
-        || composer.querySelector(".cursor-composer")
-        || composer;
-      const rowBox = row.getBoundingClientRect();
-      const bandBox = band.getBoundingClientRect();
-      root.style.setProperty(
-        "--studio-composer-stack-height",
-        `${Math.max(96, Math.round(window.innerHeight - rowBox.top))}px`,
-      );
-      const head = root.querySelector(".cursor-workspace-head");
-      const headBottom = head
-        ? head.getBoundingClientRect().bottom
-        : (Number.parseFloat(getComputedStyle(root).getPropertyValue("--cursor-head-h")) || 52);
-      const top = Math.max(8, Math.round(headBottom + 8));
-      const bottom = Math.max(8, Math.round(window.innerHeight - rowBox.top + 8));
-      const nextBox = {
-        top,
-        bottom,
-        left: Math.round(bandBox.left),
-        width: Math.max(0, Math.round(bandBox.width)),
-      };
-      setOverlayPanelBox((prev) =>
-        prev
-        && prev.top === nextBox.top
-        && prev.bottom === nextBox.bottom
-        && prev.left === nextBox.left
-        && prev.width === nextBox.width
-          ? prev
-          : nextBox,
-      );
-      if (!chat || !inputBox) {
-        root.style.removeProperty("--studio-chat-empty-clearance");
-        root.style.removeProperty("--studio-chat-stream-end-pad");
-        if (chat instanceof HTMLElement) chat.style.removeProperty("padding-bottom");
-        return;
-      }
-      const chatBox = chat.getBoundingClientRect();
-      const inputBoxRect = inputBox.getBoundingClientRect();
-      const modeSwitcher = composer.querySelector(".studio-mode-switcher");
-      const modeBox = modeSwitcher?.getBoundingClientRect();
-      // Hard clip at the input glass. End-pad parks the last message above the pills.
-      const clearance = Math.max(0, Math.round(chatBox.bottom - inputBoxRect.top));
-      const pillsBand = modeBox
-        ? Math.max(0, Math.round(inputBoxRect.top - modeBox.top))
-        : 36;
-      const endPad = pillsBand + 12;
-      const clearancePx = `${clearance}px`;
-      const endPadPx = `${endPad}px`;
-      root.style.setProperty("--studio-chat-empty-clearance", clearancePx);
-      root.style.setProperty("--studio-chat-stream-end-pad", endPadPx);
-      if (chat instanceof HTMLElement) {
-        chat.style.paddingBottom = clearancePx;
-      }
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        const chat = root.querySelector(".studio-chat-render-area");
+        const row =
+          composer.querySelector(".studio-composer-row")
+          || composer.querySelector(".cursor-composer-box")
+          || composer;
+        // Input glass only — never the mode-switcher row above it.
+        const inputBox = composer.querySelector(".cursor-composer-box");
+        // Align overlays to the visible composer glass (inside padding), not the
+        // padded .cursor-composer outer box — that looked left-shifted on mobile.
+        const band =
+          inputBox
+          || composer.querySelector(".studio-composer-row")
+          || root.querySelector(".studio-chat-composer-align")
+          || composer.querySelector(".cursor-composer")
+          || composer;
+        const rowBox = row.getBoundingClientRect();
+        const bandBox = band.getBoundingClientRect();
+        root.style.setProperty(
+          "--studio-composer-stack-height",
+          `${Math.max(96, Math.round(window.innerHeight - rowBox.top))}px`,
+        );
+        const head = root.querySelector(".cursor-workspace-head");
+        const headBottom = head
+          ? head.getBoundingClientRect().bottom
+          : (Number.parseFloat(getComputedStyle(root).getPropertyValue("--cursor-head-h")) || 52);
+        const top = Math.max(8, Math.round(headBottom + 8));
+        const bottom = Math.max(8, Math.round(window.innerHeight - rowBox.top + 8));
+        const nextBox = {
+          top,
+          bottom,
+          left: Math.round(bandBox.left),
+          width: Math.max(0, Math.round(bandBox.width)),
+        };
+        setOverlayPanelBox((prev) =>
+          prev
+          && prev.top === nextBox.top
+          && prev.bottom === nextBox.bottom
+          && prev.left === nextBox.left
+          && prev.width === nextBox.width
+            ? prev
+            : nextBox,
+        );
+        if (!chat || !inputBox) {
+          root.style.removeProperty("--studio-chat-empty-clearance");
+          root.style.removeProperty("--studio-chat-stream-end-pad");
+          if (chat instanceof HTMLElement) chat.style.removeProperty("padding-bottom");
+          return;
+        }
+        const chatBox = chat.getBoundingClientRect();
+        const inputBoxRect = inputBox.getBoundingClientRect();
+        const modeSwitcher = composer.querySelector(".studio-mode-switcher");
+        const modeBox = modeSwitcher?.getBoundingClientRect();
+        // Hard clip at the input glass. End-pad parks the last message above the pills.
+        const clearance = Math.max(0, Math.round(chatBox.bottom - inputBoxRect.top));
+        const pillsBand = modeBox
+          ? Math.max(0, Math.round(inputBoxRect.top - modeBox.top))
+          : 36;
+        const endPad = pillsBand + 12;
+        const clearancePx = `${clearance}px`;
+        const endPadPx = `${endPad}px`;
+        root.style.setProperty("--studio-chat-empty-clearance", clearancePx);
+        root.style.setProperty("--studio-chat-stream-end-pad", endPadPx);
+        if (chat instanceof HTMLElement) {
+          chat.style.paddingBottom = clearancePx;
+        }
+      });
     };
 
     const observer = new ResizeObserver(syncClearance);
@@ -19265,6 +19324,7 @@ function StudioComposer({
     return () => {
       window.cancelAnimationFrame(raf);
       window.cancelAnimationFrame(raf2);
+      if (rafId) window.cancelAnimationFrame(rafId);
       observer.disconnect();
       window.removeEventListener("resize", syncClearance);
       window.visualViewport?.removeEventListener("resize", syncClearance);
@@ -19292,7 +19352,7 @@ function StudioComposer({
     elementType,
     elementReferenceCounts,
     audioType,
-    characterCount: draft.trim().length,
+    characterCount: liveDraft.trim().length,
     sfxDurationAuto,
     sfxDurationSeconds,
     musicDurationSeconds,
@@ -19329,6 +19389,12 @@ function StudioComposer({
     if (!editor || !inputLine) return;
 
     const updateHighlights = () => {
+      const sel = document.getSelection();
+      // Plain typing is collapsed — skip getClientRects + setState thrash.
+      if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) {
+        setSelectionHighlights((prev) => (prev.length ? [] : prev));
+        return;
+      }
       setSelectionHighlights(getStudioComposerSelectionHighlights(editor, inputLine));
     };
     const clearHighlights = () => {
@@ -19340,7 +19406,7 @@ function StudioComposer({
     window.addEventListener("resize", updateHighlights);
     editor.addEventListener("keyup", updateHighlights);
     editor.addEventListener("mouseup", updateHighlights);
-    editor.addEventListener("input", updateHighlights);
+    // Do not listen to "input" — collapsed caret typing must stay free.
     editor.addEventListener("blur", clearHighlights);
 
     return () => {
@@ -19348,7 +19414,6 @@ function StudioComposer({
       window.removeEventListener("resize", updateHighlights);
       editor.removeEventListener("keyup", updateHighlights);
       editor.removeEventListener("mouseup", updateHighlights);
-      editor.removeEventListener("input", updateHighlights);
       editor.removeEventListener("blur", clearHighlights);
       clearStudioComposerSelectedTags(editor);
     };
@@ -19376,13 +19441,17 @@ function StudioComposer({
       else el.replaceChildren();
       focusComposerEditorEnd(el);
     }
-    setDraft(next);
+    pushDraftToParent(next, { immediate: true });
   }
 
   function handleGenerateClick() {
     if (canCancelAssist && onCancelAssist) {
       onCancelAssist();
       return;
+    }
+    // Flush live CE text before parent submit reads shell draft.
+    if (editorRef.current) {
+      pushDraftToParent(readComposerEditorText(editorRef.current), { immediate: true });
     }
     const needsTopUp =
       entitlement &&
@@ -19402,8 +19471,8 @@ function StudioComposer({
     disabled ||
     (!canCancelAssist && assistBusy) ||
     (assistanceOn
-      ? !canCancelAssist && !draft.trim() && !attachments.length
-      : !draft.trim()) ||
+      ? !canCancelAssist && !liveDraft.trim() && !attachments.length
+      : !liveDraft.trim()) ||
     (isAudioMode && audioType === "voiceover" && !selectedVoice?.voiceId);
   const generateTitle = canCancelAssist
     ? "Stop Assistance"
@@ -19792,7 +19861,7 @@ function StudioComposer({
                           : "Describe what you want…"
           }
           data-listening={
-            (recording || transcribing) && draft.trim() ? "append" : undefined
+            (recording || transcribing) && liveDraft.trim() ? "append" : undefined
           }
           data-listening-label={
             recording ? " Listening…" : transcribing ? " Transcribing…" : undefined
@@ -19800,8 +19869,7 @@ function StudioComposer({
           className="cursor-composer-textarea cursor-composer-mention-editor"
           onInput={(event) => {
             const next = readComposerEditorText(event.currentTarget);
-            // Keep typing responsive — defer shell reconciliation of draft-driven UI.
-            startTransition(() => setDraft(next));
+            pushDraftToParent(next);
           }}
           onKeyDown={(event) => {
             if (
@@ -19814,7 +19882,9 @@ function StudioComposer({
             if (event.key === "Backspace") {
               if (removeComposerTokenBeforeCaret(editorRef.current, setAttachments)) {
                 event.preventDefault();
-                setDraft(readComposerEditorText(editorRef.current));
+                pushDraftToParent(readComposerEditorText(editorRef.current), {
+                  immediate: true,
+                });
                 return;
               }
               // Mobile rail mirrors desktop chips (no ×). When typed text is empty,
@@ -19837,15 +19907,22 @@ function StudioComposer({
                     draft: plain,
                     attachments: nextAttachments,
                   });
-                  setDraft(readComposerEditorText(editor));
+                  pushDraftToParent(readComposerEditorText(editor), {
+                    immediate: true,
+                  });
                 } else {
-                  setDraft(plain);
+                  pushDraftToParent(plain, { immediate: true });
                 }
                 return;
               }
             }
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
+              if (editorRef.current) {
+                pushDraftToParent(readComposerEditorText(editorRef.current), {
+                  immediate: true,
+                });
+              }
               void onSubmit();
             }
           }}
