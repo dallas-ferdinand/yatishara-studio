@@ -8,9 +8,13 @@ import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind
 import { formatFileDate } from "@/desk/lib/explorer-file-actions";
 import {
   armExplorerDrag,
+  beginTouchFileHold,
+  cancelTouchFileHold,
   clearActiveExplorerDrag,
   deliverMobileComposerDrop,
+  endTouchFileGesture,
   peekActiveExplorerDrag,
+  promoteTouchFileDrag,
   writeExplorerDragData,
 } from "@/desk/lib/explorer-dnd";
 import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
@@ -662,11 +666,6 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       }
 
       clearDropTargetHighlight();
-      document.body.classList.remove(
-        "is-drag-cursor",
-        "is-touch-file-drag",
-        "is-touch-file-drag-armed",
-      );
 
       // Files dock: only celebrate when attach was actually scheduled. Composer
       // shell geometry alone used to fake a successful drop with no chip.
@@ -826,7 +825,9 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
         source.removeAttribute("data-drag-source");
         delete source.dataset.dragToken;
       }
-      if (mode === "touch") clearActiveExplorerDrag();
+      // Singleton owns scroll lock + body classes + activeExplorerDrag.
+      // Keep the lock through the fly animation, then always release here.
+      if (mode === "touch") endTouchFileGesture();
     }
   };
 
@@ -859,7 +860,7 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   };
 
   if (mode === "touch") {
-    document.body.classList.add("is-drag-cursor", "is-touch-file-drag");
+    // promoteTouchFileDrag() already set body classes + scroll lock.
     document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd, { capture: true });
     document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
@@ -884,8 +885,8 @@ export function startTouchFileDrag(
   onTouchDrop,
 ) {
   if (!source || !entry || entry.type === "parent") return;
-  // Lock scroll immediately — before chip/DOM work — so Android can't pan the list.
-  document.body.classList.add("is-drag-cursor", "is-touch-file-drag");
+  // Promote hold→drag on the singleton BEFORE chip work — no scroll gap.
+  promoteTouchFileDrag();
   armExplorerDrag(entry);
   startFileDragPreview(
     { currentTarget: source, clientX, clientY },
@@ -927,39 +928,17 @@ function FileEntryButton({
 }) {
   const buttonRef = useRef(null);
   const touchDragActiveRef = useRef(false);
-  const scrollLockMoveRef = useRef(null);
+  /** Generation from beginTouchFileHold — cancel only matches this hold. */
+  const holdGenerationRef = useRef(0);
   const [dragArmed, setDragArmed] = useState(false);
   const canTouchDrag =
     enableLongPress && entry.type !== "parent" && !selectionMode;
 
-  const unlockScrollDuringHold = () => {
-    if (!scrollLockMoveRef.current) return;
-    document.body.classList.remove("is-touch-file-drag-armed");
-    document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
-    scrollLockMoveRef.current = null;
-  };
-
-  const lockScrollDuringHold = () => {
-    if (scrollLockMoveRef.current) return;
-    document.body.classList.add("is-touch-file-drag-armed");
-    // React touch listeners are passive — must use a native non-passive
-    // capture listener or Android keeps scrolling the Files list.
-    const onMove = (event) => {
-      if (event.cancelable) event.preventDefault();
-    };
-    document.addEventListener("touchmove", onMove, { capture: true, passive: false });
-    scrollLockMoveRef.current = onMove;
-  };
-
-  // The Files list is live data — a row can unmount mid-hold. Without this,
-  // the document-level scroll lock leaks with no owner and scrolling dies
-  // app-wide until reload.
+  // Live Convex rows can unmount mid-hold. Cancel only *this* hold — never
+  // tear down a drag another row already promoted.
   useEffect(() => {
     return () => {
-      if (!scrollLockMoveRef.current) return;
-      document.body.classList.remove("is-touch-file-drag-armed");
-      document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
-      scrollLockMoveRef.current = null;
+      cancelTouchFileHold(holdGenerationRef.current);
     };
   }, []);
 
@@ -974,7 +953,7 @@ function FileEntryButton({
             ) {
               return;
             }
-            unlockScrollDuringHold();
+            cancelTouchFileHold(holdGenerationRef.current);
             clearActiveExplorerDrag();
             setDragArmed(false);
             onLongPress(entry, coords);
@@ -997,10 +976,7 @@ function FileEntryButton({
           ? () => {
               setDragArmed(true);
               armExplorerDrag(entry);
-              // Scroll lock is the native non-passive listener + body class.
-              // (Inline touch-action flips mid-gesture are latched too late to
-              // matter on Android and only add cleanup hazards.)
-              lockScrollDuringHold();
+              holdGenerationRef.current = beginTouchFileHold();
               try {
                 navigator.vibrate?.(8);
               } catch {
@@ -1018,7 +994,7 @@ function FileEntryButton({
               clearLongPressFired();
               // Drop any sheet that armed before the finger moved into a drag.
               window.dispatchEvent(new CustomEvent("studioexplorerdismisscontext"));
-              // Start drag lock first, then drop the hold lock (no scroll gap).
+              // promoteTouchFileDrag is inside startTouchFileDrag — same lock, no gap.
               startTouchFileDrag(
                 source,
                 entry,
@@ -1027,7 +1003,6 @@ function FileEntryButton({
                 coords.y,
                 onTouchDrop,
               );
-              unlockScrollDuringHold();
             }
           : undefined,
       },
@@ -1103,14 +1078,14 @@ function FileEntryButton({
           clearLongPressFired();
           return;
         }
-        unlockScrollDuringHold();
+        cancelTouchFileHold(holdGenerationRef.current);
         longPressHandlers.onTouchEnd?.(event);
         window.setTimeout(() => setDragArmed(false), 80);
       }}
       onTouchCancel={(event) => {
         longPressHandlers.onTouchCancel?.(event);
         if (!touchDragActiveRef.current) {
-          unlockScrollDuringHold();
+          cancelTouchFileHold(holdGenerationRef.current);
           setDragArmed(false);
           clearActiveExplorerDrag();
         }

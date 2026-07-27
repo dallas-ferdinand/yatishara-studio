@@ -5645,22 +5645,17 @@ export function StudioShell({
     return () => window.removeEventListener("studioexplorerdismisscontext", onDismiss);
   }, [isMobile]);
 
-  // Mobile Files touch-drop (FastShaders pattern): end the gesture first, then
-  // run the same attachEntry path desktop HTML5 drop uses — never during touchend.
+  // Fallback Files→composer bridge (primary path is onMobileAttach on FileTree).
+  // Same deferral rule: never attach on the touchend stack.
   useEffect(() => {
-    const runAttach = (entry) => {
-      if (!entry) return;
-      const snapshot = { ...entry };
-      const attach = () => attachEntryRef.current?.(snapshot, null);
-      // Microtask + timeout: Android Chrome sometimes drops work scheduled only
-      // from the touchend stack; duplicates are no-ops via already-attached id.
-      queueMicrotask(attach);
-      window.setTimeout(attach, 0);
-      window.setTimeout(attach, 32);
-    };
     setMobileComposerDropHandler(({ entry }) => {
       if (!entry) return false;
-      runAttach(entry);
+      const snapshot = { ...entry };
+      window.requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          attachEntryRef.current?.(snapshot, null);
+        }, 0);
+      });
       return true;
     });
     return () => setMobileComposerDropHandler(null);
@@ -18515,16 +18510,16 @@ export function StudioShell({
           onEntryOpen={handleEntryOpen}
           onMobileAttach={(entry) => {
             // Never attach synchronously from touchend — Android Chrome drops
-            // that work. Snapshot + defer, same as the global bridge path.
+            // that work. One rAF + timeout is enough; attachEntry dedupes by id.
             if (!entry) return false;
             const snapshot = { ...entry };
             const run = () => {
               const ok = attachEntryRef.current?.(snapshot, null);
               if (ok) setMobileSection("composer");
             };
-            queueMicrotask(run);
-            window.setTimeout(run, 0);
-            window.setTimeout(run, 48);
+            window.requestAnimationFrame(() => {
+              window.setTimeout(run, 0);
+            });
             return true;
           }}
           searchState={searchState}

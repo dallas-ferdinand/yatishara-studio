@@ -1,6 +1,21 @@
 /** Drag-and-drop payload from explorer → composer / timeline. */
 export const EXPLORER_DND_TYPE = "application/x-mercuryos-path";
 
+/**
+ * Mobile Files→composer gesture model (one owner — this module):
+ *
+ *   idle → hold (short pickup) → drag (finger moved) → idle
+ *                  ↘ menu (still-hold) → idle
+ *
+ * Scroll lock is a SINGLE document-level non-passive touchmove listener.
+ * Rows never own that listener themselves — live Convex list rows can unmount
+ * mid-hold, and a per-row lock would leak app-wide scroll death.
+ *
+ * Body classes (CSS also locks .desk-file-tree-scroll):
+ *   is-touch-file-drag-armed  — hold, before drag intent
+ *   is-touch-file-drag        — active touch drag
+ */
+
 /** Active drag entry — readable during dragOver (getData is blocked until drop). */
 let activeExplorerDrag = null;
 
@@ -9,6 +24,116 @@ let activeExplorerDrag = null;
  * StudioShell registers this; FileTree invokes it on touch-drag release from the dock.
  */
 let mobileComposerDropHandler = null;
+
+/** @type {"idle" | "hold" | "drag"} */
+let touchGesturePhase = "idle";
+/** Invalidates stale cancelTouchFileHold calls after a new hold/drag starts. */
+let touchGestureGeneration = 0;
+/** @type {((event: TouchEvent) => void) | null} */
+let touchScrollLockListener = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let touchGestureSafetyTimer = null;
+
+function onTouchScrollLockMove(event) {
+  if (event.cancelable) event.preventDefault();
+}
+
+function ensureTouchScrollLock() {
+  if (typeof document === "undefined") return;
+  if (touchScrollLockListener) return;
+  touchScrollLockListener = onTouchScrollLockMove;
+  document.addEventListener("touchmove", touchScrollLockListener, {
+    capture: true,
+    passive: false,
+  });
+}
+
+function clearTouchScrollLock() {
+  if (typeof document === "undefined") return;
+  if (!touchScrollLockListener) return;
+  document.removeEventListener("touchmove", touchScrollLockListener, true);
+  touchScrollLockListener = null;
+}
+
+function clearTouchGestureSafetyTimer() {
+  if (touchGestureSafetyTimer == null) return;
+  clearTimeout(touchGestureSafetyTimer);
+  touchGestureSafetyTimer = null;
+}
+
+function armTouchGestureSafetyTimer() {
+  if (typeof window === "undefined") return;
+  clearTouchGestureSafetyTimer();
+  // Hard ceiling — if finish()/cancel never ran (tab freeze, HMR, etc.),
+  // don't leave the whole Studio unable to scroll.
+  touchGestureSafetyTimer = window.setTimeout(() => {
+    touchGestureSafetyTimer = null;
+    if (touchGesturePhase !== "idle") endTouchFileGesture();
+  }, 8000);
+}
+
+/**
+ * Short pickup armed — freeze scroll so the Files list can't pan under the finger.
+ * @returns {number} generation token for cancelTouchFileHold
+ */
+export function beginTouchFileHold() {
+  if (typeof document === "undefined") return 0;
+  touchGestureGeneration += 1;
+  const generation = touchGestureGeneration;
+  ensureTouchScrollLock();
+  document.body.classList.add("is-touch-file-drag-armed");
+  document.body.classList.remove("is-touch-file-drag", "is-drag-cursor");
+  touchGesturePhase = "hold";
+  armTouchGestureSafetyTimer();
+  return generation;
+}
+
+/** Cancel a still-hold that never became a drag (release / unmount / menu). */
+export function cancelTouchFileHold(generation) {
+  if (touchGesturePhase !== "hold") return;
+  if (generation != null && generation !== touchGestureGeneration) return;
+  if (typeof document !== "undefined") {
+    document.body.classList.remove("is-touch-file-drag-armed");
+  }
+  clearTouchScrollLock();
+  clearTouchGestureSafetyTimer();
+  touchGesturePhase = "idle";
+}
+
+/** Finger moved past drag threshold — keep the same scroll lock, mark dragging. */
+export function promoteTouchFileDrag() {
+  if (typeof document === "undefined") return;
+  ensureTouchScrollLock();
+  document.body.classList.add("is-drag-cursor", "is-touch-file-drag");
+  document.body.classList.remove("is-touch-file-drag-armed");
+  touchGesturePhase = "drag";
+  armTouchGestureSafetyTimer();
+}
+
+/** Always-safe cleanup after drop / return / cancel / safety timer. */
+export function endTouchFileGesture() {
+  if (typeof document !== "undefined") {
+    document.body.classList.remove(
+      "is-drag-cursor",
+      "is-touch-file-drag",
+      "is-touch-file-drag-armed",
+    );
+  }
+  clearTouchScrollLock();
+  clearTouchGestureSafetyTimer();
+  touchGesturePhase = "idle";
+  // Invalidate any pending cancelTouchFileHold from a dead row.
+  touchGestureGeneration += 1;
+  activeExplorerDrag = null;
+}
+
+export function isTouchFileGestureActive() {
+  return touchGesturePhase !== "idle";
+}
+
+export function getTouchFileGesturePhase() {
+  return touchGesturePhase;
+}
 
 export function setMobileComposerDropHandler(handler) {
   mobileComposerDropHandler = typeof handler === "function" ? handler : null;
