@@ -1021,9 +1021,9 @@
   .studio-landing-head-btn {
     height: 32px;
     min-height: 32px;
-    padding: 0 14px;
+    padding: 0 16px;
     font-size: 13px;
-    border-radius: 8px;
+    border-radius: 999px;
   }
 
   .studio-landing-menu-btn {
@@ -1031,7 +1031,7 @@
     height: 32px;
     min-width: 32px;
     min-height: 32px;
-    border-radius: 8px;
+    border-radius: 50%;
   }
 
   .studio-landing-menu-btn svg {
