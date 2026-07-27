@@ -6874,9 +6874,20 @@ export function StudioShell({
           user-drag: none;
           pointer-events: none;
         }
+        body.is-touch-file-drag-armed,
         body.is-touch-file-drag {
           touch-action: none;
           overflow: hidden;
+        }
+        body.is-touch-file-drag-armed .desk-file-tree-scroll,
+        body.is-touch-file-drag .desk-file-tree-scroll,
+        body.is-touch-file-drag-armed .studio-files-dock,
+        body.is-touch-file-drag .studio-files-dock,
+        body.is-touch-file-drag-armed .studio-files-dock-body,
+        body.is-touch-file-drag .studio-files-dock-body {
+          touch-action: none !important;
+          overflow: hidden !important;
+          overscroll-behavior: none !important;
         }
         /* Shell is normally pointer-events:none; during touch-drag make it hittable
            so elementFromPoint / drop targeting can resolve data-drop-target=composer. */

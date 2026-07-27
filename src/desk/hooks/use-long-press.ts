@@ -8,9 +8,9 @@ const DEFAULT_PICKUP_DELAY = 220;
 const PRE_PICKUP_MOVE = 14;
 /**
  * After pickup, only cancel the context-menu arm once the finger clearly
- * starts a drag. Small tremor must not kill the second (longer) hold.
+ * starts a drag. Keep this tight so drag feels instant after the short hold.
  */
-const POST_PICKUP_DRAG_MOVE = 48;
+const POST_PICKUP_DRAG_MOVE = 18;
 
 type Coords = { x: number; y: number };
 

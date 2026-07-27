@@ -123,6 +123,8 @@ if (typeof document !== "undefined" && !document.body.dataset.dragPreviewSafetyN
 }
 
 const PICKUP_SPRING = { type: "spring", stiffness: 200, damping: 19, mass: 1 };
+/** Touch pickup must feel instant — spring morph lags behind the finger on Android. */
+const TOUCH_PICKUP_MS = 90;
 const RETURN_SPRING = { type: "spring", stiffness: 300, damping: 24, mass: 1 };
 const PICKUP_MORPH_MS = 520;
 const RETURN_MORPH_MS = 360;
@@ -488,8 +490,11 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   const pickupEndY = event.clientY - followOffsetY;
 
   let pickupControls = null;
-  if (reduceMotion) {
-    chip.style.transition = "none";
+  if (reduceMotion || mode === "touch") {
+    // Touch: snap/fast morph to the finger — spring pickup feels laggy on Android.
+    chip.style.transition = mode === "touch" && !reduceMotion
+      ? `width ${TOUCH_PICKUP_MS}ms ${MORPH_EASING}, height ${TOUCH_PICKUP_MS}ms ${MORPH_EASING}, border-radius ${TOUCH_PICKUP_MS}ms ${MORPH_EASING}, transform ${TOUCH_PICKUP_MS}ms ${MORPH_EASING}`
+      : "none";
     chip.style.width = `${targetWidth}px`;
     chip.style.height = `${targetHeight}px`;
     chip.style.borderRadius = `${targetRadius}px`;
@@ -514,22 +519,26 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   let lastX = event.clientX;
   let lastY = event.clientY;
   let rafId = 0;
-  let pickupSettled = reduceMotion;
+  let pickupSettled = reduceMotion || mode === "touch";
   let hoverTarget = null;
 
   const applyFollow = () => {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
-    if (mode === "touch") {
-      // Files dock: always aim at composer — never highlight folder rows under
-      // the finger (those filled the dock and looked like a successful drop).
-      const under = fromFilesDock
-        ? findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48)
-        : findDropTargetUnder(lastX, lastY, chip);
-      if (under !== hoverTarget) {
-        hoverTarget = under;
-        highlightDropTarget(under);
+    if (mode !== "touch") return;
+    // Files dock always targets composer — skip elementsFromPoint every frame
+    // (that was a major Android drag-lag source).
+    if (fromFilesDock) {
+      if (!hoverTarget) {
+        hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
+        if (hoverTarget) highlightDropTarget(hoverTarget);
       }
+      return;
+    }
+    const under = findDropTargetUnder(lastX, lastY, chip);
+    if (under !== hoverTarget) {
+      hoverTarget = under;
+      highlightDropTarget(under);
     }
   };
 
@@ -620,7 +629,11 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       }
 
       clearDropTargetHighlight();
-      document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
+      document.body.classList.remove(
+        "is-drag-cursor",
+        "is-touch-file-drag",
+        "is-touch-file-drag-armed",
+      );
 
       // Files dock: only celebrate when attach was actually scheduled. Composer
       // shell geometry alone used to fake a successful drop with no chip.
@@ -775,7 +788,16 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
   handleTouchMove = (moveEvent) => {
     if (!moveEvent.touches?.[0]) return;
     moveEvent.preventDefault();
-    handleMove(moveEvent);
+    const point = moveEvent.touches[0];
+    lastX = point.clientX;
+    lastY = point.clientY;
+    if (!pickupSettled) {
+      pickupSettled = true;
+      if (pickupControls) pickupControls.stop();
+      chip.style.transition = "none";
+    }
+    // Direct transform (no RAF) — keeps the ghost under the finger on Android.
+    chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
   };
   handleTouchEnd = (endEvent) => {
     const t = endEvent.changedTouches?.[0];
@@ -796,6 +818,9 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd, { capture: true });
     document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
+    // Seed composer highlight once; follow loop skips hit-testing.
+    hoverTarget = findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48);
+    if (hoverTarget) highlightDropTarget(hoverTarget);
   } else {
     document.addEventListener("dragover", handleMove);
     document.addEventListener("drag", handleMove);
@@ -814,6 +839,8 @@ export function startTouchFileDrag(
   onTouchDrop,
 ) {
   if (!source || !entry || entry.type === "parent") return;
+  // Lock scroll immediately — before chip/DOM work — so Android can't pan the list.
+  document.body.classList.add("is-drag-cursor", "is-touch-file-drag");
   armExplorerDrag(entry);
   startFileDragPreview(
     { currentTarget: source, clientX, clientY },
@@ -855,9 +882,30 @@ function FileEntryButton({
 }) {
   const buttonRef = useRef(null);
   const touchDragActiveRef = useRef(false);
+  const scrollLockMoveRef = useRef(null);
   const [dragArmed, setDragArmed] = useState(false);
   const canTouchDrag =
     enableLongPress && entry.type !== "parent" && !selectionMode;
+
+  const unlockScrollDuringHold = () => {
+    document.body.classList.remove("is-touch-file-drag-armed");
+    if (scrollLockMoveRef.current) {
+      document.removeEventListener("touchmove", scrollLockMoveRef.current, true);
+      scrollLockMoveRef.current = null;
+    }
+  };
+
+  const lockScrollDuringHold = () => {
+    if (scrollLockMoveRef.current) return;
+    document.body.classList.add("is-touch-file-drag-armed");
+    // React touch listeners are passive — must use a native non-passive
+    // capture listener or Android keeps scrolling the Files list.
+    const onMove = (event) => {
+      if (event.cancelable) event.preventDefault();
+    };
+    document.addEventListener("touchmove", onMove, { capture: true, passive: false });
+    scrollLockMoveRef.current = onMove;
+  };
 
   const { longPressHandlers, longPressFired, clearLongPressFired, dragIntentFired } =
     useLongPress(
@@ -870,6 +918,7 @@ function FileEntryButton({
             ) {
               return;
             }
+            unlockScrollDuringHold();
             clearActiveExplorerDrag();
             setDragArmed(false);
             onLongPress(entry, coords);
@@ -892,6 +941,7 @@ function FileEntryButton({
           ? () => {
               setDragArmed(true);
               armExplorerDrag(entry);
+              lockScrollDuringHold();
               // Block scroll competing with still-hold → context menu.
               if (buttonRef.current) buttonRef.current.style.touchAction = "none";
               try {
@@ -911,6 +961,7 @@ function FileEntryButton({
               clearLongPressFired();
               // Drop any sheet that armed before the finger moved into a drag.
               window.dispatchEvent(new CustomEvent("studioexplorerdismisscontext"));
+              // Start drag lock first, then drop the hold lock (no scroll gap).
               startTouchFileDrag(
                 source,
                 entry,
@@ -919,6 +970,7 @@ function FileEntryButton({
                 coords.y,
                 onTouchDrop,
               );
+              unlockScrollDuringHold();
             }
           : undefined,
       },
@@ -1001,6 +1053,7 @@ function FileEntryButton({
           if (buttonRef.current) buttonRef.current.style.touchAction = "";
           return;
         }
+        unlockScrollDuringHold();
         longPressHandlers.onTouchEnd?.(event);
         if (buttonRef.current) buttonRef.current.style.touchAction = "";
         window.setTimeout(() => setDragArmed(false), 80);
@@ -1009,6 +1062,7 @@ function FileEntryButton({
         longPressHandlers.onTouchCancel?.(event);
         if (buttonRef.current) buttonRef.current.style.touchAction = "";
         if (!touchDragActiveRef.current) {
+          unlockScrollDuringHold();
           setDragArmed(false);
           clearActiveExplorerDrag();
         }
