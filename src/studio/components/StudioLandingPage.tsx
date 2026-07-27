@@ -183,7 +183,7 @@ function AsideCallout({
       >
         {variant === "from-image-right" ? (
           <>
-            {/* Short origin at image edge → tip out to the right */}
+            {/* Image edge → clean open V at tip (hero style) */}
             <path
               d="M22 70c10-28 28-48 68-52"
               stroke="currentColor"
@@ -201,15 +201,15 @@ function AsideCallout({
         ) : null}
         {variant === "from-image-left" ? (
           <>
-            {/* Image edge → sweep down-left into the tip */}
+            {/* Same clean tip join as hero, mirrored + angled down-left */}
             <path
-              d="M108 18c-12 22-36 48-78 62"
+              d="M102 22c-14 22-42 48-74 56"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M44 70 26 82 40 90"
+              d="M42 64 28 78 44 86"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"

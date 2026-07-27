@@ -850,10 +850,10 @@
   max-width: 11em;
 }
 
-/* Hero / money moves: peek just off the mock → tip on the right. */
+/* Hero / money moves: almost touching the mock edge → tip on the right. */
 .studio-landing-aside.is-from-image-right {
   top: 10%;
-  left: calc(100% + 4px);
+  left: calc(100% - 10px);
   grid-template-columns: 64px auto;
   align-items: start;
   transform: none;
@@ -874,10 +874,10 @@
   transform-origin: left top;
 }
 
-/* Generate: lower on the mock, sweep down-left into the tip. */
+/* Generate: lower, same clean tip join, angled down-left. */
 .studio-landing-aside.is-from-image-left {
   top: 52%;
-  right: calc(100% + 4px);
+  right: calc(100% - 10px);
   left: auto;
   grid-template-columns: auto 68px;
   grid-template-rows: auto auto;
@@ -889,9 +889,8 @@
   grid-column: 2;
   grid-row: 1 / -1;
   width: 68px;
-  height: 78px;
-  transform: rotate(12deg);
-  transform-origin: right top;
+  height: 72px;
+  transform: none;
 }
 
 .studio-landing-aside.is-from-image-left .studio-landing-aside-text {
