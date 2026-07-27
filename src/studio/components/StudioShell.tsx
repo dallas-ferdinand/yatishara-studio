@@ -16242,7 +16242,7 @@ export function StudioShell({
           z-index: 55;
           display: flex;
           flex-direction: column;
-          height: var(--studio-mobile-history-sheet-height, 42dvh);
+          height: var(--studio-mobile-history-sheet-height, 55dvh);
           max-height: var(--studio-mobile-history-sheet-full, 72dvh);
           padding: 0;
           border: none;
@@ -16294,6 +16294,7 @@ export function StudioShell({
           touch-action: none;
           user-select: none;
           -webkit-user-select: none;
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
         }
         .studio-history-mobile-sheet-handle:active {
           cursor: grabbing;
