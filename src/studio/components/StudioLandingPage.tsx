@@ -2,7 +2,6 @@
 
 import { ArrowRight } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
-import { useAppearanceMode } from "@/lib/use-appearance-mode";
 import "./studio-landing.css";
 
 const LANDING_IMAGES = [
@@ -27,13 +26,11 @@ const POINTS = [
 ] as const;
 
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
-  const appearance = useAppearanceMode();
-
   return (
-    <div className="studio-landing" data-appearance={appearance}>
+    <div className="studio-landing" data-appearance="light">
       <header className="studio-landing-head">
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
-          <BrandMark size={18} subtle appearance={appearance} />
+          <BrandMark size={18} subtle appearance="light" />
           <span className="studio-landing-brand-name">Yatishara Studio</span>
         </a>
         <div className="studio-landing-head-end">
