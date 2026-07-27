@@ -796,27 +796,38 @@
 .studio-landing-aside {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin: 14px 0 0;
   color: #5a6b7a;
   font-family: "Caveat", cursive;
   font-size: 22px;
   font-weight: 600;
   line-height: 1.1;
-  transform: rotate(-2deg);
+  /* Never rotate the whole row — it stair-steps thin SVG strokes. */
 }
 
 .studio-landing-aside.is-under-cta {
   margin-top: 18px;
+}
+
+.studio-landing-aside-text {
+  display: inline-block;
+  transform: rotate(-2deg);
+  transform-origin: left center;
+}
+
+.studio-landing-aside.is-under-cta .studio-landing-aside-text {
   transform: rotate(-1deg);
 }
 
 .studio-landing-aside-arrow {
-  width: 40px;
-  height: 20px;
+  width: 46px;
+  height: 26px;
   flex-shrink: 0;
-  color: #7a8b9c;
+  color: #6d7f90;
   overflow: visible;
+  /* Keep vector on whole pixels so curves stay crisp next to Caveat. */
+  transform: translateY(1px);
 }
 
 .studio-landing-laptop-base {

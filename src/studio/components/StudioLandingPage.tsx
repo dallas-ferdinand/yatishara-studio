@@ -155,26 +155,30 @@ function Wavy({
   );
 }
 
-/** Single-stroke Caveat arrow — matches Circled/Wavy weight, no broken head. */
+/** Hand arrow for Caveat asides — shaft + tip meet; never CSS-rotated (blurs). */
 function AsideArrow() {
   return (
     <svg
-      viewBox="0 0 56 28"
+      viewBox="0 0 72 40"
       className="studio-landing-aside-arrow"
       aria-hidden="true"
       fill="none"
+      shapeRendering="geometricPrecision"
     >
+      {/* Soft upward sweep into the tip */}
       <path
-        d="M3.5 19.5c9.5.8 16.5-7.2 27-9.2 6.2-1.2 12.2-.4 20.5 4.2"
+        d="M5 27c11 1.5 19-9 33-11.5 9-1.6 16-.2 26 6"
         stroke="currentColor"
-        strokeWidth="2.35"
+        strokeWidth="2.8"
         strokeLinecap="round"
       />
+      {/* Classic open head that shares the tip point */}
       <path
-        d="M42.5 6.2c3.8 1.6 7.2 4 9.8 7.2M51.2 5.4c.6 3.4.4 6.8-.6 10"
+        d="M52 12.5 64 21.5 51.5 28"
         stroke="currentColor"
-        strokeWidth="2.35"
+        strokeWidth="2.8"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );
@@ -239,7 +243,7 @@ function LandingSection({
         {aside ? (
           <p className="studio-landing-aside" aria-hidden="true">
             <AsideArrow />
-            {aside}
+            <span className="studio-landing-aside-text">{aside}</span>
           </p>
         ) : null}
         {children}
@@ -805,7 +809,9 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             </p>
             <p className="studio-landing-aside" aria-hidden="true">
               <AsideArrow />
-              everything finally in one place
+              <span className="studio-landing-aside-text">
+                everything finally in one place
+              </span>
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -990,7 +996,9 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               </button>
             </div>
             <p className="studio-landing-aside is-under-cta" aria-hidden="true">
-              your first flyer is minutes away
+              <span className="studio-landing-aside-text">
+                your first flyer is minutes away
+              </span>
             </p>
           </div>
         </section>
