@@ -183,15 +183,15 @@ function AsideCallout({
       >
         {variant === "from-image-right" ? (
           <>
-            {/* Image (left) → out and into text on the right */}
+            {/* Short origin at image edge → tip out to the right */}
             <path
-              d="M8 78c8-36 28-58 72-62"
+              d="M22 70c10-28 28-48 68-52"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M68 8 84 14 76 30"
+              d="M76 10 92 16 84 32"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
@@ -201,15 +201,15 @@ function AsideCallout({
         ) : null}
         {variant === "from-image-left" ? (
           <>
-            {/* Image (right) → out and into text on the left */}
+            {/* Image edge → sweep down-left into the tip */}
             <path
-              d="M112 78c-8-36-28-58-72-62"
+              d="M108 18c-12 22-36 48-78 62"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M52 8 36 14 44 30"
+              d="M44 70 26 82 40 90"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"

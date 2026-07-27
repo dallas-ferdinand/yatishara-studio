@@ -850,11 +850,11 @@
   max-width: 11em;
 }
 
-/* Creative / hero: out of the mock → tip on the right. */
+/* Hero / money moves: peek just off the mock → tip on the right. */
 .studio-landing-aside.is-from-image-right {
-  top: 6%;
-  left: calc(100% - 28px);
-  grid-template-columns: 72px auto;
+  top: 10%;
+  left: calc(100% + 4px);
+  grid-template-columns: 64px auto;
   align-items: start;
   transform: none;
 }
@@ -862,8 +862,8 @@
 .studio-landing-aside.is-from-image-right .studio-landing-aside-arrow {
   grid-column: 1;
   grid-row: 1;
-  width: 72px;
-  height: 64px;
+  width: 64px;
+  height: 58px;
 }
 
 .studio-landing-aside.is-from-image-right .studio-landing-aside-text {
@@ -874,28 +874,31 @@
   transform-origin: left top;
 }
 
-/* Money moves: opposite side — out of the mock → tip on the left. */
+/* Generate: lower on the mock, sweep down-left into the tip. */
 .studio-landing-aside.is-from-image-left {
-  top: 6%;
-  right: calc(100% - 28px);
+  top: 52%;
+  right: calc(100% + 4px);
   left: auto;
-  grid-template-columns: auto 72px;
-  align-items: start;
+  grid-template-columns: auto 68px;
+  grid-template-rows: auto auto;
+  align-items: end;
   text-align: right;
 }
 
 .studio-landing-aside.is-from-image-left .studio-landing-aside-arrow {
   grid-column: 2;
-  grid-row: 1;
-  width: 72px;
-  height: 64px;
+  grid-row: 1 / -1;
+  width: 68px;
+  height: 78px;
+  transform: rotate(12deg);
+  transform-origin: right top;
 }
 
 .studio-landing-aside.is-from-image-left .studio-landing-aside-text {
   grid-column: 1;
-  grid-row: 1;
-  transform: rotate(3deg);
-  transform-origin: right top;
+  grid-row: 2;
+  transform: rotate(5deg);
+  transform-origin: right bottom;
 }
 
 /* Final CTA: rainbow arch up from the button’s right edge. */
@@ -1219,11 +1222,12 @@
   }
 
   .studio-landing-aside.is-from-image-right {
-    left: calc(100% - 48px);
+    left: calc(100% - 8px);
   }
 
   .studio-landing-aside.is-from-image-left {
-    right: calc(100% - 48px);
+    top: 48%;
+    right: calc(100% - 8px);
   }
 
   .studio-landing-aside.is-from-button {
