@@ -220,17 +220,17 @@ function AsideCallout({
         {variant === "from-button" ? (
           <>
             {/*
-              Natural coords (no rotate): origin at button’s right end (top-left of SVG),
-              hunched down-right into a tip that matches the hero’s open-V join.
+              Rainbow hunch (bulge up), not a belly sag: leave the button end,
+              arch up-right, then drop into the tip.
             */}
             <path
-              d="M10 8c6 34 28 54 72 60"
+              d="M10 36c22-34 58-30 82 28"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M66 54 82 68 70 82"
+              d="M76 50 92 64 78 76"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
