@@ -793,41 +793,47 @@
   stroke: currentColor;
 }
 
+/* Odoo-style annotation: curve from title accent → Caveat tip. */
 .studio-landing-aside {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 14px 0 0;
-  color: #5a6b7a;
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px auto;
+  grid-template-rows: 58px auto;
+  align-items: end;
+  justify-content: start;
+  column-gap: 0;
+  width: max-content;
+  max-width: min(100%, 340px);
+  margin: -4px auto 0;
+  /* Sit under/right of the accent word, like Odoo’s price callout. */
+  transform: translateX(clamp(20px, 7vw, 96px));
+  color: #5c5368;
   font-family: "Caveat", cursive;
-  font-size: 22px;
+  font-size: clamp(22px, 2.6vw, 26px);
   font-weight: 600;
-  line-height: 1.1;
-  /* Never rotate the whole row — it stair-steps thin SVG strokes. */
-}
-
-.studio-landing-aside.is-under-cta {
-  margin-top: 18px;
-}
-
-.studio-landing-aside-text {
-  display: inline-block;
-  transform: rotate(-2deg);
-  transform-origin: left center;
-}
-
-.studio-landing-aside.is-under-cta .studio-landing-aside-text {
-  transform: rotate(-1deg);
+  line-height: 1.15;
+  text-align: left;
+  pointer-events: none;
 }
 
 .studio-landing-aside-arrow {
-  width: 46px;
-  height: 26px;
-  flex-shrink: 0;
-  color: #6d7f90;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  width: 78px;
+  height: 104px;
+  color: #5c5368;
   overflow: visible;
-  /* Keep vector on whole pixels so curves stay crisp next to Caveat. */
-  transform: translateY(1px);
+  align-self: stretch;
+}
+
+.studio-landing-aside-text {
+  grid-column: 2;
+  grid-row: 2;
+  display: block;
+  max-width: 12em;
+  margin: 0 0 4px;
+  transform: rotate(-3deg);
+  transform-origin: left bottom;
 }
 
 .studio-landing-laptop-base {
@@ -1117,6 +1123,18 @@
 
   .studio-landing-hero-title {
     font-size: clamp(2rem, 8vw, 2.8rem);
+  }
+
+  .studio-landing-aside {
+    grid-template-columns: 64px auto;
+    grid-template-rows: 44px auto;
+    transform: translateX(clamp(8px, 4vw, 36px));
+    font-size: 22px;
+  }
+
+  .studio-landing-aside-arrow {
+    width: 64px;
+    height: 86px;
   }
 }
 

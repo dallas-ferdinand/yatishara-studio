@@ -155,32 +155,37 @@ function Wavy({
   );
 }
 
-/** Hand arrow for Caveat asides — shaft + tip meet; never CSS-rotated (blurs). */
-function AsideArrow() {
+/**
+ * Odoo-style callout: thick curve from the title accent down into Caveat text.
+ * Clear from → to (accent above, annotation at the tip).
+ */
+function AsideCallout({ children }: { children: ReactNode }) {
   return (
-    <svg
-      viewBox="0 0 72 40"
-      className="studio-landing-aside-arrow"
-      aria-hidden="true"
-      fill="none"
-      shapeRendering="geometricPrecision"
-    >
-      {/* Soft upward sweep into the tip */}
-      <path
-        d="M5 27c11 1.5 19-9 33-11.5 9-1.6 16-.2 26 6"
-        stroke="currentColor"
-        strokeWidth="2.8"
-        strokeLinecap="round"
-      />
-      {/* Classic open head that shares the tip point */}
-      <path
-        d="M52 12.5 64 21.5 51.5 28"
-        stroke="currentColor"
-        strokeWidth="2.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className="studio-landing-aside" aria-hidden="true">
+      <svg
+        viewBox="0 0 100 120"
+        className="studio-landing-aside-arrow"
+        fill="none"
+        shapeRendering="geometricPrecision"
+      >
+        {/* Under accent → arc down-right → tip at the Caveat line */}
+        <path
+          d="M38 5c0 38 8 68 42 92"
+          stroke="currentColor"
+          strokeWidth="3.8"
+          strokeLinecap="round"
+        />
+        {/* Open V head, same weight as shaft, pointing into the text */}
+        <path
+          d="M66 84 82 98 64 106"
+          stroke="currentColor"
+          strokeWidth="3.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span className="studio-landing-aside-text">{children}</span>
+    </div>
   );
 }
 
@@ -239,13 +244,8 @@ function LandingSection({
         <h2 id={`${id}-title`} className="studio-landing-section-title">
           {title}
         </h2>
+        {aside ? <AsideCallout>{aside}</AsideCallout> : null}
         <p className="studio-landing-section-lead">{lead}</p>
-        {aside ? (
-          <p className="studio-landing-aside" aria-hidden="true">
-            <AsideArrow />
-            <span className="studio-landing-aside-text">{aside}</span>
-          </p>
-        ) : null}
         {children}
       </div>
     </section>
@@ -802,16 +802,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             <h1 id="overview-title" className="studio-landing-hero-title">
               Your ads, made under <Circled>one roof</Circled>.
             </h1>
+            <AsideCallout>everything finally in one place</AsideCallout>
             <p className="studio-landing-section-lead">
               Describe what you're selling and Studio shapes it into a flyer, a
               video, a voice. When you want human hands on it,{" "}
               <Hl>hire a real creator</Hl> and pay them safely.
-            </p>
-            <p className="studio-landing-aside" aria-hidden="true">
-              <AsideArrow />
-              <span className="studio-landing-aside-text">
-                everything finally in one place
-              </span>
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -995,11 +990,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 <ArrowRight aria-hidden="true" />
               </button>
             </div>
-            <p className="studio-landing-aside is-under-cta" aria-hidden="true">
-              <span className="studio-landing-aside-text">
-                your first flyer is minutes away
-              </span>
-            </p>
+            <AsideCallout>your first flyer is minutes away</AsideCallout>
           </div>
         </section>
 
