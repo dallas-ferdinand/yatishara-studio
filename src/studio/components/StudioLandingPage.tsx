@@ -873,7 +873,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Your ads, made under <Circled>one roof</Circled>.
             </h1>
             <p className="studio-landing-section-lead">
-              Describe what you're selling and Studio shapes it into a flyer, a
+              Describe what you&rsquo;re selling and Studio shapes it into a flyer, a
               video, a voice. When you want human hands on it,{" "}
               <Hl>hire a real creator</Hl> and pay them safely.
             </p>
@@ -961,7 +961,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           tone="page"
           title={
             <>
-              Your money moves when you're <Hl>happy</Hl>.
+              Your money moves when you&rsquo;re <Hl>happy</Hl>.
             </>
           }
           lead="Book a package and the payment leaves your wallet into escrow. It only releases when the work arrives and you accept it."
@@ -1066,7 +1066,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Bring your next ad <Hl>home</Hl>.
             </h2>
             <p className="studio-landing-section-lead">
-              Sign in and start with whatever you have, even if it's just a
+              Sign in and start with whatever you have, even if it&rsquo;s just a
               sentence.
             </p>
             <div className="studio-landing-cta-with-aside">
