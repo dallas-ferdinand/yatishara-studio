@@ -16294,7 +16294,6 @@ export function StudioShell({
           touch-action: none;
           user-select: none;
           -webkit-user-select: none;
-          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
         }
         .studio-history-mobile-sheet-handle:active {
           cursor: grabbing;
@@ -16466,7 +16465,7 @@ export function StudioShell({
           border: 0;
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
           border-radius: 0;
-          background: transparent;
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
           color: inherit;
           font: inherit;
           cursor: pointer;
@@ -16475,7 +16474,7 @@ export function StudioShell({
           border-bottom-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
         }
         .studio-history-group-toggle:hover {
-          background: color-mix(in srgb, var(--cursor-accent) 6%, transparent);
+          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-plate-strong, var(--mos-raised, #d4d4da)));
         }
         .studio-history-group-label {
           margin: 0;
