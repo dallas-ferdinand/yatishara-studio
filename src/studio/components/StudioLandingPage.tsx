@@ -155,6 +155,31 @@ function Wavy({
   );
 }
 
+/** Single-stroke Caveat arrow — matches Circled/Wavy weight, no broken head. */
+function AsideArrow() {
+  return (
+    <svg
+      viewBox="0 0 56 28"
+      className="studio-landing-aside-arrow"
+      aria-hidden="true"
+      fill="none"
+    >
+      <path
+        d="M3.5 19.5c9.5.8 16.5-7.2 27-9.2 6.2-1.2 12.2-.4 20.5 4.2"
+        stroke="currentColor"
+        strokeWidth="2.35"
+        strokeLinecap="round"
+      />
+      <path
+        d="M42.5 6.2c3.8 1.6 7.2 4 9.8 7.2M51.2 5.4c.6 3.4.4 6.8-.6 10"
+        stroke="currentColor"
+        strokeWidth="2.35"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function LaptopMock({
   src,
   alt,
@@ -213,23 +238,7 @@ function LandingSection({
         <p className="studio-landing-section-lead">{lead}</p>
         {aside ? (
           <p className="studio-landing-aside" aria-hidden="true">
-            <svg viewBox="0 0 48 28" className="studio-landing-aside-arrow">
-              <path
-                d="M2 8c12 2 18 14 30 14 4 0 8-2 12-6"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-              <path
-                d="M38 10l8 6-10 2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <AsideArrow />
             {aside}
           </p>
         ) : null}
@@ -795,23 +804,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               <Hl>hire a real creator</Hl> and pay them safely.
             </p>
             <p className="studio-landing-aside" aria-hidden="true">
-              <svg viewBox="0 0 48 28" className="studio-landing-aside-arrow">
-                <path
-                  d="M4 20c14-2 22-14 40-16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M36 2l8 2-4 8"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <AsideArrow />
               everything finally in one place
             </p>
             <div className="studio-landing-cta-row">
