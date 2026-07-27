@@ -81,6 +81,8 @@ import {
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
+import { mobileBackStack } from "@/studio/lib/mobileBackStack";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -369,12 +371,13 @@ function getCreateMenuItems() {
   return CREATE_MENU_ITEMS_BASE.filter((item) => !item.previewOnly || allowVideoEdit);
 }
 
-/** Bottom nav highlight — Create only when a create/chat tab is active.
- *  Files / Messages are a middle *action* (not a section), so they never win here. */
+/** Bottom nav highlight for permanent sections (Feed / Network / Messages / Create).
+ *  Files is an optional action on Generate — never wins the section highlight. */
 function resolveMobileBottomNavSection(activeTab, mobileSection) {
   const tab = String(activeTab ?? "");
   if (tab.startsWith("feed:")) return "feed";
   if (tab.startsWith("network:") || tab.startsWith("offers:")) return "network";
+  if (tab.startsWith("messages:")) return "messages";
   if (tab.startsWith("profile:") || tab.startsWith("profilePost:")) return null;
   if (
     tab.startsWith("composer:") ||
@@ -384,6 +387,7 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
     return "composer";
   }
   if (mobileSection === "feed") return "feed";
+  if (mobileSection === "messages") return "messages";
   if (mobileSection === "composer" || mobileSection === "files") return "composer";
   return mobileSection || null;
 }
@@ -1154,8 +1158,6 @@ export function StudioShell({
   });
   const [filesDockExpanded, setFilesDockExpanded] = useState(false);
   const filesDockOpenGenRef = useRef(0);
-  const [mobileSocialOpen, setMobileSocialOpen] = useState(false);
-  const [mobileNetworkOpen, setMobileNetworkOpen] = useState(false);
   /** Synced from Creative Network context — openChatWith can't call the hook. */
   const cnModeRef = useRef("network");
   const [cnMode, setCnMode] = useState("network");
@@ -1406,30 +1408,6 @@ export function StudioShell({
     setFilesDockExpanded(false);
     shellRef.current?.removeAttribute("data-files-open");
   }, [isMobile, mobileSection]);
-
-  useEffect(() => {
-    if (!isMobile && mobileSocialOpen) setMobileSocialOpen(false);
-  }, [isMobile, mobileSocialOpen]);
-
-  useEffect(() => {
-    if (!isMobile && mobileNetworkOpen) setMobileNetworkOpen(false);
-  }, [isMobile, mobileNetworkOpen]);
-
-  useEffect(() => {
-    const onSocial =
-      typeof activeTab === "string" &&
-      (activeTab.startsWith("feed:") ||
-        activeTab.startsWith("profile:") ||
-        activeTab.startsWith("profilePost:"));
-    if (!onSocial && mobileSocialOpen) setMobileSocialOpen(false);
-  }, [activeTab, mobileSocialOpen]);
-
-  useEffect(() => {
-    const onNetwork =
-      typeof activeTab === "string" &&
-      (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
-    if (!onNetwork && mobileNetworkOpen) setMobileNetworkOpen(false);
-  }, [activeTab, mobileNetworkOpen]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -3060,8 +3038,8 @@ export function StudioShell({
       .toLowerCase()
       .replace(/^@/, "");
     if (!normalized) return;
-    // Feed/Profile + My offers/My jobs: chat stays in the Messages rail.
-    // Network browse keeps the filter rail, so chat opens the Messages tab.
+    // Desktop: Feed/Profile + My offers/My jobs keep chat in the Messages rail.
+    // Mobile: no Messages sheet/rail — always open the Messages tab.
     const tab = typeof activeTab === "string" ? activeTab : "";
     const onSocialTab =
       tab.startsWith("feed:") ||
@@ -3070,8 +3048,9 @@ export function StudioShell({
     const onCnTab = tab.startsWith("network:") || tab.startsWith("offers:");
     const cnMode = cnModeRef.current;
     const stayInMessagesRail =
-      onSocialTab ||
-      (onCnTab && (cnMode === "my-offers" || cnMode === "my-jobs"));
+      !isMobile &&
+      (onSocialTab ||
+        (onCnTab && (cnMode === "my-offers" || cnMode === "my-jobs")));
     if (!stayInMessagesRail) openMessages();
     void openDmConversation({ username: normalized })
       .then((result) => setActiveDmConversationId(result.conversationId))
@@ -3385,17 +3364,26 @@ export function StudioShell({
     if (section === "settings") {
       setMobileAppMenuOpen(false);
       setHistoryOpen(false);
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
       setSettingsOpen(true);
+      return;
+    }
+    if (section === "messages") {
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setFilesDockExpanded(false);
+      setMobileSection("composer");
+      setSettingsOpen(false);
+      setHistoryOpen(false);
+      setMobileAppMenuOpen(false);
+      openMessages();
       return;
     }
     if (section === "feed") {
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
       setMobileSection("composer");
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
       setSettingsOpen(false);
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
@@ -3405,9 +3393,8 @@ export function StudioShell({
     if (section === "network") {
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
       setMobileSection("composer");
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
       setSettingsOpen(false);
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
@@ -3427,6 +3414,9 @@ export function StudioShell({
       // Imperative snap first — StudioShell setState is too heavy to run before paint.
       const openGen = (filesDockOpenGenRef.current += 1);
       paintMobileFilesDock(true);
+      mobileBackStack.push("files-dock", () => {
+        openMobileSection("composer");
+      });
       void root?.offsetHeight;
       window.setTimeout(() => {
         if (filesDockOpenGenRef.current !== openGen) return;
@@ -3436,8 +3426,6 @@ export function StudioShell({
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
         if (editor) {
           try {
             editor.blur?.();
@@ -3453,6 +3441,7 @@ export function StudioShell({
       // is what made close feel like it "loads".
       const closeGen = (filesDockOpenGenRef.current += 1);
       paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
       window.setTimeout(() => {
         if (filesDockOpenGenRef.current !== closeGen) return;
         setFilesDockExpanded(false);
@@ -3460,8 +3449,6 @@ export function StudioShell({
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
-        setMobileSocialOpen(false);
-        setMobileNetworkOpen(false);
         if (
           !activeTab.startsWith("composer:") &&
           !activeTab.startsWith("thread:")
@@ -3475,6 +3462,7 @@ export function StudioShell({
     if (isMobile && section !== "files") {
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
       setFilesDockExpanded(false);
     }
     setMobileSection(section);
@@ -3482,58 +3470,41 @@ export function StudioShell({
       setSettingsOpen(false);
       setHistoryOpen(false);
       setMobileAppMenuOpen(false);
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
     }
   }
 
-  function toggleMobileNavAction() {
-    const onSocial =
-      typeof activeTab === "string" &&
-      (activeTab.startsWith("feed:") ||
-        activeTab.startsWith("profile:") ||
-        activeTab.startsWith("profilePost:"));
-    const onNetwork =
-      typeof activeTab === "string" &&
-      (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
-    // My Assets: middle action is Files (same as Generate), not CN filters/Messages.
-    if (onNetwork && cnModeRef.current === "my-assets") {
-      if (mobileSection === "files") {
-        openMobileSection("composer");
-        return;
-      }
-      setSettingsOpen(false);
-      setHistoryOpen(false);
-      setMobileAppMenuOpen(false);
-      setMobileSocialOpen(false);
-      setMobileNetworkOpen(false);
-      openMobileSection("files");
-      return;
-    }
-    if (onSocial) {
-      setSettingsOpen(false);
-      setHistoryOpen(false);
-      setMobileAppMenuOpen(false);
-      setMobileNetworkOpen(false);
-      if (mobileSection === "files") openMobileSection("composer");
-      setMobileSocialOpen((open) => !open);
-      return;
-    }
-    if (onNetwork) {
-      setSettingsOpen(false);
-      setHistoryOpen(false);
-      setMobileAppMenuOpen(false);
-      setMobileSocialOpen(false);
-      if (mobileSection === "files") openMobileSection("composer");
-      setMobileNetworkOpen((open) => !open);
-      return;
-    }
+  /** Files dock toggle — only used on Generate / My Assets. */
+  function toggleMobileFilesAction() {
     if (mobileSection === "files") {
       openMobileSection("composer");
       return;
     }
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
     openMobileSection("files");
   }
+
+  // Browser/gesture Back closes overlays before leaving the page (mobile only).
+  useMobileBackLayer("rename-dialog", Boolean(renameTarget), () => {
+    setRenameTarget(null);
+  });
+  useMobileBackLayer("explorer-context", Boolean(contextMenu), () => {
+    setContextMenu(null);
+  });
+  useMobileBackLayer("feed-mode-menu", feedModeMenuOpen, () => {
+    setFeedModeMenuOpen(false);
+    setFeedModeMenuKey(null);
+  });
+  useMobileBackLayer("history-panel", historyOpen, () => {
+    setHistoryOpen(false);
+  });
+  useMobileBackLayer("settings-overlay", settingsOpen, () => {
+    setSettingsOpen(false);
+  });
+  useMobileBackLayer("mobile-app-menu", mobileAppMenuOpen, () => {
+    setMobileAppMenuOpen(false);
+  });
 
   const handleTabSelect = useCallback((key) => {
     setFeedModeMenuOpen(false);
@@ -7745,31 +7716,6 @@ export function StudioShell({
         .studio-files-dock .studio-files-source-toggle + .cursor-panel-search,
         .studio-files-mobile-sheet .studio-files-source-toggle + .cursor-panel-search {
           border-top: none;
-        }
-        .studio-social-mobile-sheet .studio-mobile-app-menu-body {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          padding: 0;
-          gap: 0;
-        }
-        .studio-social-mobile-sheet .studio-dm-sidebar,
-        .studio-social-mobile-sheet .studio-dm-pane,
-        .studio-network-mobile-sheet .studio-dm-sidebar,
-        .studio-network-mobile-sheet .studio-dm-pane {
-          flex: 1 1 auto;
-          min-height: 0;
-        }
-        .studio-network-mobile-sheet .studio-mobile-app-menu-body {
-          display: flex;
-          flex-direction: column;
-          overflow: hidden;
-          padding: 0;
-          gap: 0;
-        }
-        .studio-social-mobile-sheet.is-chat-open .studio-mobile-app-menu-body,
-        .studio-network-mobile-sheet.is-chat-open .studio-mobile-app-menu-body {
-          padding: 0;
         }
         .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-files-mobile-sheet .cursor-explorer-panel {
@@ -18250,7 +18196,6 @@ export function StudioShell({
                   onClick={() => {
                     setMobileAppMenuOpen(false);
                     setSettingsOpen(false);
-                    setMobileSocialOpen(false);
                     setHistoryOpen((open) => !open);
                   }}
                   aria-label="Generation history"
@@ -18713,66 +18658,20 @@ export function StudioShell({
       ) : null}
       </StudioMobileStage>
 
-      {isMobile && mobileSocialOpen ? (
-        <StudioSocialMobileSheet
-          onClose={() => setMobileSocialOpen(false)}
-          expiresUnix={assetUrlExpiresUnix}
-          activeConversationId={activeDmConversationId}
-          onSelectConversation={setActiveDmConversationId}
-          onStartChat={openChatWith}
-          onOpenProfile={(username) => {
-            setMobileSocialOpen(false);
-            openPublicProfile(username);
-          }}
-          onOpenFeedPost={(postId) => {
-            setMobileSocialOpen(false);
-            openProfilePost("", postId);
-          }}
-        />
-      ) : null}
-
-      {isMobile && mobileNetworkOpen ? (
-        <StudioNetworkMobileSheet
-          onClose={() => setMobileNetworkOpen(false)}
-          expiresUnix={assetUrlExpiresUnix}
-          activeConversationId={activeDmConversationId}
-          onSelectConversation={setActiveDmConversationId}
-          onStartChat={openChatWith}
-          onOpenMessages={openMessages}
-          onOpenProfile={(username) => {
-            setMobileNetworkOpen(false);
-            openPublicProfile(username);
-          }}
-          onOpenFeedPost={(postId) => {
-            setMobileNetworkOpen(false);
-            openProfilePost("", postId);
-          }}
-          onOpenOffersJobs={() => {
-            setMobileNetworkOpen(false);
-            openNetworkTab();
-          }}
-        />
-      ) : null}
-
       {isMobile ? (
         <StudioMobileBottomNav
           section={resolveMobileBottomNavSection(activeTab, mobileSection)}
           onSelect={openMobileSection}
-          action={{
-            id:
-              isNetworkRail && !networkUsesFilesRail
-                ? "cnRail"
-                : isSocialRail
-                  ? "social"
-                  : "files",
-            active:
-              isNetworkRail && !networkUsesFilesRail
-                ? mobileNetworkOpen
-                : isSocialRail
-                  ? mobileSocialOpen
-                  : mobileSection === "files",
-            onClick: toggleMobileNavAction,
-          }}
+          action={
+            // Files dock only where desktop shows the file sidebar (Generate / My Assets).
+            (!isSocialRail && !isMessagesRail && !isNetworkRail) || networkUsesFilesRail
+              ? {
+                  id: "files",
+                  active: mobileSection === "files",
+                  onClick: toggleMobileFilesAction,
+                }
+              : null
+          }
           tools={
             <>
               <CreditPill
@@ -18797,8 +18696,6 @@ export function StudioShell({
                 onClick={() => {
                   setHistoryOpen(false);
                   setSettingsOpen(false);
-                  setMobileSocialOpen(false);
-                  setMobileNetworkOpen(false);
                   setMobileAppMenuOpen((open) => !open);
                 }}
                 aria-label={mobileAppMenuOpen ? "Close menu" : "Open menu"}
@@ -18852,8 +18749,6 @@ export function StudioShell({
           onOpenHistory={() => {
             setMobileAppMenuOpen(false);
             setSettingsOpen(false);
-            setMobileSocialOpen(false);
-            setMobileNetworkOpen(false);
             setHistoryOpen(true);
           }}
           onOpenAdmin={() => {
@@ -19189,6 +19084,22 @@ function StudioComposer({
   const [liveDraft, setLiveDraft] = useState(draft);
   const draftPersistTimerRef = useRef(null);
   const { isMobile } = useMobileLayout();
+
+  useMobileBackLayer("composer-preview", Boolean(previewAttachment), () => {
+    setPreviewAttachment(null);
+  });
+  useMobileBackLayer("composer-voice-picker", voicePickerOpen, () => {
+    setVoicePickerOpen(false);
+  });
+  useMobileBackLayer("composer-preset-grid", presetGridOpen, () => {
+    setPresetGridOpen(false);
+  });
+  useMobileBackLayer("composer-video-type", videoTypeGridOpen, () => {
+    setVideoTypeGridOpen(false);
+  });
+  useMobileBackLayer("composer-options", composerOptionsOpen, () => {
+    setComposerOptionsOpen(false);
+  });
 
   useEffect(() => {
     setLiveDraft(draft);
@@ -25928,6 +25839,10 @@ function StudioFilesMobileSheet({
   onToggleViewMode,
   ...explorerProps
 }) {
+  useMobileBackLayer("files-add-menu", Boolean(addMenuOpen), () => {
+    setAddMenuOpen?.(false);
+  });
+
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape" && expanded) onClose?.();
@@ -26026,80 +25941,6 @@ function StudioSocialLeftRail({
   );
 }
 
-function StudioSocialMobileSheet({
-  onClose,
-  expiresUnix,
-  activeConversationId,
-  onSelectConversation,
-  onStartChat,
-  onOpenProfile,
-  onOpenFeedPost,
-}) {
-  const [portalRoot, setPortalRoot] = useState(null);
-  const chatOpen = Boolean(activeConversationId);
-
-  useEffect(() => {
-    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (chatOpen) {
-        onSelectConversation?.(null);
-        return;
-      }
-      onClose?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [chatOpen, onClose, onSelectConversation]);
-
-  if (!portalRoot) return null;
-
-  return createPortal(
-    <div
-      className={`studio-mobile-app-menu-sheet studio-social-mobile-sheet${chatOpen ? " is-chat-open" : ""}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Messages"
-    >
-      {!chatOpen ? (
-        <div className="studio-mobile-app-menu-head">
-          <h2 className="studio-mobile-app-menu-title">Messages</h2>
-          <button
-            type="button"
-            className="studio-mobile-app-menu-close"
-            aria-label="Close messages"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
-      ) : null}
-      <div className="studio-mobile-app-menu-body">
-        {chatOpen ? (
-          <StudioMessagesPane
-            conversationId={activeConversationId}
-            onSelectConversation={onSelectConversation}
-            onOpenProfile={onOpenProfile}
-            onOpenFeedPost={onOpenFeedPost}
-            embeddedInRail
-          />
-        ) : (
-          <StudioMessagesSidebar
-            activeConversationId={activeConversationId}
-            onSelectConversation={onSelectConversation}
-            onStartChat={onStartChat}
-            expiresUnix={expiresUnix}
-          />
-        )}
-      </div>
-    </div>,
-    portalRoot,
-  );
-}
-
 function StudioCreativeNetworkModeSync({ modeRef, onModeChange }) {
   const cn = useCreativeNetwork();
   useEffect(() => {
@@ -26154,100 +25995,6 @@ function StudioNetworkLeftRail({
       onStartChat={onStartChat}
       expiresUnix={expiresUnix}
     />
-  );
-}
-
-function StudioNetworkMobileSheet({
-  onClose,
-  expiresUnix,
-  activeConversationId,
-  onSelectConversation,
-  onStartChat,
-  onOpenProfile,
-  onOpenFeedPost,
-  onOpenOffersJobs,
-  onOpenMessages,
-}) {
-  const cn = useCreativeNetwork();
-  const messagesMode = cn.mode === "my-offers" || cn.mode === "my-jobs";
-  const [portalRoot, setPortalRoot] = useState(null);
-  const chatOpen = messagesMode && Boolean(activeConversationId);
-
-  useEffect(() => {
-    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (event) => {
-      if (event.key !== "Escape") return;
-      if (chatOpen) {
-        onSelectConversation?.(null);
-        return;
-      }
-      onClose?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [chatOpen, onClose, onSelectConversation]);
-
-  if (!portalRoot) return null;
-
-  const title = messagesMode ? "Messages" : "Filters";
-  const closeLabel = messagesMode ? "Close messages" : "Close filters";
-
-  return createPortal(
-    <div
-      className={`studio-mobile-app-menu-sheet studio-network-mobile-sheet${chatOpen ? " is-chat-open" : ""}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      {!chatOpen ? (
-        <div className="studio-mobile-app-menu-head">
-          <h2 className="studio-mobile-app-menu-title">{title}</h2>
-          <button
-            type="button"
-            className="studio-mobile-app-menu-close"
-            aria-label={closeLabel}
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
-      ) : null}
-      <div className="studio-mobile-app-menu-body">
-        {!messagesMode ? (
-          <StudioCreativeNetworkSidebar
-            expiresUnix={expiresUnix}
-            onOpenMessages={() => {
-              onClose?.();
-              onOpenMessages?.();
-            }}
-            onOpenChatWithUsername={(username) => {
-              onClose?.();
-              onStartChat?.(username);
-            }}
-          />
-        ) : chatOpen ? (
-          <StudioMessagesPane
-            conversationId={activeConversationId}
-            onSelectConversation={onSelectConversation}
-            onOpenProfile={onOpenProfile}
-            onOpenFeedPost={onOpenFeedPost}
-            onOpenOffersJobs={onOpenOffersJobs}
-            embeddedInRail
-          />
-        ) : (
-          <StudioMessagesSidebar
-            activeConversationId={activeConversationId}
-            onSelectConversation={onSelectConversation}
-            onStartChat={onStartChat}
-            expiresUnix={expiresUnix}
-          />
-        )}
-      </div>
-    </div>,
-    portalRoot,
   );
 }
 

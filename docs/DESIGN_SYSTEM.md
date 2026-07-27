@@ -355,6 +355,10 @@ Structure:
   `data-files-open` inside the keyboard inset sync instead.
 - Keep dock body laid out while collapsed (`height:0` + `overflow:hidden`);
   avoid `visibility:hidden` (cold reveal of `content-visibility` thumbs).
+- **Browser/gesture Back**: mobile overlays (Files dock, sheets, menus, comments,
+  pickers) push a history entry via `mobileBackStack` / `useMobileBackLayer` so
+  Back closes the top overlay before leaving the page. Files pushes on the same
+  paint frame as `data-files-open`. Docs/memory: **757**, taps **786**.
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
 - No "Files" title bar. Chrome = search + pathbar (desktop layout): breadcrumbs +

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import "./studio-asset-picker.css";
 
 export type StudioAssetPick = {
@@ -64,6 +65,8 @@ export function StudioAssetPickerSheet({
   ]);
   const current = stack[stack.length - 1];
   const kindSet = useMemo(() => new Set(kinds), [kinds]);
+
+  useMobileBackLayer("asset-picker-sheet", true, onClose);
 
   useEffect(() => {
     setPortalRoot(document.querySelector(".studio-polish") ?? document.body);

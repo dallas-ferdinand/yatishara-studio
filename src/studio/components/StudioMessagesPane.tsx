@@ -36,6 +36,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
@@ -830,6 +831,26 @@ export function StudioMessagesPane({
   >([]);
   const [filesPickerExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
+  );
+
+  useMobileBackLayer("dm-lightbox", Boolean(lightboxUrl), () => {
+    setLightboxUrl(null);
+  });
+  useMobileBackLayer("dm-attach-menu", Boolean(attachMenu), () => {
+    setAttachMenu(null);
+  });
+  useMobileBackLayer("dm-list-context", Boolean(listContext), () => {
+    setListContext(null);
+  });
+  useMobileBackLayer("dm-assign-label", Boolean(assignPeer), () => {
+    setAssignPeer(null);
+  });
+  useMobileBackLayer(
+    "dm-peer-sheet",
+    isMobile && !embeddedInRail && peerSidebarOpen && Boolean(conversationId),
+    () => {
+      setPeerSidebarOpen(false);
+    },
   );
 
   const clearPendingImages = useCallback(() => {

@@ -39,10 +39,81 @@ import {
 } from "./ProfileCommentsPanel";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import { CaptionChipText } from "./CaptionChipText";
+import {
+  sampleOverlayBackdrop,
+  type CaptionBackdrop,
+  type OverlaySampleBias,
+} from "@/studio/lib/captionBackdropContrast";
+import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
+
+function useSlideOverlayBackdrop(
+  active: boolean,
+  bias: OverlaySampleBias = "average",
+) {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [backdrop, setBackdrop] = useState<CaptionBackdrop>("dark");
+
+  useLayoutEffect(() => {
+    const node = overlayRef.current;
+    if (!node) return undefined;
+    const slide = node.closest(".profile-post-slide") as HTMLElement | null;
+    if (!slide) return undefined;
+
+    let cancelled = false;
+    let frame = 0;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const run = () => {
+      if (cancelled) return;
+      const next = sampleOverlayBackdrop(slide, node, { bias });
+      if (next) setBackdrop(next);
+    };
+
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(run);
+    };
+
+    schedule();
+
+    const media = slide.querySelector(
+      ".profile-post-slide-media img, .profile-post-slide-media video",
+    ) as HTMLImageElement | HTMLVideoElement | null;
+    media?.addEventListener("loadeddata", schedule);
+    media?.addEventListener("load", schedule);
+
+    const ro = new ResizeObserver(schedule);
+    ro.observe(slide);
+    ro.observe(node);
+
+    const mo = new MutationObserver(schedule);
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-appearance"],
+    });
+
+    if (active && media instanceof HTMLVideoElement) {
+      intervalId = setInterval(schedule, 1800);
+    }
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      if (intervalId) clearInterval(intervalId);
+      media?.removeEventListener("loadeddata", schedule);
+      media?.removeEventListener("load", schedule);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [active, bias]);
+
+  return { overlayRef, backdrop };
+}
 
 type FeedMode = "forYou" | "following";
 
@@ -69,6 +140,7 @@ type FeedPost = {
   saveCount?: number;
   shareCount?: number;
   publishedAt: number;
+  editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
   likedByViewer: boolean;
@@ -99,6 +171,7 @@ type AuthorPost = {
   saveCount?: number;
   shareCount?: number;
   publishedAt: number;
+  editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
   likedByViewer: boolean;
@@ -117,6 +190,7 @@ type SlidePost = (AuthorPost | FeedPost) & {
   profileId?: Id<"profiles">;
   isFollowing?: boolean;
   isOwner?: boolean;
+  editedAt?: number;
   hashtags?: Array<{ tag: string; displayTag: string }>;
   keywords?: string[];
   mentions?: MentionChip[];
@@ -513,6 +587,7 @@ function FeedMedia({
             <video
               ref={videoRef}
               src={playSrc}
+              crossOrigin="anonymous"
               poster={
                 thumbUrl && !/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(thumbUrl) ? thumbUrl : undefined
               }
@@ -546,6 +621,7 @@ function FeedMedia({
             <img
               src={displaySrc}
               alt={post.caption || post.name}
+              crossOrigin="anonymous"
               draggable={false}
               decoding="async"
               loading={shouldWarm ? "eager" : "lazy"}
@@ -628,7 +704,9 @@ function FeedCaption({
   mentions,
   authorAvatarUrl,
   authorDisplayName,
+  active = false,
   onOpenDescription,
+  feedShare,
 }: {
   username?: string;
   caption?: string;
@@ -641,17 +719,47 @@ function FeedCaption({
   }>;
   authorAvatarUrl?: string;
   authorDisplayName?: string;
+  /** Sample backdrop when this slide is the interactive current post. */
+  active?: boolean;
   onOpenProfile?: (username: string) => void;
   onOpenDescription?: () => void;
+  /** Drag this caption into a Messages chat row to share the post. */
+  feedShare?: {
+    postId: string;
+    username?: string;
+    displayName?: string;
+    caption?: string;
+    thumbnailUrl?: string;
+  };
 }) {
   const trimmed = caption?.trim();
+  const { overlayRef, backdrop } = useSlideOverlayBackdrop(active);
+
   if (!trimmed && !(hashtags?.length) && !username) return null;
 
   return (
     <div
-      className={`profile-post-caption${onOpenDescription ? " is-tappable" : ""}`}
+      ref={overlayRef}
+      className={`profile-post-caption is-on-${backdrop}${onOpenDescription ? " is-tappable" : ""}${feedShare ? " is-draggable" : ""}`}
       role={onOpenDescription ? "button" : undefined}
       tabIndex={onOpenDescription ? 0 : undefined}
+      title={feedShare ? "Drag into a chat to share this post" : undefined}
+      draggable={Boolean(feedShare)}
+      onDragStart={
+        feedShare
+          ? (event) => {
+              event.stopPropagation();
+              setFeedShareDataTransfer(event.dataTransfer, {
+                type: "post",
+                postId: feedShare.postId,
+                username: feedShare.username,
+                displayName: feedShare.displayName,
+                caption: feedShare.caption,
+                thumbnailUrl: feedShare.thumbnailUrl,
+              });
+            }
+          : undefined
+      }
       onPointerDown={(event) => event.stopPropagation()}
       onClick={
         onOpenDescription
@@ -731,6 +839,7 @@ function FeedActions({
   localComments: number;
   localSaves: number;
   localShares: number;
+  active?: boolean;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -739,9 +848,11 @@ function FeedActions({
   onToggleFollow: () => void;
 }) {
   const saved = Boolean(post.savedByViewer);
+  // Overlay rail always uses white ink + shadow (TikTok/IG). Backdrop sampling
+  // kept flipping to black icons on candlelit / neon posts; caption stays adaptive.
 
   return (
-    <div className="profile-post-rail">
+    <div className="profile-post-rail is-on-dark">
       <div className="profile-post-rail-avatar-wrap">
         <StudioProfileAvatar
           as="button"
@@ -917,6 +1028,10 @@ export function ProfilePostViewer({
   const [localShares, setLocalShares] = useState<Record<string, number>>({});
   const [localViews, setLocalViews] = useState<Record<string, number>>({});
   const [localComments, setLocalComments] = useState<Record<string, number>>({});
+  /** Optimistic caption edits keyed by postId (owner description save). */
+  const [localCaptions, setLocalCaptions] = useState<
+    Record<string, { caption?: string; editedAt: number }>
+  >({});
   /** Optimistic follow state keyed by profileId — flips all slides from that author. */
   const [localFollows, setLocalFollows] = useState<Record<string, boolean>>({});
   const [followBusyProfileId, setFollowBusyProfileId] = useState<string | null>(null);
@@ -1111,6 +1226,22 @@ export function ProfilePostViewer({
     setSidePanelMode("comments");
     if (isMobile) setCommentsOpen(false);
   }, [activePost?._id, isMobile]);
+
+  useMobileBackLayer(
+    "feed-comments",
+    isMobile && commentsOpen && tabActive && sidePanelMode === "comments",
+    () => {
+      setCommentsOpen(false);
+      setSidePanelMode("comments");
+    },
+  );
+  useMobileBackLayer(
+    "feed-description",
+    isMobile && commentsOpen && tabActive && sidePanelMode === "description",
+    () => {
+      setSidePanelMode("comments");
+    },
+  );
 
   const measureSize = useCallback(() => {
     const node = rootRef.current;
@@ -1726,6 +1857,10 @@ export function ProfilePostViewer({
             const postSaves =
               localSaves[post._id]?.saveCount ?? post.saveCount ?? 0;
             const postShares = localShares[post._id] ?? post.shareCount ?? 0;
+            const captionOverride = localCaptions[post._id];
+            const slideCaption = captionOverride
+              ? captionOverride.caption
+              : post.caption;
             return (
               <article
                 key={key}
@@ -1741,11 +1876,23 @@ export function ProfilePostViewer({
                 />
                 <FeedCaption
                   username={postUsername}
-                  caption={post.caption}
+                  caption={slideCaption}
                   hashtags={post.hashtags}
                   mentions={post.mentions}
                   authorAvatarUrl={post.avatarUrl}
                   authorDisplayName={post.displayName}
+                  active={isInteractiveSlide}
+                  feedShare={
+                    isInteractiveSlide
+                      ? {
+                          postId: post._id,
+                          username: postUsername,
+                          displayName: post.displayName,
+                          caption: slideCaption,
+                          thumbnailUrl: post.thumbnailUrl,
+                        }
+                      : undefined
+                  }
                   onOpenDescription={
                     role === "current"
                       ? () => {
@@ -1777,6 +1924,7 @@ export function ProfilePostViewer({
                   localComments={postComments}
                   localSaves={postSaves}
                   localShares={postShares}
+                  active={isInteractiveSlide}
                   onLike={() => void handleLike(post)}
                   onSave={() => void handleSave(post)}
                   onShare={() => void handleShare(post)}
@@ -1858,11 +2006,19 @@ export function ProfilePostViewer({
         mode={sidePanelMode}
         onModeChange={setSidePanelMode}
         description={{
-          caption: activeSlidePost.caption,
+          caption: localCaptions[activePost._id]
+            ? localCaptions[activePost._id]!.caption
+            : activeSlidePost.caption,
           username: activeSlidePost.username,
           hashtags: activeSlidePost.hashtags,
           mentions: activeSlidePost.mentions,
           onOpenProfile,
+          onCaptionSaved: (caption, editedAt) => {
+            setLocalCaptions((prev) => ({
+              ...prev,
+              [activePost._id]: { caption, editedAt },
+            }));
+          },
         }}
         commentCount={
           localComments[activePost._id] ??
@@ -1879,7 +2035,11 @@ export function ProfilePostViewer({
           firstName: activeSlidePost.firstName,
           lastName: activeSlidePost.lastName,
           avatarUrl: activeSlidePost.avatarUrl,
+          thumbnailUrl: activeSlidePost.thumbnailUrl,
           publishedAt: activeSlidePost.publishedAt,
+          editedAt:
+            localCaptions[activePost._id]?.editedAt ?? activeSlidePost.editedAt,
+          isOwner: Boolean(activeSlidePost.isOwner),
         }}
         postActions={{
           liked: Boolean(

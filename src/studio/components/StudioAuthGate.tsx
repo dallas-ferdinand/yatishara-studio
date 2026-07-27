@@ -48,6 +48,7 @@ import {
   type StudioDefaultTab,
 } from "@/studio/lib/studio-default-tab";
 import { StudioLandingPage } from "@/studio/components/StudioLandingPage";
+import { MobileBackStackHost } from "@/studio/components/MobileBackStackHost";
 
 type StudioShellBootProps = {
   initialProfileUsername?: string;
@@ -343,6 +344,7 @@ export function StudioAuthGate({
 
   return (
     <>
+      <MobileBackStackHost />
       {showSignInScreen ? (
         showAuthForm ? (
           <StudioSignIn onBack={() => setShowAuthForm(false)} />

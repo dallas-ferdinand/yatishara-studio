@@ -28,6 +28,7 @@ import {
   type ReactNode,
 } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import "./studio-landing.css";
 
 const NAV_LINKS = [
@@ -437,6 +438,8 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     setMenuDismissY(0);
     menuDragRef.current = null;
   };
+
+  useMobileBackLayer("landing-menu", menuOpen, closeMenu);
 
   const scrollToId = (id: string) => {
     if (menuScrollSuppressClickRef.current) {

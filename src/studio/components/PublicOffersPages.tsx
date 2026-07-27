@@ -40,6 +40,7 @@ import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { CursorSelect } from "@/desk/components/CursorSelect";
@@ -800,6 +801,10 @@ function OffersCatalogInner() {
 
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  useMobileBackLayer("cn-catalog-filters", filtersOpen, () => {
+    setFiltersOpen(false);
+  });
+
   useEffect(() => {
     if (!filtersOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -1299,6 +1304,10 @@ function OfferDetailInner({ slug }: { slug: string }) {
     ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
     : null;
 
+  useMobileBackLayer("cn-public-book-sheet", bookSheetOpen, () => {
+    setBookSheetOpen(false);
+  });
+
   useEffect(() => {
     if (!bookSheetOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -1678,6 +1687,10 @@ export function StudioOfferDetailEmbed({
   const activePkg = hasPackages
     ? (packages[Math.min(pkgIndex, packages.length - 1)] ?? packages[0])
     : null;
+
+  useMobileBackLayer("cn-studio-book-sheet", bookSheetOpen, () => {
+    setBookSheetOpen(false);
+  });
 
   useEffect(() => {
     setPkgIndex(0);
