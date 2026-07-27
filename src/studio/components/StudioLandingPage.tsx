@@ -176,7 +176,7 @@ function AsideCallout({
       aria-hidden="true"
     >
       <svg
-        viewBox="0 0 120 100"
+        viewBox={variant === "from-button" ? "0 0 80 72" : "0 0 120 100"}
         className="studio-landing-aside-arrow"
         fill="none"
         shapeRendering="geometricPrecision"
@@ -220,17 +220,17 @@ function AsideCallout({
         {variant === "from-button" ? (
           <>
             {/*
-              Rainbow hunch (bulge up), not a belly sag: leave the button end,
-              arch up-right, then drop into the tip.
+              Leaves the button's right edge at mid-height, hunches up
+              (no belly), then drops into a down-pointing V tip.
             */}
             <path
-              d="M10 36c22-34 58-30 82 28"
+              d="M4 14c24-16 50 0 58 50"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M76 50 92 64 78 76"
+              d="M70 49 62 64 48 55"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
