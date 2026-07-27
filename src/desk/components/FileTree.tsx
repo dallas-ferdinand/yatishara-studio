@@ -589,7 +589,8 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
 
       if (shouldDrop && mode === "touch" && fromFilesDock) {
         // Direct tree→Shell callback is the primary path. The module-global
-        // bridge remains only as an HMR/legacy fallback.
+        // bridge remains only as an HMR/legacy fallback. Callbacks must only
+        // *schedule* attach (never sync during touchend).
         const dropEntry = { ...dragEntry };
         attached = onTouchDrop
           ? onTouchDrop(dropEntry, lastX, lastY) !== false
@@ -621,10 +622,14 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       clearDropTargetHighlight();
       document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
 
+      // Files dock: only celebrate when attach was actually scheduled. Composer
+      // shell geometry alone used to fake a successful drop with no chip.
       const isValidDrop =
         shouldDrop &&
-        (attached ||
-          (targetEl && targetEl !== source && !source.contains(targetEl)));
+        (fromFilesDock
+          ? attached
+          : attached ||
+            (targetEl && targetEl !== source && !source.contains(targetEl)));
 
       if (isValidDrop) {
         // For composer targets, animate to the text caret position instead of mouse position
@@ -781,7 +786,9 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     void finish(true);
   };
   handleTouchCancel = () => {
-    void finish(false);
+    // Android often cancels the gesture mid Files-dock drag (scroll / native
+    // drag competition). Product model is still "release → attach".
+    void finish(Boolean(fromFilesDock));
   };
 
   if (mode === "touch") {
@@ -941,8 +948,13 @@ function FileEntryButton({
         onOpen();
       }}
       onContextMenu={onContextMenu}
-      draggable={entry.type !== "parent" && !selectionMode}
+      // Mobile touch-drag owns the gesture — native HTML5 drag fights Android.
+      draggable={entry.type !== "parent" && !selectionMode && !canTouchDrag}
       onDragStart={(event) => {
+        if (canTouchDrag) {
+          event.preventDefault();
+          return;
+        }
         setDragArmed(false);
         onDragStart?.(event);
       }}

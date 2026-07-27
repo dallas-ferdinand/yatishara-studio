@@ -3727,7 +3727,11 @@ export function StudioShell({
     // context isn't the target chat, open that tab so state hydrates from ref
     // (Files dock can stay open — openTab does not close it).
     if (composerContextKey === targetTab) {
-      setAttachments(nextAttachments);
+      // Functional update: deferred mobile attaches can fire twice before re-render.
+      setAttachments((prev) => {
+        if (prev.some((item) => item.id === attachment.id)) return prev;
+        return [...prev, attachment];
+      });
       setDraft(nextDraft);
       if (isMobile) {
         window.setTimeout(paint, 0);
@@ -18506,9 +18510,18 @@ export function StudioShell({
           onOpenPath={handleOpenPath}
           onEntryOpen={handleEntryOpen}
           onMobileAttach={(entry) => {
-            const attached = attachEntry(entry, null);
-            if (attached) setMobileSection("composer");
-            return attached;
+            // Never attach synchronously from touchend — Android Chrome drops
+            // that work. Snapshot + defer, same as the global bridge path.
+            if (!entry) return false;
+            const snapshot = { ...entry };
+            const run = () => {
+              const ok = attachEntryRef.current?.(snapshot, null);
+              if (ok) setMobileSection("composer");
+            };
+            queueMicrotask(run);
+            window.setTimeout(run, 0);
+            window.setTimeout(run, 48);
+            return true;
           }}
           searchState={searchState}
           deferredSearch={deferredSearch}
