@@ -2,20 +2,12 @@
 
 import {
   ArrowRight,
-  BadgeDollarSign,
-  Clapperboard,
-  CircleHelp,
-  Home,
+  ChevronDown,
+  ChevronUp,
   Mail,
   MapPin,
   Menu,
-  MessageCircle,
-  Sparkles,
-  UserCircle,
-  Users,
-  Wallet,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
@@ -30,22 +22,27 @@ const NAV_LINKS = [
   { id: "faq", label: "FAQ" },
 ] as const;
 
-const MENU_LINKS: ReadonlyArray<{
-  id: string;
-  label: string;
-  Icon: LucideIcon;
-}> = [
-  { id: "overview", label: "Overview", Icon: Home },
-  { id: "generate", label: "Generate", Icon: Sparkles },
-  { id: "edit", label: "Edit", Icon: Clapperboard },
-  { id: "hire", label: "Hire", Icon: Users },
-  { id: "book", label: "Book", Icon: Wallet },
-  { id: "messages", label: "Messages", Icon: MessageCircle },
-  { id: "profiles", label: "Profiles", Icon: UserCircle },
-  { id: "earn", label: "Earn", Icon: BadgeDollarSign },
-  { id: "faq", label: "FAQ", Icon: CircleHelp },
-  { id: "visit", label: "Visit", Icon: MapPin },
-];
+const DECK_IDS = [
+  "overview",
+  "generate",
+  "edit",
+  "hire",
+  "book",
+  "messages",
+  "profiles",
+  "earn",
+  "faq",
+  "visit",
+  "start",
+] as const;
+
+const MENU_LINKS = [
+  ...NAV_LINKS,
+  { id: "book", label: "Book" },
+  { id: "profiles", label: "Profiles" },
+  { id: "earn", label: "Earn" },
+  { id: "visit", label: "Visit" },
+] as const;
 
 const FAQ_ITEMS = [
   {
@@ -254,6 +251,7 @@ function FaqSection() {
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
 
   const scrollToId = (id: string) => {
@@ -273,6 +271,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     setMenuOpen(false);
   };
 
+  const scrollDeckBy = (delta: number) => {
+    const next = Math.min(DECK_IDS.length - 1, Math.max(0, activeDeck + delta));
+    scrollToId(DECK_IDS[next]!);
+  };
+
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -282,8 +285,37 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const updateActive = () => {
+      const rootTop = root.getBoundingClientRect().top + 40;
+      let best = 0;
+      let bestDist = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < DECK_IDS.length; i += 1) {
+        const el = root.querySelector<HTMLElement>(`#${DECK_IDS[i]}`);
+        if (!el) continue;
+        const dist = Math.abs(el.getBoundingClientRect().top - rootTop);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      }
+      setActiveDeck(best);
+    };
+
+    updateActive();
+    root.addEventListener("scroll", updateActive, { passive: true });
+    window.addEventListener("resize", updateActive);
+    return () => {
+      root.removeEventListener("scroll", updateActive);
+      window.removeEventListener("resize", updateActive);
+    };
+  }, []);
+
   return (
-    <div ref={rootRef} className="studio-landing" data-appearance="light">
+    <div ref={rootRef} className="studio-landing is-deck" data-appearance="light">
       <header className="studio-landing-head">
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
           <BrandMark size={18} subtle appearance="light" />
@@ -306,13 +338,6 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <div className="studio-landing-head-end">
           <button
             type="button"
-            className="studio-landing-head-btn is-bordered"
-            onClick={() => scrollToId("generate")}
-          >
-            Show me around
-          </button>
-          <button
-            type="button"
             className="studio-landing-head-btn is-primary"
             onClick={onSignIn}
           >
@@ -330,6 +355,40 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           </button>
         </div>
       </header>
+
+      <aside className="studio-landing-deck-rail" aria-label="Swipe through sections">
+        <button
+          type="button"
+          className="studio-landing-deck-arrow"
+          aria-label="Previous section"
+          disabled={activeDeck <= 0}
+          onClick={() => scrollDeckBy(-1)}
+        >
+          <ChevronUp aria-hidden="true" />
+        </button>
+        <div className="studio-landing-deck-dots" role="tablist" aria-label="Sections">
+          {DECK_IDS.map((id, index) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-label={`Go to ${id}`}
+              aria-selected={index === activeDeck}
+              className={`studio-landing-deck-dot${index === activeDeck ? " is-active" : ""}`}
+              onClick={() => scrollToId(id)}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          className="studio-landing-deck-arrow"
+          aria-label="Next section"
+          disabled={activeDeck >= DECK_IDS.length - 1}
+          onClick={() => scrollDeckBy(1)}
+        >
+          <ChevronDown aria-hidden="true" />
+        </button>
+      </aside>
 
       {menuOpen ? (
         <>
@@ -359,7 +418,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               </button>
             </div>
             <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
-              {menuLinks.map((link) => (
+              {MENU_LINKS.map((link) => (
                 <button
                   key={link.id}
                   type="button"
@@ -413,6 +472,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
                 Enter Studio
                 <ArrowRight aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="studio-landing-cta is-bordered"
+                onClick={() => scrollToId("generate")}
+              >
+                Show me around
               </button>
             </div>
             <LaptopMock
