@@ -154,11 +154,25 @@ function getCaretPixelInEditor(editorEl, x, y) {
 
 function findDropTargetUnder(x, y, excludeEl) {
   if (typeof document === "undefined") return null;
-  if (excludeEl) excludeEl.style.display = "none";
-  const el = document.elementFromPoint(x, y);
-  if (excludeEl) excludeEl.style.display = "";
-  if (!el) return null;
-  return el.closest("[data-drop-target]");
+  // visibility:hidden keeps layout; display:none can shift hit targets under the finger.
+  const prevVisibility = excludeEl?.style?.visibility;
+  if (excludeEl) excludeEl.style.visibility = "hidden";
+  const stack =
+    typeof document.elementsFromPoint === "function"
+      ? document.elementsFromPoint(x, y)
+      : [document.elementFromPoint(x, y)].filter(Boolean);
+  if (excludeEl) excludeEl.style.visibility = prevVisibility ?? "";
+  let fallback = null;
+  for (const el of stack) {
+    const target = el?.closest?.("[data-drop-target]");
+    if (!target) continue;
+    // Prefer composer over folder when the stack includes both.
+    if (target.getAttribute("data-drop-target") === "composer") {
+      return target.closest?.(".cursor-composer-shell") ?? target;
+    }
+    if (!fallback) fallback = target;
+  }
+  return fallback;
 }
 
 function highlightDropTarget(el) {
@@ -703,20 +717,27 @@ function FileEntryButton({
             clearActiveExplorerDrag();
             setDragArmed(false);
             onLongPress(entry, coords);
-            try {
-              navigator.vibrate?.(12);
-            } catch {
-              /* ignore */
-            }
           }
         : undefined,
       {
         delay: longPressDelay,
         pickupDelay: canTouchDrag ? (pickupDelay ?? 220) : undefined,
+        onMenuArmed:
+          enableLongPress && onLongPress
+            ? () => {
+                try {
+                  navigator.vibrate?.(12);
+                } catch {
+                  /* ignore */
+                }
+              }
+            : undefined,
         onPickup: canTouchDrag
           ? () => {
               setDragArmed(true);
               armExplorerDrag(entry);
+              // Block scroll competing with still-hold → context menu.
+              if (buttonRef.current) buttonRef.current.style.touchAction = "none";
               try {
                 navigator.vibrate?.(8);
               } catch {
@@ -779,11 +800,22 @@ function FileEntryButton({
       onDragEnd={() => setDragArmed(false)}
       onTouchStart={(event) => {
         touchDragActiveRef.current = false;
+        // Claim the gesture before the scroll parent steals it.
+        if (canTouchDrag && buttonRef.current) {
+          buttonRef.current.style.touchAction = "none";
+        }
         longPressHandlers.onTouchStart?.(event);
       }}
-      onTouchMove={longPressHandlers.onTouchMove}
+      onTouchMove={(event) => {
+        longPressHandlers.onTouchMove?.(event);
+        // After pickup, keep the scroll parent from cancelling the still-hold.
+        if (canTouchDrag && (dragArmed || dragIntentFired() || touchDragActiveRef.current)) {
+          event.preventDefault();
+        }
+      }}
       onTouchEnd={(event) => {
         longPressHandlers.onTouchEnd?.(event);
+        if (buttonRef.current) buttonRef.current.style.touchAction = "";
         // Touch-drag owns document touchend; don't clear mid-flight.
         if (!touchDragActiveRef.current) {
           window.setTimeout(() => setDragArmed(false), 80);
@@ -791,6 +823,7 @@ function FileEntryButton({
       }}
       onTouchCancel={(event) => {
         longPressHandlers.onTouchCancel?.(event);
+        if (buttonRef.current) buttonRef.current.style.touchAction = "";
         if (!touchDragActiveRef.current) {
           setDragArmed(false);
           clearActiveExplorerDrag();

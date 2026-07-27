@@ -7,10 +7,10 @@ const DEFAULT_PICKUP_DELAY = 220;
 /** Cancel pickup/menu if finger moves before pickup arms. */
 const PRE_PICKUP_MOVE = 14;
 /**
- * After pickup, only cancel the context-menu timer once the finger clearly
+ * After pickup, only cancel the context-menu arm once the finger clearly
  * starts a drag. Small tremor must not kill the second (longer) hold.
  */
-const POST_PICKUP_DRAG_MOVE = 28;
+const POST_PICKUP_DRAG_MOVE = 48;
 
 type Coords = { x: number; y: number };
 
@@ -26,12 +26,16 @@ type UseLongPressOptions = {
    * Use this to start a touch-drag session (HTML5 DnD does not work on mobile).
    */
   onDragIntent?: (coords: Coords) => void;
+  /** Fires when the context-menu hold arms (before release). */
+  onMenuArmed?: (coords: Coords) => void;
 };
 
 /**
  * Touch long-press for mobile.
- * - Short `onPickup` (drag arm) then longer `onLongPress` (context menu) if still.
- * - Still finger → both fire. Moving after pickup → drag intent, menu cancelled.
+ * - Short `onPickup` (drag arm) then longer menu arm if still.
+ * - Context menu opens on **touchend** after arming (avoids synthetic click
+ *   dismissing a sheet that opened under the still-down finger).
+ * - Moving after pickup → drag intent, menu cancelled.
  * - Does not block normal taps.
  */
 export function useLongPress(
@@ -41,6 +45,7 @@ export function useLongPress(
     pickupDelay = DEFAULT_PICKUP_DELAY,
     onPickup,
     onDragIntent,
+    onMenuArmed,
   }: UseLongPressOptions = {},
 ) {
   const menuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -52,9 +57,11 @@ export function useLongPress(
   const onLongPressRef = useRef(onLongPress);
   const onPickupRef = useRef(onPickup);
   const onDragIntentRef = useRef(onDragIntent);
+  const onMenuArmedRef = useRef(onMenuArmed);
   onLongPressRef.current = onLongPress;
   onPickupRef.current = onPickup;
   onDragIntentRef.current = onDragIntent;
+  onMenuArmedRef.current = onMenuArmed;
 
   const clearMenu = useCallback(() => {
     if (menuTimerRef.current) clearTimeout(menuTimerRef.current);
@@ -97,7 +104,7 @@ export function useLongPress(
           // If a drag already started, skip the context menu.
           if (dragIntentFiredRef.current) return;
           firedRef.current = true;
-          onLongPressRef.current?.({
+          onMenuArmedRef.current?.({
             x: startRef.current.x,
             y: startRef.current.y,
           });
@@ -119,7 +126,10 @@ export function useLongPress(
       const dist = Math.max(dx, dy);
 
       if (!pickupFiredRef.current) {
-        if (dist > PRE_PICKUP_MOVE) clear();
+        if (dist > PRE_PICKUP_MOVE) {
+          firedRef.current = false;
+          clear();
+        }
         return;
       }
 
@@ -127,6 +137,7 @@ export function useLongPress(
       if (dist <= POST_PICKUP_DRAG_MOVE) return;
 
       clearMenu();
+      firedRef.current = false;
       if (!dragIntentFiredRef.current) {
         dragIntentFiredRef.current = true;
         onDragIntentRef.current?.({ x: t.clientX, y: t.clientY });
@@ -137,9 +148,18 @@ export function useLongPress(
 
   const onTouchEnd = useCallback(() => {
     clear();
+    // Open context menu on release so the sheet isn't dismissed by the
+    // same gesture's synthetic mousedown/click.
+    if (firedRef.current && !dragIntentFiredRef.current) {
+      onLongPressRef.current?.({
+        x: startRef.current.x,
+        y: startRef.current.y,
+      });
+    }
   }, [clear]);
 
   const onTouchCancel = useCallback(() => {
+    firedRef.current = false;
     clear();
   }, [clear]);
 

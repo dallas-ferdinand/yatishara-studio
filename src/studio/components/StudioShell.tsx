@@ -3656,6 +3656,7 @@ export function StudioShell({
     if (!entry || entry.type === "parent") return;
     const fullEntry = pathToEntry.get(entry.path) ?? entry;
     const attachment = entryToAttachment(fullEntry);
+    if (!attachment?.id) return;
     const targetTab = resolveAttachTargetTab();
     const existing =
       composerContextKey === targetTab
@@ -3689,10 +3690,24 @@ export function StudioShell({
       if (composerContextKey === targetTab) {
         setAttachments(nextAttachments);
         setDraft(composerContextsRef.current[targetTab]?.draft ?? "");
+        // Editor may exist but context key race — force chip paint next frame.
+        window.requestAnimationFrame(() => {
+          const editor = editorRef.current;
+          const ctx = composerContextsRef.current[targetTab];
+          if (!editor || !ctx) return;
+          applyComposerContextToEditor(editor, ctx);
+        });
       }
     }
 
     if (stayOnFiles) {
+      // Keep Files dock open; still ensure the live editor shows the chip.
+      window.requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        const ctx = composerContextsRef.current[targetTab];
+        if (!editor || !ctx || composerContextKey !== targetTab) return;
+        applyComposerContextToEditor(editor, ctx);
+      });
       return;
     }
 
@@ -6779,6 +6794,11 @@ export function StudioShell({
         body.is-touch-file-drag {
           touch-action: none;
           overflow: hidden;
+        }
+        /* Shell is normally pointer-events:none; during touch-drag make it hittable
+           so elementFromPoint / drop targeting can resolve data-drop-target=composer. */
+        body.is-touch-file-drag .cursor-composer-shell[data-drop-target="composer"] {
+          pointer-events: auto !important;
         }
         body.is-touch-file-drag .cursor-composer-shell.is-drop-target,
         .cursor-composer-shell.is-touch-drop-hover {
@@ -18925,6 +18945,7 @@ function StudioComposer({
       const entry = event.detail?.entry;
       if (!entry || !onDropEntry) return;
       event.preventDefault?.();
+      event.stopPropagation?.();
       setDragOver(false);
       setDropMarker(null);
       const x = event.detail?.clientX ?? 0;
@@ -18933,8 +18954,9 @@ function StudioComposer({
       if (range) setSelectionToRange(range);
       onDropEntry(entry, range);
     };
-    composer.addEventListener("studioexplorerdrop", onTouchDrop);
-    return () => composer.removeEventListener("studioexplorerdrop", onTouchDrop);
+    // Capture so folder/other handlers can't swallow the composer drop.
+    composer.addEventListener("studioexplorerdrop", onTouchDrop, true);
+    return () => composer.removeEventListener("studioexplorerdrop", onTouchDrop, true);
   }, [onDropEntry]);
 
   useEffect(() => {
@@ -19510,7 +19532,7 @@ function StudioComposer({
         ) : null}
         <div className="studio-composer-row">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
-          <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`}>
+          <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -27566,7 +27588,18 @@ function mergeEntrySnapshot(entry, snapshot) {
 
 function entryToAttachment(entry) {
   const studioKind = entry.studioKind ?? (entry.type === "dir" ? "folder" : undefined);
-  const kind = studioKind === "asset" || !studioKind ? inferAttachmentKind(entry) : studioKind === "document" ? "file" : "context";
+  const mediaKind =
+    entry.mediaKind === "image" || entry.mediaKind === "video" || entry.mediaKind === "audio"
+      ? entry.mediaKind
+      : entry.kind === "image" || entry.kind === "video" || entry.kind === "audio"
+        ? entry.kind
+        : null;
+  const kind =
+    studioKind === "asset" || !studioKind
+      ? mediaKind ?? inferAttachmentKind(entry)
+      : studioKind === "document"
+        ? "file"
+        : "context";
   const label = safeEntryTitle(entry);
   return {
     id: studioKind && entry.studioId ? `${studioKind}:${entry.studioId}` : entry.path,
@@ -27598,6 +27631,8 @@ function entryToAttachment(entry) {
 }
 
 function inferAttachmentKind(entry) {
+  const mediaKind = entry?.mediaKind ?? entry?.kind;
+  if (mediaKind === "image" || mediaKind === "video" || mediaKind === "audio") return mediaKind;
   const ext = String(entry.ext ?? entry.name?.match(/\.[^.]+$/)?.[0] ?? "").toLowerCase();
   const mime = String(entry.mimeType ?? entry.description ?? "").toLowerCase();
   if ([".webp", ".png", ".jpg", ".jpeg", ".gif", ".avif"].includes(ext) || mime.startsWith("image/")) return "image";
