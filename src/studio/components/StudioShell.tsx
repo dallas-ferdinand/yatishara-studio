@@ -7172,6 +7172,37 @@ export function StudioShell({
           width: 15px;
           height: 15px;
         }
+        .studio-files-mobile-head-tools {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          flex: 0 0 auto;
+          margin-left: auto;
+        }
+        /* Desktop-matching search + type filter + pathbar inside the sheet. */
+        .studio-files-mobile-sheet .studio-mobile-app-menu-body {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+          padding: 0;
+          gap: 0;
+        }
+        .studio-files-mobile-sheet .studio-mobile-app-menu-body > .cursor-explorer-body {
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .studio-files-mobile-sheet .cursor-panel-search {
+          flex: 0 0 auto;
+          width: 100%;
+          border-top: none;
+        }
+        .studio-files-mobile-sheet .studio-files-source-toggle + .cursor-panel-search {
+          border-top: none;
+        }
+        .studio-files-mobile-sheet .studio-folder-pathbar {
+          flex: 0 0 auto;
+          width: 100%;
+        }
         /* Generate: lift composer above the sheet so chat pads up (keyboard-style). */
         .studio-polish.is-mobile-files-composer .studio-composer.cursor-composer-shell {
           z-index: 130;
@@ -7194,101 +7225,14 @@ export function StudioShell({
         .studio-social-mobile-sheet .studio-social-body {
           padding-bottom: 12px;
         }
-        .studio-files-mobile-toolbar {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          flex: 0 0 auto;
-          align-items: center;
-          gap: 8px;
-          min-width: 0;
-          padding: 0 10px 8px;
-        }
-        .studio-files-mobile-crumbs {
-          flex: 1 1 auto;
-          min-width: 0;
-          overflow-x: auto;
-          overflow-y: hidden;
-          scrollbar-width: none;
-          -ms-overflow-style: none;
-        }
-        .studio-files-mobile-crumbs::-webkit-scrollbar {
-          display: none;
-          width: 0;
-          height: 0;
-        }
-        .studio-files-mobile-toolbar .studio-add-menu-trigger,
-        .studio-files-mobile-toolbar .studio-settings-pill {
-          flex: 0 0 auto;
-        }
-        .studio-files-search-wrap {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          align-items: center;
-          flex: 0 0 auto;
-          margin: 0 10px 8px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
-          border-radius: 12px;
-          background: color-mix(in srgb, var(--color-cursor-panel) 52%, transparent);
-          transition: border-color 120ms ease, box-shadow 120ms ease;
-        }
-        .studio-files-search-wrap:focus-within {
-          border-color: color-mix(in srgb, var(--color-cursor-border) 72%, transparent);
-          box-shadow: none;
-        }
-        .studio-files-search-icon {
-          margin-left: 11px;
-          width: 14px;
-          height: 14px;
-          flex-shrink: 0;
-          color: var(--color-cursor-muted);
-          pointer-events: none;
-        }
-        .studio-files-search {
-          flex: 1;
-          min-width: 0;
-          margin: 0;
-          padding: 9px 10px;
-          border: 0;
-          border-radius: 12px;
-          background: transparent;
-          color: var(--color-cursor-text);
-          font-size: 12px;
-          outline: none;
-          box-shadow: none;
-        }
-        .studio-files-search::placeholder {
-          color: color-mix(in srgb, var(--color-cursor-text) 36%, transparent);
-          opacity: 1;
-        }
-        .studio-files-search-clear {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 28px;
-          height: 28px;
-          margin-right: 6px;
-          padding: 0;
-          border: 0;
-          border-radius: 999px;
-          background: transparent;
-          color: var(--color-cursor-muted);
-          cursor: pointer;
-        }
-        .studio-files-search-clear svg {
-          width: 14px;
-          height: 14px;
-        }
-        .studio-files-search-clear:hover {
-          color: var(--color-cursor-text-bright);
-        }
         .studio-files-mobile-sheet .cursor-explorer-body,
-        .studio-files-mobile-sheet .cursor-explorer-panel,
+        .studio-files-mobile-sheet .cursor-explorer-panel {
+          background: transparent !important;
+          box-shadow: none !important;
+        }
         .studio-files-mobile-sheet .studio-folder-pathbar,
         .studio-files-mobile-sheet .cursor-panel-search {
           background: transparent !important;
-          border: 0 !important;
           box-shadow: none !important;
         }
         .studio-files-mobile-sheet .cursor-explorer-body {
@@ -18055,6 +17999,8 @@ export function StudioShell({
             void openPurchasedFolder(buyerAssetId);
           }}
           onNeedTopUp={openCreditsPane}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
         />
       ) : null}
 
@@ -24674,13 +24620,14 @@ function StudioFilesMobileSheet({
   onUploadFiles,
   search,
   setSearch,
+  typeFilter = "all",
+  setTypeFilter,
   breadcrumbPath,
   onBreadcrumbNavigate,
   onBreadcrumbDrop,
   ...explorerProps
 }) {
   const [portalRoot, setPortalRoot] = useState(null);
-  const searchRef = useRef(null);
 
   useEffect(() => {
     setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
@@ -24705,46 +24652,7 @@ function StudioFilesMobileSheet({
     >
       <div className="studio-mobile-app-menu-head">
         <h2 className="studio-mobile-app-menu-title">Files</h2>
-        <button
-          type="button"
-          className="studio-mobile-app-menu-close"
-          aria-label="Close files"
-          onClick={onClose}
-        >
-          <X aria-hidden="true" />
-        </button>
-      </div>
-      <div className="studio-mobile-app-menu-body">
-        <div className="studio-files-search-wrap">
-          <Search className="studio-files-search-icon" aria-hidden="true" />
-          <input
-            ref={searchRef}
-            className="studio-files-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search your content…"
-            aria-label="Search your content"
-          />
-          {search ? (
-            <button
-              type="button"
-              className="studio-files-search-clear"
-              aria-label="Clear search"
-              onClick={() => setSearch("")}
-            >
-              <X aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
-        <div className="studio-files-mobile-toolbar">
-          <div className="studio-files-mobile-crumbs">
-            <FileBreadcrumbs
-              path={breadcrumbPath}
-              onNavigate={onBreadcrumbNavigate}
-              onDropEntry={onBreadcrumbDrop}
-            />
-          </div>
+        <div className="studio-files-mobile-head-tools">
           <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
           <input
             ref={fileInputRef}
@@ -24756,17 +24664,29 @@ function StudioFilesMobileSheet({
               event.currentTarget.value = "";
             }}
           />
+          <button
+            type="button"
+            className="studio-mobile-app-menu-close"
+            aria-label="Close files"
+            onClick={onClose}
+          >
+            <X aria-hidden="true" />
+          </button>
         </div>
+      </div>
+      <div className="studio-mobile-app-menu-body">
         <StudioFilesExplorerBody
           {...explorerProps}
           search={search}
           setSearch={setSearch}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
           breadcrumbPath={breadcrumbPath}
           onBreadcrumbNavigate={onBreadcrumbNavigate}
           onBreadcrumbDrop={onBreadcrumbDrop}
           isMobile
-          showSearch={false}
-          showPathbar={false}
+          showSearch
+          showPathbar
           viewMode="grid"
           onDropFiles={onUploadFiles}
         />
