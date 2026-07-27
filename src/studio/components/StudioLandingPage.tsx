@@ -86,7 +86,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "How does booking payment work?",
-    a: "You top up your Studio wallet and book a package. The money stays protected until the delivery arrives and you accept it. If the work never lands, the money never leaves.",
+    a: "You top up your Studio wallet and book a package. The payment leaves your wallet into escrow, and it only releases when the work arrives and you accept it. If the delivery never lands, the money comes back to you.",
   },
   {
     q: "What currencies do you use?",
@@ -219,15 +219,15 @@ function AsideCallout({
         ) : null}
         {variant === "from-button" ? (
           <>
-            {/* Right edge of button → arch UP → tip at Caveat text */}
+            {/* From button end → arch UP → clean tip join (same construction as hero) */}
             <path
-              d="M18 18c18-22 52-22 78 8"
+              d="M10 14c26-26 68-22 98 30"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M82 14 98 28 84 36"
+              d="M92 30 108 44 94 52"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
@@ -922,7 +922,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Then make it <Wavy tone="coral">yours</Wavy>.
             </>
           }
-          lead="Trim the take, drop in music, and finish where you started. No exporting to somewhere else."
+          lead="Edit your video, drop in music, and finish where you started. No exporting to somewhere else."
         >
           <LaptopMock
             src="/landing/mock-edit.jpg"
@@ -954,12 +954,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Your money moves when you're <Hl>happy</Hl>.
             </>
           }
-          lead="Book a package and payment waits in your wallet until the work arrives and you accept it."
+          lead="Book a package and the payment leaves your wallet into escrow. It only releases when the work arrives and you accept it."
         >
           <LaptopMock
             src="/landing/mock-book.jpg"
             alt="Booking a Creative Network package with wallet balance"
-            aside="your wallet, your call"
+            aside="held until you say so"
             asideSide="right"
           />
         </LandingSection>
@@ -972,7 +972,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               Talk it through, <Wavy tone="sky">right here</Wavy>.
             </>
           }
-          lead="Every booking gets a thread. Share the storyboard, leave a voice note, ask for one more pass."
+          lead="Chat with creators right in Studio. Share the brief, leave a voice note, ask for one more pass. Everything lives in one place, so you're not bouncing between apps."
         >
           <LaptopMock
             src="/landing/mock-messages.jpg"
@@ -985,10 +985,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           tone="page"
           title={
             <>
-              Meet who you're <Hl tone="mint">hiring</Hl>.
+              Discover new <Hl tone="mint">creators</Hl>.
             </>
           }
-          lead="Scroll their work, get a feel for their taste, then hire from the same page."
+          lead="Get inspiration, get a feel for people's work, and meet collaborators like you. Hire from the same place when you're ready."
         >
           <LaptopMock
             src="/landing/mock-profile.jpg"
@@ -1059,7 +1059,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 <ArrowRight aria-hidden="true" />
               </button>
               <AsideCallout variant="from-button">
-                your first flyer is minutes away
+                your next ad is minutes away
               </AsideCallout>
             </div>
           </div>
