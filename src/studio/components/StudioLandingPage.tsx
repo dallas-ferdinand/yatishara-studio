@@ -269,21 +269,21 @@ function FaqSection() {
 
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
 
   const scrollToId = (id: string) => {
-    const root = rootRef.current;
-    const target = root?.querySelector<HTMLElement>(`#${id}`);
-    if (!root || !target) return;
+    const scroller = mainRef.current;
+    const target = scroller?.querySelector<HTMLElement>(`#${id}`);
+    if (!scroller || !target) return;
     const top =
       target.getBoundingClientRect().top -
-      root.getBoundingClientRect().top +
-      root.scrollTop -
-      32;
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    root.scrollTo({
+    scroller.scrollTo({
       top: Math.max(0, top),
       behavior: reduceMotion ? "auto" : "smooth",
     });
@@ -305,17 +305,17 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   }, [menuOpen]);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
+    const scroller = mainRef.current;
+    if (!scroller) return;
 
     const updateActive = () => {
-      const rootTop = root.getBoundingClientRect().top + 40;
+      const scrollerTop = scroller.getBoundingClientRect().top + 8;
       let best = 0;
       let bestDist = Number.POSITIVE_INFINITY;
       for (let i = 0; i < DECK_IDS.length; i += 1) {
-        const el = root.querySelector<HTMLElement>(`#${DECK_IDS[i]}`);
+        const el = scroller.querySelector<HTMLElement>(`#${DECK_IDS[i]}`);
         if (!el) continue;
-        const dist = Math.abs(el.getBoundingClientRect().top - rootTop);
+        const dist = Math.abs(el.getBoundingClientRect().top - scrollerTop);
         if (dist < bestDist) {
           bestDist = dist;
           best = i;
@@ -325,10 +325,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     };
 
     updateActive();
-    root.addEventListener("scroll", updateActive, { passive: true });
+    scroller.addEventListener("scroll", updateActive, { passive: true });
     window.addEventListener("resize", updateActive);
     return () => {
-      root.removeEventListener("scroll", updateActive);
+      scroller.removeEventListener("scroll", updateActive);
       window.removeEventListener("resize", updateActive);
     };
   }, []);
@@ -472,7 +472,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         </>
       ) : null}
 
-      <main className="studio-landing-main">
+      <main ref={mainRef} className="studio-landing-main">
         <section
           id="overview"
           className="studio-landing-section is-hero"

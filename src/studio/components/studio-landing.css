@@ -20,20 +20,7 @@
   background: var(--mos-page);
   color: var(--studio-landing-ink);
   font-family: inherit;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  scroll-snap-type: y mandatory;
-}
-
-.studio-landing.is-deck {
-  scrollbar-width: none;
-}
-
-.studio-landing.is-deck::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 
 .studio-landing-head {
@@ -47,14 +34,12 @@
   background: var(--mos-plate);
   border-bottom: 1px solid var(--studio-landing-line);
   box-sizing: border-box;
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 20;
   overflow: visible;
 }
 
 .studio-landing.is-menu-open .studio-landing-head {
-  position: sticky;
   z-index: 60;
   border-bottom-color: color-mix(in srgb, #1c1c1e 22%, transparent);
 }
@@ -370,19 +355,31 @@
 }
 
 .studio-landing-main {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+}
+
+.studio-landing-main::-webkit-scrollbar {
+  display: none;
 }
 
 .studio-landing-section {
   box-sizing: border-box;
+  /* Header lives outside the scroller, so each card = remaining viewport. */
   height: calc(100dvh - var(--cursor-head-h, 32px));
   min-height: calc(100dvh - var(--cursor-head-h, 32px));
   max-height: calc(100dvh - var(--cursor-head-h, 32px));
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: clamp(28px, 6vh, 56px) clamp(28px, 5vw, 48px) clamp(28px, 6vh, 56px)
+  padding: clamp(20px, 4vh, 40px) clamp(28px, 5vw, 48px) clamp(20px, 4vh, 40px)
     clamp(16px, 4vw, 40px);
   overflow: hidden;
   scroll-snap-align: start;
@@ -412,24 +409,22 @@
 
 .studio-landing-deck-dot {
   box-sizing: border-box;
-  width: 16px;
-  height: 3px;
+  width: 7px;
+  height: 7px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: 50%;
   background: color-mix(in srgb, #1c1c1e 22%, transparent);
   cursor: pointer;
   transition:
     background 160ms ease,
-    width 160ms ease,
-    height 160ms ease;
+    transform 160ms ease;
 }
 
 .studio-landing-deck-dot.is-active,
 .studio-landing-deck-dot[aria-selected="true"] {
-  width: 20px;
-  height: 4px;
   background: var(--studio-landing-ink);
+  transform: scale(1.2);
 }
 
 .studio-landing-deck-dot:hover {
@@ -496,15 +491,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.studio-landing-section-inner::-webkit-scrollbar {
-  display: none;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .studio-landing-section-inner.is-narrow {
@@ -612,8 +600,10 @@
 }
 
 .studio-landing-laptop {
-  width: min(100%, 640px);
-  margin: clamp(28px, 5vh, 44px) 0 0;
+  width: min(100%, 560px);
+  margin: clamp(16px, 3vh, 28px) 0 0;
+  flex-shrink: 1;
+  min-height: 0;
   filter: drop-shadow(0 18px 40px rgba(28, 28, 30, 0.12));
 }
 
@@ -789,7 +779,7 @@
 
 .studio-landing-faq {
   width: 100%;
-  margin-top: 28px;
+  margin-top: 18px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -798,6 +788,8 @@
   border-radius: 10px;
   overflow: hidden;
   text-align: left;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .studio-landing-faq-item {
@@ -893,11 +885,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  box-sizing: border-box;
+  height: calc(100dvh - var(--cursor-head-h, 32px));
+  min-height: calc(100dvh - var(--cursor-head-h, 32px));
+  max-height: calc(100dvh - var(--cursor-head-h, 32px));
   padding: 28px clamp(20px, 5vw, 56px) 32px;
   border-top: 1px solid var(--studio-landing-line);
   background: var(--mos-plate);
   text-align: center;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .studio-landing-foot-brand {
@@ -952,11 +951,11 @@
     height: calc(100dvh - var(--cursor-head-h, 32px));
     min-height: calc(100dvh - var(--cursor-head-h, 32px));
     max-height: calc(100dvh - var(--cursor-head-h, 32px));
-    padding: 32px 22px 40px 16px;
+    padding: 24px 22px 28px 16px;
   }
 
   .studio-landing-laptop {
-    width: 100%;
+    width: min(100%, 100%);
   }
 
   .studio-landing-laptop-base {
@@ -964,10 +963,22 @@
     margin-left: -2%;
     height: 8px;
   }
+
+  .studio-landing-section-title {
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+  }
+
+  .studio-landing-hero-title {
+    font-size: clamp(2rem, 8vw, 2.8rem);
+  }
+
+  .studio-landing-faq {
+    max-height: min(42vh, 280px);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .studio-landing {
+  .studio-landing-main {
     scroll-snap-type: none;
   }
 
@@ -987,9 +998,5 @@
   .studio-landing-menu-backdrop,
   .studio-landing-menu-sheet {
     animation: none;
-  }
-
-  .studio-landing {
-    scroll-snap-type: none;
   }
 }
