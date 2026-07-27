@@ -19,7 +19,14 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { BrandMark } from "@/components/brand-mark";
 import "./studio-landing.css";
 
@@ -271,8 +278,20 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuExpanded, setMenuExpanded] = useState(false);
+  const [menuDragY, setMenuDragY] = useState(0);
+  const [menuDragging, setMenuDragging] = useState(false);
+  const menuDragRef = useRef<{ startY: number; expanded: boolean } | null>(null);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setMenuExpanded(false);
+    setMenuDragY(0);
+    setMenuDragging(false);
+    menuDragRef.current = null;
+  };
 
   const scrollToId = (id: string) => {
     const scroller = mainRef.current;
@@ -287,7 +306,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       top: Math.max(0, top),
       behavior: reduceMotion ? "auto" : "smooth",
     });
-    setMenuOpen(false);
+    closeMenu();
   };
 
   const scrollDeckBy = (delta: number) => {
@@ -295,10 +314,51 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     scrollToId(DECK_IDS[next]!);
   };
 
+  const onMenuHandlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    menuDragRef.current = { startY: event.clientY, expanded: menuExpanded };
+    setMenuDragging(true);
+    setMenuDragY(0);
+  };
+
+  const onMenuHandlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!menuDragRef.current) return;
+    const dy = event.clientY - menuDragRef.current.startY;
+    if (menuDragRef.current.expanded) {
+      setMenuDragY(Math.max(0, dy));
+    } else {
+      setMenuDragY(dy);
+    }
+  };
+
+  const onMenuHandlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!menuDragRef.current) return;
+    const dy = event.clientY - menuDragRef.current.startY;
+    const wasExpanded = menuDragRef.current.expanded;
+    menuDragRef.current = null;
+    setMenuDragging(false);
+    setMenuDragY(0);
+
+    if (wasExpanded) {
+      if (dy > 220) closeMenu();
+      else if (dy > 90) setMenuExpanded(false);
+      return;
+    }
+
+    if (dy > 90) closeMenu();
+    else if (dy < -56) setMenuExpanded(true);
+  };
+
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen) {
+      setMenuExpanded(false);
+      setMenuDragY(0);
+      setMenuDragging(false);
+      menuDragRef.current = null;
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") closeMenu();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -409,23 +469,57 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             type="button"
             className="studio-landing-menu-backdrop"
             aria-label="Close menu"
-            onClick={() => setMenuOpen(false)}
+            onClick={closeMenu}
           />
           <div
             id="studio-landing-menu-sheet"
-            className="studio-landing-menu-sheet"
+            className={[
+              "studio-landing-menu-sheet",
+              menuExpanded ? "is-expanded" : "",
+              menuDragging ? "is-dragging" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             role="dialog"
             aria-modal="true"
             aria-label="Page sections"
+            style={
+              (() => {
+                if (!menuDragging || menuDragY === 0) return undefined;
+                if (menuDragY > 0) {
+                  return { transform: `translateY(${menuDragY}px)` } satisfies CSSProperties;
+                }
+                if (!menuExpanded) {
+                  return {
+                    height: `min(calc(62dvh + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
+                    maxHeight: `min(calc(62dvh + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
+                  } satisfies CSSProperties;
+                }
+                return undefined;
+              })()
+            }
           >
-            <div className="studio-landing-menu-sheet-grab" aria-hidden="true" />
+            <div
+              className="studio-landing-menu-sheet-handle"
+              aria-label={
+                menuExpanded
+                  ? "Drag down to shrink or close menu"
+                  : "Drag up for full menu, or down to close"
+              }
+              onPointerDown={onMenuHandlePointerDown}
+              onPointerMove={onMenuHandlePointerMove}
+              onPointerUp={onMenuHandlePointerUp}
+              onPointerCancel={onMenuHandlePointerUp}
+            >
+              <div className="studio-landing-menu-sheet-grab" aria-hidden="true" />
+            </div>
             <div className="studio-landing-menu-sheet-head">
               <h2 className="studio-landing-menu-sheet-title">Menu</h2>
               <button
                 type="button"
                 className="studio-landing-menu-btn"
                 aria-label="Close menu"
-                onClick={() => setMenuOpen(false)}
+                onClick={closeMenu}
               >
                 <X aria-hidden="true" />
               </button>
@@ -451,7 +545,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 type="button"
                 className="studio-landing-menu-sheet-cta"
                 onClick={() => {
-                  setMenuOpen(false);
+                  closeMenu();
                   onSignIn();
                 }}
               >
