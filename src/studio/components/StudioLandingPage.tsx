@@ -274,29 +274,65 @@ function FaqSection() {
   );
 }
 
-function getLandingMenuMetrics(root: HTMLElement | null) {
-  const chrome =
-    root?.querySelector<HTMLElement>(".studio-landing-head")?.getBoundingClientRect()
-      .height ?? 52;
-  const full = Math.max(220, window.innerHeight - chrome);
-  const peek = Math.min(window.innerHeight * 0.42, 320, full * 0.82);
-  return { peek, full, min: Math.max(110, peek * 0.42) };
+function readLandingMenuChrome(root: HTMLElement | null) {
+  const chromeEl = root?.querySelector<HTMLElement>(".studio-landing-head");
+  return (
+    chromeEl?.getBoundingClientRect().height ??
+    (typeof window !== "undefined" && window.matchMedia("(max-width: 979px)").matches
+      ? 52
+      : 32)
+  );
+}
+
+/** Peek is locked from first paint; only full/min refresh with viewport. */
+function getLandingMenuFull(root: HTMLElement | null) {
+  return Math.max(220, window.innerHeight - readLandingMenuChrome(root));
+}
+
+function measureLandingMenuPeek(root: HTMLElement | null, sheet: HTMLElement | null) {
+  const full = getLandingMenuFull(root);
+  // Measure CSS peek before we overwrite with inline px.
+  if (sheet && (sheet.style.height === "" || sheet.style.height == null)) {
+    const laidOut = sheet.getBoundingClientRect().height;
+    if (laidOut > 40) return Math.min(laidOut, full * 0.92);
+  }
+  if (!root) return Math.min(window.innerHeight * 0.42, 320);
+  const raw = getComputedStyle(root).getPropertyValue("--studio-landing-menu-peek-h").trim();
+  const probe = document.createElement("div");
+  probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:${raw || "min(42dvh,320px)"}`;
+  root.appendChild(probe);
+  const h = probe.getBoundingClientRect().height;
+  probe.remove();
+  return Math.min(h || Math.min(window.innerHeight * 0.42, 320), full * 0.92);
 }
 
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const menuSheetRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   /** Pixel height is the only size source while open — avoids class/transform jumps. */
   const [menuHeight, setMenuHeight] = useState<number | null>(null);
   const [menuDragging, setMenuDragging] = useState(false);
+  /** Entrance rise runs once; never re-apply after drag or it restarts translateY. */
+  const [menuEntered, setMenuEntered] = useState(false);
   const [menuDismissY, setMenuDismissY] = useState(0);
   const menuDragRef = useRef<{ startY: number; startH: number } | null>(null);
   const menuMetricsRef = useRef({ peek: 280, full: 600, min: 120 });
   const menuHeightRef = useRef<number | null>(null);
+  const menuDragRafRef = useRef<number | null>(null);
   const menuSettleTimerRef = useRef<number | null>(null);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
+
+  const applySheetHeight = (px: number) => {
+    menuHeightRef.current = px;
+    const el = menuSheetRef.current;
+    if (el) {
+      el.style.height = `${px}px`;
+      el.style.maxHeight = `${px}px`;
+    }
+  };
 
   const closeMenu = () => {
     if (menuSettleTimerRef.current != null) {
@@ -307,6 +343,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     setMenuHeight(null);
     menuHeightRef.current = null;
     setMenuDragging(false);
+    setMenuEntered(false);
     setMenuDismissY(0);
     menuDragRef.current = null;
   };
@@ -337,45 +374,77 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       window.clearTimeout(menuSettleTimerRef.current);
       menuSettleTimerRef.current = null;
     }
-    const metrics = getLandingMenuMetrics(rootRef.current);
-    menuMetricsRef.current = metrics;
-    const startH = menuHeightRef.current ?? metrics.peek;
+    const sheet = menuSheetRef.current;
+    const full = getLandingMenuFull(rootRef.current);
+    const peek = menuMetricsRef.current.peek;
+    menuMetricsRef.current = {
+      peek,
+      full,
+      min: Math.max(110, peek * 0.42),
+    };
+    // Measure painted height — never swap in a freshly computed peek (dvh mismatch = jump).
+    const startH =
+      sheet?.getBoundingClientRect().height ||
+      menuHeightRef.current ||
+      peek;
     event.currentTarget.setPointerCapture(event.pointerId);
     menuDragRef.current = { startY: event.clientY, startH };
     setMenuDismissY(0);
+    setMenuEntered(true);
     setMenuDragging(true);
+    applySheetHeight(startH);
     setMenuHeight(startH);
-    menuHeightRef.current = startH;
   };
 
   const onMenuHandlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!menuDragRef.current) return;
     const { full, min } = menuMetricsRef.current;
     const dy = event.clientY - menuDragRef.current.startY;
-    // Finger down shrinks, finger up grows — one height channel only.
+    // Finger down shrinks, finger up grows — DOM first, React height synced on rAF.
     const nextH = Math.min(full, Math.max(min, menuDragRef.current.startH - dy));
-    menuHeightRef.current = nextH;
-    setMenuHeight(nextH);
+    applySheetHeight(nextH);
+    if (menuDragRafRef.current == null) {
+      menuDragRafRef.current = window.requestAnimationFrame(() => {
+        menuDragRafRef.current = null;
+        const live = menuHeightRef.current;
+        if (live != null) setMenuHeight(live);
+      });
+    }
   };
 
   const onMenuHandlePointerUp = () => {
     if (!menuDragRef.current) return;
     menuDragRef.current = null;
+    if (menuDragRafRef.current != null) {
+      window.cancelAnimationFrame(menuDragRafRef.current);
+      menuDragRafRef.current = null;
+    }
     const { peek, full, min } = menuMetricsRef.current;
-    const h = menuHeightRef.current ?? peek;
+    const h =
+      menuHeightRef.current ??
+      menuSheetRef.current?.getBoundingClientRect().height ??
+      peek;
     const mid = (peek + full) / 2;
-    setMenuDragging(false);
 
     if (h <= peek * 0.72 || h <= min + 8) {
-      // Dismiss from current height — translate down, then unmount.
+      setMenuDragging(false);
+      setMenuHeight(h);
+      applySheetHeight(h);
       setMenuDismissY(Math.max(full * 0.45, h * 0.65));
       menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 220);
       return;
     }
 
     const target = h >= mid ? full : peek;
-    menuHeightRef.current = target;
-    setMenuHeight(target);
+    // Sync current height into React first so releasing is-dragging cannot snap.
+    applySheetHeight(h);
+    setMenuHeight(h);
+    setMenuDragging(false);
+    requestAnimationFrame(() => {
+      menuHeightRef.current = target;
+      setMenuHeight(target);
+      applySheetHeight(target);
+    });
   };
 
   useEffect(() => {
@@ -383,21 +452,38 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       setMenuHeight(null);
       menuHeightRef.current = null;
       setMenuDragging(false);
+      setMenuEntered(false);
       setMenuDismissY(0);
       menuDragRef.current = null;
       return;
     }
-    const metrics = getLandingMenuMetrics(rootRef.current);
-    menuMetricsRef.current = metrics;
-    menuHeightRef.current = metrics.peek;
-    setMenuHeight(metrics.peek);
+    setMenuEntered(false);
     setMenuDismissY(0);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setMenuEntered(true);
+    }
+    // After paint, lock peek from real CSS layout (dvh), then pin inline height.
+    const id = window.requestAnimationFrame(() => {
+      const peek = measureLandingMenuPeek(rootRef.current, menuSheetRef.current);
+      const full = getLandingMenuFull(rootRef.current);
+      menuMetricsRef.current = {
+        peek,
+        full,
+        min: Math.max(110, peek * 0.42),
+      };
+      menuHeightRef.current = peek;
+      setMenuHeight(peek);
+      applySheetHeight(peek);
+    });
 
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeMenu();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.cancelAnimationFrame(id);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
 
   useEffect(() => {
@@ -509,9 +595,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           />
           <div
             id="studio-landing-menu-sheet"
+            ref={menuSheetRef}
             className={[
               "studio-landing-menu-sheet",
-              "is-height-controlled",
+              menuEntered ? "is-entered" : "is-entering",
               menuDragging ? "is-dragging" : "",
               menuHeight != null &&
               menuHeight >= menuMetricsRef.current.full - 8
@@ -523,6 +610,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             role="dialog"
             aria-modal="true"
             aria-label="Page sections"
+            onAnimationEnd={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.animationName === "studio-landing-menu-rise") {
+                setMenuEntered(true);
+              }
+            }}
             style={
               {
                 height: menuHeight ?? undefined,
