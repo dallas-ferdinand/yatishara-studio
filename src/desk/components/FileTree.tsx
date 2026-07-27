@@ -863,6 +863,13 @@ function FileEntryButton({
     useLongPress(
       enableLongPress && onLongPress
         ? (coords) => {
+            // Never open the sheet if a Files touch-drag is in flight.
+            if (
+              touchDragActiveRef.current ||
+              document.body.classList.contains("is-touch-file-drag")
+            ) {
+              return;
+            }
             clearActiveExplorerDrag();
             setDragArmed(false);
             onLongPress(entry, coords);
@@ -901,6 +908,9 @@ function FileEntryButton({
               if (!source) return;
               touchDragActiveRef.current = true;
               setDragArmed(false);
+              clearLongPressFired();
+              // Drop any sheet that armed before the finger moved into a drag.
+              window.dispatchEvent(new CustomEvent("studioexplorerdismisscontext"));
               startTouchFileDrag(
                 source,
                 entry,
@@ -947,7 +957,16 @@ function FileEntryButton({
         }
         onOpen();
       }}
-      onContextMenu={onContextMenu}
+      onContextMenu={(event) => {
+        // Android fires a native contextmenu on long-press — that was opening
+        // the sheet mid touch-drag. Custom long-press owns the menu on mobile.
+        if (enableLongPress) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onContextMenu?.(event);
+      }}
       // Mobile touch-drag owns the gesture — native HTML5 drag fights Android.
       draggable={entry.type !== "parent" && !selectionMode && !canTouchDrag}
       onDragStart={(event) => {
@@ -975,12 +994,16 @@ function FileEntryButton({
         }
       }}
       onTouchEnd={(event) => {
+        // If a touch-drag is active, document listeners own end — don't open
+        // the long-press menu from the button's touchend.
+        if (touchDragActiveRef.current || document.body.classList.contains("is-touch-file-drag")) {
+          clearLongPressFired();
+          if (buttonRef.current) buttonRef.current.style.touchAction = "";
+          return;
+        }
         longPressHandlers.onTouchEnd?.(event);
         if (buttonRef.current) buttonRef.current.style.touchAction = "";
-        // Touch-drag owns document touchend; don't clear mid-flight.
-        if (!touchDragActiveRef.current) {
-          window.setTimeout(() => setDragArmed(false), 80);
-        }
+        window.setTimeout(() => setDragArmed(false), 80);
       }}
       onTouchCancel={(event) => {
         longPressHandlers.onTouchCancel?.(event);

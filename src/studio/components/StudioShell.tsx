@@ -5637,6 +5637,14 @@ export function StudioShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [assetPickRequest, endAssetPick]);
 
+  // Mobile touch-drag dismisses any explorer context sheet that may have armed.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    const onDismiss = () => setContextMenu(null);
+    window.addEventListener("studioexplorerdismisscontext", onDismiss);
+    return () => window.removeEventListener("studioexplorerdismisscontext", onDismiss);
+  }, [isMobile]);
+
   // Mobile Files touch-drop (FastShaders pattern): end the gesture first, then
   // run the same attachEntry path desktop HTML5 drop uses — never during touchend.
   useEffect(() => {
@@ -5831,7 +5839,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -6586,7 +6594,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -6879,11 +6887,12 @@ export function StudioShell({
         .cursor-composer-shell.is-touch-drop-hover {
           outline: 1px solid color-mix(in srgb, var(--cursor-accent, #7dd3fc) 45%, transparent);
         }
-        /* Mobile explorer context = sheet above Files dock (half Files height). */
+        /* Mobile explorer context = fixed overlay sheet above bottom nav (not a
+           flex child — .studio-polish > * { position:relative } was pushing layout). */
         .studio-explorer-context-sheet-backdrop {
-          position: absolute;
+          position: fixed !important;
           inset: 0;
-          z-index: 44;
+          z-index: 70;
           border: 0;
           margin: 0;
           padding: 0;
@@ -6891,12 +6900,13 @@ export function StudioShell({
           cursor: pointer;
         }
         .studio-explorer-context-sheet {
-          position: absolute;
+          position: fixed !important;
           left: 0;
           right: 0;
-          z-index: 45;
+          z-index: 71;
           display: flex;
           flex-direction: column;
+          flex: none;
           box-sizing: border-box;
           bottom: calc(
             var(--studio-mobile-bottom-chrome, calc(38px + env(safe-area-inset-bottom, 0px)))
@@ -6909,7 +6919,11 @@ export function StudioShell({
           background: var(--mos-plate, var(--color-cursor-surface-raised, #121820));
           box-shadow: 0 -10px 32px color-mix(in srgb, #000 28%, transparent);
           overflow: hidden;
+          transform: none;
+          filter: none;
+          isolation: auto;
         }
+        /* Files dock open: sit on top of the dock, still above the bottom nav. */
         .studio-polish.is-mobile-files .studio-explorer-context-sheet,
         .studio-polish.is-mobile-files-composer .studio-explorer-context-sheet {
           bottom: calc(

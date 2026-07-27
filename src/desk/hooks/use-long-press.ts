@@ -150,12 +150,17 @@ export function useLongPress(
     clear();
     // Open context menu on release so the sheet isn't dismissed by the
     // same gesture's synthetic mousedown/click.
-    if (firedRef.current && !dragIntentFiredRef.current) {
+    if (
+      firedRef.current &&
+      !dragIntentFiredRef.current &&
+      !document.body.classList.contains("is-touch-file-drag")
+    ) {
       onLongPressRef.current?.({
         x: startRef.current.x,
         y: startRef.current.y,
       });
     }
+    firedRef.current = false;
   }, [clear]);
 
   const onTouchCancel = useCallback(() => {
