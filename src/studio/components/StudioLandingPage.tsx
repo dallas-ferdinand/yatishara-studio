@@ -309,19 +309,9 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     if (!scroller) return;
 
     const updateActive = () => {
-      const scrollerTop = scroller.getBoundingClientRect().top + 8;
-      let best = 0;
-      let bestDist = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < DECK_IDS.length; i += 1) {
-        const el = scroller.querySelector<HTMLElement>(`#${DECK_IDS[i]}`);
-        if (!el) continue;
-        const dist = Math.abs(el.getBoundingClientRect().top - scrollerTop);
-        if (dist < bestDist) {
-          bestDist = dist;
-          best = i;
-        }
-      }
-      setActiveDeck(best);
+      const cardH = scroller.clientHeight || 1;
+      const idx = Math.round(scroller.scrollTop / cardH);
+      setActiveDeck(Math.min(DECK_IDS.length - 1, Math.max(0, idx)));
     };
 
     updateActive();

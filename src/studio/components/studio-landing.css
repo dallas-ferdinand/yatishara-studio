@@ -10,6 +10,7 @@
   --studio-landing-mute: color-mix(in srgb, #1c1c1e 55%, transparent);
   --studio-landing-faint: color-mix(in srgb, #1c1c1e 38%, transparent);
   --studio-landing-line: #d8d8de;
+  --studio-landing-chrome-h: var(--cursor-head-h, 32px);
   color-scheme: light;
   position: fixed;
   inset: 0;
@@ -27,8 +28,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: var(--cursor-head-h, 32px);
-  min-height: var(--cursor-head-h, 32px);
+  height: var(--studio-landing-chrome-h);
+  min-height: var(--studio-landing-chrome-h);
   padding: 0 12px;
   flex-shrink: 0;
   background: var(--mos-plate);
@@ -41,7 +42,6 @@
 
 .studio-landing.is-menu-open .studio-landing-head {
   z-index: 60;
-  border-bottom-color: color-mix(in srgb, #1c1c1e 22%, transparent);
 }
 
 .studio-landing-brand {
@@ -143,7 +143,7 @@
 
 .studio-landing-menu-backdrop {
   position: fixed;
-  top: var(--cursor-head-h, 32px);
+  top: var(--studio-landing-chrome-h);
   right: 0;
   bottom: 0;
   left: 0;
@@ -372,10 +372,10 @@
 
 .studio-landing-section {
   box-sizing: border-box;
-  /* Header lives outside the scroller, so each card = remaining viewport. */
-  height: calc(100dvh - var(--cursor-head-h, 32px));
-  min-height: calc(100dvh - var(--cursor-head-h, 32px));
-  max-height: calc(100dvh - var(--cursor-head-h, 32px));
+  /* Chrome (top header or mobile bottom nav) lives outside the scroller. */
+  height: calc(100dvh - var(--studio-landing-chrome-h));
+  min-height: calc(100dvh - var(--studio-landing-chrome-h));
+  max-height: calc(100dvh - var(--studio-landing-chrome-h));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -409,26 +409,28 @@
 
 .studio-landing-deck-dot {
   box-sizing: border-box;
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: color-mix(in srgb, #1c1c1e 22%, transparent);
+  background: color-mix(in srgb, #1c1c1e 20%, transparent);
   cursor: pointer;
   transition:
     background 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .studio-landing-deck-dot.is-active,
 .studio-landing-deck-dot[aria-selected="true"] {
   background: var(--studio-landing-ink);
-  transform: scale(1.2);
+  transform: scale(1.55);
+  box-shadow: 0 0 0 2px color-mix(in srgb, #f5f5f7 80%, transparent);
 }
 
 .studio-landing-deck-dot:hover {
-  background: color-mix(in srgb, #1c1c1e 42%, transparent);
+  background: color-mix(in srgb, #1c1c1e 48%, transparent);
 }
 
 .studio-landing-deck-dot:focus-visible {
@@ -888,9 +890,9 @@
   justify-content: center;
   gap: 10px;
   box-sizing: border-box;
-  height: calc(100dvh - var(--cursor-head-h, 32px));
-  min-height: calc(100dvh - var(--cursor-head-h, 32px));
-  max-height: calc(100dvh - var(--cursor-head-h, 32px));
+  height: calc(100dvh - var(--studio-landing-chrome-h));
+  min-height: calc(100dvh - var(--studio-landing-chrome-h));
+  max-height: calc(100dvh - var(--studio-landing-chrome-h));
   padding: 28px clamp(20px, 5vw, 56px) 32px;
   border-top: 1px solid var(--studio-landing-line);
   background: var(--mos-plate);
@@ -942,15 +944,62 @@
   }
 }
 
-@media (max-width: 640px) {
+/* Mobile: header chrome becomes a tight bottom nav. */
+@media (max-width: 979px) {
+  .studio-landing {
+    --studio-landing-chrome-h: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .studio-landing-main {
+    order: 1;
+  }
+
+  .studio-landing-head {
+    order: 2;
+    height: var(--studio-landing-chrome-h);
+    min-height: var(--studio-landing-chrome-h);
+    padding: 0 6px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-bottom: none;
+    border-top: 1px solid var(--studio-landing-line);
+    gap: 6px;
+  }
+
+  .studio-landing.is-menu-open .studio-landing-head {
+    border-top-color: color-mix(in srgb, #1c1c1e 22%, transparent);
+  }
+
+  .studio-landing-head-end {
+    gap: 4px;
+  }
+
+  .studio-landing-brand {
+    gap: 6px;
+  }
+
   .studio-landing-brand-name {
     max-width: 7.5rem;
   }
 
+  .studio-landing-menu-backdrop {
+    top: 0;
+    bottom: var(--studio-landing-chrome-h);
+  }
+
+  .studio-landing-menu-sheet {
+    bottom: var(--studio-landing-chrome-h);
+  }
+
+  .studio-landing-section,
+  .studio-landing-foot {
+    height: calc(100dvh - var(--studio-landing-chrome-h));
+    min-height: calc(100dvh - var(--studio-landing-chrome-h));
+    max-height: calc(100dvh - var(--studio-landing-chrome-h));
+  }
+}
+
+@media (max-width: 640px) {
   .studio-landing-section {
-    height: calc(100dvh - var(--cursor-head-h, 32px));
-    min-height: calc(100dvh - var(--cursor-head-h, 32px));
-    max-height: calc(100dvh - var(--cursor-head-h, 32px));
     padding: 24px 22px 28px 16px;
   }
 
@@ -971,7 +1020,6 @@
   .studio-landing-hero-title {
     font-size: clamp(2rem, 8vw, 2.8rem);
   }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
