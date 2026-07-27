@@ -251,13 +251,14 @@
 }
 
 .studio-landing-head-btn {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 24px;
   min-height: 24px;
   padding: 0 10px;
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--cursor-radius-sm, 6px);
   background: var(--mos-plate-strong);
   color: var(--studio-landing-ink);
@@ -265,7 +266,7 @@
   font-weight: 650;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 180ms ease, color 180ms ease;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
 }
 
 .studio-landing-head-btn:hover {
@@ -275,6 +276,17 @@
 .studio-landing-head-btn:focus-visible {
   outline: 2px solid color-mix(in srgb, #1c1c1e 35%, transparent);
   outline-offset: 1px;
+}
+
+.studio-landing-head-btn.is-bordered {
+  background: transparent;
+  border: 1px solid var(--studio-landing-line);
+  color: var(--studio-landing-ink);
+}
+
+.studio-landing-head-btn.is-bordered:hover {
+  background: var(--mos-plate-strong);
+  border-color: color-mix(in srgb, #1c1c1e 28%, transparent);
 }
 
 .studio-landing-head-btn.is-primary {

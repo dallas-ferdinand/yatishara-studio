@@ -1,6 +1,22 @@
 "use client";
 
-import { ArrowRight, Mail, MapPin, Menu, X } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeDollarSign,
+  Clapperboard,
+  CircleHelp,
+  Home,
+  Mail,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Sparkles,
+  UserCircle,
+  Users,
+  Wallet,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import "./studio-landing.css";
@@ -13,6 +29,23 @@ const NAV_LINKS = [
   { id: "messages", label: "Messages" },
   { id: "faq", label: "FAQ" },
 ] as const;
+
+const MENU_LINKS: ReadonlyArray<{
+  id: string;
+  label: string;
+  Icon: LucideIcon;
+}> = [
+  { id: "overview", label: "Overview", Icon: Home },
+  { id: "generate", label: "Generate", Icon: Sparkles },
+  { id: "edit", label: "Edit", Icon: Clapperboard },
+  { id: "hire", label: "Hire", Icon: Users },
+  { id: "book", label: "Book", Icon: Wallet },
+  { id: "messages", label: "Messages", Icon: MessageCircle },
+  { id: "profiles", label: "Profiles", Icon: UserCircle },
+  { id: "earn", label: "Earn", Icon: BadgeDollarSign },
+  { id: "faq", label: "FAQ", Icon: CircleHelp },
+  { id: "visit", label: "Visit", Icon: MapPin },
+];
 
 const FAQ_ITEMS = [
   {
@@ -223,14 +256,6 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const year = new Date().getFullYear();
 
-  const menuLinks = [
-    ...NAV_LINKS,
-    { id: "book", label: "Book" },
-    { id: "profiles", label: "Profiles" },
-    { id: "earn", label: "Earn" },
-    { id: "visit", label: "Visit" },
-  ] as const;
-
   const scrollToId = (id: string) => {
     const root = rootRef.current;
     const target = root?.querySelector<HTMLElement>(`#${id}`);
@@ -279,6 +304,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         </nav>
 
         <div className="studio-landing-head-end">
+          <button
+            type="button"
+            className="studio-landing-head-btn is-bordered"
+            onClick={() => scrollToId("generate")}
+          >
+            Show me around
+          </button>
           <button
             type="button"
             className="studio-landing-head-btn is-primary"
@@ -381,13 +413,6 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
                 Enter Studio
                 <ArrowRight aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="studio-landing-cta-ghost"
-                onClick={() => scrollToId("generate")}
-              >
-                Show me around
               </button>
             </div>
             <LaptopMock
