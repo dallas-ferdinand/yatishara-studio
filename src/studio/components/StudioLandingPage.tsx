@@ -17,27 +17,27 @@ const NAV_LINKS = [
 const FAQ_ITEMS = [
   {
     q: "What is Yatishara Studio?",
-    a: "A business creative ecosystem — generate ads, edit them, hire creators, message the job, and pay safely in one workspace.",
+    a: "A creative workspace for businesses. You generate ads, edit them, hire creators, and handle payment without ever leaving. It's the room where all your creative work finally lives together.",
   },
   {
     q: "Who is it for?",
-    a: "Businesses that need ads and creatives done, plus creators who want to sell offers or assets beside the same tools.",
+    a: "Businesses that need ads and content done, and the creators who make them. Both sides work in the same place, which is exactly the point.",
   },
   {
     q: "Do I have to hire someone?",
-    a: "No. Generate and edit on your own, or book a verified creator on Creative Network when you need a partner.",
+    a: "Not at all. Plenty of people generate and edit everything themselves. Creative Network is there for the days you'd rather hand it to a professional.",
   },
   {
     q: "How does booking payment work?",
-    a: "You pick a package and top up your Studio wallet. Payment stays protected until you accept the delivery.",
+    a: "You top up your Studio wallet and book a package. The money stays protected until the delivery arrives and you accept it. If the work never lands, the money never leaves.",
   },
   {
     q: "What currencies do you use?",
-    a: "Studio wallets and listings use TTD (Trinidad & Tobago dollars).",
+    a: "Wallets and listings run in TTD, Trinidad and Tobago dollars.",
   },
   {
     q: "Where are you based?",
-    a: "Yatishara operates from Trinidad & Tobago. Email hello@yatishara.com — details in Visit below.",
+    a: "Trinidad and Tobago, and proudly so. Write to hello@yatishara.com and a real person will answer.",
   },
 ] as const;
 
@@ -194,10 +194,10 @@ function FaqSection() {
       <div className="studio-landing-section-inner is-narrow">
         <p className="studio-landing-kicker">FAQ</p>
         <h2 id="faq-title" className="studio-landing-section-title">
-          Quick <Hl tone="mint">answers</Hl>.
+          Fair <Hl tone="mint">questions</Hl>.
         </h2>
         <p className="studio-landing-section-lead">
-          The short version of how Studio fits a business that needs ads done.
+          The things people ask before they sign in, answered straight.
         </p>
         <div className="studio-landing-faq">
           {FAQ_ITEMS.map((item, index) => {
@@ -345,14 +345,17 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="overview-title"
         >
           <div className="studio-landing-section-inner">
-            <p className="studio-landing-kicker">Business creative ecosystem</p>
+            <p className="studio-landing-kicker">
+              For businesses that need creatives done
+            </p>
             <h1 id="overview-title" className="studio-landing-hero-title">
-              Yatishara <Circled>Studio</Circled>
+              Your ads, made under <Circled>one roof</Circled>.
             </h1>
             <p className="studio-landing-section-lead">
-              Generate ads, edit them, hire creators, and pay safely —{" "}
-              <Hl>one workspace</Hl> for businesses that{" "}
-              <Wavy>need creatives done</Wavy>.
+              Describe what you're selling and Studio shapes it into a flyer, a
+              video, a voice. When you want human hands on it,{" "}
+              <Hl>hire a real creator</Hl> and pay them safely. The whole job
+              lives in <Wavy>one calm place</Wavy>.
             </p>
             <p className="studio-landing-aside" aria-hidden="true">
               <svg viewBox="0 0 48 28" className="studio-landing-aside-arrow">
@@ -372,7 +375,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                   strokeLinejoin="round"
                 />
               </svg>
-              files · chat · payments — all here
+              everything finally in one place
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -384,7 +387,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 className="studio-landing-cta-ghost"
                 onClick={() => scrollToId("generate")}
               >
-                Walk the flow
+                Show me around
               </button>
             </div>
             <LaptopMock
@@ -401,11 +404,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Generate"
           title={
             <>
-              Brief it. Get the <Hl tone="mint">ad</Hl>.
+              Start with a <Hl tone="mint">sentence</Hl>.
             </>
           }
-          lead="Talk to Studio like a creative director — image, video, audio, or script."
-          aside="no tool-hopping"
+          lead="Type the brief the way you'd say it out loud. Studio answers with the flyer, the video, the script, or the voiceover, and you shape it from there."
+          aside="just say what you need"
         >
           <LaptopMock
             src="/landing/mock-generate-chat.jpg"
@@ -419,10 +422,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Edit"
           title={
             <>
-              Cut. Caption. <Wavy tone="coral">Ship</Wavy>.
+              Then make it <Wavy tone="coral">yours</Wavy>.
             </>
           }
-          lead="Finish in the timeline — stock music and SFX sit right beside your files."
+          lead="Trim the take, drop in a voiceover, pull music straight from the library. Nothing to export and re-upload somewhere else. You finish where you started."
         >
           <LaptopMock
             src="/landing/mock-edit.jpg"
@@ -436,10 +439,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Hire"
           title={
             <>
-              Need a partner? <Circled>Book</Circled> one.
+              Some jobs deserve a <Circled>human</Circled>.
             </>
           }
-          lead="Creative Network lists verified creators — ads, delivery windows, clear packages."
+          lead="When you'd rather hand it off, Creative Network is full of verified creators with real portfolios and honest delivery windows. Find the one whose work feels right and book them."
         >
           <LaptopMock
             src="/landing/mock-network.jpg"
@@ -453,11 +456,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Book"
           title={
             <>
-              Pay when you <Hl>accept</Hl>.
+              Your money moves when you're <Hl>happy</Hl>.
             </>
           }
-          lead="Pick a package, top up, and keep payment protected until delivery looks right."
-          aside="wallet stays in Studio"
+          lead="Book a package and the payment waits, protected in your wallet, until the work arrives and you accept it. No chasing, no paying on faith."
+          aside="your wallet, your call"
         >
           <LaptopMock
             src="/landing/mock-book.jpg"
@@ -471,10 +474,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Messages"
           title={
             <>
-              Run the job in <Wavy tone="sky">chat</Wavy>.
+              Talk it through, <Wavy tone="sky">right here</Wavy>.
             </>
           }
-          lead="Share storyboards, voice notes, and revisions with paid creators in one thread."
+          lead="Every booking gets its own thread. Share the storyboard, leave a voice note, ask for one more pass. The conversation stays beside the work it's about."
         >
           <LaptopMock
             src="/landing/mock-messages.jpg"
@@ -488,10 +491,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Profiles"
           title={
             <>
-              See the work. <Hl tone="mint">Hire Us</Hl>.
+              Meet who you're <Hl tone="mint">hiring</Hl>.
             </>
           }
-          lead="Open a creator profile, skim the portfolio, then hire or message from there."
+          lead="Every creator has a profile that shows their actual work. Scroll through, get a feel for their taste, then hire or message them from the same page."
         >
           <LaptopMock
             src="/landing/mock-profile.jpg"
@@ -505,10 +508,10 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           kicker="Earn"
           title={
             <>
-              Creators <Circled>sell</Circled> here too.
+              Creators get <Circled>paid</Circled> here too.
             </>
           }
-          lead="List SFX, offers, and assets — track sales beside the same Studio files."
+          lead="List your offers, your sound effects, your assets, and watch sales land beside the files you already work in. Your storefront is part of the studio."
         >
           <LaptopMock
             src="/landing/mock-assets-sell.jpg"
@@ -526,11 +529,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <div className="studio-landing-section-inner is-narrow">
             <p className="studio-landing-kicker">Visit</p>
             <h2 id="visit-title" className="studio-landing-section-title">
-              <Wavy>Trinidad &amp; Tobago</Wavy>.
+              Made in <Wavy>Trinidad &amp; Tobago</Wavy>.
             </h2>
             <p className="studio-landing-section-lead">
-              Yatishara Studio is built and operated from Trinidad &amp; Tobago —
-              wallets and listings in TTD.
+              Studio is built and run from Trinidad and Tobago, which is why
+              wallets and listings speak TTD. If you'd rather talk to a person,
+              write to us. We answer.
             </p>
             <ul className="studio-landing-visit">
               <li>
@@ -553,11 +557,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <div className="studio-landing-section-inner">
             <p className="studio-landing-kicker">One ecosystem</p>
             <h2 id="start-title" className="studio-landing-section-title">
-              From brief to <Hl>booked delivery</Hl>.
+              Bring your next ad <Hl>home</Hl>.
             </h2>
             <p className="studio-landing-section-lead">
-              Studio is where businesses make ads, hire help, and keep the whole
-              job — files, chat, and payments — in one place.
+              One place where the idea, the edit, the hire, and the payment all
+              know each other. Sign in and start with whatever you have, even
+              if it's just a sentence.
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -566,7 +571,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               </button>
             </div>
             <p className="studio-landing-aside is-under-cta" aria-hidden="true">
-              simple. efficient. in one place.
+              your first flyer is minutes away
             </p>
           </div>
         </section>
