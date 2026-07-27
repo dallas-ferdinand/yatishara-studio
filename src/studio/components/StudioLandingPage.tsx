@@ -131,7 +131,6 @@ function LaptopMock({
 
 function LandingSection({
   id,
-  kicker,
   title,
   lead,
   children,
@@ -139,7 +138,6 @@ function LandingSection({
   aside,
 }: {
   id: string;
-  kicker: string;
   title: ReactNode;
   lead: string;
   children?: ReactNode;
@@ -153,7 +151,6 @@ function LandingSection({
       aria-labelledby={`${id}-title`}
     >
       <div className="studio-landing-section-inner">
-        <p className="studio-landing-kicker">{kicker}</p>
         <h2 id={`${id}-title`} className="studio-landing-section-title">
           {title}
         </h2>
@@ -192,13 +189,9 @@ function FaqSection() {
   return (
     <section id="faq" className="studio-landing-section is-plate" aria-labelledby="faq-title">
       <div className="studio-landing-section-inner is-narrow">
-        <p className="studio-landing-kicker">FAQ</p>
         <h2 id="faq-title" className="studio-landing-section-title">
           Fair <Hl tone="mint">questions</Hl>.
         </h2>
-        <p className="studio-landing-section-lead">
-          The things people ask before they sign in, answered straight.
-        </p>
         <div className="studio-landing-faq">
           {FAQ_ITEMS.map((item, index) => {
             const isOpen = open === index;
@@ -356,17 +349,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="overview-title"
         >
           <div className="studio-landing-section-inner">
-            <p className="studio-landing-kicker">
-              For businesses that need creatives done
-            </p>
             <h1 id="overview-title" className="studio-landing-hero-title">
               Your ads, made under <Circled>one roof</Circled>.
             </h1>
             <p className="studio-landing-section-lead">
               Describe what you're selling and Studio shapes it into a flyer, a
               video, a voice. When you want human hands on it,{" "}
-              <Hl>hire a real creator</Hl> and pay them safely. The whole job
-              lives in <Wavy>one calm place</Wavy>.
+              <Hl>hire a real creator</Hl> and pay them safely.
             </p>
             <p className="studio-landing-aside" aria-hidden="true">
               <svg viewBox="0 0 48 28" className="studio-landing-aside-arrow">
@@ -412,13 +401,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="generate"
           tone="plate"
-          kicker="Generate"
           title={
             <>
               Start with a <Hl tone="mint">sentence</Hl>.
             </>
           }
-          lead="Type the brief the way you'd say it out loud. Studio answers with the flyer, the video, the script, or the voiceover, and you shape it from there."
+          lead="Type the brief the way you'd say it out loud. Studio answers with the flyer, the video, or the voiceover."
           aside="just say what you need"
         >
           <LaptopMock
@@ -430,13 +418,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="edit"
           tone="page"
-          kicker="Edit"
           title={
             <>
               Then make it <Wavy tone="coral">yours</Wavy>.
             </>
           }
-          lead="Trim the take, drop in a voiceover, pull music straight from the library. Nothing to export and re-upload somewhere else. You finish where you started."
+          lead="Trim the take, drop in music, and finish where you started. No exporting to somewhere else."
         >
           <LaptopMock
             src="/landing/mock-edit.jpg"
@@ -447,13 +434,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="hire"
           tone="plate"
-          kicker="Hire"
           title={
             <>
               Some jobs deserve a <Circled>human</Circled>.
             </>
           }
-          lead="When you'd rather hand it off, Creative Network is full of verified creators with real portfolios and honest delivery windows. Find the one whose work feels right and book them."
+          lead="Creative Network has verified creators with real portfolios. Find who feels right and book them."
         >
           <LaptopMock
             src="/landing/mock-network.jpg"
@@ -464,13 +450,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="book"
           tone="page"
-          kicker="Book"
           title={
             <>
               Your money moves when you're <Hl>happy</Hl>.
             </>
           }
-          lead="Book a package and the payment waits, protected in your wallet, until the work arrives and you accept it. No chasing, no paying on faith."
+          lead="Book a package and payment waits in your wallet until the work arrives and you accept it."
           aside="your wallet, your call"
         >
           <LaptopMock
@@ -482,13 +467,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="messages"
           tone="plate"
-          kicker="Messages"
           title={
             <>
               Talk it through, <Wavy tone="sky">right here</Wavy>.
             </>
           }
-          lead="Every booking gets its own thread. Share the storyboard, leave a voice note, ask for one more pass. The conversation stays beside the work it's about."
+          lead="Every booking gets a thread. Share the storyboard, leave a voice note, ask for one more pass."
         >
           <LaptopMock
             src="/landing/mock-messages.jpg"
@@ -499,13 +483,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="profiles"
           tone="page"
-          kicker="Profiles"
           title={
             <>
               Meet who you're <Hl tone="mint">hiring</Hl>.
             </>
           }
-          lead="Every creator has a profile that shows their actual work. Scroll through, get a feel for their taste, then hire or message them from the same page."
+          lead="Scroll their work, get a feel for their taste, then hire from the same page."
         >
           <LaptopMock
             src="/landing/mock-profile.jpg"
@@ -516,13 +499,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         <LandingSection
           id="earn"
           tone="plate"
-          kicker="Earn"
           title={
             <>
               Creators get <Circled>paid</Circled> here too.
             </>
           }
-          lead="List your offers, your sound effects, your assets, and watch sales land beside the files you already work in. Your storefront is part of the studio."
+          lead="List your offers and assets, and watch sales land beside the files you already use."
         >
           <LaptopMock
             src="/landing/mock-assets-sell.jpg"
@@ -538,14 +520,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="visit-title"
         >
           <div className="studio-landing-section-inner is-narrow">
-            <p className="studio-landing-kicker">Visit</p>
             <h2 id="visit-title" className="studio-landing-section-title">
               Made in <Wavy>Trinidad &amp; Tobago</Wavy>.
             </h2>
             <p className="studio-landing-section-lead">
-              Studio is built and run from Trinidad and Tobago, which is why
-              wallets and listings speak TTD. If you'd rather talk to a person,
-              write to us. We answer.
+              Built and run from Trinidad and Tobago. Wallets and listings in
+              TTD. Write to us anytime.
             </p>
             <ul className="studio-landing-visit">
               <li>
@@ -566,14 +546,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="start-title"
         >
           <div className="studio-landing-section-inner">
-            <p className="studio-landing-kicker">One ecosystem</p>
             <h2 id="start-title" className="studio-landing-section-title">
               Bring your next ad <Hl>home</Hl>.
             </h2>
             <p className="studio-landing-section-lead">
-              One place where the idea, the edit, the hire, and the payment all
-              know each other. Sign in and start with whatever you have, even
-              if it's just a sentence.
+              Sign in and start with whatever you have, even if it's just a
+              sentence.
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
