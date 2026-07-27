@@ -331,7 +331,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     >
       <header className="studio-landing-head">
         <a className="studio-landing-brand" href="/" aria-label="Yatishara Studio">
-          <BrandMark size={18} subtle appearance="light" />
+          <BrandMark size={22} subtle appearance="light" />
           <span className="studio-landing-brand-name">Yatishara Studio</span>
         </a>
 

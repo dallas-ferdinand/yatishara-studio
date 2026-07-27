@@ -947,7 +947,7 @@
 /* Mobile: header chrome becomes a tight bottom nav. */
 @media (max-width: 979px) {
   .studio-landing {
-    --studio-landing-chrome-h: calc(44px + env(safe-area-inset-bottom, 0px));
+    --studio-landing-chrome-h: calc(52px + env(safe-area-inset-bottom, 0px));
   }
 
   .studio-landing-main {
@@ -958,11 +958,11 @@
     order: 2;
     height: var(--studio-landing-chrome-h);
     min-height: var(--studio-landing-chrome-h);
-    padding: 0 6px;
+    padding: 0 8px;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     border-bottom: none;
     border-top: 1px solid var(--studio-landing-line);
-    gap: 6px;
+    gap: 8px;
   }
 
   .studio-landing.is-menu-open .studio-landing-head {
@@ -970,15 +970,49 @@
   }
 
   .studio-landing-head-end {
-    gap: 4px;
-  }
-
-  .studio-landing-brand {
     gap: 6px;
   }
 
+  .studio-landing-brand {
+    gap: 8px;
+  }
+
+  .studio-landing-brand .mos-brand-mark {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  .studio-landing-brand .mos-brand-mark img {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
   .studio-landing-brand-name {
-    max-width: 7.5rem;
+    max-width: 11rem;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .studio-landing-head-btn {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 14px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  .studio-landing-menu-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 8px;
+  }
+
+  .studio-landing-menu-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .studio-landing-menu-backdrop {
