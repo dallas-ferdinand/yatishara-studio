@@ -900,30 +900,32 @@
   transform-origin: right top;
 }
 
-/* Final CTA: origin on the button’s right end → hunched tip into Caveat. */
+/* Final CTA: SVG origin glued to the button’s right end. */
 .studio-landing-aside.is-from-button {
-  top: calc(100% - 16px);
-  left: calc(100% - 22px);
-  grid-template-columns: 76px auto;
-  align-items: start;
+  top: calc(100% - 6px);
+  left: calc(100% - 12px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: max-content;
+  max-width: min(220px, 56vw);
   margin: 0;
   transform: none;
 }
 
 .studio-landing-aside.is-from-button .studio-landing-aside-arrow {
-  grid-column: 1;
-  grid-row: 1;
-  width: 76px;
-  height: 76px;
+  display: block;
+  width: 70px;
+  height: 62px;
   margin: 0;
   overflow: visible;
+  flex-shrink: 0;
 }
 
 .studio-landing-aside.is-from-button .studio-landing-aside-text {
-  grid-column: 2;
-  grid-row: 1;
-  margin-top: 44px;
-  margin-left: -6px;
+  display: block;
+  margin: -2px 0 0 26px;
   transform: rotate(-3deg);
   transform-origin: left top;
 }
@@ -1232,7 +1234,11 @@
   }
 
   .studio-landing-aside.is-from-button {
-    left: 70%;
+    left: calc(100% - 14px);
+  }
+
+  .studio-landing-aside.is-from-button .studio-landing-aside-text {
+    margin-left: 18px;
   }
 
   .studio-landing-aside-arrow {

@@ -218,22 +218,25 @@ function AsideCallout({
           </>
         ) : null}
         {variant === "from-button" ? (
-          /* Same clean hero paths, rotated so tip aims down into the Caveat text. */
-          <g transform="rotate(128 22 70)">
+          <>
+            {/*
+              Natural coords (no rotate): origin at button’s right end (top-left of SVG),
+              hunched down-right into a tip that matches the hero’s open-V join.
+            */}
             <path
-              d="M22 70c10-28 28-48 68-52"
+              d="M10 8c6 34 28 54 72 60"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
             />
             <path
-              d="M76 10 92 16 84 32"
+              d="M66 54 82 68 70 82"
               stroke="currentColor"
               strokeWidth="3.6"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-          </g>
+          </>
         ) : null}
       </svg>
       <span className="studio-landing-aside-text">{children}</span>
