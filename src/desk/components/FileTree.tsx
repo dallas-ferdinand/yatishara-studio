@@ -293,13 +293,15 @@ function commitTouchDrop(targetEl, entry, clientX, clientY) {
  * @param {object} event - pointer-like { currentTarget, clientX, clientY }
  * @param {object} entry
  * @param {string} workspaceId
- * @param {{ mode?: "html5" | "touch" }} [options]
+ * @param {{ mode?: "html5" | "touch", onTouchDrop?: Function }} [options]
  */
 function startFileDragPreview(event, entry, workspaceId, options = {}) {
   if (typeof document === "undefined") return;
   const source = event.currentTarget;
   if (!source) return;
   const mode = options.mode === "touch" ? "touch" : "html5";
+  const onTouchDrop =
+    typeof options.onTouchDrop === "function" ? options.onTouchDrop : null;
   const fromFilesDock = Boolean(
     source.closest?.(".studio-files-dock, .studio-files-mobile-sheet"),
   );
@@ -586,10 +588,12 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       let attached = false;
 
       if (shouldDrop && mode === "touch" && fromFilesDock) {
-        // Always composer from the Files dock. Snapshot fields — active drag
-        // clears in finish()'s finally and must not race the deferred attach.
+        // Direct tree→Shell callback is the primary path. The module-global
+        // bridge remains only as an HMR/legacy fallback.
         const dropEntry = { ...dragEntry };
-        attached = deliverMobileComposerDrop(dropEntry, lastX, lastY);
+        attached = onTouchDrop
+          ? onTouchDrop(dropEntry, lastX, lastY) !== false
+          : deliverMobileComposerDrop(dropEntry, lastX, lastY);
         targetEl =
           findComposerShell() ||
           findComposerDropTargetAt(lastX, lastY, 48) ||
@@ -794,14 +798,21 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
 }
 
 /** Mobile: after short hold + move, start a touch drag session (HTML5 DnD unavailable). */
-export function startTouchFileDrag(source, entry, workspaceId, clientX, clientY) {
+export function startTouchFileDrag(
+  source,
+  entry,
+  workspaceId,
+  clientX,
+  clientY,
+  onTouchDrop,
+) {
   if (!source || !entry || entry.type === "parent") return;
   armExplorerDrag(entry);
   startFileDragPreview(
     { currentTarget: source, clientX, clientY },
     entry,
     workspaceId,
-    { mode: "touch" },
+    { mode: "touch", onTouchDrop },
   );
 }
 
@@ -830,6 +841,7 @@ function FileEntryButton({
   onContextMenu,
   onDragStart,
   onDropEntry,
+  onTouchDrop,
   selected = false,
   selectionMode = false,
   onSelect,
@@ -882,7 +894,14 @@ function FileEntryButton({
               if (!source) return;
               touchDragActiveRef.current = true;
               setDragArmed(false);
-              startTouchFileDrag(source, entry, workspaceId, coords.x, coords.y);
+              startTouchFileDrag(
+                source,
+                entry,
+                workspaceId,
+                coords.x,
+                coords.y,
+                onTouchDrop,
+              );
             }
           : undefined,
       },
@@ -1031,6 +1050,7 @@ function renderEntryRows({
   onEntryContextMenu,
   onEntryDragStart,
   onEntryDrop,
+  onTouchDrop,
   selectedSet,
   selectionMode,
   onEntrySelect,
@@ -1065,6 +1085,7 @@ function renderEntryRows({
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
               onDropEntry={onEntryDrop}
+              onTouchDrop={onTouchDrop}
               selected={selectedSet?.has(e.path)}
               selectionMode={selectionMode}
               onSelect={onEntrySelect}
@@ -1120,6 +1141,7 @@ function renderEntryRows({
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
               onDropEntry={onEntryDrop}
+              onTouchDrop={onTouchDrop}
               selected={selectedSet?.has(e.path)}
               selectionMode={selectionMode}
               onSelect={onEntrySelect}
@@ -1158,6 +1180,7 @@ function renderEntryRows({
             onLongPress={onEntryLongPress}
             onContextMenu={(ev) => onEntryContextMenu(ev, e)}
             onDragStart={(ev) => onEntryDragStart(ev, e)}
+            onTouchDrop={onTouchDrop}
             selected={selectedSet?.has(e.path)}
             selectionMode={selectionMode}
             onSelect={onEntrySelect}
@@ -1200,6 +1223,7 @@ export function FileTree({
   onEntryContextMenu,
   onBlankContextMenu,
   onEntryDrop,
+  onTouchDrop,
   emptyHint,
   /** Paths highlighted while in Studio pick-from-Files mode. */
   pickedPaths = null,
@@ -1315,7 +1339,8 @@ export function FileTree({
     onEntryLongPress,
     onEntryContextMenu: onContext,
     onEntryDragStart,
-  onEntryDrop,
+    onEntryDrop,
+    onTouchDrop,
     selectedSet,
     selectionMode,
     onEntrySelect,

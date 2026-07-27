@@ -18505,6 +18505,11 @@ export function StudioShell({
           setNavTrail={setNavTrail}
           onOpenPath={handleOpenPath}
           onEntryOpen={handleEntryOpen}
+          onMobileAttach={(entry) => {
+            const attached = attachEntry(entry, null);
+            if (attached) setMobileSection("composer");
+            return attached;
+          }}
           searchState={searchState}
           deferredSearch={deferredSearch}
           setContextMenu={setContextMenu}
@@ -25193,6 +25198,7 @@ function StudioFilesExplorerBody({
   setContextMenu,
   activeFolder,
   onEntryDrop,
+  onMobileAttach,
   isMobile,
   showSearch = true,
   showPathbar = true,
@@ -25284,6 +25290,7 @@ function StudioFilesExplorerBody({
           })
         }
         onEntryDrop={onEntryDrop}
+        onTouchDrop={onMobileAttach}
         emptyHint={filterActive ? "No matching files" : undefined}
       />
   );
