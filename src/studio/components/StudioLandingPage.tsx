@@ -5,12 +5,18 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import "./studio-landing.css";
 
+/**
+ * Landing story (business creative ecosystem):
+ * Overview → Generate → Edit → Hire → Book → Messages → Profiles → Earn → Start
+ * Each full-height section = one idea + one real product laptop mock.
+ */
 const NAV_LINKS = [
   { id: "overview", label: "Overview" },
   { id: "generate", label: "Generate" },
   { id: "edit", label: "Edit" },
   { id: "hire", label: "Hire" },
-  { id: "review", label: "Review" },
+  { id: "messages", label: "Messages" },
+  { id: "profiles", label: "Profiles" },
 ] as const;
 
 function LaptopMock({
@@ -178,6 +184,22 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 {link.label}
               </button>
             ))}
+            <button
+              type="button"
+              role="menuitem"
+              className="studio-landing-mobile-link"
+              onClick={() => scrollToId("book")}
+            >
+              Book
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="studio-landing-mobile-link"
+              onClick={() => scrollToId("earn")}
+            >
+              Earn
+            </button>
           </div>
         ) : null}
       </header>
@@ -189,13 +211,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="overview-title"
         >
           <div className="studio-landing-section-inner">
-            <p className="studio-landing-kicker">For businesses that need ads</p>
+            <p className="studio-landing-kicker">Business creative ecosystem</p>
             <h1 id="overview-title" className="studio-landing-hero-title">
               Yatishara Studio
             </h1>
             <p className="studio-landing-section-lead">
-              One ecosystem to generate creatives, edit them, hire partners, and
-              review the work — without hopping between tools.
+              Generate ads, edit them, hire creators, message the job, and pay
+              safely — one workspace for businesses that need creatives done.
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -207,12 +229,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
                 className="studio-landing-cta-ghost"
                 onClick={() => scrollToId("generate")}
               >
-                See how it works
+                Walk the flow
               </button>
             </div>
             <LaptopMock
-              src="/landing/mock-generate.jpg"
-              alt="Studio generate workspace"
+              src="/landing/mock-flyer.jpg"
+              alt="Studio generating a product flyer from a brief"
               priority
             />
           </div>
@@ -222,12 +244,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           id="generate"
           tone="plate"
           kicker="Generate"
-          title="Make the ad."
-          lead="Images, video, audio, and scripts — brief once, generate in Studio."
+          title="Brief it. Get the ad."
+          lead="Talk to Studio like a creative director — image, video, audio, or script."
         >
           <LaptopMock
-            src="/landing/mock-assist.jpg"
-            alt="Studio assistant generating ad creatives"
+            src="/landing/mock-generate-chat.jpg"
+            alt="Studio assistant chat turning a brief into a video ad"
           />
         </LandingSection>
 
@@ -235,12 +257,12 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           id="edit"
           tone="page"
           kicker="Edit"
-          title="Cut. Caption. Ship."
-          lead="Open the timeline, refine the take, export without leaving your files."
+          title="Finish in the timeline."
+          lead="Cut, caption, drop stock music or SFX, and export without leaving your files."
         >
           <LaptopMock
             src="/landing/mock-edit.jpg"
-            alt="Studio video editor timeline"
+            alt="Studio video editor with asset library sound effects"
           />
         </LandingSection>
 
@@ -248,25 +270,64 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           id="hire"
           tone="plate"
           kicker="Hire"
-          title="Book the creator."
-          lead="Creative Network keeps payment safe until you accept delivery."
+          title="Need a partner? Book one."
+          lead="Creative Network lists verified creators — ads, delivery windows, clear packages."
         >
           <LaptopMock
             src="/landing/mock-network.jpg"
-            alt="Creative Network marketplace in Studio"
+            alt="Creative Network marketplace for booking creators"
           />
         </LandingSection>
 
         <LandingSection
-          id="review"
+          id="book"
           tone="page"
-          kicker="Review"
-          title="Approve together."
-          lead="Share cuts on the feed, collect comments, and lock the next revision."
+          kicker="Book"
+          title="Pay when you accept."
+          lead="Pick a package, top up, and keep payment protected until delivery looks right."
         >
           <LaptopMock
-            src="/landing/mock-feed.jpg"
-            alt="Studio feed for creative review"
+            src="/landing/mock-book.jpg"
+            alt="Booking a Creative Network package with wallet balance"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="messages"
+          tone="plate"
+          kicker="Messages"
+          title="Run the job in chat."
+          lead="Share storyboards, voice notes, and revisions with paid creators in one thread."
+        >
+          <LaptopMock
+            src="/landing/mock-messages.jpg"
+            alt="Studio messages with a paid creator and shared storyboard"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="profiles"
+          tone="page"
+          kicker="Profiles"
+          title="See the work. Hire Us."
+          lead="Open a creator profile, skim the portfolio, then hire or message from there."
+        >
+          <LaptopMock
+            src="/landing/mock-profile.jpg"
+            alt="Creator profile with Hire Us and portfolio grid"
+          />
+        </LandingSection>
+
+        <LandingSection
+          id="earn"
+          tone="plate"
+          kicker="Earn"
+          title="Creators sell here too."
+          lead="List SFX, offers, and assets — track sales beside the same Studio files."
+        >
+          <LaptopMock
+            src="/landing/mock-assets-sell.jpg"
+            alt="My assets dashboard with listed sound effects and earnings"
           />
         </LandingSection>
 
@@ -276,13 +337,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           aria-labelledby="start-title"
         >
           <div className="studio-landing-section-inner">
-            <p className="studio-landing-kicker">One workspace</p>
+            <p className="studio-landing-kicker">One ecosystem</p>
             <h2 id="start-title" className="studio-landing-section-title">
-              Generate. Edit. Hire. Review.
+              From brief to booked delivery.
             </h2>
             <p className="studio-landing-section-lead">
-              Studio is the operating layer for businesses that need ads done —
-              not another disconnected tool.
+              Studio is where businesses make ads, hire help, and keep the whole
+              job — files, chat, and payments — in one place.
             </p>
             <div className="studio-landing-cta-row">
               <button type="button" className="studio-landing-cta" onClick={onSignIn}>
@@ -295,7 +356,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
 
         <footer className="studio-landing-foot">
           <span>Yatishara Studio</span>
-          <span>Business creative ecosystem</span>
+          <span>Generate · Edit · Hire · Message</span>
         </footer>
       </main>
     </div>

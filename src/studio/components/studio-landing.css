@@ -79,12 +79,12 @@
   align-items: center;
   justify-content: center;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: none;
   border-radius: var(--cursor-radius-sm, 6px);
   background: transparent;
   color: var(--studio-landing-mute);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.01em;
   cursor: pointer;
@@ -424,7 +424,7 @@
   font-weight: 500;
 }
 
-@media (min-width: 860px) {
+@media (min-width: 980px) {
   .studio-landing-nav {
     display: flex;
   }
