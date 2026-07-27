@@ -42,6 +42,7 @@
   position: sticky;
   top: 0;
   z-index: 20;
+  overflow: visible;
 }
 
 .studio-landing-brand {
@@ -49,6 +50,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  z-index: 1;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
@@ -63,12 +65,118 @@
   text-overflow: ellipsis;
 }
 
+.studio-landing-nav {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+}
+
+.studio-landing-nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: transparent;
+  color: var(--studio-landing-mute);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.studio-landing-nav-link:hover {
+  background: var(--mos-plate-strong, #d4d4da);
+  color: var(--studio-landing-ink);
+}
+
+.studio-landing-nav-link:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mos-text, #1c1c1e) 35%, transparent);
+  outline-offset: 1px;
+}
+
 .studio-landing-head-end {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  z-index: 1;
+}
+
+.studio-landing-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: var(--mos-plate-strong, #d4d4da);
+  color: var(--studio-landing-ink);
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.studio-landing-menu-btn:hover {
+  background: color-mix(in srgb, var(--mos-plate-strong, #d4d4da) 82%, var(--mos-text, #1c1c1e));
+}
+
+.studio-landing-menu-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mos-text, #1c1c1e) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.studio-landing-menu-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.studio-landing-mobile-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 8px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 148px;
+  padding: 4px;
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, #ececf0);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.studio-landing-mobile-link {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: transparent;
+  color: var(--studio-landing-ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.studio-landing-mobile-link:hover,
+.studio-landing-mobile-link:focus-visible {
+  background: var(--mos-plate-strong, #d4d4da);
+  outline: none;
 }
 
 .studio-landing-head-btn {
@@ -320,6 +428,37 @@
   color: var(--studio-landing-mute);
 }
 
+.studio-landing-network {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px clamp(20px, 5vw, 56px);
+  border-top: 1px solid var(--studio-landing-line);
+  background: var(--mos-plate, #ececf0);
+}
+
+.studio-landing-network-copy {
+  min-width: 0;
+  max-width: 32rem;
+}
+
+.studio-landing-network-copy h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--studio-landing-ink);
+}
+
+.studio-landing-network-copy p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--studio-landing-mute);
+}
+
 .studio-landing-foot {
   display: flex;
   flex-wrap: wrap;
@@ -335,6 +474,15 @@
 }
 
 @media (min-width: 720px) {
+  .studio-landing-nav {
+    display: flex;
+  }
+
+  .studio-landing-menu-btn,
+  .studio-landing-mobile-menu {
+    display: none;
+  }
+
   .studio-landing-points {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -364,10 +512,17 @@
   .studio-landing-strip figure {
     aspect-ratio: 2 / 1;
   }
+
+  .studio-landing-brand-name {
+    max-width: 9.5rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .studio-landing-head-btn,
+  .studio-landing-menu-btn,
+  .studio-landing-nav-link,
+  .studio-landing-mobile-link,
   .studio-landing-cta,
   .studio-landing-cta svg,
   .studio-landing-cta-ghost,
