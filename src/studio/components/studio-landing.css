@@ -1098,6 +1098,11 @@
     display: flex;
   }
 
+  /* Desktop uses the inline nav — hide the mobile sheet trigger. */
+  .studio-landing-menu-btn {
+    display: none;
+  }
+
   .studio-landing-deck-arrow {
     display: inline-flex;
   }
