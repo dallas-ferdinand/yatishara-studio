@@ -61,23 +61,18 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
+/* Match the chat-head tools circle (studio-composer-circle-btn) on the right. */
 .studio-dm-back {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 24px;
+  min-width: 24px;
   height: 24px;
+  min-height: 24px;
   flex: 0 0 auto;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  cursor: pointer;
 }
 
-.studio-dm-back:hover {
-  background: var(--color-cursor-hover, var(--mos-hover));
-  color: var(--color-cursor-text, var(--mos-text));
+.studio-dm-back svg {
+  width: 13px;
+  height: 13px;
 }
 
 .studio-dm-chat-peer {

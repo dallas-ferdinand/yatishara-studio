@@ -24,6 +24,14 @@ type Props = {
    */
   durationHint?: number;
   onDownload?: () => void;
+  /** Show `title` as a label inside the player chrome (top left). */
+  showTitle?: boolean;
+  /** Top-right control (e.g. store Buy icon) — same container as play/wave. */
+  headerEnd?: ReactNode;
+  /** Optional row under the play controls (e.g. download count). */
+  footer?: ReactNode;
+  /** Denser chrome for store listing cards (smaller pad / wave / orb). */
+  compact?: boolean;
 };
 
 function formatAudioClock(seconds: number): string {
@@ -150,14 +158,20 @@ function WaveformScrubber({
   );
 }
 
-function PlayControl({ disabled }: { disabled?: boolean }) {
+function PlayControl({
+  disabled,
+  size = "md",
+}: {
+  disabled?: boolean;
+  size?: "sm" | "md";
+}) {
   const player = useAudioPlayer();
   const playing = player.isPlaying;
   const loading = player.isBuffering && playing;
 
   return (
     <StudioOrbPlayButton
-      size="md"
+      size={size}
       playing={playing}
       loading={loading}
       showGlyph
@@ -188,25 +202,55 @@ function AudioPlayerBody({
   src,
   title,
   isPane,
+  compact,
   durationHint,
+  showTitle,
+  headerEnd,
+  footer,
 }: {
   src: string;
   title?: string;
   isPane: boolean;
+  compact?: boolean;
   durationHint?: number;
+  showTitle?: boolean;
+  headerEnd?: ReactNode;
+  footer?: ReactNode;
 }) {
   const player = useAudioPlayer();
   const failed = Boolean(player.error);
+  const waveBars = isPane ? 120 : compact ? 72 : 96;
+  const waveHeight = isPane ? 80 : compact ? 28 : 48;
   const waveform = useMemo(
-    () => seedWaveform(src, isPane ? 120 : 96),
-    [src, isPane],
+    () => seedWaveform(src, waveBars),
+    [src, waveBars],
   );
+  const hasHead = Boolean(showTitle && title) || headerEnd != null;
 
   return (
     <div
-      className={cn("studio-chat-audio-player", isPane && "is-pane")}
-      title={title}
+      className={cn(
+        "studio-chat-audio-player",
+        isPane && "is-pane",
+        compact && "is-compact",
+      )}
+      title={showTitle ? undefined : title}
     >
+      {hasHead ? (
+        <div className="studio-chat-audio-head">
+          {showTitle && title ? (
+            <span className="studio-chat-audio-head-title" title={title}>
+              {title}
+            </span>
+          ) : (
+            <span className="studio-chat-audio-head-spacer" />
+          )}
+          {headerEnd ? (
+            <div className="studio-chat-audio-head-end">{headerEnd}</div>
+          ) : null}
+        </div>
+      ) : null}
+
       {isPane ? (
         <div className="studio-chat-audio-orb-hero">
           <StudioOrbPlayButton
@@ -225,11 +269,13 @@ function AudioPlayerBody({
       ) : null}
 
       <div className="studio-chat-audio-row">
-        {!isPane ? <PlayControl disabled={failed} /> : null}
+        {!isPane ? (
+          <PlayControl disabled={failed} size={compact ? "sm" : "md"} />
+        ) : null}
         <WaveformScrubber
           key={src}
           data={waveform}
-          height={isPane ? 80 : 48}
+          height={waveHeight}
           durationHint={durationHint}
         />
         <span className="studio-chat-audio-time">
@@ -238,6 +284,8 @@ function AudioPlayerBody({
           <DurationLabel durationHint={durationHint} />
         </span>
       </div>
+
+      {footer ? <div className="studio-chat-audio-foot">{footer}</div> : null}
     </div>
   );
 }
@@ -247,6 +295,10 @@ export function StudioChatAudioPlayer({
   title,
   variant = "chat",
   durationHint,
+  showTitle = false,
+  headerEnd,
+  footer,
+  compact = false,
 }: Props) {
   const isPane = variant === "pane";
   const player = (
@@ -256,7 +308,11 @@ export function StudioChatAudioPlayer({
         src={src}
         title={title}
         isPane={isPane}
+        compact={compact && !isPane}
         durationHint={durationHint}
+        showTitle={showTitle}
+        headerEnd={headerEnd}
+        footer={footer}
       />
     </AudioPlayerProvider>
   );

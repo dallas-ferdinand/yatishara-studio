@@ -25,6 +25,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { CursorSelect } from "@/desk/components/CursorSelect";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
+import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
 import { IconField, IconTextarea } from "./MarketplaceIconField";
 import { OfferMediaEditor } from "./MarketplaceMediaEditor";
 import { SellerAccessApplicationForm } from "./SellerAccessApplicationForm";
@@ -600,10 +601,13 @@ export function MarketplaceOffersPane({
   const [busy, setBusy] = useState(false);
   const [reapplyRejected, setReapplyRejected] = useState(false);
 
+  const mediaExpiresUnix = useStickySignedUrlExpiry();
   const seller = useQuery(api.marketplace.getMySellerStatus);
   const myOffers = useQuery(
     api.marketplace.listMyOffers,
-    seller?.status === "approved" ? {} : "skip",
+    seller?.status === "approved"
+      ? { expiresUnix: mediaExpiresUnix }
+      : "skip",
   );
   const sellerJobs = useQuery(
     api.marketplace.listMySellerJobs,
@@ -1082,35 +1086,7 @@ export function MarketplaceOffersPane({
   return (
     <div className="studio-admin-panel">
       {view.kind === "home" ? (
-        hideHomeTabs ? (
-          <OffersHead
-            action={
-              homeTab === "offers" ? (
-                <button
-                  type="button"
-                  className="marketplace-offers-bar-action"
-                  onClick={openCreate}
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                  New offer
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="marketplace-offers-bar-action"
-                  onClick={onOpenCredits}
-                >
-                  <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
-                  Balance
-                </button>
-              )
-            }
-          >
-            <span className="studio-admin-head-tab is-active">
-              {homeTab === "jobs" ? "My jobs" : "My offers"}
-            </span>
-          </OffersHead>
-        ) : (
+        hideHomeTabs ? null : (
         <OffersHead
           action={
             homeTab === "offers" ? (
@@ -1260,20 +1236,32 @@ export function MarketplaceOffersPane({
               <Section
                 title="Your offers"
                 extras={
-                  <CursorSelect
-                    ariaLabel="Offer type"
-                    value={offerTypeFilter}
-                    onChange={(next) =>
-                      setOfferTypeFilter(next as OfferTypeFilter)
-                    }
-                    options={[
-                      { value: "all", label: "All types" },
-                      { value: "published", label: "Live" },
-                      { value: "draft", label: "Draft" },
-                      { value: "paused", label: "Paused" },
-                      { value: "archived", label: "Archived" },
-                    ]}
-                  />
+                  <>
+                    {hideHomeTabs ? (
+                      <button
+                        type="button"
+                        className="marketplace-offers-bar-action"
+                        onClick={openCreate}
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                        New offer
+                      </button>
+                    ) : null}
+                    <CursorSelect
+                      ariaLabel="Offer type"
+                      value={offerTypeFilter}
+                      onChange={(next) =>
+                        setOfferTypeFilter(next as OfferTypeFilter)
+                      }
+                      options={[
+                        { value: "all", label: "All types" },
+                        { value: "published", label: "Live" },
+                        { value: "draft", label: "Draft" },
+                        { value: "paused", label: "Paused" },
+                        { value: "archived", label: "Archived" },
+                      ]}
+                    />
+                  </>
                 }
               >
                 {!myOffers ? (
@@ -1335,16 +1323,28 @@ export function MarketplaceOffersPane({
               <Section
                 title="Your jobs"
                 extras={
-                  <CursorSelect
-                    ariaLabel="Job type"
-                    value={jobFilter}
-                    onChange={(next) => setJobFilter(next as JobFilter)}
-                    options={[
-                      { value: "all", label: "All types" },
-                      { value: "sell", label: "Selling" },
-                      { value: "buy", label: "Buying" },
-                    ]}
-                  />
+                  <>
+                    {hideHomeTabs ? (
+                      <button
+                        type="button"
+                        className="marketplace-offers-bar-action"
+                        onClick={onOpenCredits}
+                      >
+                        <Wallet className="h-3.5 w-3.5" aria-hidden="true" />
+                        Balance
+                      </button>
+                    ) : null}
+                    <CursorSelect
+                      ariaLabel="Job type"
+                      value={jobFilter}
+                      onChange={(next) => setJobFilter(next as JobFilter)}
+                      options={[
+                        { value: "all", label: "All types" },
+                        { value: "sell", label: "Selling" },
+                        { value: "buy", label: "Buying" },
+                      ]}
+                    />
+                  </>
                 }
               >
                 {jobsLoading ? (

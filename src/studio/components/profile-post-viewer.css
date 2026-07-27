@@ -27,28 +27,27 @@
 }
 
 @media (min-width: 900px) {
+  /* Flush full-height post + comments — same as other Studio rails (no inset cards). */
   .profile-post-viewer-layout {
-    gap: 16px;
-    padding: 16px;
+    gap: 0;
+    padding: 0;
   }
 
   .profile-post-viewer-layout .profile-post-viewer {
-    height: auto;
+    height: 100%;
     align-self: stretch;
-    border-radius: 18px;
+    border-radius: 0;
     border: 0;
     overflow: hidden;
-    background: #050608;
-    box-shadow:
-      0 18px 48px rgba(0, 0, 0, 0.36),
-      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+    /* Token stage — light gets L1 page, dark gets scheme page (not hardcoded black). */
+    background: var(--mos-page, var(--mos-bg, #050608));
+    box-shadow: none;
   }
 
   [data-appearance="light"] .profile-post-viewer-layout .profile-post-viewer {
     border: 0;
-    box-shadow:
-      0 16px 40px rgba(16, 22, 30, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    background: var(--mos-page, #f5f5f7);
+    box-shadow: none;
   }
 }
 
@@ -70,13 +69,20 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: color-mix(in srgb, #050608 72%, transparent);
-  -webkit-backdrop-filter: saturate(140%) blur(12px);
-  backdrop-filter: saturate(140%) blur(12px);
+  background: var(--mos-page, var(--mos-bg, #050608));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+[data-appearance="light"] .profile-post-viewer {
+  background: var(--mos-page, #f5f5f7);
+  color: var(--color-cursor-text-bright, #0f172a);
 }
 
 [data-appearance="light"] .profile-post-viewer-blur {
-  background: color-mix(in srgb, #0b1220 38%, transparent);
+  background: var(--mos-page, #f5f5f7);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .profile-post-viewer.is-loading,
@@ -278,16 +284,20 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, #000 18%, transparent);
 }
 
+[data-appearance="light"] .profile-post-slide {
+  background: var(--mos-page, #f5f5f7);
+}
+
 [data-appearance="light"] .profile-post-slide::after {
-  border-color: color-mix(in srgb, #0f172a 16%, transparent);
+  border-color: var(--mos-plate, #ececf0);
 }
 
 [data-appearance="light"] .profile-post-slide.is-y.is-prev::after {
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, #fff 38%, transparent);
+  box-shadow: inset 0 -1px 0 var(--mos-plate, #ececf0);
 }
 
 [data-appearance="light"] .profile-post-slide.is-y.is-next::after {
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 38%, transparent);
+  box-shadow: inset 0 1px 0 var(--mos-plate, #ececf0);
 }
 
 .profile-post-slide.is-y.is-prev {
@@ -320,9 +330,9 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: color-mix(in srgb, #050608 72%, transparent);
-  -webkit-backdrop-filter: saturate(140%) blur(22px);
-  backdrop-filter: saturate(140%) blur(22px);
+  background: var(--mos-page, var(--mos-bg, #050608));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .profile-post-slide-glass::after {
@@ -331,26 +341,32 @@
   inset: auto 0 0;
   height: min(46%, 280px);
   pointer-events: none;
+  /* Scrim only in dark — light letterbox is flat page, caption ink is sampled. */
+  background: none;
+}
+
+[data-appearance="dark"] .profile-post-slide-glass::after {
   background: linear-gradient(
     180deg,
     transparent 0%,
-    color-mix(in srgb, #050608 42%, transparent) 38%,
-    color-mix(in srgb, #050608 78%, transparent) 72%,
-    color-mix(in srgb, #050608 92%, transparent) 100%
+    color-mix(in srgb, var(--mos-page, #050608) 42%, transparent) 38%,
+    color-mix(in srgb, var(--mos-page, #050608) 78%, transparent) 72%,
+    color-mix(in srgb, var(--mos-page, #050608) 92%, transparent) 100%
   );
 }
 
 [data-appearance="light"] .profile-post-slide-glass {
-  background: color-mix(in srgb, #0b1220 38%, transparent);
+  background: var(--mos-page, #f5f5f7);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 [data-appearance="light"] .profile-post-slide-glass::after {
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    color-mix(in srgb, #050608 35%, transparent) 40%,
-    color-mix(in srgb, #050608 72%, transparent) 100%
-  );
+  background: none;
+}
+
+[data-appearance="light"] .profile-post-slide-media {
+  background: var(--mos-page, #f5f5f7);
 }
 
 .profile-post-slide-media {
@@ -645,6 +661,14 @@
   cursor: pointer;
 }
 
+.profile-post-caption.is-draggable {
+  cursor: grab;
+}
+
+.profile-post-caption.is-draggable:active {
+  cursor: grabbing;
+}
+
 .profile-post-caption.is-tappable:focus-visible {
   outline: 2px solid color-mix(in srgb, #fff 70%, transparent);
   outline-offset: 4px;
@@ -733,13 +757,59 @@
   font-weight: 650;
 }
 
-[data-appearance="light"] .profile-post-caption-user,
-[data-appearance="light"] .profile-post-caption-text,
-[data-appearance="light"] .profile-post-caption-tag,
-[data-appearance="light"] .profile-post-caption-mention,
-[data-appearance="light"] .profile-post-caption-mention.is-plain {
+/* Ink follows sampled backdrop (letterbox / media), not appearance mode. */
+.profile-post-caption.is-on-dark {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.profile-post-caption.is-on-dark .profile-post-caption-user,
+.profile-post-caption.is-on-dark .profile-post-caption-text,
+.profile-post-caption.is-on-dark .profile-post-caption-tag,
+.profile-post-caption.is-on-dark .profile-post-caption-mention,
+.profile-post-caption.is-on-dark .profile-post-caption-mention.is-plain {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media {
+  color: #fff;
+  border-color: color-mix(in srgb, #fff 45%, transparent);
+  text-shadow: none;
+}
+
+.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-label,
+.profile-post-caption.is-on-dark .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
+  color: #fff;
+}
+
+.profile-post-caption.is-on-light {
+  color: var(--color-cursor-text-bright, #0f172a);
+  text-shadow: none;
+}
+
+.profile-post-caption.is-on-light.is-tappable:focus-visible {
+  outline-color: color-mix(in srgb, var(--color-cursor-text-bright, #0f172a) 45%, transparent);
+}
+
+.profile-post-caption.is-on-light .profile-post-caption-user,
+.profile-post-caption.is-on-light .profile-post-caption-text,
+.profile-post-caption.is-on-light .profile-post-caption-tag,
+.profile-post-caption.is-on-light .profile-post-caption-mention,
+.profile-post-caption.is-on-light .profile-post-caption-mention.is-plain {
+  color: var(--color-cursor-text-bright, #0f172a);
+  text-shadow: none;
+}
+
+.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media {
+  color: var(--color-cursor-text-bright, #0f172a);
+  border-color: color-mix(in srgb, var(--color-cursor-text-bright, #0f172a) 28%, transparent);
+  text-shadow: none;
+}
+
+.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-label,
+.profile-post-caption.is-on-light .profile-post-caption-text .post-compose-inline-chip.is-on-media .post-compose-inline-chip-initial {
+  color: var(--color-cursor-text-bright, #0f172a);
 }
 
 @media (min-width: 900px) {
@@ -881,13 +951,84 @@
   color: #fff;
 }
 
+/* Action rail ink follows sampled backdrop (same as caption). */
+.profile-post-rail.is-on-dark .profile-post-rail-btn {
+  color: #fff;
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.65),
+    0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.profile-post-rail.is-on-dark .profile-post-rail-btn svg,
+.profile-post-rail.is-on-dark .profile-post-rail-spin {
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.45));
+}
+
+.profile-post-rail.is-on-dark .profile-post-rail-btn span {
+  color: #fff;
+}
+
+.profile-post-rail.is-on-dark .profile-post-rail-avatar {
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
+}
+
+.profile-post-rail.is-on-dark .profile-post-rail-btn.is-liked svg {
+  color: #ff3b5c;
+}
+
+.profile-post-rail.is-on-dark .profile-post-rail-btn.is-saved svg {
+  color: #ffc53d;
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn {
+  color: var(--color-cursor-text-bright, #0f172a);
+  text-shadow: none;
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn svg,
+.profile-post-rail.is-on-light .profile-post-rail-spin {
+  filter: none;
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn span {
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-avatar {
+  filter:
+    drop-shadow(0 1px 1px rgba(255, 255, 255, 0.65))
+    drop-shadow(0 2px 6px rgba(15, 23, 42, 0.18));
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn.is-liked {
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn.is-liked svg {
+  color: #e11d48;
+  filter: none;
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn.is-saved {
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+.profile-post-rail.is-on-light .profile-post-rail-btn.is-saved svg {
+  color: #ca8a04;
+  filter: none;
+}
+
 @media (min-width: 900px) {
   .profile-post-rail {
     right: 14px;
   }
 }
 
-/* Desktop — floating comments column (spaced from post card) */
+/* Desktop — flush full-height comments rail (matches other Studio sidebars) */
 .profile-comments-dock {
   display: none;
 }
@@ -906,34 +1047,25 @@
     min-width: 280px;
     max-width: 400px;
     align-self: stretch;
-    height: auto;
+    height: 100%;
     min-height: 0;
     pointer-events: auto;
-    color: #f4f1ea;
-    border: 1px solid var(--studio-composer-glass-border, var(--color-cursor-border, var(--mos-border)));
-    border-radius: 18px;
-    background: transparent;
+    color: var(--color-cursor-text-bright, var(--mos-text, #f4f1ea));
+    border: 0;
+    border-left: 1px solid var(--mos-plate, var(--color-cursor-border, var(--mos-border)));
+    border-radius: 0;
+    /* Solid panel — beat StudioShell transparent/main aside !important rules. */
+    background: var(--mos-panel, var(--mos-page, var(--color-cursor-sidebar, #f5f5f7))) !important;
     transform: none;
     filter: none;
     isolation: auto;
     contain: none;
     overflow: hidden;
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, #000 28%, transparent),
-      0 18px 48px rgba(0, 0, 0, 0.36),
-      inset 0 1px 0 color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
+    box-shadow: none;
   }
 
   .profile-comments-dock::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: inherit;
-    background: color-mix(in srgb, var(--color-mos-composer, #07111f) 68%, transparent);
-    -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
-    backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+    content: none;
   }
 
   .profile-comments-dock > *:not(.profile-comments-lightbox) {
@@ -1053,7 +1185,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.profile-comments-head > div:not(.profile-comments-thread-head) {
+.profile-comments-head > div:not(.profile-comments-thread-head):not(.profile-comments-post-actions) {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1065,7 +1197,7 @@
 }
 
 .profile-comments-head span {
-  color: color-mix(in srgb, #fff 62%, transparent);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
   font-size: 12px;
   font-weight: 650;
 }
@@ -1073,28 +1205,46 @@
 .profile-comments-close {
   width: 32px;
   height: 32px;
+  margin: 0;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, #fff 8%, transparent);
   color: inherit;
   display: grid;
   place-items: center;
+  line-height: 0;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+.profile-comments-close svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .profile-comments-post-actions {
   display: inline-flex;
   align-items: center;
+  align-self: center;
   gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
+  min-height: 32px;
+}
+
+.profile-comments-post-actions .profile-comments-close {
+  margin-left: 2px;
+  align-self: center;
 }
 
 .profile-comments-post-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  height: 32px;
   min-height: 32px;
   padding: 0 6px;
   border: 0;
@@ -1104,6 +1254,7 @@
   font: inherit;
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -1129,7 +1280,7 @@
 }
 
 .profile-comments-post-action span {
-  color: #fff;
+  color: inherit;
 }
 
 .profile-comments-post-action:disabled {
@@ -1137,14 +1288,31 @@
   cursor: wait;
 }
 
-.profile-comments-head.is-thread .profile-comments-post-actions {
-  margin-left: 0;
-}
-
 .profile-comments-head.is-thread {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.profile-comments-head.is-thread .profile-comments-post-actions {
+  align-self: center;
+  height: 32px;
+  min-height: 32px;
+  margin-left: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.profile-comments-head.is-thread .profile-comments-post-action,
+.profile-comments-head.is-thread .profile-comments-close {
+  align-self: center;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.profile-comments-head.is-thread .profile-comments-close {
+  width: 32px;
+  height: 32px;
 }
 
 .profile-comments-thread-head {
@@ -1196,7 +1364,7 @@
 }
 
 .profile-comments-thread-preview time {
-  color: color-mix(in srgb, #fff 58%, transparent);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 55%, transparent));
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
@@ -1258,6 +1426,107 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.profile-description-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-description-edit-input {
+  width: 100%;
+  min-height: 140px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, #fff 14%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #fff 7%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: vertical;
+  outline: none;
+}
+
+.profile-description-edit-input:focus {
+  border-color: color-mix(in srgb, var(--cursor-accent, #84cc16) 55%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cursor-accent, #84cc16) 22%, transparent);
+}
+
+.profile-description-edit-input:disabled {
+  opacity: 0.65;
+}
+
+.profile-description-edit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.profile-description-edit-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, #fff 55%, transparent);
+}
+
+.profile-description-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-description-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, #fff 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 8%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.profile-description-edit-btn.is-primary {
+  border-color: color-mix(in srgb, var(--cursor-accent, #84cc16) 42%, transparent);
+  background: color-mix(in srgb, var(--cursor-accent, #84cc16) 22%, transparent);
+}
+
+.profile-description-edit-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.profile-description-edit-error {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 550;
+  color: #fb7185;
+}
+
+.profile-description-empty-edit {
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cursor-accent, #84cc16);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.profile-description-empty-edit:hover {
+  text-decoration: underline;
 }
 
 .profile-description-user {
@@ -1333,11 +1602,36 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 [data-appearance="light"] .profile-description-content {
-  --pc-ink: var(--color-cursor-text-bright);
+  --pc-ink: var(--color-cursor-text-bright, #0f172a);
   --pc-muted: var(--color-cursor-muted);
   --pc-line: var(--color-cursor-border, var(--mos-border));
   --pc-hover: color-mix(in srgb, var(--color-cursor-text) 7%, transparent);
   --pc-panel: var(--mos-panel, #f5f5f7);
+  color: var(--pc-ink);
+}
+
+[data-appearance="light"] .profile-description-user,
+[data-appearance="light"] .profile-description-text,
+[data-appearance="light"] .profile-description-text .post-compose-inline-chip,
+[data-appearance="light"] .profile-description-tags .post-compose-inline-chip,
+[data-appearance="light"] .profile-description-content .post-compose-inline-chip.profile-description-chip {
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+[data-appearance="light"] .profile-description-edit-input {
+  background: color-mix(in srgb, var(--color-cursor-text) 4%, var(--mos-panel, #fff));
+  border-color: var(--color-cursor-border, var(--mos-border));
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+[data-appearance="light"] .profile-description-edit-count {
+  color: color-mix(in srgb, #0f172a 52%, transparent);
+}
+
+[data-appearance="light"] .profile-description-edit-btn {
+  border-color: var(--color-cursor-border, var(--mos-border));
+  background: var(--mos-plate-strong, color-mix(in srgb, var(--color-cursor-text) 6%, transparent));
+  color: var(--color-cursor-text-bright, #0f172a);
 }
 
 .profile-comments-list.has-parent.is-loading,
@@ -1535,6 +1829,21 @@ button.post-compose-inline-chip.profile-description-chip {
   align-items: start;
   padding: 14px 14px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: grab;
+}
+
+.profile-comment-row:active {
+  cursor: grabbing;
+}
+
+.profile-comments-thread-head[draggable="true"],
+.profile-description-content[draggable="true"] {
+  cursor: grab;
+}
+
+.profile-comments-thread-head[draggable="true"]:active,
+.profile-description-content[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .profile-comment-row:last-child {
@@ -1576,7 +1885,7 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 .profile-comment-meta time {
-  color: color-mix(in srgb, #fff 48%, transparent);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 48%, transparent));
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
@@ -1639,7 +1948,7 @@ button.post-compose-inline-chip.profile-description-chip {
   padding: 0;
   margin: 0;
   background: transparent;
-  color: color-mix(in srgb, #fff 68%, transparent);
+  color: var(--color-cursor-muted, color-mix(in srgb, currentColor 68%, transparent));
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -1648,7 +1957,7 @@ button.post-compose-inline-chip.profile-description-chip {
 
 .profile-comment-view-replies:hover,
 .profile-comment-action:hover {
-  color: color-mix(in srgb, #fff 92%, transparent);
+  color: var(--color-cursor-text-bright, currentColor);
 }
 
 .profile-comment-like {
@@ -1937,16 +2246,10 @@ button.post-compose-inline-chip.profile-description-chip {
 }
 
 [data-appearance="light"] .profile-comments-dock {
-  color: var(--color-cursor-text-bright, #0f172a);
-  border-color: var(--color-cursor-border, var(--mos-border));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, #000 6%, transparent),
-    0 16px 40px rgba(16, 22, 30, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-
-[data-appearance="light"] .profile-comments-dock::before {
-  background: color-mix(in srgb, #ffffff 72%, transparent);
+  color: var(--color-cursor-text-bright, #0f172a) !important;
+  border-left-color: var(--mos-plate, #ececf0);
+  background: var(--mos-panel, var(--color-cursor-sidebar, #f5f5f7)) !important;
+  box-shadow: none;
 }
 
 [data-appearance="light"] .profile-comments-dock .profile-comments-composer {
@@ -1957,6 +2260,19 @@ button.post-compose-inline-chip.profile-description-chip {
 [data-appearance="light"] .profile-comments-dock .profile-comments-head,
 [data-appearance="light"] .profile-comments-head {
   border-bottom-color: var(--color-cursor-border-soft, var(--mos-border-soft));
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+[data-appearance="light"] .profile-comments-head strong,
+[data-appearance="light"] .profile-comments-thread-preview strong,
+[data-appearance="light"] .profile-comment-meta strong,
+[data-appearance="light"] .profile-comment-body p,
+[data-appearance="light"] .profile-comment-parent-content p {
+  color: var(--color-cursor-text-bright, #0f172a);
+}
+
+[data-appearance="light"] .profile-comments-head span {
+  color: var(--color-cursor-muted, color-mix(in srgb, #0f172a 55%, transparent));
 }
 
 [data-appearance="light"] .profile-comments-input-row input {
@@ -1999,9 +2315,6 @@ button.post-compose-inline-chip.profile-description-chip {
   color: #0f172a;
 }
 
-[data-appearance="light"] .profile-post-rail-btn span {
-  color: #fff;
-}
 
 [data-appearance="light"] .profile-comment-row {
   border-bottom-color: var(--color-cursor-border-soft, var(--mos-border-soft));

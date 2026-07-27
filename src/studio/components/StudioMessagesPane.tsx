@@ -1322,7 +1322,7 @@ export function StudioMessagesPane({
         {showBack ? (
           <button
             type="button"
-            className="studio-dm-back"
+            className="studio-composer-circle-btn studio-dm-back"
             onClick={() => onSelectConversation(null)}
             aria-label="Back to chats"
           >

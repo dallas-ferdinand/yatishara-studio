@@ -21,7 +21,7 @@ let activeExplorerDrag = null;
 
 /**
  * Direct mobile Files→composer attach handler (bypasses DOM CustomEvent / hit-testing).
- * StudioShell registers this; FileTree invokes it on touch-drag release from the dock.
+ * StudioShell registers this; FileTree invokes it only when release is over composer.
  */
 let mobileComposerDropHandler = null;
 
@@ -139,11 +139,26 @@ export function setMobileComposerDropHandler(handler) {
   mobileComposerDropHandler = typeof handler === "function" ? handler : null;
 }
 
-export function deliverMobileComposerDrop(entry, clientX = 0, clientY = 0) {
+/**
+ * @param {object} entry
+ * @param {number | { clientX?: number, clientY?: number, landX?: number, landY?: number }} [clientXOrIntent]
+ * @param {number} [clientY]
+ */
+export function deliverMobileComposerDrop(entry, clientXOrIntent = 0, clientY = 0) {
   if (!entry || !mobileComposerDropHandler) return false;
+  const intent =
+    clientXOrIntent && typeof clientXOrIntent === "object"
+      ? clientXOrIntent
+      : { clientX: clientXOrIntent, clientY };
   // Handler may return false if attach rejected (bad entry); treat undefined as ok
-  // when the call was scheduled (FastShaders: defer attach after gesture end).
-  const result = mobileComposerDropHandler({ entry, clientX, clientY });
+  // when the call was scheduled (defer attach after gesture end).
+  const result = mobileComposerDropHandler({
+    entry,
+    clientX: Number(intent.clientX) || 0,
+    clientY: Number(intent.clientY) || 0,
+    landX: intent.landX,
+    landY: intent.landY,
+  });
   return result !== false;
 }
 

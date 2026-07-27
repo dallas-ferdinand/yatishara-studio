@@ -23,6 +23,8 @@ import {
   signBunnyFullUrl,
   signBunnyCdnUrls,
   assetThumbnailPath,
+  clampExpiresUnix,
+  CN_CARD_TRANSFORM,
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 
@@ -264,6 +266,23 @@ function offerRatingStats(offer: Doc<"marketplaceOffers">) {
   };
 }
 
+async function signOfferCardBanner(
+  ctx: QueryCtx | MutationCtx,
+  assetId: Id<"assets">,
+  expiresUnix: number,
+): Promise<string | undefined> {
+  const asset = await ctx.db.get("assets", assetId);
+  if (!asset || asset.deletedAt) return undefined;
+  const thumbPath = assetThumbnailPath(asset);
+  if (!thumbPath) return undefined;
+  const signed = await signBunnyCdnUrls(
+    [thumbPath],
+    expiresUnix,
+    CN_CARD_TRANSFORM,
+  );
+  return signed.get(thumbPath);
+}
+
 async function signOfferGalleryItem(
   ctx: QueryCtx | MutationCtx,
   assetId: Id<"assets">,
@@ -275,7 +294,11 @@ async function signOfferGalleryItem(
   const thumbPath = assetThumbnailPath(asset);
   let thumbnailUrl: string | undefined;
   if (thumbPath) {
-    const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM);
+    const signed = await signBunnyCdnUrls(
+      [thumbPath],
+      expiresUnix,
+      CN_CARD_TRANSFORM,
+    );
     thumbnailUrl = signed.get(thumbPath);
   }
   return { kind: asset.kind, name: asset.name, url, thumbnailUrl };
@@ -284,7 +307,7 @@ async function signOfferGalleryItem(
 async function toPublicOffer(
   ctx: QueryCtx | MutationCtx,
   offer: Doc<"marketplaceOffers">,
-  opts?: { media?: "thumb" | "full" },
+  opts: { media?: "thumb" | "full"; expiresUnix: number },
 ) {
   const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
   const label = seller
@@ -299,12 +322,26 @@ async function toPublicOffer(
         thumbnailUrl?: string;
       }>
     | undefined;
-  if (opts?.media) {
-    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+  const expiresUnix = clampExpiresUnix(opts.expiresUnix);
+  if (opts.media) {
     if (offer.coverAssetId) {
-      const cover = await signOfferGalleryItem(ctx, offer.coverAssetId, expiresUnix);
-      bannerThumbUrl = cover?.thumbnailUrl ?? cover?.url;
-      if (opts.media === "full" && cover) gallery = [cover];
+      // List/cards: Optimizer WebP only — never fall back to full-res (slow).
+      bannerThumbUrl = await signOfferCardBanner(
+        ctx,
+        offer.coverAssetId,
+        expiresUnix,
+      );
+      if (opts.media === "full") {
+        const cover = await signOfferGalleryItem(
+          ctx,
+          offer.coverAssetId,
+          expiresUnix,
+        );
+        if (cover) {
+          bannerThumbUrl = cover.thumbnailUrl ?? bannerThumbUrl;
+          gallery = [cover];
+        }
+      }
     }
     if (opts.media === "full") {
       gallery = gallery ?? [];
@@ -412,6 +449,7 @@ export const listPublicOffers = query({
   args: {
     category: v.optional(v.string()),
     limit: v.optional(v.number()),
+    expiresUnix: v.number(),
   },
   returns: v.array(publicOfferReturn),
   handler: async (ctx, args) => {
@@ -426,14 +464,19 @@ export const listPublicOffers = query({
       : rows;
     const out = [];
     for (const offer of filtered.slice(0, limit)) {
-      out.push(await toPublicOffer(ctx, offer, { media: "thumb" }));
+      out.push(
+        await toPublicOffer(ctx, offer, {
+          media: "thumb",
+          expiresUnix: args.expiresUnix,
+        }),
+      );
     }
     return out;
   },
 });
 
 export const getPublicOfferBySlug = query({
-  args: { slug: v.string() },
+  args: { slug: v.string(), expiresUnix: v.number() },
   returns: v.union(publicOfferReturn, v.null()),
   handler: async (ctx, args) => {
     const slug = args.slug.trim().toLowerCase();
@@ -442,12 +485,15 @@ export const getPublicOfferBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .unique();
     if (!offer || offer.status !== "published") return null;
-    return await toPublicOffer(ctx, offer, { media: "full" });
+    return await toPublicOffer(ctx, offer, {
+      media: "full",
+      expiresUnix: args.expiresUnix,
+    });
   },
 });
 
 export const listPublicOffersByUsername = query({
-  args: { username: v.string() },
+  args: { username: v.string(), expiresUnix: v.number() },
   returns: v.array(publicOfferReturn),
   handler: async (ctx, args) => {
     const username = args.username.trim().toLowerCase().replace(/^@/, "");
@@ -465,7 +511,12 @@ export const listPublicOffersByUsername = query({
     const published = offers.filter((o) => o.status === "published");
     const out = [];
     for (const offer of published) {
-      out.push(await toPublicOffer(ctx, offer, { media: "thumb" }));
+      out.push(
+        await toPublicOffer(ctx, offer, {
+          media: "thumb",
+          expiresUnix: args.expiresUnix,
+        }),
+      );
     }
     return out;
   },
@@ -1113,7 +1164,7 @@ export const adminRefundDeliveredJob = adminMutation({
 // —— Seller offers CRUD ——
 
 export const listMyOffers = sellerQuery({
-  args: {},
+  args: { expiresUnix: v.number() },
   returns: v.array(
     v.object({
       _id: v.id("marketplaceOffers"),
@@ -1138,7 +1189,7 @@ export const listMyOffers = sellerQuery({
       sellerUsername: v.optional(v.string()),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const offers = await ctx.db
       .query("marketplaceOffers")
       .withIndex("by_seller", (q) => q.eq("sellerId", ctx.seller._id))
@@ -1146,7 +1197,10 @@ export const listMyOffers = sellerQuery({
     const sorted = offers.sort((a, b) => b.updatedAt - a.updatedAt);
     const out = [];
     for (const offer of sorted) {
-      const pub = await toPublicOffer(ctx, offer, { media: "thumb" });
+      const pub = await toPublicOffer(ctx, offer, {
+        media: "thumb",
+        expiresUnix: args.expiresUnix,
+      });
       out.push({
         _id: offer._id,
         title: offer.title,

@@ -12,12 +12,14 @@ import {
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
 import { STUDIO_START_SELLER_APPLY_KEY } from "@/studio/lib/studio-default-tab";
 
 export type CreativeNetworkMode =
   | "network"
   | "my-offers"
   | "my-jobs"
+  | "my-assets"
   | "seller-apply";
 
 export type NetworkSortKey = "newest" | "price-asc" | "price-desc" | "fastest";
@@ -179,6 +181,7 @@ type CreativeNetworkContextValue = {
   hasFilters: boolean;
   clearFilters: () => void;
   activeChips: Array<{ key: string; label: string; clear: () => void }>;
+  sellerUsernameFilter: string | null;
 };
 
 const CreativeNetworkContext = createContext<CreativeNetworkContextValue | null>(
@@ -199,16 +202,19 @@ export function StudioCreativeNetworkProvider({
   onInitialSellerConsumed?: () => void;
 }) {
   const seller = useQuery(api.marketplace.getMySellerStatus);
+  const mediaExpiresUnix = useStickySignedUrlExpiry();
   const [sellerUsernameFilter, setSellerUsernameFilter] = useState<string | null>(
     initialSellerUsername,
   );
   const allOffers = useQuery(
     api.marketplace.listPublicOffers,
-    sellerUsernameFilter ? "skip" : {},
+    sellerUsernameFilter ? "skip" : { expiresUnix: mediaExpiresUnix },
   );
   const sellerOffers = useQuery(
     api.marketplace.listPublicOffersByUsername,
-    sellerUsernameFilter ? { username: sellerUsernameFilter } : "skip",
+    sellerUsernameFilter
+      ? { username: sellerUsernameFilter, expiresUnix: mediaExpiresUnix }
+      : "skip",
   );
   const offers = sellerUsernameFilter ? sellerOffers : allOffers;
 
@@ -273,7 +279,7 @@ export function StudioCreativeNetworkProvider({
   const setMode = useCallback(
     (next: CreativeNetworkMode) => {
       if (
-        (next === "my-offers" || next === "my-jobs") &&
+        (next === "my-offers" || next === "my-jobs" || next === "my-assets") &&
         !isSellerApproved
       ) {
         setModeState("seller-apply");
@@ -284,8 +290,8 @@ export function StudioCreativeNetworkProvider({
         setSelectedOfferId(null);
         setSelectedJobId(null);
       }
-      if (next === "my-offers") setSelectedJobId(null);
-      if (next === "my-jobs") setSelectedOfferId(null);
+      if (next === "my-offers" || next === "my-assets") setSelectedJobId(null);
+      if (next === "my-jobs" || next === "my-assets") setSelectedOfferId(null);
       if (next !== "network") setBrowseSlug(null);
     },
     [isSellerApproved],
@@ -465,6 +471,7 @@ export function StudioCreativeNetworkProvider({
       hasFilters: activeChips.length > 0,
       clearFilters,
       activeChips,
+      sellerUsernameFilter,
     }),
     [
       mode,
@@ -477,6 +484,7 @@ export function StudioCreativeNetworkProvider({
       selectedOfferId,
       selectedJobId,
       browseSlug,
+      sellerUsernameFilter,
       search,
       optionValues,
       setValueFor,

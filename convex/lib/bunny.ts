@@ -217,6 +217,16 @@ export const THUMB_TRANSFORM: BunnyImageTransform = {
   format: "webp",
 };
 
+/**
+ * Creative Network / public offer card covers — sharp WebP, still Optimizer-sized
+ * (never full-res). Stable signed URLs stay edge-cached.
+ */
+export const CN_CARD_TRANSFORM: BunnyImageTransform = {
+  width: 960,
+  quality: 88,
+  format: "webp",
+};
+
 /** Style-sheet / large preview cards — sharp enough for look selection. */
 export const PREVIEW_TRANSFORM: BunnyImageTransform = {
   width: 1280,

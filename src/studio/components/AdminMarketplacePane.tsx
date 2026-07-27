@@ -23,6 +23,7 @@ import { CursorSelect } from "@/desk/components/CursorSelect";
 import { CursorTable } from "@/desk/components/CursorTable";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents } from "@/studio/lib/money";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 
 type JobStatus =
   | "pending_payment"
@@ -112,7 +113,21 @@ function formatJobAge(createdAt: number): string {
   return `${days} days`;
 }
 
-export type AdminMarketplaceSection = "sellers" | "offers" | "jobs" | "payouts";
+export type AdminMarketplaceSection =
+  | "sellers"
+  | "offers"
+  | "jobs"
+  | "payouts"
+  | "assets";
+
+type AssetListingFilter =
+  | "pending_review"
+  | "listed"
+  | "rejected"
+  | "unlisted"
+  | "removed"
+  | "platform_owned"
+  | "all";
 
 export function AdminMarketplacePane({
   section,
@@ -130,18 +145,31 @@ export function AdminMarketplacePane({
   const [offerFilter, setOfferFilter] = useState<"all" | OfferStatus>("published");
   const [jobFilter, setJobFilter] = useState<"all" | JobStatus>("all");
   const [payoutFilter, setPayoutFilter] = useState<"owed" | "paid" | "all">("owed");
+  const [assetFilter, setAssetFilter] =
+    useState<AssetListingFilter>("pending_review");
   const [busy, setBusy] = useState(false);
   const [reviewSellerId, setReviewSellerId] = useState<Id<"marketplaceSellers"> | null>(null);
   const [focusJobId, setFocusJobId] = useState<Id<"marketplaceJobs"> | null>(focusJobIdProp);
   const [refundJobId, setRefundJobId] = useState<Id<"marketplaceJobs"> | null>(null);
   const [refundReason, setRefundReason] = useState("");
+  const [rejectListingId, setRejectListingId] =
+    useState<Id<"assetListings"> | null>(null);
+  const [rejectListingReason, setRejectListingReason] = useState("");
   const [confirmAction, setConfirmAction] = useState<
     | null
     | { kind: "reject" | "suspend"; sellerId: Id<"marketplaceSellers"> }
     | { kind: "mark-paid"; payoutId: Id<"sellerPayouts"> }
+    | { kind: "remove-listing"; listingId: Id<"assetListings"> }
   >(null);
   const [confirmNote, setConfirmNote] = useState("");
   const jobsSectionRef = useRef<HTMLElement | null>(null);
+  const [assetExpiresUnix, setAssetExpiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 3600,
+  );
+  useEffect(() => {
+    // Refresh signed preview URLs when switching into Assets.
+    setAssetExpiresUnix(Math.floor(Date.now() / 1000) + 3600);
+  }, [section]);
 
   useEffect(() => {
     setFocusJobId(focusJobIdProp);
@@ -152,6 +180,8 @@ export function AdminMarketplacePane({
     setConfirmNote("");
     setRefundJobId(null);
     setRefundReason("");
+    setRejectListingId(null);
+    setRejectListingReason("");
     if (section !== "sellers") setReviewSellerId(null);
   }, [section]);
 
@@ -175,6 +205,12 @@ export function AdminMarketplacePane({
     api.marketplace.adminListJobs,
     section === "jobs" ? (jobFilter === "all" ? {} : { status: jobFilter }) : "skip",
   );
+  const assetSubmissions = useQuery(
+    api.assetStore.adminListAssetSubmissions,
+    section === "assets"
+      ? { filter: assetFilter, expiresUnix: assetExpiresUnix }
+      : "skip",
+  );
   const payouts = useQuery(
     api.marketplace.adminListPayouts,
     section === "payouts"
@@ -192,6 +228,9 @@ export function AdminMarketplacePane({
   const setOfferStatus = useMutation(api.marketplace.adminSetOfferStatus);
   const markPaid = useMutation(api.marketplace.adminMarkPayoutPaid);
   const refundJob = useMutation(api.marketplace.adminRefundDeliveredJob);
+  const approveListing = useMutation(api.assetStore.adminApproveListing);
+  const rejectListing = useMutation(api.assetStore.adminRejectListing);
+  const removeListing = useMutation(api.assetStore.adminRemoveListing);
 
   useEffect(() => {
     if (!focusJobId || !jobs) return;
@@ -232,6 +271,12 @@ export function AdminMarketplacePane({
           adminNote: note || undefined,
         });
         toast.success("Payout marked paid");
+      } else if (confirmAction.kind === "remove-listing") {
+        await removeListing({
+          listingId: confirmAction.listingId,
+          reason: note || undefined,
+        });
+        toast.success("Listing removed");
       } else {
         await decideSeller({
           sellerId: confirmAction.sellerId,
@@ -246,6 +291,38 @@ export function AdminMarketplacePane({
       clearConfirm();
     } catch (error) {
       toast.error(friendlyConvexError(error, "Action failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveAssetListing(listingId: Id<"assetListings">) {
+    setBusy(true);
+    try {
+      await approveListing({ listingId });
+      toast.success("Listing approved — now live");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Approve failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitRejectListing() {
+    if (!rejectListingId) return;
+    const reason = rejectListingReason.trim();
+    if (!reason) {
+      toast.error("Rejection reason is required.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await rejectListing({ listingId: rejectListingId, reason });
+      toast.success("Listing rejected");
+      setRejectListingId(null);
+      setRejectListingReason("");
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Reject failed."));
     } finally {
       setBusy(false);
     }
@@ -300,20 +377,26 @@ export function AdminMarketplacePane({
         ? "Suspend seller"
         : confirmAction?.kind === "mark-paid"
           ? "Mark payout paid"
-          : "";
+          : confirmAction?.kind === "remove-listing"
+            ? "Remove listing"
+            : "";
   const confirmPlaceholder =
     confirmAction?.kind === "reject"
       ? "Why is this application being rejected?"
       : confirmAction?.kind === "suspend"
         ? "Optional note for the record"
-        : "Optional payout note";
+        : confirmAction?.kind === "remove-listing"
+          ? "Optional reason for the record"
+          : "Optional payout note";
   const confirmRequired = confirmAction?.kind === "reject";
   const confirmSubmitLabel =
     confirmAction?.kind === "reject"
       ? "Confirm reject"
       : confirmAction?.kind === "suspend"
         ? "Confirm suspend"
-        : "Confirm paid";
+        : confirmAction?.kind === "remove-listing"
+          ? "Confirm remove"
+          : "Confirm paid";
 
   return (
     <>
@@ -680,6 +763,242 @@ export function AdminMarketplacePane({
                   setRefundJobId(null);
                   setRefundReason("");
                 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </section>
+      ) : null}
+
+      {section === "assets" ? (
+      <section className="studio-admin-section">
+        <div className="studio-admin-section-head">
+          <span className="studio-admin-section-title">Asset listings</span>
+          <div className="studio-admin-section-extras">
+            <CursorSelect
+              ariaLabel="Asset listing filter"
+              value={assetFilter}
+              onChange={(next) => setAssetFilter(next as AssetListingFilter)}
+              options={[
+                {
+                  value: "pending_review",
+                  label: "In review",
+                  icon: <Clock3 />,
+                  tone: "warn",
+                },
+                {
+                  value: "listed",
+                  label: "Live",
+                  icon: <CheckCircle2 />,
+                  tone: "good",
+                },
+                {
+                  value: "rejected",
+                  label: "Rejected",
+                  icon: <XCircle />,
+                  tone: "bad",
+                },
+                {
+                  value: "platform_owned",
+                  label: "Platform owned",
+                  icon: <Store />,
+                  tone: "muted",
+                },
+                {
+                  value: "removed",
+                  label: "Removed",
+                  icon: <Ban />,
+                  tone: "bad",
+                },
+                { value: "all", label: "All", icon: <LayoutList />, tone: "muted" },
+              ]}
+            />
+          </div>
+        </div>
+        <p className="studio-settings-empty" style={{ marginBottom: 12 }}>
+          Listen to submissions, then approve quality or reject with a reason.
+          Sellers resubmit the same file with a new name after rejection.
+        </p>
+        <CursorTable
+          ariaLabel="Asset listing submissions"
+          loading={!assetSubmissions}
+          empty={!!assetSubmissions && !assetSubmissions.length}
+          emptyIcon={<Package />}
+          emptyTitle="No listings"
+          emptyHint="No asset submissions match this filter."
+        >
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Seller</th>
+              <th>Preview</th>
+              <th>Price</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(assetSubmissions ?? []).map((row) => (
+              <tr key={row._id}>
+                <td>
+                  <strong>{row.title}</strong>
+                  <span className="studio-admin-job-link" style={{ cursor: "default" }}>
+                    {row.audioType === "music" ? "Music" : "SFX"}
+                    {row.durationSeconds != null
+                      ? ` · ${Math.round(row.durationSeconds)}s`
+                      : ""}
+                    {row.purchaseCount
+                      ? ` · ${row.purchaseCount} sale${row.purchaseCount === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                  {row.rejectionReason ? (
+                    <span className="studio-admin-job-link" style={{ cursor: "default" }}>
+                      Rejected: {row.rejectionReason}
+                    </span>
+                  ) : null}
+                  {row.profitBanReason ? (
+                    <span className="studio-admin-job-link" style={{ cursor: "default" }}>
+                      {row.profitBanReason}
+                    </span>
+                  ) : null}
+                </td>
+                <td>{row.sellerBusinessName}</td>
+                <td>
+                  {row.previewUrl ? (
+                    <div
+                      className="studio-chat-audio-player-host"
+                      style={{ maxWidth: 320 }}
+                    >
+                      <StudioChatAudioPlayer
+                        src={row.previewUrl}
+                        title={row.title}
+                        durationHint={row.durationSeconds}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-cursor-muted">—</span>
+                  )}
+                </td>
+                <td>{formatTtdCents(row.priceCents)}</td>
+                <td>
+                  {row.platformOwnedAt
+                    ? "Platform owned"
+                    : humanizeJobStatus(row.status)}
+                </td>
+                <td>
+                  <div className="flex flex-wrap gap-2">
+                    {row.status === "pending_review" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          disabled={busy}
+                          onClick={() => void approveAssetListing(row._id)}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          className="cursor-settings-action"
+                          disabled={busy}
+                          onClick={() => {
+                            setRejectListingId(row._id);
+                            setRejectListingReason("");
+                          }}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : null}
+                    {row.status !== "removed" ? (
+                      <button
+                        type="button"
+                        className="cursor-settings-action"
+                        disabled={busy}
+                        onClick={() => {
+                          setConfirmAction({
+                            kind: "remove-listing",
+                            listingId: row._id,
+                          });
+                          setConfirmNote("");
+                        }}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </CursorTable>
+        {rejectListingId ? (
+          <div className="studio-admin-credit-form" style={{ marginTop: 8 }}>
+            <p className="studio-admin-card-kicker">Reject submission</p>
+            <label className="studio-admin-status-field">
+              <span>Reason</span>
+              <input
+                className="cursor-input"
+                type="text"
+                placeholder="Why reject this audio?"
+                value={rejectListingReason}
+                onChange={(event) => setRejectListingReason(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => void submitRejectListing()}
+              >
+                Confirm reject
+              </button>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => {
+                  setRejectListingId(null);
+                  setRejectListingReason("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {confirmAction?.kind === "remove-listing" ? (
+          <div className="studio-admin-credit-form" style={{ marginTop: 8 }}>
+            <p className="studio-admin-card-kicker">{confirmTitle}</p>
+            <label className="studio-admin-status-field">
+              <span>Note</span>
+              <input
+                className="cursor-input"
+                type="text"
+                placeholder={confirmPlaceholder}
+                value={confirmNote}
+                onChange={(event) => setConfirmNote(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={() => void submitConfirm()}
+              >
+                {confirmSubmitLabel}
+              </button>
+              <button
+                type="button"
+                className="cursor-settings-action"
+                disabled={busy}
+                onClick={clearConfirm}
               >
                 Cancel
               </button>

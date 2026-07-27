@@ -19,7 +19,13 @@ const folderReturn = v.object({
   icon: v.string(),
   color: v.optional(v.string()),
   sortOrder: v.number(),
-  systemKind: v.optional(v.union(v.literal("messages"), v.literal("purchased_assets"))),
+  systemKind: v.optional(
+    v.union(
+      v.literal("messages"),
+      v.literal("purchased_assets"),
+      v.literal("public_assets"),
+    ),
+  ),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -543,6 +549,9 @@ function assertSystemFolderMutable(folder: Doc<"folders">) {
   if (folder.systemKind === "purchased_assets") {
     throw new Error("The Purchased folder cannot be renamed, moved, or deleted");
   }
+  if (folder.systemKind === "public_assets") {
+    throw new Error("My Public cannot be renamed, moved, or deleted");
+  }
 }
 
 /**
@@ -642,6 +651,64 @@ export async function ensurePurchasedAssetsFolder(
   });
 }
 
+const PUBLIC_ASSETS_FOLDER_NAME = "My Public";
+
+/**
+ * Idempotent My Public folder for Creative Network seller catalog copies.
+ * Contents cannot be trashed while licenseKind is listed_network.
+ */
+export async function ensurePublicAssetsFolder(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  parentId?: Id<"folders">,
+): Promise<Id<"folders">> {
+  const existing = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_system_kind", (q) =>
+      q.eq("ownerId", userId).eq("systemKind", "public_assets"),
+    )
+    .first();
+  if (existing && !existing.deletedAt) {
+    const patch: { parentId?: Id<"folders">; name?: string; updatedAt: number } =
+      { updatedAt: Date.now() };
+    let needsPatch = false;
+    if (parentId && existing.parentId !== parentId) {
+      patch.parentId = parentId;
+      needsPatch = true;
+    }
+    // Rename legacy "Public" → "My Public" without touching custom renames
+    // (system folders are locked from rename, so only the old default remains).
+    if (existing.name !== PUBLIC_ASSETS_FOLDER_NAME) {
+      patch.name = PUBLIC_ASSETS_FOLDER_NAME;
+      needsPatch = true;
+    }
+    if (needsPatch) {
+      await ctx.db.patch(existing._id, patch);
+    }
+    return existing._id;
+  }
+  if (existing?.deletedAt) {
+    await ctx.db.patch(existing._id, {
+      deletedAt: undefined,
+      name: PUBLIC_ASSETS_FOLDER_NAME,
+      ...(parentId ? { parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return existing._id;
+  }
+  const now = Date.now();
+  return await ctx.db.insert("folders", {
+    ownerId: userId,
+    ...(parentId ? { parentId } : {}),
+    name: PUBLIC_ASSETS_FOLDER_NAME,
+    icon: "globe",
+    sortOrder: 2,
+    systemKind: "public_assets",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 async function workspaceRootForUser(
   ctx: MutationCtx,
   userId: Id<"users">,
@@ -656,7 +723,8 @@ async function workspaceRootForUser(
     (folder) =>
       !folder.deletedAt &&
       folder.systemKind !== "messages" &&
-      folder.systemKind !== "purchased_assets",
+      folder.systemKind !== "purchased_assets" &&
+      folder.systemKind !== "public_assets",
   );
   return root?._id;
 }
@@ -677,5 +745,15 @@ export const ensurePurchasedAssetsFolderForMe = authedMutation({
   handler: async (ctx) => {
     const rootId = await workspaceRootForUser(ctx, ctx.user._id);
     return await ensurePurchasedAssetsFolder(ctx, ctx.user._id, rootId);
+  },
+});
+
+/** Approved sellers: ensure locked My Public folder for catalog copies. */
+export const ensurePublicAssetsFolderForMe = authedMutation({
+  args: {},
+  returns: v.id("folders"),
+  handler: async (ctx) => {
+    const rootId = await workspaceRootForUser(ctx, ctx.user._id);
+    return await ensurePublicAssetsFolder(ctx, ctx.user._id, rootId);
   },
 });

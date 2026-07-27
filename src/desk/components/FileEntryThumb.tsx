@@ -466,30 +466,37 @@ export function FileEntryThumb({
       entry?.studioKind === "messages" || entry?.systemKind === "messages";
     const isPurchased =
       entry?.studioKind === "purchased" || entry?.systemKind === "purchased_assets";
-    if (isTrash || isMessages || isPurchased) {
-      // System folders: lock badge = protected / non-deletable, not trash/message glyphs.
+    const isPublic =
+      entry?.studioKind === "public" || entry?.systemKind === "public_assets";
+    if (isTrash || isMessages || isPurchased || isPublic) {
+      // System folders: big center glyph only — no bottom-left type chip.
+      const systemIcon = isTrash
+        ? "trash"
+        : isMessages
+          ? "message"
+          : isPurchased
+            ? "shoppingBag"
+            : "globe";
+      const systemMod = isTrash
+        ? "trash"
+        : isMessages
+          ? "messages"
+          : isPurchased
+            ? "purchased"
+            : "public";
       visual = (
         <div
-          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system${
-            isTrash
-              ? " desk-file-thumb-peek-wrap--trash"
-              : " desk-file-thumb-peek-wrap--messages"
-          }`}
+          className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system desk-file-thumb-peek-wrap--${systemMod}`}
         >
           <div
-            className={`desk-file-thumb-fallback${
-              isTrash ? " desk-file-thumb-fallback--trash" : " desk-file-thumb-fallback--messages"
-            }`}
+            className={`desk-file-thumb-fallback desk-file-thumb-fallback--${systemMod}`}
           >
             <Icon
-              name="lock"
+              name={systemIcon}
               size={size === "preview" ? 36 : 26}
               className="text-cursor-muted"
             />
           </div>
-          <span className="desk-file-thumb-badge" aria-hidden="true" title="System folder">
-            <Icon name="lock" size={14} />
-          </span>
           <ThumbPeekLabel name={label} />
         </div>
       );

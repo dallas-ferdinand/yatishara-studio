@@ -375,6 +375,7 @@ export const create = authedMutation({
 export const save = authedMutation({
   args: {
     projectId: v.optional(v.id("videoEditProjects")),
+    /** Used only when creating a new project. Updates keep the existing folder. */
     folderId: v.id("folders"),
     name: v.string(),
     project: v.any(),
@@ -384,29 +385,31 @@ export const save = authedMutation({
     projectId: v.id("videoEditProjects"),
   }),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId, ctx.user._id);
     const now = Date.now();
     const name = args.name.trim() || "Untitled";
-    const projectPayload = { ...args.project, name, folderId: args.folderId };
-    const projectJson = JSON.stringify(projectPayload);
     if (args.projectId) {
       const existing = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
       if (existing.deletedAt) {
         throw new Error("Edit project is in trash.");
       }
+      // Autosave must not relocate the .edit file when the user browses folders.
+      // Intentional moves go through videoEdits.update({ folderId }).
+      const folderId = existing.folderId;
+      const projectPayload = { ...args.project, name, folderId };
       await ctx.db.patch(args.projectId, {
         name,
-        projectJson,
-        folderId: args.folderId,
+        projectJson: JSON.stringify(projectPayload),
         updatedAt: now,
       });
       return { projectId: args.projectId };
     }
+    await requireFolderOwner(ctx, args.folderId, ctx.user._id);
+    const projectPayload = { ...args.project, name, folderId: args.folderId };
     const projectId = await ctx.db.insert("videoEditProjects", {
       ownerId: ctx.user._id,
       folderId: args.folderId,
       name,
-      projectJson,
+      projectJson: JSON.stringify(projectPayload),
       sourceAssetId: args.sourceAssetId,
       createdAt: now,
       updatedAt: now,

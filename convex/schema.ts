@@ -150,14 +150,23 @@ export const creditTransactionKind = v.union(
 export const folderSystemKind = v.union(
   v.literal("messages"),
   v.literal("purchased_assets"),
+  /** Seller catalog copies of listed stock audio (locked). */
+  v.literal("public_assets"),
 );
 
-/** Buyer copy of a Creative Network listing. */
-export const assetLicenseKind = v.union(v.literal("purchased_network"));
+/** Locked Creative Network asset licenses. */
+export const assetLicenseKind = v.union(
+  /** Buyer pay-once copy in Purchased. */
+  v.literal("purchased_network"),
+  /** Seller catalog copy in Public (source for purchases). */
+  v.literal("listed_network"),
+);
 
 export const assetListingStatus = v.union(
+  v.literal("pending_review"),
   v.literal("listed"),
   v.literal("unlisted"),
+  v.literal("rejected"),
   v.literal("removed"),
 );
 
@@ -1085,6 +1094,8 @@ export default defineSchema({
     /** Share action count; optional for older posts. */
     shareCount: v.optional(v.number()),
     publishedAt: v.number(),
+    /** Set when the owner edits the caption/description after publish. */
+    editedAt: v.optional(v.number()),
     unpublishedAt: v.optional(v.number()),
   })
     .index("by_profile_and_published", ["profileId", "publishedAt"])
@@ -1253,11 +1264,17 @@ export default defineSchema({
   dmMessages: defineTable({
     conversationId: v.id("dmConversations"),
     senderId: v.id("users"),
-    /** Caption for images; empty for voice notes. */
+    /** Caption for images; empty for voice notes; optional note for feed shares. */
     body: v.string(),
     /** Absent = "text" (rows pre-dating media kinds). */
     kind: v.optional(
-      v.union(v.literal("text"), v.literal("voice"), v.literal("image")),
+      v.union(
+        v.literal("text"),
+        v.literal("voice"),
+        v.literal("image"),
+        v.literal("post"),
+        v.literal("comment"),
+      ),
     ),
     /** Billable Studio asset (Bunny) in the sender's Messages folder. */
     assetId: v.optional(v.id("assets")),
@@ -1267,6 +1284,10 @@ export default defineSchema({
     durationSec: v.optional(v.number()),
     /** WhatsApp-style reply target in the same conversation. */
     replyToMessageId: v.optional(v.id("dmMessages")),
+    /** Shared profile post (kind post|comment). */
+    sharedPostId: v.optional(v.id("profilePosts")),
+    /** Shared profile comment (kind comment). */
+    sharedCommentId: v.optional(v.id("profileComments")),
     createdAt: v.number(),
   })
     .index("by_conversation_and_created", ["conversationId", "createdAt"])
@@ -1517,7 +1538,10 @@ export default defineSchema({
   assetListings: defineTable({
     sellerId: v.id("marketplaceSellers"),
     sellerUserId: v.id("users"),
+    /** Locked Public-folder catalog copy (Bunny source for purchases). */
     sourceAssetId: v.id("assets"),
+    /** Seller's working original; kept when sourceAssetId is the Public copy. */
+    originalAssetId: v.optional(v.id("assets")),
     audioType: assetListingAudioType,
     title: v.string(),
     description: v.optional(v.string()),
@@ -1528,15 +1552,28 @@ export default defineSchema({
     priceCredits: v.number(),
     status: assetListingStatus,
     purchaseCount: v.number(),
+    /** Each submit / resubmit timestamp (moderation queue sort). */
+    submittedAt: v.optional(v.number()),
     listedAt: v.optional(v.number()),
+    rejectionReason: v.optional(v.string()),
+    reviewedAt: v.optional(v.number()),
+    reviewedBy: v.optional(v.id("users")),
+    /** Seller released ownership; listing stays live, future profits = platform. */
+    platformOwnedAt: v.optional(v.number()),
+    releasedAt: v.optional(v.number()),
+    /** Storage unpaid ≥90d (or admin): banned from earning on this listing. */
+    profitBannedAt: v.optional(v.number()),
+    profitBanReason: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
     .index("by_status_and_listed", ["status", "listedAt"])
+    .index("by_status_and_submitted", ["status", "submittedAt"])
     .index("by_seller", ["sellerId"])
     .index("by_seller_user", ["sellerUserId"])
     .index("by_source_asset", ["sourceAssetId"])
+    .index("by_original_asset", ["originalAssetId"])
     .index("by_audio_type_and_status", ["audioType", "status"]),
 
   assetPurchases: defineTable({

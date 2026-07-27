@@ -8,6 +8,18 @@
   background: color-mix(in srgb, var(--color-cursor-composer, #07111f) 55%, transparent);
 }
 
+/* Full-width host for store / admin / manage listing cards. */
+.studio-chat-audio-player-host {
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-chat-audio-player-host .studio-chat-audio-player {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
 .studio-chat-audio-player.is-loading {
   display: flex;
   align-items: center;
@@ -68,6 +80,83 @@
   gap: 10px;
   width: 100%;
   min-width: 0;
+}
+
+.studio-chat-audio-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 8px;
+}
+
+.studio-chat-audio-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-chat-audio-head-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio-chat-audio-head-end {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.studio-chat-audio-player.is-compact {
+  padding: 6px 8px;
+  border-radius: 12px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-head {
+  margin-bottom: 4px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-head-title {
+  font-size: 11px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-row {
+  gap: 6px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-wave {
+  height: 28px;
+  min-width: 72px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-time {
+  font-size: 10px;
+}
+
+.studio-chat-audio-player.is-compact .studio-chat-audio-foot {
+  margin-top: 4px;
+}
+
+.studio-chat-audio-player.is-compact.is-loading,
+.studio-chat-audio-player.is-compact .studio-chat-audio-load-body {
+  min-height: 28px;
+  height: 28px;
+}
+
+.studio-chat-audio-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 8px;
 }
 
 .studio-chat-audio-wave {

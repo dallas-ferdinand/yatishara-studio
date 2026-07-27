@@ -207,7 +207,9 @@ export function StudioDmPeerSidebar({
   );
   const offers = useQuery(
     api.marketplace.listPublicOffersByUsername,
-    open && peerUsername ? { username: peerUsername } : "skip",
+    open && peerUsername
+      ? { username: peerUsername, expiresUnix }
+      : "skip",
   );
   const jobDetail = useQuery(
     api.marketplace.getJob,

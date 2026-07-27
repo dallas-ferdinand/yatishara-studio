@@ -15,10 +15,27 @@ export const EXPLORER_TYPE_FILTERS = [
   { id: "audio", label: "Audio", icon: "music" },
 ];
 
-export function ExplorerTypeFilter({ value = "all", onChange }) {
+/** Creative Network stock-audio browse (Files → Asset library). */
+export const NETWORK_AUDIO_TYPE_FILTERS = [
+  { id: "all", label: "All", icon: "layoutGrid" },
+  { id: "music", label: "Music", icon: "music" },
+  { id: "sfx", label: "SFX", icon: "audioWaveform" },
+];
+
+/**
+ * Labeled filter dropdown with leading icons in the menu (shared CursorSelect language).
+ * Pass `options` for alternate sets (e.g. network audio All / Music / SFX).
+ */
+export function ExplorerTypeFilter({
+  value = "all",
+  onChange,
+  options = EXPLORER_TYPE_FILTERS,
+  ariaLabel = "Filter content",
+}) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
-  const active = EXPLORER_TYPE_FILTERS.find((opt) => opt.id === value) ?? EXPLORER_TYPE_FILTERS[0];
+  const list = options?.length ? options : EXPLORER_TYPE_FILTERS;
+  const active = list.find((opt) => opt.id === value) ?? list[0];
   const filtered = value !== "all";
 
   useEffect(() => {
@@ -43,10 +60,10 @@ export function ExplorerTypeFilter({ value = "all", onChange }) {
       <button
         type="button"
         className={`desk-explorer-type-filter-trigger${filtered ? " is-active" : ""}${open ? " is-open" : ""}`}
-        title={filtered ? `Filter: ${active.label}` : "Filter content"}
+        title={filtered ? `Filter: ${active.label}` : ariaLabel}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={filtered ? `Filter: ${active.label}` : "Filter content"}
+        aria-label={filtered ? `Filter: ${active.label}` : ariaLabel}
         onClick={() => setOpen((v) => !v)}
       >
         <Icon name={active.icon} size={13} />
@@ -69,8 +86,11 @@ export function ExplorerTypeFilter({ value = "all", onChange }) {
         </button>
       ) : null}
       {open ? (
-        <div className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-type-filter-menu" role="menu">
-          {EXPLORER_TYPE_FILTERS.map((opt) => (
+        <div
+          className="cursor-dropdown cursor-dropdown-down is-end desk-explorer-type-filter-menu"
+          role="menu"
+        >
+          {list.map((opt) => (
             <button
               key={opt.id}
               type="button"

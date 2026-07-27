@@ -79,11 +79,12 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Static logos / CN hero art — long-cache; bump filenames when assets change.
         source: "/branding/:path*",
         headers: [
           {
             key: "Cache-Control",
-            value: NO_STORE,
+            value: "public, max-age=31536000, immutable",
           },
           {
             key: "Strict-Transport-Security",

@@ -319,7 +319,8 @@ export const ensureStudioDefaults = authedMutation({
       (folder) =>
         !folder.deletedAt &&
         folder.systemKind !== "messages" &&
-        folder.systemKind !== "purchased_assets",
+        folder.systemKind !== "purchased_assets" &&
+        folder.systemKind !== "public_assets",
     );
 
     const rootFolderId =

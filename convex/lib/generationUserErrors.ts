@@ -8,21 +8,48 @@ export type GenerationUserError = {
   hint?: string;
 };
 
+export type GenerationErrorMode = "image" | "video" | "script" | "audio";
+
 function formatTtdFromCredits(credits: number): string {
   const amount = credits * CREDIT_PRICE_TTD;
   const formatted = Number.isInteger(amount)
     ? amount.toLocaleString()
-    : amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    : amount.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
   return `$${formatted} TTD`;
+}
+
+/**
+ * Only Studio-authored balance messages — never provider API "credits" quotas
+ * (e.g. ElevenLabs "You have 0 credits left").
+ */
+function isStudioBalanceError(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (/top up to continue|not enough balance/i.test(lower)) return true;
+  if (/you need\s+\$[\d,]+\.?\d*\s*ttd/i.test(lower)) return true;
+  if (/generation needs \d+(\.\d+)? credits/i.test(lower)) return true;
+  if (/\btt\$\s*[\d,]+\.?\d*/i.test(lower) && /need|top up|insufficient/i.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
+function nounForMode(mode: GenerationErrorMode): string {
+  if (mode === "video") return "video";
+  if (mode === "image") return "image";
+  if (mode === "audio") return "audio";
+  return "request";
 }
 
 export function friendlyGenerationError(
   raw: string | null | undefined,
-  mode: "image" | "video" | "script" = "video",
+  mode: GenerationErrorMode = "video",
 ): GenerationUserError {
   const text = (raw ?? "").trim();
   const lower = text.toLowerCase();
-  const noun = mode === "video" ? "video" : mode === "image" ? "image" : "request";
+  const noun = nounForMode(mode);
 
   if (!text) {
     return {
@@ -32,12 +59,13 @@ export function friendlyGenerationError(
     };
   }
 
-  if (/credit|insufficient|top up|needs \d+ credit|tt\$|\bttd\b/i.test(lower)) {
+  if (isStudioBalanceError(text)) {
     const ttdMatch =
-      text.match(/\$?\s*([\d.]+)\s*TTD\b/i) ?? text.match(/TT\$\s*([\d.]+)/i);
-    const creditMatch = text.match(/(\d+)\s*credit/i);
+      text.match(/\$\s*([\d,]+(?:\.\d+)?)\s*TTD\b/i) ??
+      text.match(/TT\$\s*([\d,]+(?:\.\d+)?)/i);
+    const creditMatch = text.match(/generation needs\s+(\d+(?:\.\d+)?)\s*credits?/i);
     const amountLabel = ttdMatch
-      ? `$${ttdMatch[1]} TTD`
+      ? `$${ttdMatch[1].replace(/,/g, "")} TTD`
       : creditMatch
         ? formatTtdFromCredits(Number(creditMatch[1]))
         : null;
@@ -47,6 +75,17 @@ export function friendlyGenerationError(
         ? `You need ${amountLabel} for this ${noun}.`
         : "You're out of balance for this generation.",
       hint: "Top up to continue.",
+    };
+  }
+
+  if (
+    /audio generation is temporarily unavailable|sound generation is temporarily unavailable/i.test(
+      lower,
+    )
+  ) {
+    return {
+      title: "Audio unavailable",
+      message: "Audio generation is temporarily unavailable. Try again in a few minutes.",
     };
   }
 
@@ -94,25 +133,14 @@ export function friendlyGenerationError(
     };
   }
 
-  if (
-    /voice is unavailable|library voice|paid.?plan|free users cannot use library|upgrade.*elevenlabs|elevenlabs plan/i.test(
-      lower,
-    )
-  ) {
-    return {
-      title: "Voice unavailable",
-      message: "This voice is unavailable. We'll notify you when it's available.",
-    };
-  }
-
-  if (/rate limit|429|quota|too many concurrent|too many requests/i.test(lower)) {
+  if (/rate limit|429|quota|too many/i.test(lower)) {
     return {
       title: "Too many requests",
       message: "Please wait a moment before generating again.",
     };
   }
 
-  if (/timeout|timed out|poll.*timeout/i.test(lower)) {
+  if (/timeout|timed out/i.test(lower)) {
     return {
       title: "That took too long",
       message: "The model didn't finish in time. Try a shorter clip or try again.",
@@ -127,7 +155,7 @@ export function friendlyGenerationError(
     };
   }
 
-  if (/network|fetch failed|failed to fetch|econnreset/i.test(lower)) {
+  if (/network|fetch failed|failed to fetch/i.test(lower)) {
     return {
       title: "Connection problem",
       message: "We couldn't reach the generation service. Check your connection and try again.",
@@ -150,7 +178,7 @@ export function friendlyGenerationError(
 
 export function friendlyGenerationErrorText(
   raw: string | null | undefined,
-  mode: "image" | "video" | "script" = "video",
+  mode: GenerationErrorMode = "video",
 ): string {
   const friendly = friendlyGenerationError(raw, mode);
   return friendly.hint ? `${friendly.message} ${friendly.hint}` : friendly.message;

@@ -189,6 +189,7 @@ const publicPostReturn = v.object({
   saveCount: v.number(),
   shareCount: v.number(),
   publishedAt: v.number(),
+  editedAt: v.optional(v.number()),
   thumbnailUrl: v.optional(v.string()),
   mediaUrl: v.optional(v.string()),
   likedByViewer: v.boolean(),
@@ -212,6 +213,7 @@ const feedPostReturn = v.object({
   saveCount: v.number(),
   shareCount: v.number(),
   publishedAt: v.number(),
+  editedAt: v.optional(v.number()),
   thumbnailUrl: v.optional(v.string()),
   mediaUrl: v.optional(v.string()),
   likedByViewer: v.boolean(),
@@ -247,6 +249,7 @@ type HydratedPublicPost = {
   saveCount: number;
   shareCount: number;
   publishedAt: number;
+  editedAt?: number;
   thumbnailUrl?: string;
   mediaUrl?: string;
   likedByViewer: boolean;
@@ -336,6 +339,7 @@ async function hydratePublicPosts(
       saveCount: post.saveCount ?? 0,
       shareCount: post.shareCount ?? 0,
       publishedAt: post.publishedAt,
+      editedAt: post.editedAt,
       thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
       mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
       likedByViewer: likedFlags[i] ?? false,
@@ -943,6 +947,67 @@ export const unshareAsset = authedMutation({
   },
 });
 
+const POST_CAPTION_MAX = 2200;
+
+/** Owner edits a published post's description/caption (marks as edited). */
+export const updatePostCaption = authedMutation({
+  args: {
+    postId: v.id("profilePosts"),
+    caption: v.optional(v.string()),
+  },
+  returns: v.object({
+    postId: v.id("profilePosts"),
+    caption: v.optional(v.string()),
+    editedAt: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      throw new Error("Post not found");
+    }
+    if (post.ownerId !== ctx.user._id) {
+      throw new Error("You can only edit your own posts");
+    }
+
+    const captionRaw = (args.caption ?? "").trim();
+    if (captionRaw.length > POST_CAPTION_MAX) {
+      throw new Error(`Description must be ${POST_CAPTION_MAX} characters or fewer`);
+    }
+    const caption = captionRaw || undefined;
+    const fromCaptionTags = extractHashtagsFromCaption(caption);
+    const fromCaptionKeywords = extractKeywordsFromCaption(caption);
+    const fromCaptionMentions = extractMentionsFromCaption(caption);
+    const hashtags = normalizeHashtagList(fromCaptionTags);
+    const keywords = normalizeKeywordList(fromCaptionKeywords);
+    const now = Date.now();
+
+    await ctx.db.patch(post._id, {
+      caption,
+      keywords: keywords.length ? keywords : undefined,
+      editedAt: now,
+    });
+    await syncPostHashtags(ctx, {
+      postId: post._id,
+      profileId: post.profileId,
+      ownerId: ctx.user._id,
+      rawTags: hashtags,
+      now,
+    });
+    await syncPostMentions(ctx, {
+      postId: post._id,
+      ownerId: ctx.user._id,
+      usernames: fromCaptionMentions,
+      now,
+    });
+
+    return {
+      postId: post._id,
+      caption,
+      editedAt: now,
+    };
+  },
+});
+
 export const getPublicByUsername = query({
   args: {
     username: v.string(),
@@ -1405,6 +1470,7 @@ export const listFeed = query({
       saveCount: number;
       shareCount: number;
       publishedAt: number;
+      editedAt?: number;
       thumbnailUrl?: string;
       mediaUrl?: string;
       likedByViewer: boolean;
@@ -1463,6 +1529,7 @@ export const listFeed = query({
         saveCount: item.post.saveCount ?? 0,
         shareCount: item.post.shareCount ?? 0,
         publishedAt: item.post.publishedAt,
+        editedAt: item.post.editedAt,
         thumbnailUrl: thumbPath ? signed.get(thumbPath) : undefined,
         mediaUrl: videoPath ? videoUrls.get(videoPath) : undefined,
         likedByViewer: likedFlags[i] ?? false,

@@ -7,6 +7,14 @@ import { monthlyCharge } from "./storagePricing";
 export const OUTSTANDING_BLOCK_DAYS = 5;
 export const OUTSTANDING_BLOCK_MS = OUTSTANDING_BLOCK_DAYS * 24 * 60 * 60 * 1000;
 
+/**
+ * Creative Network asset listings: after this many days of unpaid storage,
+ * live seller-owned listings are delisted and profit-banned.
+ */
+export const ASSET_STORE_STORAGE_DELIST_DAYS = 90;
+export const ASSET_STORE_STORAGE_DELIST_MS =
+  ASSET_STORE_STORAGE_DELIST_DAYS * 24 * 60 * 60 * 1000;
+
 /** Trash still sits on Bunny, so it is billed until this age, then purged. */
 export const TRASH_RETENTION_DAYS = 30;
 export const TRASH_RETENTION_MS = TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
@@ -221,6 +229,31 @@ export async function setStorageBytesFromAssets(
   }
   await ctx.db.patch(row._id, patch);
   return actualBytes;
+}
+
+/**
+ * Divert listing seller-share credits into unpaid storage debt (no balance debit).
+ * Returns how many credits were applied.
+ */
+export async function applyListingProfitToStorageDebt(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  credits: number,
+): Promise<number> {
+  const amount = roundCredits(Math.max(0, credits));
+  if (amount <= 0) return 0;
+  const row = await getStorageRow(ctx, userId);
+  if (!row || row.outstandingCredits <= 0) return 0;
+  const applied = roundCredits(Math.min(amount, row.outstandingCredits));
+  if (applied <= 0) return 0;
+  const remaining = roundCredits(row.outstandingCredits - applied);
+  const now = Date.now();
+  await ctx.db.patch(row._id, {
+    outstandingCredits: remaining,
+    outstandingSince: remaining > 0 ? row.outstandingSince : undefined,
+    updatedAt: now,
+  });
+  return applied;
 }
 
 /** Pay down storage debt from available balance — called after every credit grant. */

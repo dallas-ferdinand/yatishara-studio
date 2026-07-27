@@ -48,4 +48,11 @@ crons.daily(
   {},
 );
 
+crons.daily(
+  "enforce unpaid storage asset listing policy",
+  { hourUTC: 6, minuteUTC: 0 },
+  internal.assetStore.enforceUnpaidStorageListingPolicy,
+  {},
+);
+
 export default crons;

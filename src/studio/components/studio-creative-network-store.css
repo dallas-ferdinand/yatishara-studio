@@ -1,4 +1,5 @@
-/* Creative Network stock audio browse (Files → Creative Network mode). */
+/* Creative Network stock audio browse (Files → Asset library mode).
+   Cards use StudioChatAudioPlayer (Orb + ElevenLabs waveform) — same as chat. */
 
 .studio-cn-store {
   display: flex;
@@ -8,39 +9,11 @@
   overflow: hidden;
 }
 
-.studio-cn-store-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px 4px;
-  flex: 0 0 auto;
-}
-
-.studio-cn-store-filter {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--cursor-radius-pill, 999px);
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
-  color: var(--color-cursor-muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.studio-cn-store-filter.is-active {
-  color: var(--color-cursor-text-bright);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-cursor-accent) 45%, transparent);
-}
-
 .studio-cn-store-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 4px 8px 12px;
+  padding: 4px 8px 8px;
 }
 
 .studio-cn-store-empty {
@@ -56,100 +29,73 @@
   gap: 6px;
 }
 
+/* No outer plate — the chat audio player is the card (L2 fill). */
 .studio-cn-store-card {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-  padding: 8px;
-  border-radius: var(--cursor-radius-md, 8px);
-  background: var(--mos-plate, var(--cursor-surface-raised));
-}
-
-.studio-cn-store-play {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+  display: block;
+  min-width: 0;
+  padding: 0;
   border: none;
-  border-radius: 50%;
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
-  color: var(--color-cursor-text-bright);
-  cursor: pointer;
+  background: transparent;
 }
 
-.studio-cn-store-play:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.studio-cn-store-card.is-owned-drag {
+  cursor: grab;
 }
 
-.studio-cn-store-play > svg {
-  width: 16px;
-  height: 16px;
+.studio-cn-store-card.is-owned-drag:active {
+  cursor: grabbing;
 }
 
-.studio-cn-store-card-body {
+.studio-cn-store-card .studio-chat-audio-player {
+  width: 100%;
   min-width: 0;
+  max-width: none;
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
 }
 
-.studio-cn-store-card-top {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
+.studio-cn-store-card .studio-chat-audio-head {
+  overflow: hidden;
 }
 
-.studio-cn-store-title {
-  margin: 0;
-  min-width: 0;
-  flex: 1 1 auto;
+.studio-cn-store-card .studio-chat-audio-head-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--color-cursor-text-bright);
 }
 
-.studio-cn-store-price {
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--color-cursor-text-bright);
-}
-
-.studio-cn-store-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  margin: 3px 0 0;
-  font-size: 10px;
-  color: var(--color-cursor-muted);
-}
-
-.studio-cn-store-chip {
+.studio-cn-store-buy-group {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-weight: 650;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.studio-cn-store-chip > svg {
-  width: 11px;
-  height: 11px;
-}
-
-.studio-cn-store-desc {
-  margin: 4px 0 0;
-  font-size: 11px;
+.studio-cn-store-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
   color: var(--color-cursor-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  cursor: pointer;
+}
+
+.studio-cn-store-cancel > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.studio-cn-store-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .studio-cn-store-buy {
@@ -157,21 +103,36 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  min-height: 28px;
-  padding: 0 10px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 9.5rem;
+  min-height: 22px;
+  height: 22px;
+  padding: 0 8px;
   border: none;
   border-radius: var(--cursor-radius-pill, 999px);
   background: var(--color-cursor-accent);
   color: var(--color-cursor-accent-contrast, #fff);
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .studio-cn-store-buy > svg {
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.studio-cn-store-buy > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-cn-store-buy:disabled {
@@ -184,9 +145,14 @@
   color: var(--color-cursor-muted);
 }
 
+.studio-cn-store-buy.is-confirm {
+  background: var(--color-cursor-accent);
+  color: var(--color-cursor-accent-contrast, #fff);
+}
+
 .studio-cn-store-spin {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   animation: studio-cn-store-spin 0.8s linear infinite;
 }
 
@@ -196,106 +162,57 @@
   }
 }
 
-.studio-cn-store-confirm {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 12px;
-  background: color-mix(in srgb, var(--mos-page, #111) 55%, transparent);
-}
-
-.studio-cn-store-confirm-card {
-  width: min(100%, 340px);
-  padding: 14px;
-  border-radius: var(--cursor-radius-md, 10px);
-  background: var(--mos-plate, var(--cursor-surface-raised));
-  box-shadow: 0 12px 40px color-mix(in srgb, #000 35%, transparent);
-}
-
-.studio-cn-store-confirm-card h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-cursor-text-bright);
-}
-
-.studio-cn-store-confirm-card p {
-  margin: 0 0 8px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--color-cursor-text);
-}
-
-.studio-cn-store-confirm-note {
-  color: var(--color-cursor-muted) !important;
-  font-size: 11px !important;
-}
-
-.studio-cn-store-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.studio-cn-store-confirm-cancel,
-.studio-cn-store-confirm-buy {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: none;
-  border-radius: var(--cursor-radius-pill, 999px);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.studio-cn-store-confirm-cancel {
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
-  color: var(--color-cursor-text-bright);
-}
-
-.studio-cn-store-confirm-buy {
-  background: var(--color-cursor-accent);
-  color: var(--color-cursor-accent-contrast, #fff);
-}
-
-.studio-cn-store-confirm-buy:disabled,
-.studio-cn-store-confirm-cancel:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .studio-files-source-toggle {
   display: flex;
+  align-items: center;
   gap: 4px;
-  padding: 6px 8px 0;
+  /* Match search / pathbar / chrome heads — not a taller padded strip. */
+  box-sizing: border-box;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
   flex: 0 0 auto;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
 .studio-files-source-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex: 1 1 0;
-  min-height: 28px;
-  padding: 0 8px;
-  border: none;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 10px;
+  /* L1 grey + soft ring at rest; accent wash when active. */
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: var(--cursor-radius-pill, 999px);
-  background: transparent;
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel)));
   color: var(--color-cursor-muted);
   font: inherit;
   font-size: 11px;
   font-weight: 650;
   cursor: pointer;
+  box-shadow: none;
+}
+
+.studio-files-source-toggle button > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
 }
 
 .studio-files-source-toggle button.is-active {
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, var(--color-cursor-border));
+  background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 12%, transparent);
   color: var(--color-cursor-text-bright);
+  box-shadow: none;
+}
+
+/* Source toggle already has border-bottom — don't stack search border-top. */
+.studio-files-source-toggle + .cursor-panel-search {
+  border-top: none;
 }
 
 .cursor-explorer-body.is-network-store {

@@ -3,12 +3,20 @@
 import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { AudioWaveform, Loader2, Music2, Pause, Play, ShoppingBag } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Loader2, ShoppingBag, X } from "lucide-react";
+import { useMemo, useState, type DragEvent } from "react";
 import { toast } from "sonner";
-import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
+import {
+  clearActiveExplorerDrag,
+  writeExplorerDragData,
+} from "@/desk/lib/explorer-dnd";
+import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
+import { formatTtdCents } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
+import { MediaLoadWave } from "./media-load-frame";
 import "./studio-creative-network-store.css";
+import "./studio-chat-audio-player.css";
 
 type AudioFilter = "all" | "music" | "sfx";
 
@@ -26,85 +34,174 @@ type ListingCard = {
   sellerUsername?: string;
   previewUrl?: string;
   ownedBuyerAssetId?: Id<"assets">;
+  viewerAccess?: "owned" | "creator";
   listedAt?: number;
 };
 
-function formatDuration(seconds?: number) {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return null;
-  const whole = Math.round(seconds);
-  const m = Math.floor(whole / 60);
-  const s = whole % 60;
-  return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `${s}s`;
+function ownedDragEntry(listing: ListingCard) {
+  const assetId = listing.ownedBuyerAssetId;
+  if (!assetId) return null;
+  return {
+    path: `studio-asset/${assetId}`,
+    name: listing.title,
+    type: "file" as const,
+    studioKind: "asset",
+    studioId: assetId,
+    mediaKind: "audio" as const,
+    mimeType: "audio/mpeg",
+    durationSeconds: listing.durationSeconds,
+    mediaUrl: listing.previewUrl,
+  };
 }
 
 function ListingRow({
   listing,
-  playingId,
-  onTogglePlay,
-  onPurchase,
+  onBuyClick,
+  onCancelConfirm,
+  confirming,
   busyId,
 }: {
   listing: ListingCard;
-  playingId: string | null;
-  onTogglePlay: (listing: ListingCard) => void;
-  onPurchase: (listing: ListingCard) => void;
+  onBuyClick: (listing: ListingCard) => void;
+  onCancelConfirm: () => void;
+  confirming: boolean;
   busyId: string | null;
 }) {
   const owned = Boolean(listing.ownedBuyerAssetId);
-  const duration = formatDuration(listing.durationSeconds);
-  const isPlaying = playingId === listing._id;
+  const isCreator = listing.viewerAccess === "creator";
+  const accessLabel = isCreator ? "Creator" : "Owned";
   const busy = busyId === listing._id;
+  const typeLabel = listing.audioType === "music" ? "Music" : "SFX";
+  const displayTitle = `${typeLabel} · ${listing.title}`;
+  const priceLabel = formatTtdCents(listing.priceCents);
 
-  return (
-    <article className="studio-cn-store-card">
+  function handleDragStart(event: DragEvent<HTMLElement>) {
+    const entry = ownedDragEntry(listing);
+    if (!entry) {
+      event.preventDefault();
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    // Keep play / scrub / buttons interactive — drag from chrome around them.
+    if (target?.closest(".studio-chat-audio-row, button, a, input")) {
+      event.preventDefault();
+      return;
+    }
+    writeExplorerDragData(event.dataTransfer, entry);
+    event.dataTransfer?.setData(
+      "application/x-studio-asset",
+      JSON.stringify({
+        assetId: entry.studioId,
+        kind: "audio",
+        name: entry.name,
+        durationSeconds: entry.durationSeconds,
+      }),
+    );
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+    setChipDragImage(event.dataTransfer, {
+      label: entry.name,
+      kind: "audio",
+    });
+    document.body.classList.add("is-drag-cursor");
+  }
+
+  function handleDragEnd() {
+    document.body.classList.remove("is-drag-cursor");
+    clearActiveExplorerDrag();
+  }
+
+  const buyControl = (
+    <div className="studio-cn-store-buy-group">
+      {confirming && !owned ? (
+        <button
+          type="button"
+          className="studio-cn-store-cancel"
+          disabled={busy}
+          onClick={onCancelConfirm}
+          aria-label="Cancel purchase"
+          title="Cancel"
+        >
+          <X aria-hidden="true" />
+        </button>
+      ) : null}
       <button
         type="button"
-        className="studio-cn-store-play"
-        onClick={() => onTogglePlay(listing)}
-        disabled={!listing.previewUrl}
-        aria-label={isPlaying ? "Pause preview" : "Play preview"}
-        title={listing.previewUrl ? (isPlaying ? "Pause" : "Preview") : "Preview unavailable"}
-      >
-        {isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-      </button>
-      <div className="studio-cn-store-card-body">
-        <div className="studio-cn-store-card-top">
-          <h3 className="studio-cn-store-title">{listing.title}</h3>
-          <span className="studio-cn-store-price">{formatTtdCents(listing.priceCents)}</span>
-        </div>
-        <p className="studio-cn-store-meta">
-          <span className="studio-cn-store-chip">
-            {listing.audioType === "music" ? (
-              <Music2 aria-hidden="true" />
-            ) : (
-              <AudioWaveform aria-hidden="true" />
-            )}
-            {listing.audioType === "music" ? "Music" : "SFX"}
-          </span>
-          {duration ? <span>{duration}</span> : null}
-          <span>{listing.sellerBusinessName}</span>
-        </p>
-        {listing.description ? (
-          <p className="studio-cn-store-desc">{listing.description}</p>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        className={`studio-cn-store-buy${owned ? " is-owned" : ""}`}
+        className={`studio-cn-store-buy${owned ? " is-owned" : ""}${confirming ? " is-confirm" : ""}`}
         disabled={busy || owned}
-        onClick={() => onPurchase(listing)}
+        onClick={() => onBuyClick(listing)}
+        aria-label={
+          owned
+            ? `${accessLabel} — drag card to timeline`
+            : busy
+              ? "Buying"
+              : confirming
+                ? `Confirm buy for ${priceLabel}`
+                : `Buy for ${priceLabel}`
+        }
+        title={
+          owned
+            ? `${accessLabel} · drag to timeline`
+            : confirming
+              ? `Confirm · ${priceLabel}`
+              : `Buy · ${priceLabel}`
+        }
       >
         {busy ? (
           <Loader2 className="studio-cn-store-spin" aria-hidden="true" />
-        ) : owned ? (
-          "Owned"
-        ) : (
-          <>
-            <ShoppingBag aria-hidden="true" />
-            Buy
-          </>
+        ) : confirming ? (
+          <Check aria-hidden="true" />
+        ) : owned ? null : (
+          <ShoppingBag aria-hidden="true" />
         )}
+        <span>
+          {owned
+            ? accessLabel
+            : busy
+              ? "Buying"
+              : confirming
+                ? "Confirm"
+                : priceLabel}
+        </span>
       </button>
+    </div>
+  );
+
+  return (
+    <article
+      className={`studio-cn-store-card${owned ? " is-owned-drag" : ""}`}
+      draggable={owned}
+      onDragStart={owned ? handleDragStart : undefined}
+      onDragEnd={owned ? handleDragEnd : undefined}
+      title={owned ? `${displayTitle} · Drag to timeline` : undefined}
+    >
+      {listing.previewUrl ? (
+        <StudioChatAudioPlayer
+          src={listing.previewUrl}
+          title={displayTitle}
+          durationHint={listing.durationSeconds}
+          showTitle
+          compact
+          headerEnd={buyControl}
+        />
+      ) : (
+        <div
+          className="studio-chat-audio-player is-compact"
+          role="status"
+          aria-busy="true"
+          aria-label="Preview unavailable"
+        >
+          <div className="studio-chat-audio-head">
+            <span className="studio-chat-audio-head-title" title={displayTitle}>
+              {displayTitle}
+            </span>
+            <div className="studio-chat-audio-head-end">{buyControl}</div>
+          </div>
+          <div className="studio-chat-audio-load-body">
+            <MediaLoadWave size="sm" />
+            <p className="studio-chat-audio-load-label">Preview unavailable</p>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -112,19 +209,19 @@ function ListingRow({
 export function StudioCreativeNetworkStore({
   expiresUnix,
   search,
+  audioFilter = "all",
   onOpenPurchased,
   onNeedTopUp,
 }: {
   expiresUnix: number;
   search: string;
-  onOpenPurchased?: (buyerAssetId: Id<"assets">) => void;
+  /** All / Music / SFX — controlled from the search-bar type dropdown. */
+  audioFilter?: AudioFilter;
+  onOpenPurchased?: (buyerAssetId?: Id<"assets">) => void;
   onNeedTopUp?: () => void;
 }) {
-  const [audioFilter, setAudioFilter] = useState<AudioFilter>("all");
-  const [playingId, setPlayingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirmListing, setConfirmListing] = useState<ListingCard | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const deferredSearch = search.trim();
   const listings = useQuery(api.assetStore.browseListings, {
@@ -137,59 +234,13 @@ export function StudioCreativeNetworkStore({
 
   const rows = useMemo(() => listings ?? [], [listings]);
 
-  useEffect(() => {
-    return () => {
-      audioRef.current?.pause();
-      audioRef.current = null;
-    };
-  }, []);
-
-  function stopPreview() {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setPlayingId(null);
-  }
-
-  function togglePlay(listing: ListingCard) {
-    if (!listing.previewUrl) {
-      toast.message("Preview unavailable for this track");
-      return;
-    }
-    if (playingId === listing._id) {
-      stopPreview();
-      return;
-    }
-    stopPreview();
-    const audio = new Audio(listing.previewUrl);
-    audioRef.current = audio;
-    setPlayingId(listing._id);
-    audio.onended = () => {
-      if (audioRef.current === audio) {
-        audioRef.current = null;
-        setPlayingId(null);
-      }
-    };
-    audio.onerror = () => {
-      toast.error("Could not play preview");
-      stopPreview();
-    };
-    void audio.play().catch(() => {
-      toast.error("Could not play preview");
-      stopPreview();
-    });
-  }
-
   async function runPurchase(listing: ListingCard) {
     setBusyId(listing._id);
     try {
-      const result = await purchaseListing({ listingId: listing._id });
-      setConfirmListing(null);
-      if (result.alreadyOwned) {
-        toast.message("Already in your Purchased folder");
-      } else {
-        toast.success("Purchased — yours forever. Use it in any edit.");
-      }
-      onOpenPurchased?.(result.buyerAssetId);
+      await purchaseListing({ listingId: listing._id });
+      setConfirmId(null);
+      // Files → Your files → Purchased (no asset tab / no modal).
+      onOpenPurchased?.();
     } catch (error) {
       const message = friendlyConvexError(error, "Could not complete purchase.");
       toast.error(message);
@@ -201,29 +252,20 @@ export function StudioCreativeNetworkStore({
     }
   }
 
+  function handleBuyClick(listing: ListingCard) {
+    if (listing.ownedBuyerAssetId) {
+      onOpenPurchased?.(listing.ownedBuyerAssetId);
+      return;
+    }
+    if (confirmId === listing._id) {
+      void runPurchase(listing);
+      return;
+    }
+    setConfirmId(listing._id);
+  }
+
   return (
     <div className="studio-cn-store">
-      <div className="studio-cn-store-filters" role="tablist" aria-label="Audio type">
-        {(
-          [
-            { id: "all", label: "All" },
-            { id: "music", label: "Music" },
-            { id: "sfx", label: "SFX" },
-          ] as const
-        ).map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            role="tab"
-            aria-selected={audioFilter === chip.id}
-            className={`studio-cn-store-filter${audioFilter === chip.id ? " is-active" : ""}`}
-            onClick={() => setAudioFilter(chip.id)}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
-
       <div className="studio-cn-store-scroll">
         {!listings ? (
           <div className="studio-cn-store-empty">Loading store…</div>
@@ -231,7 +273,7 @@ export function StudioCreativeNetworkStore({
           <div className="studio-cn-store-empty">
             {deferredSearch
               ? "No matching music or sound effects"
-              : "No Creative Network audio listed yet"}
+              : "No asset library audio listed yet"}
           </div>
         ) : (
           <div className="studio-cn-store-list">
@@ -239,68 +281,15 @@ export function StudioCreativeNetworkStore({
               <ListingRow
                 key={listing._id}
                 listing={listing}
-                playingId={playingId}
                 busyId={busyId}
-                onTogglePlay={togglePlay}
-                onPurchase={(item) => {
-                  if (item.ownedBuyerAssetId) {
-                    onOpenPurchased?.(item.ownedBuyerAssetId);
-                    return;
-                  }
-                  setConfirmListing(item);
-                }}
+                confirming={confirmId === listing._id}
+                onBuyClick={handleBuyClick}
+                onCancelConfirm={() => setConfirmId(null)}
               />
             ))}
           </div>
         )}
       </div>
-
-      {confirmListing ? (
-        <div
-          className="studio-cn-store-confirm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="studio-cn-store-confirm-title"
-        >
-          <div className="studio-cn-store-confirm-card">
-            <h3 id="studio-cn-store-confirm-title">Buy this track?</h3>
-            <p>
-              <strong>{confirmListing.title}</strong> —{" "}
-              {formatTtdCents(confirmListing.priceCents)}. Pay once and keep a personal
-              copy forever in your Purchased folder. It counts toward your storage.
-            </p>
-            <p className="studio-cn-store-confirm-note">
-              Generate cost would be{" "}
-              {formatTtdFromCredits(confirmListing.generateCredits)}; store price is 3×.
-            </p>
-            <div className="studio-cn-store-confirm-actions">
-              <button
-                type="button"
-                className="studio-cn-store-confirm-cancel"
-                onClick={() => setConfirmListing(null)}
-                disabled={busyId === confirmListing._id}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="studio-cn-store-confirm-buy"
-                disabled={busyId === confirmListing._id}
-                onClick={() => void runPurchase(confirmListing)}
-              >
-                {busyId === confirmListing._id ? (
-                  <>
-                    <Loader2 className="studio-cn-store-spin" aria-hidden="true" />
-                    Buying…
-                  </>
-                ) : (
-                  `Buy for ${formatTtdCents(confirmListing.priceCents)}`
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

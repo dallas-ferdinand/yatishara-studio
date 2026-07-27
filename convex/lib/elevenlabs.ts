@@ -160,6 +160,33 @@ export function voiceUsableOnCurrentPlan(category?: string | null): boolean {
 export const VOICE_UNAVAILABLE_USER_MESSAGE =
   "This voice is unavailable. We'll notify you when it's available.";
 
+/**
+ * ElevenLabs account quota / provider credits — not the customer's Studio TTD balance.
+ * Must never be rewritten into "Not enough balance / You need $0 TTD".
+ */
+export const AUDIO_PROVIDER_QUOTA_USER_MESSAGE =
+  "Audio generation is temporarily unavailable. Try again in a few minutes.";
+
+function isElevenLabsProviderQuotaMessage(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (
+    /quota_exceeded|insufficient_credits|payment_required|credit_limit|out_of_credits/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  // Provider API credits (never Studio TTD).
+  if (
+    /insufficient credits|not enough credits|credits? (remaining|left)|exceeds your quota|out of credits/i.test(
+      lower,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function buildSharedVoicesQuery(filters: ExploreVoicesFilters): string {
   const params = new URLSearchParams();
   params.set(
@@ -256,32 +283,45 @@ export function parseElevenLabsError(status: number, detail: string): string {
             message?: string;
             code?: string;
             type?: string;
+            status?: string;
           }
         | Array<{ msg?: string }>;
       message?: string;
     };
     const detailValue = json.detail;
     let message = "";
+    let code = "";
     if (typeof detailValue === "string") message = detailValue;
     else if (Array.isArray(detailValue)) {
       message = detailValue.map((item) => item.msg).filter(Boolean).join("; ");
     } else if (detailValue && typeof detailValue === "object") {
       message = String(detailValue.message ?? "");
-      const code = String(detailValue.code ?? detailValue.type ?? "");
+      code = String(
+        detailValue.status ?? detailValue.code ?? detailValue.type ?? "",
+      );
       if (
         /paid_plan_required|payment_required/i.test(code) ||
         /free users cannot use library voices|paid.?plan|upgrade your subscription/i.test(
           message,
         )
       ) {
-        return VOICE_UNAVAILABLE_USER_MESSAGE;
+        // payment_required for library voices ≠ provider quota; keep voice copy.
+        if (!/quota_exceeded|insufficient_credits|credit_limit/i.test(code)) {
+          return VOICE_UNAVAILABLE_USER_MESSAGE;
+        }
       }
     } else if (typeof json.message === "string") {
       message = json.message;
     }
+    if (isElevenLabsProviderQuotaMessage(`${code} ${message}`) || status === 402) {
+      return AUDIO_PROVIDER_QUOTA_USER_MESSAGE;
+    }
     if (message.trim()) return message.trim().slice(0, 240);
   } catch {
     // fall through
+  }
+  if (isElevenLabsProviderQuotaMessage(trimmed) || status === 402) {
+    return AUDIO_PROVIDER_QUOTA_USER_MESSAGE;
   }
   if (/paid_plan_required|library voices|payment_required/i.test(trimmed)) {
     return VOICE_UNAVAILABLE_USER_MESSAGE;

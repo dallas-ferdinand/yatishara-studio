@@ -115,6 +115,8 @@ export function StudioVideoEditor({
   const saveTimerRef = useRef(null);
   const saveChainRef = useRef(Promise.resolve());
   const creatingProjectRef = useRef(false);
+  /** Sticky home folder for this .edit — never follows the Files rail browse folder. */
+  const [homeFolderId, setHomeFolderId] = useState(folderId);
 
   const existing = useQuery(api.videoEdits.get, projectId ? { projectId } : "skip");
   const existingBySource = useQuery(
@@ -123,9 +125,9 @@ export function StudioVideoEditor({
   );
   const folderAssets = useQuery(
     api.assets.listByFolder,
-    isRealFolderId(folderId)
+    isRealFolderId(homeFolderId)
       ? {
-          folderId,
+          folderId: homeFolderId,
           expiresUnix: urlExpiresUnix,
           quality: "preview",
         }
@@ -211,6 +213,7 @@ export function StudioVideoEditor({
     }
     setHydrated(false);
     setLocalProjectId(projectId ?? null);
+    setHomeFolderId(folderId);
     setSaveError(null);
     creatingProjectRef.current = false;
     dispatch({
@@ -221,10 +224,11 @@ export function StudioVideoEditor({
         sourceAssetId,
       }),
     });
-    // Intentionally omit sourceAssetName / hydrated / localProjectId —
-    // rename and first-save promotion must not wipe the timeline.
+    // Intentionally omit sourceAssetName / hydrated / localProjectId / folderId —
+    // rename, first-save promotion, and Files-rail folder switches must not wipe
+    // the timeline or relocate the .edit file.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, sourceAssetId, folderId]);
+  }, [projectId, sourceAssetId]);
 
   useEffect(() => {
     if (hydrated) return;
@@ -241,6 +245,7 @@ export function StudioVideoEditor({
     if (saved?.project) {
       dispatch({ type: "replace_project", project: saved.project });
       setLocalProjectId(saved._id);
+      if (saved.folderId) setHomeFolderId(saved.folderId);
       onProjectSaved?.(saved._id, saved.name);
       setHydrated(true);
       return;
@@ -283,11 +288,12 @@ export function StudioVideoEditor({
       saveChainRef.current = saveChainRef.current
         .then(async () => {
           if (creatingProjectRef.current && !localProjectId) return;
+          if (!isRealFolderId(homeFolderId)) return;
           if (!localProjectId) creatingProjectRef.current = true;
           try {
             const result = await saveProject({
               projectId: localProjectId ?? undefined,
-              folderId,
+              folderId: homeFolderId,
               name,
               project: projectSnapshot,
               sourceAssetId,
@@ -307,7 +313,7 @@ export function StudioVideoEditor({
         .catch(() => undefined);
       return saveChainRef.current;
     },
-    [folderId, localProjectId, onProjectSaved, onStatus, saveProject, sourceAssetId],
+    [homeFolderId, localProjectId, onProjectSaved, onStatus, saveProject, sourceAssetId],
   );
 
   useEffect(() => {
@@ -566,8 +572,11 @@ export function StudioVideoEditor({
       await queueSave(state.project, state.project.name);
       let pid = localProjectId;
       if (!pid) {
+        if (!isRealFolderId(homeFolderId)) {
+          throw new Error("Choose a folder before exporting.");
+        }
         const saved = await saveProject({
-          folderId,
+          folderId: homeFolderId,
           name: state.project.name,
           project: state.project,
           sourceAssetId,
@@ -578,7 +587,7 @@ export function StudioVideoEditor({
       }
       const result = await exportProject({
         projectId: pid,
-        folderId,
+        folderId: homeFolderId,
         name: state.project.name,
         project: state.project,
       });
@@ -592,7 +601,7 @@ export function StudioVideoEditor({
   }, [
     canExport,
     exportProject,
-    folderId,
+    homeFolderId,
     localProjectId,
     onOpenAsset,
     onProjectSaved,

@@ -11,7 +11,12 @@ import {
   assertCanMessagePeer,
   sellerTagForUser,
 } from "./dmPeerPanel";
-import { signBunnyFullUrl } from "./lib/bunny";
+import {
+  assetThumbnailPath,
+  signBunnyCdnUrls,
+  signBunnyFullUrl,
+  THUMB_TRANSFORM,
+} from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { hydrateSocialPeople } from "./profiles";
 
@@ -21,12 +26,16 @@ const REPLY_BODY_MAX = 120;
 const VOICE_NOTE_MAX_SECONDS = 300;
 const VOICE_PREVIEW = "Voice message";
 const IMAGE_PREVIEW = "Photo";
+const POST_PREVIEW = "Post";
+const COMMENT_PREVIEW = "Comment";
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 const dmMessageKind = v.union(
   v.literal("text"),
   v.literal("voice"),
   v.literal("image"),
+  v.literal("post"),
+  v.literal("comment"),
 );
 
 const replySnippet = v.object({
@@ -37,6 +46,18 @@ const replySnippet = v.object({
   audioUrl: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
   durationSec: v.optional(v.number()),
+});
+
+const feedShareCard = v.object({
+  type: v.union(v.literal("post"), v.literal("comment")),
+  postId: v.id("profilePosts"),
+  commentId: v.optional(v.id("profileComments")),
+  username: v.optional(v.string()),
+  displayName: v.optional(v.string()),
+  caption: v.optional(v.string()),
+  body: v.optional(v.string()),
+  thumbnailUrl: v.optional(v.string()),
+  unavailable: v.optional(v.boolean()),
 });
 
 async function resolveReplyToMessageId(
@@ -55,6 +76,14 @@ async function resolveReplyToMessageId(
 function replyPreviewBody(row: Doc<"dmMessages">): string {
   const kind = row.kind ?? "text";
   if (kind === "voice") return VOICE_PREVIEW;
+  if (kind === "post") return POST_PREVIEW;
+  if (kind === "comment") {
+    const body = row.body.trim();
+    if (!body) return COMMENT_PREVIEW;
+    const clipped =
+      body.length > REPLY_BODY_MAX ? `${body.slice(0, REPLY_BODY_MAX)}…` : body;
+    return `${COMMENT_PREVIEW} · ${clipped}`;
+  }
   if (kind === "image") {
     const caption = row.body.trim();
     if (!caption) return IMAGE_PREVIEW;
@@ -69,6 +98,89 @@ function replyPreviewBody(row: Doc<"dmMessages">): string {
   return body.length > REPLY_BODY_MAX
     ? `${body.slice(0, REPLY_BODY_MAX)}…`
     : body;
+}
+
+function feedShareListPreview(kind: "post" | "comment", body: string): string {
+  if (kind === "post") {
+    const caption = body.trim();
+    if (!caption) return POST_PREVIEW;
+    return caption.length > DM_PREVIEW_MAX
+      ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+      : caption;
+  }
+  const text = body.trim();
+  if (!text) return COMMENT_PREVIEW;
+  return text.length > DM_PREVIEW_MAX
+    ? `${text.slice(0, DM_PREVIEW_MAX)}…`
+    : text;
+}
+
+type FeedShareCard = {
+  type: "post" | "comment";
+  postId: Id<"profilePosts">;
+  commentId?: Id<"profileComments">;
+  username?: string;
+  displayName?: string;
+  caption?: string;
+  body?: string;
+  thumbnailUrl?: string;
+  unavailable?: boolean;
+};
+
+async function hydrateFeedShareCard(
+  ctx: QueryCtx,
+  row: Doc<"dmMessages">,
+  expiresUnix: number,
+): Promise<FeedShareCard | undefined> {
+  const kind = row.kind ?? "text";
+  if (kind !== "post" && kind !== "comment") return undefined;
+  const postId = row.sharedPostId;
+  if (!postId) return undefined;
+
+  const post = await ctx.db.get("profilePosts", postId);
+  if (!post || post.unpublishedAt) {
+    return {
+      type: kind,
+      postId,
+      commentId: row.sharedCommentId,
+      unavailable: true,
+    };
+  }
+
+  const [profile, asset] = await Promise.all([
+    ctx.db.get("profiles", post.profileId),
+    ctx.db.get("assets", post.assetId),
+  ]);
+  const thumbPath = asset ? assetThumbnailPath(asset) : undefined;
+  const [thumbs, people] = await Promise.all([
+    thumbPath
+      ? signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM)
+      : Promise.resolve(new Map<string, string>()),
+    profile
+      ? hydrateSocialPeople(ctx, [profile], expiresUnix)
+      : Promise.resolve([]),
+  ]);
+  const person = people[0];
+
+  let commentBody: string | undefined;
+  if (kind === "comment" && row.sharedCommentId) {
+    const comment = await ctx.db.get("profileComments", row.sharedCommentId);
+    if (comment && !comment.deletedAt) {
+      commentBody = comment.body?.trim() || undefined;
+    }
+  }
+
+  return {
+    type: kind,
+    postId,
+    commentId: row.sharedCommentId,
+    username: person?.username ?? profile?.username,
+    displayName: person?.displayName,
+    caption: post.caption?.trim() || undefined,
+    // Card copy is the live post/comment — never the DM note (row.body).
+    body: commentBody,
+    thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+  };
 }
 
 /** Resolve playable URL for a DM media row via its billable Studio asset. */
@@ -780,6 +892,7 @@ export const listMessages = authedQuery({
        */
       receipt: receiptStatus,
       replyTo: v.optional(replySnippet),
+      feedShare: v.optional(feedShareCard),
       createdAt: v.number(),
     }),
   ),
@@ -819,7 +932,7 @@ export const listMessages = authedQuery({
       {
         _id: Id<"dmMessages">;
         body: string;
-        kind: "text" | "voice" | "image";
+        kind: "text" | "voice" | "image" | "post" | "comment";
         fromMe: boolean;
         audioUrl?: string;
         imageUrl?: string;
@@ -845,6 +958,7 @@ export const listMessages = authedQuery({
       chronological.map(async (row) => {
         const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
         const fromMe = row.senderId === ctx.user._id;
+        const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
         return {
           _id: row._id,
           body: row.body,
@@ -864,6 +978,7 @@ export const listMessages = authedQuery({
           replyTo: row.replyToMessageId
             ? replyById.get(row.replyToMessageId)
             : undefined,
+          feedShare,
           createdAt: row.createdAt,
         };
       }),
@@ -917,6 +1032,89 @@ export const sendMessage = authedMutation({
       lastMessageSenderId: ctx.user._id,
       ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
     });
+    return messageId;
+  },
+});
+
+/** Share a public feed post (or comment on it) into a DM as a reply-style card. */
+export const sendFeedShare = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    postId: v.id("profilePosts"),
+    commentId: v.optional(v.id("profileComments")),
+    note: v.optional(v.string()),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      ctx.user._id,
+      peerIdOf(conversation, ctx.user._id),
+    );
+
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      throw new Error("Post not found");
+    }
+
+    let kind: "post" | "comment" = "post";
+    /** User note only — never duplicate the post caption / comment text here. */
+    let body = (args.note ?? "").trim();
+    let sharedCommentId: Id<"profileComments"> | undefined;
+    let previewFallback = (post.caption ?? "").trim();
+
+    if (args.commentId) {
+      const comment = await ctx.db.get("profileComments", args.commentId);
+      if (
+        !comment ||
+        comment.deletedAt ||
+        comment.postId !== post._id
+      ) {
+        throw new Error("Comment not found");
+      }
+      kind = "comment";
+      sharedCommentId = comment._id;
+      previewFallback = comment.body.trim();
+    }
+
+    if (body.length > DM_BODY_MAX) {
+      body = `${body.slice(0, DM_BODY_MAX - 1)}…`;
+    }
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: ctx.user._id,
+      body,
+      kind,
+      sharedPostId: post._id,
+      ...(sharedCommentId ? { sharedCommentId } : {}),
+      createdAt: now,
+    });
+
+    const isLow = conversation.userLowId === ctx.user._id;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: feedShareListPreview(
+        kind,
+        body || previewFallback,
+      ),
+      lastMessageSenderId: ctx.user._id,
+      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+    });
+
+    // Count as a post share when the payload is the post itself.
+    if (kind === "post") {
+      await ctx.db.patch(post._id, {
+        shareCount: (post.shareCount ?? 0) + 1,
+      });
+    }
+
     return messageId;
   },
 });

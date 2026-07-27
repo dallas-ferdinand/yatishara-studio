@@ -65,7 +65,9 @@ const assetReturn = v.object({
   editProxyUpdatedAt: v.optional(v.number()),
   sourceGenerationJobId: v.optional(v.id("generationJobs")),
   sourceListingId: v.optional(v.id("assetListings")),
-  licenseKind: v.optional(v.literal("purchased_network")),
+  licenseKind: v.optional(
+    v.union(v.literal("purchased_network"), v.literal("listed_network")),
+  ),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -337,9 +339,15 @@ export const update = authedMutation({
       if (asset.licenseKind === "purchased_network") {
         throw new Error("Purchased Creative Network audio cannot be moved.");
       }
+      if (asset.licenseKind === "listed_network") {
+        throw new Error("Public Creative Network catalog audio cannot be moved.");
+      }
       const fromFolder = await ctx.db.get("folders", asset.folderId);
       if (fromFolder?.systemKind === "purchased_assets") {
         throw new Error("Files in the Purchased folder cannot be moved.");
+      }
+      if (fromFolder?.systemKind === "public_assets") {
+        throw new Error("Files in My Public cannot be moved.");
       }
     }
     await ctx.db.patch(asset._id, {
@@ -363,6 +371,11 @@ export const duplicate = authedMutation({
     if (asset.licenseKind === "purchased_network") {
       throw new Error(
         "Purchased Creative Network audio cannot be duplicated.",
+      );
+    }
+    if (asset.licenseKind === "listed_network") {
+      throw new Error(
+        "Public Creative Network catalog audio cannot be duplicated.",
       );
     }
     const folderId = args.targetFolderId ?? asset.folderId;
@@ -402,6 +415,31 @@ export const duplicate = authedMutation({
   },
 });
 
+async function assertNotActiveNetworkListingSource(
+  ctx: MutationCtx,
+  assetId: Id<"assets">,
+): Promise<void> {
+  const bySource = await ctx.db
+    .query("assetListings")
+    .withIndex("by_source_asset", (q) => q.eq("sourceAssetId", assetId))
+    .unique();
+  const byOriginal = await ctx.db
+    .query("assetListings")
+    .withIndex("by_original_asset", (q) => q.eq("originalAssetId", assetId))
+    .unique();
+  const listing = bySource ?? byOriginal;
+  if (
+    listing &&
+    (listing.status === "pending_review" || listing.status === "listed")
+  ) {
+    throw new Error(
+      listing.status === "pending_review"
+        ? "Withdraw the Creative Network submission before deleting this file."
+        : "Unlist or release this Creative Network listing before deleting the source file.",
+    );
+  }
+}
+
 export const moveToTrash = authedMutation({
   args: { assetId: v.id("assets") },
   returns: v.null(),
@@ -412,12 +450,21 @@ export const moveToTrash = authedMutation({
         "Purchased Creative Network audio stays in your Purchased folder and cannot be deleted.",
       );
     }
+    if (asset.licenseKind === "listed_network") {
+      throw new Error(
+        "Public Creative Network catalog audio stays in My Public and cannot be deleted.",
+      );
+    }
     const folder = await ctx.db.get("folders", asset.folderId);
     if (folder?.systemKind === "purchased_assets") {
       throw new Error(
         "Files in the Purchased folder cannot be deleted.",
       );
     }
+    if (folder?.systemKind === "public_assets") {
+      throw new Error("Files in My Public cannot be deleted.");
+    }
+    await assertNotActiveNetworkListingSource(ctx, asset._id);
     const now = Date.now();
     await ctx.db.patch(asset._id, {
       deletedAt: now,
@@ -483,6 +530,11 @@ export const deleteForever = authedMutation({
     if (asset.licenseKind === "purchased_network") {
       throw new Error(
         "Purchased Creative Network audio cannot be permanently deleted.",
+      );
+    }
+    if (asset.licenseKind === "listed_network") {
+      throw new Error(
+        "Public Creative Network catalog audio cannot be permanently deleted.",
       );
     }
     if (!asset.deletedAt) {

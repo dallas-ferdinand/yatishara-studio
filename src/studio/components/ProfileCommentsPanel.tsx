@@ -5,11 +5,13 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowUp,
   Bookmark,
+  Check,
   ChevronLeft,
   Heart,
   Image as ImageIcon,
   Loader2,
   MessageCircle,
+  Pencil,
   Trash2,
   X,
 } from "lucide-react";
@@ -18,10 +20,14 @@ import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { formatPostWhen } from "@/studio/lib/formatPostWhen";
+import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
 import { uploadStudioAsset } from "@/studio/lib/uploadAsset";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
+
+const MAX_POST_CAPTION = 2200;
 
 type CommentRow = {
   _id: Id<"profileComments">;
@@ -57,7 +63,10 @@ type PostAuthorInfo = {
   firstName?: string;
   lastName?: string;
   avatarUrl?: string;
+  thumbnailUrl?: string;
   publishedAt: number;
+  editedAt?: number;
+  isOwner?: boolean;
 };
 
 type PostActionsInfo = {
@@ -87,6 +96,8 @@ type DescriptionInfo = {
     avatarUrl?: string;
   }>;
   onOpenProfile?: (username: string) => void;
+  /** Optimistic local caption after owner saves an edit. */
+  onCaptionSaved?: (caption: string | undefined, editedAt: number) => void;
 };
 
 const MAX_COMMENT_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -98,15 +109,12 @@ function formatCount(value: number): string {
 }
 
 function formatWhen(ts: number): string {
-  const delta = Date.now() - ts;
-  const mins = Math.floor(delta / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(ts).toLocaleDateString();
+  return formatPostWhen(ts);
+}
+
+function formatPostStamp(publishedAt: number, editedAt?: number): string {
+  const when = formatPostWhen(publishedAt);
+  return editedAt ? `${when} · edited` : when;
 }
 
 function commentLabel(comment: Pick<CommentRow, "displayName" | "username">): string {
@@ -131,6 +139,7 @@ function CommentsBody({
   variant,
   postAuthor,
   postActions,
+  onEditDescription,
 }: {
   postId: Id<"profilePosts">;
   commentCount: number;
@@ -141,6 +150,7 @@ function CommentsBody({
   variant: "sheet" | "dock";
   postAuthor?: PostAuthorInfo;
   postActions?: PostActionsInfo;
+  onEditDescription?: () => void;
 }) {
   const auth = useConvexAuth();
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60);
@@ -461,7 +471,28 @@ function CommentsBody({
     };
     const replyCount = comment.replyCount ?? 0;
     return (
-      <article key={comment._id} className="profile-comment-row">
+      <article
+        key={comment._id}
+        className="profile-comment-row"
+        draggable
+        title="Drag into a chat to share this comment"
+        onDragStart={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest("button, a, input, textarea, [contenteditable='true']")) {
+            event.preventDefault();
+            return;
+          }
+          setFeedShareDataTransfer(event.dataTransfer, {
+            type: "comment",
+            postId,
+            commentId: comment._id,
+            username: comment.username,
+            displayName: comment.displayName,
+            body: comment.body,
+            thumbnailUrl: postAuthor?.thumbnailUrl,
+          });
+        }}
+      >
         <StudioProfileAvatar
           className="profile-comment-avatar"
           size="sm"
@@ -595,7 +626,20 @@ function CommentsBody({
               )}
             </div>
           ) : postAuthor ? (
-            <div className="profile-comments-thread-head">
+            <div
+              className="profile-comments-thread-head"
+              draggable
+              title="Drag into a chat to share this post"
+              onDragStart={(event) => {
+                setFeedShareDataTransfer(event.dataTransfer, {
+                  type: "post",
+                  postId,
+                  username: postAuthor.username,
+                  displayName: postAuthor.displayName,
+                  thumbnailUrl: postAuthor.thumbnailUrl,
+                });
+              }}
+            >
               <StudioProfileAvatar
                 className="profile-comments-thread-avatar"
                 size="md"
@@ -609,7 +653,7 @@ function CommentsBody({
               <div className="profile-comments-thread-preview">
                 <strong>{postName}</strong>
                 <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
-                  {formatWhen(postAuthor.publishedAt)}
+                  {formatPostStamp(postAuthor.publishedAt, postAuthor.editedAt)}
                 </time>
               </div>
             </div>
@@ -651,6 +695,16 @@ function CommentsBody({
                 )}
                 <span>{formatCount(postActions.saveCount)}</span>
               </button>
+              {postAuthor?.isOwner && onEditDescription ? (
+                <button
+                  type="button"
+                  className="profile-comments-close"
+                  onClick={onEditDescription}
+                  aria-label="Edit description"
+                >
+                  <Pencil aria-hidden="true" strokeWidth={2.25} />
+                </button>
+              ) : null}
             </div>
           ) : null}
           {showClose ? (
@@ -905,17 +959,57 @@ function DescriptionMentionChip({
 }
 
 function DescriptionBody({
+  postId,
   description,
   postAuthor,
   variant,
   onClose,
+  startEditing = false,
+  onStartEditingConsumed,
 }: {
+  postId: Id<"profilePosts">;
   description: DescriptionInfo;
   postAuthor?: PostAuthorInfo;
   variant: "sheet" | "dock";
   onClose: () => void;
+  startEditing?: boolean;
+  onStartEditingConsumed?: () => void;
 }) {
-  const parts = parseCaptionParts(description.caption);
+  const updateCaption = useMutation(api.profiles.updatePostCaption);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(description.caption ?? "");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [localEditedAt, setLocalEditedAt] = useState<number | undefined>(
+    postAuthor?.editedAt,
+  );
+  const [localCaption, setLocalCaption] = useState(description.caption);
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(description.caption ?? "");
+      setLocalCaption(description.caption);
+    }
+  }, [description.caption, editing]);
+
+  useEffect(() => {
+    setLocalEditedAt(postAuthor?.editedAt);
+  }, [postAuthor?.editedAt]);
+
+  const canEdit = Boolean(postAuthor?.isOwner);
+
+  useEffect(() => {
+    if (!startEditing || !canEdit) return;
+    setDraft(localCaption ?? description.caption ?? "");
+    setEditError("");
+    setEditing(true);
+    onStartEditingConsumed?.();
+    // Intentionally only when parent requests edit open — not on caption churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startEditing gate
+  }, [startEditing, canEdit]);
+
+  const caption = localCaption;
+  const parts = parseCaptionParts(caption);
   const mentionByUser = new Map(
     (description.mentions ?? []).map((m) => [m.username.toLowerCase(), m] as const),
   );
@@ -937,7 +1031,7 @@ function DescriptionBody({
   const leftoverTags = (description.hashtags ?? []).filter(
     (t) => !shownHashes.has(t.tag.toLowerCase()),
   );
-  const empty = parts.length === 0 && leftoverTags.length === 0;
+  const empty = !editing && parts.length === 0 && leftoverTags.length === 0;
   const postName = postAuthor ? postAuthorLabel(postAuthor) : "Description";
   const postInitials = postAuthor
     ? profileNameInitials({
@@ -948,10 +1042,44 @@ function DescriptionBody({
       })
     : "?";
 
+  async function saveEdit() {
+    if (saving) return;
+    setSaving(true);
+    setEditError("");
+    try {
+      const result = await updateCaption({
+        postId,
+        caption: draft.slice(0, MAX_POST_CAPTION),
+      });
+      setLocalCaption(result.caption);
+      setLocalEditedAt(result.editedAt);
+      setEditing(false);
+      description.onCaptionSaved?.(result.caption, result.editedAt);
+    } catch (error) {
+      setEditError(friendlyConvexError(error, "Could not save description."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
       <header className="profile-comments-head is-thread is-description">
-        <div className="profile-comments-thread-head">
+        <div
+          className="profile-comments-thread-head"
+          draggable
+          title="Drag into a chat to share this post"
+          onDragStart={(event) => {
+            setFeedShareDataTransfer(event.dataTransfer, {
+              type: "post",
+              postId,
+              username: postAuthor?.username ?? description.username,
+              displayName: postAuthor?.displayName,
+              caption: caption,
+              thumbnailUrl: postAuthor?.thumbnailUrl,
+            });
+          }}
+        >
           {postAuthor ? (
             <>
               <StudioProfileAvatar
@@ -967,7 +1095,7 @@ function DescriptionBody({
               <div className="profile-comments-thread-preview">
                 <strong>{postName}</strong>
                 <time dateTime={new Date(postAuthor.publishedAt).toISOString()}>
-                  {formatWhen(postAuthor.publishedAt)}
+                  {formatPostStamp(postAuthor.publishedAt, localEditedAt)}
                 </time>
               </div>
             </>
@@ -977,25 +1105,118 @@ function DescriptionBody({
             </div>
           )}
         </div>
-        <button
-          type="button"
-          className="profile-comments-close"
-          onClick={onClose}
-          aria-label="Close description"
-        >
-          <X className="h-4 w-4" aria-hidden="true" />
-        </button>
+        <div className="profile-comments-post-actions">
+          {canEdit && !editing ? (
+            <button
+              type="button"
+              className="profile-comments-close"
+              onClick={() => {
+                setDraft(caption ?? "");
+                setEditError("");
+                setEditing(true);
+              }}
+              aria-label="Edit description"
+            >
+              <Pencil aria-hidden="true" strokeWidth={2.25} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="profile-comments-close"
+            onClick={onClose}
+            aria-label="Close description"
+          >
+            <X aria-hidden="true" strokeWidth={2.25} />
+          </button>
+        </div>
       </header>
 
       <div
         className={`profile-comments-list profile-description-body${empty ? " is-empty" : ""}`}
       >
-        {empty ? (
+        {editing ? (
+          <div className="profile-description-edit">
+            <textarea
+              className="profile-description-edit-input"
+              value={draft}
+              maxLength={MAX_POST_CAPTION}
+              rows={6}
+              placeholder="Write a description…"
+              disabled={saving}
+              onChange={(event) => setDraft(event.target.value.slice(0, MAX_POST_CAPTION))}
+            />
+            <div className="profile-description-edit-bar">
+              <span className="profile-description-edit-count">
+                {draft.length}/{MAX_POST_CAPTION}
+              </span>
+              <div className="profile-description-edit-actions">
+                <button
+                  type="button"
+                  className="profile-description-edit-btn"
+                  disabled={saving}
+                  onClick={() => {
+                    setEditing(false);
+                    setEditError("");
+                    setDraft(caption ?? "");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="profile-description-edit-btn is-primary"
+                  disabled={saving}
+                  onClick={() => void saveEdit()}
+                >
+                  {saving ? (
+                    <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                  )}
+                  Save
+                </button>
+              </div>
+            </div>
+            {editError ? <p className="profile-description-edit-error">{editError}</p> : null}
+          </div>
+        ) : empty ? (
           <div className="profile-comments-empty">
             <p>No description</p>
+            {canEdit ? (
+              <button
+                type="button"
+                className="profile-description-empty-edit"
+                onClick={() => {
+                  setDraft("");
+                  setEditError("");
+                  setEditing(true);
+                }}
+              >
+                Add one
+              </button>
+            ) : null}
           </div>
         ) : (
-          <div className="profile-description-content">
+          <div
+            className="profile-description-content"
+            draggable
+            title="Drag into a chat to share this post"
+            onDragStart={(event) => {
+              const target = event.target as HTMLElement | null;
+              if (target?.closest("button, a, input, textarea")) {
+                event.preventDefault();
+                return;
+              }
+              setFeedShareDataTransfer(event.dataTransfer, {
+                type: "post",
+                postId,
+                username: postAuthor?.username ?? description.username,
+                displayName: postAuthor?.displayName,
+                caption: caption,
+                thumbnailUrl: postAuthor?.thumbnailUrl,
+              });
+            }}
+          >
             {parts.length > 0 ? (
               <p className="profile-description-text">
                 {parts.map((part, index) => {
@@ -1082,6 +1303,7 @@ export function ProfileCommentsPanel({
 }) {
   const { isMobile } = useMobileLayout();
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const [startEditingDescription, setStartEditingDescription] = useState(false);
   const showingDescription = mode === "description";
 
   useEffect(() => {
@@ -1102,25 +1324,39 @@ export function ProfileCommentsPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose, onModeChange, isMobile, showingDescription]);
 
+  useEffect(() => {
+    if (mode !== "description") setStartEditingDescription(false);
+  }, [mode]);
+
   function backToComments() {
+    setStartEditingDescription(false);
     onModeChange?.("comments");
   }
 
   function dismissSheet() {
     if (showingDescription) {
+      setStartEditingDescription(false);
       onModeChange?.("comments");
       return;
     }
     onClose();
   }
 
+  function openDescriptionEditor() {
+    setStartEditingDescription(true);
+    onModeChange?.("description");
+  }
+
   const descriptionPanel =
     showingDescription && description ? (
       <DescriptionBody
+        postId={postId}
         description={description}
         postAuthor={postAuthor}
         variant={isMobile ? "sheet" : "dock"}
         onClose={backToComments}
+        startEditing={startEditingDescription}
+        onStartEditingConsumed={() => setStartEditingDescription(false)}
       />
     ) : null;
 
@@ -1140,6 +1376,9 @@ export function ProfileCommentsPanel({
             variant="dock"
             postAuthor={postAuthor}
             postActions={postActions}
+            onEditDescription={
+              postAuthor?.isOwner && description ? openDescriptionEditor : undefined
+            }
           />
         )}
       </aside>
@@ -1173,6 +1412,9 @@ export function ProfileCommentsPanel({
             variant="sheet"
             postAuthor={postAuthor}
             postActions={postActions}
+            onEditDescription={
+              postAuthor?.isOwner && description ? openDescriptionEditor : undefined
+            }
           />
         )}
       </aside>
