@@ -317,7 +317,14 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   /** Entrance rise runs once; never re-apply after drag or it restarts translateY. */
   const [menuEntered, setMenuEntered] = useState(false);
   const [menuDismissY, setMenuDismissY] = useState(0);
-  const menuDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const menuDragRef = useRef<{
+    startY: number;
+    startH: number;
+    lastY: number;
+    lastT: number;
+    /** Finger velocity in px/ms; positive = finger down. */
+    vy: number;
+  } | null>(null);
   const menuMetricsRef = useRef({ peek: 280, full: 600, min: 120 });
   const menuHeightRef = useRef<number | null>(null);
   const menuDragRafRef = useRef<number | null>(null);
@@ -409,6 +416,26 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     scrollToId(DECK_IDS[next]!);
   };
 
+  const settleMenuHeight = (h: number, target: number) => {
+    applySheetHeight(h);
+    setMenuHeight(h);
+    setMenuDragging(false);
+    requestAnimationFrame(() => {
+      menuHeightRef.current = target;
+      setMenuHeight(target);
+      applySheetHeight(target);
+    });
+  };
+
+  const dismissMenuFromHeight = (h: number) => {
+    const { full } = menuMetricsRef.current;
+    setMenuDragging(false);
+    setMenuHeight(h);
+    applySheetHeight(h);
+    setMenuDismissY(Math.max(full * 0.45, h * 0.65));
+    menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 220);
+  };
+
   const onMenuHandlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (menuSettleTimerRef.current != null) {
       window.clearTimeout(menuSettleTimerRef.current);
@@ -427,8 +454,15 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       sheet?.getBoundingClientRect().height ||
       menuHeightRef.current ||
       peek;
+    const now = performance.now();
     event.currentTarget.setPointerCapture(event.pointerId);
-    menuDragRef.current = { startY: event.clientY, startH };
+    menuDragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+    };
     setMenuDismissY(0);
     setMenuEntered(true);
     setMenuDragging(true);
@@ -437,11 +471,21 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   };
 
   const onMenuHandlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!menuDragRef.current) return;
+    const drag = menuDragRef.current;
+    if (!drag) return;
     const { full, min } = menuMetricsRef.current;
-    const dy = event.clientY - menuDragRef.current.startY;
+    const now = performance.now();
+    const dt = now - drag.lastT;
+    if (dt > 0) {
+      // Blend recent samples so a flick still reads after a short pause at the end.
+      const instant = (event.clientY - drag.lastY) / dt;
+      drag.vy = drag.vy * 0.35 + instant * 0.65;
+      drag.lastY = event.clientY;
+      drag.lastT = now;
+    }
+    const dy = event.clientY - drag.startY;
     // Finger down shrinks, finger up grows — DOM first, React height synced on rAF.
-    const nextH = Math.min(full, Math.max(min, menuDragRef.current.startH - dy));
+    const nextH = Math.min(full, Math.max(min, drag.startH - dy));
     applySheetHeight(nextH);
     if (menuDragRafRef.current == null) {
       menuDragRafRef.current = window.requestAnimationFrame(() => {
@@ -453,7 +497,8 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   };
 
   const onMenuHandlePointerUp = () => {
-    if (!menuDragRef.current) return;
+    const drag = menuDragRef.current;
+    if (!drag) return;
     menuDragRef.current = null;
     if (menuDragRafRef.current != null) {
       window.cancelAnimationFrame(menuDragRafRef.current);
@@ -465,26 +510,47 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       menuSheetRef.current?.getBoundingClientRect().height ??
       peek;
     const mid = (peek + full) / 2;
+    const range = Math.max(1, full - peek);
+    const dragDown = drag.startH - h;
+    const dragUp = h - drag.startH;
+    const fromFull = drag.startH >= full - 12;
+    // Stale sample (>80ms) = no flick — use position only.
+    const fresh = performance.now() - drag.lastT < 80;
+    const vy = fresh ? drag.vy : 0;
+    const flickUp = vy < -0.42;
+    const flickDown = vy > 0.42;
 
-    if (h <= peek * 0.72 || h <= min + 8) {
-      setMenuDragging(false);
-      setMenuHeight(h);
-      applySheetHeight(h);
-      setMenuDismissY(Math.max(full * 0.45, h * 0.65));
-      menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 220);
+    // Flick up always expands — don't bounce back to peek on a short fast swipe.
+    if (flickUp || (!fromFull && dragUp > range * 0.22 && h > peek + 8)) {
+      settleMenuHeight(h, full);
       return;
     }
 
-    const target = h >= mid ? full : peek;
-    // Sync current height into React first so releasing is-dragging cannot snap.
-    applySheetHeight(h);
-    setMenuHeight(h);
-    setMenuDragging(false);
-    requestAnimationFrame(() => {
-      menuHeightRef.current = target;
-      setMenuHeight(target);
-      applySheetHeight(target);
-    });
+    if (fromFull) {
+      // From expanded: small/medium flick-down → peek; bigger swipe → close.
+      const bigSwipeDown =
+        h <= peek * 0.78 ||
+        h <= min + 8 ||
+        dragDown >= range * 0.55 ||
+        (flickDown && dragDown >= range * 0.32);
+      if (bigSwipeDown) {
+        dismissMenuFromHeight(h);
+        return;
+      }
+      if (flickDown || dragDown > 18 || h < full - 10) {
+        settleMenuHeight(h, peek);
+        return;
+      }
+      settleMenuHeight(h, full);
+      return;
+    }
+
+    // From peek / mid: position + downward flick closes.
+    if (flickDown || h <= peek * 0.72 || h <= min + 8) {
+      dismissMenuFromHeight(h);
+      return;
+    }
+    settleMenuHeight(h, h >= mid ? full : peek);
   };
 
   useEffect(() => {
