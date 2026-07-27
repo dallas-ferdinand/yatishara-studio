@@ -7617,7 +7617,7 @@ export function StudioShell({
           );
           --studio-mobile-files-sheet-height: calc(0.6 * var(--studio-mobile-files-band));
           --studio-mobile-files-sheet-full: calc(0.92 * var(--studio-mobile-files-band));
-          --studio-mobile-history-sheet-height: calc(0.55 * var(--studio-mobile-files-band));
+          --studio-mobile-history-sheet-height: calc(0.68 * var(--studio-mobile-files-band));
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
           --studio-mobile-files-dock-ease: linear;

@@ -489,7 +489,7 @@ function HistoryMobileSheet({ onClose, children }) {
   const refreshMetrics = () => {
     const sheet = sheetRef.current;
     const root = sheet?.closest?.(".studio-polish") ?? document.documentElement;
-    const peek = readTokenPx(root, "--studio-mobile-history-sheet-height", window.innerHeight * 0.42);
+    const peek = readTokenPx(root, "--studio-mobile-history-sheet-height", window.innerHeight * 0.55);
     const full = readTokenPx(root, "--studio-mobile-history-sheet-full", window.innerHeight * 0.72);
     metricsRef.current = {
       peek,
