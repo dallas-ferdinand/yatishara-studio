@@ -1205,6 +1205,7 @@ export function StudioShell({
   const composerUploadInputRef = useRef(null);
   const shellRef = useRef(null);
   const editorRef = useRef(null);
+  const attachEntryRef = useRef(null);
   const composerKeyRef = useRef(initialComposerKey);
   const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
@@ -5598,6 +5599,25 @@ export function StudioShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [assetPickRequest, endAssetPick]);
+
+  // Belt-and-suspenders: mobile Files touch-drop broadcasts on document.
+  // StudioComposer also listens; this catches the case where the shell must
+  // attach even if the composer listener missed the event.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    const onTouchDrop = (event) => {
+      if (event.detail?.dropTarget !== "composer") return;
+      const entry = event.detail?.entry;
+      if (!entry) return;
+      const x = event.detail?.clientX ?? 0;
+      const y = event.detail?.clientY ?? 0;
+      const range = rangeFromPointInEditor(editorRef.current, x, y);
+      if (range) setSelectionToRange(range);
+      attachEntry(entry, range);
+    };
+    document.addEventListener("studioexplorerdrop", onTouchDrop);
+    return () => document.removeEventListener("studioexplorerdrop", onTouchDrop);
+  }, [isMobile]);
 
   return (
     <StudioCreativeNetworkProvider
@@ -18937,27 +18957,8 @@ function StudioComposer({
     }
   }, [isMobile]);
 
-  // Mobile touch-drag from Files (HTML5 DnD unavailable) → same attach path as desktop drop.
-  useEffect(() => {
-    const composer = composerShellRef.current;
-    if (!composer) return;
-    const onTouchDrop = (event) => {
-      const entry = event.detail?.entry;
-      if (!entry || !onDropEntry) return;
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      setDragOver(false);
-      setDropMarker(null);
-      const x = event.detail?.clientX ?? 0;
-      const y = event.detail?.clientY ?? 0;
-      const range = rangeFromPointInEditor(editorRef.current, x, y);
-      if (range) setSelectionToRange(range);
-      onDropEntry(entry, range);
-    };
-    // Capture so folder/other handlers can't swallow the composer drop.
-    composer.addEventListener("studioexplorerdrop", onTouchDrop, true);
-    return () => composer.removeEventListener("studioexplorerdrop", onTouchDrop, true);
-  }, [onDropEntry]);
+  // Touch-drop attach is handled at StudioShell (document studioexplorerdrop)
+  // so pointer-events on this shell cannot miss the chip insert.
 
   useEffect(() => {
     setPresetGridOpen(false);

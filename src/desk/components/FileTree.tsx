@@ -152,9 +152,46 @@ function getCaretPixelInEditor(editorEl, x, y) {
   }
 }
 
+function pointInRect(x, y, rect, pad = 0) {
+  if (!rect) return false;
+  return (
+    x >= rect.left - pad &&
+    x <= rect.right + pad &&
+    y >= rect.top - pad &&
+    y <= rect.bottom + pad
+  );
+}
+
+/** Geometry-first composer hit — does not depend on pointer-events. */
+function findComposerDropTargetAt(x, y, pad = 16) {
+  if (typeof document === "undefined") return null;
+  const shells = document.querySelectorAll(
+    '.cursor-composer-shell[data-drop-target="composer"], [data-drop-target="composer"].cursor-composer-shell',
+  );
+  for (const shell of shells) {
+    if (!(shell instanceof HTMLElement) || !shell.isConnected) continue;
+    if (pointInRect(x, y, shell.getBoundingClientRect(), pad)) return shell;
+  }
+  // Also accept the glass box if shell rect is oddly padded.
+  const boxes = document.querySelectorAll(
+    '.cursor-composer-box[data-drop-target="composer"]',
+  );
+  for (const box of boxes) {
+    if (!(box instanceof HTMLElement) || !box.isConnected) continue;
+    if (pointInRect(x, y, box.getBoundingClientRect(), pad)) {
+      return box.closest(".cursor-composer-shell") ?? box;
+    }
+  }
+  return null;
+}
+
 function findDropTargetUnder(x, y, excludeEl) {
   if (typeof document === "undefined") return null;
-  // visibility:hidden keeps layout; display:none can shift hit targets under the finger.
+
+  // Composer wins by geometry first (shell is pointer-events:none normally).
+  const composer = findComposerDropTargetAt(x, y);
+  if (composer) return composer;
+
   const prevVisibility = excludeEl?.style?.visibility;
   if (excludeEl) excludeEl.style.visibility = "hidden";
   const stack =
@@ -162,11 +199,11 @@ function findDropTargetUnder(x, y, excludeEl) {
       ? document.elementsFromPoint(x, y)
       : [document.elementFromPoint(x, y)].filter(Boolean);
   if (excludeEl) excludeEl.style.visibility = prevVisibility ?? "";
+
   let fallback = null;
   for (const el of stack) {
     const target = el?.closest?.("[data-drop-target]");
     if (!target) continue;
-    // Prefer composer over folder when the stack includes both.
     if (target.getAttribute("data-drop-target") === "composer") {
       return target.closest?.(".cursor-composer-shell") ?? target;
     }
@@ -196,13 +233,26 @@ function dispatchExplorerTouchDrop(targetEl, clientX, clientY) {
   if (!targetEl) return false;
   const entry = peekActiveExplorerDrag();
   if (!entry) return false;
-  targetEl.dispatchEvent(
+  const dropTarget = targetEl.getAttribute("data-drop-target") || null;
+  const detail = { entry, clientX, clientY, dropTarget };
+  // Document broadcast — composer listens here so we don't depend on the
+  // event landing on a pointer-events:none shell.
+  document.dispatchEvent(
     new CustomEvent("studioexplorerdrop", {
       bubbles: true,
       cancelable: true,
-      detail: { entry, clientX, clientY },
+      detail,
     }),
   );
+  if (dropTarget !== "composer") {
+    targetEl.dispatchEvent(
+      new CustomEvent("studioexplorerdrop", {
+        bubbles: true,
+        cancelable: true,
+        detail,
+      }),
+    );
+  }
   return true;
 }
 
@@ -487,12 +537,22 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     if (handleTouchCancel) {
       document.removeEventListener("touchcancel", handleTouchCancel, true);
     }
-    clearDropTargetHighlight();
-    document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
 
     try {
+      // Resolve the drop target BEFORE removing is-touch-file-drag — that class
+      // enables composer hit-testing (shell is normally pointer-events:none).
       const shouldDrop = didDrop || forceDrop;
-      const targetEl = shouldDrop ? findDropTargetUnder(lastX, lastY, chip) : null;
+      let targetEl = null;
+      if (shouldDrop) {
+        targetEl =
+          findDropTargetUnder(lastX, lastY, chip) ||
+          (hoverTarget?.isConnected ? hoverTarget : null) ||
+          findComposerDropTargetAt(lastX, lastY, 28);
+      }
+
+      clearDropTargetHighlight();
+      document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
+
       const isValidDrop =
         shouldDrop && targetEl && targetEl !== source && !source.contains(targetEl);
 

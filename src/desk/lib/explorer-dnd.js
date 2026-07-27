@@ -67,9 +67,15 @@ export function buildExplorerDragPayload(entry) {
 
 /** Arm drag without HTML5 DataTransfer — used for mobile touch pickup. */
 export function armExplorerDrag(entry) {
+  if (!entry) {
+    activeExplorerDrag = null;
+    return null;
+  }
   const payload = buildExplorerDragPayload(entry);
-  activeExplorerDrag = payload;
-  return payload;
+  // Keep full entry fields (thumbs, mime, etc.) merged over the slim DnD payload
+  // so mobile touch-drop can still resolve chips when path lookup misses.
+  activeExplorerDrag = payload ? { ...entry, ...payload } : { ...entry };
+  return activeExplorerDrag;
 }
 
 export function writeExplorerDragData(dataTransfer, entry) {
