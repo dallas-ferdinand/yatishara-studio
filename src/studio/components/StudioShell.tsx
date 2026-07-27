@@ -13116,10 +13116,9 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .studio-composer-toolbar {
           gap: 6px;
           flex-wrap: nowrap;
-          padding:
-            2px max(6px, env(safe-area-inset-right, 0px))
-            max(6px, env(safe-area-inset-bottom, 0px))
-            max(6px, env(safe-area-inset-left, 0px));
+          /* Nav + shell already clear the home indicator — do not stack
+             safe-area under the send button (tall/PWA/fullscreen looks gappy). */
+          padding: 2px 6px 6px;
         }
         .studio-polish.is-studio-mobile .studio-composer-toolbar-left {
           flex-wrap: nowrap;
