@@ -7487,14 +7487,95 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
+        /* Studio hamburger menu — landing-style bottom sheet (handle drag, no X). */
         .studio-mobile-app-menu-sheet {
           position: fixed;
+          left: 0;
+          right: 0;
+          bottom: var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)));
+          z-index: 55;
+          display: flex;
+          flex-direction: column;
+          flex: none;
+          min-height: 0;
+          height: var(--studio-mobile-app-menu-sheet-height, 50dvh);
+          max-height: var(--studio-mobile-app-menu-sheet-full, 72dvh);
+          overflow: hidden;
+          padding: 0;
+          border: none;
+          border-radius: 18px 18px 0 0;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
+          transform: none;
+          filter: none;
+          isolation: auto;
+          animation: studio-mobile-app-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+          transition:
+            height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+            max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 220ms ease;
+          will-change: height;
+        }
+        .studio-mobile-app-menu-sheet.is-entered {
+          animation: none;
+        }
+        .studio-mobile-app-menu-sheet.is-full {
+          border-radius: 14px 14px 0 0;
+        }
+        .studio-mobile-app-menu-sheet.is-dragging {
+          transition: none !important;
+          animation: none !important;
+        }
+        .studio-mobile-app-menu-sheet.is-settling {
+          transition:
+            height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 220ms ease;
+        }
+        @keyframes studio-mobile-app-menu-rise {
+          from {
+            transform: translate3d(0, 18px, 0);
+            opacity: 0.92;
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+            opacity: 1;
+          }
+        }
+        .studio-mobile-app-menu-sheet::before {
+          content: none;
+          display: none;
+        }
+        .studio-mobile-app-menu-sheet-handle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          min-height: 28px;
+          padding: 12px 0 8px;
+          cursor: grab;
+          touch-action: none;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .studio-mobile-app-menu-sheet-handle:active {
+          cursor: grabbing;
+        }
+        .studio-mobile-app-menu-sheet-grab {
+          width: 44px;
+          height: 5px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+          pointer-events: none;
+        }
+        [data-appearance="light"] .studio-mobile-app-menu-sheet-grab {
+          background: color-mix(in srgb, #1c1c1e 22%, transparent);
+        }
+        /* Settings keeps the older inset glass panel (title + X). */
+        .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet {
           top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
           left: 8px;
           right: 8px;
           bottom: auto;
-          /* Explicit height — top+bottom alone can fail when this is a flex child of .studio-polish,
-             so the panel shrink-wraps content and gets clipped with no internal scroll. */
           height: calc(
             100dvh
               - var(--studio-mobile-nav-height, 44px)
@@ -7514,27 +7595,21 @@ export function StudioShell({
               - 8px
           );
           z-index: 121;
-          display: flex;
-          flex-direction: column;
-          flex: none;
-          min-height: 0;
-          overflow: hidden;
           border-radius: 18px;
           border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
-          /* Glass lives on ::before — backdrop-filter on this overflow:hidden shell
-             breaks touch scroll and can kill blur (same class of bug as composer glass). */
           background: transparent;
-          transform: none;
-          filter: none;
-          isolation: auto;
           box-shadow: var(
             --studio-composer-glass-shadow,
             0 20px 48px rgba(0, 0, 0, 0.38),
             inset 0 1px 0 rgba(255, 255, 255, 0.08)
           );
+          animation: none;
+          transition: none;
+          will-change: auto;
         }
-        .studio-mobile-app-menu-sheet::before {
+        .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet::before {
           content: "";
+          display: block;
           position: absolute;
           inset: 0;
           z-index: 0;
@@ -7619,6 +7694,8 @@ export function StudioShell({
           --studio-mobile-files-sheet-full: calc(0.92 * var(--studio-mobile-files-band));
           --studio-mobile-history-sheet-height: calc(0.68 * var(--studio-mobile-files-band));
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
+          --studio-mobile-app-menu-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
+          --studio-mobile-app-menu-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
           --studio-mobile-files-dock-ease: linear;
         }
@@ -7894,7 +7971,7 @@ export function StudioShell({
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
           background: transparent;
         }
-        .studio-mobile-app-menu-head {
+        .studio-settings-mobile-sheet .studio-mobile-app-menu-head {
           position: relative;
           z-index: 1;
           display: flex;
@@ -7904,14 +7981,14 @@ export function StudioShell({
           flex: 0 0 auto;
           padding: 14px 14px 10px;
         }
-        .studio-mobile-app-menu-title {
+        .studio-settings-mobile-sheet .studio-mobile-app-menu-title {
           margin: 0;
           color: var(--color-cursor-text-bright);
           font-size: 16px;
           font-weight: 700;
           letter-spacing: -0.02em;
         }
-        .studio-mobile-app-menu-close {
+        .studio-settings-mobile-sheet .studio-mobile-app-menu-close {
           display: inline-grid;
           place-items: center;
           width: 36px;
@@ -7923,7 +8000,7 @@ export function StudioShell({
           cursor: pointer;
           padding: 0;
         }
-        .studio-mobile-app-menu-close svg {
+        .studio-settings-mobile-sheet .studio-mobile-app-menu-close svg {
           width: 18px;
           height: 18px;
         }
@@ -7932,7 +8009,7 @@ export function StudioShell({
           z-index: 1;
           flex: 1 1 0%;
           min-height: 0;
-          height: 100%;
+          height: auto;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -21466,6 +21543,16 @@ function StudioMobileAppMenu({
   onOpenAdmin,
   onSignOut,
 }) {
+  const sheetRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [settling, setSettling] = useState(false);
+  const [isFull, setIsFull] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const heightRef = useRef(null);
+  const dragRef = useRef(null);
+  const dragRafRef = useRef(null);
+  const metricsRef = useRef({ peek: 280, full: 520, min: 120 });
+
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape") onClose?.();
@@ -21473,6 +21560,159 @@ function StudioMobileAppMenu({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const readTokenPx = (el, name, fallback) => {
+    if (!el) return fallback;
+    const raw = getComputedStyle(el).getPropertyValue(name).trim();
+    if (!raw) return fallback;
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:${raw}`;
+    el.appendChild(probe);
+    const h = probe.getBoundingClientRect().height;
+    probe.remove();
+    return h > 0 ? h : fallback;
+  };
+
+  const refreshMetrics = () => {
+    const sheet = sheetRef.current;
+    const root = sheet?.closest?.(".studio-polish") ?? document.documentElement;
+    const peek = readTokenPx(root, "--studio-mobile-app-menu-sheet-height", window.innerHeight * 0.5);
+    const full = readTokenPx(root, "--studio-mobile-app-menu-sheet-full", window.innerHeight * 0.72);
+    metricsRef.current = {
+      peek,
+      full: Math.max(full, peek + 40),
+      min: Math.max(110, peek * 0.42),
+    };
+    return metricsRef.current;
+  };
+
+  const applyHeight = (px) => {
+    heightRef.current = px;
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.height = `${px}px`;
+    el.style.maxHeight = `${px}px`;
+  };
+
+  useEffect(() => {
+    const { peek } = refreshMetrics();
+    applyHeight(peek);
+    const id = window.requestAnimationFrame(() => setEntered(true));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+
+  const settleTo = (fromH, target) => {
+    const { peek, full } = metricsRef.current;
+    setDragging(false);
+    setSettling(true);
+    applyHeight(fromH);
+    window.requestAnimationFrame(() => {
+      applyHeight(target);
+      setIsFull(target >= full - 8 || (target > peek + (full - peek) * 0.5));
+      window.setTimeout(() => setSettling(false), 230);
+    });
+  };
+
+  const onHandlePointerDown = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    const { peek, full } = refreshMetrics();
+    const startH =
+      sheetRef.current?.getBoundingClientRect().height ||
+      heightRef.current ||
+      peek;
+    const now = performance.now();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+      full,
+      peek,
+    };
+    setSettling(false);
+    setDragging(true);
+    applyHeight(startH);
+  };
+
+  const onHandlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { full, min } = metricsRef.current;
+    const now = performance.now();
+    const dt = now - drag.lastT;
+    if (dt > 0) {
+      const instant = (event.clientY - drag.lastY) / dt;
+      drag.vy = drag.vy * 0.35 + instant * 0.65;
+      drag.lastY = event.clientY;
+      drag.lastT = now;
+    }
+    const dy = event.clientY - drag.startY;
+    applyHeight(Math.min(full, Math.max(min, drag.startH - dy)));
+    if (dragRafRef.current == null) {
+      dragRafRef.current = window.requestAnimationFrame(() => {
+        dragRafRef.current = null;
+      });
+    }
+  };
+
+  const onHandlePointerUp = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    if (dragRafRef.current != null) {
+      window.cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    const { peek, full, min } = metricsRef.current;
+    const h =
+      heightRef.current ??
+      sheetRef.current?.getBoundingClientRect().height ??
+      peek;
+    const mid = (peek + full) / 2;
+    const range = Math.max(1, full - peek);
+    const dragDown = drag.startH - h;
+    const dragUp = h - drag.startH;
+    const fromFull = drag.startH >= full - 12;
+    const fresh = performance.now() - drag.lastT < 80;
+    const vy = fresh ? drag.vy : 0;
+    const flickUp = vy < -0.42;
+    const flickDown = vy > 0.42;
+
+    if (flickUp || (!fromFull && dragUp > range * 0.22 && h > peek + 8)) {
+      settleTo(h, full);
+      return;
+    }
+
+    if (fromFull) {
+      const bigSwipeDown =
+        h <= peek * 0.78 ||
+        h <= min + 8 ||
+        dragDown >= range * 0.55 ||
+        (flickDown && dragDown >= range * 0.32);
+      if (bigSwipeDown) {
+        setDragging(false);
+        setSettling(false);
+        onClose?.();
+        return;
+      }
+      if (flickDown || dragDown > 18 || h < full - 10) {
+        settleTo(h, peek);
+        return;
+      }
+      settleTo(h, full);
+      return;
+    }
+
+    if (flickDown || h <= peek * 0.72 || h <= min + 8) {
+      setDragging(false);
+      setSettling(false);
+      onClose?.();
+      return;
+    }
+    settleTo(h, h >= mid ? full : peek);
+  };
 
   const sections = [
     {
@@ -21529,17 +21769,24 @@ function StudioMobileAppMenu({
   ];
 
   return createPortal(
-    <div className="studio-mobile-app-menu-sheet" role="dialog" aria-modal="true" aria-label="Studio menu">
-      <div className="studio-mobile-app-menu-head">
-        <h2 className="studio-mobile-app-menu-title">Menu</h2>
-        <button
-          type="button"
-          className="studio-mobile-app-menu-close"
-          aria-label="Close menu"
-          onClick={onClose}
-        >
-          <X aria-hidden="true" />
-        </button>
+    <div
+      ref={sheetRef}
+      className={`studio-mobile-app-menu-sheet${entered ? " is-entered" : " is-entering"}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Studio menu"
+    >
+      <div
+        className="studio-mobile-app-menu-sheet-handle"
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize menu"
+      >
+        <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
       </div>
       <div className="studio-mobile-app-menu-body">
         {sections.map((section) => (
