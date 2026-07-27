@@ -390,7 +390,7 @@ public catalog site. Deep links (`/creative-network/`, `/creative-network/[slug]
 
 | Mode | Left rail | Main pane | Right (when open) |
 |---|---|---|---|
-| **Network** (all users) | Catalog filters (`StudioCreativeNetworkSidebar`) — search = shared `PanelSearchBar` (no pill; **no top border** under brand/rail edge, same Messages rule) | Browse + banner; offer detail (gallery / intro / description / reviews) | Offer **Book** dock (`PackagePicker` + `BookPanel` via PanelGroup). Mobile: bottom Book bar → sheet — not a cramped right column |
+| **Network** (all users) | Catalog filters (`StudioCreativeNetworkSidebar`) — search = shared `PanelSearchBar` (no pill; **no top border** under brand/rail edge, same Messages rule) | Browse + banner; offer detail (gallery thumbs **below** stage; secondary `--cursor-head-h` **Back** bar). Top Network tab becomes **Back to Network** (not active) while an offer is open | Offer **Book** dock (`PackagePicker` + `BookPanel` via PanelGroup). Mobile: bottom Book bar → sheet — not a cramped right column |
 | **My offers** (approved sellers) | Messages list ↔ inline chat | Offer list (no duplicate Offers head — CN tabs only) | — |
 | **My jobs** (approved sellers) | Messages list ↔ inline chat | Job list (no duplicate Jobs head — CN tabs only) | — |
 | **Assets** (approved sellers) | File manager (Your files — list audio from Files) | Summary + listings table | — |

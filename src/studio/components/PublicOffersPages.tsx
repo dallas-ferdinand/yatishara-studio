@@ -1697,11 +1697,13 @@ export function StudioOfferDetailEmbed({
     if (!isMobile) setBookSheetOpen(false);
   }, [isMobile]);
 
-  const backControl = (
-    <button type="button" className="studio-cn-detail-back" onClick={onBack}>
-      <ArrowLeft aria-hidden="true" />
-      Back to Network
-    </button>
+  const detailHead = (
+    <header className="studio-cn-detail-head">
+      <button type="button" className="studio-cn-detail-back" onClick={onBack}>
+        <ArrowLeft aria-hidden="true" />
+        Back
+      </button>
+    </header>
   );
 
   let detailBody: ReactNode;
@@ -1768,10 +1770,7 @@ export function StudioOfferDetailEmbed({
 
   const mainColumn = (
     <div className="public-offers-main-scroll studio-cn-detail-scroll">
-      <main className="public-offers-body">
-        {backControl}
-        {detailBody}
-      </main>
+      <main className="public-offers-body">{detailBody}</main>
     </div>
   );
 
@@ -1806,6 +1805,7 @@ export function StudioOfferDetailEmbed({
   if (isMobile) {
     return (
       <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-mobile">
+        {detailHead}
         {mainColumn}
         {offer != null ? (
           <nav
@@ -1882,6 +1882,7 @@ export function StudioOfferDetailEmbed({
 
   return (
     <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-split">
+      {detailHead}
       <PanelGroup
         direction="horizontal"
         autoSaveId="studio-cn-offer-book-h"

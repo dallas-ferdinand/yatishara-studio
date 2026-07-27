@@ -1338,40 +1338,7 @@
 }
 
 @media (min-width: 861px) {
-  /* Thumbs left, large stage right — same pattern as product image viewers */
-  .public-offers-gallery:has(.public-offers-gallery-thumbs) {
-    grid-template-columns: 104px minmax(0, 1fr);
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  .public-offers-gallery:has(.public-offers-gallery-thumbs)
-    .public-offers-gallery-thumbs {
-    grid-column: 1;
-    grid-row: 1;
-    flex-direction: column;
-    align-self: stretch;
-    height: 100%;
-    max-height: min(68vh, 720px);
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding: 0;
-    overscroll-behavior: contain;
-  }
-
-  .public-offers-gallery:has(.public-offers-gallery-thumbs)
-    .public-offers-gallery-stage {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  .public-offers-gallery:has(.public-offers-gallery-thumbs)
-    .public-offers-gallery-thumbs
-    button {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-  }
-
+  /* Thumbs stay under the stage (horizontal strip); stage grows taller. */
   .public-offers-gallery-stage {
     aspect-ratio: auto;
     min-height: min(68vh, 720px);
