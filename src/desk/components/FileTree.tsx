@@ -6,13 +6,18 @@ import { icon as svgIcon } from "@mos-app/icons.js";
 import { FileEntryThumb } from "./FileEntryThumb";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
 import { formatFileDate } from "@/desk/lib/explorer-file-actions";
-import { clearActiveExplorerDrag, writeExplorerDragData } from "@/desk/lib/explorer-dnd";
+import {
+  armExplorerDrag,
+  clearActiveExplorerDrag,
+  peekActiveExplorerDrag,
+  writeExplorerDragData,
+} from "@/desk/lib/explorer-dnd";
 import { workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { withSearchSections, searchResultMeta } from "@/desk/lib/explorer-search";
 import { displayEntryPath } from "@/desk/lib/display-path";
 import { normalizeExplorerPath } from "@/desk/lib/explorer-pins";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { animate } from "@motionone/dom";
 import { Check } from "lucide-react";
 
@@ -152,15 +157,52 @@ function findDropTargetUnder(x, y, excludeEl) {
   if (excludeEl) excludeEl.style.display = "none";
   const el = document.elementFromPoint(x, y);
   if (excludeEl) excludeEl.style.display = "";
-  console.log("[findDropTarget]", { x, y, el: el?.tagName, elClass: el?.className?.slice?.(0, 60), closest: el?.closest?.("[data-drop-target]")?.tagName, closestDT: el?.closest?.("[data-drop-target]")?.dataset?.dropTarget });
   if (!el) return null;
-  return el.closest('[data-drop-target]');
+  return el.closest("[data-drop-target]");
 }
 
-function startFileDragPreview(event, entry, workspaceId) {
+function highlightDropTarget(el) {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll(".is-touch-drop-hover").forEach((node) => {
+    if (node !== el) node.classList.remove("is-touch-drop-hover", "is-drop-target");
+  });
+  if (el) {
+    el.classList.add("is-touch-drop-hover", "is-drop-target");
+  }
+}
+
+function clearDropTargetHighlight() {
+  if (typeof document === "undefined") return;
+  document.querySelectorAll(".is-touch-drop-hover").forEach((node) => {
+    node.classList.remove("is-touch-drop-hover", "is-drop-target");
+  });
+}
+
+function dispatchExplorerTouchDrop(targetEl, clientX, clientY) {
+  if (!targetEl) return false;
+  const entry = peekActiveExplorerDrag();
+  if (!entry) return false;
+  targetEl.dispatchEvent(
+    new CustomEvent("studioexplorerdrop", {
+      bubbles: true,
+      cancelable: true,
+      detail: { entry, clientX, clientY },
+    }),
+  );
+  return true;
+}
+
+/**
+ * @param {object} event - pointer-like { currentTarget, clientX, clientY }
+ * @param {object} entry
+ * @param {string} workspaceId
+ * @param {{ mode?: "html5" | "touch" }} [options]
+ */
+function startFileDragPreview(event, entry, workspaceId, options = {}) {
   if (typeof document === "undefined") return;
   const source = event.currentTarget;
   if (!source) return;
+  const mode = options.mode === "touch" ? "touch" : "html5";
 
   const rect = source.getBoundingClientRect();
   const label = entry.name ?? entry.path?.split("/").pop() ?? "Item";
@@ -369,10 +411,18 @@ function startFileDragPreview(event, entry, workspaceId) {
   let lastY = event.clientY;
   let rafId = 0;
   let pickupSettled = reduceMotion;
+  let hoverTarget = null;
 
   const applyFollow = () => {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
+    if (mode === "touch") {
+      const under = findDropTargetUnder(lastX, lastY, chip);
+      if (under !== hoverTarget) {
+        hoverTarget = under;
+        highlightDropTarget(under);
+      }
+    }
   };
 
   const queueFollow = (clientX, clientY) => {
@@ -384,14 +434,15 @@ function startFileDragPreview(event, entry, workspaceId) {
   };
 
   const handleMove = (moveEvent) => {
+    const point = moveEvent.touches?.[0] ?? moveEvent;
     if (!pickupSettled) {
       pickupSettled = true;
       if (pickupControls) pickupControls.stop();
       chip.style.transition = "none";
-      queueFollow(moveEvent.clientX, moveEvent.clientY);
+      queueFollow(point.clientX, point.clientY);
       return;
     }
-    queueFollow(moveEvent.clientX, moveEvent.clientY);
+    queueFollow(point.clientX, point.clientY);
   };
 
   let didDrop = false;
@@ -400,7 +451,11 @@ function startFileDragPreview(event, entry, workspaceId) {
   };
 
   let finished = false;
-  const finish = async () => {
+  let handleTouchMove = null;
+  let handleTouchEnd = null;
+  let handleTouchCancel = null;
+
+  const finish = async (forceDrop = false) => {
     if (finished) return;
     finished = true;
     if (rafId) window.cancelAnimationFrame(rafId);
@@ -409,12 +464,27 @@ function startFileDragPreview(event, entry, workspaceId) {
     document.removeEventListener("drag", handleMove);
     document.removeEventListener("drop", handleDropCapture, true);
     document.removeEventListener("dragend", finish);
+    if (handleTouchMove) {
+      document.removeEventListener("touchmove", handleTouchMove, true);
+    }
+    if (handleTouchEnd) {
+      document.removeEventListener("touchend", handleTouchEnd, true);
+    }
+    if (handleTouchCancel) {
+      document.removeEventListener("touchcancel", handleTouchCancel, true);
+    }
+    clearDropTargetHighlight();
+    document.body.classList.remove("is-drag-cursor", "is-touch-file-drag");
 
     try {
-      const targetEl = didDrop ? findDropTargetUnder(lastX, lastY, chip) : null;
-      const isValidDrop = didDrop && targetEl && targetEl !== source && !source.contains(targetEl);
+      const shouldDrop = didDrop || forceDrop;
+      const targetEl = shouldDrop ? findDropTargetUnder(lastX, lastY, chip) : null;
+      const isValidDrop =
+        shouldDrop && targetEl && targetEl !== source && !source.contains(targetEl);
 
-      console.log("[drag-finish]", { didDrop, lastX, lastY, targetEl: targetEl?.tagName, targetDT: targetEl?.dataset?.dropTarget, isValidDrop, sourceTag: source.tagName });
+      if (isValidDrop && mode === "touch") {
+        dispatchExplorerTouchDrop(targetEl, lastX, lastY);
+      }
 
       if (isValidDrop) {
         // For composer targets, animate to the text caret position instead of mouse position
@@ -545,13 +615,50 @@ function startFileDragPreview(event, entry, workspaceId) {
         source.removeAttribute("data-drag-source");
         delete source.dataset.dragToken;
       }
+      if (mode === "touch") clearActiveExplorerDrag();
     }
   };
 
-  document.addEventListener("dragover", handleMove);
-  document.addEventListener("drag", handleMove);
-  document.addEventListener("drop", handleDropCapture, true);
-  document.addEventListener("dragend", finish, { once: true });
+  handleTouchMove = (moveEvent) => {
+    if (!moveEvent.touches?.[0]) return;
+    moveEvent.preventDefault();
+    handleMove(moveEvent);
+  };
+  handleTouchEnd = (endEvent) => {
+    const t = endEvent.changedTouches?.[0];
+    if (t) {
+      lastX = t.clientX;
+      lastY = t.clientY;
+    }
+    void finish(true);
+  };
+  handleTouchCancel = () => {
+    void finish(false);
+  };
+
+  if (mode === "touch") {
+    document.body.classList.add("is-drag-cursor", "is-touch-file-drag");
+    document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
+    document.addEventListener("touchend", handleTouchEnd, { capture: true });
+    document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
+  } else {
+    document.addEventListener("dragover", handleMove);
+    document.addEventListener("drag", handleMove);
+    document.addEventListener("drop", handleDropCapture, true);
+    document.addEventListener("dragend", finish, { once: true });
+  }
+}
+
+/** Mobile: after short hold + move, start a touch drag session (HTML5 DnD unavailable). */
+export function startTouchFileDrag(source, entry, workspaceId, clientX, clientY) {
+  if (!source || !entry || entry.type === "parent") return;
+  armExplorerDrag(entry);
+  startFileDragPreview(
+    { currentTarget: source, clientX, clientY },
+    entry,
+    workspaceId,
+    { mode: "touch" },
+  );
 }
 
 function ExplorerEmpty({ flatEntries, rootEntries }) {
@@ -574,6 +681,8 @@ function FileEntryButton({
   enableLongPress,
   onLongPress,
   longPressDelay,
+  pickupDelay,
+  workspaceId = "mercuryos",
   onContextMenu,
   onDragStart,
   onDropEntry,
@@ -581,25 +690,71 @@ function FileEntryButton({
   selectionMode = false,
   onSelect,
 }) {
-  const { longPressHandlers, longPressFired, clearLongPressFired } = useLongPress(
-    enableLongPress && onLongPress ? (coords) => onLongPress(entry, coords) : undefined,
-    { delay: longPressDelay },
-  );
+  const buttonRef = useRef(null);
+  const touchDragActiveRef = useRef(false);
+  const [dragArmed, setDragArmed] = useState(false);
+  const canTouchDrag =
+    enableLongPress && entry.type !== "parent" && !selectionMode;
+
+  const { longPressHandlers, longPressFired, clearLongPressFired, dragIntentFired } =
+    useLongPress(
+      enableLongPress && onLongPress
+        ? (coords) => {
+            clearActiveExplorerDrag();
+            setDragArmed(false);
+            onLongPress(entry, coords);
+            try {
+              navigator.vibrate?.(12);
+            } catch {
+              /* ignore */
+            }
+          }
+        : undefined,
+      {
+        delay: longPressDelay,
+        pickupDelay: canTouchDrag ? (pickupDelay ?? 220) : undefined,
+        onPickup: canTouchDrag
+          ? () => {
+              setDragArmed(true);
+              armExplorerDrag(entry);
+              try {
+                navigator.vibrate?.(8);
+              } catch {
+                /* ignore */
+              }
+            }
+          : undefined,
+        onDragIntent: canTouchDrag
+          ? (coords) => {
+              if (touchDragActiveRef.current) return;
+              const source = buttonRef.current;
+              if (!source) return;
+              touchDragActiveRef.current = true;
+              setDragArmed(false);
+              startTouchFileDrag(source, entry, workspaceId, coords.x, coords.y);
+            }
+          : undefined,
+      },
+    );
 
   const isDir = entry.type === "dir";
   const [dragOver, setDragOver] = useState(false);
 
   return (
     <button
+      ref={buttonRef}
       type="button"
-      className={`${className}${dragOver ? " is-drag-over" : ""}`}
+      className={`${className}${dragOver ? " is-drag-over" : ""}${dragArmed ? " is-drag-armed" : ""}`}
       data-entry-path={entry.path}
       data-drop-target={isDir && onDropEntry ? "folder" : undefined}
+      data-drag-armed={dragArmed ? "true" : undefined}
       title={entry.path ? displayEntryPath(entry) : label}
       aria-selected={entry.type === "parent" ? undefined : selected}
       onClick={(event) => {
-        if (longPressFired()) {
+        if (longPressFired() || dragIntentFired() || touchDragActiveRef.current) {
           clearLongPressFired();
+          touchDragActiveRef.current = false;
+          setDragArmed(false);
           return;
         }
         if (
@@ -617,7 +772,30 @@ function FileEntryButton({
       }}
       onContextMenu={onContextMenu}
       draggable={entry.type !== "parent" && !selectionMode}
-      onDragStart={onDragStart}
+      onDragStart={(event) => {
+        setDragArmed(false);
+        onDragStart?.(event);
+      }}
+      onDragEnd={() => setDragArmed(false)}
+      onTouchStart={(event) => {
+        touchDragActiveRef.current = false;
+        longPressHandlers.onTouchStart?.(event);
+      }}
+      onTouchMove={longPressHandlers.onTouchMove}
+      onTouchEnd={(event) => {
+        longPressHandlers.onTouchEnd?.(event);
+        // Touch-drag owns document touchend; don't clear mid-flight.
+        if (!touchDragActiveRef.current) {
+          window.setTimeout(() => setDragArmed(false), 80);
+        }
+      }}
+      onTouchCancel={(event) => {
+        longPressHandlers.onTouchCancel?.(event);
+        if (!touchDragActiveRef.current) {
+          setDragArmed(false);
+          clearActiveExplorerDrag();
+        }
+      }}
       onDragOver={isDir && onDropEntry ? (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = Array.from(e.dataTransfer.types).includes("Files")
@@ -632,7 +810,6 @@ function FileEntryButton({
         setDragOver(false);
         onDropEntry(e, entry);
       } : undefined}
-      {...longPressHandlers}
     >
       {selectionMode && entry.type !== "parent" ? (
         <span
@@ -696,6 +873,7 @@ function renderEntryRows({
   onEntrySelect,
   enableLongPress,
   longPressDelay,
+  pickupDelay,
   rowClass,
   pinnedFolderIconClass,
   entryLabel,
@@ -718,6 +896,8 @@ function renderEntryRows({
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
               longPressDelay={longPressDelay}
+              pickupDelay={pickupDelay}
+              workspaceId={workspaceId}
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -771,6 +951,8 @@ function renderEntryRows({
               onOpen={() => onEntry(e)}
               enableLongPress={enableLongPress}
               longPressDelay={longPressDelay}
+              pickupDelay={pickupDelay}
+              workspaceId={workspaceId}
               onLongPress={onEntryLongPress}
               onContextMenu={(ev) => onEntryContextMenu(ev, e)}
               onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -808,6 +990,8 @@ function renderEntryRows({
             onOpen={() => onEntry(e)}
             enableLongPress={enableLongPress}
             longPressDelay={longPressDelay}
+            pickupDelay={pickupDelay}
+            workspaceId={workspaceId}
             onLongPress={onEntryLongPress}
             onContextMenu={(ev) => onEntryContextMenu(ev, e)}
             onDragStart={(ev) => onEntryDragStart(ev, e)}
@@ -848,6 +1032,7 @@ export function FileTree({
   pinnedShortcuts = [],
   enableLongPress = false,
   longPressDelay,
+  pickupDelay,
   onEntryLongPress,
   onEntryContextMenu,
   onBlankContextMenu,
@@ -973,6 +1158,7 @@ export function FileTree({
     onEntrySelect,
   enableLongPress,
   longPressDelay,
+  pickupDelay,
   rowClass,
     pinnedFolderIconClass,
     entryLabel,

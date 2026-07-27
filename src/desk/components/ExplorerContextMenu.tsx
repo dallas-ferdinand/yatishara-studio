@@ -78,6 +78,8 @@ function buildMenuItems(entry, {
   canListOnNetwork = false,
   networkListingId = null,
   networkListingStatus = null,
+  networkPurchaseCount = 0,
+  networkPlatformOwned = false,
 }) {
   if (!entry) return [];
 
@@ -88,7 +90,11 @@ function buildMenuItems(entry, {
     entry.studioKind === "messages" || entry.systemKind === "messages";
   const isPurchasedFolder =
     entry.studioKind === "purchased" || entry.systemKind === "purchased_assets";
+  const isPublicFolder =
+    entry.studioKind === "public" || entry.systemKind === "public_assets";
   const isPurchasedNetworkAsset = entry.licenseKind === "purchased_network";
+  const isListedNetworkAsset = entry.licenseKind === "listed_network";
+  const isLockedNetworkAsset = isPurchasedNetworkAsset || isListedNetworkAsset;
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -101,7 +107,7 @@ function buildMenuItems(entry, {
         ...(canCreateFolder ? [{ id: "new-folder", label: "Folder" }] : []),
       ];
 
-  if (isTrashFolder || isMessagesFolder || isPurchasedFolder) {
+  if (isTrashFolder || isMessagesFolder || isPurchasedFolder || isPublicFolder) {
     return [{ id: "open", label: "Open folder" }];
   }
 
@@ -233,15 +239,50 @@ function buildMenuItems(entry, {
     !isPurchasedNetworkAsset;
   if (isListableAudio && canListOnNetwork) {
     items.push({ id: "sep-network", sep: true });
-    if (networkListingId && networkListingStatus === "listed") {
-      items.push({ id: "unlist-network", label: "Unlist from Creative Network" });
-    } else {
+    if (networkListingId && networkListingStatus === "pending_review") {
+      items.push({
+        id: "unlist-network",
+        label: "Withdraw Creative Network submission",
+      });
+    } else if (
+      networkListingId &&
+      networkListingStatus === "listed" &&
+      !networkPlatformOwned
+    ) {
+      if (networkPurchaseCount > 0) {
+        items.push({
+          id: "release-network",
+          label: "Release listing to platform",
+        });
+      } else {
+        items.push({
+          id: "unlist-network",
+          label: "Unlist from Creative Network",
+        });
+      }
+    } else if (
+      networkListingStatus === "rejected" ||
+      networkListingStatus === "unlisted"
+    ) {
+      items.push({
+        id: "list-network",
+        label: "Resubmit to Creative Network",
+      });
+    } else if (!networkListingId && !isListedNetworkAsset) {
       items.push({ id: "list-network", label: "List on Creative Network" });
+    } else if (isListedNetworkAsset && !networkListingId) {
+      items.push({ id: "list-network", label: "List on Creative Network" });
+    } else if (networkPlatformOwned) {
+      items.push({
+        id: "network-released",
+        label: "Released to platform",
+        disabled: true,
+      });
     }
   }
 
   // —— Danger ——
-  if (onRequestDelete && !isPurchasedNetworkAsset) {
+  if (onRequestDelete && !isLockedNetworkAsset) {
     items.push({ id: "sep-danger", sep: true });
     items.push({
       id: "delete",
@@ -268,16 +309,21 @@ function renderMenuIcon(item) {
 
 function MenuItemButton({ item, active, onActivate, onHover }) {
   const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+  const disabled = Boolean(item.disabled);
   return (
     <button
       type="button"
-      className={`cursor-tab-context-item${item.danger ? " is-danger" : ""}${active ? " is-active" : ""}${hasChildren ? " has-submenu" : ""}`}
+      className={`cursor-tab-context-item${item.danger ? " is-danger" : ""}${active ? " is-active" : ""}${hasChildren ? " has-submenu" : ""}${disabled ? " is-disabled" : ""}`}
       role="menuitem"
+      disabled={disabled}
       aria-haspopup={hasChildren ? "menu" : undefined}
       aria-expanded={hasChildren ? active : undefined}
-      onMouseEnter={() => onHover?.(item)}
+      onMouseEnter={() => {
+        if (!disabled) onHover?.(item);
+      }}
       onClick={(e) => {
         e.stopPropagation();
+        if (disabled) return;
         onActivate(item, e);
       }}
     >
@@ -310,12 +356,18 @@ export function ExplorerContextMenu({
   canListOnNetwork = false,
   networkListingId = null,
   networkListingStatus = null,
+  networkPurchaseCount = 0,
+  networkPlatformOwned = false,
+  /** "menu" = floating desktop menu; "sheet" = mobile half-height panel above Files. */
+  presentation = "menu",
 }) {
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
+  const isSheet = presentation === "sheet";
   const [openSubmenuId, setOpenSubmenuId] = useState(null);
   const [submenuPos, setSubmenuPos] = useState({ left: 0, top: 0 });
+  const [portalRoot, setPortalRoot] = useState(null);
 
   const items = useMemo(
     () =>
@@ -334,6 +386,8 @@ export function ExplorerContextMenu({
         canListOnNetwork,
         networkListingId,
         networkListingStatus,
+        networkPurchaseCount,
+        networkPlatformOwned,
       }),
     [
       entry,
@@ -351,6 +405,8 @@ export function ExplorerContextMenu({
       canListOnNetwork,
       networkListingId,
       networkListingStatus,
+      networkPurchaseCount,
+      networkPlatformOwned,
     ],
   );
 
@@ -359,7 +415,7 @@ export function ExplorerContextMenu({
     [items, openSubmenuId],
   );
 
-  const pos = useFloatingMenuPosition(x, y, menuRef, open, [
+  const pos = useFloatingMenuPosition(x, y, menuRef, open && !isSheet, [
     items.length,
     entry?.path,
     entry?.type,
@@ -367,11 +423,23 @@ export function ExplorerContextMenu({
   ]);
 
   useEffect(() => {
+    if (!open) {
+      setPortalRoot(null);
+      return;
+    }
+    if (isSheet) {
+      setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
+    } else {
+      setPortalRoot(document.body);
+    }
+  }, [open, isSheet]);
+
+  useEffect(() => {
     setOpenSubmenuId(null);
   }, [entry?.path, entry?.type, x, y]);
 
   useEffect(() => {
-    if (!openSubmenuItem || !menuRef.current) return;
+    if (isSheet || !openSubmenuItem || !menuRef.current) return;
     const parentBtn = menuRef.current.querySelector(
       `[data-submenu-id="${openSubmenuItem.id}"]`,
     );
@@ -392,7 +460,7 @@ export function ExplorerContextMenu({
       top = Math.max(8, window.innerHeight - estimatedHeight - 8);
     }
     setSubmenuPos({ left, top });
-  }, [openSubmenuItem, pos.left, pos.top]);
+  }, [isSheet, openSubmenuItem, pos.left, pos.top]);
 
   useEffect(() => {
     if (!entry) return;
@@ -408,20 +476,25 @@ export function ExplorerContextMenu({
         else onClose();
       }
     };
+    // Sheet opens on long-press release; wait out iOS synthetic mouse events
+    // so the opening gesture cannot immediately dismiss the sheet.
     const t = window.setTimeout(() => {
       document.addEventListener("mousedown", onDoc);
-      document.addEventListener("scroll", onDoc, true);
+      document.addEventListener("touchstart", onDoc, { passive: true });
+      // Floating menus close on outside scroll; sheet keeps internal scroll.
+      if (!isSheet) document.addEventListener("scroll", onDoc, true);
       document.addEventListener("keydown", onKey);
-    }, 0);
+    }, isSheet ? 420 : 0);
     return () => {
       window.clearTimeout(t);
       document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("touchstart", onDoc);
       document.removeEventListener("scroll", onDoc, true);
       document.removeEventListener("keydown", onKey);
     };
-  }, [entry, onClose, openSubmenuId]);
+  }, [entry, onClose, openSubmenuId, isSheet]);
 
-  if (!open) return null;
+  if (!open || !portalRoot) return null;
 
   const runAction = (actionId) => {
     if (actionId === "delete") {
@@ -441,7 +514,86 @@ export function ExplorerContextMenu({
       return;
     }
     runAction(item.id);
+    if (isSheet) onClose();
   };
+
+  if (isSheet) {
+    const title =
+      entry?.type === "blank"
+        ? "Actions"
+        : entry?.name || entry?.path?.split("/").pop() || "Actions";
+    return createPortal(
+      <>
+        <button
+          type="button"
+          className="studio-explorer-context-sheet-backdrop"
+          aria-label="Dismiss"
+          onClick={onClose}
+        />
+        <div
+          ref={menuRef}
+          className="studio-explorer-context-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          onContextMenu={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
+          <header className="studio-explorer-context-sheet-head">
+            <span className="studio-explorer-context-sheet-title truncate">{title}</span>
+            <button
+              type="button"
+              className="studio-explorer-context-sheet-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              Done
+            </button>
+          </header>
+          <div className="studio-explorer-context-sheet-scroll" role="menu">
+            {items.map((item) =>
+              item.sep ? (
+                <div key={item.id} className="cursor-tab-context-sep" role="separator" />
+              ) : (
+                <div key={item.id} className="studio-explorer-context-sheet-group">
+                  <MenuItemButton
+                    item={item}
+                    active={openSubmenuId === item.id}
+                    onActivate={activateItem}
+                  />
+                  {openSubmenuId === item.id && item.children?.length ? (
+                    <div className="studio-explorer-context-sheet-submenu" role="group">
+                      {item.children.map((child) =>
+                        child.sep ? (
+                          <div
+                            key={child.id}
+                            className="cursor-tab-context-sep"
+                            role="separator"
+                          />
+                        ) : (
+                          <MenuItemButton
+                            key={child.id}
+                            item={child}
+                            active={false}
+                            onActivate={(picked) => {
+                              runAction(picked.id);
+                              onClose();
+                            }}
+                          />
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      </>,
+      portalRoot,
+    );
+  }
 
   return createPortal(
     <>
@@ -494,6 +646,6 @@ export function ExplorerContextMenu({
         </div>
       ) : null}
     </>,
-    document.body,
+    portalRoot,
   );
 }

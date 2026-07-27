@@ -27,14 +27,21 @@ export function inferMediaKind(entry) {
   return null;
 }
 
-export function writeExplorerDragData(dataTransfer, entry) {
-  if (!dataTransfer || !entry?.path) return;
-  const name = entry.name ?? entry.path.split("/").pop() ?? entry.path;
+/** Build explorer→composer drag payload (files, purchased/library assets, etc.). */
+export function buildExplorerDragPayload(entry) {
+  if (!entry) return null;
+  const path =
+    entry.path ||
+    (entry.studioId
+      ? `/Studio/${entry.studioKind === "element" ? "elements" : "assets"}/${entry.studioId}`
+      : null);
+  if (!path) return null;
+  const name = entry.name ?? path.split("/").pop() ?? path;
   const type = entry.type === "dir" ? "dir" : "file";
   const mediaKind = inferMediaKind(entry);
   const durationSeconds = Number(entry.durationSeconds ?? entry.duration);
-  const payload = {
-    path: entry.path,
+  return {
+    path,
     name,
     type,
     ext: entry.ext,
@@ -49,11 +56,26 @@ export function writeExplorerDragData(dataTransfer, entry) {
     thumbnailUrl: entry.thumbnailUrl,
     mimeType: entry.mimeType,
     byteSize: entry.byteSize,
+    licenseKind: entry.licenseKind,
+    sourceListingId: entry.sourceListingId,
     mediaKind,
     ...(Number.isFinite(durationSeconds) && durationSeconds > 0.1
       ? { durationSeconds }
       : {}),
   };
+}
+
+/** Arm drag without HTML5 DataTransfer — used for mobile touch pickup. */
+export function armExplorerDrag(entry) {
+  const payload = buildExplorerDragPayload(entry);
+  activeExplorerDrag = payload;
+  return payload;
+}
+
+export function writeExplorerDragData(dataTransfer, entry) {
+  if (!dataTransfer) return;
+  const payload = buildExplorerDragPayload(entry);
+  if (!payload) return;
   activeExplorerDrag = payload;
   dataTransfer.setData(EXPLORER_DND_TYPE, JSON.stringify(payload));
   dataTransfer.effectAllowed = "all";
