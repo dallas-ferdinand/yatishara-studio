@@ -910,7 +910,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             src="/landing/mock-generate-chat.jpg"
             alt="Studio assistant chat turning a brief into a video ad"
             aside="just say what you need"
-            asideSide="right"
+            asideSide="left"
           />
         </LandingSection>
 
@@ -960,7 +960,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             src="/landing/mock-book.jpg"
             alt="Booking a Creative Network package with wallet balance"
             aside="your wallet, your call"
-            asideSide="left"
+            asideSide="right"
           />
         </LandingSection>
 
