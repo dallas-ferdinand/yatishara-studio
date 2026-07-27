@@ -513,44 +513,23 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             >
               <div className="studio-landing-menu-sheet-grab" aria-hidden="true" />
             </div>
-            <div className="studio-landing-menu-sheet-head">
-              <h2 className="studio-landing-menu-sheet-title">Menu</h2>
-              <button
-                type="button"
-                className="studio-landing-menu-btn"
-                aria-label="Close menu"
-                onClick={closeMenu}
-              >
-                <X aria-hidden="true" />
-              </button>
-            </div>
-            <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
-              {MENU_LINKS.map((link) => {
-                const Icon = link.Icon;
-                return (
-                  <button
-                    key={link.id}
-                    type="button"
-                    className="studio-landing-menu-sheet-link"
-                    onClick={() => scrollToId(link.id)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{link.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-            <div className="studio-landing-menu-sheet-foot">
-              <button
-                type="button"
-                className="studio-landing-menu-sheet-cta"
-                onClick={() => {
-                  closeMenu();
-                  onSignIn();
-                }}
-              >
-                Sign in
-              </button>
+            <div className="studio-landing-menu-sheet-scroll">
+              <nav className="studio-landing-menu-sheet-body" aria-label="Page sections">
+                {MENU_LINKS.map((link) => {
+                  const Icon = link.Icon;
+                  return (
+                    <button
+                      key={link.id}
+                      type="button"
+                      className="studio-landing-menu-sheet-link"
+                      onClick={() => scrollToId(link.id)}
+                    >
+                      <Icon aria-hidden="true" />
+                      <span>{link.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
             </div>
           </div>
         </>
