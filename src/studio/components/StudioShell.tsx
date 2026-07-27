@@ -5921,7 +5921,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -6012,12 +6012,64 @@ export function StudioShell({
           color: var(--color-cursor-text-bright) !important;
           box-shadow: none !important;
         }
-        /* Optimistic Files open — matches nav is-active before React catches up. */
-        .studio-polish[data-files-open="1"] .studio-mobile-nav-action {
-          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border)) !important;
-          background: color-mix(in srgb, var(--cursor-accent) 14%, var(--studio-mobile-chrome-glass-foot)) !important;
-          color: var(--color-cursor-text-bright) !important;
+        /* Linked tab + Files: shared pill “hole” hugging two fixed circles. */
+        .studio-mobile-nav-cluster {
+          display: inline-flex;
+          align-items: center;
+          flex: 0 0 auto;
+          width: auto;
+          min-width: 0;
+          height: 100%;
+          max-height: 100%;
+          gap: 0;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          box-sizing: border-box;
+        }
+        .studio-mobile-nav-cluster.is-linked {
+          padding: 2px;
+          gap: 2px;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent) 42%, var(--studio-mobile-chrome-border));
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--studio-mobile-chrome-glass-foot));
+        }
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
+          flex: 0 0 auto !important;
+          width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          min-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          max-width: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          min-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          max-height: calc(var(--studio-mobile-chrome-control, 30px) - 4px) !important;
+          padding: 0 !important;
+          border: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
+          border-radius: 999px !important;
           box-shadow: none !important;
+        }
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot.is-active {
+          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-mobile-chrome-glass-foot)) !important;
+          color: var(--color-cursor-text-bright) !important;
+        }
+        /* Files idle = L1 page grey circle inside the pill; selected = accent. */
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action:not(.is-active),
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history:not(.is-active) {
+          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 78%, transparent) !important;
+        }
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action.is-active,
+        .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history.is-active {
+          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-mobile-chrome-glass-foot)) !important;
+          color: var(--color-cursor-text-bright) !important;
+        }
+        /* Keep Generate/Network lit while Files is open (optimistic + selected). */
+        .studio-polish[data-files-open="1"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot:not(.studio-mobile-nav-action):not(.studio-mobile-nav-history) {
+          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-mobile-chrome-glass-foot)) !important;
+          color: var(--color-cursor-text-bright) !important;
+        }
+        .studio-polish[data-files-open="1"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action {
+          background: color-mix(in srgb, var(--cursor-accent) 22%, var(--studio-mobile-chrome-glass-foot)) !important;
+          color: var(--color-cursor-text-bright) !important;
         }
         .studio-mobile-nav-btn {
           display: inline-flex;
@@ -6702,7 +6754,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -7564,6 +7616,9 @@ export function StudioShell({
               - var(--studio-mobile-bottom-chrome)
           );
           --studio-mobile-files-sheet-height: calc(0.6 * var(--studio-mobile-files-band));
+          --studio-mobile-files-sheet-full: calc(0.92 * var(--studio-mobile-files-band));
+          --studio-mobile-history-sheet-height: calc(0.55 * var(--studio-mobile-files-band));
+          --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
           --studio-mobile-files-dock-ease: linear;
         }
@@ -7591,7 +7646,7 @@ export function StudioShell({
           flex: 0 0 auto;
           width: 100%;
           height: 0;
-          max-height: var(--studio-mobile-files-sheet-height);
+          max-height: var(--studio-mobile-files-sheet-full);
           overflow: hidden;
           display: flex;
           flex-direction: column;
@@ -7599,14 +7654,29 @@ export function StudioShell({
           box-sizing: border-box;
           border: 0;
           border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-radius: 0;
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           z-index: 25;
-          /* Instant snap — height tween forced layout on Generate + dock every frame. */
+          /* Instant open snap; settle after drag uses .is-settling. */
           transition: none;
         }
         .studio-files-dock.is-expanded,
         .studio-polish[data-files-open="1"] .studio-files-dock {
           height: var(--studio-mobile-files-sheet-height);
+          /* Same top radii as landing menu sheet. */
+          border-radius: 18px 18px 0 0;
+        }
+        .studio-files-dock.is-expanded.is-full,
+        .studio-polish[data-files-open="1"] .studio-files-dock.is-full {
+          border-radius: 14px 14px 0 0;
+        }
+        .studio-files-dock.is-dragging {
+          transition: none !important;
+        }
+        .studio-files-dock.is-settling {
+          transition:
+            height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 220ms ease;
         }
         .studio-files-dock:not(.is-expanded) {
           border-top-color: transparent;
@@ -7615,6 +7685,31 @@ export function StudioShell({
         .studio-polish[data-files-open="1"] .studio-files-dock {
           border-top-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
           pointer-events: auto;
+        }
+        .studio-files-dock-handle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          min-height: 22px;
+          padding: 8px 0 4px;
+          cursor: grab;
+          touch-action: none;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .studio-files-dock-handle:active {
+          cursor: grabbing;
+        }
+        .studio-files-dock-grab {
+          width: 40px;
+          height: 4px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 22%, transparent);
+          pointer-events: none;
+        }
+        [data-appearance="light"] .studio-files-dock-grab {
+          background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         /* Keep body laid out while collapsed (height:0 + overflow:hidden).
            visibility:hidden made first open pay a cold "reveal" layout for
@@ -8336,6 +8431,22 @@ export function StudioShell({
             background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-panel, #f5f5f7)) !important;
             color: var(--color-cursor-text) !important;
             box-shadow: none !important;
+          }
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked {
+            border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--studio-mobile-chrome-border));
+            background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-panel, #f5f5f7));
+          }
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action:not(.is-active),
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history:not(.is-active) {
+            background: var(--mos-page, #f5f5f7) !important;
+            color: color-mix(in srgb, var(--color-cursor-text) 72%, transparent) !important;
+          }
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot.is-active,
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-action.is-active,
+          [data-appearance="light"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-history.is-active,
+          [data-appearance="light"] .studio-polish[data-files-open="1"] .studio-mobile-nav-cluster.is-linked .studio-mobile-nav-btn.is-cluster-slot {
+            background: color-mix(in srgb, var(--cursor-accent) 18%, var(--mos-panel, #f5f5f7)) !important;
+            color: var(--color-cursor-text) !important;
           }
           [data-appearance="light"] .studio-polish .studio-mode-row {
             border-color: rgba(15, 23, 42, 0.10);
@@ -16121,9 +16232,89 @@ export function StudioShell({
         .studio-history-floating-panel {
           width: 100%;
         }
-        /* Mobile history reuses .studio-mobile-app-menu-sheet (inset above bottom nav, glass, no overlay). */
+        /* Mobile history: landing-menu-style bottom overlay (handle + height drag). */
+        .studio-history-mobile-sheet {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)));
+          z-index: 55;
+          display: flex;
+          flex-direction: column;
+          height: var(--studio-mobile-history-sheet-height, 42dvh);
+          max-height: var(--studio-mobile-history-sheet-full, 72dvh);
+          padding: 0;
+          border: none;
+          border-radius: 18px 18px 0 0;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
+          overflow: hidden;
+          animation: studio-history-mobile-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+          transition:
+            height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+            max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 220ms ease;
+          will-change: height;
+        }
+        .studio-history-mobile-sheet.is-entered {
+          animation: none;
+        }
+        .studio-history-mobile-sheet.is-full {
+          border-radius: 14px 14px 0 0;
+        }
+        .studio-history-mobile-sheet.is-dragging {
+          transition: none !important;
+          animation: none !important;
+        }
+        .studio-history-mobile-sheet.is-settling {
+          transition:
+            height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 220ms ease;
+        }
+        @keyframes studio-history-mobile-rise {
+          from {
+            transform: translate3d(0, 18px, 0);
+            opacity: 0.92;
+          }
+          to {
+            transform: translate3d(0, 0, 0);
+            opacity: 1;
+          }
+        }
+        .studio-history-mobile-sheet-handle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          min-height: 28px;
+          padding: 12px 0 8px;
+          cursor: grab;
+          touch-action: none;
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .studio-history-mobile-sheet-handle:active {
+          cursor: grabbing;
+        }
+        .studio-history-mobile-sheet-grab {
+          width: 44px;
+          height: 5px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+          pointer-events: none;
+        }
+        [data-appearance="light"] .studio-history-mobile-sheet-grab {
+          background: color-mix(in srgb, #1c1c1e 22%, transparent);
+        }
+        .studio-history-mobile-sheet-body {
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: hidden;
+        }
         .studio-history-mobile-sheet .studio-history-search-wrap {
-          margin: 0 0 2px;
+          margin: 0 12px 8px;
           flex: 0 0 auto;
         }
         .studio-history-mobile-sheet .studio-history-list {
@@ -16136,56 +16327,6 @@ export function StudioShell({
           -webkit-overflow-scrolling: touch;
           padding: 0 0 8px;
           scrollbar-gutter: auto;
-        }
-        /* History popup: flush full-height panel between header and bottom nav,
-           squared edges, and a chrome-height head with an accent underline. */
-        .studio-mobile-app-menu-sheet.studio-history-mobile-sheet {
-          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px));
-          left: 0;
-          right: 0;
-          height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-          );
-          max-height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-          );
-          border-radius: 0;
-          border-left: 0;
-          border-right: 0;
-          border-top: 0;
-        }
-        .studio-mobile-app-menu-sheet.studio-history-mobile-sheet::before {
-          border-radius: 0;
-        }
-        .studio-history-mobile-sheet .studio-mobile-app-menu-head {
-          min-height: var(--studio-mobile-nav-height, 44px);
-          height: var(--studio-mobile-nav-height, 44px);
-          padding: 0 6px 0 12px;
-          border-bottom: 2px solid
-            color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 55%, transparent);
-        }
-        .studio-history-mobile-sheet .studio-mobile-app-menu-title {
-          font-size: 13px;
-          font-weight: 650;
-          letter-spacing: -0.01em;
-        }
-        .studio-history-mobile-sheet .studio-mobile-app-menu-close {
-          width: 26px;
-          height: 26px;
-          border-radius: var(--cursor-radius-sm, 6px);
-          border-color: var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-history-mobile-sheet .studio-mobile-app-menu-close svg {
-          width: 15px;
-          height: 15px;
         }
         .studio-history-floating-head {
           display: flex;
@@ -18189,22 +18330,6 @@ export function StudioShell({
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
-              {isMobile && showHistory ? (
-                <button
-                  type="button"
-                  className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
-                  onClick={() => {
-                    setMobileAppMenuOpen(false);
-                    setSettingsOpen(false);
-                    setHistoryOpen((open) => !open);
-                  }}
-                  aria-label="Generation history"
-                  title="Generation history"
-                  aria-pressed={historyOpen}
-                >
-                  <History className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              ) : null}
             </div>
             {!isMobile ? (
               <>
@@ -18664,11 +18789,26 @@ export function StudioShell({
           onSelect={openMobileSection}
           action={
             // Files dock only where desktop shows the file sidebar (Generate / My Assets).
+            // Linked pill: expands beside Create on Generate, beside Network on My Assets.
             (!isSocialRail && !isMessagesRail && !isNetworkRail) || networkUsesFilesRail
               ? {
                   id: "files",
+                  anchor: networkUsesFilesRail ? "network" : "composer",
                   active: mobileSection === "files",
                   onClick: toggleMobileFilesAction,
+                }
+              : null
+          }
+          historyAction={
+            showHistory
+              ? {
+                  active: historyOpen,
+                  onClick: () => {
+                    setMobileAppMenuOpen(false);
+                    setSettingsOpen(false);
+                    if (mobileSection === "files") openMobileSection("composer");
+                    setHistoryOpen((open) => !open);
+                  },
                 }
               : null
           }
@@ -25819,7 +25959,7 @@ function StudioMobileStage({ enabled, children }) {
   return <div className="studio-mobile-stage">{children}</div>;
 }
 
-/** In-flow Files dock under Generate — height 0↔sheet snap; Generate flexes with it. */
+/** In-flow Files dock under Generate — height peek↔full via handle drag (landing menu parity). */
 function StudioFilesMobileSheet({
   expanded = false,
   onClose,
@@ -25839,6 +25979,15 @@ function StudioFilesMobileSheet({
   onToggleViewMode,
   ...explorerProps
 }) {
+  const dockRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [settling, setSettling] = useState(false);
+  const [isFull, setIsFull] = useState(false);
+  const heightRef = useRef(null);
+  const dragRef = useRef(null);
+  const dragRafRef = useRef(null);
+  const metricsRef = useRef({ peek: 280, full: 520, min: 120 });
+
   useMobileBackLayer("files-add-menu", Boolean(addMenuOpen), () => {
     setAddMenuOpen?.(false);
   });
@@ -25851,14 +26000,206 @@ function StudioFilesMobileSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, expanded]);
 
+  const readTokenPx = (el, name, fallback) => {
+    if (!el) return fallback;
+    const raw = getComputedStyle(el).getPropertyValue(name).trim();
+    if (!raw) return fallback;
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:${raw}`;
+    el.appendChild(probe);
+    const h = probe.getBoundingClientRect().height;
+    probe.remove();
+    return h > 0 ? h : fallback;
+  };
+
+  const refreshMetrics = () => {
+    const dock = dockRef.current;
+    const root = dock?.closest?.(".studio-polish") ?? document.documentElement;
+    const peek = readTokenPx(root, "--studio-mobile-files-sheet-height", window.innerHeight * 0.4);
+    const full = readTokenPx(root, "--studio-mobile-files-sheet-full", window.innerHeight * 0.7);
+    metricsRef.current = {
+      peek,
+      full: Math.max(full, peek + 40),
+      min: Math.max(110, peek * 0.42),
+    };
+    return metricsRef.current;
+  };
+
+  const applyHeight = (px) => {
+    heightRef.current = px;
+    const el = dockRef.current;
+    if (!el) return;
+    el.style.height = `${px}px`;
+    el.style.maxHeight = `${px}px`;
+  };
+
+  const clearInlineHeight = () => {
+    heightRef.current = null;
+    const el = dockRef.current;
+    if (!el) return;
+    el.style.height = "";
+    el.style.maxHeight = "";
+  };
+
+  useEffect(() => {
+    if (!expanded) {
+      setDragging(false);
+      setSettling(false);
+      setIsFull(false);
+      dragRef.current = null;
+      clearInlineHeight();
+      return;
+    }
+    // Pin peek in px after open so drag starts from the painted height.
+    const id = window.requestAnimationFrame(() => {
+      const { peek } = refreshMetrics();
+      const painted = dockRef.current?.getBoundingClientRect().height || peek;
+      setIsFull(false);
+      applyHeight(painted > 40 ? painted : peek);
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [expanded]);
+
+  const settleTo = (fromH, target) => {
+    const { peek, full } = metricsRef.current;
+    setDragging(false);
+    setSettling(true);
+    applyHeight(fromH);
+    window.requestAnimationFrame(() => {
+      applyHeight(target);
+      setIsFull(target >= full - 8 || (target > peek + (full - peek) * 0.5));
+      window.setTimeout(() => {
+        setSettling(false);
+      }, 230);
+    });
+  };
+
+  const onHandlePointerDown = (event) => {
+    if (!expanded) return;
+    if (event.button != null && event.button !== 0) return;
+    const { peek, full } = refreshMetrics();
+    const startH =
+      dockRef.current?.getBoundingClientRect().height ||
+      heightRef.current ||
+      peek;
+    const now = performance.now();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+      full,
+      peek,
+    };
+    setSettling(false);
+    setDragging(true);
+    applyHeight(startH);
+  };
+
+  const onHandlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { full, min } = metricsRef.current;
+    const now = performance.now();
+    const dt = now - drag.lastT;
+    if (dt > 0) {
+      const instant = (event.clientY - drag.lastY) / dt;
+      drag.vy = drag.vy * 0.35 + instant * 0.65;
+      drag.lastY = event.clientY;
+      drag.lastT = now;
+    }
+    const dy = event.clientY - drag.startY;
+    const nextH = Math.min(full, Math.max(min, drag.startH - dy));
+    applyHeight(nextH);
+    if (dragRafRef.current == null) {
+      dragRafRef.current = window.requestAnimationFrame(() => {
+        dragRafRef.current = null;
+      });
+    }
+  };
+
+  const onHandlePointerUp = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    if (dragRafRef.current != null) {
+      window.cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    const { peek, full, min } = metricsRef.current;
+    const h =
+      heightRef.current ??
+      dockRef.current?.getBoundingClientRect().height ??
+      peek;
+    const mid = (peek + full) / 2;
+    const range = Math.max(1, full - peek);
+    const dragDown = drag.startH - h;
+    const dragUp = h - drag.startH;
+    const fromFull = drag.startH >= full - 12;
+    const fresh = performance.now() - drag.lastT < 80;
+    const vy = fresh ? drag.vy : 0;
+    const flickUp = vy < -0.42;
+    const flickDown = vy > 0.42;
+
+    if (flickUp || (!fromFull && dragUp > range * 0.22 && h > peek + 8)) {
+      settleTo(h, full);
+      return;
+    }
+
+    if (fromFull) {
+      const bigSwipeDown =
+        h <= peek * 0.78 ||
+        h <= min + 8 ||
+        dragDown >= range * 0.55 ||
+        (flickDown && dragDown >= range * 0.32);
+      if (bigSwipeDown) {
+        setDragging(false);
+        setSettling(false);
+        applyHeight(0);
+        onClose?.();
+        return;
+      }
+      if (flickDown || dragDown > 18 || h < full - 10) {
+        settleTo(h, peek);
+        return;
+      }
+      settleTo(h, full);
+      return;
+    }
+
+    if (flickDown || h <= peek * 0.72 || h <= min + 8) {
+      setDragging(false);
+      setSettling(false);
+      applyHeight(0);
+      onClose?.();
+      return;
+    }
+    settleTo(h, h >= mid ? full : peek);
+  };
+
   return (
     <div
-      className={`studio-files-dock studio-files-mobile-sheet${expanded ? " is-expanded" : ""}`}
+      ref={dockRef}
+      className={`studio-files-dock studio-files-mobile-sheet${expanded ? " is-expanded" : ""}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}`}
       role="dialog"
       aria-modal={expanded ? "true" : undefined}
       aria-hidden={expanded ? undefined : "true"}
       aria-label="Files"
     >
+      <div
+        className="studio-files-dock-handle"
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize files"
+      >
+        <span className="studio-files-dock-grab" aria-hidden="true" />
+      </div>
       <div className="studio-files-dock-body">
         <StudioFilesExplorerBody
           {...explorerProps}

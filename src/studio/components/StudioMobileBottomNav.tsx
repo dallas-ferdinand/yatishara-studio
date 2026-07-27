@@ -1,15 +1,13 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, MessageCircle, Sparkles, Store } from "lucide-react";
+import { Cloud, Folder, History, MessageCircle, Sparkles, Store } from "lucide-react";
 import { useRef } from "react";
 
-/** Context action in the middle slot — Files on Generate, Messages on Social/CN. */
+/** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
 export const MOBILE_NAV_ACTION = {
   files: { id: "files", label: "Files", Icon: Folder },
-  social: { id: "social", label: "Messages", Icon: MessageCircle },
-  /** Opens CN Messages/filters rail sheet while Creative Network is active. */
-  cnRail: { id: "cnRail", label: "Messages", Icon: MessageCircle },
+  history: { id: "history", label: "History", Icon: History },
 };
 
 /** Cancel pointer→action if the finger slides (scroll intent). */
@@ -77,21 +75,52 @@ function NavButton({
   );
 }
 
+/**
+ * Permanent sections: Feed | Network | Messages | Create.
+ * On Generate, Create expands into a linked pill with Files (+ History) to the right.
+ */
 export function StudioMobileBottomNav({
   section,
   onSelect,
   action = null,
+  historyAction = null,
   tools = null,
 }) {
-  const actionDef =
-    action?.id === "social"
-      ? MOBILE_NAV_ACTION.social
-      : action?.id === "cnRail"
-        ? MOBILE_NAV_ACTION.cnRail
-        : action?.id === "files"
-          ? MOBILE_NAV_ACTION.files
-          : null;
-  const ActionIcon = actionDef?.Icon;
+  const filesAction = action?.id === "files" ? action : null;
+  const filesAnchor = filesAction?.anchor === "network" ? "network" : "composer";
+  const FilesIcon = MOBILE_NAV_ACTION.files.Icon;
+  const HistoryIcon = MOBILE_NAV_ACTION.history.Icon;
+  const linkFilesToNetwork = Boolean(filesAction) && filesAnchor === "network";
+  const linkFilesToCreate = Boolean(filesAction) && filesAnchor === "composer";
+  const networkLinked = linkFilesToNetwork && section === "network";
+  const createLinked =
+    section === "composer" && (linkFilesToCreate || Boolean(historyAction));
+
+  const filesBtn = (linked) =>
+    filesAction ? (
+      <NavButton
+        className={`studio-mobile-nav-btn studio-mobile-nav-action is-icon-only${filesAction.active ? " is-active" : ""}${linked ? " is-cluster-slot" : ""}`}
+        ariaLabel="Files"
+        title="Files"
+        ariaPressed={filesAction.active ? true : undefined}
+        onActivate={() => filesAction.onClick?.()}
+      >
+        <FilesIcon aria-hidden="true" />
+      </NavButton>
+    ) : null;
+
+  const historyBtn = (linked) =>
+    historyAction ? (
+      <NavButton
+        className={`studio-mobile-nav-btn studio-mobile-nav-history is-icon-only${historyAction.active ? " is-active" : ""}${linked ? " is-cluster-slot" : ""}`}
+        ariaLabel="History"
+        title="History"
+        ariaPressed={historyAction.active ? true : undefined}
+        onActivate={() => historyAction.onClick?.()}
+      >
+        <HistoryIcon aria-hidden="true" />
+      </NavButton>
+    ) : null;
 
   return (
     <nav className="studio-mobile-bottom-nav" aria-label="Studio mobile sections">
@@ -105,35 +134,75 @@ export function StudioMobileBottomNav({
         >
           <Cloud aria-hidden="true" />
         </NavButton>
-        <NavButton
-          className={`studio-mobile-nav-btn${section === "network" ? " is-active" : ""} is-icon-only`}
-          ariaCurrent={section === "network" ? "page" : undefined}
-          ariaLabel="Creative Network"
-          title="Creative Network"
-          onActivate={() => onSelect("network")}
-        >
-          <Store aria-hidden="true" />
-        </NavButton>
-        {actionDef && ActionIcon ? (
-          <NavButton
-            className={`studio-mobile-nav-btn studio-mobile-nav-action is-icon-only${action?.active ? " is-active" : ""}`}
-            ariaLabel={actionDef.label}
-            title={actionDef.label}
-            ariaPressed={action?.active ? true : undefined}
-            onActivate={() => action?.onClick?.()}
+
+        {networkLinked ? (
+          <div
+            className={`studio-mobile-nav-cluster is-linked${filesAction.active ? " is-action-active" : ""}`}
+            role="group"
+            aria-label="Creative Network and Files"
           >
-            <ActionIcon aria-hidden="true" />
+            <NavButton
+              className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
+              ariaCurrent="page"
+              ariaLabel="Creative Network"
+              title="Creative Network"
+              onActivate={() => onSelect("network")}
+            >
+              <Store aria-hidden="true" />
+            </NavButton>
+            {filesBtn(true)}
+          </div>
+        ) : (
+          <NavButton
+            className={`studio-mobile-nav-btn${section === "network" ? " is-active" : ""} is-icon-only`}
+            ariaCurrent={section === "network" ? "page" : undefined}
+            ariaLabel="Creative Network"
+            title="Creative Network"
+            onActivate={() => onSelect("network")}
+          >
+            <Store aria-hidden="true" />
           </NavButton>
-        ) : null}
+        )}
+
         <NavButton
-          className={`studio-mobile-nav-btn${section === "composer" ? " is-active" : ""} is-icon-only`}
-          ariaCurrent={section === "composer" ? "page" : undefined}
-          ariaLabel="Create"
-          title="Create"
-          onActivate={() => onSelect("composer")}
+          className={`studio-mobile-nav-btn${section === "messages" ? " is-active" : ""} is-icon-only`}
+          ariaCurrent={section === "messages" ? "page" : undefined}
+          ariaLabel="Messages"
+          title="Messages"
+          onActivate={() => onSelect("messages")}
         >
-          <Sparkles aria-hidden="true" />
+          <MessageCircle aria-hidden="true" />
         </NavButton>
+
+        {createLinked ? (
+          <div
+            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || historyAction?.active ? " is-action-active" : ""}`}
+            role="group"
+            aria-label="Create, Files, and History"
+          >
+            <NavButton
+              className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
+              ariaCurrent="page"
+              ariaLabel="Create"
+              title="Create"
+              onActivate={() => onSelect("composer")}
+            >
+              <Sparkles aria-hidden="true" />
+            </NavButton>
+            {filesBtn(true)}
+            {historyBtn(true)}
+          </div>
+        ) : (
+          <NavButton
+            className={`studio-mobile-nav-btn${section === "composer" ? " is-active" : ""} is-icon-only`}
+            ariaCurrent={section === "composer" ? "page" : undefined}
+            ariaLabel="Create"
+            title="Create"
+            onActivate={() => onSelect("composer")}
+          >
+            <Sparkles aria-hidden="true" />
+          </NavButton>
+        )}
       </div>
       {tools ? <div className="studio-mobile-nav-tools">{tools}</div> : null}
     </nav>
