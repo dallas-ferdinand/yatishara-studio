@@ -181,14 +181,15 @@
   will-change: transform, height;
 }
 
+.studio-landing-menu-sheet.is-height-controlled {
+  /* Height comes from inline px while open — never fight CSS class heights. */
+}
+
 .studio-landing-menu-sheet.is-expanded {
-  height: calc(100dvh - var(--studio-landing-chrome-h));
-  max-height: calc(100dvh - var(--studio-landing-chrome-h));
   border-radius: 14px 14px 0 0;
 }
 
-.studio-landing-menu-sheet.is-dragging,
-.studio-landing-menu-sheet.is-locking {
+.studio-landing-menu-sheet.is-dragging {
   transition: none;
   animation: none;
 }
@@ -1046,11 +1047,6 @@
 
   .studio-landing-menu-sheet {
     bottom: var(--studio-landing-chrome-h);
-  }
-
-  .studio-landing-menu-sheet.is-expanded {
-    height: calc(100dvh - var(--studio-landing-chrome-h));
-    max-height: calc(100dvh - var(--studio-landing-chrome-h));
   }
 
   .studio-landing-section,

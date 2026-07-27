@@ -274,16 +274,26 @@ function FaqSection() {
   );
 }
 
+function getLandingMenuMetrics(root: HTMLElement | null) {
+  const chrome =
+    root?.querySelector<HTMLElement>(".studio-landing-head")?.getBoundingClientRect()
+      .height ?? 52;
+  const full = Math.max(220, window.innerHeight - chrome);
+  const peek = Math.min(window.innerHeight * 0.42, 320, full * 0.82);
+  return { peek, full, min: Math.max(110, peek * 0.42) };
+}
+
 export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuExpanded, setMenuExpanded] = useState(false);
-  const [menuDragY, setMenuDragY] = useState(0);
+  /** Pixel height is the only size source while open — avoids class/transform jumps. */
+  const [menuHeight, setMenuHeight] = useState<number | null>(null);
   const [menuDragging, setMenuDragging] = useState(false);
-  const [menuLockHeight, setMenuLockHeight] = useState<number | null>(null);
-  const menuDragRef = useRef<{ startY: number; expanded: boolean } | null>(null);
-  const menuSheetRef = useRef<HTMLDivElement>(null);
+  const [menuDismissY, setMenuDismissY] = useState(0);
+  const menuDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const menuMetricsRef = useRef({ peek: 280, full: 600, min: 120 });
+  const menuHeightRef = useRef<number | null>(null);
   const menuSettleTimerRef = useRef<number | null>(null);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
@@ -294,28 +304,11 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       menuSettleTimerRef.current = null;
     }
     setMenuOpen(false);
-    setMenuExpanded(false);
-    setMenuDragY(0);
+    setMenuHeight(null);
+    menuHeightRef.current = null;
     setMenuDragging(false);
-    setMenuLockHeight(null);
+    setMenuDismissY(0);
     menuDragRef.current = null;
-  };
-
-  const settleMenuHeight = (next: "peek" | "expanded", visibleHeight: number) => {
-    if (menuSettleTimerRef.current != null) {
-      window.clearTimeout(menuSettleTimerRef.current);
-      menuSettleTimerRef.current = null;
-    }
-    // Lock the release-point height, flip target, then release so CSS springs from here.
-    setMenuLockHeight(visibleHeight > 0 ? visibleHeight : null);
-    setMenuDragY(0);
-    setMenuDragging(false);
-    setMenuExpanded(next === "expanded");
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setMenuLockHeight(null);
-      });
-    });
   };
 
   const scrollToId = (id: string) => {
@@ -344,70 +337,62 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       window.clearTimeout(menuSettleTimerRef.current);
       menuSettleTimerRef.current = null;
     }
+    const metrics = getLandingMenuMetrics(rootRef.current);
+    menuMetricsRef.current = metrics;
+    const startH = menuHeightRef.current ?? metrics.peek;
     event.currentTarget.setPointerCapture(event.pointerId);
-    menuDragRef.current = { startY: event.clientY, expanded: menuExpanded };
-    setMenuLockHeight(null);
+    menuDragRef.current = { startY: event.clientY, startH };
+    setMenuDismissY(0);
     setMenuDragging(true);
-    setMenuDragY(0);
+    setMenuHeight(startH);
+    menuHeightRef.current = startH;
   };
 
   const onMenuHandlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!menuDragRef.current) return;
+    const { full, min } = menuMetricsRef.current;
     const dy = event.clientY - menuDragRef.current.startY;
-    if (menuDragRef.current.expanded) {
-      setMenuDragY(Math.max(0, dy));
-    } else {
-      setMenuDragY(dy);
-    }
+    // Finger down shrinks, finger up grows — one height channel only.
+    const nextH = Math.min(full, Math.max(min, menuDragRef.current.startH - dy));
+    menuHeightRef.current = nextH;
+    setMenuHeight(nextH);
   };
 
   const onMenuHandlePointerUp = () => {
     if (!menuDragRef.current) return;
-    const dy = menuDragY;
-    const wasExpanded = menuDragRef.current.expanded;
-    const layoutH = menuSheetRef.current?.getBoundingClientRect().height ?? 0;
     menuDragRef.current = null;
+    const { peek, full, min } = menuMetricsRef.current;
+    const h = menuHeightRef.current ?? peek;
+    const mid = (peek + full) / 2;
+    setMenuDragging(false);
 
-    if (wasExpanded) {
-      if (dy > 200) {
-        setMenuDragging(false);
-        setMenuDragY(Math.max(dy, window.innerHeight * 0.55));
-        menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 200);
-        return;
-      }
-      if (dy > 72) {
-        // translateY(dy) means the visible card is shorter by dy — spring from there.
-        settleMenuHeight("peek", Math.max(160, layoutH - dy));
-        return;
-      }
-      // Small drag: spring transform back to full without height jump.
-      setMenuDragging(false);
-      setMenuDragY(0);
+    if (h <= peek * 0.72 || h <= min + 8) {
+      // Dismiss from current height — translate down, then unmount.
+      setMenuDismissY(Math.max(full * 0.45, h * 0.65));
+      menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 220);
       return;
     }
 
-    if (dy > 72) {
-      setMenuDragging(false);
-      setMenuDragY(Math.max(dy, window.innerHeight * 0.45));
-      menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 200);
-      return;
-    }
-    if (dy < -48) {
-      settleMenuHeight("expanded", layoutH);
-      return;
-    }
-    settleMenuHeight("peek", layoutH);
+    const target = h >= mid ? full : peek;
+    menuHeightRef.current = target;
+    setMenuHeight(target);
   };
 
   useEffect(() => {
     if (!menuOpen) {
-      setMenuExpanded(false);
-      setMenuDragY(0);
+      setMenuHeight(null);
+      menuHeightRef.current = null;
       setMenuDragging(false);
-      setMenuLockHeight(null);
+      setMenuDismissY(0);
       menuDragRef.current = null;
       return;
     }
+    const metrics = getLandingMenuMetrics(rootRef.current);
+    menuMetricsRef.current = metrics;
+    menuHeightRef.current = metrics.peek;
+    setMenuHeight(metrics.peek);
+    setMenuDismissY(0);
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeMenu();
     };
@@ -523,13 +508,15 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             onClick={closeMenu}
           />
           <div
-            ref={menuSheetRef}
             id="studio-landing-menu-sheet"
             className={[
               "studio-landing-menu-sheet",
-              menuExpanded ? "is-expanded" : "",
+              "is-height-controlled",
               menuDragging ? "is-dragging" : "",
-              menuLockHeight != null ? "is-locking" : "",
+              menuHeight != null &&
+              menuHeight >= menuMetricsRef.current.full - 8
+                ? "is-expanded"
+                : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -537,34 +524,16 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             aria-modal="true"
             aria-label="Page sections"
             style={
-              (() => {
-                if (menuLockHeight != null) {
-                  return {
-                    height: `${menuLockHeight}px`,
-                    maxHeight: `${menuLockHeight}px`,
-                    transform: "translateY(0)",
-                  } satisfies CSSProperties;
-                }
-                if (menuDragY > 0) {
-                  return { transform: `translateY(${menuDragY}px)` } satisfies CSSProperties;
-                }
-                if (menuDragging && menuDragY < 0 && !menuExpanded) {
-                  return {
-                    height: `min(calc(var(--studio-landing-menu-peek-h) + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
-                    maxHeight: `min(calc(var(--studio-landing-menu-peek-h) + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
-                  } satisfies CSSProperties;
-                }
-                return undefined;
-              })()
+              {
+                height: menuHeight ?? undefined,
+                maxHeight: menuHeight ?? undefined,
+                transform: menuDismissY > 0 ? `translateY(${menuDismissY}px)` : undefined,
+              } satisfies CSSProperties
             }
           >
             <div
               className="studio-landing-menu-sheet-handle"
-              aria-label={
-                menuExpanded
-                  ? "Drag down to shrink or close menu"
-                  : "Drag up for full menu, or down to close"
-              }
+              aria-label="Drag up for full menu, or down to close"
               onPointerDown={onMenuHandlePointerDown}
               onPointerMove={onMenuHandlePointerMove}
               onPointerUp={onMenuHandlePointerUp}
