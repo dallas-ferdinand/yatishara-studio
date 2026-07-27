@@ -3655,10 +3655,10 @@ export function StudioShell({
   }
 
   function attachEntry(entry, insertRange = null) {
-    if (!entry || entry.type === "parent") return;
+    if (!entry || entry.type === "parent") return false;
     const fullEntry = pathToEntry.get(entry.path) ?? entry;
     const attachment = entryToAttachment(fullEntry);
-    if (!attachment?.id) return;
+    if (!attachment?.id) return false;
 
     const targetTab = resolveAttachTargetTab();
     const prevCtx = composerContextsRef.current[targetTab] ?? {};
@@ -3670,9 +3670,8 @@ export function StudioShell({
     const nextAttachments = already ? existing : [...existing, attachment];
     const stayOnFiles = isMobile && mobileSection === "files";
 
-    // Mobile (Android Chrome especially): Range/selection insert during touchend
-    // is unreliable. Always build HTML offline from state, then paint the
-    // contenteditable — never depend on insertNode.
+    // Mobile (Android): never Range-insert during the gesture. Build HTML offline,
+    // commit React attachments (chip rail), then paint contenteditable after release.
     const liveEditor =
       composerContextKey === targetTab ? editorRef.current : null;
     const baseDraft =
@@ -3691,7 +3690,6 @@ export function StudioShell({
       nextHtml = baseHtml;
       nextDraft = baseDraft;
     } else if (!isMobile && liveEditor) {
-      // Desktop caret drop can still use live Range insert.
       insertComposerAttachmentToken(liveEditor, attachment, insertRange);
       nextHtml = liveEditor.innerHTML;
       nextDraft = readComposerEditorText(liveEditor);
@@ -3724,20 +3722,22 @@ export function StudioShell({
       });
     };
 
+    // Always update React attachments for the active chat context — the mobile
+    // chip rail renders from this, independent of contenteditable success.
     if (composerContextKey === targetTab) {
       setAttachments(nextAttachments);
       setDraft(nextDraft);
-      paint();
-      // Android Chrome often ignores sync contenteditable writes during touchend.
-      // Repaint after the gesture fully releases.
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(paint);
-      });
-      window.setTimeout(paint, 0);
-      window.setTimeout(paint, 48);
+      if (isMobile) {
+        // FastShaders / Android pattern: mutate after the gesture fully ends.
+        window.setTimeout(paint, 0);
+        window.setTimeout(paint, 32);
+        window.setTimeout(paint, 100);
+      } else {
+        paint();
+      }
     }
 
-    if (stayOnFiles) return;
+    if (stayOnFiles) return true;
 
     openTab(targetTab);
     window.requestAnimationFrame(() => {
@@ -3746,6 +3746,7 @@ export function StudioShell({
       editor.focus();
       paint();
     });
+    return true;
   }
   attachEntryRef.current = attachEntry;
 
@@ -5628,14 +5629,15 @@ export function StudioShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [assetPickRequest, endAssetPick]);
 
-  // Mobile Files touch-drop: FileTree calls deliverMobileComposerDrop → this handler.
-  // (Animation can succeed without this; chips cannot.)
+  // Mobile Files touch-drop (FastShaders pattern): end the gesture first, then
+  // run the same attachEntry path desktop HTML5 drop uses — never during touchend.
   useEffect(() => {
-    setMobileComposerDropHandler(({ entry, clientX = 0, clientY = 0 }) => {
-      if (!entry) return;
-      const range = rangeFromPointInEditor(editorRef.current, clientX, clientY);
-      if (range) setSelectionToRange(range);
-      attachEntryRef.current?.(entry, range);
+    setMobileComposerDropHandler(({ entry }) => {
+      if (!entry) return false;
+      window.setTimeout(() => {
+        attachEntryRef.current?.(entry, null);
+      }, 0);
+      return true;
     });
     return () => setMobileComposerDropHandler(null);
   }, []);
@@ -5647,11 +5649,9 @@ export function StudioShell({
       if (event.detail?.dropTarget !== "composer") return;
       const entry = event.detail?.entry;
       if (!entry) return;
-      const x = event.detail?.clientX ?? 0;
-      const y = event.detail?.clientY ?? 0;
-      const range = rangeFromPointInEditor(editorRef.current, x, y);
-      if (range) setSelectionToRange(range);
-      attachEntryRef.current?.(entry, range);
+      window.setTimeout(() => {
+        attachEntryRef.current?.(entry, null);
+      }, 0);
     };
     document.addEventListener("studioexplorerdrop", onTouchDrop);
     return () => document.removeEventListener("studioexplorerdrop", onTouchDrop);
@@ -12273,6 +12273,66 @@ export function StudioShell({
           user-select: none;
           -webkit-user-select: none;
           box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent);
+        }
+        /* Mobile: chips render in the React rail (Android-safe). Hide duplicates
+           that may also exist inside the contenteditable. */
+        .studio-polish.is-studio-mobile .cursor-composer-mention-editor .studio-inline-tag {
+          display: none !important;
+        }
+        .studio-composer-attach-rail {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          flex: 0 0 auto;
+          width: 100%;
+          padding: 8px 10px 0;
+          box-sizing: border-box;
+        }
+        .studio-composer-attach-rail .studio-inline-tag {
+          cursor: default;
+          margin: 0;
+          max-width: min(160px, 42vw);
+          overflow: visible;
+        }
+        /* Preview chips in the rail need room for the remove control. */
+        .studio-composer-attach-rail .studio-inline-tag--image-only {
+          width: auto;
+          min-width: var(--studio-composer-chip-size, 28px);
+          max-width: none;
+          padding-right: 2px;
+          gap: 2px;
+        }
+        .studio-composer-attach-rail .studio-inline-tag--image-only .studio-inline-tag-kind {
+          position: relative;
+          inset: auto;
+          width: var(--studio-composer-chip-size, 28px);
+          height: var(--studio-composer-chip-size, 28px);
+          flex: 0 0 auto;
+        }
+        .studio-composer-attach-rail .studio-inline-tag--image-only .studio-inline-tag-overlay {
+          inset: 0;
+          width: var(--studio-composer-chip-size, 28px);
+          height: var(--studio-composer-chip-size, 28px);
+        }
+        .studio-composer-attach-rail-remove {
+          position: relative;
+          z-index: 2;
+          flex: 0 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          margin-left: 2px;
+          border: 0;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--mos-text-bright, #fff) 10%, transparent);
+          color: var(--color-cursor-text-bright);
+          cursor: pointer;
+          padding: 0;
+        }
+        .studio-composer-attach-rail-remove:active {
+          transform: scale(0.96);
         }
         .studio-inline-tag.is-dragging {
           opacity: 0.55;
@@ -19150,7 +19210,7 @@ function StudioComposer({
       return;
     }
     // If React has more attachments than the DOM, always repaint — even when
-    // draft text matches (iOS touch-drop used to early-return here with no chips).
+    // draft text matches (Android touch-drop used to early-return here with no chips).
     if (composerDomAttachmentCount(el) < attachments.length) {
       applyComposerContextToEditor(el, { draft, attachments });
       return;
@@ -19578,6 +19638,26 @@ function StudioComposer({
         <div className="studio-composer-row">
           <StudioModeSwitcher mode={mode} setMode={setMode} />
           <div className={`cursor-composer-box ${recording ? "is-recording" : ""} ${transcribing ? "is-transcribing" : ""}${dragOver ? " is-drop-target" : ""}`} data-drop-target="composer">
+      {isMobile && attachments.length > 0 ? (
+        <StudioComposerMobileAttachRail
+          attachments={attachments}
+          onRemove={(id) => {
+            const nextAttachments = attachments.filter((item) => item.id !== id);
+            setAttachments(nextAttachments);
+            const editor = editorRef.current;
+            const plain = String(draft ?? "").replace(/\uFFFC/g, "").replace(/\s+$/g, "");
+            if (editor) {
+              applyComposerContextToEditor(editor, {
+                draft: plain,
+                attachments: nextAttachments,
+              });
+              setDraft(readComposerEditorText(editor));
+            } else {
+              setDraft(plain);
+            }
+          }}
+        />
+      ) : null}
       <div
         className="studio-composer-inputline"
         ref={inputLineRef}
@@ -19794,6 +19874,96 @@ function StudioComposer({
         }}
       />
       </div>
+    </div>
+  );
+}
+
+function composerRailIconName(kind) {
+  if (kind === "map-pin") return "mapPin";
+  if (kind === "video") return "film";
+  if (kind === "audio") return "audioWaveform";
+  if (kind === "context" || kind === "element") return "sparkles";
+  if (
+    kind === "image" ||
+    kind === "folder" ||
+    kind === "sparkles" ||
+    kind === "user" ||
+    kind === "package" ||
+    kind === "file"
+  ) {
+    return kind;
+  }
+  return "file";
+}
+
+/** Android-safe chip rail: React state → visible UI (no contenteditable Range insert). */
+function StudioComposerMobileAttachRail({ attachments, onRemove }) {
+  if (!Array.isArray(attachments) || attachments.length === 0) return null;
+  return (
+    <div className="studio-composer-attach-rail" aria-label="Attachments">
+      {attachments.map((attachment) => {
+        const id = String(attachment?.id ?? "");
+        if (!id) return null;
+        const label = String(attachment.label ?? attachment.filename ?? "Reference");
+        const isElement = attachment.studioKind === "element";
+        const thumb = attachment.thumbnailUrl;
+        const isPreview =
+          Boolean(thumb) &&
+          (isElement || attachment.kind === "image" || attachment.kind === "video");
+        const overlayName = composerRailIconName(
+          isElement
+            ? elementTokenIconKind(attachment.elementType)
+            : attachment.kind === "video"
+              ? "video"
+              : "image",
+        );
+        return (
+          <span
+            key={id}
+            className={`studio-inline-tag${isPreview ? " studio-inline-tag--preview studio-inline-tag--image-only" : ""}`}
+            data-attachment-id={id}
+            title={label}
+          >
+            <span className="studio-inline-tag-kind">
+              {isPreview ? (
+                attachment.kind === "video" && !isElement ? (
+                  <video
+                    className="studio-inline-tag-media"
+                    src={attachment.mediaUrl ?? thumb}
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="studio-inline-tag-media" src={thumb} alt="" />
+                )
+              ) : (
+                <Icon name={composerRailIconName(composerTokenIconKind(attachment))} size={11} />
+              )}
+            </span>
+            {isPreview ? (
+              <span className="studio-inline-tag-overlay" aria-hidden="true">
+                <Icon name={overlayName} size={11} />
+              </span>
+            ) : (
+              <span className="studio-inline-tag-label">{label}</span>
+            )}
+            <button
+              type="button"
+              className="studio-composer-attach-rail-remove"
+              aria-label={`Remove ${label}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onRemove?.(id);
+              }}
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -21364,7 +21534,7 @@ function applyComposerContextToEditor(editor, ctx) {
   if (!editor || !ctx) return;
   const attachments = Array.isArray(ctx.attachments) ? ctx.attachments : [];
   let html = typeof ctx.editorHtml === "string" ? ctx.editorHtml : "";
-  // Stale editorHtml (common after failed iOS Range inserts) must not win over attachments.
+  // Stale editorHtml (common after failed mobile touchend Range inserts) must not win over attachments.
   if (!html || !composerHtmlHasAttachments(html, attachments)) {
     html = buildComposerEditorHtmlFromState(ctx.draft, attachments);
   }
@@ -21390,7 +21560,7 @@ function composerDomAttachmentCount(editor) {
   return editor.querySelectorAll(".studio-inline-tag[data-attachment-id]").length;
 }
 
-/** Offline append — safe on iOS where Range insert during touchend often no-ops. */
+/** Offline append — safe on Android/mobile where Range insert during touchend often no-ops. */
 function buildComposerHtmlWithAppendedAttachment(baseHtml, draft, existingAttachments, attachment) {
   const existing = Array.isArray(existingAttachments) ? existingAttachments : [];
   const shell = document.createElement("div");
@@ -27691,12 +27861,22 @@ function entryToAttachment(entry) {
         ? "file"
         : "context";
   const label = safeEntryTitle(entry);
+  const path =
+    entry.path ||
+    (entry.studioId
+      ? `/Studio/${studioKind === "element" ? "elements" : "assets"}/${entry.studioId}`
+      : "");
+  const id =
+    (studioKind && entry.studioId ? `${studioKind}:${entry.studioId}` : null) ||
+    path ||
+    (entry.studioId ? `asset:${entry.studioId}` : null) ||
+    `tmp:${label}:${kind}`;
   return {
-    id: studioKind && entry.studioId ? `${studioKind}:${entry.studioId}` : entry.path,
+    id,
     kind,
     label,
-    path: entry.path,
-    displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
+    path: path || undefined,
+    displayPath: entry.displayPath ?? (path ? displayWorkspacePath(path) : label),
     filename: typeof entry.name === "string" ? entry.name : label,
     studioKind,
     studioId: entry.studioId,

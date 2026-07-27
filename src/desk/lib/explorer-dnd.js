@@ -16,8 +16,10 @@ export function setMobileComposerDropHandler(handler) {
 
 export function deliverMobileComposerDrop(entry, clientX = 0, clientY = 0) {
   if (!entry || !mobileComposerDropHandler) return false;
-  mobileComposerDropHandler({ entry, clientX, clientY });
-  return true;
+  // Handler may return false if attach rejected (bad entry); treat undefined as ok
+  // when the call was scheduled (FastShaders: defer attach after gesture end).
+  const result = mobileComposerDropHandler({ entry, clientX, clientY });
+  return result !== false;
 }
 
 export function inferMediaKind(entry) {
