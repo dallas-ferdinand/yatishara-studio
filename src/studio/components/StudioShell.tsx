@@ -3710,9 +3710,10 @@ export function StudioShell({
       editorHtml: nextHtml,
       draft: nextDraft,
     };
+    writePersistedComposerContexts(composerContextsRef.current);
 
     const paint = () => {
-      if (composerContextKey !== targetTab) return;
+      if (composerKeyRef.current !== targetTab) return;
       const editor = editorRef.current;
       if (!editor) return;
       applyComposerContextToEditor(editor, {
@@ -3722,30 +3723,33 @@ export function StudioShell({
       });
     };
 
-    // Always update React attachments for the active chat context — the mobile
-    // chip rail renders from this, independent of contenteditable success.
+    // Live React attachments power the mobile chip rail. If the active composer
+    // context isn't the target chat, open that tab so state hydrates from ref
+    // (Files dock can stay open — openTab does not close it).
     if (composerContextKey === targetTab) {
       setAttachments(nextAttachments);
       setDraft(nextDraft);
       if (isMobile) {
-        // FastShaders / Android pattern: mutate after the gesture fully ends.
         window.setTimeout(paint, 0);
         window.setTimeout(paint, 32);
         window.setTimeout(paint, 100);
       } else {
         paint();
       }
+    } else {
+      openTab(targetTab);
     }
 
     if (stayOnFiles) return true;
 
-    openTab(targetTab);
-    window.requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) return;
-      editor.focus();
-      paint();
-    });
+    if (composerContextKey === targetTab) {
+      window.requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.focus();
+        paint();
+      });
+    }
     return true;
   }
   attachEntryRef.current = attachEntry;
@@ -5632,11 +5636,19 @@ export function StudioShell({
   // Mobile Files touch-drop (FastShaders pattern): end the gesture first, then
   // run the same attachEntry path desktop HTML5 drop uses — never during touchend.
   useEffect(() => {
+    const runAttach = (entry) => {
+      if (!entry) return;
+      const snapshot = { ...entry };
+      const attach = () => attachEntryRef.current?.(snapshot, null);
+      // Microtask + timeout: Android Chrome sometimes drops work scheduled only
+      // from the touchend stack; duplicates are no-ops via already-attached id.
+      queueMicrotask(attach);
+      window.setTimeout(attach, 0);
+      window.setTimeout(attach, 32);
+    };
     setMobileComposerDropHandler(({ entry }) => {
       if (!entry) return false;
-      window.setTimeout(() => {
-        attachEntryRef.current?.(entry, null);
-      }, 0);
+      runAttach(entry);
       return true;
     });
     return () => setMobileComposerDropHandler(null);
@@ -5649,9 +5661,10 @@ export function StudioShell({
       if (event.detail?.dropTarget !== "composer") return;
       const entry = event.detail?.entry;
       if (!entry) return;
-      window.setTimeout(() => {
-        attachEntryRef.current?.(entry, null);
-      }, 0);
+      const snapshot = { ...entry };
+      const attach = () => attachEntryRef.current?.(snapshot, null);
+      queueMicrotask(attach);
+      window.setTimeout(attach, 0);
     };
     document.addEventListener("studioexplorerdrop", onTouchDrop);
     return () => document.removeEventListener("studioexplorerdrop", onTouchDrop);

@@ -208,27 +208,25 @@ function findFolderDropTargetAt(x, y, excludeEl) {
 }
 
 /**
- * Mobile Files dock model: after pickup+drag, release attaches to composer
- * unless the finger is clearly over a folder row. Do NOT require hitting the
- * small composer glass — that hit-test model fails in the flex dock layout.
+ * Mobile Files dock model: release always attaches to composer.
+ * Folder rows fill the dock, so elementFromPoint("folder") steals almost every
+ * release (animation looks like a drop, composer never gets the chip). Folder
+ * moves stay on long-press / desktop HTML5 DnD.
  */
 function resolveTouchDropTarget(x, y, source, chip, hoverTarget) {
   const fromFilesDock = Boolean(
     source?.closest?.(".studio-files-dock, .studio-files-mobile-sheet"),
   );
 
+  if (fromFilesDock) {
+    return findComposerShell() || findComposerDropTargetAt(x, y, 48);
+  }
+
   const folder =
     findFolderDropTargetAt(x, y, chip) ||
     (hoverTarget?.getAttribute?.("data-drop-target") === "folder" && hoverTarget.isConnected
       ? hoverTarget
       : null);
-
-  if (fromFilesDock) {
-    // Explicit folder drop inside the dock wins; everything else → composer.
-    if (folder && folder !== source && !source.contains(folder)) return folder;
-    const composer = findComposerShell() || findComposerDropTargetAt(x, y, 48);
-    if (composer) return composer;
-  }
 
   return (
     findComposerDropTargetAt(x, y, 28) ||
@@ -521,16 +519,11 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     rafId = 0;
     chip.style.transform = `translate3d(${lastX - followOffsetX}px, ${lastY - followOffsetY}px, 0)`;
     if (mode === "touch") {
-      let under = null;
-      if (fromFilesDock) {
-        const folder = findFolderDropTargetAt(lastX, lastY, chip);
-        under =
-          folder ||
-          findComposerShell() ||
-          findComposerDropTargetAt(lastX, lastY, 48);
-      } else {
-        under = findDropTargetUnder(lastX, lastY, chip);
-      }
+      // Files dock: always aim at composer — never highlight folder rows under
+      // the finger (those filled the dock and looked like a successful drop).
+      const under = fromFilesDock
+        ? findComposerShell() || findComposerDropTargetAt(lastX, lastY, 48)
+        : findDropTargetUnder(lastX, lastY, chip);
       if (under !== hoverTarget) {
         hoverTarget = under;
         highlightDropTarget(under);
@@ -593,27 +586,22 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       let attached = false;
 
       if (shouldDrop && mode === "touch" && fromFilesDock) {
-        // Product model: drag from mobile Files dock → composer, unless over a folder.
-        const folder = findFolderDropTargetAt(lastX, lastY, chip);
-        if (folder && folder !== source && !source.contains(folder)) {
-          targetEl = folder;
-          attached = commitTouchDrop(folder, dragEntry, lastX, lastY);
-        } else {
-          // Attach is state-first in Shell — always deliver the entry.
-          attached = deliverMobileComposerDrop(dragEntry, lastX, lastY);
-          targetEl =
-            findComposerShell() ||
-            findComposerDropTargetAt(lastX, lastY, 48) ||
-            targetEl;
-          if (!attached) {
-            // Handler missing (HMR) — last-resort CustomEvent.
-            attached = commitTouchDrop(
-              targetEl || findComposerShell(),
-              dragEntry,
-              lastX,
-              lastY,
-            );
-          }
+        // Always composer from the Files dock. Snapshot fields — active drag
+        // clears in finish()'s finally and must not race the deferred attach.
+        const dropEntry = { ...dragEntry };
+        attached = deliverMobileComposerDrop(dropEntry, lastX, lastY);
+        targetEl =
+          findComposerShell() ||
+          findComposerDropTargetAt(lastX, lastY, 48) ||
+          targetEl;
+        if (!attached) {
+          // Handler missing (HMR) — last-resort CustomEvent.
+          attached = commitTouchDrop(
+            targetEl || findComposerShell(),
+            dropEntry,
+            lastX,
+            lastY,
+          );
         }
       } else if (shouldDrop) {
         targetEl =
