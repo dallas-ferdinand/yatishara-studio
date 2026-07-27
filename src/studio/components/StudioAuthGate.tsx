@@ -47,6 +47,7 @@ import {
   writeStoredStudioDefaultTab,
   type StudioDefaultTab,
 } from "@/studio/lib/studio-default-tab";
+import { StudioLandingPage } from "@/studio/components/StudioLandingPage";
 
 type StudioShellBootProps = {
   initialProfileUsername?: string;
@@ -256,6 +257,12 @@ export function StudioAuthGate({
   const userPending = Boolean(auth?.isAuthenticated) && currentUser === undefined;
   const showSignInScreen =
     Boolean(auth) && !auth.isAuthenticated && (!auth.isLoading || authLoadTimedOut);
+  const [showAuthForm, setShowAuthForm] = useState(false);
+
+  useEffect(() => {
+    if (!showSignInScreen) setShowAuthForm(false);
+  }, [showSignInScreen]);
+
   const showCompleteAccount =
     Boolean(auth?.isAuthenticated) &&
     currentUser != null &&
@@ -336,7 +343,13 @@ export function StudioAuthGate({
 
   return (
     <>
-      {showSignInScreen ? <StudioSignIn /> : null}
+      {showSignInScreen ? (
+        showAuthForm ? (
+          <StudioSignIn onBack={() => setShowAuthForm(false)} />
+        ) : (
+          <StudioLandingPage onSignIn={() => setShowAuthForm(true)} />
+        )
+      ) : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
       {showIntentChooser ? <StudioIntentChooser /> : null}
       {showShell ? (
@@ -600,7 +613,7 @@ type SignInStep =
   | { contact: { kind: "email"; email: string }; phase: "email-code"; hasPassword: boolean }
   | ({ contact: { kind: "whatsapp"; phone: string }; phase: "whatsapp-code"; hasPassword: boolean } & WhatsAppCodeStep);
 
-function StudioSignIn() {
+function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
   const startWhatsApp = useMutation(api.whatsappAuth.start);
@@ -707,6 +720,7 @@ function StudioSignIn() {
               ? "Open WhatsApp"
               : "Sign in"
       }
+      onBack={onBack && step === "identify" ? onBack : undefined}
     >
       <form
         className="mt-6 space-y-4"
@@ -1105,10 +1119,12 @@ function AuthFrame({
   eyebrow,
   title,
   children,
+  onBack,
 }: {
   eyebrow: string;
   title: string;
   children?: ReactNode;
+  onBack?: () => void;
 }) {
   const appearance = useAppearanceMode();
   const backgrounds = useMemo(
@@ -1339,6 +1355,15 @@ function AuthFrame({
         }
       `}</style>
       <section className="studio-auth-card relative w-full max-w-[372px] rounded-[2rem] p-5 text-center backdrop-blur-3xl sm:p-6">
+        {onBack ? (
+          <button
+            type="button"
+            className="studio-auth-link mb-3 w-full cursor-pointer bg-transparent py-1 text-left text-sm underline-offset-4 transition hover:underline focus:outline-none"
+            onClick={onBack}
+          >
+            ← Back
+          </button>
+        ) : null}
         <div className="flex flex-col items-center justify-center gap-3">
           <BrandMark size={64} subtle appearance={appearance} />
           <div>

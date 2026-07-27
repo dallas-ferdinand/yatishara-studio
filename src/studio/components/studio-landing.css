@@ -1,0 +1,367 @@
+/* Studio public landing — L1 page greys, chrome-height header. */
+
+.studio-landing {
+  --studio-landing-ink: var(--mos-text, #1c1c1e);
+  --studio-landing-mute: color-mix(in srgb, var(--mos-text, #1c1c1e) 55%, transparent);
+  --studio-landing-faint: color-mix(in srgb, var(--mos-text, #1c1c1e) 38%, transparent);
+  --studio-landing-line: var(--studio-chrome-divider, var(--color-cursor-border-soft, #d8d8de));
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--mos-page, #f5f5f7);
+  color: var(--studio-landing-ink);
+  font-family: inherit;
+  overflow-x: hidden;
+}
+
+.studio-landing-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  padding: 0 12px;
+  flex-shrink: 0;
+  background: var(--mos-plate, #ececf0);
+  border-bottom: 1px solid var(--studio-landing-line);
+  box-sizing: border-box;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.studio-landing-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.studio-landing-brand-name {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-landing-head-end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.studio-landing-head-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: var(--mos-plate-strong, #d4d4da);
+  color: var(--studio-landing-ink);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.studio-landing-head-btn:hover {
+  background: color-mix(in srgb, var(--mos-plate-strong, #d4d4da) 82%, var(--mos-text, #1c1c1e));
+}
+
+.studio-landing-head-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mos-text, #1c1c1e) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.studio-landing-head-btn.is-primary {
+  background: var(--mos-text, #1c1c1e);
+  color: var(--mos-page, #f5f5f7);
+}
+
+.studio-landing-head-btn.is-primary:hover {
+  background: color-mix(in srgb, var(--mos-text, #1c1c1e) 88%, var(--mos-page, #f5f5f7));
+}
+
+.studio-landing-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-landing-hero {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: calc(100dvh - var(--cursor-head-h, 32px));
+  padding: clamp(32px, 8vh, 72px) clamp(20px, 5vw, 56px) 0;
+  overflow: hidden;
+}
+
+.studio-landing-hero-visual {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.studio-landing-hero-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  opacity: 0.22;
+  filter: grayscale(0.35) contrast(0.95);
+}
+
+.studio-landing-hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--mos-page, #f5f5f7) 72%, transparent) 0%,
+      color-mix(in srgb, var(--mos-page, #f5f5f7) 88%, transparent) 45%,
+      var(--mos-page, #f5f5f7) 100%
+    ),
+    radial-gradient(
+      ellipse 70% 55% at 70% 35%,
+      color-mix(in srgb, var(--mos-plate, #ececf0) 55%, transparent),
+      transparent 70%
+    );
+}
+
+.studio-landing-hero-copy {
+  position: relative;
+  z-index: 1;
+  max-width: 40rem;
+}
+
+.studio-landing-kicker {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--studio-landing-faint);
+}
+
+.studio-landing-title {
+  margin: 0;
+  font-size: clamp(2.4rem, 6vw, 3.75rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  color: var(--studio-landing-ink);
+}
+
+.studio-landing-lead {
+  margin: 18px 0 0;
+  max-width: 28rem;
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 1.55;
+  color: var(--studio-landing-mute);
+}
+
+.studio-landing-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.studio-landing-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: var(--mos-text, #1c1c1e);
+  color: var(--mos-page, #f5f5f7);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 180ms ease, transform 180ms ease;
+}
+
+.studio-landing-cta:hover {
+  background: color-mix(in srgb, var(--mos-text, #1c1c1e) 88%, var(--mos-page, #f5f5f7));
+}
+
+.studio-landing-cta:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--mos-text, #1c1c1e) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.studio-landing-cta svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 180ms ease;
+}
+
+.studio-landing-cta:hover svg {
+  transform: translateX(2px);
+}
+
+.studio-landing-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--cursor-radius-sm, 6px);
+  background: transparent;
+  color: var(--studio-landing-mute);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: color 180ms ease, background 180ms ease;
+}
+
+.studio-landing-cta-ghost:hover {
+  color: var(--studio-landing-ink);
+  background: var(--mos-plate, #ececf0);
+}
+
+.studio-landing-strip {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(40px, 10vh, 88px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  background: var(--studio-landing-line);
+  border-top: 1px solid var(--studio-landing-line);
+}
+
+.studio-landing-strip figure {
+  margin: 0;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--mos-plate, #ececf0);
+}
+
+.studio-landing-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.85) contrast(0.96);
+  transition: transform 500ms ease, filter 300ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio-landing-strip figure:hover img {
+    transform: scale(1.03);
+    filter: saturate(0.95) contrast(1);
+  }
+}
+
+.studio-landing-points {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  background: var(--studio-landing-line);
+  border-top: 1px solid var(--studio-landing-line);
+}
+
+.studio-landing-point {
+  background: var(--mos-page, #f5f5f7);
+  padding: 22px clamp(20px, 5vw, 56px);
+}
+
+.studio-landing-point h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--studio-landing-ink);
+}
+
+.studio-landing-point p {
+  margin: 6px 0 0;
+  max-width: 36rem;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--studio-landing-mute);
+}
+
+.studio-landing-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px clamp(20px, 5vw, 56px) 18px;
+  border-top: 1px solid var(--studio-landing-line);
+  background: var(--mos-plate, #ececf0);
+  color: var(--studio-landing-faint);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+@media (min-width: 720px) {
+  .studio-landing-points {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .studio-landing-point {
+    padding: 28px 24px;
+  }
+
+  .studio-landing-points .studio-landing-point:first-child {
+    padding-left: clamp(20px, 5vw, 56px);
+  }
+
+  .studio-landing-points .studio-landing-point:last-child {
+    padding-right: clamp(20px, 5vw, 56px);
+  }
+}
+
+@media (max-width: 640px) {
+  .studio-landing-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-landing-strip figure:nth-child(n + 2) {
+    display: none;
+  }
+
+  .studio-landing-strip figure {
+    aspect-ratio: 2 / 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-landing-head-btn,
+  .studio-landing-cta,
+  .studio-landing-cta svg,
+  .studio-landing-cta-ghost,
+  .studio-landing-strip img {
+    transition: none;
+  }
+
+  .studio-landing-strip figure:hover img {
+    transform: none;
+  }
+}
