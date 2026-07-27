@@ -909,7 +909,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <LaptopMock
             src="/landing/mock-generate-chat.jpg"
             alt="Studio assistant chat turning a brief into a video ad"
-            aside="just say what you need"
+            aside={
+              <>
+                just say what
+                <br />
+                you need
+              </>
+            }
             asideSide="left"
           />
         </LandingSection>
