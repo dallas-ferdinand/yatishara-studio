@@ -281,16 +281,41 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   const [menuExpanded, setMenuExpanded] = useState(false);
   const [menuDragY, setMenuDragY] = useState(0);
   const [menuDragging, setMenuDragging] = useState(false);
+  const [menuLockHeight, setMenuLockHeight] = useState<number | null>(null);
   const menuDragRef = useRef<{ startY: number; expanded: boolean } | null>(null);
+  const menuSheetRef = useRef<HTMLDivElement>(null);
+  const menuSettleTimerRef = useRef<number | null>(null);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
 
   const closeMenu = () => {
+    if (menuSettleTimerRef.current != null) {
+      window.clearTimeout(menuSettleTimerRef.current);
+      menuSettleTimerRef.current = null;
+    }
     setMenuOpen(false);
     setMenuExpanded(false);
     setMenuDragY(0);
     setMenuDragging(false);
+    setMenuLockHeight(null);
     menuDragRef.current = null;
+  };
+
+  const settleMenuHeight = (next: "peek" | "expanded", visibleHeight: number) => {
+    if (menuSettleTimerRef.current != null) {
+      window.clearTimeout(menuSettleTimerRef.current);
+      menuSettleTimerRef.current = null;
+    }
+    // Lock the release-point height, flip target, then release so CSS springs from here.
+    setMenuLockHeight(visibleHeight > 0 ? visibleHeight : null);
+    setMenuDragY(0);
+    setMenuDragging(false);
+    setMenuExpanded(next === "expanded");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setMenuLockHeight(null);
+      });
+    });
   };
 
   const scrollToId = (id: string) => {
@@ -315,8 +340,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   };
 
   const onMenuHandlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (menuSettleTimerRef.current != null) {
+      window.clearTimeout(menuSettleTimerRef.current);
+      menuSettleTimerRef.current = null;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     menuDragRef.current = { startY: event.clientY, expanded: menuExpanded };
+    setMenuLockHeight(null);
     setMenuDragging(true);
     setMenuDragY(0);
   };
@@ -331,22 +361,42 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     }
   };
 
-  const onMenuHandlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onMenuHandlePointerUp = () => {
     if (!menuDragRef.current) return;
-    const dy = event.clientY - menuDragRef.current.startY;
+    const dy = menuDragY;
     const wasExpanded = menuDragRef.current.expanded;
+    const layoutH = menuSheetRef.current?.getBoundingClientRect().height ?? 0;
     menuDragRef.current = null;
-    setMenuDragging(false);
-    setMenuDragY(0);
 
     if (wasExpanded) {
-      if (dy > 220) closeMenu();
-      else if (dy > 90) setMenuExpanded(false);
+      if (dy > 200) {
+        setMenuDragging(false);
+        setMenuDragY(Math.max(dy, window.innerHeight * 0.55));
+        menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 200);
+        return;
+      }
+      if (dy > 72) {
+        // translateY(dy) means the visible card is shorter by dy — spring from there.
+        settleMenuHeight("peek", Math.max(160, layoutH - dy));
+        return;
+      }
+      // Small drag: spring transform back to full without height jump.
+      setMenuDragging(false);
+      setMenuDragY(0);
       return;
     }
 
-    if (dy > 90) closeMenu();
-    else if (dy < -56) setMenuExpanded(true);
+    if (dy > 72) {
+      setMenuDragging(false);
+      setMenuDragY(Math.max(dy, window.innerHeight * 0.45));
+      menuSettleTimerRef.current = window.setTimeout(() => closeMenu(), 200);
+      return;
+    }
+    if (dy < -48) {
+      settleMenuHeight("expanded", layoutH);
+      return;
+    }
+    settleMenuHeight("peek", layoutH);
   };
 
   useEffect(() => {
@@ -354,6 +404,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
       setMenuExpanded(false);
       setMenuDragY(0);
       setMenuDragging(false);
+      setMenuLockHeight(null);
       menuDragRef.current = null;
       return;
     }
@@ -472,11 +523,13 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             onClick={closeMenu}
           />
           <div
+            ref={menuSheetRef}
             id="studio-landing-menu-sheet"
             className={[
               "studio-landing-menu-sheet",
               menuExpanded ? "is-expanded" : "",
               menuDragging ? "is-dragging" : "",
+              menuLockHeight != null ? "is-locking" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -485,14 +538,20 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
             aria-label="Page sections"
             style={
               (() => {
-                if (!menuDragging || menuDragY === 0) return undefined;
+                if (menuLockHeight != null) {
+                  return {
+                    height: `${menuLockHeight}px`,
+                    maxHeight: `${menuLockHeight}px`,
+                    transform: "translateY(0)",
+                  } satisfies CSSProperties;
+                }
                 if (menuDragY > 0) {
                   return { transform: `translateY(${menuDragY}px)` } satisfies CSSProperties;
                 }
-                if (!menuExpanded) {
+                if (menuDragging && menuDragY < 0 && !menuExpanded) {
                   return {
-                    height: `min(calc(62dvh + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
-                    maxHeight: `min(calc(62dvh + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
+                    height: `min(calc(var(--studio-landing-menu-peek-h) + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
+                    maxHeight: `min(calc(var(--studio-landing-menu-peek-h) + ${-menuDragY}px), calc(100dvh - var(--studio-landing-chrome-h)))`,
                   } satisfies CSSProperties;
                 }
                 return undefined;
