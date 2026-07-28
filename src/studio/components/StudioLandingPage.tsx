@@ -776,7 +776,7 @@ export function StudioLandingPage({
         <div className="studio-landing-head-end">
           <button
             type="button"
-            className="studio-landing-head-btn"
+            className="studio-landing-head-btn is-primary"
             onClick={authOpen ? closeAuth : openAuth}
           >
             {authOpen ? "Close" : "Sign in"}

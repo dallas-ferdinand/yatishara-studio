@@ -390,6 +390,8 @@
 }
 
 .studio-landing-head-btn.is-primary {
+  padding: 0 8px;
+  border-radius: 999px;
   background: #1c1c1e;
   color: #f5f5f7;
 }
@@ -1114,6 +1116,10 @@
 }
 
 @media (min-width: 980px) {
+  .studio-landing-head {
+    padding: 0 8px;
+  }
+
   .studio-landing-nav {
     display: flex;
   }
@@ -1121,6 +1127,10 @@
   /* Desktop uses the inline nav — hide the mobile sheet trigger. */
   .studio-landing-menu-btn {
     display: none;
+  }
+
+  .studio-landing-head-btn.is-primary {
+    padding: 0 10px;
   }
 
   .studio-landing-deck-arrow {

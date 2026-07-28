@@ -285,10 +285,11 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 - Always **light** page (`--mos-page`) + centered opaque **plate sheet** (`--mos-plate`,
   radius 18px, ~300px max-width). No wallpaper carousel, no glass / `backdrop-filter`.
-- Fields = opaque white 36px rows; primary CTA = Generate/PayWise 3D green pill.
+- Fields = opaque white 36px rows; primary CTA = flat dark pill (`#1c1c1e`) matching
+  landing Sign in / Enter Studio (not Generate/PayWise 3D green).
 - **Embedded in landing**: sign-in fills `.studio-landing-auth-stage` (content band);
-  header / mobile bottom nav stay mounted. Head CTA toggles **Sign in** ↔ **Close**
-  (no full-viewport takeover). Menu sheet still works. Memory: **807**.
+  header / mobile bottom nav stay mounted. Head **Sign in** = dark pill; toggles to
+  **Close**. Desktop head has tighter horizontal pad. Memory: **807**.
 
 **History + Messages chat-list bubbles** (shared soft bubble language):
 
@@ -636,6 +637,6 @@ Update memory when you change a rule here:
 - **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
 - **697** — Offers inputs keep raised fill; white/borderless rejected.
 - **703** — Public routes reuse mos tokens; `public-offers.css` mirrors admin billing chrome.
-- **807** — Landing auth = light opaque plate in content stage; chrome stays; Sign in↔Close.
+- **807** — Landing auth embeds in content; dark Sign in pill; Continue = flat dark (not 3D green).
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.

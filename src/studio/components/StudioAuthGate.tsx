@@ -1240,7 +1240,7 @@ function AuthFrame({
           color: color-mix(in srgb, var(--mos-text) 38%, transparent);
           font-weight: 450;
         }
-        /* Same 3D green CTA language as Generate + PayWise pay. */
+        /* Flat dark pill — same ink as landing Sign in / Enter Studio CTAs. */
         .studio-auth-primary {
           display: inline-flex;
           align-items: center;
@@ -1249,71 +1249,39 @@ function AuthFrame({
           width: 100%;
           min-height: 42px;
           padding: 0 16px;
-          border: 1px solid color-mix(in srgb, #4ade80 52%, #22c55e 48%);
-          border-bottom-color: color-mix(in srgb, #15803d 62%, #000 28%);
+          border: 1px solid transparent;
           border-radius: 999px;
-          background: linear-gradient(
-            180deg,
-            #4ade80 0%,
-            #22c55e 46%,
-            #15803d 100%
-          );
-          box-shadow:
-            inset 0 -2px 0 color-mix(in srgb, #052e16 22%, transparent),
-            0 2px 3px color-mix(in srgb, #052e16 24%, transparent),
-            0 4px 10px color-mix(in srgb, #16a34a 18%, transparent);
-          color: #ffffff;
+          background: #1c1c1e;
+          box-shadow: none;
+          color: #f5f5f7;
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 650;
           letter-spacing: -0.01em;
-          text-shadow: 0 1px 2px color-mix(in srgb, #052e16 50%, transparent);
+          text-shadow: none;
           cursor: pointer;
-          transition:
-            filter 0.12s ease,
-            transform 0.12s ease,
-            box-shadow 0.18s ease,
-            background 0.12s ease,
-            border-color 0.12s ease;
+          transition: background 0.14s ease, transform 0.12s ease;
+          text-decoration: none;
         }
         .studio-auth-primary:hover:not(:disabled) {
-          border-color: color-mix(in srgb, #4ade80 58%, #22c55e 42%);
-          border-bottom-color: color-mix(in srgb, #15803d 64%, #000 26%);
-          background: linear-gradient(
-            180deg,
-            #5ee78c 0%,
-            #22c55e 46%,
-            #16803d 100%
-          );
-          box-shadow:
-            inset 0 -2px 0 color-mix(in srgb, #052e16 22%, transparent),
-            0 2px 4px color-mix(in srgb, #052e16 24%, transparent),
-            0 5px 12px color-mix(in srgb, #16a34a 18%, transparent);
+          background: color-mix(in srgb, #1c1c1e 88%, #f5f5f7);
         }
         .studio-auth-primary:active:not(:disabled) {
           transform: translateY(1px) scale(0.99);
-          box-shadow:
-            inset 0 2px 3px color-mix(in srgb, #052e16 28%, transparent),
-            0 1px 2px color-mix(in srgb, #052e16 18%, transparent);
         }
         .studio-auth-primary:focus-visible,
         .studio-auth-secondary:focus-visible {
           outline: none;
           box-shadow:
             0 0 0 2px #f5f5f7,
-            0 0 0 4px color-mix(in srgb, #22c55e 40%, transparent);
+            0 0 0 4px color-mix(in srgb, #1c1c1e 35%, transparent);
         }
         .studio-auth-primary:disabled {
           cursor: not-allowed;
           transform: none;
-          border-color: color-mix(in srgb, #4b7c5c 55%, #2a3a30 20%);
-          border-bottom-color: color-mix(in srgb, #2a4034 70%, #000 20%);
-          background: linear-gradient(
-            180deg,
-            color-mix(in srgb, #5f8f6e 70%, #3d5a48),
-            color-mix(in srgb, #3f6b50 78%, #2a4034)
-          );
-          box-shadow: inset 0 -1px 0 color-mix(in srgb, #000 16%, transparent);
-          color: color-mix(in srgb, #d7e6db 62%, #7a9484);
+          border-color: transparent;
+          background: color-mix(in srgb, #1c1c1e 42%, #d4d4da);
+          box-shadow: none;
+          color: color-mix(in srgb, #f5f5f7 62%, #8e8e93);
           text-shadow: none;
           opacity: 1;
         }
