@@ -10,8 +10,8 @@ export const DEFAULT_CREDIT_PRICE_CENTS = 50;
 export const TOP_UP_TIER_CREDITS = [100, 1000, 2000, 4000] as const;
 export const TOP_UP_TIER_LABELS = ["Starter", "Pro", "Studio", "Scale"] as const;
 
-/** TEMP PayWise prod smoke — allow TT$10. Set null to restore tier minimum (TT$50). */
-export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = 1_000;
+/** TEMP PayWise prod smoke — allow TT$5. Set null to restore tier minimum (TT$50). */
+export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = 500;
 
 export function creditsToCents(
   credits: number,

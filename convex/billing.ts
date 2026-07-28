@@ -93,8 +93,8 @@ const pricingReturn = v.object({
 });
 
 const creditPriceCents = 50;
-/** Must match UI min in src/studio/lib/money.ts. TEMP smoke: 20 credits = TT$10 at 0.50/credit (was 100 / TT$50). */
-const TOP_UP_MIN_CREDITS = 20;
+/** Must match UI min in src/studio/lib/money.ts. TEMP smoke: 10 credits = TT$5 at 0.50/credit (was 100 / TT$50). */
+const TOP_UP_MIN_CREDITS = 10;
 const PAYWISE_INITIAL_CHECK_DELAY_MS = 30_000;
 const PAYWISE_MAX_STATUS_CHECKS = 48;
 const PAYWISE_REVIEW_CHECK_DELAY_MS = 24 * 60 * 60 * 1000;
@@ -792,6 +792,8 @@ export const applyPaywiseStatusCheck = internalMutation({
     status: paymentStatus,
     granted: v.boolean(),
     reason: v.optional(v.string()),
+    amountCents: v.optional(v.number()),
+    creditsGranted: v.optional(v.number()),
   }),
   handler: async (
     ctx,
@@ -808,6 +810,8 @@ export const applyPaywiseStatusCheck = internalMutation({
       | "rejected";
     granted: boolean;
     reason?: string;
+    amountCents?: number;
+    creditsGranted?: number;
   }> => {
     const payment = await ctx.db.get(args.paymentId);
     if (!payment || payment.method !== "paywise") {
@@ -815,7 +819,13 @@ export const applyPaywiseStatusCheck = internalMutation({
     }
     const now = Date.now();
     if (payment.status === "payment_completed") {
-      return { status: payment.status, granted: false, reason: "already_completed" };
+      return {
+        status: payment.status,
+        granted: false,
+        reason: "already_completed",
+        amountCents: payment.amountCents,
+        creditsGranted: payment.creditsGranted,
+      };
     }
     if (payment.status === "checkout_failed") {
       return { status: payment.status, granted: false, reason: "already_terminal" };
@@ -901,7 +911,12 @@ export const applyPaywiseStatusCheck = internalMutation({
           status: "payment_completed",
         });
       }
-      return { status: "payment_completed" as const, granted: !alreadyGranted };
+      return {
+        status: "payment_completed" as const,
+        granted: !alreadyGranted,
+        amountCents: payment.amountCents,
+        creditsGranted: payment.creditsGranted,
+      };
     }
 
     if (args.normalizedStatus === "rejected" || args.normalizedStatus === "cancelled") {

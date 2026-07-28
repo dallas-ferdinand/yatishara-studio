@@ -1207,6 +1207,8 @@ export function StudioShell({
   const [optimisticByThread, setOptimisticByThread] = useState({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState("general");
+  /** PayWise return celebration — full-screen above all chrome. */
+  const [paymentCelebration, setPaymentCelebration] = useState(null);
   const [mobileSection, setMobileSection] = useState("composer");
   /**
    * Files dock stays mounted on mobile so open is height-only.
@@ -3494,6 +3496,7 @@ export function StudioShell({
         }),
     customCursorEnabled,
     onCustomCursorChange: setCustomCursorEnabled,
+    onPaymentCelebration: setPaymentCelebration,
   };
 
   const openCreditsPane = useCallback(() => {
@@ -10341,6 +10344,73 @@ export function StudioShell({
         .studio-settings-receipt-submit:disabled {
           opacity: 0.45;
           cursor: not-allowed;
+        }
+        .studio-payment-celebration {
+          position: fixed;
+          inset: 0;
+          z-index: 200000;
+          display: grid;
+          place-items: center;
+          padding: 24px;
+          background: color-mix(in srgb, var(--mos-page, #0b0b0f) 78%, transparent);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+        }
+        .studio-payment-celebration-inner {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+          width: min(100%, 360px);
+          text-align: center;
+        }
+        .studio-payment-celebration-check {
+          width: 76px;
+          height: 76px;
+          color: var(--mos-success, #22c55e);
+          filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--mos-success, #22c55e) 35%, transparent));
+        }
+        .studio-payment-celebration-spin {
+          width: 48px;
+          height: 48px;
+          color: var(--cursor-accent);
+          animation: studio-payment-celebration-spin 0.9s linear infinite;
+        }
+        @keyframes studio-payment-celebration-spin {
+          to { transform: rotate(360deg); }
+        }
+        .studio-payment-celebration-title {
+          margin: 0;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font-size: 22px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+        }
+        .studio-payment-celebration-copy {
+          margin: 0;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 15px;
+          line-height: 1.45;
+        }
+        .studio-payment-celebration-btn {
+          margin-top: 8px;
+          min-width: 148px;
+          height: 42px;
+          border: 0;
+          border-radius: 999px;
+          padding: 0 22px;
+          background: var(--mos-success, #22c55e);
+          color: #fff;
+          font-size: 14px;
+          font-weight: 650;
+          cursor: pointer;
+        }
+        .studio-payment-celebration-btn:hover {
+          filter: brightness(1.05);
+        }
+        .studio-payment-celebration-btn:focus-visible {
+          outline: 2px solid var(--cursor-accent);
+          outline-offset: 3px;
         }
         .studio-settings-thankyou {
           display: grid;
@@ -19367,6 +19437,16 @@ export function StudioShell({
           isMobile={isMobile}
         />
       ) : null}
+      {paymentCelebration && typeof document !== "undefined"
+        ? createPortal(
+            <PaymentReceivedOverlay
+              celebration={paymentCelebration}
+              creditPriceCents={pricing?.creditPriceCents}
+              onClose={() => setPaymentCelebration(null)}
+            />,
+            document.body,
+          )
+        : null}
       {contextMenu ? (
         <ExplorerContextMenu
           entry={contextMenu.entry}
@@ -27172,6 +27252,7 @@ function SettingsSidePanel({
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
+  onPaymentCelebration,
   isMobile = false,
 }) {
   useEffect(() => {
@@ -27196,6 +27277,7 @@ function SettingsSidePanel({
       onSaveAccount={onSaveAccount}
       customCursorEnabled={customCursorEnabled}
       onCustomCursorChange={onCustomCursorChange}
+      onPaymentCelebration={onPaymentCelebration}
     />
   );
 
@@ -27225,6 +27307,57 @@ function SettingsSidePanel({
   );
 }
 
+function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
+  const phase = celebration?.phase ?? "confirming";
+  const amountLabel =
+    celebration?.amountCents != null
+      ? formatTtdCents(celebration.amountCents)
+      : celebration?.creditsGranted != null
+        ? formatTtdFromCredits(celebration.creditsGranted, creditPriceCents)
+        : null;
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape" && phase === "success") onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, phase]);
+
+  return (
+    <div
+      className="studio-payment-celebration"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="studio-payment-celebration-title"
+      aria-busy={phase === "confirming"}
+    >
+      <div className="studio-payment-celebration-inner">
+        {phase === "success" ? (
+          <CheckCircle2 className="studio-payment-celebration-check" aria-hidden="true" strokeWidth={1.75} />
+        ) : (
+          <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
+        )}
+        <h2 id="studio-payment-celebration-title" className="studio-payment-celebration-title">
+          {phase === "success" ? "Payment received" : "Confirming payment"}
+        </h2>
+        <p className="studio-payment-celebration-copy">
+          {phase === "success"
+            ? amountLabel
+              ? `${amountLabel} was added to your account.`
+              : "Your Studio balance has been updated."
+            : "Hang tight — we’re verifying your PayWise payment."}
+        </p>
+        {phase === "success" ? (
+          <button type="button" className="studio-payment-celebration-btn" onClick={onClose}>
+            Thanks
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function SettingsWorkspacePane({
   tab,
   currentUser,
@@ -27237,13 +27370,12 @@ function SettingsWorkspacePane({
   onSaveAccount,
   customCursorEnabled,
   onCustomCursorChange,
+  onPaymentCelebration,
 }) {
   const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
   const [customAmountInput, setCustomAmountInput] = useState("");
   const [customAmountError, setCustomAmountError] = useState("");
-  const [isThankYouStep, setIsThankYouStep] = useState(false);
-  const [thankYouSummary, setThankYouSummary] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
@@ -27288,6 +27420,7 @@ function SettingsWorkspacePane({
     paymentReturnHandledRef.current = true;
     setSection("billing");
     setInvoicesOpen(true);
+    onPaymentCelebration?.({ phase: "confirming" });
     // Do not block checkout — invoice row holds pending/provider status while we sync.
     params.delete("payment");
     params.delete("paymentId");
@@ -27307,14 +27440,11 @@ function SettingsWorkspacePane({
           const result = await syncPaywisePayment({ paymentId, force: true });
           if (cancelled) return;
           if (result.status === "payment_completed") {
-            setThankYouSummary({
-              title: "PayWise top-up",
-              amountCents: null,
-              credits: null,
-              kind: "top-up",
-              status: result.status,
+            onPaymentCelebration?.({
+              phase: "success",
+              amountCents: result.amountCents ?? null,
+              creditsGranted: result.creditsGranted ?? null,
             });
-            setIsThankYouStep(true);
             setPaymentStatus("Payment confirmed");
             return;
           }
@@ -27323,29 +27453,23 @@ function SettingsWorkspacePane({
             result.status === "rejected" ||
             result.status === "checkout_failed"
           ) {
+            onPaymentCelebration?.(null);
             setPaymentStatus(
               result.status === "cancelled" ? "Payment cancelled" : "Payment not completed",
             );
             return;
           }
         }
+        onPaymentCelebration?.(null);
       } catch {
+        onPaymentCelebration?.(null);
         // Invoice list stays the source of truth for pending/provider status.
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [syncPaywisePayment]);
-
-  function resetPaymentDraft() {
-    setIsThankYouStep(false);
-    setThankYouSummary(null);
-    setPaymentStatus("");
-    setCustomAmountError("");
-    setCheckoutStarting(false);
-    clientRequestIdRef.current = null;
-  }
+  }, [onPaymentCelebration, syncPaywisePayment]);
 
   function amountInputFromCents(amountCents) {
     const dollars = Number(amountCents) / 100;
@@ -27367,7 +27491,6 @@ function SettingsWorkspacePane({
     setCustomAmountInput(amountInputFromCents(plan.amountCents));
     setCustomAmountError("");
     setPaymentStatus("");
-    setIsThankYouStep(false);
     clientRequestIdRef.current = null;
   }
 
@@ -27455,38 +27578,6 @@ function SettingsWorkspacePane({
 
         {settingsSectionId === "billing" ? (
           <div className="studio-settings-stack">
-            {isThankYouStep && thankYouSummary ? (
-              <section className="cursor-settings-section studio-settings-thankyou">
-                <p className="studio-settings-thankyou-kicker">Thank you</p>
-                <h3>Payment confirmed</h3>
-                <p className="studio-settings-thankyou-lead">
-                  PayWise confirmed your payment and your Studio balance has been updated.
-                </p>
-                <div className="studio-settings-thankyou-summary">
-                  <dl className="studio-settings-stat-list">
-                    <div className="studio-settings-stat-row">
-                      <dt>Order</dt>
-                      <dd>{thankYouSummary.title}</dd>
-                    </div>
-                    {thankYouSummary.amountCents != null ? (
-                      <div className="studio-settings-stat-row">
-                        <dt>Amount paid</dt>
-                        <dd>{formatMoney(thankYouSummary.amountCents)}</dd>
-                      </div>
-                    ) : null}
-                    {thankYouSummary.credits != null ? (
-                      <div className="studio-settings-stat-row">
-                        <dt>Balance</dt>
-                        <dd>{formatTtdFromCredits(thankYouSummary.credits, pricing?.creditPriceCents)}</dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                </div>
-                <button type="button" className="cursor-settings-action" onClick={resetPaymentDraft}>
-                  Back to top up
-                </button>
-              </section>
-            ) : (
               <section className="cursor-settings-section studio-settings-plans">
                 <div className="studio-settings-balance-pill" aria-label="Current balance">
                   <span>Current balance</span>
@@ -27570,8 +27661,6 @@ function SettingsWorkspacePane({
                   </p>
                 </div>
               </section>
-            )}
-            {!isThankYouStep ? (
               <section className="cursor-settings-section studio-settings-invoices-card">
                 <button
                   type="button"
@@ -27608,10 +27697,7 @@ function SettingsWorkspacePane({
                   </div>
                 ) : null}
               </section>
-            ) : null}
-            {!isThankYouStep ? (
               <UsageHistorySection creditPriceCents={creditPriceCents} />
-            ) : null}
           </div>
         ) : null}
 

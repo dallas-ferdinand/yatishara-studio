@@ -54,6 +54,8 @@ type StatusApplyResult = {
   status: string;
   granted: boolean;
   reason?: string;
+  amountCents?: number;
+  creditsGranted?: number;
 };
 
 const getCheckoutUserRef = makeFunctionReference<
@@ -369,6 +371,8 @@ export const syncMyPayment = action({
     status: v.string(),
     granted: v.boolean(),
     reason: v.optional(v.string()),
+    amountCents: v.optional(v.number()),
+    creditsGranted: v.optional(v.number()),
   }),
   handler: async (ctx, args): Promise<StatusApplyResult> => {
     const userId = await getAuthUserId(ctx);
@@ -389,7 +393,13 @@ export const syncMyPayment = action({
       payment.status === "payment_completed" ||
       payment.status === "checkout_failed"
     ) {
-      return { status: payment.status, granted: false, reason: "already_terminal" };
+      return {
+        status: payment.status,
+        granted: false,
+        reason: "already_terminal",
+        amountCents: payment.amountCents,
+        creditsGranted: payment.creditsGranted,
+      };
     }
     if (
       !args.force &&
