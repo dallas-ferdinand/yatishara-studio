@@ -28,7 +28,6 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import { SCHEMES } from "@/mos-app/theme.js";
 import { markPerfMilestone } from "@/lib/performance";
 import {
   resetStudioClient,
@@ -148,7 +147,8 @@ const StudioShell = dynamic<StudioShellBootProps>(
 );
 
 const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
-const AUTH_ACCENT = SCHEMES.agent?.accent ?? "#22c55e";
+/** Landing ink — no agent/green accent on the public auth sheet. */
+const AUTH_ACCENT = "#1c1c1e";
 
 function hexToRgbString(hex: string) {
   const value = hex.replace("#", "");
@@ -1168,16 +1168,16 @@ function AuthFrame({
           margin-top: 1.25rem;
           text-align: left;
         }
-        .studio-auth-accent-text,
-        .studio-auth-eyebrow {
-          color: rgb(var(--studio-auth-accent-rgb) / 0.9);
-        }
         .studio-auth-eyebrow {
           margin: 0;
+          color: color-mix(in srgb, #1c1c1e 55%, transparent);
           font-size: 11px;
           font-weight: 650;
           letter-spacing: 0.14em;
           text-transform: uppercase;
+        }
+        .studio-auth-accent-text {
+          color: color-mix(in srgb, #1c1c1e 42%, transparent);
         }
         .studio-auth-field {
           display: flex;
@@ -1216,10 +1216,10 @@ function AuthFrame({
         }
         .studio-auth-field:focus,
         .studio-auth-field:focus-within {
-          border-color: color-mix(in srgb, var(--studio-auth-accent) 45%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, var(--studio-auth-accent) 5%, #ffffff);
+          border-color: color-mix(in srgb, #1c1c1e 28%, transparent);
+          background: #ffffff;
           outline: none;
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-auth-accent) 16%, transparent);
+          box-shadow: 0 0 0 2px color-mix(in srgb, #1c1c1e 12%, transparent);
         }
         .studio-auth-field input,
         .studio-auth-field textarea,

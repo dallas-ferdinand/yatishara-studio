@@ -285,8 +285,8 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 - Always **light** page (`--mos-page`) + centered opaque **plate sheet** (`--mos-plate`,
   radius 18px, ~300px max-width). No wallpaper carousel, no glass / `backdrop-filter`.
-- Fields = opaque white **42px pills** (same height/radius as primary CTA); primary CTA =
-  flat dark pill (`#1c1c1e`) matching landing Sign in / Enter Studio.
+- Theme = landing ink (no agent green): accent `#1c1c1e`, mute eyebrow/icons, dark
+  primary + bordered secondary pills. Fields = opaque white **42px pills**.
 - **Embedded in landing**: sign-in fills `.studio-landing-auth-stage` (content band);
   header / mobile bottom nav stay mounted. Head **Sign in** = dark pill; toggles to
   **Close**. Desktop head has tighter horizontal pad. Memory: **807**.
