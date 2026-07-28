@@ -91,10 +91,6 @@ PayWise Checkout (set on Convex deployment):
 Browser return URLs use `SITE_URL`; PayWise notify/callback URLs use `CONVEX_SITE_URL`.
 Run `npm run check:launch-env:convex` before release to verify these names exist on the selected Convex deployment.
 
-Preview only:
-
-- `PREVIEW_STUDIO_PASSWORD`
-
 ## Convex Notes
 
 - Generation runs in Convex actions. Set `AI_GATEWAY_API_KEY` and all `GATEWAY_*` model IDs on the Convex deployment with `npx convex env set`, not only in `.env.local`.

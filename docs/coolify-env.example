@@ -40,8 +40,6 @@ NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallp
 WEB_PUSH_VAPID_PUBLIC_KEY=
 WEB_PUSH_VAPID_PRIVATE_KEY=
 NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY=
-PREVIEW_STUDIO_PASSWORD=
-
 # PayWise Checkout — set on the Convex deployment (and Coolify if mirrored)
 PAYWISE_API_BASE=https://sandbox-api.paywise.co
 PAYWISE_ENVIRONMENT=sandbox

@@ -2,7 +2,7 @@
 
 Yatishara Studio is the production creative workspace for Yatishara. It is a Next.js 16, React 19, and Convex app with a MercuryOS-style interface for managing folders, media assets, documents, prompt context, billing, and image/video generation.
 
-Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `https://preview.studio.yatishara.com` behind the `PREVIEW_STUDIO_PASSWORD` gate.
+Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `https://preview.studio.yatishara.com` (open — no password gate).
 
 ## Main Domains
 
@@ -15,8 +15,8 @@ Production runs at `https://studio.yatishara.com`. Preview hot reload runs at `h
 
 ## Repo Map
 
-- `src/app/`: Next.js App Router entry points, Convex client provider, preview gate route.
-- `src/proxy.ts`: Next.js proxy that applies preview password gating, then Convex Auth middleware.
+- `src/app/`: Next.js App Router entry points and Convex client provider.
+- `src/proxy.ts`: Next.js proxy that runs Convex Auth middleware.
 - `src/studio/components/StudioShell.tsx`: main Studio application shell.
 - `src/desk/`, `src/mos-app/`, `src/mos-shared/`, `src/mos-css/`: MercuryOS UI/runtime pieces reused by Studio.
 - `convex/`: Convex schema, auth, public functions, internal functions, actions, and provider integrations.

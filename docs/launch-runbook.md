@@ -66,12 +66,9 @@ Set these on the dedicated Studio Convex deployment (`https://convex-studio-api.
 
 ## Preview Hot Reload
 
-- URL: `https://preview.studio.yatishara.com`
-- Password env var: `PREVIEW_STUDIO_PASSWORD`
-- Repo code: `src/proxy.ts`, `src/app/preview-gate/route.ts`, `src/lib/preview-gate.ts`, `next.config.ts`
+- URL: `https://preview.studio.yatishara.com` (open — no password gate)
+- Repo code: `src/proxy.ts`, `next.config.ts`
 - External VPS files: `/etc/systemd/system/yatishara-studio-preview.service` and `/data/coolify/proxy/dynamic/yatishara-studio-preview.yaml`
-
-The preview gate sets a short-lived HTTP-only cookie before normal Convex Auth middleware runs. Do not document or print the actual preview password.
 
 ## Provider Smoke Status
 

@@ -11,8 +11,7 @@
 ## Repo Findings
 
 - `convex/http.ts` added for Convex Auth HTTP routes.
-- `src/proxy.ts` handles preview password gating and then Convex Auth Next.js routing.
-- `src/app/preview-gate/route.ts` and `src/lib/preview-gate.ts` implement the preview hot-reload password gate.
+- `src/proxy.ts` runs Convex Auth Next.js routing (preview password gate removed).
 - Web Push env names normalized across frontend, Convex actions, `.env.example`, and Coolify env.
 - Next.js now uses standalone server/container output for production auth and Coolify.
 - Docker deployment artifacts added.
@@ -29,7 +28,7 @@
 - `npm run build`
 - `docker build -t yatishara-studio:launch-check .`
 - Local Docker smoke returns HTTP 200.
-- Preview gate unlocks with `PREVIEW_STUDIO_PASSWORD` and HMR works on `preview.studio.yatishara.com`.
+- Preview opens without a password gate and HMR works on `preview.studio.yatishara.com`.
 - OTP sign-in works on `studio.yatishara.com`.
 - Bunny upload and signed read work. Completed locally against live Bunny API.
 - AI Gateway image generation works with `GATEWAY_IMAGE_MODEL_ID` (`openai/gpt-image-2`).

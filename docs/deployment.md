@@ -70,8 +70,6 @@ Set these on Coolify for the Next app:
 - Bunny: storage, CDN signing, stream library, stream access key vars
 - public wallpapers: `NEXT_PUBLIC_STUDIO_BG_CDN=https://yatishara-studio-assets.b-cdn.net/studio/wallpapers/v1` (unsigned; upload via `node scripts/upload-studio-wallpapers.mjs`)
 - web push: VAPID public/private vars and `WEB_PUSH_SUBJECT`
-- preview service only: `PREVIEW_STUDIO_PASSWORD`
-
 Set Convex-side env where Convex functions need it:
 
 - `JWT_PRIVATE_KEY`
@@ -98,9 +96,7 @@ Preview runs at `https://preview.studio.yatishara.com` and exists for rapid revi
 
 Repo files involved:
 
-- `src/proxy.ts`: detects preview host or configured preview password, then requires the gate cookie before normal Convex Auth middleware.
-- `src/app/preview-gate/route.ts`: renders the password page and sets the gate cookie after a correct password.
-- `src/lib/preview-gate.ts`: owns `PREVIEW_STUDIO_PASSWORD`, preview host, cookie name, and token hashing.
+- `src/proxy.ts`: Convex Auth middleware (no password gate).
 - `next.config.ts`: allows HMR from `preview.studio.yatishara.com`.
 
 External VPS pieces, documented here but not committed:
@@ -120,12 +116,7 @@ Preview architecture:
 
 1. systemd runs the repo with Next dev on the VPS.
 2. Traefik routes `preview.studio.yatishara.com` to that dev server.
-3. Browser requests hit `src/proxy.ts`.
-4. If the gate cookie is missing, the user is redirected to `/preview-gate`.
-5. Correct `PREVIEW_STUDIO_PASSWORD` stores a 12-hour HTTP-only cookie.
-6. Convex Auth middleware then handles the normal app session.
-
-Never write the preview password into docs, git history, or terminal output. Refer to `PREVIEW_STUDIO_PASSWORD`.
+3. Browser requests hit `src/proxy.ts` → Convex Auth middleware (open preview; no password gate).
 
 ## Verification
 
@@ -162,15 +153,11 @@ Live smoke after deploy:
 Preview smoke:
 
 - Open `https://preview.studio.yatishara.com`.
-- Enter `PREVIEW_STUDIO_PASSWORD`.
-- Confirm redirect back to requested path.
 - Edit a harmless UI file and confirm HMR refreshes.
-- Confirm normal Studio auth still works after the gate.
+- Confirm normal Studio auth still works.
 
 ## Troubleshooting
 
-- Preview shows `Preview password is not configured.`: set `PREVIEW_STUDIO_PASSWORD` in the preview service environment and restart systemd.
-- Preview loops to the gate: confirm the request host is `preview.studio.yatishara.com`, cookie path is `/`, and browser accepts secure cookies.
 - HMR websocket fails: confirm Traefik forwards websocket upgrades and `allowedDevOrigins` includes the preview host.
 - DNS or cert failure: check `preview.studio.yatishara.com`/`studio.yatishara.com` DNS, Traefik route, and certificate issuance logs.
 - Convex Auth callback mismatch: align `SITE_URL`, `CONVEX_SITE_URL`, `NEXT_PUBLIC_CONVEX_URL`, and `NEXT_PUBLIC_CONVEX_SITE_URL` between Coolify and Convex.
