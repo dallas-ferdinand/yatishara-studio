@@ -600,6 +600,9 @@ function StudioSignIn({
         embedded || !onBack || step !== "identify" ? undefined : onBack
       }
     >
+      {step === "identify" ? (
+        <p className="studio-auth-copy mt-2">Sign in with email — no WhatsApp needed</p>
+      ) : null}
       <form
         className="studio-auth-form"
         onSubmit={(event) => {
@@ -664,7 +667,7 @@ function StudioSignIn({
               <Mail className="studio-auth-accent-text" aria-hidden="true" />
               <input
                 name="email"
-                placeholder="Email"
+                placeholder="you@email.com"
                 aria-label="Email"
                 type="email"
                 inputMode="email"
@@ -967,42 +970,44 @@ function AuthFrame({
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 10px;
+          gap: 12px;
           width: 100%;
           margin: 2px 0 4px;
-          padding: 18px 16px 16px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
-          border-radius: 22px;
+          padding: 22px 18px 18px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
+          border-radius: 26px;
           background:
-            linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72)),
+            linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.68) 55%, rgba(245, 245, 247, 0.9)),
             var(--mos-plate);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.8),
-            0 10px 28px rgba(15, 23, 42, 0.06);
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 14px 34px rgba(15, 23, 42, 0.07);
           text-align: center;
         }
         .studio-auth-email-badge {
           display: grid;
           place-items: center;
-          width: 48px;
-          height: 48px;
-          border-radius: 16px;
-          background: color-mix(in srgb, #1c1c1e 8%, #ffffff);
+          width: 56px;
+          height: 56px;
+          border-radius: 20px;
+          background: color-mix(in srgb, #1c1c1e 7%, #ffffff);
           color: #1c1c1e;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.8),
+            0 6px 16px rgba(15, 23, 42, 0.06);
         }
         .studio-auth-email-lead {
           margin: 2px 0 0;
-          color: color-mix(in srgb, var(--mos-text) 58%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
           font-size: 13px;
           line-height: 1.35;
         }
         .studio-auth-email-address {
-          margin: 0 0 4px;
+          margin: 0 0 6px;
           color: var(--mos-text);
-          font-size: 14px;
-          font-weight: 650;
-          letter-spacing: -0.01em;
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
           word-break: break-word;
         }
         .studio-auth-field:focus,
@@ -1018,24 +1023,24 @@ function AuthFrame({
           min-width: 0;
           flex: 1 1 auto;
           width: 100%;
-          height: 14px;
+          height: 18px;
           margin: 0;
           padding: 0;
           border: 0;
           background: transparent;
           color: inherit;
-          font-size: 12px;
+          font-size: 14px;
           font-weight: 500;
-          line-height: 14px;
+          line-height: 18px;
           outline: none;
         }
         .studio-auth-field input::placeholder,
         .studio-auth-field textarea::placeholder,
         input.studio-auth-field::placeholder {
-          color: color-mix(in srgb, var(--mos-text) 42%, transparent);
-          font-size: 12px;
+          color: color-mix(in srgb, var(--mos-text) 38%, transparent);
+          font-size: 14px;
           font-weight: 450;
-          line-height: 14px;
+          line-height: 18px;
         }
         /* Flat dark pill — same ink as landing Sign in / Enter Studio CTAs. */
         .studio-auth-primary {
@@ -1044,14 +1049,14 @@ function AuthFrame({
           justify-content: center;
           gap: 8px;
           width: 100%;
-          min-height: 42px;
-          padding: 0 16px;
+          min-height: 48px;
+          padding: 0 18px;
           border: 1px solid transparent;
           border-radius: 999px;
           background: #1c1c1e;
           box-shadow: none;
           color: #f5f5f7;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 650;
           letter-spacing: -0.01em;
           text-shadow: none;
@@ -1091,14 +1096,14 @@ function AuthFrame({
           align-items: center;
           justify-content: center;
           gap: 8px;
-          min-height: 42px;
+          min-height: 48px;
           width: 100%;
-          padding: 0 16px;
+          padding: 0 18px;
           border: 1px solid var(--studio-landing-line, #d8d8de);
           border-radius: 999px;
           background: transparent;
           color: #1c1c1e;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 650;
           box-shadow: none;
           -webkit-backdrop-filter: none;
@@ -1263,8 +1268,8 @@ function AuthFrame({
         }
       `}</style>
       <section
-        className={`studio-auth-card relative w-full p-5 text-center sm:p-5 ${
-          wide ? "max-w-[400px]" : "max-w-[300px]"
+        className={`studio-auth-card relative w-full px-6 py-7 text-center sm:px-7 sm:py-8 ${
+          wide ? "max-w-[420px]" : "max-w-[340px]"
         }`}
       >
         {onBack ? (

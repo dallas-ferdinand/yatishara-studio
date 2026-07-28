@@ -10713,6 +10713,12 @@ export function StudioShell({
           font-size: var(--studio-label-size, 11px);
           font-weight: var(--studio-label-weight, 650);
         }
+        .studio-account-fields .studio-settings-field-hint {
+          font-size: 11px;
+          font-weight: 500;
+          line-height: 1.35;
+          opacity: 0.85;
+        }
         .studio-account-fields input,
         .studio-account-fields textarea {
           width: 100%;
@@ -28153,6 +28159,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
               type="tel"
               required
             />
+            <span className="studio-settings-field-hint">Used for PayWise checkout — no verification</span>
           </label>
         </div>
         <div className="studio-account-actions">
