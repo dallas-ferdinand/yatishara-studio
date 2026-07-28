@@ -600,8 +600,6 @@ function StudioSignIn({
         embedded || !onBack || step !== "identify" ? undefined : onBack
       }
     >
-      {step === "identify" ? (
-      ) : null}
       <form
         className="studio-auth-form"
         onSubmit={(event) => {
