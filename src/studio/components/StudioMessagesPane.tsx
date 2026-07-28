@@ -16,7 +16,6 @@ import {
   Tags,
   Trash2,
   Upload,
-  Wrench,
   X,
 } from "lucide-react";
 import {
@@ -806,6 +805,7 @@ export function StudioMessagesPane({
   );
 
   const send = useMutation(api.dms.sendMessage);
+  const setTyping = useMutation(api.dms.setTyping);
   const markRead = useMutation(api.dms.markRead);
   const ackDelivered = useMutation(api.dms.ackDelivered);
   const ensureMessagesFolder = useMutation(api.folders.ensureMessagesFolderForMe);
@@ -816,6 +816,9 @@ export function StudioMessagesPane({
   const sendFeedShare = useMutation(api.dms.sendFeedShare);
 
   const [draft, setDraft] = useState("");
+  const [presenceNow, setPresenceNow] = useState(() => Date.now());
+  const lastTypingPingRef = useRef(0);
+  const typingActiveRef = useRef(false);
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
@@ -1049,6 +1052,45 @@ export function StudioMessagesPane({
     [conversationId, conversations],
   );
 
+  const peerTyping = Boolean(
+    activeRow?.peerTypingAt &&
+      presenceNow - activeRow.peerTypingAt < 4000,
+  );
+
+  useEffect(() => {
+    if (!activeRow?.peerTypingAt) return;
+    const id = window.setInterval(() => setPresenceNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [activeRow?.peerTypingAt]);
+
+  const pingTyping = useCallback(
+    (active: boolean) => {
+      if (!conversationId) return;
+      if (active) {
+        const now = Date.now();
+        if (now - lastTypingPingRef.current < 2000) return;
+        lastTypingPingRef.current = now;
+        typingActiveRef.current = true;
+        void setTyping({ conversationId, typing: true });
+        return;
+      }
+      if (!typingActiveRef.current && lastTypingPingRef.current === 0) return;
+      typingActiveRef.current = false;
+      lastTypingPingRef.current = 0;
+      void setTyping({ conversationId, typing: false });
+    },
+    [conversationId, setTyping],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (!conversationId || !typingActiveRef.current) return;
+      typingActiveRef.current = false;
+      lastTypingPingRef.current = 0;
+      void setTyping({ conversationId, typing: false });
+    };
+  }, [conversationId, setTyping]);
+
   const lastMessageId = messages?.length
     ? messages[messages.length - 1]!._id
     : null;
@@ -1177,6 +1219,7 @@ export function StudioMessagesPane({
       }
       if (sent > 0) {
         setDraft("");
+        pingTyping(false);
         setReplyTo(null);
         setFilesPickerOpen(false);
       }
@@ -1237,6 +1280,7 @@ export function StudioMessagesPane({
         });
       }
       setDraft("");
+      pingTyping(false);
       setReplyTo(null);
       inputRef.current?.focus();
     } catch (error) {
@@ -1334,7 +1378,8 @@ export function StudioMessagesPane({
 
   const peerLabel =
     activeRow?.peer.displayName?.trim() ||
-    (activeRow ? `@${activeRow.peer.username}` : "Chat");
+    activeRow?.peer.username ||
+    "Chat";
   peerLabelRef.current = peerLabel;
 
   let lastDay = "";
@@ -1359,46 +1404,45 @@ export function StudioMessagesPane({
             activeRow ? onOpenProfile?.(activeRow.peer.username) : undefined
           }
         >
-          <StudioProfileAvatar
-            size="sm"
-            src={activeRow?.peer.avatarUrl}
-            displayName={activeRow?.peer.displayName}
-            name={activeRow?.peer.username}
-            alt=""
-          />
+          <span className="studio-dm-chat-peer-avatar-wrap">
+            <StudioProfileAvatar
+              size="sm"
+              src={activeRow?.peer.avatarUrl}
+              displayName={activeRow?.peer.displayName}
+              name={activeRow?.peer.username}
+              alt=""
+            />
+            {peerTyping ? (
+              <span
+                className="studio-dm-typing-dot"
+                aria-label="Typing"
+                title="Typing…"
+              >
+                <i />
+                <i />
+                <i />
+              </span>
+            ) : activeRow?.peerOnline ? (
+              <span className="studio-dm-online-dot" aria-label="Online" />
+            ) : null}
+          </span>
           <span className="studio-dm-chat-peer-copy">
             <strong>
               <span className="studio-dm-name-text">{peerLabel}</span>
               <StudioDmProviderTag tag={activeRow?.peer.sellerTag} />
             </strong>
-            {activeRow ? (
-              <span
-                className={
-                  activeRow.peerOnline
-                    ? "studio-dm-peer-status is-online"
-                    : undefined
-                }
-              >
-                {activeRow.peerOnline
-                  ? "Online"
-                  : `@${activeRow.peer.username}`}
-              </span>
-            ) : null}
           </span>
         </button>
         {!embeddedInRail ? (
           <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
             <button
               type="button"
-              className={`studio-composer-circle-btn studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
-              aria-label={
-                peerSidebarOpen ? "Close chat details" : "Open chat details"
-              }
+              className={`studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
               aria-pressed={peerSidebarOpen}
-              title={peerSidebarOpen ? "Close chat details" : "Chat details"}
+              title={peerSidebarOpen ? "Close Action" : "Action"}
               onClick={() => setPeerSidebarOpen((open) => !open)}
             >
-              <Wrench size={14} strokeWidth={2.25} aria-hidden="true" />
+              Action
             </button>
           </div>
         ) : null}
@@ -1641,9 +1685,13 @@ export function StudioMessagesPane({
               }
               aria-label={`Message ${peerLabel}`}
               onChange={(event) => {
-                const next = event.target.value;
-                setDraft(looksLikeFeedShareJson(next) ? "" : next);
+                const next = looksLikeFeedShareJson(event.target.value)
+                  ? ""
+                  : event.target.value;
+                setDraft(next);
+                pingTyping(next.trim().length > 0);
               }}
+              onBlur={() => pingTyping(false)}
               onPaste={(event) => {
                 const text = event.clipboardData.getData("text/plain");
                 if (looksLikeFeedShareJson(text)) {
@@ -1900,6 +1948,7 @@ export function StudioDmConversationRow({
     lastMessageFromMe: boolean;
     lastMessageReceipt: DmReceipt;
     peerOnline?: boolean;
+    peerTypingAt?: number;
     unread: boolean;
   };
   active: boolean;
