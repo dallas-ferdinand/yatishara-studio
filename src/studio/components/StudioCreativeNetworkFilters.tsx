@@ -103,6 +103,53 @@ export function StudioCreativeNetworkFilters() {
 
       {open ? (
         <div className="studio-cn-main-filters-panel public-offers-rail-body">
+          <FilterSection
+            title="Price (TTD)"
+            activeCount={cn.priceMin || cn.priceMax ? 1 : 0}
+            open={!cn.closedSections.price}
+            onToggle={() => cn.toggleSection("price")}
+          >
+            <div className="public-offers-range">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Min"
+                value={cn.priceMin}
+                onChange={(event) => cn.setPriceMin(event.target.value)}
+                aria-label="Minimum price in TTD"
+              />
+              <span aria-hidden="true">–</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="Max"
+                value={cn.priceMax}
+                onChange={(event) => cn.setPriceMax(event.target.value)}
+                aria-label="Maximum price in TTD"
+              />
+            </div>
+            <div className="public-offers-presets">
+              {NETWORK_PRICE_PRESETS.map((preset) => {
+                const active =
+                  cn.priceMin === preset.min && cn.priceMax === preset.max;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    className={`public-offers-preset${active ? " is-active" : ""}`}
+                    aria-pressed={active}
+                    onClick={() => {
+                      cn.setPriceMin(active ? "" : preset.min);
+                      cn.setPriceMax(active ? "" : preset.max);
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </FilterSection>
+
           {NETWORK_OPTION_FILTERS.map((def) => {
             const options = def.getOptions(offers);
             const value = cn.valueFor(def);
@@ -156,53 +203,6 @@ export function StudioCreativeNetworkFilters() {
               </Fragment>
             );
           })}
-
-          <FilterSection
-            title="Price (TTD)"
-            activeCount={cn.priceMin || cn.priceMax ? 1 : 0}
-            open={!cn.closedSections.price}
-            onToggle={() => cn.toggleSection("price")}
-          >
-            <div className="public-offers-range">
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="Min"
-                value={cn.priceMin}
-                onChange={(event) => cn.setPriceMin(event.target.value)}
-                aria-label="Minimum price in TTD"
-              />
-              <span aria-hidden="true">–</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="Max"
-                value={cn.priceMax}
-                onChange={(event) => cn.setPriceMax(event.target.value)}
-                aria-label="Maximum price in TTD"
-              />
-            </div>
-            <div className="public-offers-presets">
-              {NETWORK_PRICE_PRESETS.map((preset) => {
-                const active =
-                  cn.priceMin === preset.min && cn.priceMax === preset.max;
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    className={`public-offers-preset${active ? " is-active" : ""}`}
-                    aria-pressed={active}
-                    onClick={() => {
-                      cn.setPriceMin(active ? "" : preset.min);
-                      cn.setPriceMax(active ? "" : preset.max);
-                    }}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </FilterSection>
 
           {cn.hasFilters ? (
             <button
