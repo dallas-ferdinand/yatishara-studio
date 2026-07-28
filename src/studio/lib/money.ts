@@ -40,6 +40,32 @@ export function creditsFromAmountCents(
   return Math.floor(Number(amountCents) / price);
 }
 
+/**
+ * PayWise published card fee when the payer covers 100%: 3.5% + TT$3.00.
+ * Used for checkout disclosure; live charged total may round a few cents differently.
+ * @see https://paywise.co/fees/
+ */
+export function paywiseCardFeeCents(amountCents: number): number {
+  const base = Math.max(0, Math.round(Number(amountCents) || 0));
+  return Math.round(base * 0.035) + 300;
+}
+
+/** Top-up amount + PayWise card fee (what the payer is charged). */
+export function paywiseCheckoutTotalCents(amountCents: number): number {
+  const base = Math.max(0, Math.round(Number(amountCents) || 0));
+  return base + paywiseCardFeeCents(base);
+}
+
+/** Short money label for buttons: `$50` / `$54.75` (no TTD suffix). */
+export function formatTtdShort(amountCents: number | null | undefined): string {
+  if (amountCents == null || Number.isNaN(Number(amountCents))) return "—";
+  const amount = Number(amountCents) / 100;
+  return `$${amount.toLocaleString(undefined, {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /** Format a bank/top-up amount already stored in cents → `$25 TTD` / `$12.50 TTD`. */
 export function formatTtdCents(amountCents: number | null | undefined): string {
   if (amountCents == null || Number.isNaN(Number(amountCents))) return "—";

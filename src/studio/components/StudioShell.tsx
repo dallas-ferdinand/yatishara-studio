@@ -170,6 +170,9 @@ import {
   creditsFromAmountCents,
   formatTtdCents,
   formatTtdFromCredits,
+  formatTtdShort,
+  paywiseCardFeeCents,
+  paywiseCheckoutTotalCents,
   topUpMinAmountCents,
 } from "@/studio/lib/money";
 import {
@@ -9921,6 +9924,18 @@ export function StudioShell({
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .studio-settings-topup-fee {
+          margin: 10px 0 6px;
+          color: color-mix(in srgb, var(--color-cursor-text-secondary, #8a8a8a) 92%, #6b7280);
+          font-size: 12px;
+          letter-spacing: 0.01em;
+          line-height: 1.35;
+          text-align: center;
+        }
+        .studio-settings-topup-fee strong {
+          font-weight: 600;
+          color: color-mix(in srgb, var(--mos-text-bright, #e8e8e8) 72%, var(--color-cursor-text-secondary, #8a8a8a));
         }
         .studio-settings-topup-secure {
           display: inline-flex;
@@ -27451,6 +27466,14 @@ function SettingsWorkspacePane({
   const minAmountLabel = formatTtdCents(minAmountCents);
   const customAmountCents = Math.round(Number.parseFloat(customAmountInput || "0") * 100);
   const customCredits = creditsFromAmountCents(customAmountCents, creditPriceCents);
+  const paywiseFeeCents =
+    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
+      ? paywiseCardFeeCents(customAmountCents)
+      : 0;
+  const paywiseTotalCents =
+    Number.isFinite(customAmountCents) && customAmountCents >= minAmountCents
+      ? paywiseCheckoutTotalCents(customAmountCents)
+      : 0;
   const checkoutPlan =
     plans.find((plan) => plan.amountCents === customAmountCents) ??
     (customCredits > 0 && customAmountCents >= minAmountCents
@@ -27683,6 +27706,12 @@ function SettingsWorkspacePane({
                       </button>
                     ))}
                   </div>
+                  {paywiseFeeCents > 0 ? (
+                    <p className="studio-settings-topup-fee">
+                      Includes transaction fee · PayWise{" "}
+                      <strong>{formatTtdShort(paywiseFeeCents)}</strong>
+                    </p>
+                  ) : null}
                   <button
                     type="button"
                     className={`studio-settings-topup-pay${
@@ -27710,7 +27739,10 @@ function SettingsWorkspacePane({
                         ? paymentStatus || "Please wait…"
                         : customAmountError
                           ? customAmountError
-                          : paymentStatus || "Pay with PayWise"}
+                          : paymentStatus ||
+                            (paywiseTotalCents > 0
+                              ? `Pay ${formatTtdShort(paywiseTotalCents)} with PayWise`
+                              : "Pay with PayWise")}
                     </span>
                   </button>
                   <p className="studio-settings-topup-secure">
