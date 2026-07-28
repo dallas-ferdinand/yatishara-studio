@@ -7737,15 +7737,58 @@ export function StudioShell({
         [data-appearance="light"] .studio-mobile-app-menu-sheet-grab {
           background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
-        /* Settings = landing-style bottom sheet (same drag model as app menu). */
+        /* Settings keeps the older inset glass panel (title + X). */
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet {
+          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
+          left: 8px;
+          right: 8px;
+          bottom: auto;
+          height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - 8px
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - 8px
+          );
+          max-height: calc(
+            100dvh
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-top, 0px)
+              - 8px
+              - var(--studio-mobile-nav-height, 44px)
+              - env(safe-area-inset-bottom, 0px)
+              - 8px
+          );
           z-index: 121;
-          height: var(--studio-mobile-settings-sheet-height, 55dvh);
-          max-height: var(--studio-mobile-settings-sheet-full, 88dvh);
+          border-radius: 18px;
+          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
+          background: transparent;
+          box-shadow: var(
+            --studio-composer-glass-shadow,
+            0 20px 48px rgba(0, 0, 0, 0.38),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08)
+          );
+          animation: none;
+          transition: none;
+          will-change: auto;
         }
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet::before {
-          content: none;
-          display: none;
+          content: "";
+          display: block;
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          border-radius: inherit;
+          pointer-events: none;
+          background: color-mix(
+            in srgb,
+            var(--color-mos-composer, #07111f) 68%,
+            transparent
+          );
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
         }
         .studio-mobile-app-menu-body,
         .studio-history-list,
@@ -26844,6 +26887,196 @@ function StudioWorkspaceColumn({ settingsOpen, isMobile, settingsPanelProps, chi
   return children;
 }
 
+/** Landing / menu-style Settings sheet: grab handle, peek↔full, flick dismiss. */
+function SettingsMobileSheet({ onClose, children }) {
+  const sheetRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [settling, setSettling] = useState(false);
+  const [isFull, setIsFull] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const heightRef = useRef(null);
+  const dragRef = useRef(null);
+  const dragRafRef = useRef(null);
+  const metricsRef = useRef({ peek: 280, full: 520, min: 120 });
+
+  const readTokenPx = (el, name, fallback) => {
+    if (!el) return fallback;
+    const raw = getComputedStyle(el).getPropertyValue(name).trim();
+    if (!raw) return fallback;
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;height:${raw}`;
+    el.appendChild(probe);
+    const h = probe.getBoundingClientRect().height;
+    probe.remove();
+    return h > 0 ? h : fallback;
+  };
+
+  const refreshMetrics = () => {
+    const sheet = sheetRef.current;
+    const root = sheet?.closest?.(".studio-polish") ?? document.documentElement;
+    const peek = readTokenPx(root, "--studio-mobile-settings-sheet-height", window.innerHeight * 0.55);
+    const full = readTokenPx(root, "--studio-mobile-settings-sheet-full", window.innerHeight * 0.88);
+    metricsRef.current = {
+      peek,
+      full: Math.max(full, peek + 40),
+      min: Math.max(110, peek * 0.42),
+    };
+    return metricsRef.current;
+  };
+
+  const applyHeight = (px) => {
+    heightRef.current = px;
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.height = `${px}px`;
+    el.style.maxHeight = `${px}px`;
+  };
+
+  useEffect(() => {
+    const { peek } = refreshMetrics();
+    applyHeight(peek);
+    const id = window.requestAnimationFrame(() => setEntered(true));
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+
+  const settleTo = (fromH, target) => {
+    const { peek, full } = metricsRef.current;
+    setDragging(false);
+    setSettling(true);
+    applyHeight(fromH);
+    window.requestAnimationFrame(() => {
+      applyHeight(target);
+      setIsFull(target >= full - 8 || (target > peek + (full - peek) * 0.5));
+      window.setTimeout(() => setSettling(false), 230);
+    });
+  };
+
+  const onHandlePointerDown = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    const { peek, full } = refreshMetrics();
+    const startH =
+      sheetRef.current?.getBoundingClientRect().height ||
+      heightRef.current ||
+      peek;
+    const now = performance.now();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+      full,
+      peek,
+    };
+    setSettling(false);
+    setDragging(true);
+    applyHeight(startH);
+  };
+
+  const onHandlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const { full, min } = metricsRef.current;
+    const now = performance.now();
+    const dt = now - drag.lastT;
+    if (dt > 0) {
+      const instant = (event.clientY - drag.lastY) / dt;
+      drag.vy = drag.vy * 0.35 + instant * 0.65;
+      drag.lastY = event.clientY;
+      drag.lastT = now;
+    }
+    const dy = event.clientY - drag.startY;
+    applyHeight(Math.min(full, Math.max(min, drag.startH - dy)));
+    if (dragRafRef.current == null) {
+      dragRafRef.current = window.requestAnimationFrame(() => {
+        dragRafRef.current = null;
+      });
+    }
+  };
+
+  const onHandlePointerUp = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    if (dragRafRef.current != null) {
+      window.cancelAnimationFrame(dragRafRef.current);
+      dragRafRef.current = null;
+    }
+    const { peek, full, min } = metricsRef.current;
+    const h =
+      heightRef.current ??
+      sheetRef.current?.getBoundingClientRect().height ??
+      peek;
+    const mid = (peek + full) / 2;
+    const range = Math.max(1, full - peek);
+    const dragDown = drag.startH - h;
+    const dragUp = h - drag.startH;
+    const fromFull = drag.startH >= full - 12;
+    const fresh = performance.now() - drag.lastT < 80;
+    const vy = fresh ? drag.vy : 0;
+    const flickUp = vy < -0.42;
+    const flickDown = vy > 0.42;
+
+    if (flickUp || (!fromFull && dragUp > range * 0.22 && h > peek + 8)) {
+      settleTo(h, full);
+      return;
+    }
+
+    if (fromFull) {
+      const bigSwipeDown =
+        h <= peek * 0.78 ||
+        h <= min + 8 ||
+        dragDown >= range * 0.55 ||
+        (flickDown && dragDown >= range * 0.32);
+      if (bigSwipeDown) {
+        setDragging(false);
+        setSettling(false);
+        onClose?.();
+        return;
+      }
+      if (flickDown || dragDown > 18 || h < full - 10) {
+        settleTo(h, peek);
+        return;
+      }
+      settleTo(h, full);
+      return;
+    }
+
+    if (flickDown || h <= peek * 0.72 || h <= min + 8) {
+      setDragging(false);
+      setSettling(false);
+      onClose?.();
+      return;
+    }
+    settleTo(h, h >= mid ? full : peek);
+  };
+
+  return (
+    <div
+      ref={sheetRef}
+      className={`studio-mobile-app-menu-sheet studio-settings-mobile-sheet${entered ? " is-entered" : " is-entering"}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
+    >
+      <div
+        className="studio-mobile-app-menu-sheet-handle"
+        onPointerDown={onHandlePointerDown}
+        onPointerMove={onHandlePointerMove}
+        onPointerUp={onHandlePointerUp}
+        onPointerCancel={onHandlePointerUp}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize settings"
+      >
+        <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
+      </div>
+      <div className="studio-settings-mobile-sheet-body studio-mobile-app-menu-body">{children}</div>
+    </div>
+  );
+}
+
 function SettingsSidePanel({
   settingsSection,
   currentUser,
@@ -26894,25 +27127,7 @@ function SettingsSidePanel({
   if (isMobile) {
     if (!portalRoot) return null;
     return createPortal(
-      <div
-        className="studio-mobile-app-menu-sheet studio-settings-mobile-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Settings"
-      >
-        <div className="studio-mobile-app-menu-head">
-          <h2 className="studio-mobile-app-menu-title">Settings</h2>
-          <button
-            type="button"
-            className="studio-mobile-app-menu-close"
-            aria-label="Close settings"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </button>
-        </div>
-        <div className="studio-mobile-app-menu-body">{pane}</div>
-      </div>,
+      <SettingsMobileSheet onClose={onClose}>{pane}</SettingsMobileSheet>,
       portalRoot,
     );
   }
