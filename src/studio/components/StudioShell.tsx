@@ -3303,11 +3303,19 @@ export function StudioShell({
   }
 
   function openMessages() {
-    openTab(MESSAGES_TAB);
+    void import("./StudioMessagesPane");
+    void import("./StudioMessagesSidebar");
     setSettingsOpen(false);
     setHistoryOpen(false);
     setMobileAppMenuOpen(false);
-    if (isMobile) setMobileSection("composer");
+    if (isMobile) {
+      setMobileSection("composer");
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setFilesDockExpanded(false);
+    }
+    openTab(MESSAGES_TAB);
     prefetchStudioSurface("messages");
   }
 
@@ -9298,7 +9306,7 @@ export function StudioShell({
         }
         .studio-settings-stack {
           display: grid;
-          gap: 14px;
+          gap: 6px;
         }
         .studio-settings-simple-card {
           padding: 0 !important;
@@ -9308,6 +9316,11 @@ export function StudioShell({
           border-radius: 0;
           background: transparent;
           padding: 0 !important;
+          /* desk-shell gives sections margin-bottom:20px — kills tight billing stacks. */
+          margin: 0;
+        }
+        .studio-settings-workspace .studio-settings-stack {
+          gap: 6px;
         }
         /* Shared Settings section containers (soft surface cards). */
         .studio-settings-workspace .studio-account-card,
@@ -13674,7 +13687,7 @@ export function StudioShell({
         }
         .studio-settings-stack {
           display: grid;
-          gap: 8px;
+          gap: 6px;
         }
         .studio-settings-title {
           margin: 0;
@@ -24560,12 +24573,16 @@ function ActivePane({
     const id = window.requestAnimationFrame(() => setSocialMounted(true));
     return () => window.cancelAnimationFrame(id);
   }, [isSocialActive, needsSocialKeepalive]);
-  useEffect(() => {
+  // Mount on the active paint — waiting for useEffect left Messages blank for a frame
+  // (and looked like a dead click when settings remounted ActivePane).
+  useLayoutEffect(() => {
     if (isMessagesActive) setMessagesMounted(true);
   }, [isMessagesActive]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isNetworkActive) setNetworkMounted(true);
   }, [isNetworkActive]);
+  const showMessagesKeepalive = messagesMounted || isMessagesActive;
+  const showNetworkKeepalive = networkMounted || isNetworkActive;
 
   const socialKeepalive = !socialMounted ? null : (
     <div className="studio-social-keepalive" aria-hidden={!isSocialActive}>
@@ -24637,7 +24654,7 @@ function ActivePane({
     </div>
   );
 
-  const messagesKeepalive = !messagesMounted ? null : (
+  const messagesKeepalive = !showMessagesKeepalive ? null : (
     <div
       className={`studio-pane-keepalive-slot${isMessagesActive ? " is-active" : ""}`}
       data-tab="messages"
@@ -24667,7 +24684,7 @@ function ActivePane({
     </div>
   );
 
-  const networkKeepalive = !networkMounted ? null : (
+  const networkKeepalive = !showNetworkKeepalive ? null : (
     <div
       className={`studio-pane-keepalive-slot${isNetworkActive ? " is-active" : ""}`}
       data-tab="network"
