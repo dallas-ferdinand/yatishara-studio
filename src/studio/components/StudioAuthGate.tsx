@@ -414,9 +414,6 @@ function StudioIntentChooser() {
 
   return (
     <AuthFrame title="What brings you here?" wide>
-      <p className="studio-auth-copy">
-        Pick a starting point — you can change it later in Settings.
-      </p>
       <div className="studio-auth-choices" role="list">
         {options.map((option) => {
           const Icon = option.icon;
