@@ -269,18 +269,22 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 | `.studio-admin-section-head` | Compact section bar (36px, `0 8px` pad) | `--mos-plate` |
 | `.studio-admin-card`, `.studio-plan-card`, `.studio-bank-card` | Cards | `--mos-plate` |
 | `.studio-admin-chip` | Count / meta chip | subtle |
-| Settings / History **section containers** | Soft surface cards for Settings panes + History groups | see below |
+| Settings **section containers** | Soft surface cards for Settings panes | see below |
+| History **chat bubbles** | Flat chronological list — each thread is its own bubble | see below |
 
-**Settings + History section containers** (shared chrome in `StudioShell.tsx`):
+**Settings section containers** (shared chrome in `StudioShell.tsx`):
 
 - Selectors: `.studio-account-card`, `.studio-settings-appearance-card`,
   `.studio-settings-plans`, `.studio-settings-storage-card`,
   `.studio-settings-invoices-card`, `.studio-settings-activity-card`,
-  `.studio-settings-payment-card`, `.studio-history-group`
+  `.studio-settings-payment-card`
 - Fill: `color-mix(mos-surface 58%, transparent)` · border soft 82% · **radius 18px**
 - Shadow: inset top highlight + soft 1px/4px drop (light mode uses white inset)
-- History list: `10px` pad + `10px` gap between group cards; group toggle is an L3 wash
-  header inside the card (not a full-bleed flat bar). Memory: **759**.
+
+**History chat bubbles** (no group containers / accordions):
+
+- Flat newest-first list of `.studio-history-item` bubbles (`16px` radius, surface
+  wash, soft border). Active = accent wash + inset ring. Memory: **759**.
 
 **Mobile bottom sheets** (Studio chrome — shared edge language):
 

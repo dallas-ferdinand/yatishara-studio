@@ -9320,15 +9320,14 @@ export function StudioShell({
           background: transparent;
           padding: 0 !important;
         }
-        /* Shared Settings / History section containers (soft surface cards). */
+        /* Shared Settings section containers (soft surface cards). */
         .studio-settings-workspace .studio-account-card,
         .studio-settings-workspace .studio-settings-appearance-card,
         .studio-settings-workspace .studio-settings-invoices-card,
         .studio-settings-workspace .studio-settings-plans,
         .studio-settings-workspace .studio-settings-storage-card,
         .studio-settings-workspace .studio-settings-activity-card,
-        .studio-settings-workspace .studio-settings-payment-card,
-        .studio-history-group {
+        .studio-settings-workspace .studio-settings-payment-card {
           overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
@@ -9344,8 +9343,7 @@ export function StudioShell({
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-plans,
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-storage-card,
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-activity-card,
-        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-payment-card,
-        [data-appearance="light"] .studio-polish .studio-history-group {
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-payment-card {
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.72),
             0 1px 2px rgba(15, 23, 42, 0.05),
@@ -16900,114 +16898,72 @@ export function StudioShell({
           padding: 10px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 8px;
           background: transparent;
         }
-        /* Settings-style section cards — chrome from shared section-container rule. */
-        .studio-history-group {
-          flex: 0 0 auto;
-        }
-        .studio-history-group-toggle {
-          display: grid;
-          grid-template-columns: 42px minmax(0, 1fr) 42px;
-          width: 100%;
-          align-items: center;
-          gap: 4px;
-          margin: 0;
-          padding: 10px 12px;
-          border: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 0;
-          background: color-mix(
-            in srgb,
-            var(--mos-plate-strong, var(--mos-raised, #d4d4da)) 72%,
-            transparent
-          );
-          color: inherit;
-          font: inherit;
-          cursor: pointer;
-        }
-        .studio-history-group:not(.is-open) .studio-history-group-toggle {
-          border-bottom-color: transparent;
-        }
-        .studio-history-group-toggle:hover {
-          background: color-mix(
-            in srgb,
-            var(--cursor-accent) 10%,
-            var(--mos-plate-strong, var(--mos-raised, #d4d4da))
-          );
-        }
-        .studio-history-group-label {
-          margin: 0;
-          text-align: center;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 58%, transparent);
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-        .studio-history-group-meta {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          color: var(--color-cursor-muted);
-        }
-        .studio-history-group-meta.is-start {
-          justify-content: flex-start;
-        }
-        .studio-history-group-meta.is-end {
-          justify-content: flex-end;
-        }
-        .studio-history-group-count {
-          font-size: 11px;
-          font-weight: 650;
-          opacity: 0.85;
-        }
-        .studio-history-group-chevron {
-          width: 16px;
-          height: 16px;
-          transition: transform 140ms ease;
-        }
-        .studio-history-group.is-open .studio-history-group-chevron {
-          transform: rotate(180deg);
-        }
-        .studio-history-group-body {
-          padding: 0;
-        }
-        .studio-history-group-items {
-          display: grid;
-          gap: 0;
-          padding: 0;
-        }
+        /* Each chat = its own soft bubble (no group containers). */
         .studio-history-item {
           display: flex;
+          flex: 0 0 auto;
           width: 100%;
           align-items: flex-start;
           gap: 10px;
-          padding: 10px 12px;
-          border: 0;
-          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
-          border-radius: 0;
-          background: transparent;
+          padding: 12px 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
+          box-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
+            0 1px 2px color-mix(in srgb, #000 8%, transparent);
           color: inherit;
           font-family: inherit;
           font-size: inherit;
           text-align: left;
           cursor: pointer;
-          transition: background 120ms ease;
+          transition:
+            background 120ms ease,
+            border-color 120ms ease,
+            box-shadow 120ms ease;
         }
-        .studio-history-item:last-child {
-          border-bottom: 0;
+        [data-appearance="light"] .studio-polish .studio-history-item {
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.72),
+            0 1px 2px rgba(15, 23, 42, 0.05);
         }
         .studio-history-item:hover,
         .studio-history-item:active {
-          background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
-          border-color: color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 8%,
+            color-mix(in srgb, var(--mos-surface) 58%, transparent)
+          );
+          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft));
         }
         .studio-history-item.is-active {
-          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-          border-color: color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
-          box-shadow: inset 2px 0 0 var(--cursor-accent);
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 12%,
+            color-mix(in srgb, var(--mos-surface) 58%, transparent)
+          );
+          border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
+          box-shadow:
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent);
+        }
+        .studio-history-list-loading,
+        .studio-history-list-empty {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 72px;
+          padding: 14px 10px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+        }
+        .studio-history-list-loading {
+          border-radius: 16px;
+          background: color-mix(in srgb, var(--mos-surface) 40%, transparent);
         }
         .studio-history-item-main {
           display: flex;
@@ -17105,16 +17061,6 @@ export function StudioShell({
           height: 11px;
           flex-shrink: 0;
           opacity: 0.8;
-        }
-        .studio-history-group-loading,
-        .studio-history-group-empty {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 14px 10px;
-          color: var(--color-cursor-muted);
-          font-size: 12px;
         }
         .studio-history-spin {
           width: 14px;

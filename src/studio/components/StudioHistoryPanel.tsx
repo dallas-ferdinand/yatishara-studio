@@ -5,12 +5,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "convex/react";
 import {
-  ChevronDown,
   Clock3,
   FileText,
   Play,
   Image as ImageIcon,
-  Loader2,
   MessageSquare,
   Music,
   Search,
@@ -26,8 +24,6 @@ import {
 } from "@/studio/lib/studioLiveCache";
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 
-const DEFAULT_OPEN_GROUPS = new Set(["Open", "Today", "Yesterday"]);
-
 function formatHistoryWhen(ts) {
   const diff = Date.now() - ts;
   const minute = 60_000;
@@ -42,18 +38,6 @@ function formatHistoryWhen(ts) {
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
-
-function historyGroupLabel(ts) {
-  const now = new Date();
-  const date = new Date(ts);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const dayMs = 24 * 60 * 60 * 1000;
-  const t = date.getTime();
-  if (t >= todayStart) return "Today";
-  if (t >= todayStart - dayMs) return "Yesterday";
-  if (t >= todayStart - 7 * dayMs) return "This week";
-  return "Older";
 }
 
 function cleanHistoryTitle(thread) {
@@ -185,58 +169,6 @@ function HistoryThreadCard({ thread, active, onSelect }) {
   );
 }
 
-function HistoryGroupSection({
-  label,
-  count,
-  open,
-  onToggle,
-  items,
-  loading,
-  hasMore,
-  onLoadMore,
-  activeThreadId,
-  onSelectThread,
-}) {
-  return (
-    <section className={`studio-history-group${open ? " is-open" : ""}`}>
-      <button type="button" className="studio-history-group-toggle" aria-expanded={open} onClick={onToggle}>
-        <span className="studio-history-group-meta is-start">
-          {typeof count === "number" ? <span className="studio-history-group-count">{count}</span> : <span />}
-        </span>
-        <span className="studio-history-group-label">{label}</span>
-        <span className="studio-history-group-meta is-end">
-          <ChevronDown className="studio-history-group-chevron" aria-hidden="true" />
-        </span>
-      </button>
-      {open ? (
-        <div className="studio-history-group-body">
-          {loading && !items.length ? (
-            <div className="studio-history-group-loading" aria-busy="true" aria-hidden="true" />
-          ) : items.length ? (
-            <div className="studio-history-group-items">
-              {items.map((thread) => (
-                <HistoryThreadCard
-                  key={thread._id}
-                  thread={thread}
-                  active={thread._id === activeThreadId}
-                  onSelect={onSelectThread}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="studio-history-group-empty">Nothing here yet.</p>
-          )}
-          {hasMore ? (
-            <button type="button" className="studio-history-load-more" onClick={onLoadMore} disabled={loading}>
-              {loading ? "Loading…" : "Load more"}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 function useHistoryRange(range, enabled, expiresUnix) {
   const [cursor, setCursor] = useState(undefined);
   const [items, setItems] = useState(() =>
@@ -295,7 +227,6 @@ function useHistoryRange(range, enabled, expiresUnix) {
 }
 
 function HistoryPanelBody({
-  openThreadIds,
   indexThreads,
   activeThreadId,
   onSelectThread,
@@ -304,71 +235,61 @@ function HistoryPanelBody({
   setQuery,
   searchRef,
 }) {
-  const [openGroups, setOpenGroups] = useState(() => new Set(DEFAULT_OPEN_GROUPS));
-  const openIdSet = useMemo(() => new Set(openThreadIds.filter(Boolean)), [openThreadIds]);
-
+  // Flat chronological list — no Open/Today/Week accordion containers.
   const recent = useHistoryRange("recent", true, expiresUnix);
-  const weekOpen = openGroups.has("This week");
-  const olderOpen = openGroups.has("Older");
-  const week = useHistoryRange("this_week", weekOpen, expiresUnix);
-  const older = useHistoryRange("older", olderOpen, expiresUnix);
+  const week = useHistoryRange("this_week", true, expiresUnix);
+  const older = useHistoryRange("older", true, expiresUnix);
 
   const indexSorted = useMemo(
-    () => [...(indexThreads ?? [])].sort((a, b) => (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime)),
+    () =>
+      [...(indexThreads ?? [])].sort(
+        (a, b) => (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime),
+      ),
     [indexThreads],
   );
 
-  const counts = useMemo(() => {
-    const next = { "This week": 0, Older: 0, Open: 0 };
-    for (const thread of indexSorted) {
-      const label = historyGroupLabel(thread.updatedAt ?? thread._creationTime);
-      if (label === "This week" || label === "Older") next[label] += 1;
-      if (openIdSet.has(thread._id)) next.Open += 1;
+  const threads = useMemo(() => {
+    const byId = new Map();
+    for (const thread of [
+      ...recent.items,
+      ...week.items,
+      ...older.items,
+      ...indexSorted,
+    ]) {
+      byId.set(thread._id, thread);
     }
-    return next;
-  }, [indexSorted, openIdSet]);
-
-  const openThreads = useMemo(() => {
-    const byId = new Map(recent.items.map((thread) => [thread._id, thread]));
-    for (const thread of week.items) byId.set(thread._id, thread);
-    for (const thread of older.items) byId.set(thread._id, thread);
-    for (const thread of indexSorted) {
-      if (!byId.has(thread._id)) byId.set(thread._id, thread);
-    }
-    return openThreadIds.map((id) => byId.get(id)).filter(Boolean);
-  }, [openThreadIds, recent.items, week.items, older.items, indexSorted]);
+    return [...byId.values()].sort(
+      (a, b) => (b.updatedAt ?? b._creationTime) - (a.updatedAt ?? a._creationTime),
+    );
+  }, [recent.items, week.items, older.items, indexSorted]);
 
   const q = query.trim().toLowerCase();
-  const filterThreads = (list) => {
-    if (!q) return list;
-    return list.filter((thread) => {
+  const items = useMemo(() => {
+    if (!q) return threads;
+    return threads.filter((thread) => {
       const title = cleanHistoryTitle(thread).toLowerCase();
       const snippet = String(thread.previewSnippet ?? "").toLowerCase();
-      const chipText = (thread.previewChips ?? []).map((chip) => chip.label).join(" ").toLowerCase();
+      const chipText = (thread.previewChips ?? [])
+        .map((chip) => chip.label)
+        .join(" ")
+        .toLowerCase();
       return title.includes(q) || snippet.includes(q) || chipText.includes(q);
     });
-  };
+  }, [threads, q]);
 
-  const todayItems = filterThreads(
-    recent.items.filter((thread) => historyGroupLabel(thread.updatedAt ?? thread._creationTime) === "Today"),
-  );
-  const yesterdayItems = filterThreads(
-    recent.items.filter((thread) => historyGroupLabel(thread.updatedAt ?? thread._creationTime) === "Yesterday"),
-  );
-  const weekItems = filterThreads(week.items);
-  const olderItems = filterThreads(older.items);
-  const openItems = filterThreads(openThreads);
+  const loading =
+    (recent.loading || week.loading || older.loading) && items.length === 0;
+  const hasMore = !q && (week.hasMore || older.hasMore);
+  const loadingMore =
+    (week.loading && week.items.length > 0) ||
+    (older.loading && older.items.length > 0);
 
-  function toggleGroup(label) {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
+  function loadMore() {
+    if (week.hasMore) week.loadMore();
+    if (older.hasMore) older.loadMore();
   }
 
-  const emptyIndex = !(indexThreads?.length || recent.items.length);
+  const emptyIndex = !(indexThreads?.length || recent.items.length || week.items.length);
 
   return (
     <>
@@ -396,78 +317,37 @@ function HistoryPanelBody({
       </div>
 
       <div className="studio-history-list">
-        {emptyIndex && !recent.loading ? (
+        {emptyIndex && !loading ? (
           <div className="studio-history-empty">
             <MessageSquare className="studio-history-empty-icon" aria-hidden="true" />
             <p className="studio-history-empty-title">No generations yet</p>
             <p className="studio-history-empty-copy">Your past prompts and results will show up here.</p>
           </div>
-        ) : (
+        ) : loading ? (
+          <div className="studio-history-list-loading" aria-busy="true" aria-hidden="true" />
+        ) : items.length ? (
           <>
-            {openItems.length ? (
-              <HistoryGroupSection
-                label="Open"
-                count={counts.Open}
-                open={openGroups.has("Open")}
-                onToggle={() => toggleGroup("Open")}
-                items={openItems}
-                loading={false}
-                hasMore={false}
-                activeThreadId={activeThreadId}
-                onSelectThread={onSelectThread}
+            {items.map((thread) => (
+              <HistoryThreadCard
+                key={thread._id}
+                thread={thread}
+                active={thread._id === activeThreadId}
+                onSelect={onSelectThread}
               />
+            ))}
+            {hasMore ? (
+              <button
+                type="button"
+                className="studio-history-load-more"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
             ) : null}
-
-            <HistoryGroupSection
-              label="Today"
-              count={todayItems.length}
-              open={openGroups.has("Today")}
-              onToggle={() => toggleGroup("Today")}
-              items={todayItems}
-              loading={recent.loading}
-              hasMore={false}
-              activeThreadId={activeThreadId}
-              onSelectThread={onSelectThread}
-            />
-
-            <HistoryGroupSection
-              label="Yesterday"
-              count={yesterdayItems.length}
-              open={openGroups.has("Yesterday")}
-              onToggle={() => toggleGroup("Yesterday")}
-              items={yesterdayItems}
-              loading={recent.loading}
-              hasMore={false}
-              activeThreadId={activeThreadId}
-              onSelectThread={onSelectThread}
-            />
-
-            <HistoryGroupSection
-              label="This week"
-              count={counts["This week"]}
-              open={weekOpen}
-              onToggle={() => toggleGroup("This week")}
-              items={weekItems}
-              loading={week.loading}
-              hasMore={!q && week.hasMore}
-              onLoadMore={week.loadMore}
-              activeThreadId={activeThreadId}
-              onSelectThread={onSelectThread}
-            />
-
-            <HistoryGroupSection
-              label="Older"
-              count={counts.Older}
-              open={olderOpen}
-              onToggle={() => toggleGroup("Older")}
-              items={olderItems}
-              loading={older.loading}
-              hasMore={!q && older.hasMore}
-              onLoadMore={older.loadMore}
-              activeThreadId={activeThreadId}
-              onSelectThread={onSelectThread}
-            />
           </>
+        ) : (
+          <p className="studio-history-list-empty">No matches.</p>
         )}
       </div>
     </>
@@ -666,7 +546,7 @@ function HistoryMobileSheet({ onClose, children }) {
 
 export function StudioHistoryPanel({
   indexThreads = [],
-  openThreadIds = [],
+  openThreadIds: _openThreadIds = [],
   activeThreadId,
   onSelectThread,
   onClose,
@@ -696,7 +576,6 @@ export function StudioHistoryPanel({
 
   const body = (
     <HistoryPanelBody
-      openThreadIds={openThreadIds}
       indexThreads={indexThreads}
       activeThreadId={activeThreadId}
       onSelectThread={onSelectThread}
