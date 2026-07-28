@@ -1360,22 +1360,13 @@ function AuthFrame({
         .studio-auth-choice-tile-mask {
           position: absolute;
           inset: 0;
+          /* Bottom dark mask — keeps title readable over the photo. */
           background: linear-gradient(
             180deg,
-            rgba(28, 28, 30, 0.08) 0%,
-            rgba(28, 28, 30, 0.18) 42%,
-            rgba(28, 28, 30, 0.78) 100%
-          );
-          /* Soft edge mask so the photo reads as a vignette plate. */
-          -webkit-mask-image: radial-gradient(
-            120% 110% at 50% 38%,
-            #000 42%,
-            transparent 100%
-          );
-          mask-image: radial-gradient(
-            120% 110% at 50% 38%,
-            #000 42%,
-            transparent 100%
+            rgba(28, 28, 30, 0) 0%,
+            rgba(28, 28, 30, 0) 42%,
+            rgba(28, 28, 30, 0.55) 72%,
+            rgba(28, 28, 30, 0.88) 100%
           );
           pointer-events: none;
         }
@@ -1464,18 +1455,6 @@ function AuthFrame({
           border-radius: 10px;
           background: rgb(254 226 226 / 0.72);
           color: #991b1b;
-          font-size: 12px;
-          line-height: 1.35;
-        }
-        .studio-auth-choice-title {
-          color: var(--mos-text);
-          font-size: 13px;
-          font-weight: 650;
-          letter-spacing: -0.01em;
-          line-height: 1.25;
-        }
-        .studio-auth-choice-body {
-          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
           font-size: 12px;
           line-height: 1.35;
         }
