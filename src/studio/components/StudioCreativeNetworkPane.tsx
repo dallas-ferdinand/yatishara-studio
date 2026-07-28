@@ -18,7 +18,9 @@ import {
   Timer,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { formatTtdCents } from "@/studio/lib/money";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MarketplaceOffersPane } from "./MarketplaceOffersPane";
@@ -353,6 +355,9 @@ export function StudioCreativeNetworkPane({
 }: StudioCreativeNetworkPaneProps) {
   const cn = useCreativeNetwork();
   const [applyBusy, setApplyBusy] = useState(false);
+  const headTabsScrollRef = useRef<HTMLElement | null>(null);
+  useHorizontalWheelScroll(headTabsScrollRef);
+  useHorizontalScrollFade(headTabsScrollRef);
   const offerOpen = cn.mode === "network" && Boolean(cn.browseSlug);
 
   const sellerCtaLabel = cn.hasSellerDraft
@@ -378,7 +383,11 @@ export function StudioCreativeNetworkPane({
     <div className="studio-cn-pane">
       <header className="studio-cn-head">
         {cn.isSellerApproved ? (
-          <nav className="studio-cn-head-tabs" aria-label="Creative Network">
+          <nav
+            ref={headTabsScrollRef}
+            className="studio-cn-head-tabs"
+            aria-label="Creative Network"
+          >
             <button
               type="button"
               className={`studio-cn-head-tab${cn.mode === "network" && !offerOpen ? " is-active" : ""}`}
@@ -417,7 +426,11 @@ export function StudioCreativeNetworkPane({
             </button>
           </nav>
         ) : (
-          <nav className="studio-cn-head-tabs" aria-label="Creative Network">
+          <nav
+            ref={headTabsScrollRef}
+            className="studio-cn-head-tabs"
+            aria-label="Creative Network"
+          >
             <button
               type="button"
               className={`studio-cn-head-tab${cn.mode !== "seller-apply" && !offerOpen ? " is-active" : ""}`}

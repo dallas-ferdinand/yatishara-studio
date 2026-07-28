@@ -247,10 +247,15 @@
 .studio-cn-head-tabs {
   display: flex;
   align-items: center;
+  flex: 1 1 auto;
   gap: 4px;
   min-width: 0;
+  height: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .studio-cn-head-tabs::-webkit-scrollbar {

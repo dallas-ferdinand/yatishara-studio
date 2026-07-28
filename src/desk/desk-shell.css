@@ -7964,6 +7964,61 @@ textarea.cursor-input {
     transparent 100%
   );
 }
+
+/*
+  Horizontal overflow edge fades (Settings section nav, CN head tabs, …).
+  Same soft right-edge language as .cursor-unified-tabs-scroll; left+right when
+  mid-scroll. data-scroll-fade from useHorizontalScrollFade — clears a side when
+  scrolled flush so items can fully reach that edge.
+*/
+.cursor-h-scroll-fade {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.cursor-h-scroll-fade[data-scroll-fade="right"] {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
+.cursor-h-scroll-fade[data-scroll-fade="left"] {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 28px,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 28px,
+    #000 100%
+  );
+}
+.cursor-h-scroll-fade[data-scroll-fade="both"] {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent 100%
+  );
+}
 .cursor-unified-tabs.is-dragging-strip {
   cursor: grabbing;
   user-select: none;

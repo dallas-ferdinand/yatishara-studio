@@ -318,6 +318,12 @@ same head-tab language: idle labels are plain (transparent, muted); **only**
 `.is-active` gets the accent pill. Never glass-fill every section chip. Same rule as
 `studio-admin-head-tab` / `studio-cn-head-tab`.
 
+**Horizontal overflow edge fades** (Settings section nav + Creative Network second
+head tabs): use `.cursor-h-scroll-fade` + `useHorizontalScrollFade`. Soft mask matches
+workspace tab strip (`.cursor-unified-tabs-scroll` right fade). `data-scroll-fade` is
+`right` / `left` / `both` / `none` — clear a side when scrolled flush so items can
+fully reach that edge. No horizontal padding on the scroll track itself. Memory: **806**.
+
 Inside that sidebar `cursor-settings-action` is **full-width** — never use it for an inline
 action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
 `.studio-dm-peer-offer-card`: an ellipsised title row (`.studio-dm-peer-card-head` +

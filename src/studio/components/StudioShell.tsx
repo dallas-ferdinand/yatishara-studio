@@ -207,6 +207,7 @@ import {
 import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { playUiSound } from "@/mos-app/sounds.js";
 import {
   fallbackWallpaper,
@@ -9213,7 +9214,8 @@ export function StudioShell({
           gap: 4px;
           overflow-x: auto;
           overflow-y: hidden;
-          padding: 4px 8px;
+          /* Vertical pad only — items must scroll flush to left/right edges under fade masks. */
+          padding: 4px 0;
           scroll-behavior: auto;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: none;
@@ -27250,6 +27252,7 @@ function SettingsWorkspacePane({
   const paymentReturnHandledRef = useRef(false);
   const settingsMenuScrollRef = useRef(null);
   useHorizontalWheelScroll(settingsMenuScrollRef);
+  useHorizontalScrollFade(settingsMenuScrollRef);
   const startPaywiseCheckout = useAction(api.paywiseActions.startCheckout);
   const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
   const sellerPayout = useQuery(api.marketplace.getMyPayoutAccount);
