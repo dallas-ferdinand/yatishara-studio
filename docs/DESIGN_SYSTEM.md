@@ -293,10 +293,10 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   Peek/full tokens: History `0.68/0.88` of files-band; menu + Settings alias those.
   Never force full-band height from `desk-shell.css` (`!important` kills drag).
   Memory: **790**.
-- Hamburger menu **list** = landing menu links: flat centered icon+label rows
-  (`13px` / `600`, `34px` min-height, `mos-plate-strong` hover). No section cards,
-  labels, or icon chips. Scroll wrap (`.studio-mobile-app-menu-scroll`) has the
-  same 40px top/bottom plate fade masks as landing. Memory: **790**.
+- Hamburger menu **list** = phone home-screen app grid (try): 4 columns,
+  `52×52` L3 (`--mos-plate-strong`) rounded tiles + 11px label under.
+  Short labels; full name in `aria-label`. Scroll wrap keeps landing 40px
+  plate fade masks. Scoped via `.is-app-grid`. Memory: **790**.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /

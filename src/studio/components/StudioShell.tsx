@@ -8300,9 +8300,9 @@ export function StudioShell({
           background: transparent;
         }
         /*
-          Hamburger menu list = landing menu sheet links:
-          flat centered rows, icon + label, no section cards / icon chips.
-          Scroll wrapper carries top/bottom plate fade masks (landing parity).
+          Hamburger menu = phone home-screen app grid (try).
+          Scroll wrapper keeps landing top/bottom plate fade masks.
+          Scoped with .is-app-grid so Settings sheet body is untouched.
         */
         .studio-mobile-app-menu-scroll {
           position: relative;
@@ -8342,10 +8342,6 @@ export function StudioShell({
         .studio-mobile-app-menu-body {
           position: relative;
           z-index: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: stretch;
-          gap: 1px;
           flex: 1 1 0%;
           min-height: 0;
           height: auto;
@@ -8353,63 +8349,92 @@ export function StudioShell({
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
-          padding: 22px 10px 26px;
           -webkit-overflow-scrolling: touch;
           -webkit-tap-highlight-color: transparent;
         }
-        .studio-mobile-app-menu-item {
+        .studio-mobile-app-menu-body.is-app-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          align-content: start;
+          justify-items: stretch;
+          gap: 16px 10px;
+          padding: 22px 16px 28px;
+        }
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item {
           display: flex;
-          width: 100%;
+          flex-direction: column;
           align-items: center;
-          justify-content: center;
-          gap: 8px;
-          min-height: 34px;
-          padding: 0 10px;
+          justify-content: flex-start;
+          gap: 7px;
+          width: 100%;
+          min-width: 0;
+          min-height: 0;
+          padding: 2px 0 0;
           border: 0;
-          border-radius: var(--cursor-radius-sm, 6px);
+          border-radius: 0;
           background: transparent;
           color: var(--color-cursor-text-bright, var(--mos-text-bright));
           font: inherit;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 600;
+          line-height: 1.15;
           text-align: center;
           cursor: pointer;
-          transition: background 160ms ease;
           -webkit-tap-highlight-color: transparent;
           touch-action: manipulation;
         }
-        .studio-mobile-app-menu-item svg {
-          width: 15px;
-          height: 15px;
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon {
+          display: grid;
+          place-items: center;
+          width: 52px;
+          height: 52px;
           flex: 0 0 auto;
-          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--mos-text-bright)) 58%, transparent);
+          border-radius: 14px;
+          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
+          color: var(--color-cursor-text-bright, var(--mos-text-bright));
+          transition:
+            background 140ms ease,
+            transform 140ms ease;
+        }
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon svg {
+          width: 22px;
+          height: 22px;
+        }
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-label {
+          display: -webkit-box;
+          min-width: 0;
+          max-width: 100%;
+          overflow: hidden;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          line-clamp: 2;
+          word-break: break-word;
         }
         @media (hover: hover) and (pointer: fine) {
-          .studio-mobile-app-menu-item:hover {
-            background: var(--mos-plate-strong);
-          }
-          .studio-mobile-app-menu-item:hover svg {
-            color: var(--color-cursor-text-bright, var(--mos-text-bright));
+          .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item:hover .studio-mobile-app-menu-item-icon {
+            background: color-mix(
+              in srgb,
+              var(--mos-plate-strong, #d4d4da) 82%,
+              var(--mos-text-bright, #fff) 18%
+            );
           }
         }
-        .studio-mobile-app-menu-item:focus-visible {
-          background: var(--mos-plate-strong);
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item:focus-visible {
           outline: none;
         }
-        .studio-mobile-app-menu-item:focus-visible svg {
-          color: var(--color-cursor-text-bright, var(--mos-text-bright));
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item:focus-visible .studio-mobile-app-menu-item-icon {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent) 55%, transparent);
+          outline-offset: 2px;
         }
-        .studio-mobile-app-menu-item:active {
-          background: var(--mos-plate-strong);
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item:active .studio-mobile-app-menu-item-icon {
+          transform: scale(0.94);
         }
-        .studio-mobile-app-menu-item.is-danger {
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item.is-danger {
           color: #ff8a9a;
         }
-        .studio-mobile-app-menu-item.is-danger svg {
+        .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item.is-danger .studio-mobile-app-menu-item-icon {
+          background: color-mix(in srgb, #ff8a9a 16%, var(--mos-plate-strong, #d4d4da));
           color: #ff8a9a;
-        }
-        .studio-mobile-app-menu-item-label {
-          min-width: 0;
         }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
@@ -22082,12 +22107,13 @@ function StudioMobileAppMenu({
     };
   };
 
-  // Flat landing-style list — no section cards / labels / icon chips.
+  // Phone home-screen style grid — short labels under L3 app tiles.
   const items = [
-    { label: "View profile", Icon: UserRound, onClick: onViewProfile },
-    { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
+    { label: "Profile", ariaLabel: "View profile", Icon: UserRound, onClick: onViewProfile },
+    { label: "Edit", ariaLabel: "Edit profile", Icon: Pencil, onClick: onEditProfile },
     {
-      label: "Creative Network",
+      label: "Network",
+      ariaLabel: "Creative Network",
       Icon: Store,
       onClick: () => {
         onClose?.();
@@ -22109,12 +22135,12 @@ function StudioMobileAppMenu({
     ...(showHistory
       ? [{ label: "History", Icon: History, onClick: onOpenHistory }]
       : []),
-    { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
-    { label: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
+    { label: "Theme", ariaLabel: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
+    { label: "Account", ariaLabel: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
     { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
     { label: "Credits", Icon: Zap, onClick: onOpenCredits },
     { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
-    { label: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
+    { label: "API", ariaLabel: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
     ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
     { label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true },
   ];
@@ -22137,18 +22163,25 @@ function StudioMobileAppMenu({
         <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
       </div>
       <div className="studio-mobile-app-menu-scroll">
-        <nav className="studio-mobile-app-menu-body" aria-label="Studio menu" role="menu">
+        <nav
+          className="studio-mobile-app-menu-body is-app-grid"
+          aria-label="Studio menu"
+          role="menu"
+        >
           {items.map((item) => {
             const Icon = item.Icon;
             return (
               <button
-                key={item.label}
+                key={item.ariaLabel || item.label}
                 type="button"
                 role="menuitem"
+                aria-label={item.ariaLabel || item.label}
                 className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
                 onClick={item.onClick}
               >
-                <Icon aria-hidden="true" />
+                <span className="studio-mobile-app-menu-item-icon" aria-hidden="true">
+                  <Icon />
+                </span>
                 <span className="studio-mobile-app-menu-item-label">{item.label}</span>
               </button>
             );
