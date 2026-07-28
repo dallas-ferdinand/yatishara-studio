@@ -293,11 +293,12 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   Peek/full tokens: History `0.68/0.88` of files-band; menu + Settings alias those.
   Never force full-band height from `desk-shell.css` (`!important` kills drag).
   Memory: **790**.
-- Hamburger menu **list** = phone home-screen app grid (try):
-  `auto-fit` / `minmax(76px, 1fr)` so tiles never squish; fixed `56×56`
-  L3 (`--mos-plate-strong`) icons + 11px single-line label. Short labels;
-  full name in `aria-label`. Scroll wrap keeps landing 40px plate fade
-  masks. Scoped via `.is-app-grid`. Memory: **790**.
+- Hamburger menu **list** = phone home-screen app grid: 4 columns,
+  locked `52×52` L3 tiles + 11px ellipsis label. Scroll chain like History —
+  stage `flex: 1 1 0%` + `overflow: hidden`, body `overflow-y: auto`,
+  `grid-auto-rows: max-content` so sheet collapse scrolls instead of squishing
+  tiles. Landing 40px plate fade masks on `.studio-mobile-app-menu-scroll`.
+  Scoped via `.is-app-grid`. Memory: **790**.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /

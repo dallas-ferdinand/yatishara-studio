@@ -8300,16 +8300,18 @@ export function StudioShell({
           background: transparent;
         }
         /*
-          Hamburger menu = phone home-screen app grid (try).
-          Scroll wrapper keeps landing top/bottom plate fade masks.
+          Hamburger menu = phone home-screen app grid.
+          Scroll chain = History/landing: sheet clips → scroll stage flex:1 1 0%
+          → body overflows internally. Never let grid tiles shrink with sheet height.
           Scoped with .is-app-grid so Settings sheet body is untouched.
         */
         .studio-mobile-app-menu-scroll {
           position: relative;
           display: flex;
           flex-direction: column;
-          flex: 1 1 auto;
+          flex: 1 1 0%;
           min-height: 0;
+          overflow: hidden;
         }
         .studio-mobile-app-menu-scroll::before,
         .studio-mobile-app-menu-scroll::after {
@@ -8344,7 +8346,6 @@ export function StudioShell({
           z-index: 1;
           flex: 1 1 0%;
           min-height: 0;
-          height: auto;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
@@ -8354,25 +8355,27 @@ export function StudioShell({
         }
         .studio-mobile-app-menu-body.is-app-grid {
           display: grid;
-          /* Never minmax(0) — that squishes tiles. Reflow to fewer cols if needed. */
-          grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-auto-rows: max-content;
           align-content: start;
           justify-items: center;
-          column-gap: 8px;
-          row-gap: 18px;
-          padding: 24px 18px 32px;
+          gap: 16px 10px;
+          padding: 22px 16px 28px;
+          /* Content taller than sheet → scroll; never compress rows into the viewport. */
+          align-items: start;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: flex-start;
-          gap: 8px;
-          width: 76px;
-          max-width: 100%;
-          min-width: 76px;
-          min-height: 0;
-          padding: 0;
+          gap: 7px;
+          width: 100%;
+          max-width: 76px;
+          min-width: 0;
+          min-height: max-content;
+          flex-shrink: 0;
+          padding: 2px 0 0;
           border: 0;
           border-radius: 0;
           background: transparent;
@@ -8380,7 +8383,7 @@ export function StudioShell({
           font: inherit;
           font-size: 11px;
           font-weight: 600;
-          line-height: 1.2;
+          line-height: 1.15;
           text-align: center;
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
@@ -8389,14 +8392,12 @@ export function StudioShell({
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon {
           display: grid;
           place-items: center;
-          box-sizing: border-box;
-          width: 56px;
-          height: 56px;
-          min-width: 56px;
-          min-height: 56px;
-          aspect-ratio: 1 / 1;
-          flex: 0 0 56px;
-          flex-shrink: 0;
+          width: 52px;
+          height: 52px;
+          min-width: 52px;
+          min-height: 52px;
+          flex: 0 0 52px;
+          aspect-ratio: 1;
           border-radius: 14px;
           background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
           color: var(--color-cursor-text-bright, var(--mos-text-bright));
@@ -8405,14 +8406,14 @@ export function StudioShell({
             transform 140ms ease;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon svg {
-          width: 24px;
-          height: 24px;
+          width: 22px;
+          height: 22px;
           flex-shrink: 0;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-label {
           display: block;
-          width: 100%;
           min-width: 0;
+          max-width: 100%;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
