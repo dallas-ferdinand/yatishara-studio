@@ -293,6 +293,9 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
   Peek/full tokens: History `0.68/0.88` of files-band; menu + Settings alias those.
   Never force full-band height from `desk-shell.css` (`!important` kills drag).
   Memory: **790**.
+- Hamburger menu **list** = landing menu links: flat centered icon+label rows
+  (`13px` / `600`, `34px` min-height, `mos-plate-strong` hover). No section cards,
+  labels, or icon chips. Memory: **790**.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /

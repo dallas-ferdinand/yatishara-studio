@@ -8299,9 +8299,17 @@ export function StudioShell({
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
           background: transparent;
         }
+        /*
+          Hamburger menu list = landing menu sheet links:
+          flat centered rows, icon + label, no section cards / icon chips.
+        */
         .studio-mobile-app-menu-body {
           position: relative;
           z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 1px;
           flex: 1 1 0%;
           min-height: 0;
           height: auto;
@@ -8309,84 +8317,63 @@ export function StudioShell({
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
-          padding: 4px 10px 14px;
+          padding: 22px 10px 26px;
           -webkit-overflow-scrolling: touch;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          align-content: flex-start;
-        }
-        .studio-mobile-app-menu-section {
-          flex: 0 0 auto;
-          border: 1px solid var(--color-cursor-border, var(--mos-border));
-          border-radius: 16px;
-          background: color-mix(in srgb, var(--color-cursor-text) 4%, transparent);
-          overflow: hidden;
-        }
-        .studio-mobile-app-menu-label {
-          margin: 0;
-          padding: 10px 12px 8px;
-          text-align: center;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 58%, transparent);
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
-        }
-        .studio-mobile-app-menu-list {
-          display: grid;
-          gap: 2px;
-          padding: 4px;
+          -webkit-tap-highlight-color: transparent;
         }
         .studio-mobile-app-menu-item {
           display: flex;
           width: 100%;
           align-items: center;
-          gap: 12px;
-          min-height: 46px;
-          padding: 0 12px;
+          justify-content: center;
+          gap: 8px;
+          min-height: 34px;
+          padding: 0 10px;
           border: 0;
-          border-radius: 14px;
+          border-radius: var(--cursor-radius-sm, 6px);
           background: transparent;
-          color: var(--color-cursor-text-bright);
+          color: var(--color-cursor-text-bright, var(--mos-text-bright));
           font: inherit;
-          font-size: 14px;
-          font-weight: 650;
-          text-align: left;
+          font-size: 13px;
+          font-weight: 600;
+          text-align: center;
           cursor: pointer;
+          transition: background 160ms ease;
+          -webkit-tap-highlight-color: transparent;
+          touch-action: manipulation;
         }
-        @media (hover: hover) {
+        .studio-mobile-app-menu-item svg {
+          width: 15px;
+          height: 15px;
+          flex: 0 0 auto;
+          color: color-mix(in srgb, var(--color-cursor-text-bright, var(--mos-text-bright)) 58%, transparent);
+        }
+        @media (hover: hover) and (pointer: fine) {
           .studio-mobile-app-menu-item:hover {
-            background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
+            background: var(--mos-plate-strong);
+          }
+          .studio-mobile-app-menu-item:hover svg {
+            color: var(--color-cursor-text-bright, var(--mos-text-bright));
           }
         }
+        .studio-mobile-app-menu-item:focus-visible {
+          background: var(--mos-plate-strong);
+          outline: none;
+        }
+        .studio-mobile-app-menu-item:focus-visible svg {
+          color: var(--color-cursor-text-bright, var(--mos-text-bright));
+        }
         .studio-mobile-app-menu-item:active {
-          background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
+          background: var(--mos-plate-strong);
         }
         .studio-mobile-app-menu-item.is-danger {
           color: #ff8a9a;
         }
-        .studio-mobile-app-menu-item-icon {
-          display: inline-grid;
-          place-items: center;
-          width: 32px;
-          height: 32px;
-          flex: 0 0 auto;
-          border-radius: 10px;
-          background: color-mix(in srgb, var(--color-cursor-text) 8%, transparent);
-          color: inherit;
-        }
-        .studio-mobile-app-menu-item.is-danger .studio-mobile-app-menu-item-icon {
-          background: color-mix(in srgb, #ff8a9a 14%, transparent);
-        }
-        .studio-mobile-app-menu-item-icon svg {
-          width: 16px;
-          height: 16px;
+        .studio-mobile-app-menu-item.is-danger svg {
+          color: #ff8a9a;
         }
         .studio-mobile-app-menu-item-label {
           min-width: 0;
-          flex: 1 1 auto;
         }
         .studio-polish .cursor-unified-tab-preview img,
         .studio-polish .cursor-unified-tab-preview video {
@@ -22059,58 +22046,41 @@ function StudioMobileAppMenu({
     };
   };
 
-  const sections = [
+  // Flat landing-style list — no section cards / labels / icon chips.
+  const items = [
+    { label: "View profile", Icon: UserRound, onClick: onViewProfile },
+    { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
     {
-      label: "Profile",
-      items: [
-        { label: "View profile", Icon: UserRound, onClick: onViewProfile },
-        { label: "Edit profile", Icon: Pencil, onClick: onEditProfile },
-        {
-          label: "Creative Network",
-          Icon: Store,
-          onClick: () => {
-            onClose?.();
-            onOpenOffers?.();
-          },
-        },
-      ],
+      label: "Creative Network",
+      Icon: Store,
+      onClick: () => {
+        onClose?.();
+        onOpenOffers?.();
+      },
     },
+    { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
+    { label: "Feed", Icon: Cloud, onClick: () => onOpenSection?.("feed") },
     {
-      label: "Navigate",
-      items: [
-        { label: "Files", Icon: Folder, onClick: () => onOpenSection?.("files") },
-        { label: "Feed", Icon: Cloud, onClick: () => onOpenSection?.("feed") },
-        {
-          label: "Messages",
-          Icon: MessageCircle,
-          onClick: () => {
-            onClose?.();
-            onOpenMessages?.();
-          },
-        },
-        { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
-        { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
-        ...(showHistory
-          ? [{ label: "History", Icon: History, onClick: onOpenHistory }]
-          : []),
-      ],
+      label: "Messages",
+      Icon: MessageCircle,
+      onClick: () => {
+        onClose?.();
+        onOpenMessages?.();
+      },
     },
-    {
-      label: "Account",
-      items: [
-        { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
-        { label: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
-        { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
-        { label: "Credits", Icon: Zap, onClick: onOpenCredits },
-        { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
-        { label: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
-        ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
-      ],
-    },
-    {
-      label: "Session",
-      items: [{ label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true }],
-    },
+    { label: "Create", Icon: Sparkles, onClick: () => onOpenSection?.("composer") },
+    { label: "Settings", Icon: Settings, onClick: () => onOpenSection?.("settings") },
+    ...(showHistory
+      ? [{ label: "History", Icon: History, onClick: onOpenHistory }]
+      : []),
+    { label: "Appearance", Icon: Palette, onClick: () => onOpenSettings?.("general") },
+    { label: "Account details", Icon: UserCog, onClick: () => onOpenSettings?.("account") },
+    { label: "Billing", Icon: CreditCard, onClick: () => onOpenSettings?.("billing") },
+    { label: "Credits", Icon: Zap, onClick: onOpenCredits },
+    { label: "Activity", Icon: Clock3, onClick: () => onOpenSettings?.("activity") },
+    { label: "API keys", Icon: KeyRound, onClick: () => onOpenSettings?.("api-keys") },
+    ...(isAdminUser ? [{ label: "Admin", Icon: Gauge, onClick: onOpenAdmin }] : []),
+    { label: "Sign out", Icon: LogOut, onClick: onSignOut, danger: true },
   ];
 
   return createPortal(
@@ -22130,32 +22100,23 @@ function StudioMobileAppMenu({
       >
         <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
       </div>
-      <div className="studio-mobile-app-menu-body">
-        {sections.map((section) => (
-          <section key={section.label} className="studio-mobile-app-menu-section">
-            <p className="studio-mobile-app-menu-label">{section.label}</p>
-            <div className="studio-mobile-app-menu-list" role="menu">
-              {section.items.map((item) => {
-                const Icon = item.Icon;
-                return (
-                  <button
-                    key={item.label}
-                    type="button"
-                    role="menuitem"
-                    className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
-                    onClick={item.onClick}
-                  >
-                    <span className="studio-mobile-app-menu-item-icon" aria-hidden="true">
-                      <Icon />
-                    </span>
-                    <span className="studio-mobile-app-menu-item-label">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
+      <nav className="studio-mobile-app-menu-body" aria-label="Studio menu" role="menu">
+        {items.map((item) => {
+          const Icon = item.Icon;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
+              onClick={item.onClick}
+            >
+              <Icon aria-hidden="true" />
+              <span className="studio-mobile-app-menu-item-label">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>,
     // Must live inside .studio-polish (wallpaper overflow root) or backdrop-filter
     // samples blank like the old body-portal glass bug — same as composer.
