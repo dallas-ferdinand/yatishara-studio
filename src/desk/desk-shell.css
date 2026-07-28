@@ -9049,10 +9049,10 @@ textarea.cursor-input {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--color-cursor-bg) 55%, transparent);
+  background: color-mix(in srgb, var(--color-cursor-bg) 82%, transparent);
   color: var(--color-cursor-text);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   cursor: pointer;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   pointer-events: auto;
@@ -9650,7 +9650,7 @@ textarea.cursor-input {
   overflow: hidden;
   background: color-mix(
     in srgb,
-    var(--color-mos-composer, #07111f) 16%,
+    var(--color-mos-composer, #07111f) 42%,
     transparent
   ) !important;
   border: 1px solid color-mix(
@@ -9659,8 +9659,8 @@ textarea.cursor-input {
     transparent
   ) !important;
   color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 48%, transparent) !important;
-  -webkit-backdrop-filter: saturate(120%) blur(4px);
-  backdrop-filter: saturate(120%) blur(4px);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow: none !important;
 }
 
@@ -10872,16 +10872,16 @@ textarea.cursor-input {
   backdrop-filter: var(--studio-composer-glass-blur, saturate(140%) blur(8px));
 }
 
-/* --- empty chat logo (same glass stack as composer/bubbles) --- */
+/* --- empty chat logo (opaque plate — no blur over scrolling chat) --- */
 .studio-polish .studio-empty-logo-blur {
   position: absolute;
   inset: 0;
   z-index: 0;
   border-radius: 999px;
   border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11));
-  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 10%, transparent);
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 55%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow:
     0 20px 46px color-mix(in srgb, #000 44%, transparent),
     0 8px 20px color-mix(in srgb, #000 32%, transparent),

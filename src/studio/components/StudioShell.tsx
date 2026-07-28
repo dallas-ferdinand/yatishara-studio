@@ -1276,22 +1276,24 @@ export function StudioShell({
     openTabs.some(
       (tab) => tab.startsWith("network:") || tab.startsWith("offers:"),
     );
-  // Desktop: skip heavy folder contents while Messages / Feed / Network filters
-  // own the left rail (Files UI unmounted). Mobile keeps them — files dock stays
-  // warm-mounted. Asset-pick restores the Files rail and re-subscribes.
+  // Skip heavy folder contents while Files UI is not actually shown.
+  // Desktop: Messages / Feed / Network filters own the left rail.
+  // Mobile: dock stays mounted for instant open, but don't subscribe until
+  // the user opens Files (first expand pays one Convex round-trip).
   const needsExplorerFolderContents =
-    isMobile ||
     Boolean(assetPickRequest) ||
-    !(
-      typeof activeTab === "string" &&
-      (activeTab.startsWith("messages:") ||
-        activeTab.startsWith("feed:") ||
-        activeTab.startsWith("profile:") ||
-        activeTab.startsWith("profilePost:") ||
-        ((activeTab.startsWith("network:") ||
-          activeTab.startsWith("offers:")) &&
-          cnMode !== "my-assets"))
-    );
+    (isMobile
+      ? mobileSection === "files" || filesDockExpanded
+      : !(
+          typeof activeTab === "string" &&
+          (activeTab.startsWith("messages:") ||
+            activeTab.startsWith("feed:") ||
+            activeTab.startsWith("profile:") ||
+            activeTab.startsWith("profilePost:") ||
+            ((activeTab.startsWith("network:") ||
+              activeTab.startsWith("offers:")) &&
+              cnMode !== "my-assets"))
+        ));
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
     hasCurrentUser ? {} : "skip",
@@ -1675,7 +1677,9 @@ export function StudioShell({
           threadId: activeThreadId,
           expiresUnix: assetUrlExpiresUnix,
           limit: CHAT_LIVE_EVENT_LIMIT,
-          signPlayableUrls: true,
+          // Thumbs only in the live query — playable video/audio CDN signatures
+          // fan out via chatPlayableQueries so opening a thread stays under budget.
+          signPlayableUrls: false,
         }
       : "skip",
   );
@@ -1933,11 +1937,31 @@ export function StudioShell({
         args: { assetId: asset._id, expiresUnix: assetUrlExpiresUnix },
       };
     }
+    // Live listEvents skips bulk playable CDN signatures — lazy-sign the newest
+    // chat video/audio so opening a thread stays fast but playback still works.
+    let chatPlayable = 0;
+    for (let i = (events?.length ?? 0) - 1; i >= 0 && chatPlayable < 20; i -= 1) {
+      const event = events[i];
+      if (event?.kind !== "result" || !event.resultAssets?.length) continue;
+      for (const asset of event.resultAssets) {
+        if (!asset?._id || seen.has(asset._id)) continue;
+        if (asset.kind !== "video" && asset.kind !== "audio") continue;
+        if (asset.signedReadUrl) continue;
+        seen.add(asset._id);
+        queries[`asset:${asset._id}`] = {
+          query: api.assets.signedReadUrl,
+          args: { assetId: asset._id, expiresUnix: assetUrlExpiresUnix },
+        };
+        chatPlayable += 1;
+        if (chatPlayable >= 20) break;
+      }
+    }
     return queries;
   }, [
     activeFolderResultAssets,
     assetUrlExpiresUnix,
     assets,
+    events,
     hasCurrentUser,
     isTrashView,
     trashedAssets,
@@ -1975,9 +1999,9 @@ export function StudioShell({
   }, [assetUrlExpiresUnix, attachments, hasCurrentUser]);
   const attachmentMediaUrls = useQueries(attachmentUrlQueries);
   const assetsWithPreviewUrls = useMemo(() => {
-    if (assets === undefined) return undefined;
+    if (assets === undefined && !(events?.length)) return undefined;
     const byId = new Map();
-    for (const asset of assets) {
+    for (const asset of assets ?? []) {
       const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
       const signedReadUrl = fullQualityUrl(asset.signedReadUrl, lazyFullUrl);
       const signedThumbnailUrl =
@@ -2005,10 +2029,32 @@ export function StudioShell({
             : undefined),
       });
     }
+    // Hydrate chat result media with lazy playable URLs (outside current folder).
+    for (const event of events ?? []) {
+      if (event?.kind !== "result" || !event.resultAssets?.length) continue;
+      for (const asset of event.resultAssets) {
+        if (!asset?._id) continue;
+        const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
+        const existing = byId.get(asset._id);
+        if (existing) {
+          if (!existing.signedReadUrl && lazyFullUrl) {
+            byId.set(asset._id, {
+              ...existing,
+              signedReadUrl: fullQualityUrl(existing.signedReadUrl, lazyFullUrl),
+            });
+          }
+          continue;
+        }
+        byId.set(asset._id, {
+          ...asset,
+          signedReadUrl: fullQualityUrl(asset.signedReadUrl, lazyFullUrl),
+        });
+      }
+    }
     return [...byId.values()].sort(
       (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
     );
-  }, [activeFolderResultAssets, assetPreviewUrls, assets]);
+  }, [activeFolderResultAssets, assetPreviewUrls, assets, events]);
   const styleSheets = useQuery(
     api.elements.listStyleSheets,
     hasCurrentUser && needsComposerCatalog ? {} : "skip",
@@ -7817,6 +7863,8 @@ export function StudioShell({
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
+          --studio-mobile-dm-peer-sheet-height: calc(0.48 * var(--studio-mobile-files-band));
+          --studio-mobile-dm-peer-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
           --studio-mobile-files-dock-ease: linear;
         }

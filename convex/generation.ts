@@ -428,7 +428,8 @@ export const listEvents = authedQuery({
     beforeOrder: v.optional(v.number()),
     /**
      * When false, skip playable video/audio CDN signatures (thumbnails only).
-     * Used for older history pages to keep queries fast; live tail keeps playable URLs.
+     * Live thread opens use false + client lazy signedReadUrl for newest media;
+     * older history pages also skip to keep queries under budget.
      */
     signPlayableUrls: v.optional(v.boolean()),
   },

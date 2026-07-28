@@ -335,11 +335,15 @@ Studio must feel **native**, not like a website waiting to load:
   `dmClientCache` (session + memory) + warm `listMessages` for the top chats in
   the sidebar; quiet pending spacer only when there is no cache yet.
 - **Gate Shell Convex** — skip composer catalog / threads / seller listings until
-  that surface is active; on **desktop** also skip folder contents (`listByFolder`,
-  peeks, trash lists, unused elements) while Messages / Feed / Network filters
-  own the left rail (asset-pick / my-assets re-enable). Mobile keeps Files
-  subscriptions (warm dock). `StudioComposer` already mounts only on
+  that surface is active; skip folder contents (`listByFolder`, peeks, trash,
+  unused elements) while Files isn’t shown — desktop social rails **and** mobile
+  until the Files dock is open. Asset-pick / my-assets re-enable.
+  Live `listEvents` skips bulk playable CDN signatures; newest video/audio
+  lazy-sign via client `signedReadUrl` queries. `StudioComposer` mounts only on
   `composer:` / `thread:` tabs. Do **not** split Shell into components for this.
+- **Scroll glass** — no `backdrop-filter` on scrolling surfaces (profile wash,
+  feed post chrome, empty-chat logo, media play overlay); glass stays on fixed
+  composer / menus.
 - **Overlay motion** — app menu / history sheet rise ~110ms (not 220ms+).
 - Files dock + Back stack: see Mobile Generate Files dock. Memory: **786**.
 
