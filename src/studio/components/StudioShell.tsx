@@ -8302,7 +8302,43 @@ export function StudioShell({
         /*
           Hamburger menu list = landing menu sheet links:
           flat centered rows, icon + label, no section cards / icon chips.
+          Scroll wrapper carries top/bottom plate fade masks (landing parity).
         */
+        .studio-mobile-app-menu-scroll {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+        }
+        .studio-mobile-app-menu-scroll::before,
+        .studio-mobile-app-menu-scroll::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          z-index: 2;
+          height: 40px;
+          pointer-events: none;
+        }
+        .studio-mobile-app-menu-scroll::before {
+          top: 0;
+          background: linear-gradient(
+            to bottom,
+            var(--mos-plate, var(--mos-panel, #ececf0)) 0%,
+            color-mix(in srgb, var(--mos-plate, #ececf0) 70%, transparent) 45%,
+            transparent 100%
+          );
+        }
+        .studio-mobile-app-menu-scroll::after {
+          bottom: 0;
+          background: linear-gradient(
+            to top,
+            var(--mos-plate, var(--mos-panel, #ececf0)) 0%,
+            color-mix(in srgb, var(--mos-plate, #ececf0) 70%, transparent) 45%,
+            transparent 100%
+          );
+        }
         .studio-mobile-app-menu-body {
           position: relative;
           z-index: 1;
@@ -22100,23 +22136,25 @@ function StudioMobileAppMenu({
       >
         <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
       </div>
-      <nav className="studio-mobile-app-menu-body" aria-label="Studio menu" role="menu">
-        {items.map((item) => {
-          const Icon = item.Icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
-              onClick={item.onClick}
-            >
-              <Icon aria-hidden="true" />
-              <span className="studio-mobile-app-menu-item-label">{item.label}</span>
-            </button>
-          );
-        })}
-      </nav>
+      <div className="studio-mobile-app-menu-scroll">
+        <nav className="studio-mobile-app-menu-body" aria-label="Studio menu" role="menu">
+          {items.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <button
+                key={item.label}
+                type="button"
+                role="menuitem"
+                className={`studio-mobile-app-menu-item${item.danger ? " is-danger" : ""}`}
+                onClick={item.onClick}
+              >
+                <Icon aria-hidden="true" />
+                <span className="studio-mobile-app-menu-item-label">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
     </div>,
     // Must live inside .studio-polish (wallpaper overflow root) or backdrop-filter
     // samples blank like the old body-portal glass bug — same as composer.
