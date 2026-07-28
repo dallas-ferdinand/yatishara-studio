@@ -612,7 +612,7 @@ function StudioSignIn({
         step === "identify"
           ? "Welcome back"
           : isEmailCodeStep
-            ? "Check your email"
+            ? "Enter code"
             : "Sign in"
       }
       onBack={
@@ -755,14 +755,10 @@ function StudioSignIn({
         ) : null}
 
         {isEmailCodeStep ? (
-          <div className="studio-auth-email-panel">
-            <div className="studio-auth-email-badge" aria-hidden="true">
-              <Mail className="h-5 w-5" strokeWidth={2} />
-            </div>
-            <p className="studio-auth-email-lead">
-              We sent a sign-in code to
+          <>
+            <p className="studio-auth-copy m-0 text-center text-[13px]">
+              Code sent to <strong>{step.email}</strong>
             </p>
-            <p className="studio-auth-email-address">{step.email}</p>
             <input name="email" value={step.email} type="hidden" />
             <div className="studio-auth-otp-stack">
               <input
@@ -812,7 +808,7 @@ function StudioSignIn({
                 Enter password
               </button>
             ) : null}
-          </div>
+          </>
         ) : null}
 
         {notice ? <p className="studio-auth-notice">{notice}</p> : null}
@@ -936,7 +932,7 @@ function AuthFrame({
         scrollTimer = 0;
         const submit = wrapper.querySelector<HTMLElement>(".studio-auth-primary");
         const target =
-          active.closest(".studio-auth-field, .studio-auth-email-panel") ?? active;
+          active.closest(".studio-auth-field") ?? active;
         target.scrollIntoView({
           block: "center",
           inline: "nearest",
@@ -1093,9 +1089,9 @@ function AuthFrame({
         }
         .studio-auth-field.is-code.is-email-otp {
           width: 100%;
-          min-height: 58px;
-          border-radius: 20px;
-          font-size: 1.4rem;
+          min-height: 52px;
+          border-radius: 18px;
+          font-size: 1.25rem;
           font-weight: 700;
           letter-spacing: 0.28em;
           background: #ffffff;
@@ -1107,7 +1103,7 @@ function AuthFrame({
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          gap: 10px;
+          gap: 8px;
           width: 100%;
         }
         .studio-auth-otp-paste {
@@ -1115,7 +1111,7 @@ function AuthFrame({
           align-items: center;
           justify-content: center;
           width: 100%;
-          min-height: 44px;
+          min-height: 40px;
           padding: 0 14px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 86%, transparent);
           border-radius: 999px;
@@ -1135,50 +1131,6 @@ function AuthFrame({
           background: color-mix(in srgb, #1c1c1e 4%, #ffffff);
           border-color: color-mix(in srgb, #1c1c1e 22%, transparent);
           color: #1c1c1e;
-        }
-        .studio-auth-email-panel {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          margin: 2px 0 4px;
-          padding: 22px 18px 18px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 78%, transparent);
-          border-radius: 26px;
-          background:
-            linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.68) 55%, rgba(245, 245, 247, 0.9)),
-            var(--mos-plate);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.9),
-            0 14px 34px rgba(15, 23, 42, 0.07);
-          text-align: center;
-        }
-        .studio-auth-email-badge {
-          display: grid;
-          place-items: center;
-          width: 56px;
-          height: 56px;
-          border-radius: 20px;
-          background: color-mix(in srgb, #1c1c1e 7%, #ffffff);
-          color: #1c1c1e;
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.8),
-            0 6px 16px rgba(15, 23, 42, 0.06);
-        }
-        .studio-auth-email-lead {
-          margin: 2px 0 0;
-          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
-          font-size: 13px;
-          line-height: 1.35;
-        }
-        .studio-auth-email-address {
-          margin: 0 0 6px;
-          color: var(--mos-text);
-          font-size: 15px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-          word-break: break-word;
         }
         .studio-auth-field:focus,
         .studio-auth-field:focus-within {
@@ -1228,7 +1180,7 @@ function AuthFrame({
         input.studio-auth-field:-webkit-autofill:focus,
         input.studio-auth-field:-webkit-autofill:active {
           -webkit-text-fill-color: #1c1c1e !important;
-          caret-color: #1c1c1e;
+          caret-color: transparent;
           background-color: #ffffff !important;
           background-image: none !important;
           -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
