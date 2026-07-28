@@ -9957,6 +9957,27 @@ export function StudioShell({
           flex: 0 0 auto;
           opacity: 0.85;
         }
+        .studio-settings-topup-preview {
+          display: block;
+          width: 100%;
+          margin-top: 10px;
+          padding: 0;
+          border: 0;
+          background: transparent;
+          color: color-mix(in srgb, var(--color-cursor-text-secondary, #8a8a8a) 92%, #6b7280);
+          font: inherit;
+          font-size: 12px;
+          font-weight: 550;
+          letter-spacing: 0.01em;
+          line-height: 1.3;
+          text-align: center;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+          cursor: pointer;
+        }
+        .studio-settings-topup-preview:hover {
+          color: var(--mos-text-bright, var(--color-cursor-text));
+        }
         @keyframes studio-settings-topup-spin {
           to {
             transform: rotate(360deg);
