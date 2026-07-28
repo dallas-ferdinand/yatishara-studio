@@ -8081,6 +8081,7 @@ export function StudioShell({
         .studio-polish[data-files-open="1"] .studio-files-dock {
           pointer-events: auto;
         }
+        /* Handle = menu/History: grab only on plate, no filled band. */
         .studio-files-dock-handle {
           position: relative;
           z-index: 2;
@@ -8090,6 +8091,9 @@ export function StudioShell({
           flex: 0 0 auto;
           min-height: 28px;
           padding: 12px 0 8px;
+          border: 0;
+          background: transparent;
+          box-shadow: none;
           cursor: grab;
           touch-action: none;
           user-select: none;
@@ -8145,7 +8149,7 @@ export function StudioShell({
           flex: 1 1 auto;
           min-width: 0;
         }
-        /* Pathbar = same height as search container; crumbs + tools centered. */
+        /* Pathbar = same height as search; no filled band under the grab handle. */
         .studio-files-mobile-sheet .studio-folder-pathbar {
           flex: 0 0 auto;
           box-sizing: border-box;
@@ -8157,7 +8161,7 @@ export function StudioShell({
           padding: 0 2px 0 0 !important;
           padding-inline: 0 2px !important;
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft)) !important;
-          background: var(--mos-bg) !important;
+          background: transparent !important;
         }
         .studio-files-mobile-sheet .desk-file-breadcrumbs,
         .studio-files-mobile-sheet .desk-file-breadcrumbs-track {
@@ -8222,9 +8226,18 @@ export function StudioShell({
           background: transparent !important;
           box-shadow: none !important;
         }
-        /* Keep desktop search/pathbar chrome (bottom hairline); only kill left-rail fill. */
-        .studio-files-mobile-sheet .studio-folder-pathbar,
-        .studio-files-mobile-sheet .cursor-panel-search {
+        /*
+          Beat later .studio-polish / light pathbar+search fills (mos-bg / mos-panel)
+          so the Files sheet stays one continuous plate under the grab handle.
+        */
+        .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
+        .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
+        .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
+        .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel {
           background: transparent !important;
           box-shadow: none !important;
         }
