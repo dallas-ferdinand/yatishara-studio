@@ -1167,7 +1167,7 @@ function AuthFrame({
         .studio-auth-field {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           min-height: 42px;
           width: 100%;
           padding: 0 16px;
@@ -1212,20 +1212,24 @@ function AuthFrame({
           min-width: 0;
           flex: 1 1 auto;
           width: 100%;
+          height: 14px;
+          margin: 0;
+          padding: 0;
           border: 0;
           background: transparent;
           color: inherit;
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 500;
-          line-height: 1.3;
+          line-height: 14px;
           outline: none;
         }
         .studio-auth-field input::placeholder,
         .studio-auth-field textarea::placeholder,
         input.studio-auth-field::placeholder {
           color: color-mix(in srgb, var(--mos-text) 42%, transparent);
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 450;
+          line-height: 14px;
         }
         /* Flat dark pill — same ink as landing Sign in / Enter Studio CTAs. */
         .studio-auth-primary {
