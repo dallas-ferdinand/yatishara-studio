@@ -427,6 +427,9 @@
   display: flex;
   flex-direction: column;
   background: var(--mos-page);
+  /* Room for OS keyboard so the card can scroll / sit above it. */
+  padding-bottom: var(--studio-auth-keyboard-inset, 0px);
+  box-sizing: border-box;
 }
 
 .studio-landing-main::-webkit-scrollbar {
@@ -1229,6 +1232,27 @@
     height: calc(100dvh - var(--studio-landing-chrome-h));
     min-height: calc(100dvh - var(--studio-landing-chrome-h));
     max-height: calc(100dvh - var(--studio-landing-chrome-h));
+  }
+
+  /* Auth + keyboard: tuck bottom nav away and pin the form above the KB. */
+  .studio-landing.is-auth-open[data-keyboard-open="1"] {
+    --studio-landing-chrome-h: 0px;
+  }
+
+  .studio-landing.is-auth-open[data-keyboard-open="1"] .studio-landing-head {
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  .studio-landing.is-auth-open[data-keyboard-open="1"] .studio-auth-embedded {
+    justify-content: flex-end;
+    padding-top: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   }
 }
 

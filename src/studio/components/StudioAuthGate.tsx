@@ -843,18 +843,99 @@ function AuthFrame({
   /** Wider sheet for multi-line choice lists. */
   wide?: boolean;
 }) {
+  const wrapperRef = useRef<HTMLElement | null>(null);
   const authThemeStyle = {
     "--studio-auth-accent": AUTH_ACCENT,
     "--studio-auth-accent-rgb": hexToRgbString(AUTH_ACCENT),
   } as CSSProperties;
   const Wrapper = embedded ? "div" : "main";
 
+  // Mobile: keep the form above the OS keyboard (and landing bottom nav).
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const host =
+      (wrapper.closest(".studio-landing") as HTMLElement | null) ?? wrapper;
+
+    let rafId = 0;
+    let lastInset = -1;
+    let scrollTimer = 0;
+
+    const isMobile = () => window.matchMedia("(max-width: 979px)").matches;
+
+    const syncKeyboardInset = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        const vv = window.visualViewport;
+        let inset = 0;
+        if (isMobile() && vv) {
+          const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+          inset = raw < 6 ? 0 : Math.round(raw);
+        }
+        if (inset === lastInset) return;
+        lastInset = inset;
+        host.style.setProperty("--studio-auth-keyboard-inset", `${inset}px`);
+        if (inset > 0) host.setAttribute("data-keyboard-open", "1");
+        else host.removeAttribute("data-keyboard-open");
+      });
+    };
+
+    const scrollFocusedIntoView = () => {
+      if (!isMobile()) return;
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement) || !wrapper.contains(active)) return;
+      if (scrollTimer) window.clearTimeout(scrollTimer);
+      scrollTimer = window.setTimeout(() => {
+        scrollTimer = 0;
+        const submit = wrapper.querySelector<HTMLElement>(".studio-auth-primary");
+        const target =
+          active.closest(".studio-auth-field, .studio-auth-email-panel") ?? active;
+        target.scrollIntoView({
+          block: "center",
+          inline: "nearest",
+          behavior: "smooth",
+        });
+        if (submit) {
+          window.setTimeout(() => {
+            submit.scrollIntoView({
+              block: "nearest",
+              inline: "nearest",
+              behavior: "smooth",
+            });
+          }, 80);
+        }
+      }, 140);
+    };
+
+    syncKeyboardInset();
+    window.visualViewport?.addEventListener("resize", syncKeyboardInset);
+    window.visualViewport?.addEventListener("scroll", syncKeyboardInset);
+    window.addEventListener("resize", syncKeyboardInset);
+    wrapper.addEventListener("focusin", scrollFocusedIntoView);
+
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId);
+      if (scrollTimer) window.clearTimeout(scrollTimer);
+      window.visualViewport?.removeEventListener("resize", syncKeyboardInset);
+      window.visualViewport?.removeEventListener("scroll", syncKeyboardInset);
+      window.removeEventListener("resize", syncKeyboardInset);
+      wrapper.removeEventListener("focusin", scrollFocusedIntoView);
+      host.style.removeProperty("--studio-auth-keyboard-inset");
+      host.removeAttribute("data-keyboard-open");
+    };
+  }, []);
+
   return (
     <Wrapper
+      ref={(node) => {
+        wrapperRef.current = node;
+      }}
       className={
         embedded
           ? "studio-auth-theme studio-auth-embedded relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-auto px-4 py-6 sm:px-5 sm:py-8"
-          : "studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-8 sm:px-5 sm:py-10"
+          : "studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-auto px-4 py-8 sm:px-5 sm:py-10"
       }
       data-appearance="light"
       data-auth-appearance="light"
@@ -888,6 +969,16 @@ function AuthFrame({
           color: #1c1c1e;
           background: #f5f5f7;
           color-scheme: light;
+        }
+        /* Standalone auth: clear the keyboard on mobile. */
+        @media (max-width: 979px) {
+          main.studio-auth-theme {
+            overflow: auto;
+            padding-bottom: max(2rem, var(--studio-auth-keyboard-inset, 0px));
+          }
+          main.studio-auth-theme[data-keyboard-open="1"] {
+            align-items: flex-end;
+          }
         }
         .studio-auth-card {
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
