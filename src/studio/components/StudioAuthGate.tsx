@@ -1212,6 +1212,46 @@ function AuthFrame({
           font-weight: 450;
           line-height: 18px;
         }
+        /* Kill Chrome/Safari autofill blue/yellow wash — keep white auth fields. */
+        .studio-auth-field input:-webkit-autofill,
+        .studio-auth-field input:-webkit-autofill:hover,
+        .studio-auth-field input:-webkit-autofill:focus,
+        .studio-auth-field input:-webkit-autofill:active,
+        .studio-auth-field textarea:-webkit-autofill,
+        .studio-auth-field textarea:-webkit-autofill:hover,
+        .studio-auth-field textarea:-webkit-autofill:focus,
+        .studio-auth-field textarea:-webkit-autofill:active,
+        input.studio-auth-field:-webkit-autofill,
+        input.studio-auth-field:-webkit-autofill:hover,
+        input.studio-auth-field:-webkit-autofill:focus,
+        input.studio-auth-field:-webkit-autofill:active {
+          -webkit-text-fill-color: #1c1c1e !important;
+          caret-color: #1c1c1e;
+          background-color: #ffffff !important;
+          background-image: none !important;
+          -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+          box-shadow: 0 0 0 1000px #ffffff inset !important;
+          transition: background-color 99999s ease-out 0s;
+          filter: none;
+          color-scheme: light;
+        }
+        .studio-auth-field:has(input:-webkit-autofill),
+        .studio-auth-field:has(textarea:-webkit-autofill) {
+          background: #ffffff;
+        }
+        input.studio-auth-field.is-code:-webkit-autofill,
+        input.studio-auth-field.is-code:-webkit-autofill:hover,
+        input.studio-auth-field.is-code:-webkit-autofill:focus,
+        input.studio-auth-field.is-code:-webkit-autofill:active {
+          -webkit-box-shadow:
+            0 0 0 1000px #ffffff inset,
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 1px 2px rgba(15, 23, 42, 0.04) !important;
+          box-shadow:
+            0 0 0 1000px #ffffff inset,
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 1px 2px rgba(15, 23, 42, 0.04) !important;
+        }
         /* Flat dark pill — same ink as landing Sign in / Enter Studio CTAs. */
         .studio-auth-primary {
           display: inline-flex;
