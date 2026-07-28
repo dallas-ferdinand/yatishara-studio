@@ -9474,12 +9474,14 @@ export function StudioShell({
           align-items: center;
           gap: 14px;
           min-height: 58px;
-          padding: 12px 2px;
+          padding: 14px 2px;
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
         .studio-settings-invoice-row:last-child {
-          padding-bottom: 2px;
+          border-bottom: 0;
+          padding-bottom: 4px;
         }
         .studio-settings-invoice-copy {
           display: grid;
@@ -15714,21 +15716,47 @@ export function StudioShell({
           display: inline-flex;
           width: fit-content;
           align-items: center;
-          border: 1px solid var(--color-cursor-border-soft);
+          gap: 5px;
+          border: 0;
           border-radius: 999px;
-          background: var(--cursor-surface-raised);
-          color: var(--color-cursor-text);
-          padding: 4px 8px;
+          background: color-mix(in srgb, var(--mos-plate-strong, #d4d4da) 55%, transparent);
+          color: color-mix(in srgb, var(--color-cursor-muted) 88%, var(--color-cursor-text-bright));
+          padding: 4px 10px;
           font-size: 11px;
-          font-weight: 600;
+          font-weight: 650;
+          letter-spacing: 0.01em;
+          line-height: 1.2;
+        }
+        .studio-payment-status-pill::before {
+          content: "";
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: currentColor;
+          opacity: 0.85;
         }
         .studio-payment-status-pill.is-payment_completed {
-          border-color: color-mix(in srgb, #22c55e 42%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, #22c55e 14%, transparent);
+          background: color-mix(in srgb, #22c55e 16%, transparent);
+          color: color-mix(in srgb, #15803d 72%, var(--color-cursor-text-bright));
         }
-        .studio-payment-status-pill.is-rejected {
-          border-color: color-mix(in srgb, #ef4444 42%, var(--color-cursor-border-soft));
-          background: color-mix(in srgb, #ef4444 14%, transparent);
+        .studio-payment-status-pill.is-pending {
+          background: color-mix(in srgb, #60a5fa 14%, transparent);
+          color: color-mix(in srgb, #1d4ed8 58%, var(--color-cursor-text-bright));
+        }
+        .studio-payment-status-pill.is-receipt_uploaded,
+        .studio-payment-status-pill.is-receipt_received,
+        .studio-payment-status-pill.is-needs_review {
+          background: color-mix(in srgb, #fbbf24 15%, transparent);
+          color: color-mix(in srgb, #a16207 62%, var(--color-cursor-text-bright));
+        }
+        .studio-payment-status-pill.is-cancelled {
+          background: color-mix(in srgb, var(--mos-plate-strong, #d4d4da) 70%, transparent);
+          color: var(--color-cursor-muted);
+        }
+        .studio-payment-status-pill.is-rejected,
+        .studio-payment-status-pill.is-checkout_failed {
+          background: color-mix(in srgb, #fb7185 11%, transparent);
+          color: color-mix(in srgb, #9f1239 46%, var(--color-cursor-text-bright));
         }
         .studio-admin-detail-panel {
           display: grid;
@@ -27684,11 +27712,14 @@ function SettingsWorkspacePane({
                         <div className="studio-settings-invoice-copy">
                           <strong>{paymentInvoiceTitle(payment)}</strong>
                           <span>
-                            {formatDate(payment.createdAt)} ·{" "}
-                            {paymentInvoiceStatusLine(payment)}
+                            {formatDate(payment.createdAt)}
+                            {payment.status !== "payment_completed" && payment.providerStatus
+                              ? ` · ${payment.providerStatus}`
+                              : ""}
                           </span>
                         </div>
                         <div className="studio-settings-invoice-meta">
+                          <PaymentStatusPill status={payment.status} />
                           <span className="studio-settings-invoice-amount">{formatMoney(payment.amountCents)}</span>
                         </div>
                       </div>
@@ -28110,7 +28141,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
             />
           </label>
           <label>
-            <span>WhatsApp</span>
+            <span>Phone</span>
             <input
               value={phone}
               onChange={(event) => {
@@ -28118,7 +28149,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
                 setSaved("");
                 setSaveError("");
               }}
-              placeholder="+1 868 337 7338"
+              placeholder="+1 868 555 0100"
               type="tel"
               required
             />
@@ -28141,7 +28172,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
                 return;
               }
               if (!phoneValid) {
-                setSaveError("Enter a valid WhatsApp number");
+                setSaveError("Enter a valid phone number for checkout");
                 return;
               }
               setSaveBusy(true);
@@ -28238,7 +28269,7 @@ function AccountDetailsCard({ currentUser, onSave }) {
                   setPasswordError("");
                   setPasswordSaved("");
                   if (!canSetPassword) {
-                    setPasswordError("Save email and WhatsApp first");
+                    setPasswordError("Save email and phone first");
                     return;
                   }
                   if (newPassword.length < 8) {

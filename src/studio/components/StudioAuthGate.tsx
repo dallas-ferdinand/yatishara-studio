@@ -1,10 +1,9 @@
 "use client";
 
 import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
-import { useAction, useConvex, useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
-  Copy,
   Loader2,
   Lock,
   Mail,
@@ -26,7 +25,6 @@ import {
   dismissPaintBoot,
 } from "@/components/studio-paint-boot-control";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { markPerfMilestone } from "@/lib/performance";
 import {
@@ -145,38 +143,12 @@ const StudioShell = dynamic<StudioShellBootProps>(
   },
 );
 
-const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
 /** Landing ink — no agent/green accent on the public auth sheet. */
 const AUTH_ACCENT = "#1c1c1e";
 
 function hexToRgbString(hex: string) {
   const value = hex.replace("#", "");
   return `${parseInt(value.slice(0, 2), 16)} ${parseInt(value.slice(2, 4), 16)} ${parseInt(value.slice(4, 6), 16)}`;
-}
-
-type WhatsAppCodeStep = {
-  requestId: Id<"whatsappAuthRequests">;
-  phone: string;
-  code: string;
-  whatsappNumber: string;
-  whatsappUrl: string;
-  expiresAt: number;
-  clientExpiresAt?: number;
-};
-
-function withWhatsAppClientExpiry(step: WhatsAppCodeStep): WhatsAppCodeStep {
-  return {
-    ...step,
-    clientExpiresAt: Math.min(step.expiresAt, Date.now() + WHATSAPP_CODE_TTL_MS),
-  };
-}
-
-function WhatsAppIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12.04 2.25a9.66 9.66 0 0 0-8.19 14.78l-1.1 4.01 4.11-1.08a9.66 9.66 0 1 0 5.18-17.71Zm0 1.78a7.88 7.88 0 1 1 0 15.76 7.8 7.8 0 0 1-4-1.1l-.29-.17-2.44.64.65-2.38-.19-.3a7.88 7.88 0 0 1 6.27-12.45Zm-3.35 3.7c-.18 0-.47.07-.71.34-.24.26-.93.91-.93 2.22 0 1.31.96 2.58 1.09 2.76.13.17 1.85 2.96 4.58 4.03 2.27.89 2.73.71 3.22.67.49-.04 1.59-.65 1.81-1.28.22-.63.22-1.17.15-1.28-.07-.11-.24-.18-.51-.31-.27-.13-1.59-.78-1.84-.87-.25-.09-.43-.13-.61.13-.18.27-.7.87-.86 1.05-.16.18-.31.2-.58.07-.27-.13-1.13-.42-2.15-1.33-.8-.71-1.34-1.59-1.5-1.86-.16-.27-.02-.41.12-.55.12-.12.27-.31.4-.47.13-.16.18-.27.27-.45.09-.18.04-.34-.02-.47-.07-.13-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47h-.52Z" />
-    </svg>
-  );
 }
 
 export function StudioAuthGate({
@@ -533,8 +505,8 @@ function StudioCompleteAccount({
             <input
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
-              placeholder="Phone / WhatsApp"
-              aria-label="Phone / WhatsApp"
+              placeholder="Phone (for checkout)"
+              aria-label="Phone number for checkout"
               type="tel"
               required
               disabled={!missingPhone}
@@ -574,16 +546,6 @@ function splitDisplayNameParts(name: string | undefined): { firstName: string; l
   };
 }
 
-type IdentifyContact =
-  | { kind: "email"; email: string }
-  | { kind: "whatsapp"; phone: string };
-
-type SignInStep =
-  | "identify"
-  | { contact: IdentifyContact; phase: "password" }
-  | { contact: { kind: "email"; email: string }; phase: "email-code"; hasPassword: boolean }
-  | ({ contact: { kind: "whatsapp"; phone: string }; phase: "whatsapp-code"; hasPassword: boolean } & WhatsAppCodeStep);
-
 function StudioSignIn({
   onBack,
   embedded = false,
@@ -594,26 +556,18 @@ function StudioSignIn({
 } = {}) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
-  const startWhatsApp = useMutation(api.whatsappAuth.start);
-  const checkLatestWhatsApp = useAction(api.whatsappAuth.checkLatest);
-  const [step, setStep] = useState<SignInStep>("identify");
-  const [identifierInput, setIdentifierInput] = useState("");
+  const [step, setStep] = useState<
+    | "identify"
+    | { email: string; phase: "password" }
+    | { email: string; phase: "email-code"; hasPassword: boolean }
+  >("identify");
+  const [emailInput, setEmailInput] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  const isWhatsAppCodeStep = step !== "identify" && step.phase === "whatsapp-code";
   const isEmailCodeStep = step !== "identify" && step.phase === "email-code";
   const isPasswordStep = step !== "identify" && step.phase === "password";
-  const inputMode = detectInputMode(identifierInput);
-  const whatsAppExpiry =
-    !isWhatsAppCodeStep
-      ? 0
-      : (step.clientExpiresAt ?? step.expiresAt);
-  const whatsAppTimeLeftMs = Math.max(0, whatsAppExpiry - nowMs);
-  const whatsAppTimeLeftSeconds = Math.ceil(whatsAppTimeLeftMs / 1000);
-  const whatsAppExpired = isWhatsAppCodeStep && whatsAppTimeLeftSeconds <= 0;
 
   const resetToIdentify = () => {
     setError("");
@@ -623,68 +577,14 @@ function StudioSignIn({
 
   const startEmailCode = async (email: string, hasPassword = false) => {
     await signIn("resend-otp", { email });
-    setStep({ contact: { kind: "email", email }, phase: "email-code", hasPassword });
+    setStep({ email, phase: "email-code", hasPassword });
   };
-
-  const startWhatsAppCode = async (phone: string, hasPassword = false) => {
-    const request = await startWhatsApp({ phone });
-    setStep({
-      contact: { kind: "whatsapp", phone },
-      phase: "whatsapp-code",
-      hasPassword,
-      ...withWhatsAppClientExpiry(request),
-    });
-    setNowMs(Date.now());
-  };
-
-  // Tick once per second while the WhatsApp code is showing.
-  // Do NOT depend on whatsAppExpiry — when clientExpiresAt is missing it was
-  // derived from nowMs, so setNowMs retriggered this effect forever (React #301).
-  useEffect(() => {
-    if (!isWhatsAppCodeStep) return;
-    setNowMs(Date.now());
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [isWhatsAppCodeStep]);
-
-  useEffect(() => {
-    if (!isWhatsAppCodeStep) return;
-    setStep((current) => {
-      if (current === "identify" || current.phase !== "whatsapp-code") return current;
-      if (current.clientExpiresAt != null) return current;
-      return { ...current, ...withWhatsAppClientExpiry(current) };
-    });
-  }, [isWhatsAppCodeStep]);
 
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 1800);
     return () => window.clearTimeout(timer);
   }, [notice]);
-
-  const resendWhatsAppCode = () => {
-    if (!isWhatsAppCodeStep) return;
-    setPending(true);
-    setError("");
-    setNotice("");
-    void startWhatsApp({ phone: step.contact.phone })
-      .then((request) => {
-        setStep({
-          contact: step.contact,
-          phase: "whatsapp-code",
-          hasPassword: step.hasPassword,
-          ...withWhatsAppClientExpiry(request),
-        });
-        setNowMs(Date.now());
-        setNotice("New code ready.");
-      })
-      .catch((err: unknown) => {
-        setError(
-          friendlyConvexError(err, "WhatsApp sign-in failed"),
-        );
-      })
-      .finally(() => setPending(false));
-  };
 
   return (
     <AuthFrame
@@ -694,9 +594,7 @@ function StudioSignIn({
           ? "Welcome back"
           : isEmailCodeStep
             ? "Check your email"
-            : isWhatsAppCodeStep
-              ? "Open WhatsApp"
-              : "Sign in"
+            : "Sign in"
       }
       onBack={
         embedded || !onBack || step !== "identify" ? undefined : onBack
@@ -712,29 +610,20 @@ function StudioSignIn({
           const formData = new FormData(event.currentTarget);
 
           if (step === "identify") {
-            const contact = parseContactInput(identifierInput);
-            if (!contact) {
-              setError("Enter a valid email or WhatsApp number");
+            const email = normalizeEmail(emailInput);
+            if (!email) {
+              setError("Enter a valid email address");
               setPending(false);
               return;
             }
             void convex
-              .query(
-                api.passwordAuth.signInOptions,
-                contact.kind === "email"
-                  ? { email: contact.email }
-                  : { phone: contact.phone },
-              )
+              .query(api.passwordAuth.signInOptions, { email })
               .then(async (options) => {
                 if (!options.hasPassword) {
-                  if (contact.kind === "email") {
-                    await startEmailCode(contact.email);
-                  } else {
-                    await startWhatsAppCode(contact.phone);
-                  }
+                  await startEmailCode(email);
                   return;
                 }
-                setStep({ contact, phase: "password" });
+                setStep({ email, phase: "password" });
               })
               .catch((err: unknown) => {
                 setError(friendlyConvexError(err, "Sign-in failed"));
@@ -745,24 +634,13 @@ function StudioSignIn({
 
           if (isPasswordStep) {
             const password = String(formData.get("password") ?? "");
-            if (step.contact.kind === "email") {
-              void signIn("password", {
-                flow: "signIn",
-                email: step.contact.email,
-                password,
-              })
-                .catch((err: unknown) => {
-                  setError(friendlyConvexError(err, "Wrong email or password"));
-                })
-                .finally(() => setPending(false));
-              return;
-            }
-            void signIn("phone-password", {
-              phone: step.contact.phone,
+            void signIn("password", {
+              flow: "signIn",
+              email: step.email,
               password,
             })
               .catch((err: unknown) => {
-                setError(friendlyConvexError(err, "Wrong number or password"));
+                setError(friendlyConvexError(err, "Wrong email or password"));
               })
               .finally(() => setPending(false));
             return;
@@ -777,75 +655,25 @@ function StudioSignIn({
             return;
           }
 
-          if (!isWhatsAppCodeStep) {
-            setPending(false);
-            return;
-          }
-
-          void checkLatestWhatsApp({
-            requestId: step.requestId,
-            phone: step.contact.phone,
-          })
-            .then(async (result) => {
-              if (result.status !== "verified") {
-                setError(
-                  friendlyConvexError(
-                    result.message,
-                    "WhatsApp isn't verified yet. Check the code and try again.",
-                  ),
-                );
-                return;
-              }
-              setNotice("WhatsApp verified. Signing you in...");
-              const signInResult = await signIn("whatsapp-otp", {
-                requestId: step.requestId,
-                phone: step.contact.phone,
-              });
-              if (!signInResult.signingIn) {
-                setError("Verified code expired. Request a new code.");
-              }
-            })
-            .catch((err: unknown) => {
-              setError(
-                friendlyConvexError(err, "WhatsApp check failed"),
-              );
-            })
-            .finally(() => setPending(false));
+          setPending(false);
         }}
       >
         {step === "identify" ? (
           <label className="block">
             <span className="studio-auth-field">
-              {contactInputIcon(identifierInput) === "email" ? (
-                <Mail className="studio-auth-accent-text" aria-hidden="true" />
-              ) : contactInputIcon(identifierInput) === "phone" ? (
-                <Phone className="studio-auth-accent-text" aria-hidden="true" />
-              ) : (
-                <UserRound className="studio-auth-accent-text" aria-hidden="true" />
-              )}
+              <Mail className="studio-auth-accent-text" aria-hidden="true" />
               <input
-                name="identifier"
-                placeholder="Email or WhatsApp"
-                aria-label="Email or WhatsApp"
-                type="text"
-                inputMode={
-                  inputMode === "email"
-                    ? "email"
-                    : inputMode === "phone"
-                      ? "tel"
-                      : "text"
-                }
-                autoComplete="off"
+                name="email"
+                placeholder="Email"
+                aria-label="Email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
                 autoCorrect="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                value={identifierInput}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setIdentifierInput(
-                    detectInputMode(value) === "phone" ? formatPhoneInput(value) : value,
-                  );
-                }}
+                value={emailInput}
+                onChange={(event) => setEmailInput(event.target.value)}
                 required
               />
             </span>
@@ -854,6 +682,9 @@ function StudioSignIn({
 
         {isPasswordStep ? (
           <>
+            <p className="studio-auth-copy m-0 text-center text-[13px]">
+              Signing in as <strong>{step.email}</strong>
+            </p>
             <label className="block">
               <span className="studio-auth-field">
                 <Lock className="studio-auth-accent-text" aria-hidden="true" />
@@ -862,7 +693,7 @@ function StudioSignIn({
                   placeholder="Password"
                   aria-label="Password"
                   type="password"
-                  autoComplete="off"
+                  autoComplete="current-password"
                   autoCorrect="off"
                   autoCapitalize="none"
                   spellCheck={false}
@@ -871,7 +702,6 @@ function StudioSignIn({
                   data-form-type="other"
                   required
                   autoFocus
-                  // Android WebView autofill often steals focus; unlock on first focus.
                   readOnly
                   onFocus={(event) => {
                     event.currentTarget.removeAttribute("readonly");
@@ -887,31 +717,34 @@ function StudioSignIn({
                 setPending(true);
                 setError("");
                 setNotice("");
-                const run =
-                  step.contact.kind === "email"
-                    ? startEmailCode(step.contact.email, true)
-                    : startWhatsAppCode(step.contact.phone, true);
-                void run
+                void startEmailCode(step.email, true)
                   .catch((err: unknown) => {
                     setError(friendlyConvexError(err, "Could not send code"));
                   })
                   .finally(() => setPending(false));
               }}
             >
-              {step.contact.kind === "email" ? "Get email code" : "Get WhatsApp code"}
+              Email me a code instead
             </button>
           </>
         ) : null}
 
         {isEmailCodeStep ? (
-          <>
-            <input name="email" value={step.contact.email} type="hidden" />
-            <label className="block">
+          <div className="studio-auth-email-panel">
+            <div className="studio-auth-email-badge" aria-hidden="true">
+              <Mail className="h-5 w-5" strokeWidth={2} />
+            </div>
+            <p className="studio-auth-email-lead">
+              We sent a sign-in code to
+            </p>
+            <p className="studio-auth-email-address">{step.email}</p>
+            <input name="email" value={step.email} type="hidden" />
+            <label className="block w-full">
               <input
-                className="studio-auth-field is-code"
+                className="studio-auth-field is-code is-email-otp"
                 name="code"
-                placeholder="Code"
-                aria-label="Code"
+                placeholder="••••••"
+                aria-label="Email code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 required
@@ -925,81 +758,15 @@ function StudioSignIn({
                 onClick={() => {
                   setError("");
                   setNotice("");
-                  setStep({ contact: step.contact, phase: "password" });
+                  setStep({ email: step.email, phase: "password" });
                 }}
               >
                 Enter password
               </button>
             ) : null}
-          </>
+          </div>
         ) : null}
 
-        {isWhatsAppCodeStep ? (
-          <>
-            <div className="studio-auth-panel p-3 text-center">
-              <div className="flex items-center justify-center gap-2">
-                <p className="m-0 text-xl font-semibold tracking-[0.14em]">
-                  {formatAuthCode(step.code)}
-                </p>
-                <button
-                  className="studio-auth-link inline-flex cursor-pointer items-center justify-center p-0 transition focus:outline-none"
-                  type="button"
-                  aria-label="Copy code"
-                  title="Copy code"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(step.code);
-                    setNotice("Code copied.");
-                  }}
-                >
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-              <p className="studio-auth-faint mt-1 text-[11px] leading-4">
-                {whatsAppExpired
-                  ? "Expired"
-                  : `Expires in ${formatCountdown(whatsAppTimeLeftSeconds)}`}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                className="studio-auth-primary"
-                href={step.whatsappUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <WhatsAppIcon className="h-4 w-4" />
-                Open WhatsApp
-              </a>
-              <button
-                className="studio-auth-primary"
-                type="submit"
-                disabled={pending || whatsAppExpired}
-              >
-                {pending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <>
-                    Continue
-                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                  </>
-                )}
-              </button>
-            </div>
-            {step.hasPassword ? (
-              <button
-                className="studio-auth-secondary"
-                type="button"
-                onClick={() => {
-                  setError("");
-                  setNotice("");
-                  setStep({ contact: step.contact, phase: "password" });
-                }}
-              >
-                Enter password
-              </button>
-            ) : null}
-          </>
-        ) : null}
         {notice ? <p className="studio-auth-notice">{notice}</p> : null}
         {error ? <p className="studio-auth-error-box">{error}</p> : null}
         {step === "identify" || isPasswordStep || isEmailCodeStep ? (
@@ -1009,17 +776,10 @@ function StudioSignIn({
             disabled={pending}
           >
             {pending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                {step === "identify"
-                  ? "Checking account"
-                  : isPasswordStep
-                    ? "Signing in"
-                    : "Continuing"}
-              </>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <>
-                {step === "identify" ? "Continue" : isPasswordStep ? "Sign in" : "Continue"}
+                {isEmailCodeStep ? "Continue" : step === "identify" ? "Continue" : "Sign in"}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </>
             )}
@@ -1027,55 +787,42 @@ function StudioSignIn({
         ) : null}
         {step !== "identify" ? (
           <button
-            className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none"
             type="button"
+            className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none"
             onClick={resetToIdentify}
           >
-            Change account
+            Use a different email
           </button>
         ) : null}
-        {isWhatsAppCodeStep ? (
-          <div className="flex items-center justify-center">
-            <button
-              className="studio-auth-link cursor-pointer px-1 py-1 underline-offset-4 transition hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              disabled={pending}
-              onClick={resendWhatsAppCode}
-            >
-              Resend code
-            </button>
-          </div>
+        {isEmailCodeStep ? (
+          <button
+            type="button"
+            className="studio-auth-link cursor-pointer px-1 py-1 underline-offset-4 transition hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={pending}
+            onClick={() => {
+              setPending(true);
+              setError("");
+              setNotice("");
+              void startEmailCode(step.email, step.hasPassword)
+                .then(() => setNotice("New code sent."))
+                .catch((err: unknown) => {
+                  setError(friendlyConvexError(err, "Could not resend code"));
+                })
+                .finally(() => setPending(false));
+            }}
+          >
+            Resend code
+          </button>
         ) : null}
       </form>
     </AuthFrame>
   );
 }
 
-function detectInputMode(value: string): "email" | "phone" | "mixed" {
-  const trimmed = value.trim();
-  if (!trimmed) return "mixed";
-  if (trimmed.includes("@") || /[a-zA-Z]/.test(trimmed)) return "email";
-  return "phone";
-}
-
-function contactInputIcon(value: string): "profile" | "email" | "phone" {
-  const trimmed = value.trim();
-  if (!trimmed) return "profile";
-  const mode = detectInputMode(value);
-  return mode === "mixed" ? "profile" : mode;
-}
-
-function parseContactInput(value: string): IdentifyContact | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.includes("@")) {
-    const email = trimmed.toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-    return { kind: "email", email };
-  }
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length < 8 || digits.length > 15) return null;
-  return { kind: "whatsapp", phone: digits };
+function normalizeEmail(value: string): string | null {
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email;
 }
 
 function AuthFrame({
@@ -1140,28 +887,30 @@ function AuthFrame({
           color-scheme: light;
         }
         .studio-auth-card {
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 18px;
-          background: var(--mos-plate);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 68%, transparent);
+          border-radius: 28px;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.22)),
+            var(--mos-plate);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.72),
-            0 1px 2px rgba(15, 23, 42, 0.05),
-            0 12px 28px rgba(15, 23, 42, 0.08);
+            inset 0 1px 0 rgba(255, 255, 255, 0.88),
+            0 1px 2px rgba(15, 23, 42, 0.04),
+            0 18px 42px rgba(15, 23, 42, 0.09);
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
         }
         .studio-auth-title {
           margin: 0;
           color: var(--mos-text);
-          font-size: 1.375rem;
-          font-weight: 650;
-          letter-spacing: -0.02em;
-          line-height: 1.2;
+          font-size: 1.5rem;
+          font-weight: 700;
+          letter-spacing: -0.03em;
+          line-height: 1.15;
         }
         .studio-auth-form {
           display: grid;
-          gap: 10px;
-          margin-top: 1.25rem;
+          gap: 12px;
+          margin-top: 1.35rem;
           text-align: left;
         }
         .studio-auth-accent-text {
@@ -1170,37 +919,91 @@ function AuthFrame({
         .studio-auth-field {
           display: flex;
           align-items: center;
-          gap: 8px;
-          min-height: 42px;
+          gap: 10px;
+          min-height: 48px;
           width: 100%;
-          padding: 0 16px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          padding: 0 18px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 86%, transparent);
           border-radius: 999px;
           background: #ffffff;
-          box-shadow: none;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           transition:
             border-color 0.14s ease,
-            background 0.14s ease;
+            background 0.14s ease,
+            box-shadow 0.14s ease;
         }
         .studio-auth-field.is-stack {
           flex-direction: column;
           align-items: stretch;
           gap: 4px;
           min-height: 0;
-          padding: 10px 16px;
-          border-radius: 18px;
+          padding: 12px 18px;
+          border-radius: 22px;
           text-align: left;
         }
         .studio-auth-field.is-code {
           justify-content: center;
-          min-height: 42px;
-          padding: 0 16px;
-          font-size: 1.05rem;
-          font-weight: 650;
-          letter-spacing: 0.22em;
+          min-height: 48px;
+          padding: 0 18px;
+          font-size: 1.15rem;
+          font-weight: 700;
+          letter-spacing: 0.28em;
           text-align: center;
+        }
+        .studio-auth-field.is-code.is-email-otp {
+          min-height: 58px;
+          border-radius: 20px;
+          font-size: 1.4rem;
+          font-weight: 700;
+          letter-spacing: 0.36em;
+          background: #ffffff;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.9),
+            0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        .studio-auth-email-panel {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          margin: 2px 0 4px;
+          padding: 18px 16px 16px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
+          border-radius: 22px;
+          background:
+            linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72)),
+            var(--mos-plate);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.8),
+            0 10px 28px rgba(15, 23, 42, 0.06);
+          text-align: center;
+        }
+        .studio-auth-email-badge {
+          display: grid;
+          place-items: center;
+          width: 48px;
+          height: 48px;
+          border-radius: 16px;
+          background: color-mix(in srgb, #1c1c1e 8%, #ffffff);
+          color: #1c1c1e;
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        }
+        .studio-auth-email-lead {
+          margin: 2px 0 0;
+          color: color-mix(in srgb, var(--mos-text) 58%, transparent);
+          font-size: 13px;
+          line-height: 1.35;
+        }
+        .studio-auth-email-address {
+          margin: 0 0 4px;
+          color: var(--mos-text);
+          font-size: 14px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+          word-break: break-word;
         }
         .studio-auth-field:focus,
         .studio-auth-field:focus-within {
@@ -1483,33 +1286,4 @@ function AuthFrame({
       </section>
     </Wrapper>
   );
-}
-
-function formatCountdown(totalSeconds: number) {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = safeSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
-
-function formatAuthCode(code: string) {
-  return code.replace(/^(\d{3})(\d{3})$/, "$1-$2");
-}
-
-function formatPhoneDisplay(phone: string) {
-  return phone.replace(/^1?(\d{3})(\d{3})(\d{4})$/, "+1 ($1) $2-$3");
-}
-
-function formatPhoneInput(value: string) {
-  const digits = value.replace(/\D/g, "").replace(/^1/, "").slice(0, 10);
-  const area = digits.slice(0, 3);
-  const prefix = digits.slice(3, 6);
-  const line = digits.slice(6, 10);
-
-  // Progressive formatting: do not force `)` / spaces the user just deleted.
-  // Closing paren appears only once a 4th digit is typed.
-  if (!digits) return "";
-  if (digits.length <= 3) return `+1 (${area}`;
-  if (digits.length <= 6) return `+1 (${area}) ${prefix}`;
-  return `+1 (${area}) ${prefix}-${line}`;
 }

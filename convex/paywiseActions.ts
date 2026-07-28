@@ -252,8 +252,8 @@ export const startCheckout = action({
     if (!user) {
       throw new Error("User not found");
     }
-    // PayWise requires payers[].mobile_number; card checkout does not need WhatsApp OTP.
-    // Keep requiring a phone on file so payer ≠ merchant can be tested cleanly.
+    // PayWise docs require payers[].mobile_number on /payments/request (including direct_pos+card).
+    // Collect phone in Account details for checkout — no WhatsApp OTP on sign-in.
     if (!user.phone?.trim()) {
       throw new Error(
         "Add a phone number in Account details before topping up with PayWise.",

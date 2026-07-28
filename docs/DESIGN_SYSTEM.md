@@ -607,6 +607,12 @@ buyer/seller copy (memory **715** / **769**).
 Hidden globally (`src/mos-css/scrollbars.css`): `scrollbar-width: none !important` +
 `::-webkit-scrollbar { display: none }`. Do not re-introduce thin/visible scrollbars in chrome.
 
+### Billing invoices
+
+Invoice rows use a soft hairline divider between items (not cards). Status uses
+`.studio-payment-status-pill` with a dot + tinted wash — **Paid** green, **Pending**
+blue, review/amber for receipts, soft rose for failed (never harsh bordered red).
+
 ---
 
 ## 8. Do / Don't
