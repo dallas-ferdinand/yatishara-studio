@@ -141,48 +141,44 @@
   margin-left: auto;
 }
 
-/* Text "Action" — same head-tab language: plain idle, accent pill when open. */
+/* Nest 28px hammer circle in 32px head; accent when Action panel is open. */
 .studio-dm-chat-head-tools .studio-dm-peer-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  min-height: 24px;
-  height: 24px;
-  margin: 0;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-cursor-muted, var(--mos-muted));
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
 }
 
-.studio-dm-chat-head-tools .studio-dm-peer-toggle:hover {
-  color: var(--color-cursor-text-bright, var(--mos-text));
+.studio-dm-chat-head-tools .studio-dm-peer-toggle svg {
+  width: 15px;
+  height: 15px;
 }
 
 .studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on {
   border-color: color-mix(
     in srgb,
-    var(--cursor-accent, var(--mos-accent)) 42%,
+    var(--cursor-accent, var(--mos-accent)) 48%,
     var(--color-cursor-border-soft, var(--mos-border))
   );
   background: color-mix(
     in srgb,
-    var(--cursor-accent, var(--mos-accent)) 14%,
-    transparent
+    var(--cursor-accent, var(--mos-accent)) 16%,
+    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
   );
   color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-dm-chat-head-tools .studio-dm-peer-toggle.is-on:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 62%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 24%,
+    var(--studio-composer-glass-muted, var(--mos-plate-strong, var(--mos-raised)))
+  );
 }
 
 /* Match workspace tab thumb (.cursor-unified-tab-preview = 20px), not tool circles. */

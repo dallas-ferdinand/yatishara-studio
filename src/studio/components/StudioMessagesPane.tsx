@@ -8,6 +8,7 @@ import {
   FolderOpen,
   ImageIcon,
   Loader2,
+  Hammer,
   MessageCircle,
   Mic,
   Paperclip,
@@ -1437,12 +1438,13 @@ export function StudioMessagesPane({
           <div className="cursor-panel-head-tools studio-dm-chat-head-tools">
             <button
               type="button"
-              className={`studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
+              className={`studio-composer-circle-btn studio-dm-peer-toggle${peerSidebarOpen ? " is-on" : ""}`}
+              aria-label={peerSidebarOpen ? "Close Action" : "Action"}
               aria-pressed={peerSidebarOpen}
               title={peerSidebarOpen ? "Close Action" : "Action"}
               onClick={() => setPeerSidebarOpen((open) => !open)}
             >
-              Action
+              <Hammer size={16} strokeWidth={2.25} aria-hidden="true" />
             </button>
           </div>
         ) : null}
