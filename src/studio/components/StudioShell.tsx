@@ -6543,7 +6543,7 @@ export function StudioShell({
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            padding: 4px 8px 8px;
+            padding: 2px 8px 6px;
           }
           .studio-polish .studio-composer-toolbar-scroll {
             display: none !important;
@@ -12807,7 +12807,7 @@ export function StudioShell({
           flex-wrap: nowrap;
           gap: 8px;
           margin-top: auto;
-          padding: 4px 8px 8px;
+          padding: 4px 8px 6px;
           min-width: 0;
           overflow: visible;
         }
@@ -24547,6 +24547,15 @@ function ActivePane({
     );
   }
   if (activeTab.startsWith("messages:")) {
+    // Mobile inbox: full Messages sidebar (search + labels + filters), not the bare list.
+    if (showDmChatListWhenEmpty && !dmConversationId) {
+      return wrapPane(
+        <MobileMessagesInbox
+          onSelectConversation={onSelectDmConversation}
+          onStartChat={onOpenChat}
+        />,
+      );
+    }
     return wrapPane(
       <StudioMessagesPane
         conversationId={dmConversationId}
@@ -26556,6 +26565,23 @@ function StudioSocialLeftRail({
       onStartChat={onStartChat}
       expiresUnix={expiresUnix}
     />
+  );
+}
+
+/** Mobile Messages tab inbox — same chrome as the desktop Messages rail. */
+function MobileMessagesInbox({ onSelectConversation, onStartChat }) {
+  const [expiresUnix] = useState(
+    () => Math.floor(Date.now() / 1000) + 60 * 60 * 12,
+  );
+  return (
+    <div className="studio-dm-pane is-inbox">
+      <StudioMessagesSidebar
+        activeConversationId={null}
+        onSelectConversation={onSelectConversation}
+        onStartChat={onStartChat}
+        expiresUnix={expiresUnix}
+      />
+    </div>
   );
 }
 

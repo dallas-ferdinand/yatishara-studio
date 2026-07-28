@@ -15,6 +15,16 @@
   font-family: var(--font-onest), system-ui, sans-serif;
 }
 
+/* Mobile Messages tab inbox — sidebar chrome fills the main pane. */
+.studio-dm-pane.is-inbox {
+  overflow: hidden;
+}
+
+.studio-dm-pane.is-inbox .studio-dm-sidebar {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 /* CN Messages rail / mobile sheet: chat fills the sidebar, Back stays there. */
 .studio-dm-pane.is-rail-embedded {
   flex: 1 1 auto;
