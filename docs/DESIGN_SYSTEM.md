@@ -557,7 +557,12 @@ public catalog site. Deep links (`/creative-network/`, `/creative-network/[slug]
 On **Network** (and seller-apply), the left rail is the catalog filter rail like the
 public Creative Network page — including **Sort** (not in the main results head).
 Studio Network filter search uses `PanelSearchBar` (Messages language), not a pill
-input. Public `/creative-network/` keeps its existing left book rail on offer detail;
+input. Keep **~10px horizontal pad** on search + `.public-offers-rail-body` (do not
+zero left/right — flush content reads as a bug). Filter sections in Studio CN are
+soft **L2** `--mos-plate` cards (12px radius, soft border, light top sheen) with
+accent-tinted active rows — not a flat wall of transparent chips. Scope those
+lift styles to `.studio-cn-sidebar` so public `/creative-network/` stays as-is.
+Public `/creative-network/` keeps its existing left book rail on offer detail;
 in-Studio offer book is the **right** secondary dock (`--mos-panel`).
 On **My offers / My jobs**, the rail is Messages with inline chat (Back stays in the
 rail — no Messages tab). On **Assets**, the rail is the normal file manager (Your files)
