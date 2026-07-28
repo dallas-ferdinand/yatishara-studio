@@ -1397,7 +1397,7 @@ function AuthFrame({
           font-size: 11px;
         }
       `}</style>
-      <section className="studio-auth-card relative w-full max-w-[380px] p-5 text-center sm:p-6">
+      <section className="studio-auth-card relative w-full max-w-[300px] p-5 text-center sm:p-5">
         {onBack ? (
           <button
             type="button"
