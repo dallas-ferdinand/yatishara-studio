@@ -19,6 +19,12 @@ import {
 } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { ResizableSideSheet } from "./ResizableSideSheet";
+import {
+  historyRangeCacheKey,
+  rememberStudioLive,
+  readStudioLive,
+} from "@/studio/lib/studioLiveCache";
+import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 
 const DEFAULT_OPEN_GROUPS = new Set(["Open", "Today", "Yesterday"]);
 
@@ -205,10 +211,7 @@ function HistoryGroupSection({
       {open ? (
         <div className="studio-history-group-body">
           {loading && !items.length ? (
-            <div className="studio-history-group-loading">
-              <Loader2 className="studio-history-spin" aria-hidden="true" />
-              <span>Loading…</span>
-            </div>
+            <div className="studio-history-group-loading" aria-busy="true" aria-hidden="true" />
           ) : items.length ? (
             <div className="studio-history-group-items">
               {items.map((thread) => (
@@ -236,7 +239,9 @@ function HistoryGroupSection({
 
 function useHistoryRange(range, enabled, expiresUnix) {
   const [cursor, setCursor] = useState(undefined);
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() =>
+    enabled ? readStudioLive(historyRangeCacheKey(range)) ?? [] : [],
+  );
   const [hasMore, setHasMore] = useState(false);
 
   const page = useQuery(
@@ -256,18 +261,25 @@ function useHistoryRange(range, enabled, expiresUnix) {
       setCursor(undefined);
       setItems([]);
       setHasMore(false);
+      return;
     }
-  }, [enabled]);
+    const cached = readStudioLive(historyRangeCacheKey(range));
+    if (cached?.length) setItems(cached);
+  }, [enabled, range]);
 
   useEffect(() => {
     if (!page) return;
     setItems((prev) => {
-      if (cursor == null) return page.threads;
+      if (cursor == null) {
+        rememberStudioLive(historyRangeCacheKey(range), page.threads);
+        return page.threads;
+      }
       const seen = new Set(prev.map((thread) => thread._id));
       return [...prev, ...page.threads.filter((thread) => !seen.has(thread._id))];
     });
     setHasMore(Boolean(page.hasMore));
-  }, [page, cursor]);
+    if (cursor == null) markStudioPaint("history");
+  }, [page, cursor, range]);
 
   function loadMore() {
     if (!page?.nextCursor || !page.hasMore) return;
@@ -276,7 +288,7 @@ function useHistoryRange(range, enabled, expiresUnix) {
 
   return {
     items,
-    loading: enabled && page === undefined,
+    loading: enabled && page === undefined && items.length === 0,
     hasMore,
     loadMore,
   };

@@ -269,6 +269,18 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 | `.studio-admin-section-head` | Compact section bar (36px, `0 8px` pad) | `--mos-plate` |
 | `.studio-admin-card`, `.studio-plan-card`, `.studio-bank-card` | Cards | `--mos-plate` |
 | `.studio-admin-chip` | Count / meta chip | subtle |
+| Settings / History **section containers** | Soft surface cards for Settings panes + History groups | see below |
+
+**Settings + History section containers** (shared chrome in `StudioShell.tsx`):
+
+- Selectors: `.studio-account-card`, `.studio-settings-appearance-card`,
+  `.studio-settings-plans`, `.studio-settings-storage-card`,
+  `.studio-settings-invoices-card`, `.studio-settings-activity-card`,
+  `.studio-settings-payment-card`, `.studio-history-group`
+- Fill: `color-mix(mos-surface 58%, transparent)` · border soft 82% · **radius 18px**
+- Shadow: inset top highlight + soft 1px/4px drop (light mode uses white inset)
+- History list: `10px` pad + `10px` gap between group cards; group toggle is an L3 wash
+  header inside the card (not a full-bleed flat bar). Memory: **759**.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
@@ -331,21 +343,39 @@ Studio must feel **native**, not like a website waiting to load:
   the same after first visit (switch back = show slot, no remount/resubscribe).
 - **Idle prefetch** — after auth, `preloadStudioHotPanes()` warms Feed / Network /
   History / Profile chunks so first open isn’t a blank wait.
-- **Messages instant open** — never show “Loading…” for inbox/thread. Use
-  `dmClientCache` (session + memory) + warm `listMessages` for the top chats in
-  the sidebar; quiet pending spacer only when there is no cache yet.
+- **Intent prefetch** — pointerdown / hover on mobile nav (and tab select) calls
+  `prefetchStudioSurface` + `markStudioIntent` before the pane mounts.
+- **Optimistic live cache** — `studioLiveOrCached` / `dmClientCache`: paint last
+  session snapshot for DMs, folders, threads, History, Feed, CN store while Convex
+  catches up. Never flash “Loading…” when cache exists (quiet pending only).
+- **Signed-URL budget** — `SIGNED_URL_BUDGET` caps folder preview fallbacks and
+  chat playable lazy-signs (`signedUrlBudget.ts`). Thumbs first; full media lazy.
+- **Wallpaper layer** — `StudioBackdrop` is `memo()` with no props so Convex ticks
+  don’t repaint the wallpaper. Glass stays on fixed chrome only.
+- **Dallas paint HUD** — admin + `?studioPerf=1` or
+  `localStorage yatishara-studio-perf-hud=1` shows intent→paint ms (`StudioPerfHud`).
+- **Messages instant open** — DM cache + warm top chats in the sidebar.
 - **Gate Shell Convex** — skip composer catalog / threads / seller listings until
-  that surface is active; skip folder contents (`listByFolder`, peeks, trash,
-  unused elements) while Files isn’t shown — desktop social rails **and** mobile
-  until the Files dock is open. Asset-pick / my-assets re-enable.
-  Live `listEvents` skips bulk playable CDN signatures; newest video/audio
-  lazy-sign via client `signedReadUrl` queries. `StudioComposer` mounts only on
-  `composer:` / `thread:` tabs. Do **not** split Shell into components for this.
-- **Scroll glass** — no `backdrop-filter` on scrolling surfaces (profile wash,
-  feed post chrome, empty-chat logo, media play overlay); glass stays on fixed
-  composer / menus.
+  that surface is active; skip folder contents while Files isn’t shown — desktop
+  social rails **and** mobile until the Files dock is open. Asset-pick / my-assets
+  re-enable. Live `listEvents` skips bulk playable CDN signatures. `StudioComposer`
+  mounts only on `composer:` / `thread:` tabs. Do **not** split Shell into
+  components for this.
+- **Scroll glass** — no `backdrop-filter` on scrolling surfaces; glass stays on
+  fixed composer / menus.
 - **Overlay motion** — app menu / history sheet rise ~110ms (not 220ms+).
 - Files dock + Back stack: see Mobile Generate Files dock. Memory: **786**.
+
+#### Instant surface checklist (every new pane)
+
+Before merge, a pane must:
+
+1. Mount-gate / keepalive so switch-back isn’t a remount tax  
+2. Skip unused Convex queries when the surface is hidden  
+3. Use `live ?? cache ?? empty` — no “Loading…” when cache exists  
+4. No `backdrop-filter` on its scroll surface  
+5. No unbounded signed-URL fan-out (respect `SIGNED_URL_BUDGET`)  
+6. Prefetch chunk on nav intent when first open is common  
 
 ### Mobile Generate Files dock (locked)
 

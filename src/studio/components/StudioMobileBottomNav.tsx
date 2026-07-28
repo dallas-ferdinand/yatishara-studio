@@ -17,7 +17,7 @@ const POINTER_MOVE_CANCEL = 14;
  * Fire primary nav actions on pointerdown so is-active paints immediately.
  * onClick remains as keyboard / synthetic fallback when pointer path already ran.
  */
-function useInstantTap(onActivate) {
+function useInstantTap(onActivate, onIntent) {
   const handledRef = useRef(false);
   const startRef = useRef({ x: 0, y: 0 });
   const cancelledRef = useRef(false);
@@ -29,6 +29,7 @@ function useInstantTap(onActivate) {
       cancelledRef.current = false;
       startRef.current = { x: event.clientX, y: event.clientY };
       handledRef.current = true;
+      onIntent?.();
       onActivate?.();
     },
     onPointerMove: (event) => {
@@ -45,6 +46,7 @@ function useInstantTap(onActivate) {
         handledRef.current = false;
         return;
       }
+      onIntent?.();
       onActivate?.();
     },
   };
@@ -57,9 +59,10 @@ function NavButton({
   ariaPressed,
   title,
   onActivate,
+  onIntent,
   children,
 }) {
-  const tap = useInstantTap(onActivate);
+  const tap = useInstantTap(onActivate, onIntent);
   return (
     <button
       type="button"
@@ -68,6 +71,7 @@ function NavButton({
       aria-label={ariaLabel}
       aria-pressed={ariaPressed}
       title={title}
+      onPointerEnter={() => onIntent?.()}
       {...tap}
     >
       {children}
@@ -82,6 +86,7 @@ function NavButton({
 export function StudioMobileBottomNav({
   section,
   onSelect,
+  onPrefetch,
   action = null,
   historyAction = null,
   tools = null,
@@ -104,6 +109,7 @@ export function StudioMobileBottomNav({
         title="Files"
         ariaPressed={filesAction.active ? true : undefined}
         onActivate={() => filesAction.onClick?.()}
+        onIntent={() => onPrefetch?.("files")}
       >
         <FilesIcon aria-hidden="true" />
       </NavButton>
@@ -117,6 +123,7 @@ export function StudioMobileBottomNav({
         title="History"
         ariaPressed={historyAction.active ? true : undefined}
         onActivate={() => historyAction.onClick?.()}
+        onIntent={() => onPrefetch?.("history")}
       >
         <HistoryIcon aria-hidden="true" />
       </NavButton>
@@ -131,6 +138,7 @@ export function StudioMobileBottomNav({
           ariaLabel="Feed"
           title="Feed"
           onActivate={() => onSelect("feed")}
+          onIntent={() => onPrefetch?.("feed")}
         >
           <Cloud aria-hidden="true" />
         </NavButton>
@@ -147,6 +155,7 @@ export function StudioMobileBottomNav({
               ariaLabel="Creative Network"
               title="Creative Network"
               onActivate={() => onSelect("network")}
+              onIntent={() => onPrefetch?.("network")}
             >
               <Store aria-hidden="true" />
             </NavButton>
@@ -159,6 +168,7 @@ export function StudioMobileBottomNav({
             ariaLabel="Creative Network"
             title="Creative Network"
             onActivate={() => onSelect("network")}
+            onIntent={() => onPrefetch?.("network")}
           >
             <Store aria-hidden="true" />
           </NavButton>
@@ -170,6 +180,7 @@ export function StudioMobileBottomNav({
           ariaLabel="Messages"
           title="Messages"
           onActivate={() => onSelect("messages")}
+          onIntent={() => onPrefetch?.("messages")}
         >
           <MessageCircle aria-hidden="true" />
         </NavButton>
@@ -186,6 +197,7 @@ export function StudioMobileBottomNav({
               ariaLabel="Create"
               title="Create"
               onActivate={() => onSelect("composer")}
+              onIntent={() => onPrefetch?.("composer")}
             >
               <Sparkles aria-hidden="true" />
             </NavButton>
@@ -199,6 +211,7 @@ export function StudioMobileBottomNav({
             ariaLabel="Create"
             title="Create"
             onActivate={() => onSelect("composer")}
+            onIntent={() => onPrefetch?.("composer")}
           >
             <Sparkles aria-hidden="true" />
           </NavButton>

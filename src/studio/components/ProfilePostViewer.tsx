@@ -48,6 +48,13 @@ import {
   type OverlaySampleBias,
 } from "@/studio/lib/captionBackdropContrast";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
+import {
+  feedCacheKey,
+  rememberStudioLive,
+  readStudioLive,
+  studioLiveOrCached,
+} from "@/studio/lib/studioLiveCache";
+import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 import "./profile-post-viewer.css";
 import "./post-compose-tab.css";
 
@@ -999,13 +1006,24 @@ export function ProfilePostViewer({
     !postId || String(postId) === "home"
       ? undefined
       : (postId as Id<"profilePosts">);
-  const feed = useQuery(api.profiles.listFeed, {
+  const feedLive = useQuery(api.profiles.listFeed, {
     expiresUnix,
     limit: 28,
     // Seed pin only applies to For You; Following is pure follow graph.
     seedPostId: feedMode === "forYou" ? seedPostId : undefined,
     mode: feedMode,
   });
+  const feedKey = feedCacheKey(feedMode, seedPostId ?? "home");
+  useEffect(() => {
+    rememberStudioLive(feedKey, feedLive);
+  }, [feedKey, feedLive]);
+  const { data: feed, pending: feedPending } = studioLiveOrCached(
+    feedLive,
+    readStudioLive(feedKey),
+  );
+  useEffect(() => {
+    if (feed != null && tabActive) markStudioPaint("feed");
+  }, [feed, tabActive]);
   const toggleLike = useMutation(api.profiles.toggleLike);
   const toggleSave = useMutation(api.profiles.toggleSave);
   const recordShare = useMutation(api.profiles.recordShare);
@@ -1711,11 +1729,18 @@ export function ProfilePostViewer({
     }
   }
 
-  if (feed === undefined) {
+  if (feed == null) {
     return (
-      <div className="profile-post-viewer is-loading" aria-busy="true">
+      <div
+        className={`profile-post-viewer${feedPending ? " is-loading" : " is-empty"}`}
+        aria-busy={feedPending || undefined}
+      >
         <div className="profile-post-viewer-blur" aria-hidden="true" />
-        <MediaLoadWave className="profile-post-viewer-load-wave" />
+        {feedPending ? (
+          <MediaLoadWave className="profile-post-viewer-load-wave" />
+        ) : (
+          <p>No posts in feed yet</p>
+        )}
       </div>
     );
   }

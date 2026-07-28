@@ -132,6 +132,24 @@ import {
   StudioStyleSheetTriggerButton,
 } from "@/studio/components/StudioStyleSheetPicker";
 import { friendlyGenerationError } from "@/studio/lib/generationUserErrors";
+import {
+  SIGNED_URL_BUDGET,
+  takeSignedUrlBudget,
+} from "@/studio/lib/signedUrlBudget";
+import {
+  folderAssetsCacheKey,
+  folderChildrenCacheKey,
+  folderDocumentsCacheKey,
+  rememberStudioLive,
+  readStudioLive,
+  threadEventsCacheKey,
+} from "@/studio/lib/studioLiveCache";
+import {
+  markStudioIntent,
+  markStudioPaint,
+  surfaceFromTabKey,
+} from "@/studio/lib/studioPaintMarks";
+import { StudioPerfHud } from "@/studio/components/StudioPerfHud";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
@@ -308,6 +326,27 @@ function preloadStudioHotPanes() {
   void import("./StudioRenameDialog");
   void import("./StudioListAssetPane");
 }
+
+/** Intent prefetch — pointerdown/hover on nav before the tab paint. */
+function prefetchStudioSurface(surface: string) {
+  markStudioIntent(surface);
+  if (surface === "feed" || surface === "profile") {
+    void import("./ProfilePostViewer");
+    void import("./PublicProfileView");
+  } else if (surface === "network") {
+    void import("./StudioCreativeNetworkPane");
+  } else if (surface === "history") {
+    void import("./StudioHistoryPanel");
+  } else if (surface === "messages") {
+    void import("./StudioMessagesPane");
+    void import("./StudioMessagesSidebar");
+  }
+}
+
+/** Wallpaper layer — memo with no props so Convex ticks don't repaint it. */
+const StudioBackdrop = memo(function StudioBackdrop() {
+  return <div className="studio-backdrop" aria-hidden="true" />;
+});
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
@@ -1569,7 +1608,7 @@ export function StudioShell({
       observer.disconnect();
     };
   }, [isMobile]);
-  const childFolders = useQuery(
+  const childFoldersQuery = useQuery(
     api.folders.listWithPeeks,
     hasCurrentUser && activeFolder && !isTrashView && needsExplorerFolderContents
       ? {
@@ -1579,6 +1618,17 @@ export function StudioShell({
         }
       : "skip",
   );
+  useEffect(() => {
+    if (activeFolder?._id && childFoldersQuery !== undefined) {
+      rememberStudioLive(folderChildrenCacheKey(activeFolder._id), childFoldersQuery);
+    }
+  }, [activeFolder?._id, childFoldersQuery]);
+  const childFolders =
+    childFoldersQuery !== undefined
+      ? childFoldersQuery
+      : activeFolder?._id
+        ? readStudioLive(folderChildrenCacheKey(activeFolder._id)) ?? undefined
+        : undefined;
   const trashedAssets = useQuery(
     api.assets.listTrash,
     hasCurrentUser && isTrashView && needsExplorerFolderContents
@@ -1599,7 +1649,7 @@ export function StudioShell({
     () => (trashedElementsRaw ?? []).filter((element) => element.deletedAt),
     [trashedElementsRaw],
   );
-  const assets = useQuery(
+  const assetsQuery = useQuery(
     api.assets.listByFolder,
     hasCurrentUser &&
       activeFolder &&
@@ -1612,7 +1662,18 @@ export function StudioShell({
         }
       : "skip",
   );
-  const documents = useQuery(
+  useEffect(() => {
+    if (activeFolder?._id && assetsQuery !== undefined) {
+      rememberStudioLive(folderAssetsCacheKey(activeFolder._id), assetsQuery);
+    }
+  }, [activeFolder?._id, assetsQuery]);
+  const assets =
+    assetsQuery !== undefined
+      ? assetsQuery
+      : activeFolder?._id
+        ? readStudioLive(folderAssetsCacheKey(activeFolder._id)) ?? undefined
+        : undefined;
+  const documentsQuery = useQuery(
     api.documents.listByFolder,
     hasCurrentUser &&
       activeFolder &&
@@ -1621,6 +1682,17 @@ export function StudioShell({
       ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
       : "skip",
   );
+  useEffect(() => {
+    if (activeFolder?._id && documentsQuery !== undefined) {
+      rememberStudioLive(folderDocumentsCacheKey(activeFolder._id), documentsQuery);
+    }
+  }, [activeFolder?._id, documentsQuery]);
+  const documents =
+    documentsQuery !== undefined
+      ? documentsQuery
+      : activeFolder?._id
+        ? readStudioLive(folderDocumentsCacheKey(activeFolder._id)) ?? undefined
+        : undefined;
   const videoEditorEnabled = isVideoEditorPreviewEnabled();
   const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
@@ -1683,8 +1755,30 @@ export function StudioShell({
         }
       : "skip",
   );
-  const liveEvents = liveEventsPage?.events;
-  const eventsLoading = Boolean(activeThreadId && liveEventsPage === undefined);
+  useEffect(() => {
+    if (activeThreadId && liveEventsPage?.events !== undefined) {
+      rememberStudioLive(
+        threadEventsCacheKey(activeThreadId),
+        liveEventsPage.events,
+      );
+    }
+  }, [activeThreadId, liveEventsPage?.events]);
+  const liveEventsCached = activeThreadId
+    ? readStudioLive(threadEventsCacheKey(activeThreadId))
+    : null;
+  const liveEvents =
+    liveEventsPage?.events !== undefined
+      ? liveEventsPage.events
+      : (liveEventsCached ?? undefined);
+  const eventsLoading = Boolean(
+    activeThreadId &&
+      liveEventsPage === undefined &&
+      liveEventsCached == null,
+  );
+  useEffect(() => {
+    if (!activeThreadId || eventsLoading) return;
+    markStudioPaint("thread");
+  }, [activeThreadId, eventsLoading, liveEvents?.length]);
   const assistanceApprovals = useQuery(
     api.assistanceApprovals.listForThread,
     hasCurrentUser && activeThreadId && assistanceEnabled
@@ -1921,6 +2015,7 @@ export function StudioShell({
       ? (trashedAssets ?? [])
       : [...(assets ?? []), ...activeFolderResultAssets];
     const seen = new Set();
+    let folderFallback = 0;
     for (const asset of previewAssets) {
       if (!asset?._id || !["image", "video"].includes(asset.kind) || seen.has(asset._id)) {
         continue;
@@ -1932,6 +2027,8 @@ export function StudioShell({
       // Videos with a poster thumb are done; videos with a playable URL can
       // render a first-frame <video> thumb without another signedReadUrl hop.
       if (asset.kind === "video" && (hasThumb || hasRead)) continue;
+      if (folderFallback >= SIGNED_URL_BUDGET.folderPreviewFallback) continue;
+      folderFallback += 1;
       queries[`asset:${asset._id}`] = {
         query: api.assets.signedReadUrl,
         args: { assetId: asset._id, expiresUnix: assetUrlExpiresUnix },
@@ -1939,8 +2036,8 @@ export function StudioShell({
     }
     // Live listEvents skips bulk playable CDN signatures — lazy-sign the newest
     // chat video/audio so opening a thread stays fast but playback still works.
-    let chatPlayable = 0;
-    for (let i = (events?.length ?? 0) - 1; i >= 0 && chatPlayable < 20; i -= 1) {
+    const chatCandidates = [];
+    for (let i = (events?.length ?? 0) - 1; i >= 0; i -= 1) {
       const event = events[i];
       if (event?.kind !== "result" || !event.resultAssets?.length) continue;
       for (const asset of event.resultAssets) {
@@ -1948,13 +2045,17 @@ export function StudioShell({
         if (asset.kind !== "video" && asset.kind !== "audio") continue;
         if (asset.signedReadUrl) continue;
         seen.add(asset._id);
-        queries[`asset:${asset._id}`] = {
-          query: api.assets.signedReadUrl,
-          args: { assetId: asset._id, expiresUnix: assetUrlExpiresUnix },
-        };
-        chatPlayable += 1;
-        if (chatPlayable >= 20) break;
+        chatCandidates.push(asset._id);
       }
+    }
+    for (const assetId of takeSignedUrlBudget(
+      chatCandidates,
+      SIGNED_URL_BUDGET.chatPlayable,
+    )) {
+      queries[`asset:${assetId}`] = {
+        query: api.assets.signedReadUrl,
+        args: { assetId, expiresUnix: assetUrlExpiresUnix },
+      };
     }
     return queries;
   }, [
@@ -2705,12 +2806,16 @@ export function StudioShell({
       )
     : Boolean(
         activeFolder &&
-          (childFolders === undefined ||
-            assetsWithPreviewUrls === undefined ||
-            documents === undefined ||
-            videoEdits === undefined ||
-            elements === undefined),
+          needsExplorerFolderContents &&
+          assets === undefined &&
+          documents === undefined &&
+          childFolders === undefined,
       );
+
+  useEffect(() => {
+    if (!needsExplorerFolderContents || folderContentLoading) return;
+    markStudioPaint("files");
+  }, [folderContentLoading, needsExplorerFolderContents, activeFolder?._id]);
 
   const currentEntries = useMemo(() => {
     const parentCrumb = navTrail.length > 1 ? navTrail[navTrail.length - 2] : null;
@@ -3189,6 +3294,7 @@ export function StudioShell({
   }
 
   function openMessages() {
+    prefetchStudioSurface("messages");
     openTab(MESSAGES_TAB);
     setSettingsOpen(false);
     setHistoryOpen(false);
@@ -3527,6 +3633,9 @@ export function StudioShell({
 
   function openMobileSection(section) {
     // Sync — do not wrap in useTransition; nav is-active must paint on pointerdown.
+    if (section === "feed" || section === "network" || section === "messages" || section === "files" || section === "composer") {
+      prefetchStudioSurface(section === "composer" ? "composer" : section);
+    }
     if (section === "settings") {
       setMobileAppMenuOpen(false);
       setHistoryOpen(false);
@@ -3675,6 +3784,11 @@ export function StudioShell({
   const handleTabSelect = useCallback((key) => {
     setFeedModeMenuOpen(false);
     setFeedModeMenuKey(null);
+    const surface = surfaceFromTabKey(key);
+    if (surface) {
+      prefetchStudioSurface(surface);
+      markStudioIntent(surface);
+    }
     // Sync — useTransition deferred the active tab paint and felt like a website load.
     setActiveTab(key);
   }, []);
@@ -5953,7 +6067,8 @@ export function StudioShell({
       }}
     >
       <StudioOnlinePresence />
-      <div className="studio-backdrop" aria-hidden="true" />
+      <StudioBackdrop />
+      <StudioPerfHud enabled={Boolean(isAdminUser)} />
       <style jsx global>{`
         .studio-polish {
           --studio-active-bg: none;
@@ -7659,7 +7774,10 @@ export function StudioShell({
           position: fixed;
           left: 0;
           right: 0;
-          bottom: var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)));
+          bottom: calc(
+            var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+              + var(--studio-keyboard-inset, 0px)
+          );
           z-index: 55;
           display: flex;
           flex-direction: column;
@@ -7863,8 +7981,6 @@ export function StudioShell({
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
-          --studio-mobile-settings-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
-          --studio-mobile-settings-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-dm-peer-sheet-height: calc(0.48 * var(--studio-mobile-files-band));
           --studio-mobile-dm-peer-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
@@ -7877,8 +7993,11 @@ export function StudioShell({
           min-width: 0;
           min-height: 0;
           overflow: hidden;
-          /* Clear absolute bottom nav — same CB math as before. */
-          padding-bottom: var(--studio-mobile-bottom-chrome);
+          /* Clear absolute bottom nav + OS keyboard — never let KB cover chrome. */
+          padding-bottom: calc(
+            var(--studio-mobile-bottom-chrome)
+              + var(--studio-keyboard-inset, 0px)
+          );
           box-sizing: border-box;
         }
         .studio-polish.is-studio-mobile .studio-mobile-stage > .studio-main-panels {
@@ -9135,9 +9254,15 @@ export function StudioShell({
           background: transparent;
           padding: 0 !important;
         }
+        /* Shared Settings / History section containers (soft surface cards). */
+        .studio-settings-workspace .studio-account-card,
+        .studio-settings-workspace .studio-settings-appearance-card,
         .studio-settings-workspace .studio-settings-invoices-card,
         .studio-settings-workspace .studio-settings-plans,
-        .studio-settings-workspace .studio-settings-storage-card {
+        .studio-settings-workspace .studio-settings-storage-card,
+        .studio-settings-workspace .studio-settings-activity-card,
+        .studio-settings-workspace .studio-settings-payment-card,
+        .studio-history-group {
           overflow: hidden;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
@@ -9147,9 +9272,14 @@ export function StudioShell({
             0 1px 2px color-mix(in srgb, #000 8%, transparent),
             0 4px 10px color-mix(in srgb, #000 6%, transparent);
         }
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-account-card,
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-appearance-card,
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-invoices-card,
         [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-plans,
-        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-storage-card {
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-storage-card,
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-activity-card,
+        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-payment-card,
+        [data-appearance="light"] .studio-polish .studio-history-group {
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.72),
             0 1px 2px rgba(15, 23, 42, 0.05),
@@ -9955,13 +10085,6 @@ export function StudioShell({
           font-size: 12px;
         }
         .studio-settings-workspace .studio-settings-payment-card {
-          overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 18px;
-          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
-            0 10px 28px color-mix(in srgb, #000 18%, transparent);
           display: grid;
           gap: 0;
           padding: 0 !important;
@@ -10207,13 +10330,6 @@ export function StudioShell({
           font-size: 13px;
         }
         .studio-settings-workspace .studio-settings-activity-card {
-          overflow: hidden;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 18px;
-          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 6%, transparent),
-            0 10px 28px color-mix(in srgb, #000 18%, transparent);
           padding: 0 !important;
         }
         .studio-settings-activity-head {
@@ -10398,25 +10514,11 @@ export function StudioShell({
         .studio-settings-workspace .studio-settings-appearance-card {
           overflow-x: clip;
           overflow-y: visible;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
-          border-radius: 18px;
-          background: color-mix(in srgb, var(--mos-surface) 58%, transparent);
-          box-shadow:
-            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 7%, transparent),
-            0 1px 2px color-mix(in srgb, #000 8%, transparent),
-            0 4px 10px color-mix(in srgb, #000 6%, transparent);
           padding: 14px 16px !important;
           min-width: 0;
           max-width: 100%;
           width: 100%;
           box-sizing: border-box;
-        }
-        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-account-card,
-        [data-appearance="light"] .studio-polish .studio-settings-workspace .studio-settings-appearance-card {
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.72),
-            0 1px 2px rgba(15, 23, 42, 0.05),
-            0 3px 8px rgba(15, 23, 42, 0.04);
         }
         .studio-settings-appearance-card .cursor-settings-section {
           border: 0 !important;
@@ -16498,12 +16600,29 @@ export function StudioShell({
           position: fixed;
           left: 0;
           right: 0;
-          bottom: var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)));
+          bottom: calc(
+            var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+              + var(--studio-keyboard-inset, 0px)
+          );
           z-index: 55;
           display: flex;
           flex-direction: column;
-          height: var(--studio-mobile-history-sheet-height, 55dvh);
-          max-height: var(--studio-mobile-history-sheet-full, 72dvh);
+          /* Cap to the band under the top header — shrink when KB opens, never slide under head. */
+          --studio-mobile-history-sheet-band: calc(
+            100dvh
+              - var(--studio-mobile-top-chrome, calc(44px + env(safe-area-inset-top, 0px)))
+              - var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+              - var(--studio-keyboard-inset, 0px)
+              - 8px
+          );
+          height: min(
+            var(--studio-history-sheet-h, var(--studio-mobile-history-sheet-height, 55dvh)),
+            var(--studio-mobile-history-sheet-band)
+          );
+          max-height: min(
+            var(--studio-mobile-history-sheet-full, 72dvh),
+            var(--studio-mobile-history-sheet-band)
+          );
           padding: 0;
           border: none;
           border-radius: 18px 18px 0 0;
@@ -16515,8 +16634,17 @@ export function StudioShell({
           transition:
             height 140ms cubic-bezier(0.22, 1, 0.36, 1),
             max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            top 120ms cubic-bezier(0.22, 1, 0.36, 1),
+            bottom 120ms cubic-bezier(0.22, 1, 0.36, 1),
             border-radius 120ms ease;
           will-change: height;
+        }
+        /* Keyboard open: pin under workspace head — never let height push through the header. */
+        .studio-polish[data-keyboard-open="1"] .studio-history-mobile-sheet {
+          top: calc(var(--studio-mobile-top-chrome, calc(44px + env(safe-area-inset-top, 0px))) + 8px);
+          height: auto !important;
+          max-height: none !important;
+          border-radius: 14px 14px 0 0;
         }
         .studio-history-mobile-sheet.is-entered {
           animation: none;
@@ -16587,7 +16715,7 @@ export function StudioShell({
           overscroll-behavior: contain;
           touch-action: pan-y;
           -webkit-overflow-scrolling: touch;
-          padding: 0;
+          padding: 10px;
           scrollbar-gutter: auto;
         }
         .studio-history-floating-head {
@@ -16620,6 +16748,7 @@ export function StudioShell({
           height: 32px;
           padding: 0 8px 0 10px;
           border: 0;
+          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
           border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border));
           border-radius: 0;
           background: transparent;
@@ -16700,19 +16829,15 @@ export function StudioShell({
           overflow-y: auto;
           overscroll-behavior: contain;
           touch-action: pan-y;
-          padding: 0;
+          padding: 10px;
           display: flex;
           flex-direction: column;
-          gap: 0;
+          gap: 10px;
           background: transparent;
         }
-        /* Full-bleed sections — no floating rounded cards. */
+        /* Settings-style section cards — chrome from shared section-container rule. */
         .studio-history-group {
           flex: 0 0 auto;
-          border: 0;
-          border-radius: 0;
-          background: transparent;
-          overflow: hidden;
         }
         .studio-history-group-toggle {
           display: grid;
@@ -16721,20 +16846,28 @@ export function StudioShell({
           align-items: center;
           gap: 4px;
           margin: 0;
-          padding: 8px 12px;
+          padding: 10px 12px;
           border: 0;
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 0;
-          background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
+          background: color-mix(
+            in srgb,
+            var(--mos-plate-strong, var(--mos-raised, #d4d4da)) 72%,
+            transparent
+          );
           color: inherit;
           font: inherit;
           cursor: pointer;
         }
         .studio-history-group:not(.is-open) .studio-history-group-toggle {
-          border-bottom-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-bottom-color: transparent;
         }
         .studio-history-group-toggle:hover {
-          background: color-mix(in srgb, var(--cursor-accent) 8%, var(--mos-plate-strong, var(--mos-raised, #d4d4da)));
+          background: color-mix(
+            in srgb,
+            var(--cursor-accent) 10%,
+            var(--mos-plate-strong, var(--mos-raised, #d4d4da))
+          );
         }
         .studio-history-group-label {
           margin: 0;
@@ -16785,7 +16918,7 @@ export function StudioShell({
           gap: 10px;
           padding: 10px 12px;
           border: 0;
-          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
           border-radius: 0;
           background: transparent;
           color: inherit;
@@ -16795,14 +16928,17 @@ export function StudioShell({
           cursor: pointer;
           transition: background 120ms ease;
         }
+        .studio-history-item:last-child {
+          border-bottom: 0;
+        }
         .studio-history-item:hover,
         .studio-history-item:active {
           background: color-mix(in srgb, var(--cursor-accent) 8%, transparent);
-          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-color: color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
         }
         .studio-history-item.is-active {
           background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-          border-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-color: color-mix(in srgb, var(--color-cursor-border-soft) 70%, transparent);
           box-shadow: inset 2px 0 0 var(--cursor-accent);
         }
         .studio-history-item-main {
@@ -19079,6 +19215,7 @@ export function StudioShell({
         <StudioMobileBottomNav
           section={resolveMobileBottomNavSection(activeTab, mobileSection)}
           onSelect={openMobileSection}
+          onPrefetch={prefetchStudioSurface}
           action={
             // Files dock only where desktop shows the file sidebar (Generate / My Assets).
             // Linked pill: expands beside Create on Generate, beside Network on My Assets.
@@ -19692,7 +19829,7 @@ function StudioComposer({
         keyboardRafId = 0;
         const vv = window.visualViewport;
         let inset = 0;
-        if (isMobile && vv && root.getAttribute("data-files-open") !== "1") {
+        if (isMobile && vv) {
           const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
           // Noise floor only — no 80px cliff (that caused the jump mid-animation).
           inset = raw < 6 ? 0 : Math.round(raw);

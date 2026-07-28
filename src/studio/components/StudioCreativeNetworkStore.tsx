@@ -4,7 +4,7 @@ import { useAction, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Check, Loader2, ShoppingBag, X } from "lucide-react";
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 import {
   clearActiveExplorerDrag,
@@ -13,6 +13,13 @@ import {
 import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
 import { formatTtdCents } from "@/studio/lib/money";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import {
+  cnListingsCacheKey,
+  rememberStudioLive,
+  readStudioLive,
+  studioLiveOrCached,
+} from "@/studio/lib/studioLiveCache";
+import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
 import { StudioChatAudioPlayer } from "./StudioChatAudioPlayer";
 import { MediaLoadWave } from "./media-load-frame";
 import "./studio-creative-network-store.css";
@@ -224,12 +231,26 @@ export function StudioCreativeNetworkStore({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const deferredSearch = search.trim();
-  const listings = useQuery(api.assetStore.browseListings, {
+  const listingsLive = useQuery(api.assetStore.browseListings, {
     expiresUnix,
     audioType: audioFilter === "all" ? undefined : audioFilter,
     search: deferredSearch || undefined,
     limit: 48,
   });
+  const listingsCacheKey = cnListingsCacheKey(
+    audioFilter === "all" ? "all" : audioFilter,
+    deferredSearch,
+  );
+  useEffect(() => {
+    rememberStudioLive(listingsCacheKey, listingsLive);
+  }, [listingsCacheKey, listingsLive]);
+  const { data: listings, pending: listingsPending } = studioLiveOrCached(
+    listingsLive,
+    readStudioLive(listingsCacheKey),
+  );
+  useEffect(() => {
+    if (listings != null) markStudioPaint("network");
+  }, [listings]);
   const purchaseListing = useAction(api.assetStoreActions.purchaseListing);
 
   const rows = useMemo(() => listings ?? [], [listings]);
@@ -268,7 +289,11 @@ export function StudioCreativeNetworkStore({
     <div className="studio-cn-store">
       <div className="studio-cn-store-scroll">
         {!listings ? (
-          <div className="studio-cn-store-empty">Loading store…</div>
+          <div
+            className={`studio-cn-store-empty${listingsPending ? " is-pending" : ""}`}
+            aria-busy={listingsPending || undefined}
+            aria-hidden={listingsPending ? true : undefined}
+          />
         ) : rows.length === 0 ? (
           <div className="studio-cn-store-empty">
             {deferredSearch
