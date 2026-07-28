@@ -1203,6 +1203,8 @@ function AuthFrame({
           font-weight: 500;
           line-height: 18px;
           outline: none;
+          /* Focus cue is the field border only — no blinking caret. */
+          caret-color: transparent;
         }
         .studio-auth-field input::placeholder,
         .studio-auth-field textarea::placeholder,
