@@ -1,6 +1,7 @@
 import { Email } from "@convex-dev/auth/providers/Email";
 import { generateRandomString, type RandomReader } from "@oslojs/crypto/random";
 import { Resend as ResendAPI } from "resend";
+import { buildSignInCodeEmail } from "./lib/authEmail";
 
 export const ResendOTP = Email({
   id: "resend-otp",
@@ -20,13 +21,13 @@ export const ResendOTP = Email({
     }
     const resend = new ResendAPI(provider.apiKey);
     const from = process.env.AUTH_RESEND_FROM ?? "Yatishara Studio <noreply@yatishara.com>";
-    const pretty =
-      token.length === 6 ? `${token.slice(0, 3)}-${token.slice(3)}` : token;
+    const message = buildSignInCodeEmail({ code: token, email });
     const { error } = await resend.emails.send({
       from,
       to: [email],
-      subject: "Your Yatishara Studio sign-in code",
-      text: `Your Yatishara Studio code is ${pretty}`,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
     });
     if (error) {
       throw new Error("Could not send verification code");
