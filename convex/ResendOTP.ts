@@ -21,7 +21,11 @@ export const ResendOTP = Email({
     }
     const resend = new ResendAPI(provider.apiKey);
     const from = process.env.AUTH_RESEND_FROM ?? "Yatishara Studio <noreply@yatishara.com>";
-    const message = buildSignInCodeEmail({ code: token, email });
+    const message = buildSignInCodeEmail({
+      code: token,
+      email,
+      siteUrl: process.env.SITE_URL,
+    });
     const { error } = await resend.emails.send({
       from,
       to: [email],

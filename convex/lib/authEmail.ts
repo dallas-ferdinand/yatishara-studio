@@ -19,6 +19,8 @@ export function formatSignInCode(token: string): string {
 export function buildSignInCodeEmail(opts: {
   code: string;
   email?: string;
+  /** Public site origin for hosted brand assets (email clients need absolute URLs). */
+  siteUrl?: string;
 }): { subject: string; text: string; html: string } {
   const pretty = formatSignInCode(opts.code);
   const subject = "Your Studio sign-in code";
@@ -32,6 +34,12 @@ export function buildSignInCodeEmail(opts: {
   ].join("\n");
 
   const codeEsc = escapeHtml(pretty);
+  const site = (opts.siteUrl || process.env.SITE_URL || "https://studio.yatishara.com").replace(
+    /\/$/,
+    "",
+  );
+  // PNG + dark ink for light auth sheet; absolute URL required in email.
+  const logoUrl = `${site}/branding/yatishara-logo-dark-96.png`;
   const toLine = opts.email
     ? `We sent this to <span style="color:#1c1c1e;font-weight:600;">${escapeHtml(opts.email)}</span>.`
     : "Enter it on the sign-in screen to continue.";
@@ -53,9 +61,20 @@ export function buildSignInCodeEmail(opts: {
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:380px;border-collapse:separate;border-spacing:0;">
             <tr>
               <td style="background:#ececf0;border:1px solid rgba(0,0,0,0.08);border-radius:28px;padding:28px 24px 26px;box-shadow:0 1px 2px rgba(15,23,42,0.04),0 18px 42px rgba(15,23,42,0.08);">
-                <div style="text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:650;letter-spacing:0.01em;color:#636366;margin:0 0 14px;">
-                  Yatishara Studio
-                </div>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 14px;">
+                  <tr>
+                    <td align="center">
+                      <div style="display:inline-block;width:56px;height:56px;border-radius:50%;background:#ffffff;border:1px solid rgba(0,0,0,0.06);box-shadow:inset 0 1px 0 rgba(255,255,255,0.9),0 6px 16px rgba(15,23,42,0.06);line-height:56px;text-align:center;">
+                        <img src="${escapeHtml(logoUrl)}" width="28" height="28" alt="Yatishara Studio" style="display:inline-block;width:28px;height:28px;vertical-align:middle;border:0;outline:none;" />
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding-top:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:650;letter-spacing:0.01em;color:#636366;">
+                      Yatishara Studio
+                    </td>
+                  </tr>
+                </table>
                 <h1 style="margin:0 0 10px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:1.15;letter-spacing:-0.03em;font-weight:700;color:#1c1c1e;">
                   Here’s your code
                 </h1>
