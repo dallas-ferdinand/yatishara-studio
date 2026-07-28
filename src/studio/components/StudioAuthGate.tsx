@@ -4,12 +4,17 @@ import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
 import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
+  BadgeDollarSign,
   Copy,
   Loader2,
   Lock,
   Mail,
+  Newspaper,
   Phone,
+  Sparkles,
   UserRound,
+  Users,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Component,
@@ -34,7 +39,6 @@ import {
   studioResetHref,
 } from "@/studio/lib/studio-client-reset";
 import {
-  STUDIO_DEFAULT_TAB_LABELS,
   STUDIO_START_SELLER_APPLY_KEY,
   readStoredStudioDefaultTab,
   writeStoredStudioDefaultTab,
@@ -374,64 +378,79 @@ function StudioIntentChooser() {
     title: string;
     body: string;
     tab: StudioDefaultTab;
+    icon: LucideIcon;
     startSeller?: boolean;
   }> = [
     {
       id: "network",
-      title: "Hire / marketplace",
-      body: "Browse Creative Network and book verified creators.",
+      title: "Hire creators",
+      body: "Browse Creative Network and book verified talent.",
       tab: "network",
+      icon: Users,
     },
     {
       id: "composer",
       title: "Create media",
-      body: "Jump into Generate and make images, video, or audio.",
+      body: "Generate images, video, or audio from a brief.",
       tab: "composer",
+      icon: Sparkles,
     },
     {
       id: "feed",
-      title: "Social",
-      body: "See what people are posting on the Feed.",
+      title: "Social feed",
+      body: "See what people are posting in Studio.",
       tab: "feed",
+      icon: Newspaper,
     },
     {
       id: "sell",
       title: "Sell services",
-      body: "Open Creative Network and start seller registration.",
+      body: "Start seller registration on Creative Network.",
       tab: "network",
+      icon: BadgeDollarSign,
       startSeller: true,
     },
   ];
 
   return (
-    <AuthFrame title="What brings you here?">
-      <p className="studio-auth-copy mt-3 text-sm">
-        Pick a starting point. You can change your default tab anytime in Settings → General.
+    <AuthFrame title="What brings you here?" wide>
+      <p className="studio-auth-copy">
+        Pick a starting point — you can change it later in Settings.
       </p>
-      <div className="studio-auth-form">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className="studio-auth-field is-stack disabled:opacity-60"
-            disabled={pending != null}
-            onClick={() => void choose(option.tab, Boolean(option.startSeller))}
-          >
-            <span className="studio-auth-choice-title">
-              {option.title}
-              {pending === option.id || (option.startSeller && pending === "sell")
-                ? "…"
-                : ""}
-            </span>
-            <span className="studio-auth-choice-body">{option.body}</span>
-            <span className="studio-auth-choice-meta">
-              Opens {STUDIO_DEFAULT_TAB_LABELS[option.tab]}
-              {option.startSeller ? " · seller signup" : ""}
-            </span>
-          </button>
-        ))}
+      <div className="studio-auth-choices" role="list">
+        {options.map((option) => {
+          const Icon = option.icon;
+          const isPending =
+            pending === option.id ||
+            (option.startSeller && pending === "sell");
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="listitem"
+              className="studio-auth-choice"
+              disabled={pending != null}
+              onClick={() => void choose(option.tab, Boolean(option.startSeller))}
+            >
+              <span className="studio-auth-choice-icon" aria-hidden="true">
+                <Icon />
+              </span>
+              <span className="studio-auth-choice-text">
+                <span className="studio-auth-choice-title">{option.title}</span>
+                <span className="studio-auth-choice-body">{option.body}</span>
+              </span>
+              <span className="studio-auth-choice-chevron" aria-hidden="true">
+                {isPending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <ArrowRight />
+                )}
+              </span>
+            </button>
+          );
+        })}
       </div>
-      {error ? <p className="studio-auth-error mt-3 text-sm">{error}</p> : null}
+      {error ? <p className="studio-auth-error-box mt-3">{error}</p> : null}
     </AuthFrame>
   );
 }
@@ -1083,12 +1102,15 @@ function AuthFrame({
   children,
   onBack,
   embedded = false,
+  wide = false,
 }: {
   title: string;
   children?: ReactNode;
   onBack?: () => void;
   /** Fill parent stage instead of owning the full viewport. */
   embedded?: boolean;
+  /** Wider sheet for multi-line choice lists. */
+  wide?: boolean;
 }) {
   const authThemeStyle = {
     "--studio-auth-accent": AUTH_ACCENT,
@@ -1313,16 +1335,83 @@ function AuthFrame({
         }
         .studio-auth-copy {
           margin: 0.65rem 0 0;
-          color: color-mix(in srgb, var(--mos-text) 68%, transparent);
-          font-size: 13px;
+          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
+          font-size: 12px;
           line-height: 1.4;
+          text-align: center;
+        }
+        .studio-auth-choices {
+          display: grid;
+          gap: 8px;
+          margin-top: 1.1rem;
           text-align: left;
+        }
+        .studio-auth-choice {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+          min-height: 56px;
+          padding: 10px 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          border-radius: 14px;
+          background: #ffffff;
+          color: inherit;
+          cursor: pointer;
+          transition:
+            background 0.14s ease,
+            border-color 0.14s ease;
+        }
+        .studio-auth-choice:hover:not(:disabled) {
+          background: var(--mos-plate);
+          border-color: color-mix(in srgb, #1c1c1e 22%, transparent);
+        }
+        .studio-auth-choice:focus-visible {
+          outline: none;
+          box-shadow:
+            0 0 0 2px #f5f5f7,
+            0 0 0 4px color-mix(in srgb, #1c1c1e 28%, transparent);
+        }
+        .studio-auth-choice:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+        .studio-auth-choice-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          flex: 0 0 auto;
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          background: var(--mos-plate-strong);
+          color: #1c1c1e;
+        }
+        .studio-auth-choice-icon svg {
+          width: 15px;
+          height: 15px;
+        }
+        .studio-auth-choice-text {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+          flex: 1 1 auto;
+        }
+        .studio-auth-choice-chevron {
+          display: inline-flex;
+          flex: 0 0 auto;
+          color: color-mix(in srgb, #1c1c1e 38%, transparent);
+        }
+        .studio-auth-choice-chevron svg {
+          width: 16px;
+          height: 16px;
         }
         .studio-auth-icon,
         .studio-auth-accent-text {
+          display: block;
           flex: 0 0 auto;
-          width: 16px;
-          height: 16px;
+          width: 14px;
+          height: 14px;
         }
         .studio-auth-icon {
           color: color-mix(in srgb, var(--mos-text) 42%, transparent);
@@ -1365,18 +1454,20 @@ function AuthFrame({
           color: var(--mos-text);
           font-size: 13px;
           font-weight: 650;
+          letter-spacing: -0.01em;
+          line-height: 1.25;
         }
         .studio-auth-choice-body {
-          color: color-mix(in srgb, var(--mos-text) 62%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
           font-size: 12px;
           line-height: 1.35;
         }
-        .studio-auth-choice-meta {
-          color: color-mix(in srgb, var(--mos-text) 45%, transparent);
-          font-size: 11px;
-        }
       `}</style>
-      <section className="studio-auth-card relative w-full max-w-[300px] p-5 text-center sm:p-5">
+      <section
+        className={`studio-auth-card relative w-full p-5 text-center sm:p-5 ${
+          wide ? "max-w-[360px]" : "max-w-[300px]"
+        }`}
+      >
         {onBack ? (
           <button
             type="button"
