@@ -634,34 +634,81 @@ export function StudioMessagesSidebar({
   );
 }
 
-/** Wrap query matches in the composer mention chip style. */
+/** Wrap query matches like composer selection pills — grouped words, no extra spacing. */
 function highlightSearchMatches(text: string, query: string): ReactNode {
-  const terms = query
-    .trim()
+  const raw = query.trim();
+  if (!text || !raw) return text;
+
+  const terms = raw
     .split(/\s+/)
     .map((term) => term.replace(/^[@#]+/, ""))
     .filter((term) => term.length > 0);
-  if (!text || terms.length === 0) return text;
+  if (terms.length === 0) return text;
 
-  const escaped = terms
+  const ranges: Array<{ start: number; end: number }> = [];
+  const pushMatches = (pattern: RegExp) => {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      if (match[0].length === 0) {
+        pattern.lastIndex += 1;
+        continue;
+      }
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+  };
+
+  // Prefer contiguous phrase spans so multi-word queries paint as one group.
+  const phrase = terms
     .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
-  const parts = text.split(pattern);
-  if (parts.length <= 1) return text;
+    .join("\\s+");
+  pushMatches(new RegExp(phrase, "gi"));
+  for (const term of terms) {
+    pushMatches(
+      new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
+    );
+  }
 
-  return parts.map((part, index) => {
-    if (!part) return null;
-    const isMatch = terms.some(
-      (term) => part.toLowerCase() === term.toLowerCase(),
+  if (ranges.length === 0) return text;
+
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: Array<{ start: number; end: number }> = [];
+  for (const range of ranges) {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ ...range });
+      continue;
+    }
+    const between = text.slice(last.end, range.start);
+    // Merge overlapping / adjacent / whitespace-only gaps (group words).
+    if (range.start <= last.end || /^[\s]*$/.test(between)) {
+      last.end = Math.max(last.end, range.end);
+      continue;
+    }
+    merged.push({ ...range });
+  }
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  merged.forEach((range, index) => {
+    if (range.start > cursor) {
+      nodes.push(
+        <Fragment key={`t-${index}-${cursor}`}>
+          {text.slice(cursor, range.start)}
+        </Fragment>,
+      );
+    }
+    nodes.push(
+      <mark key={`h-${index}-${range.start}`} className="studio-dm-search-hit">
+        {text.slice(range.start, range.end)}
+      </mark>,
     );
-    if (!isMatch) return <Fragment key={index}>{part}</Fragment>;
-    return (
-      <mark key={index} className="studio-dm-search-hit">
-        {part}
-      </mark>
-    );
+    cursor = range.end;
   });
+  if (cursor < text.length) {
+    nodes.push(<Fragment key={`t-end`}>{text.slice(cursor)}</Fragment>);
+  }
+  return nodes;
 }
 
 function searchTimeLabel(timestamp: number): string {
