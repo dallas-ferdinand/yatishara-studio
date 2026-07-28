@@ -10441,6 +10441,81 @@ export function StudioShell({
           letter-spacing: 0.04em;
           text-transform: uppercase;
         }
+        .studio-paywise-iframe-shell {
+          position: fixed;
+          inset: 0;
+          z-index: 200000;
+          display: flex;
+          flex-direction: column;
+          background: var(--mos-page, #0b0b0f);
+        }
+        .studio-paywise-iframe-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex: 0 0 auto;
+          min-height: 56px;
+          padding: 10px 14px;
+          padding-top: max(10px, env(safe-area-inset-top, 0px));
+          border-bottom: 1px solid var(--color-cursor-border-soft, rgba(255,255,255,0.08));
+          background: var(--mos-plate, #141418);
+        }
+        .studio-paywise-iframe-head-copy {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .studio-paywise-iframe-title {
+          margin: 0;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+        }
+        .studio-paywise-iframe-close {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          border: 1px solid var(--color-cursor-border-soft, rgba(255,255,255,0.12));
+          border-radius: 999px;
+          background: transparent;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          cursor: pointer;
+        }
+        .studio-paywise-iframe-close:hover {
+          background: color-mix(in srgb, var(--mos-text, #fff) 8%, transparent);
+        }
+        .studio-paywise-iframe-body {
+          position: relative;
+          flex: 1 1 auto;
+          min-height: 0;
+          background: #fff;
+        }
+        .studio-paywise-iframe {
+          display: block;
+          width: 100%;
+          height: 100%;
+          border: 0;
+          background: #fff;
+        }
+        .studio-paywise-iframe-loading {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          background: #fff;
+          color: #636366;
+          font-size: 14px;
+          pointer-events: none;
+        }
         .studio-paywise-handoff-amount {
           margin: 0;
           color: var(--color-cursor-text-bright, var(--mos-text));
@@ -19543,7 +19618,18 @@ export function StudioShell({
         ? createPortal(
             <PaywiseCheckoutHandoffOverlay
               handoff={paywiseHandoff}
-              onClear={() => setPaywiseHandoff(null)}
+              onClose={() => setPaywiseHandoff(null)}
+              onPaid={(result) => {
+                setPaywiseHandoff(null);
+                setPaymentCelebration({
+                  phase: "success",
+                  amountCents: result?.amountCents ?? paywiseHandoff?.amountCents ?? null,
+                  creditsGranted: result?.creditsGranted ?? null,
+                });
+              }}
+              onFailed={() => {
+                setPaywiseHandoff(null);
+              }}
             />,
             document.body,
           )
@@ -27461,19 +27547,156 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
   );
 }
 
-function PaywiseCheckoutHandoffOverlay({ handoff }) {
+function PaywiseCheckoutHandoffOverlay({ handoff, onClose, onPaid, onFailed }) {
+  const syncPaywisePayment = useAction(api.paywiseActions.syncMyPayment);
   const phase = handoff?.phase ?? "preparing";
   const checkoutUrl = typeof handoff?.checkoutUrl === "string" ? handoff.checkoutUrl : "";
+  const paymentId = handoff?.paymentId ?? null;
   const amountLabel =
     handoff?.amountCents != null ? formatTtdCents(handoff.amountCents) : null;
+  const frameRef = useRef(null);
+  const settledRef = useRef(false);
+  const [frameLoaded, setFrameLoaded] = useState(false);
+
+  const settleFromReturn = useCallback(
+    async (outcome) => {
+      if (settledRef.current) return;
+      settledRef.current = true;
+      if (!paymentId) {
+        if (outcome === "success") onPaid?.(null);
+        else onFailed?.();
+        return;
+      }
+      if (outcome !== "success") {
+        onFailed?.();
+        return;
+      }
+      try {
+        const result = await syncPaywisePayment({ paymentId, force: true });
+        if (result.status === "payment_completed") {
+          onPaid?.(result);
+          return;
+        }
+      } catch {
+        /* fall through — still show success shell; invoice sync can catch up */
+      }
+      onPaid?.(null);
+    },
+    [onFailed, onPaid, paymentId, syncPaywisePayment],
+  );
+
+  const readFrameReturn = useCallback(() => {
+    const frame = frameRef.current;
+    if (!frame) return null;
+    try {
+      const href = frame.contentWindow?.location?.href ?? "";
+      if (!href || href === "about:blank") return null;
+      const url = new URL(href);
+      if (url.origin !== window.location.origin) return null;
+      const outcome = url.searchParams.get("payment");
+      if (outcome === "success" || outcome === "error") return outcome;
+    } catch {
+      /* cross-origin PayWise page — expected until return */
+    }
+    return null;
+  }, []);
 
   useEffect(() => {
-    if (phase !== "redirect" || !checkoutUrl) return;
-    const timer = window.setTimeout(() => {
-      window.location.assign(checkoutUrl);
-    }, 700);
-    return () => window.clearTimeout(timer);
-  }, [phase, checkoutUrl]);
+    if (phase !== "checkout" || !checkoutUrl || !paymentId) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled || settledRef.current) return;
+      const fromFrame = readFrameReturn();
+      if (fromFrame) {
+        await settleFromReturn(fromFrame);
+        return;
+      }
+      try {
+        const result = await syncPaywisePayment({ paymentId, force: false });
+        if (cancelled || settledRef.current) return;
+        if (result.status === "payment_completed") {
+          settledRef.current = true;
+          onPaid?.(result);
+          return;
+        }
+        if (
+          result.status === "cancelled" ||
+          result.status === "rejected" ||
+          result.status === "checkout_failed"
+        ) {
+          settledRef.current = true;
+          onFailed?.();
+        }
+      } catch {
+        /* keep polling while iframe is open */
+      }
+    };
+    const timer = window.setInterval(() => {
+      void tick();
+    }, 2500);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [
+    checkoutUrl,
+    onFailed,
+    onPaid,
+    paymentId,
+    phase,
+    readFrameReturn,
+    settleFromReturn,
+    syncPaywisePayment,
+  ]);
+
+  if (phase === "checkout" && checkoutUrl) {
+    return (
+      <div
+        className="studio-paywise-iframe-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studio-paywise-handoff-title"
+      >
+        <header className="studio-paywise-iframe-head">
+          <div className="studio-paywise-iframe-head-copy">
+            <p className="studio-paywise-handoff-kicker">PayWise checkout</p>
+            <h2 id="studio-paywise-handoff-title" className="studio-paywise-iframe-title">
+              {amountLabel ? `Pay ${amountLabel}` : "Card payment"}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="studio-paywise-iframe-close"
+            aria-label="Close checkout"
+            onClick={() => onClose?.()}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </header>
+        <div className="studio-paywise-iframe-body">
+          {!frameLoaded ? (
+            <div className="studio-paywise-iframe-loading" aria-busy="true">
+              <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
+              <p>Loading PayWise…</p>
+            </div>
+          ) : null}
+          <iframe
+            ref={frameRef}
+            className="studio-paywise-iframe"
+            title="PayWise checkout"
+            src={checkoutUrl}
+            allow="payment *"
+            onLoad={() => {
+              setFrameLoaded(true);
+              const outcome = readFrameReturn();
+              if (outcome) void settleFromReturn(outcome);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -27487,15 +27710,13 @@ function PaywiseCheckoutHandoffOverlay({ handoff }) {
         <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
         <p className="studio-paywise-handoff-kicker">PayWise</p>
         <h2 id="studio-paywise-handoff-title" className="studio-payment-celebration-title">
-          {phase === "redirect" ? "Continuing to PayWise" : "Preparing checkout"}
+          Preparing checkout
         </h2>
         {amountLabel ? (
           <p className="studio-paywise-handoff-amount">{amountLabel}</p>
         ) : null}
         <p className="studio-payment-celebration-copy">
-          {phase === "redirect"
-            ? "Finish card payment securely on PayWise — we’ll bring you back here after."
-            : "One moment while we open a secure checkout."}
+          One moment while we open a secure checkout.
         </p>
       </div>
     </div>
@@ -27675,11 +27896,13 @@ function SettingsWorkspacePane({
         creditsRequested: checkoutPlan.credits,
         reference: `Top up: ${checkoutPlan.name}`,
       });
-      setPaymentStatus("Redirecting…");
+      setPaymentStatus("Checkout ready");
+      setCheckoutStarting(false);
       onPaywiseHandoff?.({
-        phase: "redirect",
+        phase: "checkout",
         amountCents: checkoutPlan.amountCents,
         checkoutUrl: result.checkoutUrl,
+        paymentId: result.paymentId,
       });
     } catch (error) {
       onPaywiseHandoff?.(null);
