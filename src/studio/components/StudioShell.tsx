@@ -1276,6 +1276,22 @@ export function StudioShell({
     openTabs.some(
       (tab) => tab.startsWith("network:") || tab.startsWith("offers:"),
     );
+  // Desktop: skip heavy folder contents while Messages / Feed / Network filters
+  // own the left rail (Files UI unmounted). Mobile keeps them — files dock stays
+  // warm-mounted. Asset-pick restores the Files rail and re-subscribes.
+  const needsExplorerFolderContents =
+    isMobile ||
+    Boolean(assetPickRequest) ||
+    !(
+      typeof activeTab === "string" &&
+      (activeTab.startsWith("messages:") ||
+        activeTab.startsWith("feed:") ||
+        activeTab.startsWith("profile:") ||
+        activeTab.startsWith("profilePost:") ||
+        ((activeTab.startsWith("network:") ||
+          activeTab.startsWith("offers:")) &&
+          cnMode !== "my-assets"))
+    );
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
     hasCurrentUser ? {} : "skip",
@@ -1553,7 +1569,7 @@ export function StudioShell({
   }, [isMobile]);
   const childFolders = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && activeFolder && !isTrashView
+    hasCurrentUser && activeFolder && !isTrashView && needsExplorerFolderContents
       ? {
           parentId: activeFolder._id,
           expiresUnix: assetUrlExpiresUnix,
@@ -1563,12 +1579,19 @@ export function StudioShell({
   );
   const trashedAssets = useQuery(
     api.assets.listTrash,
-    hasCurrentUser && isTrashView ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+    hasCurrentUser && isTrashView && needsExplorerFolderContents
+      ? { expiresUnix: assetUrlExpiresUnix }
+      : "skip",
   );
-  const trashedDocuments = useQuery(api.documents.listTrash, hasCurrentUser && isTrashView ? {} : "skip");
+  const trashedDocuments = useQuery(
+    api.documents.listTrash,
+    hasCurrentUser && isTrashView && needsExplorerFolderContents ? {} : "skip",
+  );
   const trashedElementsRaw = useQuery(
     api.elements.list,
-    hasCurrentUser && isTrashView ? { includeDeleted: true } : "skip",
+    hasCurrentUser && isTrashView && needsExplorerFolderContents
+      ? { includeDeleted: true }
+      : "skip",
   );
   const trashedElements = useMemo(
     () => (trashedElementsRaw ?? []).filter((element) => element.deletedAt),
@@ -1576,7 +1599,10 @@ export function StudioShell({
   );
   const assets = useQuery(
     api.assets.listByFolder,
-    hasCurrentUser && activeFolder && !isTrashView
+    hasCurrentUser &&
+      activeFolder &&
+      !isTrashView &&
+      needsExplorerFolderContents
       ? {
           folderId: activeFolder._id,
           expiresUnix: assetUrlExpiresUnix,
@@ -1586,14 +1612,21 @@ export function StudioShell({
   );
   const documents = useQuery(
     api.documents.listByFolder,
-    hasCurrentUser && activeFolder && !isTrashView
+    hasCurrentUser &&
+      activeFolder &&
+      !isTrashView &&
+      needsExplorerFolderContents
       ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
       : "skip",
   );
   const videoEditorEnabled = isVideoEditorPreviewEnabled();
   const videoEditsRaw = useQuery(
     api.videoEdits.listByFolder,
-    hasCurrentUser && activeFolder && !isTrashView && videoEditorEnabled
+    hasCurrentUser &&
+      activeFolder &&
+      !isTrashView &&
+      videoEditorEnabled &&
+      needsExplorerFolderContents
       ? {
           folderId: activeFolder._id,
           expiresUnix: assetUrlExpiresUnix,
@@ -1603,15 +1636,27 @@ export function StudioShell({
   );
   const trashedVideoEditsRaw = useQuery(
     api.videoEdits.listTrash,
-    hasCurrentUser && isTrashView && videoEditorEnabled
+    hasCurrentUser &&
+      isTrashView &&
+      videoEditorEnabled &&
+      needsExplorerFolderContents
       ? { expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
   const videoEdits = videoEditorEnabled ? videoEditsRaw : [];
   const trashedVideoEdits = videoEditorEnabled ? trashedVideoEditsRaw : [];
+  const needsElementsList =
+    needsExplorerFolderContents ||
+    needsComposerCatalog ||
+    isTrashBrowse ||
+    openTabs.some((tab) => tab.startsWith("element:"));
   const elements = useQuery(
     api.elements.list,
-    hasCurrentUser ? (isTrashBrowse ? { includeDeleted: true } : {}) : "skip",
+    hasCurrentUser && needsElementsList
+      ? isTrashBrowse
+        ? { includeDeleted: true }
+        : {}
+      : "skip",
   );
   const threads = useQuery(
     api.generation.listThreads,
@@ -2758,7 +2803,7 @@ export function StudioShell({
   );
   const folderPrefetchQueries = useMemo(() => {
     const queries = {};
-    if (!hasCurrentUser) return queries;
+    if (!hasCurrentUser || !needsExplorerFolderContents) return queries;
     // Prefetch only child folder names for the first few visible folders —
     // full asset/document fan-out was creating ~40 speculative subscriptions.
     for (const folderId of visibleFolderIds) {
@@ -2768,7 +2813,7 @@ export function StudioShell({
       };
     }
     return queries;
-  }, [hasCurrentUser, visibleFolderIds]);
+  }, [hasCurrentUser, needsExplorerFolderContents, visibleFolderIds]);
   useQueries(folderPrefetchQueries);
 
   const tabs = useMemo(() => {
