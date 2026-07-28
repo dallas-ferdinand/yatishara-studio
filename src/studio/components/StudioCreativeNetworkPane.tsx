@@ -170,10 +170,7 @@ function NetworkBrowse() {
 
   if (cn.browseSlug) {
     return (
-      <StudioOfferDetailEmbed
-        slug={cn.browseSlug}
-        onBack={() => cn.setBrowseSlug(null)}
-      />
+      <StudioOfferDetailEmbed slug={cn.browseSlug} />
     );
   }
 

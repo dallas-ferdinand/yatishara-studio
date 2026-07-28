@@ -1668,10 +1668,8 @@ function StudioCnOfferBookSidebar({
  */
 export function StudioOfferDetailEmbed({
   slug,
-  onBack,
 }: {
   slug: string;
-  onBack: () => void;
 }) {
   const { isMobile } = useMobileLayout();
   const mediaExpiresUnix = useStickySignedUrlExpiry();
@@ -1709,15 +1707,6 @@ export function StudioOfferDetailEmbed({
   useEffect(() => {
     if (!isMobile) setBookSheetOpen(false);
   }, [isMobile]);
-
-  const detailHead = (
-    <header className="studio-cn-detail-head">
-      <button type="button" className="studio-cn-detail-back" onClick={onBack}>
-        <ArrowLeft aria-hidden="true" />
-        Back
-      </button>
-    </header>
-  );
 
   let detailBody: ReactNode;
   if (offer === undefined) {
@@ -1818,7 +1807,6 @@ export function StudioOfferDetailEmbed({
   if (isMobile) {
     return (
       <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-mobile">
-        {detailHead}
         {mainColumn}
         {offer != null ? (
           <nav
@@ -1895,7 +1883,6 @@ export function StudioOfferDetailEmbed({
 
   return (
     <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-split">
-      {detailHead}
       <PanelGroup
         direction="horizontal"
         autoSaveId="studio-cn-offer-book-h"
