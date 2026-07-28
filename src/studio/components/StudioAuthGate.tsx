@@ -1295,23 +1295,24 @@ function AuthFrame({
           align-items: center;
           justify-content: center;
           gap: 8px;
-          min-height: 36px;
+          min-height: 42px;
           width: 100%;
-          padding: 0 14px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
-          border-radius: 10px;
-          background: var(--mos-plate-strong);
-          color: color-mix(in srgb, var(--mos-text) 78%, transparent);
+          padding: 0 16px;
+          border: 1px solid var(--studio-landing-line, #d8d8de);
+          border-radius: 999px;
+          background: transparent;
+          color: #1c1c1e;
           font-size: 13px;
-          font-weight: 600;
+          font-weight: 650;
           box-shadow: none;
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
           transition: background 0.14s ease, border-color 0.14s ease;
         }
         .studio-auth-secondary:hover {
-          border-color: color-mix(in srgb, var(--studio-auth-accent) 35%, var(--color-cursor-border-soft));
-          color: var(--mos-text);
+          background: var(--mos-plate-strong);
+          border-color: color-mix(in srgb, #1c1c1e 28%, transparent);
+          color: #1c1c1e;
         }
         .studio-auth-notice {
           min-height: 1rem;
