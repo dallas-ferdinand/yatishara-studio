@@ -8354,22 +8354,25 @@ export function StudioShell({
         }
         .studio-mobile-app-menu-body.is-app-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          /* Never minmax(0) — that squishes tiles. Reflow to fewer cols if needed. */
+          grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
           align-content: start;
-          justify-items: stretch;
-          gap: 16px 10px;
-          padding: 22px 16px 28px;
+          justify-items: center;
+          column-gap: 8px;
+          row-gap: 18px;
+          padding: 24px 18px 32px;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: flex-start;
-          gap: 7px;
-          width: 100%;
-          min-width: 0;
+          gap: 8px;
+          width: 76px;
+          max-width: 100%;
+          min-width: 76px;
           min-height: 0;
-          padding: 2px 0 0;
+          padding: 0;
           border: 0;
           border-radius: 0;
           background: transparent;
@@ -8377,7 +8380,7 @@ export function StudioShell({
           font: inherit;
           font-size: 11px;
           font-weight: 600;
-          line-height: 1.15;
+          line-height: 1.2;
           text-align: center;
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
@@ -8386,9 +8389,14 @@ export function StudioShell({
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon {
           display: grid;
           place-items: center;
-          width: 52px;
-          height: 52px;
-          flex: 0 0 auto;
+          box-sizing: border-box;
+          width: 56px;
+          height: 56px;
+          min-width: 56px;
+          min-height: 56px;
+          aspect-ratio: 1 / 1;
+          flex: 0 0 56px;
+          flex-shrink: 0;
           border-radius: 14px;
           background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
           color: var(--color-cursor-text-bright, var(--mos-text-bright));
@@ -8397,18 +8405,17 @@ export function StudioShell({
             transform 140ms ease;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-icon svg {
-          width: 22px;
-          height: 22px;
+          width: 24px;
+          height: 24px;
+          flex-shrink: 0;
         }
         .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item-label {
-          display: -webkit-box;
+          display: block;
+          width: 100%;
           min-width: 0;
-          max-width: 100%;
           overflow: hidden;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          line-clamp: 2;
-          word-break: break-word;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         @media (hover: hover) and (pointer: fine) {
           .studio-mobile-app-menu-body.is-app-grid .studio-mobile-app-menu-item:hover .studio-mobile-app-menu-item-icon {
