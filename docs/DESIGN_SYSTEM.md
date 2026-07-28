@@ -555,7 +555,8 @@ public catalog site. Deep links (`/creative-network/`, `/creative-network/[slug]
 | Non-sellers | Catalog filters | Network browse + Become seller / Continue registration CTA | — |
 
 On **Network** (and seller-apply), the left rail is the catalog filter rail like the
-public Creative Network page — including **Sort** (not in the main results head).
+public Creative Network page — **Price (TTD)** first, then **Sort** (not in the
+main results head), then category/facet sections.
 Studio Network filter search uses `PanelSearchBar` (Messages language), not a pill
 input. Keep **~10px horizontal pad** on search + `.public-offers-rail-body` (do not
 zero left/right — flush content reads as a bug). Filter sections in Studio CN are
