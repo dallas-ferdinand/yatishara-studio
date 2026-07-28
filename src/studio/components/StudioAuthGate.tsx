@@ -404,7 +404,7 @@ function StudioIntentChooser() {
   ];
 
   return (
-    <AuthFrame eyebrow="Yatishara Studio" title="What brings you here?">
+    <AuthFrame title="What brings you here?">
       <p className="studio-auth-copy mt-3 text-sm">
         Pick a starting point. You can change your default tab anytime in Settings → General.
       </p>
@@ -465,7 +465,7 @@ function StudioCompleteAccount({
     phone.trim().length > 0;
 
   return (
-    <AuthFrame eyebrow="Yatishara Studio" title="Finish your account">
+    <AuthFrame title="Finish your account">
       <p className="studio-auth-copy mt-3 text-sm">
         Every Studio account needs first name, last name, email, and WhatsApp. You can change them later,
         but you cannot remove email or phone.
@@ -693,7 +693,6 @@ function StudioSignIn({
   return (
     <AuthFrame
       embedded={embedded}
-      eyebrow="Yatishara Studio"
       title={
         step === "identify"
           ? "Welcome back"
