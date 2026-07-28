@@ -1083,13 +1083,11 @@ function parseContactInput(value: string): IdentifyContact | null {
 }
 
 function AuthFrame({
-  eyebrow,
   title,
   children,
   onBack,
   embedded = false,
 }: {
-  eyebrow: string;
   title: string;
   children?: ReactNode;
   onBack?: () => void;
@@ -1166,14 +1164,6 @@ function AuthFrame({
           gap: 10px;
           margin-top: 1.25rem;
           text-align: left;
-        }
-        .studio-auth-eyebrow {
-          margin: 0;
-          color: color-mix(in srgb, #1c1c1e 55%, transparent);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
         }
         .studio-auth-accent-text {
           color: color-mix(in srgb, #1c1c1e 42%, transparent);
@@ -1395,9 +1385,8 @@ function AuthFrame({
             ← Back
           </button>
         ) : null}
-        <div className="flex flex-col items-center justify-center gap-2.5">
+        <div className="flex flex-col items-center justify-center">
           <BrandMark size={48} subtle appearance="light" />
-          <p className="studio-auth-eyebrow">{eyebrow}</p>
         </div>
         <div className="mt-3">
           <h1 className="studio-auth-title">{title}</h1>
