@@ -438,11 +438,13 @@ Structure:
   paint frame as `data-files-open`. Docs/memory: **757**, taps **786**.
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
-- No "Files" title bar. Chrome = search + pathbar (desktop layout): breadcrumbs +
-  select + view toggle + Add. Pathbar tools = ghost **circle** icon buttons
-  (transparent, soft grey border, no shadow). Your files / Asset library = L1
-  `--mos-page` fill + border-soft; active = accent wash/border. Bottom nav
-  **Files** and **Create** are icon-only. Memory: **757**, instant taps **786**.
+- No "Files" title bar. Grab handle = menu/History (transparent on L2 plate —
+  no pathbar/search `mos-bg` / `mos-panel` band under the grab). Chrome =
+  search + pathbar (desktop layout): breadcrumbs + select + view toggle + Add.
+  Pathbar tools = ghost **circle** icon buttons (transparent, soft grey border,
+  no shadow). Your files / Asset library = L1 `--mos-page` fill + border-soft;
+  active = accent wash/border. Bottom nav **Files** and **Create** are icon-only.
+  Memory: **757**, instant taps **786**.
 
 ### Studio Files asset picker (locked)
 
