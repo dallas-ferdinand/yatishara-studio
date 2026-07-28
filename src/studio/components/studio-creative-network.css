@@ -237,8 +237,8 @@
   flex: 0 0 auto;
   min-height: var(--cursor-head-h, 32px);
   height: var(--cursor-head-h, 32px);
-  /* No horizontal pad — tabs are full-width like Settings; CTA pads itself. */
-  padding: 0;
+  /* Inset from pane edges; tabs still flex-fill the remaining width. */
+  padding: 0 12px;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   /* L1 — match workspace / panel heads (not L2 mos-bg/plate). */
   background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
@@ -300,7 +300,7 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  padding: 0 12px 0 8px;
+  padding: 0 0 0 8px;
 }
 
 .studio-cn-seller-cta {
