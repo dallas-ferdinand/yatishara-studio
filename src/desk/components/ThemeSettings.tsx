@@ -33,7 +33,7 @@ export function ThemeSettings() {
   const convex = useConvex();
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined && currentUser !== null;
-  const [mode, setMode] = useState<"light" | "dark">("dark");
+  const [mode, setMode] = useState<"light" | "dark">("light");
   const [wallpaper, setWallpaperState] = useState<WallpaperRef | null>(null);
   const [savedAssetIds, setSavedAssetIds] = useState<string[]>([]);
   const [expiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);

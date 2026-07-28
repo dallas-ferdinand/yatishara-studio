@@ -30,10 +30,12 @@ export type WallpaperState = {
   urlHints: Record<string, string>;
 };
 
+/** First-visit default — light Archive (gold-archive wallpaper). */
+export const DEFAULT_APPEARANCE = "light" as const;
 export const DEFAULT_WALLPAPER = {
   kind: "preset" as const,
   family: "animated" as const,
-  themeId: "agent",
+  themeId: "gold",
 };
 
 export function wallpaperKey(ref: WallpaperRef): string {
@@ -48,7 +50,9 @@ export function isValidThemeId(id: string): id is StudioThemeId {
 function defaultStateFromLegacy(): WallpaperState {
   const themeRaw = typeof localStorage !== "undefined" ? localStorage.getItem(SCHEME_KEY) : null;
   const themeId =
-    themeRaw && themeRaw !== "light" && isValidThemeId(themeRaw) ? themeRaw : "agent";
+    themeRaw && themeRaw !== "light" && isValidThemeId(themeRaw)
+      ? themeRaw
+      : DEFAULT_WALLPAPER.themeId;
   const family = normalizeStudioBackgroundFamily(
     typeof localStorage !== "undefined" ? localStorage.getItem(STUDIO_BG_PACK_KEY) : null,
   );
@@ -70,7 +74,9 @@ function parseRef(raw: unknown): WallpaperRef | null {
       typeof obj.family === "string" ? obj.family : null,
     );
     const themeId =
-      typeof obj.themeId === "string" && isValidThemeId(obj.themeId) ? obj.themeId : "agent";
+      typeof obj.themeId === "string" && isValidThemeId(obj.themeId)
+        ? obj.themeId
+        : DEFAULT_WALLPAPER.themeId;
     return { kind: "preset", family, themeId };
   }
   if (obj.kind === "asset" && typeof obj.assetId === "string" && obj.assetId.length > 0) {

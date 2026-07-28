@@ -15,7 +15,8 @@ Admin/Offers embedded CSS lives in `src/studio/components/StudioShell.tsx`.
 ## 1. Themes & appearance
 
 - **Appearance modes:** `light` / `dark`, set on `document.documentElement[data-appearance]`.
-- **Accent schemes:** 16 named schemes in `SCHEMES` (`agent` Genesis, `ocean`, `ember`,
+  First-visit default = **light** + **Archive** (`gold` / gold-archive wallpaper).
+- **Accent schemes:** 16 named schemes in `SCHEMES` (`gold` Archive, `agent` Genesis, `ocean`, `ember`,
   `violet`, `cobalt`, `teal`, `indigo`, …). Each defines `accent`, `bg`, `surface`, `raised`.
 - Tokens are applied at runtime by `applyDeskTokens()` **and** pre-paint by the inline
   boot script (`getThemeBootInlineScript()`). **Any token change must be made in BOTH

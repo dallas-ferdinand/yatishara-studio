@@ -96,7 +96,7 @@ export function applyStudioBackgroundNow() {
   }
 
   const family = normalizeStudioBackgroundFamily(current.family);
-  const themeId = current.themeId || "agent";
+  const themeId = current.themeId || DEFAULT_WALLPAPER.themeId;
   const primary = studioBackgroundPath(family, themeId, appearance);
   const animated = studioBackgroundPath("animated", themeId, appearance);
 
