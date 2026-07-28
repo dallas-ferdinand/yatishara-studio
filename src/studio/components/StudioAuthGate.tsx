@@ -601,7 +601,6 @@ function StudioSignIn({
       }
     >
       {step === "identify" ? (
-        <p className="studio-auth-copy mt-2">Sign in with email — no WhatsApp needed</p>
       ) : null}
       <form
         className="studio-auth-form"
