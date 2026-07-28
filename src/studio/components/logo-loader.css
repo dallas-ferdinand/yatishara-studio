@@ -1,10 +1,11 @@
 .logo-loader {
   --logo-loader-ring: 56px;
   --logo-loader-mark: 34px;
-  --logo-loader-shadow-tight: 0 0 8px color-mix(in srgb, #000 14%, transparent);
+  /* Soft aura — peak (wide) must stay gentle; harsh black bloom reads as a blot. */
+  --logo-loader-shadow-tight: 0 0 6px color-mix(in srgb, #000 10%, transparent);
   --logo-loader-shadow-wide:
-    0 0 34px color-mix(in srgb, #000 36%, transparent),
-    0 0 16px color-mix(in srgb, #000 22%, transparent);
+    0 0 22px color-mix(in srgb, #000 16%, transparent),
+    0 0 10px color-mix(in srgb, #000 9%, transparent);
   position: relative;
   display: grid;
   place-items: center;
@@ -117,7 +118,7 @@
   object-fit: contain;
   background: transparent;
   opacity: 0.9;
-  filter: drop-shadow(0 0 8px color-mix(in srgb, #000 20%, transparent));
+  filter: drop-shadow(0 0 5px color-mix(in srgb, #000 12%, transparent));
   animation: logo-loader-breathe-fade 2.6s ease-in-out infinite;
   will-change: opacity;
 }
@@ -151,21 +152,22 @@
 @keyframes logo-loader-breathe-shadow {
   0%,
   100% {
-    opacity: 0.28;
+    opacity: 0.32;
     box-shadow: var(--logo-loader-shadow-tight);
   }
   50% {
-    opacity: 1;
+    /* Peak visibility — keep below full opacity so the bloom never hardens. */
+    opacity: 0.7;
     box-shadow: var(--logo-loader-shadow-wide);
   }
 }
 
 [data-appearance="light"] .logo-loader,
 .logo-loader[data-appearance="light"] {
-  --logo-loader-shadow-tight: 0 0 6px color-mix(in srgb, #000 10%, transparent);
+  --logo-loader-shadow-tight: 0 0 5px color-mix(in srgb, #000 7%, transparent);
   --logo-loader-shadow-wide:
-    0 0 28px color-mix(in srgb, #000 22%, transparent),
-    0 0 12px color-mix(in srgb, #000 12%, transparent);
+    0 0 20px color-mix(in srgb, #000 12%, transparent),
+    0 0 8px color-mix(in srgb, #000 7%, transparent);
 }
 
 [data-appearance="light"] .logo-loader-glass,
@@ -176,10 +178,10 @@
 
 [data-appearance="dark"] .logo-loader,
 .logo-loader[data-appearance="dark"] {
-  --logo-loader-shadow-tight: 0 0 8px color-mix(in srgb, #000 18%, transparent);
+  --logo-loader-shadow-tight: 0 0 6px color-mix(in srgb, #000 12%, transparent);
   --logo-loader-shadow-wide:
-    0 0 36px color-mix(in srgb, #000 42%, transparent),
-    0 0 16px color-mix(in srgb, #000 26%, transparent);
+    0 0 24px color-mix(in srgb, #000 22%, transparent),
+    0 0 10px color-mix(in srgb, #000 12%, transparent);
 }
 
 [data-appearance="dark"] .logo-loader-glass,
@@ -191,7 +193,7 @@
 [data-appearance="light"] .logo-loader-mark,
 .logo-loader[data-appearance="light"] .logo-loader-mark {
   opacity: 0.82;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, #000 12%, transparent));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, #000 8%, transparent));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -212,7 +214,7 @@
   }
 
   .logo-loader-aura {
-    opacity: 0.7;
+    opacity: 0.55;
     box-shadow: var(--logo-loader-shadow-wide);
   }
 
