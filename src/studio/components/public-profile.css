@@ -412,11 +412,11 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    color-mix(in srgb, #ffffff 12%, transparent) 18%,
-    color-mix(in srgb, #ffffff 22%, transparent) 38%,
-    color-mix(in srgb, #ffffff 28%, transparent) 50%,
-    color-mix(in srgb, #ffffff 22%, transparent) 62%,
-    color-mix(in srgb, #ffffff 12%, transparent) 82%,
+    color-mix(in srgb, #ffffff 22%, transparent) 16%,
+    color-mix(in srgb, #ffffff 38%, transparent) 34%,
+    color-mix(in srgb, #ffffff 48%, transparent) 50%,
+    color-mix(in srgb, #ffffff 38%, transparent) 66%,
+    color-mix(in srgb, #ffffff 22%, transparent) 84%,
     transparent 100%
   );
   border: 0;
