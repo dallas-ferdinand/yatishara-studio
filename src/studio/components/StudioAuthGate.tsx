@@ -4,17 +4,12 @@ import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
 import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
-  BadgeDollarSign,
   Copy,
   Loader2,
   Lock,
   Mail,
-  Newspaper,
   Phone,
-  Sparkles,
   UserRound,
-  Users,
-  type LucideIcon,
 } from "lucide-react";
 import {
   Component,
@@ -376,47 +371,41 @@ function StudioIntentChooser() {
   const options: Array<{
     id: StudioDefaultTab | "sell";
     title: string;
-    body: string;
     tab: StudioDefaultTab;
-    icon: LucideIcon;
+    image: string;
     startSeller?: boolean;
   }> = [
     {
       id: "network",
       title: "Hire creators",
-      body: "Browse Creative Network and book verified talent.",
       tab: "network",
-      icon: Users,
+      image: "/landing/intent/intent-hire.webp",
     },
     {
       id: "composer",
       title: "Create media",
-      body: "Generate images, video, or audio from a brief.",
       tab: "composer",
-      icon: Sparkles,
+      image: "/landing/intent/intent-create.webp",
     },
     {
       id: "feed",
       title: "Social feed",
-      body: "See what people are posting in Studio.",
       tab: "feed",
-      icon: Newspaper,
+      image: "/landing/intent/intent-feed.webp",
     },
     {
       id: "sell",
       title: "Sell services",
-      body: "Start seller registration on Creative Network.",
       tab: "network",
-      icon: BadgeDollarSign,
+      image: "/landing/intent/intent-sell.webp",
       startSeller: true,
     },
   ];
 
   return (
     <AuthFrame title="What brings you here?" wide>
-      <div className="studio-auth-choices" role="list">
+      <div className="studio-auth-choices is-grid" role="list">
         {options.map((option) => {
-          const Icon = option.icon;
           const isPending =
             pending === option.id ||
             (option.startSeller && pending === "sell");
@@ -425,23 +414,18 @@ function StudioIntentChooser() {
               key={option.id}
               type="button"
               role="listitem"
-              className="studio-auth-choice"
+              className={`studio-auth-choice-tile${isPending ? " is-pending" : ""}`}
               disabled={pending != null}
               onClick={() => void choose(option.tab, Boolean(option.startSeller))}
+              style={{ "--studio-auth-choice-image": `url(${option.image})` } as CSSProperties}
             >
-              <span className="studio-auth-choice-icon" aria-hidden="true">
-                <Icon />
-              </span>
-              <span className="studio-auth-choice-text">
-                <span className="studio-auth-choice-title">{option.title}</span>
-                <span className="studio-auth-choice-body">{option.body}</span>
-              </span>
-              <span className="studio-auth-choice-chevron" aria-hidden="true">
+              <span className="studio-auth-choice-tile-media" aria-hidden="true" />
+              <span className="studio-auth-choice-tile-mask" aria-hidden="true" />
+              <span className="studio-auth-choice-tile-label">
                 {isPending ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <ArrowRight />
-                )}
+                  <Loader2 className="studio-auth-choice-tile-spinner animate-spin" aria-hidden="true" />
+                ) : null}
+                {option.title}
               </span>
             </button>
           );
@@ -1343,6 +1327,102 @@ function AuthFrame({
           margin-top: 1.1rem;
           text-align: left;
         }
+        .studio-auth-choices.is-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        .studio-auth-choice-tile {
+          position: relative;
+          display: block;
+          width: 100%;
+          aspect-ratio: 1;
+          padding: 0;
+          overflow: hidden;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
+          border-radius: 16px;
+          background: var(--mos-plate-strong);
+          cursor: pointer;
+          isolation: isolate;
+          transition:
+            transform 0.14s ease,
+            border-color 0.14s ease,
+            box-shadow 0.14s ease;
+        }
+        .studio-auth-choice-tile-media {
+          position: absolute;
+          inset: 0;
+          background-image: var(--studio-auth-choice-image);
+          background-size: cover;
+          background-position: center;
+          transform: scale(1.02);
+          transition: transform 0.22s ease;
+        }
+        .studio-auth-choice-tile-mask {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            180deg,
+            rgba(28, 28, 30, 0.08) 0%,
+            rgba(28, 28, 30, 0.18) 42%,
+            rgba(28, 28, 30, 0.78) 100%
+          );
+          /* Soft edge mask so the photo reads as a vignette plate. */
+          -webkit-mask-image: radial-gradient(
+            120% 110% at 50% 38%,
+            #000 42%,
+            transparent 100%
+          );
+          mask-image: radial-gradient(
+            120% 110% at 50% 38%,
+            #000 42%,
+            transparent 100%
+          );
+          pointer-events: none;
+        }
+        .studio-auth-choice-tile-label {
+          position: absolute;
+          left: 10px;
+          right: 10px;
+          bottom: 10px;
+          z-index: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          color: #f5f5f7;
+          font-size: 12px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+          line-height: 1.2;
+          text-align: center;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+        }
+        .studio-auth-choice-tile-spinner {
+          width: 13px;
+          height: 13px;
+        }
+        .studio-auth-choice-tile:hover:not(:disabled) .studio-auth-choice-tile-media {
+          transform: scale(1.06);
+        }
+        .studio-auth-choice-tile:hover:not(:disabled) {
+          border-color: color-mix(in srgb, #1c1c1e 28%, transparent);
+          box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
+        }
+        .studio-auth-choice-tile:focus-visible {
+          outline: none;
+          box-shadow:
+            0 0 0 2px #f5f5f7,
+            0 0 0 4px color-mix(in srgb, #1c1c1e 28%, transparent);
+        }
+        .studio-auth-choice-tile:disabled {
+          cursor: not-allowed;
+        }
+        .studio-auth-choice-tile:disabled:not(.is-pending) {
+          opacity: 0.5;
+        }
+        .studio-auth-choice-tile.is-pending {
+          opacity: 1;
+        }
         .studio-auth-choice {
           display: flex;
           align-items: center;
@@ -1372,36 +1452,6 @@ function AuthFrame({
         .studio-auth-choice:disabled {
           cursor: not-allowed;
           opacity: 0.55;
-        }
-        .studio-auth-choice-icon {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex: 0 0 auto;
-          width: 32px;
-          height: 32px;
-          border-radius: 999px;
-          background: var(--mos-plate-strong);
-          color: #1c1c1e;
-        }
-        .studio-auth-choice-icon svg {
-          width: 15px;
-          height: 15px;
-        }
-        .studio-auth-choice-text {
-          display: grid;
-          gap: 2px;
-          min-width: 0;
-          flex: 1 1 auto;
-        }
-        .studio-auth-choice-chevron {
-          display: inline-flex;
-          flex: 0 0 auto;
-          color: color-mix(in srgb, #1c1c1e 38%, transparent);
-        }
-        .studio-auth-choice-chevron svg {
-          width: 16px;
-          height: 16px;
         }
         .studio-auth-icon,
         .studio-auth-accent-text {
@@ -1462,7 +1512,7 @@ function AuthFrame({
       `}</style>
       <section
         className={`studio-auth-card relative w-full p-5 text-center sm:p-5 ${
-          wide ? "max-w-[360px]" : "max-w-[300px]"
+          wide ? "max-w-[400px]" : "max-w-[300px]"
         }`}
       >
         {onBack ? (

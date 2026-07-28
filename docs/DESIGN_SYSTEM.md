@@ -288,8 +288,9 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Theme = landing ink (no agent green): accent `#1c1c1e`, mute icons, dark primary +
   bordered secondary pills. Fields = opaque white **42px pills**, 12px input text
   centered with icons.
-- **Intent chooser** (“What brings you here?”): wider sheet (360px), icon + title +
-  one-line body rows (`.studio-auth-choice`) — not stacked form-field cards. Memory: **807**.
+- **Intent chooser** (“What brings you here?”): wider sheet (400px), **2×2 image tiles**
+  (`.studio-auth-choice-tile`) with generated bg photos + gradient/radial mask + title
+  label. Assets in `public/landing/intent/`. Memory: **807**.
 - **Embedded in landing**: sign-in fills `.studio-landing-auth-stage` (content band);
   header / mobile bottom nav stay mounted. Head **Sign in** = dark pill; toggles to
   **Close**. Desktop head has tighter horizontal pad. Memory: **807**.
