@@ -281,6 +281,13 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Fill: `color-mix(mos-surface 58%, transparent)` · border soft 82% · **radius 18px**
 - Shadow: inset top highlight + soft 1px/4px drop (light mode uses white inset)
 
+**Landing auth / sign-in sheet** (`StudioAuthGate` → `AuthFrame`):
+
+- Always **light** page (`--mos-page`) + centered opaque **plate sheet** (`--mos-plate`,
+  radius 18px). No wallpaper carousel, no glass / `backdrop-filter`.
+- Fields = opaque `--mos-surface` 36px rows (Studio form density); primary/secondary
+  match Settings action language. Memory: **807**.
+
 **History + Messages chat-list bubbles** (shared soft bubble language):
 
 - Flat list rows: `.studio-history-item` and `.studio-dm-row` — `16px` radius,
@@ -322,7 +329,9 @@ same head-tab language: idle labels are plain (transparent, muted); **only**
 head tabs): use `.cursor-h-scroll-fade` + `useHorizontalScrollFade`. Soft mask matches
 workspace tab strip (`.cursor-unified-tabs-scroll` right fade). `data-scroll-fade` is
 `right` / `left` / `both` / `none` — clear a side when scrolled flush so items can
-fully reach that edge. No horizontal padding on the scroll track itself. Memory: **806**.
+fully reach that edge. No container pad on the track — `::before`/`::after` 12px
+spacers inset the first/last pill at rest but scroll away so pills can go flush under
+the fade. Memory: **806**.
 
 Inside that sidebar `cursor-settings-action` is **full-width** — never use it for an inline
 action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
@@ -625,5 +634,6 @@ Update memory when you change a rule here:
 - **691** — Light admin: page lighter, plates darker; 16/12/8 spacing.
 - **697** — Offers inputs keep raised fill; white/borderless rejected.
 - **703** — Public routes reuse mos tokens; `public-offers.css` mirrors admin billing chrome.
+- **807** — Landing auth = light opaque plate sheet (no glass / photo wallpaper).
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.

@@ -18,7 +18,7 @@ import {
   type ReactNode,
 } from "react";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { StudioBootLoader } from "@/components/studio-boot-loader";
 import {
@@ -28,13 +28,7 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
-import {
-  STUDIO_AUTH_BACKGROUND_PATHS,
-  studioSceneThemeIdFromPath,
-} from "@/studio/lib/studio-scene-backgrounds";
 import { SCHEMES } from "@/mos-app/theme.js";
-import { useAppearanceMode } from "@/lib/use-appearance-mode";
-import type { AppearanceMode } from "@/lib/brand-assets";
 import { markPerfMilestone } from "@/lib/performance";
 import {
   resetStudioClient,
@@ -153,26 +147,12 @@ const StudioShell = dynamic<StudioShellBootProps>(
   },
 );
 
-const AUTH_BACKGROUND_IMAGES = [...STUDIO_AUTH_BACKGROUND_PATHS];
-
-function authBackgroundsForAppearance(appearance: AppearanceMode) {
-  const filtered = AUTH_BACKGROUND_IMAGES.filter((path) =>
-    appearance === "light" ? path.includes("-light-") : !path.includes("-light-"),
-  );
-  return filtered.length > 0 ? filtered : AUTH_BACKGROUND_IMAGES;
-}
-
 const WHATSAPP_CODE_TTL_MS = 2 * 60 * 1000;
+const AUTH_ACCENT = SCHEMES.agent?.accent ?? "#22c55e";
 
 function hexToRgbString(hex: string) {
   const value = hex.replace("#", "");
   return `${parseInt(value.slice(0, 2), 16)} ${parseInt(value.slice(2, 4), 16)} ${parseInt(value.slice(4, 6), 16)}`;
-}
-
-function getAuthThemeForBackground(path: string) {
-  const themeId = studioSceneThemeIdFromPath(path);
-  const scheme = SCHEMES[themeId as keyof typeof SCHEMES] ?? SCHEMES.agent;
-  return { key: themeId, accent: scheme.accent };
 }
 
 type WhatsAppCodeStep = {
@@ -427,23 +407,23 @@ function StudioIntentChooser() {
       <p className="studio-auth-copy mt-3 text-sm">
         Pick a starting point. You can change your default tab anytime in Settings → General.
       </p>
-      <div className="mt-6 grid gap-2">
+      <div className="studio-auth-form">
         {options.map((option) => (
           <button
             key={option.id}
             type="button"
-            className="studio-auth-field flex w-full flex-col items-start gap-1 rounded-2xl border bg-transparent px-4 py-3.5 text-left backdrop-blur-xl transition disabled:opacity-60"
+            className="studio-auth-field is-stack disabled:opacity-60"
             disabled={pending != null}
             onClick={() => void choose(option.tab, Boolean(option.startSeller))}
           >
-            <span className="font-medium text-white">
+            <span className="studio-auth-choice-title">
               {option.title}
               {pending === option.id || (option.startSeller && pending === "sell")
                 ? "…"
                 : ""}
             </span>
-            <span className="text-sm opacity-70">{option.body}</span>
-            <span className="text-xs opacity-50">
+            <span className="studio-auth-choice-body">{option.body}</span>
+            <span className="studio-auth-choice-meta">
               Opens {STUDIO_DEFAULT_TAB_LABELS[option.tab]}
               {option.startSeller ? " · seller signup" : ""}
             </span>
@@ -490,7 +470,7 @@ function StudioCompleteAccount({
         but you cannot remove email or phone.
       </p>
       <form
-        className="mt-6 space-y-3"
+        className="studio-auth-form"
         onSubmit={(event) => {
           event.preventDefault();
           setPending(true);
@@ -507,13 +487,12 @@ function StudioCompleteAccount({
             .finally(() => setPending(false));
         }}
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="block space-y-2">
-            <span className="studio-auth-label text-xs uppercase tracking-[0.18em]">First name</span>
-            <span className="studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition">
-              <UserRound className="studio-auth-icon h-4 w-4 shrink-0" />
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <label className="block">
+            <span className="studio-auth-label">First name</span>
+            <span className="studio-auth-field">
+              <UserRound className="studio-auth-icon" aria-hidden="true" />
               <input
-                className="w-full bg-transparent outline-none"
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
                 placeholder="First name"
@@ -522,12 +501,11 @@ function StudioCompleteAccount({
               />
             </span>
           </label>
-          <label className="block space-y-2">
-            <span className="studio-auth-label text-xs uppercase tracking-[0.18em]">Last name</span>
-            <span className="studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition">
-              <UserRound className="studio-auth-icon h-4 w-4 shrink-0" />
+          <label className="block">
+            <span className="studio-auth-label">Last name</span>
+            <span className="studio-auth-field">
+              <UserRound className="studio-auth-icon" aria-hidden="true" />
               <input
-                className="w-full bg-transparent outline-none"
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
                 placeholder="Last name"
@@ -537,14 +515,13 @@ function StudioCompleteAccount({
             </span>
           </label>
         </div>
-        <label className="block space-y-2">
-          <span className="studio-auth-label text-xs uppercase tracking-[0.18em]">
+        <label className="block">
+          <span className="studio-auth-label">
             Email{missingEmail ? " (required)" : ""}
           </span>
-          <span className={`studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition${!missingEmail ? " opacity-70" : ""}`}>
-            <Mail className="studio-auth-icon h-4 w-4 shrink-0" />
+          <span className={`studio-auth-field${!missingEmail ? " opacity-70" : ""}`}>
+            <Mail className="studio-auth-icon" aria-hidden="true" />
             <input
-              className="w-full bg-transparent outline-none disabled:cursor-not-allowed"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
@@ -555,14 +532,13 @@ function StudioCompleteAccount({
             />
           </span>
         </label>
-        <label className="block space-y-2">
-          <span className="studio-auth-label text-xs uppercase tracking-[0.18em]">
+        <label className="block">
+          <span className="studio-auth-label">
             Phone / WhatsApp{missingPhone ? " (required)" : ""}
           </span>
-          <span className={`studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition${!missingPhone ? " opacity-70" : ""}`}>
-            <Phone className="studio-auth-icon h-4 w-4 shrink-0" />
+          <span className={`studio-auth-field${!missingPhone ? " opacity-70" : ""}`}>
+            <Phone className="studio-auth-icon" aria-hidden="true" />
             <input
-              className="w-full bg-transparent outline-none disabled:cursor-not-allowed"
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
               placeholder="+1 868 337 7338"
@@ -576,7 +552,7 @@ function StudioCompleteAccount({
         {error ? <p className="studio-auth-error text-sm">{error}</p> : null}
         <button
           type="submit"
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3.5 font-medium text-black disabled:opacity-60"
+          className="studio-auth-primary"
           disabled={pending || !canContinue}
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -584,7 +560,7 @@ function StudioCompleteAccount({
         </button>
         <button
           type="button"
-          className="studio-auth-link w-full text-sm underline-offset-2 hover:underline"
+          className="studio-auth-link w-full py-1 text-center underline-offset-2 hover:underline"
           onClick={() => void signOut()}
         >
           Sign out
@@ -725,7 +701,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
       onBack={onBack && step === "identify" ? onBack : undefined}
     >
       <form
-        className="mt-6 space-y-4"
+        className="studio-auth-form"
         onSubmit={(event) => {
           event.preventDefault();
           setPending(true);
@@ -836,19 +812,19 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
         }}
       >
         {step === "identify" ? (
-          <label className="block text-left">
-            <span className="studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition">
+          <label className="block">
+            <span className="studio-auth-label">Email or WhatsApp</span>
+            <span className="studio-auth-field">
               {contactInputIcon(identifierInput) === "email" ? (
-                <Mail className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
+                <Mail className="studio-auth-accent-text" aria-hidden="true" />
               ) : contactInputIcon(identifierInput) === "phone" ? (
-                <Phone className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
+                <Phone className="studio-auth-accent-text" aria-hidden="true" />
               ) : (
-                <UserRound className="studio-auth-accent-text h-5 w-5" aria-hidden="true" />
+                <UserRound className="studio-auth-accent-text" aria-hidden="true" />
               )}
               <input
-                className="min-w-0 flex-1 bg-transparent text-lg outline-none"
                 name="identifier"
-                placeholder="Enter email or number"
+                placeholder="you@email.com or number"
                 type="text"
                 inputMode={
                   inputMode === "email"
@@ -876,14 +852,11 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
 
         {isPasswordStep ? (
           <>
-            <label className="block text-left">
-              <span className="studio-auth-field flex items-center gap-3 rounded-2xl border bg-transparent px-4 py-3.5 backdrop-blur-xl transition">
-                <Lock
-                  className="studio-auth-accent-text h-5 w-5"
-                  aria-hidden="true"
-                />
+            <label className="block">
+              <span className="studio-auth-label">Password</span>
+              <span className="studio-auth-field">
+                <Lock className="studio-auth-accent-text" aria-hidden="true" />
                 <input
-                  className="min-w-0 flex-1 bg-transparent text-lg outline-none"
                   name="password"
                   placeholder="Your password"
                   type="password"
@@ -905,7 +878,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
               </span>
             </label>
             <button
-              className="studio-auth-secondary w-full cursor-pointer rounded-2xl border bg-transparent px-5 py-3.5 text-base font-semibold backdrop-blur-xl transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              className="studio-auth-secondary"
               type="button"
               disabled={pending}
               onClick={() => {
@@ -932,9 +905,9 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
           <>
             <input name="email" value={step.contact.email} type="hidden" />
             <label className="block">
-              <span className="sr-only">Code</span>
+              <span className="studio-auth-label">Code</span>
               <input
-                className="studio-auth-field w-full rounded-2xl border bg-transparent px-5 py-4 text-center text-lg font-semibold tracking-[0.28em] outline-none backdrop-blur-xl transition"
+                className="studio-auth-field is-code"
                 name="code"
                 placeholder="00000000"
                 inputMode="numeric"
@@ -945,7 +918,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
             </label>
             {step.hasPassword ? (
               <button
-                className="studio-auth-secondary w-full cursor-pointer rounded-2xl border bg-transparent px-5 py-3.5 text-base font-semibold backdrop-blur-xl transition focus:outline-none"
+                className="studio-auth-secondary"
                 type="button"
                 onClick={() => {
                   setError("");
@@ -960,14 +933,14 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
         ) : null}
 
         {isWhatsAppCodeStep ? (
-          <div className="space-y-2">
-            <div className="studio-auth-panel rounded-2xl border bg-transparent p-3 text-center backdrop-blur-xl">
+          <>
+            <div className="studio-auth-panel p-3 text-center">
               <div className="flex items-center justify-center gap-2">
-                <p className="text-2xl font-semibold tracking-[0.16em]">
+                <p className="m-0 text-xl font-semibold tracking-[0.14em]">
                   {formatAuthCode(step.code)}
                 </p>
                 <button
-                  className="studio-auth-link inline-flex cursor-pointer items-center justify-center bg-transparent p-0 transition focus:outline-none"
+                  className="studio-auth-link inline-flex cursor-pointer items-center justify-center p-0 transition focus:outline-none"
                   type="button"
                   aria-label="Copy code"
                   title="Copy code"
@@ -987,7 +960,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
             </div>
             <div className="grid grid-cols-2 gap-2">
               <a
-                className="studio-auth-primary flex cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none"
+                className="studio-auth-primary"
                 href={step.whatsappUrl}
                 target="_blank"
                 rel="noreferrer"
@@ -996,7 +969,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
                 Open WhatsApp
               </a>
               <button
-                className="studio-auth-primary flex cursor-pointer items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                className="studio-auth-primary"
                 type="submit"
                 disabled={pending || whatsAppExpired}
               >
@@ -1005,17 +978,14 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
                 ) : (
                   <>
                     Continue
-                    <ArrowRight
-                      className="h-4 w-4 transition group-hover:translate-x-0.5"
-                      aria-hidden="true"
-                    />
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </>
                 )}
               </button>
             </div>
             {step.hasPassword ? (
               <button
-                className="studio-auth-secondary w-full cursor-pointer rounded-2xl border bg-transparent px-5 py-3.5 text-base font-semibold backdrop-blur-xl transition focus:outline-none"
+                className="studio-auth-secondary"
                 type="button"
                 onClick={() => {
                   setError("");
@@ -1026,27 +996,19 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
                 Enter password
               </button>
             ) : null}
-          </div>
+          </>
         ) : null}
-        {notice ? (
-          <p className="studio-auth-notice text-xs">
-            {notice}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="studio-auth-error-box rounded-xl border px-4 py-3 text-sm">
-            {error}
-          </p>
-        ) : null}
+        {notice ? <p className="studio-auth-notice">{notice}</p> : null}
+        {error ? <p className="studio-auth-error-box">{error}</p> : null}
         {step === "identify" || isPasswordStep || isEmailCodeStep ? (
           <button
-            className="studio-auth-primary group flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-base font-semibold shadow-lg shadow-black/20 transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            className="studio-auth-primary"
             type="submit"
             disabled={pending}
           >
             {pending ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 {step === "identify"
                   ? "Checking account"
                   : isPasswordStep
@@ -1056,17 +1018,14 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
             ) : (
               <>
                 {step === "identify" ? "Continue" : isPasswordStep ? "Sign in" : "Continue"}
-                <ArrowRight
-                  className="h-5 w-5 transition group-hover:translate-x-0.5"
-                  aria-hidden="true"
-                />
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </>
             )}
           </button>
         ) : null}
         {step !== "identify" ? (
           <button
-            className="studio-auth-link w-full cursor-pointer bg-transparent py-1 text-sm underline-offset-4 transition hover:underline focus:outline-none"
+            className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none"
             type="button"
             onClick={resetToIdentify}
           >
@@ -1074,9 +1033,9 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
           </button>
         ) : null}
         {isWhatsAppCodeStep ? (
-          <div className="flex items-center justify-center gap-3 text-sm font-medium">
+          <div className="flex items-center justify-center">
             <button
-              className="studio-auth-link cursor-pointer bg-transparent px-1 py-1 underline-offset-4 transition hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="studio-auth-link cursor-pointer px-1 py-1 underline-offset-4 transition hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               disabled={pending}
               onClick={resendWhatsAppCode}
@@ -1128,254 +1087,271 @@ function AuthFrame({
   children?: ReactNode;
   onBack?: () => void;
 }) {
-  const appearance = useAppearanceMode();
-  const backgrounds = useMemo(
-    () => authBackgroundsForAppearance(appearance),
-    [appearance],
-  );
-  const [backgroundIndex, setBackgroundIndex] = useState(0);
-  const activeBackground = backgrounds[backgroundIndex % backgrounds.length] ?? backgrounds[0];
-  const activeTheme = getAuthThemeForBackground(activeBackground);
   const authThemeStyle = {
-    "--studio-auth-accent": activeTheme.accent,
-    "--studio-auth-accent-rgb": hexToRgbString(activeTheme.accent),
+    "--studio-auth-accent": AUTH_ACCENT,
+    "--studio-auth-accent-rgb": hexToRgbString(AUTH_ACCENT),
   } as CSSProperties;
-
-  useEffect(() => {
-    setBackgroundIndex(0);
-  }, [appearance]);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => {
-      setBackgroundIndex((index) => (index + 1) % backgrounds.length);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [backgrounds]);
-
-  useEffect(() => {
-    const next = backgrounds[(backgroundIndex + 1) % backgrounds.length];
-    if (!next) return;
-    const image = new Image();
-    image.decoding = "async";
-    image.src = next;
-  }, [backgroundIndex, backgrounds]);
 
   return (
     <main
-      className="studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-5 py-10"
-      data-auth-appearance={appearance}
+      className="studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-8 sm:px-5 sm:py-10"
+      data-auth-appearance="light"
       style={authThemeStyle}
     >
-      <div
-        className="absolute inset-0 scale-[1.03] bg-cover bg-center"
-        style={{ backgroundImage: `url("${activeBackground}")` }}
-        aria-hidden="true"
-      />
-      <div className="studio-auth-scrim absolute inset-0" aria-hidden="true" />
       <style jsx global>{`
+        /* Light opaque Studio sheet — no wallpaper glass (matches settings / KYC panes). */
         .studio-auth-theme {
-          color: #fff;
-          background: #020617;
+          color: var(--mos-text, #111118);
+          background: var(--mos-page, #f5f5f7);
         }
-        .studio-auth-theme[data-auth-appearance="light"] {
-          color: #0f172a;
-          background: #e8ecf4;
+        .studio-auth-card {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 82%, transparent);
+          border-radius: 18px;
+          background: var(--mos-plate, #ececf0);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.72),
+            0 1px 2px rgba(15, 23, 42, 0.05),
+            0 12px 28px rgba(15, 23, 42, 0.08);
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
         }
-        .studio-auth-theme .studio-auth-scrim {
-          background:
-            radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.14), transparent 28%),
-            linear-gradient(180deg, rgba(5, 7, 12, 0.42), rgba(5, 7, 12, 0.82));
+        .studio-auth-title {
+          margin: 0;
+          color: var(--mos-text, #111118);
+          font-size: 1.375rem;
+          font-weight: 650;
+          letter-spacing: -0.02em;
+          line-height: 1.2;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-scrim {
-          background:
-            radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.55), transparent 32%),
-            linear-gradient(180deg, rgba(232, 236, 244, 0.42), rgba(232, 236, 244, 0.78));
+        .studio-auth-form {
+          display: grid;
+          gap: 10px;
+          margin-top: 1.25rem;
+          text-align: left;
         }
-        .studio-auth-theme .studio-auth-card {
-          border: 1px solid rgb(255 255 255 / 0.15);
+        .studio-auth-accent-text,
+        .studio-auth-eyebrow {
+          color: rgb(var(--studio-auth-accent-rgb) / 0.9);
+        }
+        .studio-auth-eyebrow {
+          margin: 0;
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+        .studio-auth-field {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 36px;
+          width: 100%;
+          padding: 0 12px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border-radius: 10px;
+          background: var(--mos-surface, #ffffff);
+          box-shadow: none;
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+          transition:
+            border-color 0.14s ease,
+            background 0.14s ease;
+        }
+        .studio-auth-field.is-stack {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 4px;
+          min-height: 0;
+          padding: 10px 12px;
+          text-align: left;
+        }
+        .studio-auth-field.is-code {
+          justify-content: center;
+          min-height: 44px;
+          padding: 0 14px;
+          font-size: 1.05rem;
+          font-weight: 650;
+          letter-spacing: 0.22em;
+          text-align: center;
+        }
+        .studio-auth-field:focus,
+        .studio-auth-field:focus-within {
+          border-color: color-mix(in srgb, var(--studio-auth-accent) 45%, var(--color-cursor-border-soft, #d4d4da));
+          background: color-mix(in srgb, var(--studio-auth-accent) 5%, var(--mos-surface, #ffffff));
+          outline: none;
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-auth-accent) 16%, transparent);
+        }
+        .studio-auth-field input,
+        .studio-auth-field textarea,
+        input.studio-auth-field {
+          min-width: 0;
+          flex: 1 1 auto;
+          width: 100%;
+          border: 0;
           background: transparent;
-          box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.35);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-card {
-          border-color: rgb(15 23 42 / 0.12);
-          background: color-mix(in srgb, #ffffff 70%, transparent);
-          box-shadow:
-            0 24px 60px rgb(15 23 42 / 0.12),
-            inset 0 1px 0 rgb(255 255 255 / 0.65);
-        }
-        .studio-auth-theme .studio-auth-accent-text,
-        .studio-auth-theme .studio-auth-eyebrow {
-          color: rgb(var(--studio-auth-accent-rgb) / 0.72);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-accent-text,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-eyebrow {
-          color: rgb(var(--studio-auth-accent-rgb) / 0.88);
-        }
-        .studio-auth-theme .studio-auth-field {
-          border-color: rgb(255 255 255 / 0.15);
-          box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-field {
-          border-color: rgb(15 23 42 / 0.14);
-          background: color-mix(in srgb, #ffffff 55%, transparent);
-          box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7);
-        }
-        .studio-auth-theme .studio-auth-field:focus,
-        .studio-auth-theme .studio-auth-field:focus-within {
-          border-color: rgb(var(--studio-auth-accent-rgb) / 0.44);
-          background: rgb(var(--studio-auth-accent-rgb) / 0.035);
-          box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.04),
-            0 0 0 1px rgb(var(--studio-auth-accent-rgb) / 0.16);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-field:focus,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-field:focus-within {
-          background: rgb(var(--studio-auth-accent-rgb) / 0.06);
-          box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.75),
-            0 0 0 1px rgb(var(--studio-auth-accent-rgb) / 0.2);
-        }
-        .studio-auth-theme .studio-auth-field input,
-        .studio-auth-theme .studio-auth-field textarea {
           color: inherit;
+          font-size: 13px;
+          font-weight: 500;
+          line-height: 1.3;
+          outline: none;
         }
-        .studio-auth-theme .studio-auth-field input::placeholder,
-        .studio-auth-theme .studio-auth-field textarea::placeholder,
-        .studio-auth-theme input.studio-auth-field::placeholder {
-          color: rgb(255 255 255 / 0.32);
+        .studio-auth-field input::placeholder,
+        .studio-auth-field textarea::placeholder,
+        input.studio-auth-field::placeholder {
+          color: color-mix(in srgb, var(--mos-text, #111118) 38%, transparent);
+          font-weight: 450;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-field input::placeholder,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-field textarea::placeholder,
-        .studio-auth-theme[data-auth-appearance="light"] input.studio-auth-field::placeholder {
-          color: rgb(15 23 42 / 0.34);
+        .studio-auth-primary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 36px;
+          width: 100%;
+          padding: 0 14px;
+          border: 1px solid color-mix(in srgb, var(--studio-auth-accent) 40%, transparent);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--studio-auth-accent) 18%, var(--mos-surface, #fff));
+          color: var(--mos-text, #111118);
+          font-size: 13px;
+          font-weight: 650;
+          box-shadow: none;
+          transition: background 0.14s ease, border-color 0.14s ease;
         }
-        .studio-auth-theme .studio-auth-primary {
-          border: 1px solid rgb(var(--studio-auth-accent-rgb) / 0.34);
-          background: rgb(var(--studio-auth-accent-rgb) / 0.18);
-          color: #fff;
-          box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.08),
-            0 18px 44px rgb(0 0 0 / 0.24),
-            0 0 34px rgb(var(--studio-auth-accent-rgb) / 0.16);
+        .studio-auth-primary:hover {
+          border-color: color-mix(in srgb, var(--studio-auth-accent) 55%, transparent);
+          background: color-mix(in srgb, var(--studio-auth-accent) 26%, var(--mos-surface, #fff));
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-primary {
-          color: #0f172a;
-          background: rgb(var(--studio-auth-accent-rgb) / 0.22);
-          box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.55),
-            0 14px 34px rgb(15 23 42 / 0.12),
-            0 0 28px rgb(var(--studio-auth-accent-rgb) / 0.16);
+        .studio-auth-primary:focus-visible,
+        .studio-auth-secondary:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-auth-accent) 28%, transparent);
         }
-        .studio-auth-theme .studio-auth-primary:hover {
-          border-color: rgb(var(--studio-auth-accent-rgb) / 0.52);
-          background: rgb(var(--studio-auth-accent-rgb) / 0.24);
+        .studio-auth-primary:disabled,
+        .studio-auth-secondary:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
         }
-        .studio-auth-theme .studio-auth-primary:focus-visible,
-        .studio-auth-theme .studio-auth-secondary:focus-visible,
-        .studio-auth-theme .studio-auth-method:focus-visible {
-          box-shadow:
-            0 0 0 2px rgb(2 6 23 / 0.9),
-            0 0 0 4px rgb(var(--studio-auth-accent-rgb) / 0.34);
+        .studio-auth-secondary {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          min-height: 36px;
+          width: 100%;
+          padding: 0 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border-radius: 10px;
+          background: var(--mos-plate-strong, #d4d4da);
+          color: color-mix(in srgb, var(--mos-text, #111118) 78%, transparent);
+          font-size: 13px;
+          font-weight: 600;
+          box-shadow: none;
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+          transition: background 0.14s ease, border-color 0.14s ease;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-primary:focus-visible,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-secondary:focus-visible,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-method:focus-visible {
-          box-shadow:
-            0 0 0 2px rgb(255 255 255 / 0.95),
-            0 0 0 4px rgb(var(--studio-auth-accent-rgb) / 0.34);
+        .studio-auth-secondary:hover {
+          border-color: color-mix(in srgb, var(--studio-auth-accent) 35%, var(--color-cursor-border-soft, #d4d4da));
+          color: var(--mos-text, #111118);
         }
-        .studio-auth-theme .studio-auth-secondary {
-          border-color: rgb(255 255 255 / 0.15);
-          color: rgb(255 255 255 / 0.75);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-secondary {
-          border-color: rgb(15 23 42 / 0.14);
-          color: rgb(15 23 42 / 0.72);
-          background: color-mix(in srgb, #ffffff 45%, transparent);
-        }
-        .studio-auth-theme .studio-auth-secondary:hover,
-        .studio-auth-theme .studio-auth-method:hover {
-          border-color: rgb(var(--studio-auth-accent-rgb) / 0.34);
-          background: rgb(var(--studio-auth-accent-rgb) / 0.06);
-          color: rgb(255 255 255 / 0.88);
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-secondary:hover,
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-method:hover {
-          color: rgb(15 23 42 / 0.9);
-        }
-        .studio-auth-theme .studio-auth-method.is-active {
-          border: 1px solid rgb(var(--studio-auth-accent-rgb) / 0.32);
-          background: rgb(var(--studio-auth-accent-rgb) / 0.12);
-          color: #fff;
-        }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-method.is-active {
-          color: #0f172a;
-        }
-        .studio-auth-theme .studio-auth-notice {
-          color: rgb(255 255 255 / 0.58);
+        .studio-auth-notice {
           min-height: 1rem;
+          margin: 0;
+          color: color-mix(in srgb, var(--mos-text, #111118) 55%, transparent);
+          font-size: 12px;
+          text-align: center;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-notice {
-          color: rgb(15 23 42 / 0.55);
+        .studio-auth-copy {
+          margin: 0.65rem 0 0;
+          color: color-mix(in srgb, var(--mos-text, #111118) 68%, transparent);
+          font-size: 13px;
+          line-height: 1.4;
+          text-align: left;
         }
-        .studio-auth-theme .studio-auth-copy { color: rgb(255 255 255 / 0.7); }
-        .studio-auth-theme .studio-auth-label { color: rgb(255 255 255 / 0.55); }
-        .studio-auth-theme .studio-auth-icon { color: rgb(255 255 255 / 0.45); }
-        .studio-auth-theme .studio-auth-link { color: rgb(255 255 255 / 0.55); }
-        .studio-auth-theme .studio-auth-link:hover { color: #fff; }
-        .studio-auth-theme .studio-auth-faint { color: rgb(255 255 255 / 0.38); }
-        .studio-auth-theme .studio-auth-panel {
-          border-color: rgb(255 255 255 / 0.15);
-          box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+        .studio-auth-label {
+          display: block;
+          margin: 0 0 5px;
+          color: color-mix(in srgb, var(--mos-text, #111118) 52%, transparent);
+          font-size: 11px;
+          font-weight: 650;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-copy { color: rgb(15 23 42 / 0.68); }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-label { color: rgb(15 23 42 / 0.52); }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-icon { color: rgb(15 23 42 / 0.42); }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-link { color: rgb(15 23 42 / 0.55); }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-link:hover { color: #0f172a; }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-faint { color: rgb(15 23 42 / 0.4); }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-panel {
-          border-color: rgb(15 23 42 / 0.12);
-          background: color-mix(in srgb, #ffffff 55%, transparent);
+        .studio-auth-icon,
+        .studio-auth-accent-text {
+          flex: 0 0 auto;
+          width: 16px;
+          height: 16px;
         }
-        .studio-auth-theme .studio-auth-error {
-          color: rgb(254 202 202);
+        .studio-auth-icon {
+          color: color-mix(in srgb, var(--mos-text, #111118) 42%, transparent);
         }
-        .studio-auth-theme .studio-auth-error-box {
-          border-color: rgb(248 113 113 / 0.2);
-          background: rgb(239 68 68 / 0.1);
-          color: rgb(254 226 226);
+        .studio-auth-link {
+          color: color-mix(in srgb, var(--mos-text, #111118) 55%, transparent);
+          font-size: 12px;
+          font-weight: 500;
+          background: transparent;
+          border: 0;
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-error {
-          color: rgb(185 28 28);
+        .studio-auth-link:hover {
+          color: var(--mos-text, #111118);
         }
-        .studio-auth-theme[data-auth-appearance="light"] .studio-auth-error-box {
-          border-color: rgb(185 28 28 / 0.22);
-          background: rgb(254 226 226 / 0.65);
-          color: rgb(153 27 27);
+        .studio-auth-faint {
+          color: color-mix(in srgb, var(--mos-text, #111118) 42%, transparent);
+        }
+        .studio-auth-panel {
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border-radius: 12px;
+          background: var(--mos-surface, #ffffff);
+          box-shadow: none;
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+        }
+        .studio-auth-error {
+          color: #b91c1c;
+        }
+        .studio-auth-error-box {
+          margin: 0;
+          padding: 10px 12px;
+          border: 1px solid rgb(185 28 28 / 0.22);
+          border-radius: 10px;
+          background: rgb(254 226 226 / 0.72);
+          color: #991b1b;
+          font-size: 12px;
+          line-height: 1.35;
+        }
+        .studio-auth-choice-title {
+          color: var(--mos-text, #111118);
+          font-size: 13px;
+          font-weight: 650;
+        }
+        .studio-auth-choice-body {
+          color: color-mix(in srgb, var(--mos-text, #111118) 62%, transparent);
+          font-size: 12px;
+          line-height: 1.35;
+        }
+        .studio-auth-choice-meta {
+          color: color-mix(in srgb, var(--mos-text, #111118) 45%, transparent);
+          font-size: 11px;
         }
       `}</style>
-      <section className="studio-auth-card relative w-full max-w-[372px] rounded-[2rem] p-5 text-center backdrop-blur-3xl sm:p-6">
+      <section className="studio-auth-card relative w-full max-w-[380px] p-5 text-center sm:p-6">
         {onBack ? (
           <button
             type="button"
-            className="studio-auth-link mb-3 w-full cursor-pointer bg-transparent py-1 text-left text-sm underline-offset-4 transition hover:underline focus:outline-none"
+            className="studio-auth-link mb-2 w-full cursor-pointer py-1 text-left underline-offset-4 transition hover:underline focus:outline-none"
             onClick={onBack}
           >
             ← Back
           </button>
         ) : null}
-        <div className="flex flex-col items-center justify-center gap-3">
-          <BrandMark size={64} subtle appearance={appearance} />
-          <div>
-            <p className="studio-auth-eyebrow text-xs font-semibold uppercase tracking-[0.24em]">
-              {eyebrow}
-            </p>
-          </div>
+        <div className="flex flex-col items-center justify-center gap-2.5">
+          <BrandMark size={48} subtle appearance="light" />
+          <p className="studio-auth-eyebrow">{eyebrow}</p>
         </div>
-        <div className="mt-4">
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        <div className="mt-3">
+          <h1 className="studio-auth-title">{title}</h1>
         </div>
         {children}
       </section>
