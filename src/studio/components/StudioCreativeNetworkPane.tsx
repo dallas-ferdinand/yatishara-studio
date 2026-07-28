@@ -138,6 +138,9 @@ function usePreloadCreativeNetworkHero() {
 function NetworkBrowse() {
   const cn = useCreativeNetwork();
   usePreloadCreativeNetworkHero();
+  const valuesScrollRef = useRef<HTMLDivElement | null>(null);
+  useHorizontalWheelScroll(valuesScrollRef);
+  useHorizontalScrollFade(valuesScrollRef);
   const filtered = cn.filtered as
     | Array<{
         _id: string;
@@ -191,7 +194,11 @@ function NetworkBrowse() {
             </div>
           </section>
 
-          <div className="public-offers-values">
+          <div
+            ref={valuesScrollRef}
+            className="public-offers-values"
+            aria-label="Why Creative Network"
+          >
             {VALUE_PROPS.map((value) => (
               <div
                 key={value.title}

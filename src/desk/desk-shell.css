@@ -7975,24 +7975,26 @@ textarea.cursor-input {
   starts inset, but can scroll flush under the fade to the track edge.
 */
 .cursor-h-scroll-fade {
+  --cursor-h-scroll-fade-pad: 12px;
+  --cursor-h-scroll-fade-gap: 4px;
   -webkit-mask-image: none;
   mask-image: none;
 }
 .cursor-h-scroll-fade::before,
 .cursor-h-scroll-fade::after {
   content: "";
-  flex: 0 0 12px;
-  width: 12px;
-  min-width: 12px;
+  flex: 0 0 var(--cursor-h-scroll-fade-pad);
+  width: var(--cursor-h-scroll-fade-pad);
+  min-width: var(--cursor-h-scroll-fade-pad);
   height: 1px;
   pointer-events: none;
 }
-/* Cancel row gap so rest inset stays 12px, not 12+gap. */
+/* Cancel row gap so rest inset stays pad, not pad+gap. */
 .cursor-h-scroll-fade::before {
-  margin-inline-end: -4px;
+  margin-inline-end: calc(var(--cursor-h-scroll-fade-gap) * -1);
 }
 .cursor-h-scroll-fade::after {
-  margin-inline-start: -4px;
+  margin-inline-start: calc(var(--cursor-h-scroll-fade-gap) * -1);
 }
 .cursor-h-scroll-fade[data-scroll-fade="right"] {
   -webkit-mask-image: linear-gradient(

@@ -31,6 +31,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -39,13 +40,15 @@ import { toast } from "sonner";
 import { ConvexClientProvider } from "@/app/ConvexClientProvider";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { useMobileLayout } from "@/hooks/use-mobile-layout";
-import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
-import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
-import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { CursorSelect } from "@/desk/components/CursorSelect";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
+import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
+import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
+import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
 import "./public-offers.css";
 import "./studio-creative-network.css";
 
@@ -644,6 +647,9 @@ function CatalogFiltersBody({
 function OffersCatalogInner() {
   const searchParams = useSearchParams();
   const mediaExpiresUnix = useStickySignedUrlExpiry();
+  const valuesScrollRef = useRef<HTMLDivElement | null>(null);
+  useHorizontalWheelScroll(valuesScrollRef);
+  useHorizontalScrollFade(valuesScrollRef);
   const sellerUsername = searchParams.get("u")?.replace(/^@/, "").trim() || undefined;
   const allOffers = useQuery(
     api.marketplace.listPublicOffers,
@@ -887,7 +893,11 @@ function OffersCatalogInner() {
               </div>
             </section>
 
-            <div className="public-offers-values">
+            <div
+              ref={valuesScrollRef}
+              className="public-offers-values"
+              aria-label="Why Creative Network"
+            >
               {VALUE_PROPS.map((value) => (
                 <div key={value.title} className="public-offers-value" title={value.copy}>
                   <span className="public-offers-value-icon">

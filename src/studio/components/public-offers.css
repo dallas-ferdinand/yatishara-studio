@@ -723,14 +723,18 @@
   max-width: 860px;
 }
 
-/* Value props are title-only chips in one horizontally scrolling row (all sizes) */
+/* Value props are title-only chips in one horizontally scrolling row (all sizes).
+   Full-bleed track + scrollable end spacers (via .cursor-h-scroll-fade) so chips
+   rest inset but can scroll flush under left/right fade masks. */
 .public-offers-values {
+  --cursor-h-scroll-fade-pad: 16px;
+  --cursor-h-scroll-fade-gap: 8px;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   margin: 0 -16px;
-  padding: 0 16px 2px;
+  padding: 0 0 2px;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -1551,8 +1555,9 @@
 
   /* Chips already scroll horizontally at every size — just tighten them */
   .public-offers-values {
+    --cursor-h-scroll-fade-pad: 12px;
     margin: 0 -12px;
-    padding: 0 12px 2px;
+    padding: 0 0 2px;
   }
 
   .public-offers-value {
