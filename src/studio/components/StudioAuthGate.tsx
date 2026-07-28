@@ -489,26 +489,26 @@ function StudioCompleteAccount({
       >
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <label className="block">
-            <span className="studio-auth-label">First name</span>
             <span className="studio-auth-field">
               <UserRound className="studio-auth-icon" aria-hidden="true" />
               <input
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
                 placeholder="First name"
+                aria-label="First name"
                 autoComplete="given-name"
                 required
               />
             </span>
           </label>
           <label className="block">
-            <span className="studio-auth-label">Last name</span>
             <span className="studio-auth-field">
               <UserRound className="studio-auth-icon" aria-hidden="true" />
               <input
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
                 placeholder="Last name"
+                aria-label="Last name"
                 autoComplete="family-name"
                 required
               />
@@ -516,15 +516,13 @@ function StudioCompleteAccount({
           </label>
         </div>
         <label className="block">
-          <span className="studio-auth-label">
-            Email{missingEmail ? " (required)" : ""}
-          </span>
           <span className={`studio-auth-field${!missingEmail ? " opacity-70" : ""}`}>
             <Mail className="studio-auth-icon" aria-hidden="true" />
             <input
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
+              placeholder="Email"
+              aria-label="Email"
               type="email"
               required
               disabled={!missingEmail}
@@ -533,15 +531,13 @@ function StudioCompleteAccount({
           </span>
         </label>
         <label className="block">
-          <span className="studio-auth-label">
-            Phone / WhatsApp{missingPhone ? " (required)" : ""}
-          </span>
           <span className={`studio-auth-field${!missingPhone ? " opacity-70" : ""}`}>
             <Phone className="studio-auth-icon" aria-hidden="true" />
             <input
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
-              placeholder="+1 868 337 7338"
+              placeholder="Phone / WhatsApp"
+              aria-label="Phone / WhatsApp"
               type="tel"
               required
               disabled={!missingPhone}
@@ -813,7 +809,6 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
       >
         {step === "identify" ? (
           <label className="block">
-            <span className="studio-auth-label">Email or WhatsApp</span>
             <span className="studio-auth-field">
               {contactInputIcon(identifierInput) === "email" ? (
                 <Mail className="studio-auth-accent-text" aria-hidden="true" />
@@ -824,7 +819,8 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
               )}
               <input
                 name="identifier"
-                placeholder="you@email.com or number"
+                placeholder="Email or WhatsApp"
+                aria-label="Email or WhatsApp"
                 type="text"
                 inputMode={
                   inputMode === "email"
@@ -853,12 +849,12 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
         {isPasswordStep ? (
           <>
             <label className="block">
-              <span className="studio-auth-label">Password</span>
               <span className="studio-auth-field">
                 <Lock className="studio-auth-accent-text" aria-hidden="true" />
                 <input
                   name="password"
-                  placeholder="Your password"
+                  placeholder="Password"
+                  aria-label="Password"
                   type="password"
                   autoComplete="off"
                   autoCorrect="off"
@@ -905,11 +901,11 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
           <>
             <input name="email" value={step.contact.email} type="hidden" />
             <label className="block">
-              <span className="studio-auth-label">Code</span>
               <input
                 className="studio-auth-field is-code"
                 name="code"
-                placeholder="00000000"
+                placeholder="Code"
+                aria-label="Code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 required
@@ -1292,15 +1288,6 @@ function AuthFrame({
           font-size: 13px;
           line-height: 1.4;
           text-align: left;
-        }
-        .studio-auth-label {
-          display: block;
-          margin: 0 0 5px;
-          color: color-mix(in srgb, var(--mos-text) 52%, transparent);
-          font-size: 11px;
-          font-weight: 650;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
         }
         .studio-auth-icon,
         .studio-auth-accent-text {
