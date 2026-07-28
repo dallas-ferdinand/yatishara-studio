@@ -8,6 +8,7 @@ import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind
 import { workspaceFileRawUrl, workspaceFileThumbUrl } from "@/desk/lib/workspace-file-url.js";
 import { displayEntryPath } from "@/desk/lib/display-path";
 import { externalPreviewUrl } from "@mos-app/preview.js";
+import { LogoLoader } from "@/studio/components/logo-loader";
 
 const TEXT_KINDS = new Set(["code", "markdown", "html", "csv", "text"]);
 
@@ -204,7 +205,9 @@ function ProgressiveThumb({
     <span className={`desk-file-thumb-progressive${hiLoaded ? " is-ready" : ""}`}>
       {showUnderlay ? (
         <>
-          <span className="desk-file-thumb-skeleton" aria-hidden />
+          <span className="desk-file-thumb-skeleton desk-file-thumb-skeleton--logo" aria-hidden>
+            <LogoLoader size="sm" variant="bare" />
+          </span>
           {lqipSrc ? (
             <img
               src={lqipSrc}
@@ -278,7 +281,11 @@ function VideoThumb({ src, className = "", fallbackIcon = "play" }) {
 
   return (
     <span className={`desk-file-thumb-video-wrap${loaded ? " is-ready" : ""}`}>
-      {!loaded ? <span className="desk-file-thumb-skeleton desk-file-thumb-skeleton--spinner" aria-hidden /> : null}
+      {!loaded ? (
+        <span className="desk-file-thumb-skeleton desk-file-thumb-skeleton--logo" aria-hidden>
+          <LogoLoader size="sm" variant="bare" />
+        </span>
+      ) : null}
       <video
         key={`${src}::${retryTick}`}
         src={src}

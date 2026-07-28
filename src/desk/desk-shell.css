@@ -900,21 +900,17 @@ select.cursor-select:focus {
   animation: desk-thumb-breathe 1.8s ease-in-out infinite;
 }
 
-.desk-file-thumb-skeleton--spinner {
+.desk-file-thumb-skeleton--logo {
   z-index: 2;
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, transparent);
+  animation: none;
 }
 
-.desk-file-thumb-skeleton--spinner::after {
-  content: "";
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--mos-text-bright, #fff) 18%, transparent);
-  border-top-color: color-mix(in srgb, var(--mos-text-bright, #fff) 72%, transparent);
-  animation: desk-thumb-spin 0.85s linear infinite;
+.desk-file-thumb-skeleton--logo .logo-loader {
+  transform: scale(0.85);
+  transform-origin: center;
 }
 
 .desk-file-thumb-video-wrap {
