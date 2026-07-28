@@ -7737,58 +7737,15 @@ export function StudioShell({
         [data-appearance="light"] .studio-mobile-app-menu-sheet-grab {
           background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
-        /* Settings keeps the older inset glass panel (title + X). */
+        /* Settings = landing-style bottom sheet (same drag model as app menu). */
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet {
-          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
-          left: 8px;
-          right: 8px;
-          bottom: auto;
-          height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - 8px
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - 8px
-          );
-          max-height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - 8px
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - 8px
-          );
           z-index: 121;
-          border-radius: 18px;
-          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
-          background: transparent;
-          box-shadow: var(
-            --studio-composer-glass-shadow,
-            0 20px 48px rgba(0, 0, 0, 0.38),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08)
-          );
-          animation: none;
-          transition: none;
-          will-change: auto;
+          height: var(--studio-mobile-settings-sheet-height, 55dvh);
+          max-height: var(--studio-mobile-settings-sheet-full, 88dvh);
         }
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet::before {
-          content: "";
-          display: block;
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          background: color-mix(
-            in srgb,
-            var(--color-mos-composer, #07111f) 68%,
-            transparent
-          );
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
-          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          content: none;
+          display: none;
         }
         .studio-mobile-app-menu-body,
         .studio-history-list,
@@ -7863,6 +7820,8 @@ export function StudioShell({
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
           --studio-mobile-app-menu-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
+          --studio-mobile-settings-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
+          --studio-mobile-settings-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-dm-peer-sheet-height: calc(0.48 * var(--studio-mobile-files-band));
           --studio-mobile-dm-peer-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
           --studio-mobile-files-dock-duration: 0ms;
@@ -16153,7 +16112,7 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-empty-logo img {
           filter: none;
-          opacity: 0.68;
+          opacity: 0.88;
         }
         .studio-empty-logo img {
           position: relative;
@@ -16162,7 +16121,7 @@ export function StudioShell({
           height: 104px;
           object-fit: contain;
           transform: translate(-2px, 5px);
-          opacity: 0.76;
+          opacity: 0.94;
           filter: drop-shadow(0 10px 20px color-mix(in srgb, #000 18%, transparent));
         }
         .studio-polish .cursor-chat-empty.thread-empty.cursor-chat-empty-logo-only {

@@ -10879,7 +10879,7 @@ textarea.cursor-input {
   z-index: 0;
   border-radius: 999px;
   border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.11));
-  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 55%, transparent);
+  background: color-mix(in srgb, var(--color-mos-composer, #07111f) 78%, transparent);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow:
