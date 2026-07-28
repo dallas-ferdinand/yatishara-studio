@@ -9208,7 +9208,8 @@ export function StudioShell({
           height: var(--cursor-head-h);
           align-items: stretch;
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--color-cursor-sidebar);
+          /* L1 canvas — same as workspace body / other chrome, not darker sidebar grey. */
+          background: var(--mos-page);
           padding: 0;
         }
         .studio-settings-horizontal-menu {
@@ -27770,6 +27771,23 @@ function SettingsWorkspacePane({
                     <Lock aria-hidden="true" />
                     <span>secure checkout</span>
                   </p>
+                  <button
+                    type="button"
+                    className="studio-settings-topup-preview"
+                    onClick={() => {
+                      const amountCents =
+                        Number.isFinite(customAmountCents) && customAmountCents > 0
+                          ? customAmountCents
+                          : minAmountCents;
+                      onPaymentCelebration?.({
+                        phase: "success",
+                        amountCents,
+                        creditsGranted: creditsFromAmountCents(amountCents, creditPriceCents),
+                      });
+                    }}
+                  >
+                    Preview payment received
+                  </button>
                 </div>
               </section>
               <section className="cursor-settings-section studio-settings-invoices-card">
