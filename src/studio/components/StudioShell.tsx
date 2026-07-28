@@ -327,20 +327,29 @@ function preloadStudioHotPanes() {
   void import("./StudioListAssetPane");
 }
 
-/** Intent prefetch — pointerdown/hover on nav before the tab paint. */
+/** Intent mark now; chunk warm after paint so taps aren't blocked. */
 function prefetchStudioSurface(surface: string) {
   markStudioIntent(surface);
-  if (surface === "feed" || surface === "profile") {
-    void import("./ProfilePostViewer");
-    void import("./PublicProfileView");
-  } else if (surface === "network") {
-    void import("./StudioCreativeNetworkPane");
-  } else if (surface === "history") {
-    void import("./StudioHistoryPanel");
-  } else if (surface === "messages") {
-    void import("./StudioMessagesPane");
-    void import("./StudioMessagesSidebar");
+  const warm = () => {
+    if (surface === "feed" || surface === "profile") {
+      void import("./ProfilePostViewer");
+      void import("./PublicProfileView");
+    } else if (surface === "network") {
+      void import("./StudioCreativeNetworkPane");
+    } else if (surface === "history") {
+      void import("./StudioHistoryPanel");
+    } else if (surface === "messages") {
+      void import("./StudioMessagesPane");
+      void import("./StudioMessagesSidebar");
+    }
+  };
+  if (typeof window === "undefined") {
+    warm();
+    return;
   }
+  window.requestAnimationFrame(() => {
+    window.setTimeout(warm, 0);
+  });
 }
 
 /** Wallpaper layer — memo with no props so Convex ticks don't repaint it. */
@@ -3294,12 +3303,12 @@ export function StudioShell({
   }
 
   function openMessages() {
-    prefetchStudioSurface("messages");
     openTab(MESSAGES_TAB);
     setSettingsOpen(false);
     setHistoryOpen(false);
     setMobileAppMenuOpen(false);
     if (isMobile) setMobileSection("composer");
+    prefetchStudioSurface("messages");
   }
 
   /** Open (or create) the one-per-pair chat with a person and focus it. */
@@ -3633,9 +3642,7 @@ export function StudioShell({
 
   function openMobileSection(section) {
     // Sync — do not wrap in useTransition; nav is-active must paint on pointerdown.
-    if (section === "feed" || section === "network" || section === "messages" || section === "files" || section === "composer") {
-      prefetchStudioSurface(section === "composer" ? "composer" : section);
-    }
+    // Prefetch is deferred from the nav button after paint — do not import here.
     if (section === "settings") {
       setMobileAppMenuOpen(false);
       setHistoryOpen(false);
@@ -3784,13 +3791,10 @@ export function StudioShell({
   const handleTabSelect = useCallback((key) => {
     setFeedModeMenuOpen(false);
     setFeedModeMenuKey(null);
-    const surface = surfaceFromTabKey(key);
-    if (surface) {
-      prefetchStudioSurface(surface);
-      markStudioIntent(surface);
-    }
-    // Sync — useTransition deferred the active tab paint and felt like a website load.
+    // Paint first — warm chunks after.
     setActiveTab(key);
+    const surface = surfaceFromTabKey(key);
+    if (surface) prefetchStudioSurface(surface);
   }, []);
 
   const handleFeedTabReselect = useCallback((key) => {

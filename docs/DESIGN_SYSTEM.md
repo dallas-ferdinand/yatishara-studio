@@ -343,11 +343,14 @@ Studio must feel **native**, not like a website waiting to load:
   the same after first visit (switch back = show slot, no remount/resubscribe).
 - **Idle prefetch** — after auth, `preloadStudioHotPanes()` warms Feed / Network /
   History / Profile chunks so first open isn’t a blank wait.
-- **Intent prefetch** — pointerdown / hover on mobile nav (and tab select) calls
-  `prefetchStudioSurface` + `markStudioIntent` before the pane mounts.
-- **Optimistic live cache** — `studioLiveOrCached` / `dmClientCache`: paint last
-  session snapshot for DMs, folders, threads, History, Feed, CN store while Convex
-  catches up. Never flash “Loading…” when cache exists (quiet pending only).
+- **Intent prefetch** — after paint (rAF + setTimeout 0): mark intent cheaply,
+  then warm chunks. Never `import()` or stringify cache on pointerdown before
+  the tab paints. Mobile nav activates first, then defers warm.
+- **Optimistic live cache** — `studioLiveOrCached` / `dmClientCache`: memory Map
+  for Feed / folders / threads / History / CN (no sync `sessionStorage`
+  stringify — that made mobile tabs lag). Small DM snapshots may still use
+  session. Never flash “Loading…” when cache exists (quiet pending only).
+  Legacy heavy session keys are purged on read.
 - **Signed-URL budget** — `SIGNED_URL_BUDGET` caps folder preview fallbacks and
   chat playable lazy-signs (`signedUrlBudget.ts`). Thumbs first; full media lazy.
 - **Wallpaper layer** — `StudioBackdrop` is `memo()` with no props so Convex ticks

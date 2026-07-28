@@ -15,7 +15,7 @@ const POINTER_MOVE_CANCEL = 14;
 
 /**
  * Fire primary nav actions on pointerdown so is-active paints immediately.
- * onClick remains as keyboard / synthetic fallback when pointer path already ran.
+ * Warm/prefetch runs after activate so it never blocks the tap paint.
  */
 function useInstantTap(onActivate, onIntent) {
   const handledRef = useRef(false);
@@ -29,8 +29,14 @@ function useInstantTap(onActivate, onIntent) {
       cancelledRef.current = false;
       startRef.current = { x: event.clientX, y: event.clientY };
       handledRef.current = true;
-      onIntent?.();
       onActivate?.();
+      if (typeof window !== "undefined") {
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => onIntent?.(), 0);
+        });
+      } else {
+        onIntent?.();
+      }
     },
     onPointerMove: (event) => {
       if (!handledRef.current || cancelledRef.current) return;
@@ -46,8 +52,8 @@ function useInstantTap(onActivate, onIntent) {
         handledRef.current = false;
         return;
       }
-      onIntent?.();
       onActivate?.();
+      onIntent?.();
     },
   };
 }
