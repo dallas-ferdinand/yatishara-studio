@@ -9575,47 +9575,16 @@ textarea.cursor-input {
   transform: none !important;
 }
 
-/* Mobile app menu — same composer glass; blur on ::before so scroll body stays touchable. */
+/*
+  Mobile app menu / Settings / peer sheets — owned by StudioShell:
+  bottom-anchored L2 plate, peek↔full height drag (History parity).
+  Do NOT pin top/force full-band height here — !important height kills drag.
+  Only keep filter/isolation clear so backdrop-filter ancestors stay safe.
+*/
 .studio-polish .studio-mobile-app-menu-sheet {
-  position: fixed !important;
-  top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px) !important;
-  bottom: auto !important;
-  height: calc(
-    100dvh
-      - var(--studio-mobile-nav-height, 44px)
-      - env(safe-area-inset-top, 0px)
-      - 8px
-      - var(--studio-mobile-nav-height, 44px)
-      - env(safe-area-inset-bottom, 0px)
-      - 8px
-  ) !important;
-  max-height: calc(
-    100dvh
-      - var(--studio-mobile-nav-height, 44px)
-      - env(safe-area-inset-top, 0px)
-      - 8px
-      - var(--studio-mobile-nav-height, 44px)
-      - env(safe-area-inset-bottom, 0px)
-      - 8px
-  ) !important;
-  flex: none !important;
   transform: none !important;
   filter: none !important;
   isolation: auto !important;
-  border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-  box-shadow: var(
-    --studio-composer-glass-shadow,
-    0 20px 48px rgba(0, 0, 0, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08)
-  ) !important;
-}
-.studio-polish .studio-mobile-app-menu-sheet::before {
-  background: var(
-    --studio-composer-glass,
-    color-mix(in srgb, var(--color-mos-composer, #07111f) 50%, transparent)
-  ) !important;
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px)) !important;
 }
 
 /* Nested style grid inside the shared options shell — no second glass layer. */

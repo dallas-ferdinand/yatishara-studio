@@ -282,6 +282,18 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - History list: `10px` pad + `10px` gap between group cards; group toggle is an L3 wash
   header inside the card (not a full-bleed flat bar). Memory: **759**.
 
+**Mobile bottom sheets** (Studio chrome — shared edge language):
+
+- Surfaces: menu, Settings, History, Files dock (when open), DM peer actions — L2
+  `--mos-plate`, top radii `18px` (peek) / `14px` (full), grab handle `44×5`.
+- Shadow token: `--studio-mobile-sheet-shadow` (inset top highlight + upward soft lift).
+  Do **not** use inset glass panels with title+X for Settings on mobile.
+- Menu / History / Settings share peek↔full drag: bottom-anchored, band-capped under
+  top chrome, window `pointermove` during drag, `--*-sheet-h` inline px.
+  Peek/full tokens: History `0.68/0.88` of files-band; menu + Settings alias those.
+  Never force full-band height from `desk-shell.css` (`!important` kills drag).
+  Memory: **790**.
+
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
 `studio-admin-head-tab`, body stacks with `studio-admin-section` /

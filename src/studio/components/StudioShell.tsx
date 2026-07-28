@@ -7398,7 +7398,7 @@ export function StudioShell({
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
           border-bottom: 0;
           background: var(--mos-plate, var(--color-cursor-surface-raised, #121820));
-          box-shadow: 0 -10px 32px color-mix(in srgb, #000 28%, transparent);
+          box-shadow: var(--studio-mobile-sheet-shadow, 0 -10px 32px color-mix(in srgb, #000 28%, transparent));
           overflow: hidden;
           transform: none;
           filter: none;
@@ -7773,7 +7773,7 @@ export function StudioShell({
           gap: 6px;
           flex: 0 0 auto;
         }
-        /* Studio hamburger menu — landing-style bottom sheet (handle drag, no X). */
+        /* Studio hamburger menu — History-parity bottom sheet (handle drag, no X). */
         .studio-mobile-app-menu-sheet {
           position: fixed;
           left: 0;
@@ -7787,14 +7787,28 @@ export function StudioShell({
           flex-direction: column;
           flex: none;
           min-height: 0;
-          height: var(--studio-mobile-app-menu-sheet-height, 50dvh);
-          max-height: var(--studio-mobile-app-menu-sheet-full, 72dvh);
+          /* Cap under top header — same band math as History. */
+          --studio-mobile-app-menu-sheet-band: calc(
+            100dvh
+              - var(--studio-mobile-top-chrome, calc(44px + env(safe-area-inset-top, 0px)))
+              - var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+              - var(--studio-keyboard-inset, 0px)
+              - 8px
+          );
+          height: min(
+            var(--studio-menu-sheet-h, var(--studio-mobile-app-menu-sheet-height, 55dvh)),
+            var(--studio-mobile-app-menu-sheet-band)
+          );
+          max-height: min(
+            var(--studio-mobile-app-menu-sheet-full, 72dvh),
+            var(--studio-mobile-app-menu-sheet-band)
+          );
           overflow: hidden;
           padding: 0;
           border: none;
           border-radius: 18px 18px 0 0;
           background: var(--mos-plate, var(--mos-panel, #ececf0));
-          box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
+          box-shadow: var(--studio-mobile-sheet-shadow);
           transform: none;
           filter: none;
           isolation: auto;
@@ -7802,6 +7816,8 @@ export function StudioShell({
           transition:
             height 140ms cubic-bezier(0.22, 1, 0.36, 1),
             max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            top 120ms cubic-bezier(0.22, 1, 0.36, 1),
+            bottom 120ms cubic-bezier(0.22, 1, 0.36, 1),
             border-radius 120ms ease;
           will-change: height;
         }
@@ -7835,6 +7851,8 @@ export function StudioShell({
           display: none;
         }
         .studio-mobile-app-menu-sheet-handle {
+          position: relative;
+          z-index: 2;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -7859,58 +7877,49 @@ export function StudioShell({
         [data-appearance="light"] .studio-mobile-app-menu-sheet-grab {
           background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
-        /* Settings keeps the older inset glass panel (title + X). */
+        /*
+          Settings = same chrome as hamburger menu (inherit bottom/shadow/transition).
+          Only raise z-index, pin height via --studio-settings-sheet-h, kill glass.
+          Do NOT redeclare transition here — it would override .is-dragging { transition:none }.
+        */
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet {
-          top: calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-top, 0px) + 8px);
-          left: 8px;
-          right: 8px;
-          bottom: auto;
-          height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - 8px
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - 8px
-          );
-          max-height: calc(
-            100dvh
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-top, 0px)
-              - 8px
-              - var(--studio-mobile-nav-height, 44px)
-              - env(safe-area-inset-bottom, 0px)
-              - 8px
-          );
           z-index: 121;
-          border-radius: 18px;
-          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14));
-          background: transparent;
-          box-shadow: var(
-            --studio-composer-glass-shadow,
-            0 20px 48px rgba(0, 0, 0, 0.38),
-            inset 0 1px 0 rgba(255, 255, 255, 0.08)
+          top: auto;
+          height: min(
+            var(
+              --studio-settings-sheet-h,
+              var(--studio-mobile-app-menu-sheet-height, 55dvh)
+            ),
+            var(--studio-mobile-app-menu-sheet-band)
           );
-          animation: none;
-          transition: none;
-          will-change: auto;
+          max-height: min(
+            var(--studio-mobile-app-menu-sheet-full, 72dvh),
+            var(--studio-mobile-app-menu-sheet-band)
+          );
+          border: none;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
+        }
+        .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet.is-dragging {
+          transition: none !important;
+          animation: none !important;
         }
         .studio-mobile-app-menu-sheet.studio-settings-mobile-sheet::before {
-          content: "";
-          display: block;
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          background: color-mix(
-            in srgb,
-            var(--color-mos-composer, #07111f) 68%,
-            transparent
-          );
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
-          backdrop-filter: var(--studio-composer-glass-blur, saturate(160%) blur(12px));
+          content: none !important;
+          display: none !important;
+          background: none !important;
+          -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+        }
+        .studio-settings-mobile-sheet-body {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          flex: 1 1 auto;
+          min-height: 0;
+          overflow: hidden;
         }
         .studio-mobile-app-menu-body,
         .studio-history-list,
@@ -7983,12 +7992,27 @@ export function StudioShell({
           --studio-mobile-files-sheet-full: calc(0.92 * var(--studio-mobile-files-band));
           --studio-mobile-history-sheet-height: calc(0.68 * var(--studio-mobile-files-band));
           --studio-mobile-history-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
-          --studio-mobile-app-menu-sheet-height: calc(0.62 * var(--studio-mobile-files-band));
-          --studio-mobile-app-menu-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
+          /* Menu peek/full = History (same open height + drag band). */
+          --studio-mobile-app-menu-sheet-height: var(--studio-mobile-history-sheet-height);
+          --studio-mobile-app-menu-sheet-full: var(--studio-mobile-history-sheet-full);
+          /* Settings peek/full = same as hamburger menu / History. */
+          --studio-mobile-settings-sheet-height: var(--studio-mobile-app-menu-sheet-height);
+          --studio-mobile-settings-sheet-full: var(--studio-mobile-app-menu-sheet-full);
           --studio-mobile-dm-peer-sheet-height: calc(0.48 * var(--studio-mobile-files-band));
           --studio-mobile-dm-peer-sheet-full: calc(0.88 * var(--studio-mobile-files-band));
+          /* Soft sheet edge: top inset highlight + upward lift (shared by menu/Settings/History/Files/peer). */
+          --studio-mobile-sheet-shadow:
+            inset 0 1px 0 color-mix(in srgb, var(--mos-text-bright) 12%, transparent),
+            0 -10px 36px color-mix(in srgb, #000 22%, transparent),
+            0 -2px 10px color-mix(in srgb, #000 10%, transparent);
           --studio-mobile-files-dock-duration: 0ms;
           --studio-mobile-files-dock-ease: linear;
+        }
+        [data-appearance="light"] .studio-polish.is-studio-mobile {
+          --studio-mobile-sheet-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.72),
+            0 -10px 32px rgba(15, 23, 42, 0.12),
+            0 -2px 8px rgba(15, 23, 42, 0.06);
         }
         .studio-mobile-stage {
           display: flex;
@@ -8024,9 +8048,10 @@ export function StudioShell({
           min-height: 0;
           box-sizing: border-box;
           border: 0;
-          border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          border-top: 1px solid transparent;
           border-radius: 0;
-          background: var(--mos-bg, var(--color-cursor-bg, #05080f));
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+          box-shadow: none;
           z-index: 25;
           /* Instant open snap; settle after drag uses .is-settling. */
           transition: none;
@@ -8034,8 +8059,9 @@ export function StudioShell({
         .studio-files-dock.is-expanded,
         .studio-polish[data-files-open="1"] .studio-files-dock {
           height: var(--studio-mobile-files-sheet-height);
-          /* Same top radii as landing menu sheet. */
+          /* Same top radii + edge shadow as menu / Settings / History sheets. */
           border-radius: 18px 18px 0 0;
+          box-shadow: var(--studio-mobile-sheet-shadow);
         }
         .studio-files-dock.is-expanded.is-full,
         .studio-polish[data-files-open="1"] .studio-files-dock.is-full {
@@ -8050,20 +8076,20 @@ export function StudioShell({
             border-radius 220ms ease;
         }
         .studio-files-dock:not(.is-expanded) {
-          border-top-color: transparent;
           pointer-events: none;
         }
         .studio-polish[data-files-open="1"] .studio-files-dock {
-          border-top-color: var(--studio-chrome-divider, var(--color-cursor-border-soft));
           pointer-events: auto;
         }
         .studio-files-dock-handle {
+          position: relative;
+          z-index: 2;
           display: flex;
           align-items: center;
           justify-content: center;
           flex: 0 0 auto;
-          min-height: 22px;
-          padding: 8px 0 4px;
+          min-height: 28px;
+          padding: 12px 0 8px;
           cursor: grab;
           touch-action: none;
           user-select: none;
@@ -8073,10 +8099,10 @@ export function StudioShell({
           cursor: grabbing;
         }
         .studio-files-dock-grab {
-          width: 40px;
-          height: 4px;
+          width: 44px;
+          height: 5px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-text, var(--mos-text)) 22%, transparent);
+          background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
           pointer-events: none;
         }
         [data-appearance="light"] .studio-files-dock-grab {
@@ -8272,39 +8298,6 @@ export function StudioShell({
         .studio-polish.is-studio-mobile .desk-file-thumb-progressive,
         .studio-files-mobile-sheet .desk-file-thumb-progressive {
           background: transparent;
-        }
-        .studio-settings-mobile-sheet .studio-mobile-app-menu-head {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          flex: 0 0 auto;
-          padding: 14px 14px 10px;
-        }
-        .studio-settings-mobile-sheet .studio-mobile-app-menu-title {
-          margin: 0;
-          color: var(--color-cursor-text-bright);
-          font-size: 16px;
-          font-weight: 700;
-          letter-spacing: -0.02em;
-        }
-        .studio-settings-mobile-sheet .studio-mobile-app-menu-close {
-          display: inline-grid;
-          place-items: center;
-          width: 36px;
-          height: 36px;
-          border: 1px solid var(--color-cursor-border, var(--mos-border));
-          border-radius: 999px;
-          background: color-mix(in srgb, var(--color-cursor-text) 6%, transparent);
-          color: var(--color-cursor-text-bright);
-          cursor: pointer;
-          padding: 0;
-        }
-        .studio-settings-mobile-sheet .studio-mobile-app-menu-close svg {
-          width: 18px;
-          height: 18px;
         }
         .studio-mobile-app-menu-body {
           position: relative;
@@ -16632,7 +16625,7 @@ export function StudioShell({
           border-radius: 18px 18px 0 0;
           /* L2 plate — same shade language as landing menu / section bars. */
           background: var(--mos-plate, var(--mos-panel, #ececf0));
-          box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
+          box-shadow: var(--studio-mobile-sheet-shadow);
           overflow: hidden;
           animation: studio-history-mobile-rise 110ms cubic-bezier(0.22, 1, 0.36, 1);
           transition:
@@ -16676,6 +16669,8 @@ export function StudioShell({
           }
         }
         .studio-history-mobile-sheet-handle {
+          position: relative;
+          z-index: 2;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -21876,8 +21871,8 @@ function StudioMobileAppMenu({
   const [entered, setEntered] = useState(false);
   const heightRef = useRef(null);
   const dragRef = useRef(null);
-  const dragRafRef = useRef(null);
   const metricsRef = useRef({ peek: 280, full: 520, min: 120 });
+  const windowDragCleanupRef = useRef(null);
 
   useEffect(() => {
     const onKey = (event) => {
@@ -21902,7 +21897,8 @@ function StudioMobileAppMenu({
   const refreshMetrics = () => {
     const sheet = sheetRef.current;
     const root = sheet?.closest?.(".studio-polish") ?? document.documentElement;
-    const peek = readTokenPx(root, "--studio-mobile-app-menu-sheet-height", window.innerHeight * 0.5);
+    // Same peek/full tokens as History (aliased in mobile chrome vars).
+    const peek = readTokenPx(root, "--studio-mobile-app-menu-sheet-height", window.innerHeight * 0.55);
     const full = readTokenPx(root, "--studio-mobile-app-menu-sheet-full", window.innerHeight * 0.72);
     metricsRef.current = {
       peek,
@@ -21913,18 +21909,31 @@ function StudioMobileAppMenu({
   };
 
   const applyHeight = (px) => {
-    heightRef.current = px;
+    const next = Math.max(0, Math.round(px));
+    heightRef.current = next;
     const el = sheetRef.current;
     if (!el) return;
-    el.style.height = `${px}px`;
-    el.style.maxHeight = `${px}px`;
+    el.style.setProperty("--studio-menu-sheet-h", `${next}px`);
+    el.style.height = `${next}px`;
+    el.style.maxHeight = `${next}px`;
   };
 
-  useEffect(() => {
+  const endWindowDrag = () => {
+    const cleanup = windowDragCleanupRef.current;
+    if (cleanup) {
+      cleanup();
+      windowDragCleanupRef.current = null;
+    }
+  };
+
+  useLayoutEffect(() => {
     const { peek } = refreshMetrics();
     applyHeight(peek);
     const id = window.requestAnimationFrame(() => setEntered(true));
-    return () => window.cancelAnimationFrame(id);
+    return () => {
+      window.cancelAnimationFrame(id);
+      endWindowDrag();
+    };
   }, []);
 
   const settleTo = (fromH, target) => {
@@ -21939,58 +21948,11 @@ function StudioMobileAppMenu({
     });
   };
 
-  const onHandlePointerDown = (event) => {
-    if (event.button != null && event.button !== 0) return;
-    const { peek, full } = refreshMetrics();
-    const startH =
-      sheetRef.current?.getBoundingClientRect().height ||
-      heightRef.current ||
-      peek;
-    const now = performance.now();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragRef.current = {
-      startY: event.clientY,
-      startH,
-      lastY: event.clientY,
-      lastT: now,
-      vy: 0,
-      full,
-      peek,
-    };
-    setSettling(false);
-    setDragging(true);
-    applyHeight(startH);
-  };
-
-  const onHandlePointerMove = (event) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const { full, min } = metricsRef.current;
-    const now = performance.now();
-    const dt = now - drag.lastT;
-    if (dt > 0) {
-      const instant = (event.clientY - drag.lastY) / dt;
-      drag.vy = drag.vy * 0.35 + instant * 0.65;
-      drag.lastY = event.clientY;
-      drag.lastT = now;
-    }
-    const dy = event.clientY - drag.startY;
-    applyHeight(Math.min(full, Math.max(min, drag.startH - dy)));
-    if (dragRafRef.current == null) {
-      dragRafRef.current = window.requestAnimationFrame(() => {
-        dragRafRef.current = null;
-      });
-    }
-  };
-
-  const onHandlePointerUp = () => {
+  const finishDrag = () => {
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
-    if (dragRafRef.current != null) {
-      window.cancelAnimationFrame(dragRafRef.current);
-      dragRafRef.current = null;
-    }
+    endWindowDrag();
     const { peek, full, min } = metricsRef.current;
     const h =
       heightRef.current ??
@@ -22038,6 +22000,63 @@ function StudioMobileAppMenu({
       return;
     }
     settleTo(h, h >= mid ? full : peek);
+  };
+
+  const onHandlePointerDown = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    endWindowDrag();
+    const { peek, full } = refreshMetrics();
+    const startH =
+      sheetRef.current?.getBoundingClientRect().height ||
+      heightRef.current ||
+      peek;
+    const now = performance.now();
+    const pointerId = event.pointerId;
+    event.currentTarget.setPointerCapture?.(pointerId);
+    dragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+      full,
+      peek,
+    };
+    setSettling(false);
+    setDragging(true);
+    applyHeight(startH);
+
+    // Window listeners — pointer capture is unreliable across some mobile WebViews.
+    const onMove = (moveEvent) => {
+      if (moveEvent.pointerId != null && moveEvent.pointerId !== pointerId) return;
+      const drag = dragRef.current;
+      if (!drag) return;
+      const { full: maxH, min } = metricsRef.current;
+      const t = performance.now();
+      const dt = t - drag.lastT;
+      if (dt > 0) {
+        const instant = (moveEvent.clientY - drag.lastY) / dt;
+        drag.vy = drag.vy * 0.35 + instant * 0.65;
+        drag.lastY = moveEvent.clientY;
+        drag.lastT = t;
+      }
+      const dy = moveEvent.clientY - drag.startY;
+      applyHeight(Math.min(maxH, Math.max(min, drag.startH - dy)));
+    };
+    const onUp = (upEvent) => {
+      if (upEvent.pointerId != null && upEvent.pointerId !== pointerId) return;
+      finishDrag();
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onUp, { passive: true });
+    windowDragCleanupRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
   };
 
   const sections = [
@@ -22105,9 +22124,6 @@ function StudioMobileAppMenu({
       <div
         className="studio-mobile-app-menu-sheet-handle"
         onPointerDown={onHandlePointerDown}
-        onPointerMove={onHandlePointerMove}
-        onPointerUp={onHandlePointerUp}
-        onPointerCancel={onHandlePointerUp}
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize menu"
@@ -27037,8 +27053,8 @@ function SettingsMobileSheet({ onClose, children }) {
   const [entered, setEntered] = useState(false);
   const heightRef = useRef(null);
   const dragRef = useRef(null);
-  const dragRafRef = useRef(null);
   const metricsRef = useRef({ peek: 280, full: 520, min: 120 });
+  const windowDragCleanupRef = useRef(null);
 
   const readTokenPx = (el, name, fallback) => {
     if (!el) return fallback;
@@ -27055,8 +27071,9 @@ function SettingsMobileSheet({ onClose, children }) {
   const refreshMetrics = () => {
     const sheet = sheetRef.current;
     const root = sheet?.closest?.(".studio-polish") ?? document.documentElement;
-    const peek = readTokenPx(root, "--studio-mobile-settings-sheet-height", window.innerHeight * 0.55);
-    const full = readTokenPx(root, "--studio-mobile-settings-sheet-full", window.innerHeight * 0.88);
+    // Same peek/full as hamburger menu / History — Settings must open at that height.
+    const peek = readTokenPx(root, "--studio-mobile-app-menu-sheet-height", window.innerHeight * 0.55);
+    const full = readTokenPx(root, "--studio-mobile-app-menu-sheet-full", window.innerHeight * 0.72);
     metricsRef.current = {
       peek,
       full: Math.max(full, peek + 40),
@@ -27066,18 +27083,31 @@ function SettingsMobileSheet({ onClose, children }) {
   };
 
   const applyHeight = (px) => {
-    heightRef.current = px;
+    const next = Math.max(0, Math.round(px));
+    heightRef.current = next;
     const el = sheetRef.current;
     if (!el) return;
-    el.style.height = `${px}px`;
-    el.style.maxHeight = `${px}px`;
+    el.style.setProperty("--studio-settings-sheet-h", `${next}px`);
+    el.style.height = `${next}px`;
+    el.style.maxHeight = `${next}px`;
   };
 
-  useEffect(() => {
+  const endWindowDrag = () => {
+    const cleanup = windowDragCleanupRef.current;
+    if (cleanup) {
+      cleanup();
+      windowDragCleanupRef.current = null;
+    }
+  };
+
+  useLayoutEffect(() => {
     const { peek } = refreshMetrics();
     applyHeight(peek);
     const id = window.requestAnimationFrame(() => setEntered(true));
-    return () => window.cancelAnimationFrame(id);
+    return () => {
+      window.cancelAnimationFrame(id);
+      endWindowDrag();
+    };
   }, []);
 
   const settleTo = (fromH, target) => {
@@ -27092,58 +27122,11 @@ function SettingsMobileSheet({ onClose, children }) {
     });
   };
 
-  const onHandlePointerDown = (event) => {
-    if (event.button != null && event.button !== 0) return;
-    const { peek, full } = refreshMetrics();
-    const startH =
-      sheetRef.current?.getBoundingClientRect().height ||
-      heightRef.current ||
-      peek;
-    const now = performance.now();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    dragRef.current = {
-      startY: event.clientY,
-      startH,
-      lastY: event.clientY,
-      lastT: now,
-      vy: 0,
-      full,
-      peek,
-    };
-    setSettling(false);
-    setDragging(true);
-    applyHeight(startH);
-  };
-
-  const onHandlePointerMove = (event) => {
-    const drag = dragRef.current;
-    if (!drag) return;
-    const { full, min } = metricsRef.current;
-    const now = performance.now();
-    const dt = now - drag.lastT;
-    if (dt > 0) {
-      const instant = (event.clientY - drag.lastY) / dt;
-      drag.vy = drag.vy * 0.35 + instant * 0.65;
-      drag.lastY = event.clientY;
-      drag.lastT = now;
-    }
-    const dy = event.clientY - drag.startY;
-    applyHeight(Math.min(full, Math.max(min, drag.startH - dy)));
-    if (dragRafRef.current == null) {
-      dragRafRef.current = window.requestAnimationFrame(() => {
-        dragRafRef.current = null;
-      });
-    }
-  };
-
-  const onHandlePointerUp = () => {
+  const finishDrag = () => {
     const drag = dragRef.current;
     if (!drag) return;
     dragRef.current = null;
-    if (dragRafRef.current != null) {
-      window.cancelAnimationFrame(dragRafRef.current);
-      dragRafRef.current = null;
-    }
+    endWindowDrag();
     const { peek, full, min } = metricsRef.current;
     const h =
       heightRef.current ??
@@ -27193,6 +27176,63 @@ function SettingsMobileSheet({ onClose, children }) {
     settleTo(h, h >= mid ? full : peek);
   };
 
+  const onHandlePointerDown = (event) => {
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    endWindowDrag();
+    const { peek, full } = refreshMetrics();
+    const startH =
+      sheetRef.current?.getBoundingClientRect().height ||
+      heightRef.current ||
+      peek;
+    const now = performance.now();
+    const pointerId = event.pointerId;
+    event.currentTarget.setPointerCapture?.(pointerId);
+    dragRef.current = {
+      startY: event.clientY,
+      startH,
+      lastY: event.clientY,
+      lastT: now,
+      vy: 0,
+      full,
+      peek,
+    };
+    setSettling(false);
+    setDragging(true);
+    applyHeight(startH);
+
+    // Window listeners — pointer capture is unreliable across some mobile WebViews.
+    const onMove = (moveEvent) => {
+      if (moveEvent.pointerId != null && moveEvent.pointerId !== pointerId) return;
+      const drag = dragRef.current;
+      if (!drag) return;
+      const { full: maxH, min } = metricsRef.current;
+      const t = performance.now();
+      const dt = t - drag.lastT;
+      if (dt > 0) {
+        const instant = (moveEvent.clientY - drag.lastY) / dt;
+        drag.vy = drag.vy * 0.35 + instant * 0.65;
+        drag.lastY = moveEvent.clientY;
+        drag.lastT = t;
+      }
+      const dy = moveEvent.clientY - drag.startY;
+      applyHeight(Math.min(maxH, Math.max(min, drag.startH - dy)));
+    };
+    const onUp = (upEvent) => {
+      if (upEvent.pointerId != null && upEvent.pointerId !== pointerId) return;
+      finishDrag();
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointercancel", onUp, { passive: true });
+    windowDragCleanupRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  };
+
   return (
     <div
       ref={sheetRef}
@@ -27204,9 +27244,6 @@ function SettingsMobileSheet({ onClose, children }) {
       <div
         className="studio-mobile-app-menu-sheet-handle"
         onPointerDown={onHandlePointerDown}
-        onPointerMove={onHandlePointerMove}
-        onPointerUp={onHandlePointerUp}
-        onPointerCancel={onHandlePointerUp}
         role="separator"
         aria-orientation="horizontal"
         aria-label="Resize settings"
@@ -27233,13 +27270,6 @@ function SettingsSidePanel({
   onCustomCursorChange,
   isMobile = false,
 }) {
-  const [portalRoot, setPortalRoot] = useState(null);
-
-  useEffect(() => {
-    if (!isMobile) return;
-    setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
-  }, [isMobile]);
-
   useEffect(() => {
     if (!isMobile) return;
     const onKey = (event) => {
@@ -27266,6 +27296,11 @@ function SettingsSidePanel({
   );
 
   if (isMobile) {
+    // Same sync portal as hamburger menu — no useEffect delay / blank frame.
+    const portalRoot =
+      typeof document !== "undefined"
+        ? document.querySelector(".studio-polish") ?? document.body
+        : null;
     if (!portalRoot) return null;
     return createPortal(
       <SettingsMobileSheet onClose={onClose}>{pane}</SettingsMobileSheet>,
