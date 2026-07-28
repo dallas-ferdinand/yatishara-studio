@@ -132,6 +132,103 @@ describe("PayWise status contract", () => {
     );
   });
 
+  test("payments_status.paid overrides coarse Processing / Payment Authorized", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            status: "success",
+            data: {
+              paymentDetailsId: 430,
+              status: "Processing",
+              raw: {
+                payment_details: {
+                  id: 430,
+                  amount: "50.00",
+                  currency: "TTD",
+                  status: "Processing",
+                  payments_status: {
+                    paid: "50.00 TTD",
+                    remaining: "0.00 TTD",
+                  },
+                  payers: [
+                    {
+                      status: "Payment Authorized",
+                      amount: "54.81",
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(getPaymentStatus("430", { maxRetries: 0 }, config)).resolves.toMatchObject({
+      paymentDetailsId: "430",
+      providerStatus: "Payment Authorized",
+      normalizedStatus: "paid",
+      amountCents: 5_000,
+      currency: "TTD",
+    });
+  });
+
+  test("Payment Authorized without captured paid stays pending", async () => {
+    const liveConfig: PaywiseConfig = {
+      ...config,
+      paidStatuses: new Set([
+        "paid",
+        "completed",
+        "success",
+        "successful",
+        "payment_completed",
+        "settled",
+      ]),
+      pendingStatuses: new Set([
+        "pending",
+        "processing",
+        "payment authorized",
+        "authorized",
+      ]),
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            status: "success",
+            data: {
+              paymentDetailsId: 430,
+              raw: {
+                payment_details: {
+                  id: 430,
+                  amount: "50.00",
+                  currency: "TTD",
+                  status: "Processing",
+                  payments_status: {
+                    paid: "0.00 TTD",
+                    remaining: "50.00 TTD",
+                  },
+                  payers: [{ status: "Payment Authorized" }],
+                },
+              },
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(getPaymentStatus("430", { maxRetries: 0 }, liveConfig)).resolves.toMatchObject({
+      providerStatus: "Payment Authorized",
+      normalizedStatus: "pending",
+      amountCents: 5_000,
+    });
+  });
+
   test("checkout payload uses payment_link card and omits rejected fields", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? "{}"));

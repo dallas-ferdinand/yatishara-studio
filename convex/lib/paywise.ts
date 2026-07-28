@@ -8,7 +8,12 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_RETRIES = 3;
 const DEFAULT_REJECTED_STATUSES = new Set(["failed", "rejected", "declined"]);
 const DEFAULT_CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
-const DEFAULT_PENDING_STATUSES = new Set(["pending", "processing"]);
+const DEFAULT_PENDING_STATUSES = new Set([
+  "pending",
+  "processing",
+  "payment authorized",
+  "authorized",
+]);
 
 export type PaywiseNormalizedStatus = "paid" | "pending" | "rejected" | "cancelled" | "unknown";
 
@@ -513,6 +518,21 @@ function extractPaymentDetailsId(payload: Record<string, unknown>): string | nul
   );
 }
 
+function moneyFieldToCents(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return Math.round(raw * 100);
+  }
+  if (typeof raw !== "string") return null;
+  const match = raw.trim().match(/^(-?\d+(?:\.\d{1,2})?)/);
+  if (!match?.[1]) return null;
+  return Math.round(Number(match[1]) * 100);
+}
+
+/**
+ * PayWise often keeps payment_details.status at "Processing" while the payer
+ * row moves to "Payment Authorized" and payments_status.paid tracks capture.
+ * Prefer the payer status when the envelope is still a coarse pending state.
+ */
 function extractProviderStatus(
   payload: Record<string, unknown>,
   opts: { required?: boolean } = {},
@@ -524,6 +544,14 @@ function extractProviderStatus(
   const payerStatus = payers
     .map((row) => asRecord(row)?.status)
     .find((status) => typeof status === "string" && status.trim());
+  const detailStatus =
+    typeof paymentDetails?.status === "string" ? paymentDetails.status.trim() : "";
+  const coarsePending = ["processing", "pending", "created", "initiated"].includes(
+    detailStatus.toLowerCase(),
+  );
+  if (coarsePending && typeof payerStatus === "string" && payerStatus.trim()) {
+    return payerStatus.trim();
+  }
   const candidates = [
     paymentDetails?.status,
     payerStatus,
@@ -548,6 +576,14 @@ function extractProviderStatus(
     });
   }
   return undefined;
+}
+
+/** Authoritative capture signal from payments_status.paid (e.g. "50.00 TTD"). */
+function extractCapturedPaidCents(payload: Record<string, unknown>): number | null {
+  const normalized = unwrapPaywisePayload(payload);
+  const paymentDetails = asRecord(normalized.payment_details);
+  const paymentsStatus = asRecord(paymentDetails?.payments_status);
+  return moneyFieldToCents(paymentsStatus?.paid);
 }
 
 function extractAmountAndCurrency(payload: Record<string, unknown>): {
@@ -609,8 +645,7 @@ export async function createPaymentRequest(
           first_name: input.payer.firstName,
           last_name: input.payer.lastName,
           email: input.payer.email,
-          // Sandbox isolation: Checkout Builder succeeds with direct_pos+card;
-          // payment_link hosted handoff blanks after Pay.
+          // Prefer direct_pos+card: cleaner PayWise emails; same checkout handoff as payment_link for Studio.
           payment_channel: "direct_pos",
           payment_method: "card",
           amount,
@@ -682,9 +717,19 @@ export async function getPaymentStatus(
       retryable: false,
     });
   }
+  let normalizedStatus = normalizePaywiseStatus(providerStatus, config);
+  // Capture can lag the coarse "Processing" label — trust payments_status.paid.
+  const capturedPaidCents = extractCapturedPaidCents(payload);
+  if (
+    normalizedStatus !== "paid" &&
+    capturedPaidCents !== null &&
+    capturedPaidCents >= amountCents
+  ) {
+    normalizedStatus = "paid";
+  }
   return {
     providerStatus,
-    normalizedStatus: normalizePaywiseStatus(providerStatus, config),
+    normalizedStatus,
     amountCents,
     currency,
     providerRequestId: typeof payload.request_id === "string" ? payload.request_id : undefined,

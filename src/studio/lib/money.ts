@@ -5,10 +5,13 @@ export const DEFAULT_CREDIT_PRICE_CENTS = 50;
 /**
  * Preset top-up packs (credits). At 0.50 TTD/credit:
  * $50 · $500 · $1,000 · $2,000 TTD.
- * Custom amounts allowed at or above the first tier ($50 TTD).
+ * Custom amounts allowed at or above the first tier ($50 TTD), unless a temp override is set.
  */
 export const TOP_UP_TIER_CREDITS = [100, 1000, 2000, 4000] as const;
 export const TOP_UP_TIER_LABELS = ["Starter", "Pro", "Studio", "Scale"] as const;
+
+/** TEMP PayWise prod smoke — allow TT$10. Set null to restore tier minimum (TT$50). */
+export const TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE: number | null = 1_000;
 
 export function creditsToCents(
   credits: number,
@@ -17,10 +20,13 @@ export function creditsToCents(
   return Math.round(Number(credits || 0) * Number(creditPriceCents || DEFAULT_CREDIT_PRICE_CENTS));
 }
 
-/** Minimum custom / any top-up: price of the first (cheapest) tier. */
+/** Minimum custom / any top-up: temp override, else price of the first (cheapest) tier. */
 export function topUpMinAmountCents(
   creditPriceCents: number = DEFAULT_CREDIT_PRICE_CENTS,
 ): number {
+  if (TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE != null) {
+    return TOP_UP_MIN_AMOUNT_CENTS_OVERRIDE;
+  }
   return creditsToCents(TOP_UP_TIER_CREDITS[0], creditPriceCents);
 }
 

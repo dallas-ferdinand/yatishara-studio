@@ -298,7 +298,7 @@ export const listThreads = authedQuery({
 
 /**
  * Paginated enriched history for one time range.
- * recent = today + yesterday; this_week / older load only when their accordion opens.
+ * recent = last 2 calendar days (today + yesterday); this_week / older load when accordion opens.
  */
 export const listHistoryThreads = authedQuery({
   args: {

@@ -1,6 +1,10 @@
 /**
  * ElevenLabs API helpers (voice library, TTS v3, sound effects, music).
- * Call only from Node Convex actions — keeps ELEVENLABS_API_KEY server-side.
+ * Call only from Node Convex actions — keys stay server-side.
+ *
+ * Multi-key: set ELEVENLABS_API_KEYS (JSON array or comma-separated) and/or
+ * ELEVENLABS_API_KEY. Each billed request probes remaining credits and tries
+ * key 1 → key 2 → …; errors only when every key is empty or fails quota.
  */
 
 /** Self-serve Music API length: 3s–5min (API allows up to 10min; we bill/cap at 5). */
@@ -19,6 +23,138 @@ export function clampMusicDurationSeconds(durationSeconds?: number | null): numb
 }
 
 const ELEVEN_API_BASE = "https://api.elevenlabs.io";
+
+/** Parse ELEVENLABS_API_KEYS (+ legacy ELEVENLABS_API_KEY). Deduped, order preserved. */
+export function parseConfiguredApiKeys(
+  multiRaw?: string | null,
+  singleRaw?: string | null,
+): string[] {
+  const keys: string[] = [];
+  const multi = (multiRaw ?? "").trim();
+  if (multi) {
+    if (multi.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(multi) as unknown;
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item === "string" && item.trim()) keys.push(item.trim());
+            else if (
+              item &&
+              typeof item === "object" &&
+              typeof (item as { key?: string }).key === "string" &&
+              (item as { key: string }).key.trim()
+            ) {
+              keys.push((item as { key: string }).key.trim());
+            }
+          }
+        }
+      } catch {
+        // fall through to delimiter split
+      }
+    }
+    if (keys.length === 0) {
+      for (const part of multi.split(/[\n,]+/)) {
+        const key = part.trim();
+        if (key) keys.push(key);
+      }
+    }
+  }
+  const single = (singleRaw ?? "").trim();
+  if (single) keys.unshift(single);
+  return [...new Set(keys)];
+}
+
+function configuredApiKeys(): string[] {
+  return parseConfiguredApiKeys(
+    process.env.ELEVENLABS_API_KEYS,
+    process.env.ELEVENLABS_API_KEY,
+  );
+}
+
+async function remainingCharsForKey(key: string): Promise<number | null> {
+  try {
+    const response = await fetch(`${ELEVEN_API_BASE}/v1/user/subscription`, {
+      headers: { "xi-api-key": key, Accept: "application/json" },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      // Scoped keys can TTS but refuse user_read — treat as unknown remaining.
+      if (/missing_permissions|missing the permission/i.test(text)) return null;
+      if (response.status === 401) return -1;
+      return null;
+    }
+    const json = JSON.parse(text) as {
+      character_count?: number;
+      character_limit?: number;
+    };
+    const used = Number(json.character_count);
+    const limit = Number(json.character_limit);
+    if (!Number.isFinite(used) || !Number.isFinite(limit)) return null;
+    return Math.max(0, limit - used);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pick keys with enough remaining credits for needChars, then unknown-scope keys.
+ * Throws AUDIO_PROVIDER_QUOTA_USER_MESSAGE when none can cover the request.
+ */
+export async function selectApiKeysForNeed(needChars: number): Promise<string[]> {
+  const keys = configuredApiKeys();
+  if (keys.length === 0) {
+    throw new Error("ELEVENLABS_API_KEY is not configured");
+  }
+  const need = Math.max(0, Math.floor(Number(needChars) || 0));
+  if (need <= 0) return keys;
+
+  const enough: Array<{ key: string; remaining: number }> = [];
+  const unknown: string[] = [];
+  for (const key of keys) {
+    const remaining = await remainingCharsForKey(key);
+    if (remaining == null) {
+      unknown.push(key);
+      continue;
+    }
+    if (remaining < 0) continue; // invalid
+    if (remaining >= need) enough.push({ key, remaining });
+  }
+  enough.sort((a, b) => b.remaining - a.remaining);
+  const ordered = [...enough.map((row) => row.key), ...unknown];
+  if (ordered.length === 0) {
+    throw new Error(AUDIO_PROVIDER_QUOTA_USER_MESSAGE);
+  }
+  return ordered;
+}
+
+/**
+ * Run a billed ElevenLabs call with credit-aware key rotation.
+ * Retries the next key on quota/exhaustion; other errors fail immediately.
+ */
+export async function withElevenLabsApiKey<T>(
+  needChars: number,
+  attempt: (apiKey: string) => Promise<T>,
+): Promise<T> {
+  const keys = await selectApiKeysForNeed(needChars);
+  let lastError: unknown;
+  for (const key of keys) {
+    try {
+      return await attempt(key);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message === AUDIO_PROVIDER_QUOTA_USER_MESSAGE ||
+        isElevenLabsProviderQuotaMessage(message)
+      ) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (lastError instanceof Error) throw lastError;
+  throw new Error(AUDIO_PROVIDER_QUOTA_USER_MESSAGE);
+}
 
 export type SharedVoiceSort =
   | "trending"
@@ -66,14 +202,6 @@ export type ExploreVoicesResult = {
   hasMore: boolean;
   totalCount: number;
 };
-
-function apiKey(): string {
-  const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) {
-    throw new Error("ELEVENLABS_API_KEY is not configured");
-  }
-  return key;
-}
 
 /** Map Studio sort labels → ElevenLabs shared-voices sort. */
 export function mapVoiceSort(sort?: string): SharedVoiceSort {
@@ -329,46 +457,55 @@ export function parseElevenLabsError(status: number, detail: string): string {
   return `ElevenLabs request failed (${status})${trimmed ? `: ${trimmed.slice(0, 180)}` : ""}`;
 }
 
+function throwIfElevenLabsFailed(status: number, detail: string): void {
+  if (status >= 200 && status < 300) return;
+  throw new Error(parseElevenLabsError(status, detail));
+}
+
 /** Premade / account voices that work for TTS without a paid library plan. */
 export async function listAccountVoices(): Promise<SharedVoice[]> {
-  const response = await fetch(`${ELEVEN_API_BASE}/v1/voices`, {
-    headers: { "xi-api-key": apiKey() },
+  return withElevenLabsApiKey(1, async (apiKey) => {
+    const response = await fetch(`${ELEVEN_API_BASE}/v1/voices`, {
+      headers: { "xi-api-key": apiKey },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+    const json = (await response.json()) as {
+      voices?: Array<Record<string, unknown>>;
+    };
+    return (json.voices ?? [])
+      .map(normalizeAccountVoice)
+      .filter((voice): voice is SharedVoice => Boolean(voice?.voiceId));
   });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
-  const json = (await response.json()) as {
-    voices?: Array<Record<string, unknown>>;
-  };
-  return (json.voices ?? [])
-    .map(normalizeAccountVoice)
-    .filter((voice): voice is SharedVoice => Boolean(voice?.voiceId));
 }
 
 export async function listSharedVoices(
   filters: ExploreVoicesFilters = {},
 ): Promise<ExploreVoicesResult> {
-  const query = buildSharedVoicesQuery(filters);
-  const response = await fetch(`${ELEVEN_API_BASE}/v1/shared-voices?${query}`, {
-    headers: { "xi-api-key": apiKey() },
+  return withElevenLabsApiKey(1, async (apiKey) => {
+    const query = buildSharedVoicesQuery(filters);
+    const response = await fetch(`${ELEVEN_API_BASE}/v1/shared-voices?${query}`, {
+      headers: { "xi-api-key": apiKey },
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+    const json = (await response.json()) as {
+      voices?: Array<Record<string, unknown>>;
+      has_more?: boolean;
+      total_count?: number;
+    };
+    return {
+      voices: (json.voices ?? [])
+        .map(normalizeSharedVoice)
+        .filter((voice) => voice.voiceId && voice.publicOwnerId),
+      hasMore: Boolean(json.has_more),
+      totalCount: Number(json.total_count) || 0,
+    };
   });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
-  const json = (await response.json()) as {
-    voices?: Array<Record<string, unknown>>;
-    has_more?: boolean;
-    total_count?: number;
-  };
-  return {
-    voices: (json.voices ?? [])
-      .map(normalizeSharedVoice)
-      .filter((voice) => voice.voiceId && voice.publicOwnerId),
-    hasMore: Boolean(json.has_more),
-    totalCount: Number(json.total_count) || 0,
-  };
 }
 
 /** Add a shared library voice to the ElevenLabs account collection (required before TTS). */
@@ -378,24 +515,26 @@ export async function addSharedVoice(
   newName?: string,
 ): Promise<void> {
   if (isAccountVoiceOwnerId(publicOwnerId)) return;
-  const response = await fetch(
-    `${ELEVEN_API_BASE}/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`,
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey(),
-        "Content-Type": "application/json",
+  await withElevenLabsApiKey(1, async (apiKey) => {
+    const response = await fetch(
+      `${ELEVEN_API_BASE}/v1/voices/add/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          new_name: (newName?.trim() || `Studio ${voiceId.slice(0, 8)}`).slice(0, 100),
+        }),
       },
-      body: JSON.stringify({
-        new_name: (newName?.trim() || `Studio ${voiceId.slice(0, 8)}`).slice(0, 100),
-      }),
-    },
-  );
-  // Already-added voices may 400/409 — treat as ok for idempotent saves.
-  if (!response.ok && response.status !== 400 && response.status !== 409) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
+    );
+    // Already-added voices may 400/409 — treat as ok for idempotent saves.
+    if (!response.ok && response.status !== 400 && response.status !== 409) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+  });
 }
 
 export async function textToSpeechV3(args: {
@@ -407,27 +546,29 @@ export async function textToSpeechV3(args: {
   if (text.length > 3000) {
     throw new Error("Voiceover text must be 3000 characters or less for eleven_v3.");
   }
-  const response = await fetch(
-    `${ELEVEN_API_BASE}/v1/text-to-speech/${encodeURIComponent(args.voiceId)}?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey(),
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
+  return withElevenLabsApiKey(text.length, async (apiKey) => {
+    const response = await fetch(
+      `${ELEVEN_API_BASE}/v1/text-to-speech/${encodeURIComponent(args.voiceId)}?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text,
+          model_id: "eleven_v3",
+        }),
       },
-      body: JSON.stringify({
-        text,
-        model_id: "eleven_v3",
-      }),
-    },
-  );
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  return { data: buffer, mediaType: "audio/mpeg" };
+    );
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return { data: buffer, mediaType: "audio/mpeg" };
+  });
 }
 
 export async function soundGeneration(args: {
@@ -449,21 +590,24 @@ export async function soundGeneration(args: {
   if (args.promptInfluence != null && Number.isFinite(args.promptInfluence)) {
     body.prompt_influence = Math.max(0, Math.min(1, Number(args.promptInfluence)));
   }
-  const response = await fetch(`${ELEVEN_API_BASE}/v1/sound-generation`, {
-    method: "POST",
-    headers: {
-      "xi-api-key": apiKey(),
-      "Content-Type": "application/json",
-      Accept: "audio/mpeg",
-    },
-    body: JSON.stringify(body),
+  // SFX billing is not 1:1 with prompt chars — require any positive remaining.
+  return withElevenLabsApiKey(1, async (apiKey) => {
+    const response = await fetch(`${ELEVEN_API_BASE}/v1/sound-generation`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return { data: buffer, mediaType: "audio/mpeg" };
   });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  return { data: buffer, mediaType: "audio/mpeg" };
 }
 
 /** Eleven Music compose — prompt mode (`music_v2`). */
@@ -486,22 +630,24 @@ export async function composeMusic(args: {
   if (args.forceInstrumental != null) {
     body.force_instrumental = Boolean(args.forceInstrumental);
   }
-  const response = await fetch(
-    `${ELEVEN_API_BASE}/v1/music?output_format=mp3_44100_128`,
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey(),
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
+  return withElevenLabsApiKey(1, async (apiKey) => {
+    const response = await fetch(
+      `${ELEVEN_API_BASE}/v1/music?output_format=mp3_44100_128`,
+      {
+        method: "POST",
+        headers: {
+          "xi-api-key": apiKey,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    },
-  );
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(parseElevenLabsError(response.status, detail));
-  }
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  return { data: buffer, mediaType: "audio/mpeg" };
+    );
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throwIfElevenLabsFailed(response.status, detail);
+    }
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return { data: buffer, mediaType: "audio/mpeg" };
+  });
 }

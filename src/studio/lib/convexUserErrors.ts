@@ -38,8 +38,8 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     message: "Phone is required. You can change it, but you can't remove it.",
   },
   {
-    match: /add and verify your phone|verify your phone/i,
-    message: "Add and verify your WhatsApp number in Account details before topping up.",
+    match: /add and verify your phone|verify your phone|add a phone number in account details before topping up/i,
+    message: "Add a phone number in Account details before topping up.",
   },
   {
     match: /add an email address/i,

@@ -1255,6 +1255,9 @@ export default defineSchema({
      */
     lowLastDeliveredAt: v.optional(v.number()),
     highLastDeliveredAt: v.optional(v.number()),
+    /** Per-member typing pings (WhatsApp-style); clients treat >~4s as idle. */
+    lowTypingAt: v.optional(v.number()),
+    highTypingAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_pair", ["userLowId", "userHighId"])

@@ -250,9 +250,11 @@ export const startCheckout = action({
     if (!user) {
       throw new Error("User not found");
     }
-    if (!user.phone || !user.phoneVerifiedAt) {
+    // PayWise requires payers[].mobile_number; card checkout does not need WhatsApp OTP.
+    // Keep requiring a phone on file so payer ≠ merchant can be tested cleanly.
+    if (!user.phone?.trim()) {
       throw new Error(
-        "Add and verify your phone number in Account details before topping up with PayWise.",
+        "Add a phone number in Account details before topping up with PayWise.",
       );
     }
     if (!user.email?.trim()) {
@@ -361,6 +363,7 @@ export const startCheckout = action({
 export const syncMyPayment = action({
   args: {
     paymentId: v.id("payments"),
+    force: v.optional(v.boolean()),
   },
   returns: v.object({
     status: v.string(),
@@ -389,6 +392,7 @@ export const syncMyPayment = action({
       return { status: payment.status, granted: false, reason: "already_terminal" };
     }
     if (
+      !args.force &&
       payment.lastStatusCheckedAt &&
       Date.now() - payment.lastStatusCheckedAt < 10_000
     ) {

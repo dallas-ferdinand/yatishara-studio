@@ -7470,43 +7470,7 @@ export function StudioShell({
         .studio-polish main.studio-composer-bg {
           background: transparent !important;
         }
-        /* Generate chat bg — same banner + fade mask language as Creative Network hero. */
-        .studio-polish main.studio-composer-bg::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-          opacity: 0;
-          background-image: url("/branding/creative-network-banner-4k.webp");
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-          -webkit-mask-image: linear-gradient(
-            180deg,
-            #000 0%,
-            rgba(0, 0, 0, 0.94) 18%,
-            rgba(0, 0, 0, 0.78) 36%,
-            rgba(0, 0, 0, 0.52) 54%,
-            rgba(0, 0, 0, 0.28) 70%,
-            rgba(0, 0, 0, 0.12) 84%,
-            transparent 100%
-          );
-          mask-image: linear-gradient(
-            180deg,
-            #000 0%,
-            rgba(0, 0, 0, 0.94) 18%,
-            rgba(0, 0, 0, 0.78) 36%,
-            rgba(0, 0, 0, 0.52) 54%,
-            rgba(0, 0, 0, 0.28) 70%,
-            rgba(0, 0, 0, 0.12) 84%,
-            transparent 100%
-          );
-          -webkit-mask-size: 100% 100%;
-          mask-size: 100% 100%;
-          transition: opacity 220ms ease;
-        }
-        .studio-polish main.studio-composer-bg::after {
+        .studio-polish main::before {
           content: "";
           position: absolute;
           inset: 0;
@@ -7514,40 +7478,38 @@ export function StudioShell({
           pointer-events: none;
           opacity: 0;
           background:
-            linear-gradient(
-              180deg,
-              color-mix(in srgb, var(--mos-page, #f5f5f7) 8%, transparent) 0%,
-              color-mix(in srgb, var(--mos-plate, #ececf0) 28%, transparent) 38%,
-              color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 68%,
-              var(--mos-plate, #ececf0) 100%
+            radial-gradient(ellipse at center,
+              transparent 0%,
+              color-mix(in srgb, #000 2%, transparent) 28%,
+              color-mix(in srgb, #000 10%, transparent) 48%,
+              color-mix(in srgb, #000 22%, transparent) 66%,
+              color-mix(in srgb, #000 38%, transparent) 82%,
+              color-mix(in srgb, #000 56%, transparent) 100%
             ),
-            radial-gradient(
-              130% 100% at 50% 18%,
-              color-mix(in srgb, var(--mos-page, #f5f5f7) 22%, transparent) 0%,
-              color-mix(in srgb, var(--mos-plate, #ececf0) 55%, transparent) 52%,
-              transparent 78%
+            radial-gradient(ellipse at 50% -4%,
+              color-mix(in srgb, var(--cursor-accent) 6%, transparent) 0%,
+              transparent 50%
+            ),
+            radial-gradient(ellipse at 82% 94%,
+              color-mix(in srgb, var(--cursor-accent-hover) 3%, transparent) 0%,
+              transparent 40%
             );
-          transition: opacity 220ms ease;
+          transition: opacity 180ms ease;
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
-          opacity: 0.72;
-        }
-        .studio-polish.is-studio-bg-ready main.studio-composer-bg::after {
           opacity: 1;
         }
-        [data-appearance="dark"] .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
-          opacity: 0.82;
+        [data-appearance="light"] .studio-polish main.studio-composer-bg::before {
+          opacity: 0;
         }
         @media (max-width: 899px) {
-          /* Extend banner mask under the bottom nav */
-          .studio-polish.is-studio-mobile main.studio-composer-bg::before,
-          .studio-polish.is-studio-mobile main.studio-composer-bg::after {
+          /* Extend vignette under the bottom nav so the mask isn't spaced above the bar */
+          .studio-polish.is-studio-mobile main.studio-composer-bg::before {
             bottom: calc(-1 * (var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px)));
           }
         }
         .studio-polish main > :not(style) {
           position: relative;
-          z-index: 1;
         }
         .studio-polish :where(.cursor-tree-row) {
           position: relative;
@@ -27284,7 +27246,6 @@ function SettingsWorkspacePane({
   const [thankYouSummary, setThankYouSummary] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState("");
   const [checkoutStarting, setCheckoutStarting] = useState(false);
-  const [verifyingPaymentId, setVerifyingPaymentId] = useState(null);
   const [invoicesOpen, setInvoicesOpen] = useState(false);
   const clientRequestIdRef = useRef(null);
   const paymentReturnHandledRef = useRef(false);
@@ -27326,38 +27287,55 @@ function SettingsWorkspacePane({
     if (!outcome || !paymentId) return;
     paymentReturnHandledRef.current = true;
     setSection("billing");
-    setVerifyingPaymentId(paymentId);
-    setPaymentStatus("Verifying…");
+    setInvoicesOpen(true);
+    // Do not block checkout — invoice row holds pending/provider status while we sync.
+    params.delete("payment");
+    params.delete("paymentId");
+    const cleaned = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", cleaned);
+
+    let cancelled = false;
     void (async () => {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const maxAttempts = 8;
       try {
-        const result = await syncPaywisePayment({ paymentId });
-        if (result.status === "payment_completed") {
-          setThankYouSummary({
-            title: "PayWise top-up",
-            amountCents: null,
-            credits: null,
-            kind: "top-up",
-            status: result.status,
-          });
-          setIsThankYouStep(true);
-          setPaymentStatus("Payment confirmed");
-        } else if (result.status === "pending") {
-          setPaymentStatus("Still processing…");
-        } else if (result.status === "cancelled") {
-          setPaymentStatus("Payment cancelled");
-        } else {
-          setPaymentStatus("Payment not completed");
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          if (cancelled) return;
+          if (attempt > 0) {
+            await sleep(Math.min(6_000, 1_200 * 2 ** Math.min(attempt - 1, 2)));
+          }
+          const result = await syncPaywisePayment({ paymentId, force: true });
+          if (cancelled) return;
+          if (result.status === "payment_completed") {
+            setThankYouSummary({
+              title: "PayWise top-up",
+              amountCents: null,
+              credits: null,
+              kind: "top-up",
+              status: result.status,
+            });
+            setIsThankYouStep(true);
+            setPaymentStatus("Payment confirmed");
+            return;
+          }
+          if (
+            result.status === "cancelled" ||
+            result.status === "rejected" ||
+            result.status === "checkout_failed"
+          ) {
+            setPaymentStatus(
+              result.status === "cancelled" ? "Payment cancelled" : "Payment not completed",
+            );
+            return;
+          }
         }
-      } catch (error) {
-        setPaymentStatus(friendlyConvexError(error, "Could not verify"));
-      } finally {
-        setVerifyingPaymentId(null);
-        params.delete("payment");
-        params.delete("paymentId");
-        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
-        window.history.replaceState({}, "", next);
+      } catch {
+        // Invoice list stays the source of truth for pending/provider status.
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [syncPaywisePayment]);
 
   function resetPaymentDraft() {
@@ -27366,7 +27344,6 @@ function SettingsWorkspacePane({
     setPaymentStatus("");
     setCustomAmountError("");
     setCheckoutStarting(false);
-    setVerifyingPaymentId(null);
     clientRequestIdRef.current = null;
   }
 
@@ -27395,7 +27372,7 @@ function SettingsWorkspacePane({
   }
 
   async function handlePaywiseCheckout() {
-    if (checkoutStarting || verifyingPaymentId) return;
+    if (checkoutStarting) return;
     if (!Number.isFinite(customAmountCents) || customAmountCents < minAmountCents) {
       setCustomAmountError(`Enter an amount of at least ${minAmountLabel}.`);
       return;
@@ -27560,10 +27537,9 @@ function SettingsWorkspacePane({
                   <button
                     type="button"
                     className={`studio-settings-topup-pay${
-                      checkoutStarting || verifyingPaymentId ? " is-loading" : ""
+                      checkoutStarting ? " is-loading" : ""
                     }${
                       !checkoutStarting &&
-                      !verifyingPaymentId &&
                       (customAmountError ||
                         /fail|error|not completed|cancelled|missing|could not/i.test(paymentStatus))
                         ? " is-error"
@@ -27572,23 +27548,20 @@ function SettingsWorkspacePane({
                     disabled={
                       !checkoutPlan ||
                       customAmountCents < minAmountCents ||
-                      checkoutStarting ||
-                      Boolean(verifyingPaymentId)
+                      checkoutStarting
                     }
-                    aria-busy={checkoutStarting || Boolean(verifyingPaymentId)}
+                    aria-busy={checkoutStarting}
                     onClick={() => void handlePaywiseCheckout()}
                   >
-                    {checkoutStarting || verifyingPaymentId ? (
+                    {checkoutStarting ? (
                       <Loader2 className="studio-settings-topup-pay-spin" aria-hidden="true" />
                     ) : null}
                     <span className="studio-settings-topup-pay-label">
                       {checkoutStarting
                         ? paymentStatus || "Please wait…"
-                        : verifyingPaymentId
-                          ? paymentStatus || "Verifying…"
-                          : customAmountError
-                            ? customAmountError
-                            : paymentStatus || "Pay with PayWise"}
+                        : customAmountError
+                          ? customAmountError
+                          : paymentStatus || "Pay with PayWise"}
                     </span>
                   </button>
                   <p className="studio-settings-topup-secure">
@@ -27623,7 +27596,7 @@ function SettingsWorkspacePane({
                           <strong>{paymentInvoiceTitle(payment)}</strong>
                           <span>
                             {formatDate(payment.createdAt)} ·{" "}
-                            {humanizePaymentStatus(payment.status, payment.method)}
+                            {paymentInvoiceStatusLine(payment)}
                           </span>
                         </div>
                         <div className="studio-settings-invoice-meta">
@@ -28386,10 +28359,27 @@ function paymentInvoiceTitle(payment) {
   return "Legacy top-up";
 }
 
+function paymentInvoiceStatusLine(payment) {
+  const base = humanizePaymentStatus(payment?.status, payment?.method);
+  const provider = String(payment?.providerStatus ?? "").trim();
+  if (
+    payment?.method === "paywise" &&
+    provider &&
+    payment.status !== "payment_completed" &&
+    payment.status !== "checkout_failed"
+  ) {
+    return `${base} · ${provider}`;
+  }
+  if (payment?.method === "paywise" && payment?.rejectionReason && payment.status === "checkout_failed") {
+    return `${base} · ${String(payment.rejectionReason).slice(0, 80)}`;
+  }
+  return base;
+}
+
 function humanizePaymentStatus(status, method) {
   const key = String(status ?? "");
   const labels = {
-    pending: method === "paywise" ? "Awaiting card payment" : "Pending",
+    pending: method === "paywise" ? "Pending" : "Pending",
     needs_review: "Needs review",
     checkout_failed: "Checkout failed",
     payment_completed: "Paid",
@@ -28438,7 +28428,7 @@ function buildStudioActivityItems(notifications = [], payments = []) {
       id: `p:${item._id}`,
       kind: "payment",
       title: paymentInvoiceTitle(item),
-      body: `${humanizePaymentStatus(item.status, item.method)} · ${formatMoney(item.amountCents)}`,
+      body: `${paymentInvoiceStatusLine(item)} · ${formatMoney(item.amountCents)}`,
       createdAt: item.createdAt ?? item._creationTime,
       tone: activityToneForKind("payment", item.status),
       status: item.status,

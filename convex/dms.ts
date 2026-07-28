@@ -322,6 +322,27 @@ function peerIdOf(conversation: Doc<"dmConversations">, me: Id<"users">) {
     : conversation.userLowId;
 }
 
+function peerTypingAtOf(
+  conversation: Doc<"dmConversations">,
+  me: Id<"users">,
+): number | undefined {
+  const at =
+    conversation.userLowId === me
+      ? conversation.highTypingAt
+      : conversation.lowTypingAt;
+  return at && at > 0 ? at : undefined;
+}
+
+function myTypingPatch(
+  conversation: Doc<"dmConversations">,
+  me: Id<"users">,
+  typingAt: number,
+) {
+  return conversation.userLowId === me
+    ? { lowTypingAt: typingAt }
+    : { highTypingAt: typingAt };
+}
+
 async function memberConversations(ctx: QueryCtx, me: Id<"users">) {
   const [asLow, asHigh] = await Promise.all([
     ctx.db
@@ -407,6 +428,8 @@ const conversationRowReturn = v.object({
   lastMessageReceipt: receiptStatus,
   /** Peer has Studio open (connect/visibility; stale after ~3 min). */
   peerOnline: v.boolean(),
+  /** Peer last typing ping (ms); client treats older than ~4s as idle. */
+  peerTypingAt: v.optional(v.number()),
   unread: v.boolean(),
 });
 
@@ -568,6 +591,7 @@ export const listMyConversations = authedQuery({
               )
             : "sent",
           peerOnline: isStudioOnline(peerUser, now),
+          peerTypingAt: peerTypingAtOf(conversation, me),
           unread: Boolean(
             conversation.lastMessageSenderId &&
               conversation.lastMessageSenderId !== me &&
@@ -576,6 +600,36 @@ export const listMyConversations = authedQuery({
         };
       }),
     );
+  },
+});
+
+/** WhatsApp-style typing ping — throttled by the client (~2s while drafting). */
+export const setTyping = authedMutation({
+  args: {
+    conversationId: v.id("dmConversations"),
+    typing: v.boolean(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      ctx.user._id,
+    );
+    const now = Date.now();
+    const nextAt = args.typing ? now : 0;
+    const isLow = conversation.userLowId === ctx.user._id;
+    const prev = isLow
+      ? (conversation.lowTypingAt ?? 0)
+      : (conversation.highTypingAt ?? 0);
+    // Avoid write storms: skip identical clear; throttle online pings <1.2s.
+    if (!args.typing && prev <= 0) return null;
+    if (args.typing && prev > 0 && now - prev < 1200) return null;
+    await ctx.db.patch(
+      conversation._id,
+      myTypingPatch(conversation, ctx.user._id, nextAt),
+    );
+    return null;
   },
 });
 
@@ -1030,7 +1084,9 @@ export const sendMessage = authedMutation({
       lastMessagePreview:
         body.length > DM_PREVIEW_MAX ? `${body.slice(0, DM_PREVIEW_MAX)}…` : body,
       lastMessageSenderId: ctx.user._id,
-      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
     });
     return messageId;
   },
@@ -1105,7 +1161,9 @@ export const sendFeedShare = authedMutation({
         body || previewFallback,
       ),
       lastMessageSenderId: ctx.user._id,
-      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
     });
 
     // Count as a post share when the payload is the post itself.
@@ -1169,7 +1227,9 @@ export const sendVoiceMessage = authedMutation({
       lastMessageAt: now,
       lastMessagePreview: VOICE_PREVIEW,
       lastMessageSenderId: ctx.user._id,
-      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
     });
     return messageId;
   },
@@ -1234,7 +1294,9 @@ export const sendImageMessage = authedMutation({
       lastMessageAt: now,
       lastMessagePreview: preview,
       lastMessageSenderId: ctx.user._id,
-      ...(isLow ? { lowLastReadAt: now } : { highLastReadAt: now }),
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
     });
     return messageId;
   },

@@ -5,11 +5,26 @@ import {
   mapCategoryToUseCase,
   mapVoiceSort,
   normalizeVoicePageSize,
+  parseConfiguredApiKeys,
   parseElevenLabsError,
   sliceVoicePage,
   VOICE_UNAVAILABLE_USER_MESSAGE,
   voiceUsableOnCurrentPlan,
 } from "./elevenlabs";
+
+describe("parseConfiguredApiKeys", () => {
+  it("parses JSON array, comma list, and legacy single key", () => {
+    expect(parseConfiguredApiKeys('["sk_a","sk_b"]', null)).toEqual(["sk_a", "sk_b"]);
+    expect(parseConfiguredApiKeys("sk_a, sk_b", null)).toEqual(["sk_a", "sk_b"]);
+    expect(parseConfiguredApiKeys(null, "sk_legacy")).toEqual(["sk_legacy"]);
+    expect(parseConfiguredApiKeys("sk_a,sk_b", "sk_legacy")).toEqual([
+      "sk_legacy",
+      "sk_a",
+      "sk_b",
+    ]);
+    expect(parseConfiguredApiKeys('[{"key":"sk_obj"}]', "sk_obj")).toEqual(["sk_obj"]);
+  });
+});
 
 describe("mapVoiceSort", () => {
   it("maps UI sort labels to ElevenLabs shared-voices sort", () => {
