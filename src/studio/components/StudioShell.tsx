@@ -1212,6 +1212,8 @@ export function StudioShell({
   const [settingsSection, setSettingsSection] = useState("general");
   /** PayWise return celebration — full-screen above all chrome. */
   const [paymentCelebration, setPaymentCelebration] = useState(null);
+  /** Full-screen handoff while creating checkout + leaving for PayWise. */
+  const [paywiseHandoff, setPaywiseHandoff] = useState(null);
   const [mobileSection, setMobileSection] = useState("composer");
   /**
    * Files dock stays mounted on mobile so open is height-only.
@@ -3500,6 +3502,7 @@ export function StudioShell({
     customCursorEnabled,
     onCustomCursorChange: setCustomCursorEnabled,
     onPaymentCelebration: setPaymentCelebration,
+    onPaywiseHandoff: setPaywiseHandoff,
   };
 
   const openCreditsPane = useCallback(() => {
@@ -9958,27 +9961,6 @@ export function StudioShell({
           flex: 0 0 auto;
           opacity: 0.85;
         }
-        .studio-settings-topup-preview {
-          display: block;
-          width: 100%;
-          margin-top: 10px;
-          padding: 0;
-          border: 0;
-          background: transparent;
-          color: color-mix(in srgb, var(--color-cursor-text-secondary, #8a8a8a) 92%, #6b7280);
-          font: inherit;
-          font-size: 12px;
-          font-weight: 550;
-          letter-spacing: 0.01em;
-          line-height: 1.3;
-          text-align: center;
-          text-decoration: underline;
-          text-underline-offset: 3px;
-          cursor: pointer;
-        }
-        .studio-settings-topup-preview:hover {
-          color: var(--mos-text-bright, var(--color-cursor-text));
-        }
         @keyframes studio-settings-topup-spin {
           to {
             transform: rotate(360deg);
@@ -10450,6 +10432,21 @@ export function StudioShell({
         .studio-payment-celebration-btn:focus-visible {
           outline: 2px solid var(--cursor-accent);
           outline-offset: 3px;
+        }
+        .studio-paywise-handoff-kicker {
+          margin: 0;
+          color: var(--color-cursor-muted, var(--mos-muted));
+          font-size: 12px;
+          font-weight: 650;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .studio-paywise-handoff-amount {
+          margin: 0;
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
         }
         .studio-settings-thankyou {
           display: grid;
@@ -19542,6 +19539,15 @@ export function StudioShell({
             document.body,
           )
         : null}
+      {paywiseHandoff && typeof document !== "undefined"
+        ? createPortal(
+            <PaywiseCheckoutHandoffOverlay
+              handoff={paywiseHandoff}
+              onClear={() => setPaywiseHandoff(null)}
+            />,
+            document.body,
+          )
+        : null}
       {contextMenu ? (
         <ExplorerContextMenu
           entry={contextMenu.entry}
@@ -27348,6 +27354,7 @@ function SettingsSidePanel({
   customCursorEnabled,
   onCustomCursorChange,
   onPaymentCelebration,
+  onPaywiseHandoff,
   isMobile = false,
 }) {
   useEffect(() => {
@@ -27373,6 +27380,7 @@ function SettingsSidePanel({
       customCursorEnabled={customCursorEnabled}
       onCustomCursorChange={onCustomCursorChange}
       onPaymentCelebration={onPaymentCelebration}
+      onPaywiseHandoff={onPaywiseHandoff}
     />
   );
 
@@ -27453,6 +27461,47 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
   );
 }
 
+function PaywiseCheckoutHandoffOverlay({ handoff }) {
+  const phase = handoff?.phase ?? "preparing";
+  const checkoutUrl = typeof handoff?.checkoutUrl === "string" ? handoff.checkoutUrl : "";
+  const amountLabel =
+    handoff?.amountCents != null ? formatTtdCents(handoff.amountCents) : null;
+
+  useEffect(() => {
+    if (phase !== "redirect" || !checkoutUrl) return;
+    const timer = window.setTimeout(() => {
+      window.location.assign(checkoutUrl);
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [phase, checkoutUrl]);
+
+  return (
+    <div
+      className="studio-payment-celebration"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="studio-paywise-handoff-title"
+      aria-busy="true"
+    >
+      <div className="studio-payment-celebration-inner">
+        <Loader2 className="studio-payment-celebration-spin" aria-hidden="true" />
+        <p className="studio-paywise-handoff-kicker">PayWise</p>
+        <h2 id="studio-paywise-handoff-title" className="studio-payment-celebration-title">
+          {phase === "redirect" ? "Continuing to PayWise" : "Preparing checkout"}
+        </h2>
+        {amountLabel ? (
+          <p className="studio-paywise-handoff-amount">{amountLabel}</p>
+        ) : null}
+        <p className="studio-payment-celebration-copy">
+          {phase === "redirect"
+            ? "Finish card payment securely on PayWise — we’ll bring you back here after."
+            : "One moment while we open a secure checkout."}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SettingsWorkspacePane({
   tab,
   currentUser,
@@ -27466,6 +27515,7 @@ function SettingsWorkspacePane({
   customCursorEnabled,
   onCustomCursorChange,
   onPaymentCelebration,
+  onPaywiseHandoff,
 }) {
   const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
@@ -27614,6 +27664,10 @@ function SettingsWorkspacePane({
     }
     setCheckoutStarting(true);
     setPaymentStatus("Please wait…");
+    onPaywiseHandoff?.({
+      phase: "preparing",
+      amountCents: checkoutPlan.amountCents,
+    });
     try {
       const result = await startPaywiseCheckout({
         clientRequestId: clientRequestIdRef.current,
@@ -27622,8 +27676,13 @@ function SettingsWorkspacePane({
         reference: `Top up: ${checkoutPlan.name}`,
       });
       setPaymentStatus("Redirecting…");
-      window.location.assign(result.checkoutUrl);
+      onPaywiseHandoff?.({
+        phase: "redirect",
+        amountCents: checkoutPlan.amountCents,
+        checkoutUrl: result.checkoutUrl,
+      });
     } catch (error) {
+      onPaywiseHandoff?.(null);
       setPaymentStatus(friendlyConvexError(error, "PayWise checkout failed."));
       setCheckoutStarting(false);
       clientRequestIdRef.current = null;
@@ -27771,23 +27830,6 @@ function SettingsWorkspacePane({
                     <Lock aria-hidden="true" />
                     <span>secure checkout</span>
                   </p>
-                  <button
-                    type="button"
-                    className="studio-settings-topup-preview"
-                    onClick={() => {
-                      const amountCents =
-                        Number.isFinite(customAmountCents) && customAmountCents > 0
-                          ? customAmountCents
-                          : minAmountCents;
-                      onPaymentCelebration?.({
-                        phase: "success",
-                        amountCents,
-                        creditsGranted: creditsFromAmountCents(amountCents, creditPriceCents),
-                      });
-                    }}
-                  >
-                    Preview payment received
-                  </button>
                 </div>
               </section>
               <section className="cursor-settings-section studio-settings-invoices-card">
