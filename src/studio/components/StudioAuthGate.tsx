@@ -1095,19 +1095,43 @@ function AuthFrame({
   return (
     <main
       className="studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-8 sm:px-5 sm:py-10"
+      data-appearance="light"
       data-auth-appearance="light"
       style={authThemeStyle}
     >
       <style jsx global>{`
-        /* Light opaque Studio sheet — no wallpaper glass (matches settings / KYC panes). */
+        /* Light opaque Studio sheet — pin LIGHT_BASE tokens so document dark mode
+           cannot leak into --mos-* (var() fallbacks only apply when unset). */
         .studio-auth-theme {
-          color: var(--mos-text, #111118);
-          background: var(--mos-page, #f5f5f7);
+          --mos-page: #f5f5f7;
+          --mos-panel: #f5f5f7;
+          --mos-plate: #ececf0;
+          --mos-plate-strong: #d4d4da;
+          --mos-bg: #ececf0;
+          --mos-surface: #f0f0f3;
+          --mos-raised: #d4d4da;
+          --mos-text: #1c1c1e;
+          --mos-text-soft: #4a4a4e;
+          --mos-text-bright: #1c1c1e;
+          --mos-muted: #636366;
+          --mos-faint: #8e8e93;
+          --mos-hover: #e6e6ec;
+          --mos-active: #c8c8d0;
+          --mos-border: rgba(0, 0, 0, 0.11);
+          --mos-border-soft: rgba(0, 0, 0, 0.075);
+          --color-cursor-border-soft: rgba(0, 0, 0, 0.075);
+          --color-cursor-border: rgba(0, 0, 0, 0.11);
+          --color-cursor-text: #1c1c1e;
+          --color-cursor-muted: #636366;
+          --color-cursor-bg: #f5f5f7;
+          color: #1c1c1e;
+          background: #f5f5f7;
+          color-scheme: light;
         }
         .studio-auth-card {
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 82%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
           border-radius: 18px;
-          background: var(--mos-plate, #ececf0);
+          background: var(--mos-plate);
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.72),
             0 1px 2px rgba(15, 23, 42, 0.05),
@@ -1117,7 +1141,7 @@ function AuthFrame({
         }
         .studio-auth-title {
           margin: 0;
-          color: var(--mos-text, #111118);
+          color: var(--mos-text);
           font-size: 1.375rem;
           font-weight: 650;
           letter-spacing: -0.02em;
@@ -1147,9 +1171,9 @@ function AuthFrame({
           min-height: 36px;
           width: 100%;
           padding: 0 12px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
           border-radius: 10px;
-          background: var(--mos-surface, #ffffff);
+          background: #ffffff;
           box-shadow: none;
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
@@ -1176,8 +1200,8 @@ function AuthFrame({
         }
         .studio-auth-field:focus,
         .studio-auth-field:focus-within {
-          border-color: color-mix(in srgb, var(--studio-auth-accent) 45%, var(--color-cursor-border-soft, #d4d4da));
-          background: color-mix(in srgb, var(--studio-auth-accent) 5%, var(--mos-surface, #ffffff));
+          border-color: color-mix(in srgb, var(--studio-auth-accent) 45%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--studio-auth-accent) 5%, #ffffff);
           outline: none;
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-auth-accent) 16%, transparent);
         }
@@ -1198,7 +1222,7 @@ function AuthFrame({
         .studio-auth-field input::placeholder,
         .studio-auth-field textarea::placeholder,
         input.studio-auth-field::placeholder {
-          color: color-mix(in srgb, var(--mos-text, #111118) 38%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 38%, transparent);
           font-weight: 450;
         }
         .studio-auth-primary {
@@ -1211,8 +1235,8 @@ function AuthFrame({
           padding: 0 14px;
           border: 1px solid color-mix(in srgb, var(--studio-auth-accent) 40%, transparent);
           border-radius: 10px;
-          background: color-mix(in srgb, var(--studio-auth-accent) 18%, var(--mos-surface, #fff));
-          color: var(--mos-text, #111118);
+          background: color-mix(in srgb, var(--studio-auth-accent) 18%, #ffffff);
+          color: var(--mos-text);
           font-size: 13px;
           font-weight: 650;
           box-shadow: none;
@@ -1220,7 +1244,7 @@ function AuthFrame({
         }
         .studio-auth-primary:hover {
           border-color: color-mix(in srgb, var(--studio-auth-accent) 55%, transparent);
-          background: color-mix(in srgb, var(--studio-auth-accent) 26%, var(--mos-surface, #fff));
+          background: color-mix(in srgb, var(--studio-auth-accent) 26%, #ffffff);
         }
         .studio-auth-primary:focus-visible,
         .studio-auth-secondary:focus-visible {
@@ -1240,10 +1264,10 @@ function AuthFrame({
           min-height: 36px;
           width: 100%;
           padding: 0 14px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
           border-radius: 10px;
-          background: var(--mos-plate-strong, #d4d4da);
-          color: color-mix(in srgb, var(--mos-text, #111118) 78%, transparent);
+          background: var(--mos-plate-strong);
+          color: color-mix(in srgb, var(--mos-text) 78%, transparent);
           font-size: 13px;
           font-weight: 600;
           box-shadow: none;
@@ -1252,19 +1276,19 @@ function AuthFrame({
           transition: background 0.14s ease, border-color 0.14s ease;
         }
         .studio-auth-secondary:hover {
-          border-color: color-mix(in srgb, var(--studio-auth-accent) 35%, var(--color-cursor-border-soft, #d4d4da));
-          color: var(--mos-text, #111118);
+          border-color: color-mix(in srgb, var(--studio-auth-accent) 35%, var(--color-cursor-border-soft));
+          color: var(--mos-text);
         }
         .studio-auth-notice {
           min-height: 1rem;
           margin: 0;
-          color: color-mix(in srgb, var(--mos-text, #111118) 55%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
           font-size: 12px;
           text-align: center;
         }
         .studio-auth-copy {
           margin: 0.65rem 0 0;
-          color: color-mix(in srgb, var(--mos-text, #111118) 68%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 68%, transparent);
           font-size: 13px;
           line-height: 1.4;
           text-align: left;
@@ -1272,7 +1296,7 @@ function AuthFrame({
         .studio-auth-label {
           display: block;
           margin: 0 0 5px;
-          color: color-mix(in srgb, var(--mos-text, #111118) 52%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 52%, transparent);
           font-size: 11px;
           font-weight: 650;
           letter-spacing: 0.04em;
@@ -1285,25 +1309,25 @@ function AuthFrame({
           height: 16px;
         }
         .studio-auth-icon {
-          color: color-mix(in srgb, var(--mos-text, #111118) 42%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 42%, transparent);
         }
         .studio-auth-link {
-          color: color-mix(in srgb, var(--mos-text, #111118) 55%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 55%, transparent);
           font-size: 12px;
           font-weight: 500;
           background: transparent;
           border: 0;
         }
         .studio-auth-link:hover {
-          color: var(--mos-text, #111118);
+          color: var(--mos-text);
         }
         .studio-auth-faint {
-          color: color-mix(in srgb, var(--mos-text, #111118) 42%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 42%, transparent);
         }
         .studio-auth-panel {
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft, #d4d4da) 90%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
           border-radius: 12px;
-          background: var(--mos-surface, #ffffff);
+          background: #ffffff;
           box-shadow: none;
           -webkit-backdrop-filter: none;
           backdrop-filter: none;
@@ -1322,17 +1346,17 @@ function AuthFrame({
           line-height: 1.35;
         }
         .studio-auth-choice-title {
-          color: var(--mos-text, #111118);
+          color: var(--mos-text);
           font-size: 13px;
           font-weight: 650;
         }
         .studio-auth-choice-body {
-          color: color-mix(in srgb, var(--mos-text, #111118) 62%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 62%, transparent);
           font-size: 12px;
           line-height: 1.35;
         }
         .studio-auth-choice-meta {
-          color: color-mix(in srgb, var(--mos-text, #111118) 45%, transparent);
+          color: color-mix(in srgb, var(--mos-text) 45%, transparent);
           font-size: 11px;
         }
       `}</style>
