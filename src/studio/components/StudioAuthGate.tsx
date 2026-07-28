@@ -1423,36 +1423,6 @@ function AuthFrame({
         .studio-auth-choice-tile.is-pending {
           opacity: 1;
         }
-        .studio-auth-choice {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          width: 100%;
-          min-height: 56px;
-          padding: 10px 12px;
-          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
-          border-radius: 14px;
-          background: #ffffff;
-          color: inherit;
-          cursor: pointer;
-          transition:
-            background 0.14s ease,
-            border-color 0.14s ease;
-        }
-        .studio-auth-choice:hover:not(:disabled) {
-          background: var(--mos-plate);
-          border-color: color-mix(in srgb, #1c1c1e 22%, transparent);
-        }
-        .studio-auth-choice:focus-visible {
-          outline: none;
-          box-shadow:
-            0 0 0 2px #f5f5f7,
-            0 0 0 4px color-mix(in srgb, #1c1c1e 28%, transparent);
-        }
-        .studio-auth-choice:disabled {
-          cursor: not-allowed;
-          opacity: 0.55;
-        }
         .studio-auth-icon,
         .studio-auth-accent-text {
           display: block;
