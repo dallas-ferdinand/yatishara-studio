@@ -1444,7 +1444,7 @@ export function StudioMessagesPane({
               title={peerSidebarOpen ? "Close Action" : "Action"}
               onClick={() => setPeerSidebarOpen((open) => !open)}
             >
-              <Hammer size={16} strokeWidth={2.25} aria-hidden="true" />
+              <Hammer size={13} strokeWidth={2.25} aria-hidden="true" />
             </button>
           </div>
         ) : null}
