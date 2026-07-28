@@ -12,7 +12,7 @@ export const ResendOTP = Email({
         crypto.getRandomValues(bytes);
       },
     };
-    return generateRandomString(random, "0123456789", 8);
+    return generateRandomString(random, "0123456789", 6);
   },
   async sendVerificationRequest({ identifier: email, provider, token }) {
     if (!provider.apiKey) {
@@ -20,11 +20,13 @@ export const ResendOTP = Email({
     }
     const resend = new ResendAPI(provider.apiKey);
     const from = process.env.AUTH_RESEND_FROM ?? "Yatishara Studio <noreply@yatishara.com>";
+    const pretty =
+      token.length === 6 ? `${token.slice(0, 3)}-${token.slice(3)}` : token;
     const { error } = await resend.emails.send({
       from,
       to: [email],
       subject: "Your Yatishara Studio sign-in code",
-      text: `Your Yatishara Studio code is ${token}`,
+      text: `Your Yatishara Studio code is ${pretty}`,
     });
     if (error) {
       throw new Error("Could not send verification code");

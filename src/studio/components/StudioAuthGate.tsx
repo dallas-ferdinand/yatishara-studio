@@ -4,6 +4,8 @@ import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
 import { useConvex, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
+  Check,
+  Copy,
   Loader2,
   Lock,
   Mail,
@@ -562,22 +564,46 @@ function StudioSignIn({
     | { email: string; phase: "email-code"; hasPassword: boolean }
   >("identify");
   const [emailInput, setEmailInput] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
 
   const isEmailCodeStep = step !== "identify" && step.phase === "email-code";
   const isPasswordStep = step !== "identify" && step.phase === "password";
+  const emailCodeDigits = emailCode.replace(/\D/g, "").slice(0, 6);
+  const emailCodeDisplay = formatEmailOtpDigits(emailCodeDigits);
 
   const resetToIdentify = () => {
     setError("");
     setNotice("");
+    setEmailCode("");
+    setCodeCopied(false);
     setStep("identify");
   };
 
   const startEmailCode = async (email: string, hasPassword = false) => {
     await signIn("resend-otp", { email });
+    setEmailCode("");
+    setCodeCopied(false);
     setStep({ email, phase: "email-code", hasPassword });
+  };
+
+  const copyEmailCode = async () => {
+    const value = emailCodeDigits || emailCodeDisplay;
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(
+        emailCodeDigits.length === 6
+          ? formatEmailOtpDigits(emailCodeDigits)
+          : emailCodeDigits,
+      );
+      setCodeCopied(true);
+      window.setTimeout(() => setCodeCopied(false), 1600);
+    } catch {
+      setError("Could not copy code");
+    }
   };
 
   useEffect(() => {
@@ -647,6 +673,12 @@ function StudioSignIn({
           }
 
           if (isEmailCodeStep) {
+            if (emailCodeDigits.length !== 6) {
+              setError("Enter the 6-digit code from your email");
+              setPending(false);
+              return;
+            }
+            formData.set("code", emailCodeDigits);
             void signIn("resend-otp", formData)
               .catch((err: unknown) => {
                 setError(friendlyConvexError(err, "Sign-in failed"));
@@ -739,18 +771,59 @@ function StudioSignIn({
             </p>
             <p className="studio-auth-email-address">{step.email}</p>
             <input name="email" value={step.email} type="hidden" />
-            <label className="block w-full">
+            <div className="studio-auth-otp-row">
               <input
                 className="studio-auth-field is-code is-email-otp"
                 name="code"
-                placeholder="••••••"
+                value={emailCodeDisplay}
+                placeholder="000-000"
                 aria-label="Email code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                maxLength={7}
+                pattern="[0-9]{3}-[0-9]{3}"
                 required
                 autoFocus
+                onChange={(event) => {
+                  setEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  setCodeCopied(false);
+                  setError("");
+                }}
+                onPaste={(event) => {
+                  const text = event.clipboardData.getData("text");
+                  const digits = text.replace(/\D/g, "").slice(0, 6);
+                  if (!digits) return;
+                  event.preventDefault();
+                  setEmailCode(digits);
+                  setCodeCopied(false);
+                  setError("");
+                }}
               />
-            </label>
+              <button
+                type="button"
+                className="studio-auth-otp-copy"
+                aria-label={codeCopied ? "Code copied" : "Copy code"}
+                title={codeCopied ? "Copied" : "Copy code"}
+                disabled={emailCodeDigits.length === 0}
+                onClick={() => void copyEmailCode()}
+              >
+                {codeCopied ? (
+                  <Check className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>{codeCopied ? "Copied" : "Copy"}</span>
+              </button>
+              <button
+                type="button"
+                className="studio-auth-otp-copy is-paste"
+                aria-label="Paste code"
+                title="Paste code"
+                onClick={() => void pasteEmailCode()}
+              >
+                Paste
+              </button>
+            </div>
             {step.hasPassword ? (
               <button
                 className="studio-auth-secondary"
@@ -823,6 +896,13 @@ function normalizeEmail(value: string): string | null {
   const email = value.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   return email;
+}
+
+/** Display email OTP as `123-456` while storing digits only. */
+function formatEmailOtpDigits(digits: string): string {
+  const d = digits.replace(/\D/g, "").slice(0, 6);
+  if (d.length <= 3) return d;
+  return `${d.slice(0, 3)}-${d.slice(3)}`;
 }
 
 function AuthFrame({
@@ -1044,15 +1124,56 @@ function AuthFrame({
           text-align: center;
         }
         .studio-auth-field.is-code.is-email-otp {
+          flex: 1 1 auto;
+          min-width: 0;
           min-height: 58px;
           border-radius: 20px;
           font-size: 1.4rem;
           font-weight: 700;
-          letter-spacing: 0.36em;
+          letter-spacing: 0.22em;
           background: #ffffff;
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.9),
             0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        .studio-auth-otp-row {
+          display: flex;
+          align-items: stretch;
+          gap: 8px;
+          width: 100%;
+        }
+        .studio-auth-otp-copy {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          flex: 0 0 auto;
+          min-height: 58px;
+          padding: 0 14px;
+          border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 86%, transparent);
+          border-radius: 18px;
+          background: #ffffff;
+          color: #1c1c1e;
+          font-size: 13px;
+          font-weight: 650;
+          letter-spacing: -0.01em;
+          cursor: pointer;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+          transition:
+            background 0.14s ease,
+            border-color 0.14s ease,
+            opacity 0.14s ease;
+        }
+        .studio-auth-otp-copy:hover:not(:disabled) {
+          background: color-mix(in srgb, #1c1c1e 4%, #ffffff);
+          border-color: color-mix(in srgb, #1c1c1e 22%, transparent);
+        }
+        .studio-auth-otp-copy:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .studio-auth-otp-copy.is-paste {
+          padding: 0 12px;
         }
         .studio-auth-email-panel {
           display: flex;
