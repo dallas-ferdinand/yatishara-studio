@@ -7470,46 +7470,70 @@ export function StudioShell({
         .studio-polish main.studio-composer-bg {
           background: transparent !important;
         }
-        .studio-polish main::before {
+        /* Generate chat bg — same banner + fade mask language as Creative Network hero. */
+        .studio-polish main.studio-composer-bg::before {
           content: "";
           position: absolute;
           inset: 0;
           z-index: 0;
           pointer-events: none;
           opacity: 0;
-          background:
-            radial-gradient(ellipse at center,
-              transparent 0%,
-              color-mix(in srgb, #000 2%, transparent) 28%,
-              color-mix(in srgb, #000 10%, transparent) 48%,
-              color-mix(in srgb, #000 22%, transparent) 66%,
-              color-mix(in srgb, #000 38%, transparent) 82%,
-              color-mix(in srgb, #000 56%, transparent) 100%
-            ),
-            radial-gradient(ellipse at 50% -4%,
-              color-mix(in srgb, var(--cursor-accent) 6%, transparent) 0%,
-              transparent 50%
-            ),
-            radial-gradient(ellipse at 82% 94%,
-              color-mix(in srgb, var(--cursor-accent-hover) 3%, transparent) 0%,
-              transparent 40%
-            );
+          background-image: url("/branding/creative-network-banner-4k.webp");
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          -webkit-mask-image: linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.92) 0%,
+            rgba(0, 0, 0, 0.72) 42%,
+            rgba(0, 0, 0, 0.28) 78%,
+            transparent 100%
+          );
+          mask-image: linear-gradient(
+            180deg,
+            rgba(0, 0, 0, 0.92) 0%,
+            rgba(0, 0, 0, 0.72) 42%,
+            rgba(0, 0, 0, 0.28) 78%,
+            transparent 100%
+          );
+          -webkit-mask-size: 100% 100%;
+          mask-size: 100% 100%;
+          transition: opacity 180ms ease;
+        }
+        .studio-polish main.studio-composer-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          opacity: 0;
+          background: radial-gradient(
+            120% 90% at 50% 20%,
+            color-mix(in srgb, var(--mos-page, #f5f5f7) 18%, transparent) 0%,
+            color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 58%,
+            var(--mos-plate, #ececf0) 100%
+          );
           transition: opacity 180ms ease;
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
+          opacity: 0.48;
+        }
+        .studio-polish.is-studio-bg-ready main.studio-composer-bg::after {
           opacity: 1;
         }
-        [data-appearance="light"] .studio-polish main.studio-composer-bg::before {
-          opacity: 0;
+        [data-appearance="dark"] .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
+          opacity: 0.58;
         }
         @media (max-width: 899px) {
-          /* Extend vignette under the bottom nav so the mask isn't spaced above the bar */
-          .studio-polish.is-studio-mobile main.studio-composer-bg::before {
+          /* Extend banner mask under the bottom nav */
+          .studio-polish.is-studio-mobile main.studio-composer-bg::before,
+          .studio-polish.is-studio-mobile main.studio-composer-bg::after {
             bottom: calc(-1 * (var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px)));
           }
         }
         .studio-polish main > :not(style) {
           position: relative;
+          z-index: 1;
         }
         .studio-polish :where(.cursor-tree-row) {
           position: relative;
