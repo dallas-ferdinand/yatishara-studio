@@ -321,6 +321,19 @@ Offer banner/gallery media is **not** a flat "recent assets" grid. `OfferMediaEd
   `.marketplace-media-banner` (140px cover + L3 name bar + remove), gallery =
   `.marketplace-media-tile` with overlay remove. Memory: **753**.
 
+### Instant chrome (desktop + mobile)
+
+Studio must feel **native**, not like a website waiting to load:
+
+- **Sync tab/nav selection** — never wrap `setActiveTab` / overlay open in
+  `useTransition` (deferred paint reads as lag).
+- **Warm panes** — Feed already keepalive-mounts; Messages + Creative Network do
+  the same after first visit (switch back = show slot, no remount/resubscribe).
+- **Idle prefetch** — after auth, `preloadStudioHotPanes()` warms Feed / Network /
+  History / Profile chunks so first open isn’t a blank wait.
+- **Overlay motion** — app menu / history sheet rise ~110ms (not 220ms+).
+- Files dock + Back stack: see Mobile Generate Files dock. Memory: **786**.
+
 ### Mobile Generate Files dock (locked)
 
 Bottom-nav **Files** on Generate is an **in-flow flex dock** under Generate — not a

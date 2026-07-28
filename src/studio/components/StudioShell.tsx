@@ -79,7 +79,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, useCallback, memo, startTransition } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, memo } from "react";
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { mobileBackStack } from "@/studio/lib/mobileBackStack";
@@ -297,6 +297,17 @@ const AssistanceApprovalCard = dynamic(
   () => import("./guided-video/AssistanceApprovalCard").then((m) => m.AssistanceApprovalCard),
   { ssr: false },
 );
+
+/** Idle-prefetch panes users open from Generate so first switch isn't a chunk wait. */
+function preloadStudioHotPanes() {
+  void import("./ProfilePostViewer");
+  void import("./StudioCreativeNetworkPane");
+  void import("./StudioHistoryPanel");
+  void import("./PublicProfileView");
+  void import("./PostComposeTab");
+  void import("./StudioRenameDialog");
+  void import("./StudioListAssetPane");
+}
 
 const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
@@ -1161,7 +1172,6 @@ export function StudioShell({
   /** Synced from Creative Network context — openChatWith can't call the hook. */
   const cnModeRef = useRef("network");
   const [cnMode, setCnMode] = useState("network");
-  const [, startMobileTransition] = useTransition();
   const [customCursorEnabled, setCustomCursorEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
@@ -1250,6 +1260,25 @@ export function StudioShell({
   useEffect(() => {
     setPinnedFolders(loadPinnedFolders(explorerUserId));
   }, [explorerUserId]);
+
+  // Prefetch Feed / Network / History chunks after auth so first open isn't a spinner.
+  useEffect(() => {
+    if (!hasCurrentUser) return undefined;
+    let idleId = 0;
+    let timeoutId = 0;
+    const run = () => preloadStudioHotPanes();
+    if (typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(run, { timeout: 2200 });
+    } else {
+      timeoutId = window.setTimeout(run, 700);
+    }
+    return () => {
+      if (idleId && typeof window.cancelIdleCallback === "function") {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [hasCurrentUser]);
 
   // Keep asset wallpaper signed URL fresh after auth / on boot.
   useEffect(() => {
@@ -3004,6 +3033,7 @@ export function StudioShell({
   }
 
   function openFeed() {
+    void import("./ProfilePostViewer");
     const existing = openTabs.find((tab) => tab.startsWith("feed:"));
     const current = parseFeedTabKey(existing || activeTab);
     openFeedTab("home", current?.mode ?? "forYou");
@@ -3282,6 +3312,7 @@ export function StudioShell({
   }
 
   function openNetworkTab(opts = {}) {
+    void import("./StudioCreativeNetworkPane");
     setSettingsOpen(false);
     if (isMobile) setMobileSection("network");
     openTab(NETWORK_TAB);
@@ -3509,7 +3540,8 @@ export function StudioShell({
   const handleTabSelect = useCallback((key) => {
     setFeedModeMenuOpen(false);
     setFeedModeMenuKey(null);
-    startMobileTransition(() => setActiveTab(key));
+    // Sync — useTransition deferred the active tab paint and felt like a website load.
+    setActiveTab(key);
   }, []);
 
   const handleFeedTabReselect = useCallback((key) => {
@@ -7509,11 +7541,11 @@ export function StudioShell({
           transform: none;
           filter: none;
           isolation: auto;
-          animation: studio-mobile-app-menu-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+          animation: studio-mobile-app-menu-rise 110ms cubic-bezier(0.22, 1, 0.36, 1);
           transition:
-            height 240ms cubic-bezier(0.22, 1, 0.36, 1),
-            max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
-            border-radius 220ms ease;
+            height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 120ms ease;
           will-change: height;
         }
         .studio-mobile-app-menu-sheet.is-entered {
@@ -7528,8 +7560,8 @@ export function StudioShell({
         }
         .studio-mobile-app-menu-sheet.is-settling {
           transition:
-            height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-            border-radius 220ms ease;
+            height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 120ms ease;
         }
         @keyframes studio-mobile-app-menu-rise {
           from {
@@ -16276,17 +16308,22 @@ export function StudioShell({
           min-height: 0;
           pointer-events: none;
         }
-        .studio-social-keepalive-slot {
+        .studio-social-keepalive-slot,
+        .studio-pane-keepalive-slot {
           position: absolute;
           inset: 0;
           z-index: 0;
           opacity: 0;
           pointer-events: none;
+          /* Skip paint for covered panes; React + Convex stay warm. */
+          content-visibility: hidden;
         }
-        .studio-social-keepalive-slot.is-active {
+        .studio-social-keepalive-slot.is-active,
+        .studio-pane-keepalive-slot.is-active {
           z-index: 2;
           opacity: 1;
           pointer-events: auto;
+          content-visibility: visible;
         }
         .studio-pane-foreground {
           position: relative;
@@ -16327,11 +16364,11 @@ export function StudioShell({
           background: var(--mos-plate, var(--mos-panel, #ececf0));
           box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.14);
           overflow: hidden;
-          animation: studio-history-mobile-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+          animation: studio-history-mobile-rise 110ms cubic-bezier(0.22, 1, 0.36, 1);
           transition:
-            height 240ms cubic-bezier(0.22, 1, 0.36, 1),
-            max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
-            border-radius 220ms ease;
+            height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 120ms ease;
           will-change: height;
         }
         .studio-history-mobile-sheet.is-entered {
@@ -16346,8 +16383,8 @@ export function StudioShell({
         }
         .studio-history-mobile-sheet.is-settling {
           transition:
-            height 220ms cubic-bezier(0.22, 1, 0.36, 1),
-            border-radius 220ms ease;
+            height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+            border-radius 120ms ease;
         }
         @keyframes studio-history-mobile-rise {
           from {
@@ -18483,6 +18520,7 @@ export function StudioShell({
                   <button
                     className={`studio-settings-pill studio-settings-trigger${historyOpen ? " is-active" : ""}`}
                     onClick={() => {
+                      void import("./StudioHistoryPanel");
                       setMobileAppMenuOpen(false);
                       setSettingsOpen(false);
                       setHistoryOpen((open) => !open);
@@ -18993,7 +19031,8 @@ export function StudioShell({
             setMobileAppMenuOpen(false);
             openCreditsPane();
           }}
-          onOpenHistory={() => {
+            onOpenHistory={() => {
+            void import("./StudioHistoryPanel");
             setMobileAppMenuOpen(false);
             setSettingsOpen(false);
             setHistoryOpen(true);
@@ -24308,12 +24347,20 @@ function ActivePane({
     [openTabs],
   );
   const isSocialActive = Boolean(feedPostId || profilePostMatch || profileUsername);
+  const isMessagesActive =
+    typeof activeTab === "string" && activeTab.startsWith("messages:");
+  const isNetworkActive =
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
+  const isKeepaliveCovering = isSocialActive || isMessagesActive || isNetworkActive;
   const needsSocialKeepalive =
     isSocialActive || keptFeedTabs.length > 0 || keptProfileTabs.length > 0;
   // Defer feed/profile keepalive until after first paint so authenticated boot
   // doesn't instantiate ProfilePostViewer during the shell's critical path.
   // Only mount when a social tab actually exists — avoid unconditional rAF mount.
   const [socialMounted, setSocialMounted] = useState(false);
+  const [messagesMounted, setMessagesMounted] = useState(false);
+  const [networkMounted, setNetworkMounted] = useState(false);
   useEffect(() => {
     if (!needsSocialKeepalive) {
       setSocialMounted(false);
@@ -24326,6 +24373,12 @@ function ActivePane({
     const id = window.requestAnimationFrame(() => setSocialMounted(true));
     return () => window.cancelAnimationFrame(id);
   }, [isSocialActive, needsSocialKeepalive]);
+  useEffect(() => {
+    if (isMessagesActive) setMessagesMounted(true);
+  }, [isMessagesActive]);
+  useEffect(() => {
+    if (isNetworkActive) setNetworkMounted(true);
+  }, [isNetworkActive]);
 
   const socialKeepalive = !socialMounted ? null : (
     <div className="studio-social-keepalive" aria-hidden={!isSocialActive}>
@@ -24397,14 +24450,60 @@ function ActivePane({
     </div>
   );
 
+  const messagesKeepalive = !messagesMounted ? null : (
+    <div
+      className={`studio-pane-keepalive-slot${isMessagesActive ? " is-active" : ""}`}
+      data-tab="messages"
+      inert={!isMessagesActive}
+      aria-hidden={!isMessagesActive}
+    >
+      {showDmChatListWhenEmpty && !dmConversationId ? (
+        <MobileMessagesInbox
+          onSelectConversation={onSelectDmConversation}
+          onStartChat={onOpenChat}
+        />
+      ) : (
+        <StudioMessagesPane
+          conversationId={dmConversationId}
+          onSelectConversation={onSelectDmConversation}
+          onOpenProfile={onOpenPublicProfile}
+          onOpenFeedPost={
+            onOpenProfilePost
+              ? (postId) => onOpenProfilePost("", postId)
+              : undefined
+          }
+          onOpenOffersJobs={onOpenOffersJobs}
+          showChatListWhenEmpty={showDmChatListWhenEmpty}
+          onRequestPickAsset={onRequestPickAsset}
+        />
+      )}
+    </div>
+  );
+
+  const networkKeepalive = !networkMounted ? null : (
+    <div
+      className={`studio-pane-keepalive-slot${isNetworkActive ? " is-active" : ""}`}
+      data-tab="network"
+      inert={!isNetworkActive}
+      aria-hidden={!isNetworkActive}
+    >
+      <StudioCreativeNetworkPane
+        onOpenCredits={onOpenCredits ?? onOpenSettings}
+        creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
+      />
+    </div>
+  );
+
   function wrapPane(content) {
     return (
       <div className="studio-active-pane">
         {socialKeepalive}
+        {messagesKeepalive}
+        {networkKeepalive}
         {content ? (
           <div
-            className={`studio-pane-foreground${isSocialActive ? " is-covered" : ""}`}
-            aria-hidden={isSocialActive || undefined}
+            className={`studio-pane-foreground${isKeepaliveCovering ? " is-covered" : ""}`}
+            aria-hidden={isKeepaliveCovering || undefined}
           >
             {content}
           </div>
@@ -24547,30 +24646,8 @@ function ActivePane({
     );
   }
   if (activeTab.startsWith("messages:")) {
-    // Mobile inbox: full Messages sidebar (search + labels + filters), not the bare list.
-    if (showDmChatListWhenEmpty && !dmConversationId) {
-      return wrapPane(
-        <MobileMessagesInbox
-          onSelectConversation={onSelectDmConversation}
-          onStartChat={onOpenChat}
-        />,
-      );
-    }
-    return wrapPane(
-      <StudioMessagesPane
-        conversationId={dmConversationId}
-        onSelectConversation={onSelectDmConversation}
-        onOpenProfile={onOpenPublicProfile}
-        onOpenFeedPost={
-          onOpenProfilePost
-            ? (postId) => onOpenProfilePost("", postId)
-            : undefined
-        }
-        onOpenOffersJobs={onOpenOffersJobs}
-        showChatListWhenEmpty={showDmChatListWhenEmpty}
-        onRequestPickAsset={onRequestPickAsset}
-      />,
-    );
+    // Stay mounted in messagesKeepalive — no remount / resubscribe on tab switch.
+    return wrapPane(null);
   }
   if (feedPostId || profilePostMatch || profileUsername) {
     // Feed / profile stay mounted in socialKeepalive — no remount on tab switch.
@@ -24634,12 +24711,8 @@ function ActivePane({
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"))
   ) {
-    return wrapPane(
-      <StudioCreativeNetworkPane
-        onOpenCredits={onOpenCredits ?? onOpenSettings}
-        creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
-      />,
-    );
+    // Stay mounted in networkKeepalive — no remount on tab switch.
+    return wrapPane(null);
   }
   if (billingTab) {
     return wrapPane(
