@@ -7484,21 +7484,27 @@ export function StudioShell({
           background-repeat: no-repeat;
           -webkit-mask-image: linear-gradient(
             180deg,
-            rgba(0, 0, 0, 0.92) 0%,
-            rgba(0, 0, 0, 0.72) 42%,
-            rgba(0, 0, 0, 0.28) 78%,
+            #000 0%,
+            rgba(0, 0, 0, 0.94) 18%,
+            rgba(0, 0, 0, 0.78) 36%,
+            rgba(0, 0, 0, 0.52) 54%,
+            rgba(0, 0, 0, 0.28) 70%,
+            rgba(0, 0, 0, 0.12) 84%,
             transparent 100%
           );
           mask-image: linear-gradient(
             180deg,
-            rgba(0, 0, 0, 0.92) 0%,
-            rgba(0, 0, 0, 0.72) 42%,
-            rgba(0, 0, 0, 0.28) 78%,
+            #000 0%,
+            rgba(0, 0, 0, 0.94) 18%,
+            rgba(0, 0, 0, 0.78) 36%,
+            rgba(0, 0, 0, 0.52) 54%,
+            rgba(0, 0, 0, 0.28) 70%,
+            rgba(0, 0, 0, 0.12) 84%,
             transparent 100%
           );
           -webkit-mask-size: 100% 100%;
           mask-size: 100% 100%;
-          transition: opacity 180ms ease;
+          transition: opacity 220ms ease;
         }
         .studio-polish main.studio-composer-bg::after {
           content: "";
@@ -7507,22 +7513,30 @@ export function StudioShell({
           z-index: 0;
           pointer-events: none;
           opacity: 0;
-          background: radial-gradient(
-            120% 90% at 50% 20%,
-            color-mix(in srgb, var(--mos-page, #f5f5f7) 18%, transparent) 0%,
-            color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 58%,
-            var(--mos-plate, #ececf0) 100%
-          );
-          transition: opacity 180ms ease;
+          background:
+            linear-gradient(
+              180deg,
+              color-mix(in srgb, var(--mos-page, #f5f5f7) 8%, transparent) 0%,
+              color-mix(in srgb, var(--mos-plate, #ececf0) 28%, transparent) 38%,
+              color-mix(in srgb, var(--mos-plate, #ececf0) 72%, transparent) 68%,
+              var(--mos-plate, #ececf0) 100%
+            ),
+            radial-gradient(
+              130% 100% at 50% 18%,
+              color-mix(in srgb, var(--mos-page, #f5f5f7) 22%, transparent) 0%,
+              color-mix(in srgb, var(--mos-plate, #ececf0) 55%, transparent) 52%,
+              transparent 78%
+            );
+          transition: opacity 220ms ease;
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
-          opacity: 0.48;
+          opacity: 0.72;
         }
         .studio-polish.is-studio-bg-ready main.studio-composer-bg::after {
           opacity: 1;
         }
         [data-appearance="dark"] .studio-polish.is-studio-bg-ready main.studio-composer-bg::before {
-          opacity: 0.58;
+          opacity: 0.82;
         }
         @media (max-width: 899px) {
           /* Extend banner mask under the bottom nav */
