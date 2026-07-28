@@ -906,11 +906,20 @@ select.cursor-select:focus {
   place-items: center;
   background: color-mix(in srgb, var(--mos-text-bright, #fff) 5%, transparent);
   animation: none;
+  overflow: visible;
+}
+
+.desk-file-thumb-skeleton--logo .media-load-frame-wave,
+.desk-file-thumb-skeleton--logo .media-load-frame-wave.is-ring {
+  position: relative;
+  inset: auto;
+  width: var(--logo-loader-ring, 44px);
+  height: var(--logo-loader-ring, 44px);
+  overflow: visible;
 }
 
 .desk-file-thumb-skeleton--logo .logo-loader {
-  transform: scale(0.85);
-  transform-origin: center;
+  overflow: visible;
 }
 
 .desk-file-thumb-video-wrap {
