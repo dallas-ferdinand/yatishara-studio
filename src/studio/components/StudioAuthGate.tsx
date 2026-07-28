@@ -1183,11 +1183,11 @@ function AuthFrame({
           display: flex;
           align-items: center;
           gap: 10px;
-          min-height: 36px;
+          min-height: 42px;
           width: 100%;
-          padding: 0 12px;
+          padding: 0 16px;
           border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 90%, transparent);
-          border-radius: 10px;
+          border-radius: 999px;
           background: #ffffff;
           box-shadow: none;
           -webkit-backdrop-filter: none;
@@ -1201,13 +1201,14 @@ function AuthFrame({
           align-items: stretch;
           gap: 4px;
           min-height: 0;
-          padding: 10px 12px;
+          padding: 10px 16px;
+          border-radius: 18px;
           text-align: left;
         }
         .studio-auth-field.is-code {
           justify-content: center;
-          min-height: 44px;
-          padding: 0 14px;
+          min-height: 42px;
+          padding: 0 16px;
           font-size: 1.05rem;
           font-weight: 650;
           letter-spacing: 0.22em;
