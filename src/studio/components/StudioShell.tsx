@@ -9221,35 +9221,37 @@ export function StudioShell({
         .studio-settings-horizontal-menu::-webkit-scrollbar {
           display: none;
         }
+        /* Same language as admin/CN head tabs: plain labels; pill only on selected. */
         .studio-settings-horizontal-menu button {
           display: inline-flex;
           flex: 0 0 auto;
-          min-height: 28px;
-          height: 28px;
+          min-height: 24px;
+          height: 24px;
           align-items: center;
           justify-content: center;
-          gap: 4px;
-          border: 1px solid var(--studio-composer-glass-border, var(--color-cursor-border-soft));
+          gap: 6px;
+          border: 1px solid transparent;
           border-radius: 999px;
-          background: var(--studio-composer-glass-muted, color-mix(in srgb, var(--mos-surface) 64%, transparent));
-          padding: 0 12px;
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 76%, transparent);
-          font-size: 11px;
-          font-weight: 650;
+          background: transparent;
+          padding: 0 10px;
+          color: var(--color-cursor-muted);
+          font-size: 12px;
+          font-weight: 600;
           font-family: inherit;
           line-height: 1;
+          white-space: nowrap;
           cursor: pointer;
           transition:
-            border-color var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease),
-            color var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease),
-            background var(--studio-motion-fast, 120ms) var(--studio-motion-ease, ease);
+            border-color 160ms ease,
+            color 160ms ease,
+            background 160ms ease;
         }
         .studio-settings-horizontal-menu button:hover {
           color: var(--color-cursor-text-bright);
         }
         .studio-settings-horizontal-menu button.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 40%, transparent);
-          background: color-mix(in srgb, var(--cursor-accent) 14%, var(--mos-surface));
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
           color: var(--color-cursor-text-bright);
         }
         .studio-settings-workspace-body {

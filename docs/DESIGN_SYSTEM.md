@@ -313,6 +313,11 @@ second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
 `studio-dm-assign-row` + checkbox (same as Assign labels). Layout-only helpers live in
 `studio-messages.css` under `.studio-dm-peer-*`. Memory: **745**.
 
+**Settings horizontal section menu** (`.studio-settings-horizontal-menu`) matches the
+same head-tab language: idle labels are plain (transparent, muted); **only**
+`.is-active` gets the accent pill. Never glass-fill every section chip. Same rule as
+`studio-admin-head-tab` / `studio-cn-head-tab`.
+
 Inside that sidebar `cursor-settings-action` is **full-width** — never use it for an inline
 action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
 `.studio-dm-peer-offer-card`: an ellipsised title row (`.studio-dm-peer-card-head` +
