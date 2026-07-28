@@ -1244,13 +1244,45 @@ export function StudioShell({
   const syncedBriefAttachmentsRevisionRef = useRef(null);
   const currentUser = useQuery(api.users.current, {});
   const hasCurrentUser = currentUser !== undefined;
+  const isGenerateSurface =
+    typeof activeTab === "string" &&
+    (activeTab.startsWith("composer:") ||
+      activeTab.startsWith("thread:") ||
+      activeTab.startsWith("create:") ||
+      activeTab.startsWith("edit:") ||
+      activeTab.startsWith("videoEdit:") ||
+      activeTab.startsWith("asset:") ||
+      activeTab.startsWith("document:") ||
+      activeTab.startsWith("element:") ||
+      activeTab.startsWith("listAsset:") ||
+      activeTab.startsWith("post:compose:") ||
+      (!activeTab.startsWith("messages:") &&
+        !activeTab.startsWith("feed:") &&
+        !activeTab.startsWith("profile:") &&
+        !activeTab.startsWith("profilePost:") &&
+        !activeTab.startsWith("network:") &&
+        !activeTab.startsWith("offers:") &&
+        !activeTab.startsWith("admin:")));
+  const needsComposerCatalog =
+    isGenerateSurface || Boolean(activeTab?.startsWith("thread:"));
+  const needsThreadsList =
+    historyOpen ||
+    Boolean(activeTab?.startsWith("thread:")) ||
+    openTabs.some((tab) => tab.startsWith("thread:"));
+  const needsSellerListings =
+    settingsOpen ||
+    Boolean(activeTab?.startsWith("network:")) ||
+    Boolean(activeTab?.startsWith("offers:")) ||
+    openTabs.some(
+      (tab) => tab.startsWith("network:") || tab.startsWith("offers:"),
+    );
   const mySellerStatus = useQuery(
     api.marketplace.getMySellerStatus,
     hasCurrentUser ? {} : "skip",
   );
   const myAssetListings = useQuery(
     api.assetStore.listMyListings,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsSellerListings ? {} : "skip",
   );
   const explorerUserId = currentUser?._id ?? null;
   const [pinnedFolders, setPinnedFolders] = useState(() =>
@@ -1581,7 +1613,10 @@ export function StudioShell({
     api.elements.list,
     hasCurrentUser ? (isTrashBrowse ? { includeDeleted: true } : {}) : "skip",
   );
-  const threads = useQuery(api.generation.listThreads, hasCurrentUser ? {} : "skip");
+  const threads = useQuery(
+    api.generation.listThreads,
+    hasCurrentUser && needsThreadsList ? {} : "skip",
+  );
   const activeThreadId = activeTab.startsWith("thread:")
     ? activeTab.slice("thread:".length)
     : null;
@@ -1609,7 +1644,7 @@ export function StudioShell({
   );
   const assistanceFeatureEnabled = useQuery(
     api.guidedVideoLite.featureEnabled,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser && needsComposerCatalog ? {} : "skip",
   );
   const guidedVideoTypes = useQuery(
     api.guidedVideoLite.listVideoTypes,
@@ -1929,7 +1964,10 @@ export function StudioShell({
       (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
     );
   }, [activeFolderResultAssets, assetPreviewUrls, assets]);
-  const styleSheets = useQuery(api.elements.listStyleSheets, hasCurrentUser ? {} : "skip");
+  const styleSheets = useQuery(
+    api.elements.listStyleSheets,
+    hasCurrentUser && needsComposerCatalog ? {} : "skip",
+  );
   const styleSheetSheetAssetIds = useMemo(
     () =>
       [
@@ -2067,15 +2105,21 @@ export function StudioShell({
   );
   const presets = useQuery(
     api.stylePresets.listComposerPresets,
-    hasCurrentUser
+    hasCurrentUser && needsComposerCatalog
       ? {
           expiresUnix: assetUrlExpiresUnix,
         }
       : "skip",
   );
   const setActiveStyleSheetMutation = useMutation(api.users.setActiveStyleSheet);
-  const scriptTypes = useQuery(api.composerCatalog.listScriptTypes, hasCurrentUser ? {} : "skip");
-  const referenceIntents = useQuery(api.composerCatalog.listReferenceIntents, hasCurrentUser ? {} : "skip");
+  const scriptTypes = useQuery(
+    api.composerCatalog.listScriptTypes,
+    hasCurrentUser && needsComposerCatalog ? {} : "skip",
+  );
+  const referenceIntents = useQuery(
+    api.composerCatalog.listReferenceIntents,
+    hasCurrentUser && needsComposerCatalog ? {} : "skip",
+  );
   const attachedScriptMarkdown = useMemo(
     () =>
       attachments
@@ -7832,6 +7876,14 @@ export function StudioShell({
           overflow: hidden;
           padding: 0;
           gap: 0;
+        }
+        /* Skip content-visibility deferral in the dock — first paint must be full. */
+        .studio-files-dock .desk-file-list-row,
+        .studio-files-dock .desk-file-preview-item,
+        .studio-files-mobile-sheet .desk-file-list-row,
+        .studio-files-mobile-sheet .desk-file-preview-item {
+          content-visibility: visible;
+          contain-intrinsic-size: none;
         }
         @media (prefers-reduced-motion: reduce) {
           .studio-files-dock {

@@ -331,6 +331,11 @@ Studio must feel **native**, not like a website waiting to load:
   the same after first visit (switch back = show slot, no remount/resubscribe).
 - **Idle prefetch** — after auth, `preloadStudioHotPanes()` warms Feed / Network /
   History / Profile chunks so first open isn’t a blank wait.
+- **Messages instant open** — never show “Loading…” for inbox/thread. Use
+  `dmClientCache` (session + memory) + warm `listMessages` for the top chats in
+  the sidebar; quiet pending spacer only when there is no cache yet.
+- **Gate Shell Convex** — skip composer catalog / threads / seller listings until
+  that surface is active (do **not** split Shell into components for this).
 - **Overlay motion** — app menu / history sheet rise ~110ms (not 220ms+).
 - Files dock + Back stack: see Mobile Generate Files dock. Memory: **786**.
 

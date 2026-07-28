@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useQueries } from "convex/react";
 import {
   MessageCircle,
   MessagesSquare,
@@ -52,6 +52,12 @@ import {
   StudioDmConversationRow,
   type DmConversationId,
 } from "./StudioMessagesPane";
+import {
+  dmLiveOrCached,
+  readDmConversations,
+  rememberDmConversations,
+  rememberDmMessages,
+} from "@/studio/lib/dmClientCache";
 import "./studio-messages.css";
 
 type LabelId = Id<"dmLabels">;
@@ -110,10 +116,45 @@ export function StudioMessagesSidebar({
   const labels = useQuery(api.dmLabels.listMine, {});
   const removeLabel = useMutation(api.dmLabels.remove);
   const ackDelivered = useMutation(api.dms.ackDelivered);
-  const conversations = useQuery(api.dms.listMyConversations, {
+  const conversationsLive = useQuery(api.dms.listMyConversations, {
     expiresUnix,
     labelId: activeLabelId ?? undefined,
   });
+  useEffect(() => {
+    rememberDmConversations(conversationsLive, activeLabelId);
+  }, [activeLabelId, conversationsLive]);
+  const { data: conversations } = dmLiveOrCached(
+    conversationsLive,
+    readDmConversations(activeLabelId),
+  );
+
+  // Warm recent threads so opening a chat paints instantly (Convex + client cache).
+  const warmMessageQueries = useMemo(() => {
+    if (!conversations?.length) return {};
+    const queries: Record<
+      string,
+      {
+        query: typeof api.dms.listMessages;
+        args: { conversationId: DmConversationId; expiresUnix: number };
+      }
+    > = {};
+    for (const row of conversations.slice(0, 8)) {
+      queries[`dm:${row.conversationId}`] = {
+        query: api.dms.listMessages,
+        args: { conversationId: row.conversationId, expiresUnix },
+      };
+    }
+    return queries;
+  }, [conversations, expiresUnix]);
+  const warmMessageResults = useQueries(warmMessageQueries);
+  useEffect(() => {
+    for (const [key, result] of Object.entries(warmMessageResults)) {
+      if (result === undefined || result instanceof Error) continue;
+      const conversationId = key.slice("dm:".length) as DmConversationId;
+      rememberDmMessages(conversationId, result);
+    }
+  }, [warmMessageResults]);
+
   const searchResults = useQuery(
     api.dms.searchSidebar,
     searching
@@ -347,7 +388,7 @@ export function StudioMessagesSidebar({
           />
         ) : searching ? (
           searchResults === undefined ? (
-            <p className="studio-dm-empty">Loading…</p>
+            <div className="studio-dm-scroll-pending" aria-hidden="true" />
           ) : searchResults.people.length === 0 &&
             searchResults.chats.length === 0 &&
             searchResults.messages.length === 0 &&
@@ -536,15 +577,15 @@ export function StudioMessagesSidebar({
               </SearchResultSection>
             </div>
           )
-        ) : conversations === undefined || filteredConversations === undefined ? (
-          <p className="studio-dm-empty">Loading…</p>
+        ) : conversations == null ? (
+          <div className="studio-dm-scroll-pending" aria-hidden="true" />
         ) : conversations.length === 0 ? (
           <p className="studio-dm-empty">
             {activeLabelId
               ? "No chats in this label yet. Right-click a chat to add labels."
               : "Search people above or tap Message on a profile."}
           </p>
-        ) : filteredConversations.length === 0 ? (
+        ) : !filteredConversations || filteredConversations.length === 0 ? (
           <p className="studio-dm-empty">
             {chatFilter === "unread"
               ? "No unread chats — you’re all caught up."

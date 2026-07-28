@@ -210,6 +210,16 @@
   display: none;
 }
 
+/* Quiet placeholder while Convex catches up — never show "Loading…" text. */
+.studio-dm-scroll-pending {
+  min-height: 48px;
+  flex: 1 1 auto;
+}
+
+.studio-dm-scroll.is-pending {
+  opacity: 0.92;
+}
+
 /* Full-width message column (WhatsApp main pane). */
 .studio-dm-messages {
   display: grid;
@@ -1121,9 +1131,8 @@
   right: 2px;
   width: 18px;
   height: 18px;
-  background: color-mix(in srgb, var(--mos-page) 78%, transparent);
+  background: color-mix(in srgb, var(--mos-page) 88%, transparent);
   color: var(--color-cursor-text-bright);
-  backdrop-filter: blur(4px);
 }
 
 .studio-dm-attach-badge {

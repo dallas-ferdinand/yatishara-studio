@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -37,6 +36,13 @@ import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
+import {
+  dmLiveOrCached,
+  readDmConversations,
+  readDmMessages,
+  rememberDmConversations,
+  rememberDmMessages,
+} from "@/studio/lib/dmClientCache";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
@@ -773,13 +779,32 @@ export function StudioMessagesPane({
       peerSidebarOpen ? "1" : "0",
     );
   }, [embeddedInRail, peerSidebarOpen]);
-  const conversations = useQuery(api.dms.listMyConversations, { expiresUnix });
-  const messages = useQuery(
+  const conversationsLive = useQuery(api.dms.listMyConversations, { expiresUnix });
+  const messagesLive = useQuery(
     api.dms.listMessages,
     conversationId ? { conversationId, expiresUnix } : "skip",
   );
-  // Keep typing urgent — defer re-painting the message list while the draft updates.
-  const deferredMessages = useDeferredValue(messages);
+
+  useEffect(() => {
+    rememberDmConversations(conversationsLive);
+  }, [conversationsLive]);
+  useEffect(() => {
+    if (conversationId) rememberDmMessages(conversationId, messagesLive);
+  }, [conversationId, messagesLive]);
+
+  const conversationsCached = readDmConversations<typeof conversationsLive>();
+  const messagesCached = conversationId
+    ? readDmMessages<typeof messagesLive>(conversationId)
+    : null;
+  const { data: conversations } = dmLiveOrCached(
+    conversationsLive,
+    conversationsCached ?? null,
+  );
+  const { data: messages, pending: messagesPending } = dmLiveOrCached(
+    messagesLive,
+    messagesCached ?? null,
+  );
+
   const send = useMutation(api.dms.sendMessage);
   const markRead = useMutation(api.dms.markRead);
   const ackDelivered = useMutation(api.dms.ackDelivered);
@@ -1246,9 +1271,7 @@ export function StudioMessagesPane({
       return (
         <div className="studio-dm-pane">
           <div className="studio-dm-list-host">
-            {conversations === undefined ? (
-              <p className="studio-dm-empty">Loading…</p>
-            ) : conversations.length === 0 ? (
+            {conversations == null || conversations.length === 0 ? (
               <div className="studio-dm-empty-state">
                 <MessageCircle aria-hidden="true" />
                 <strong>No chats yet</strong>
@@ -1381,18 +1404,23 @@ export function StudioMessagesPane({
         ) : null}
       </header>
 
-      <div className="studio-dm-scroll" ref={scrollRef}>
-        {messages === undefined ? (
-          <p className="studio-dm-empty">Loading…</p>
-        ) : messages.length === 0 ? (
-          <div className="studio-dm-empty-state">
-            <MessageCircle aria-hidden="true" />
-            <strong>Say hi</strong>
-            <p>This is the start of your chat with {peerLabel}.</p>
-          </div>
+      <div
+        className={`studio-dm-scroll${messagesPending && !messages?.length ? " is-pending" : ""}`}
+        ref={scrollRef}
+      >
+        {messages == null || messages.length === 0 ? (
+          messagesPending && messages == null ? (
+            <div className="studio-dm-scroll-pending" aria-hidden="true" />
+          ) : (
+            <div className="studio-dm-empty-state">
+              <MessageCircle aria-hidden="true" />
+              <strong>Say hi</strong>
+              <p>This is the start of your chat with {peerLabel}.</p>
+            </div>
+          )
         ) : (
           <div className="studio-dm-messages">
-            {(deferredMessages ?? messages).map((message) => {
+            {messages.map((message) => {
               const day = dayLabel(message.createdAt);
               const showDay = day !== lastDay;
               lastDay = day;
