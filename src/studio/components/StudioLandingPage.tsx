@@ -387,7 +387,18 @@ function measureLandingMenuPeek(root: HTMLElement | null, sheet: HTMLElement | n
   return Math.min(h || Math.min(window.innerHeight * 0.42, 320), full * 0.92);
 }
 
-export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
+export function StudioLandingPage({
+  onSignIn,
+  onCloseAuth,
+  authOpen = false,
+  authSlot = null,
+}: {
+  onSignIn: () => void;
+  onCloseAuth?: () => void;
+  /** When true, auth fills the content stage; chrome (header / mobile bottom nav) stays. */
+  authOpen?: boolean;
+  authSlot?: ReactNode;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const menuSheetRef = useRef<HTMLDivElement>(null);
@@ -417,6 +428,8 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     moved: boolean;
   } | null>(null);
   const menuScrollSuppressClickRef = useRef(false);
+  /** Section id to scroll after closing the auth stage. */
+  const pendingScrollIdRef = useRef<string | null>(null);
   const [activeDeck, setActiveDeck] = useState(0);
   const year = new Date().getFullYear();
 
@@ -445,9 +458,35 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
 
   useMobileBackLayer("landing-menu", menuOpen, closeMenu);
 
+  const closeAuth = () => {
+    onCloseAuth?.();
+  };
+
+  const openAuth = () => {
+    closeMenu();
+    onSignIn();
+  };
+
+  useMobileBackLayer("landing-auth", authOpen, closeAuth);
+
+  useEffect(() => {
+    if (!authOpen || !onCloseAuth) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCloseAuth();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [authOpen, onCloseAuth]);
+
   const scrollToId = (id: string) => {
     if (menuScrollSuppressClickRef.current) {
       menuScrollSuppressClickRef.current = false;
+      return;
+    }
+    if (authOpen) {
+      pendingScrollIdRef.current = id;
+      closeAuth();
+      closeMenu();
       return;
     }
     const scroller = mainRef.current;
@@ -464,6 +503,21 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
     });
     closeMenu();
   };
+
+  useEffect(() => {
+    if (authOpen) return;
+    const id = pendingScrollIdRef.current;
+    if (!id) return;
+    pendingScrollIdRef.current = null;
+    const scroller = mainRef.current;
+    const target = scroller?.querySelector<HTMLElement>(`#${id}`);
+    if (!scroller || !target) return;
+    const top =
+      target.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop;
+    scroller.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+  }, [authOpen]);
 
   const onMenuListPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     menuListGestureRef.current = {
@@ -697,7 +751,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
   return (
     <div
       ref={rootRef}
-      className={`studio-landing is-deck${menuOpen ? " is-menu-open" : ""}`}
+      className={`studio-landing is-deck${menuOpen ? " is-menu-open" : ""}${authOpen ? " is-auth-open" : ""}`}
       data-appearance="light"
     >
       <header className="studio-landing-head">
@@ -723,9 +777,9 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
           <button
             type="button"
             className="studio-landing-head-btn is-primary"
-            onClick={onSignIn}
+            onClick={authOpen ? closeAuth : openAuth}
           >
-            Sign in
+            {authOpen ? "Close" : "Sign in"}
           </button>
           <button
             type="button"
@@ -740,39 +794,41 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         </div>
       </header>
 
-      <aside className="studio-landing-deck-rail" aria-label="Swipe through sections">
-        <button
-          type="button"
-          className="studio-landing-deck-arrow"
-          aria-label="Previous section"
-          disabled={activeDeck <= 0}
-          onClick={() => scrollDeckBy(-1)}
-        >
-          <ChevronUp aria-hidden="true" />
-        </button>
-        <div className="studio-landing-deck-dots" role="tablist" aria-label="Sections">
-          {DECK_IDS.map((id, index) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-label={`Go to ${id}`}
-              aria-selected={index === activeDeck}
-              className={`studio-landing-deck-dot${index === activeDeck ? " is-active" : ""}`}
-              onClick={() => scrollToId(id)}
-            />
-          ))}
-        </div>
-        <button
-          type="button"
-          className="studio-landing-deck-arrow"
-          aria-label="Next section"
-          disabled={activeDeck >= DECK_IDS.length - 1}
-          onClick={() => scrollDeckBy(1)}
-        >
-          <ChevronDown aria-hidden="true" />
-        </button>
-      </aside>
+      {!authOpen ? (
+        <aside className="studio-landing-deck-rail" aria-label="Swipe through sections">
+          <button
+            type="button"
+            className="studio-landing-deck-arrow"
+            aria-label="Previous section"
+            disabled={activeDeck <= 0}
+            onClick={() => scrollDeckBy(-1)}
+          >
+            <ChevronUp aria-hidden="true" />
+          </button>
+          <div className="studio-landing-deck-dots" role="tablist" aria-label="Sections">
+            {DECK_IDS.map((id, index) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-label={`Go to ${id}`}
+                aria-selected={index === activeDeck}
+                className={`studio-landing-deck-dot${index === activeDeck ? " is-active" : ""}`}
+                onClick={() => scrollToId(id)}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            className="studio-landing-deck-arrow"
+            aria-label="Next section"
+            disabled={activeDeck >= DECK_IDS.length - 1}
+            onClick={() => scrollDeckBy(1)}
+          >
+            <ChevronDown aria-hidden="true" />
+          </button>
+        </aside>
+      ) : null}
 
       {menuOpen ? (
         <>
@@ -862,7 +918,22 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
         </>
       ) : null}
 
-      <main ref={mainRef} className="studio-landing-main">
+      {authOpen && authSlot ? (
+        <div
+          className="studio-landing-auth-stage"
+          role="region"
+          aria-label="Sign in"
+        >
+          {authSlot}
+        </div>
+      ) : null}
+
+      <main
+        ref={mainRef}
+        className="studio-landing-main"
+        hidden={authOpen}
+        aria-hidden={authOpen}
+      >
         <section
           id="overview"
           className="studio-landing-section is-hero"
@@ -878,7 +949,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               <Hl>hire a real creator</Hl> and pay them safely.
             </p>
             <div className="studio-landing-cta-row">
-              <button type="button" className="studio-landing-cta" onClick={onSignIn}>
+              <button type="button" className="studio-landing-cta" onClick={openAuth}>
                 Enter Studio
                 <ArrowRight aria-hidden="true" />
               </button>
@@ -1070,7 +1141,7 @@ export function StudioLandingPage({ onSignIn }: { onSignIn: () => void }) {
               sentence.
             </p>
             <div className="studio-landing-cta-with-aside">
-              <button type="button" className="studio-landing-cta" onClick={onSignIn}>
+              <button type="button" className="studio-landing-cta" onClick={openAuth}>
                 Sign in to Studio
                 <ArrowRight aria-hidden="true" />
               </button>

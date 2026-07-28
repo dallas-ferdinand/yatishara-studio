@@ -326,11 +326,12 @@ export function StudioAuthGate({
     <>
       <MobileBackStackHost />
       {showSignInScreen ? (
-        showAuthForm ? (
-          <StudioSignIn onBack={() => setShowAuthForm(false)} />
-        ) : (
-          <StudioLandingPage onSignIn={() => setShowAuthForm(true)} />
-        )
+        <StudioLandingPage
+          authOpen={showAuthForm}
+          onSignIn={() => setShowAuthForm(true)}
+          onCloseAuth={() => setShowAuthForm(false)}
+          authSlot={showAuthForm ? <StudioSignIn embedded /> : null}
+        />
       ) : null}
       {showCompleteAccount ? <StudioCompleteAccount currentUser={currentUser} /> : null}
       {showIntentChooser ? <StudioIntentChooser /> : null}
@@ -587,7 +588,14 @@ type SignInStep =
   | { contact: { kind: "email"; email: string }; phase: "email-code"; hasPassword: boolean }
   | ({ contact: { kind: "whatsapp"; phone: string }; phase: "whatsapp-code"; hasPassword: boolean } & WhatsAppCodeStep);
 
-function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
+function StudioSignIn({
+  onBack,
+  embedded = false,
+}: {
+  onBack?: () => void;
+  /** When true, fill landing content stage (chrome stays). */
+  embedded?: boolean;
+} = {}) {
   const { signIn } = useAuthActions();
   const convex = useConvex();
   const startWhatsApp = useMutation(api.whatsappAuth.start);
@@ -684,6 +692,7 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
 
   return (
     <AuthFrame
+      embedded={embedded}
       eyebrow="Yatishara Studio"
       title={
         step === "identify"
@@ -694,7 +703,9 @@ function StudioSignIn({ onBack }: { onBack?: () => void } = {}) {
               ? "Open WhatsApp"
               : "Sign in"
       }
-      onBack={onBack && step === "identify" ? onBack : undefined}
+      onBack={
+        embedded || !onBack || step !== "identify" ? undefined : onBack
+      }
     >
       <form
         className="studio-auth-form"
@@ -1077,20 +1088,28 @@ function AuthFrame({
   title,
   children,
   onBack,
+  embedded = false,
 }: {
   eyebrow: string;
   title: string;
   children?: ReactNode;
   onBack?: () => void;
+  /** Fill parent stage instead of owning the full viewport. */
+  embedded?: boolean;
 }) {
   const authThemeStyle = {
     "--studio-auth-accent": AUTH_ACCENT,
     "--studio-auth-accent-rgb": hexToRgbString(AUTH_ACCENT),
   } as CSSProperties;
+  const Wrapper = embedded ? "div" : "main";
 
   return (
-    <main
-      className="studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-8 sm:px-5 sm:py-10"
+    <Wrapper
+      className={
+        embedded
+          ? "studio-auth-theme studio-auth-embedded relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-auto px-4 py-6 sm:px-5 sm:py-8"
+          : "studio-auth-theme relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-8 sm:px-5 sm:py-10"
+      }
       data-appearance="light"
       data-auth-appearance="light"
       style={authThemeStyle}
@@ -1416,7 +1435,7 @@ function AuthFrame({
         </div>
         {children}
       </section>
-    </main>
+    </Wrapper>
   );
 }
 
