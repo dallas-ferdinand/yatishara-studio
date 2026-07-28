@@ -466,10 +466,6 @@ function StudioCompleteAccount({
 
   return (
     <AuthFrame title="Finish your account">
-      <p className="studio-auth-copy mt-3 text-sm">
-        Every Studio account needs first name, last name, email, and WhatsApp. You can change them later,
-        but you cannot remove email or phone.
-      </p>
       <form
         className="studio-auth-form"
         onSubmit={(event) => {
