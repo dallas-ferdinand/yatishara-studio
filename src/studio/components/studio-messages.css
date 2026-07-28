@@ -88,7 +88,7 @@
 .studio-dm-chat-peer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
@@ -120,6 +120,7 @@
   line-height: 1;
 }
 
+/* Match workspace tab label weight — not a bulky title. */
 .studio-dm-chat-peer-copy strong {
   display: inline-flex;
   align-items: center;
@@ -128,10 +129,11 @@
   max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 16px;
-  font-weight: 650;
-  line-height: 1.15;
-  color: var(--color-cursor-text-bright, var(--mos-text));
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--color-cursor-text, var(--mos-text));
 }
 
 .studio-dm-chat-head-tools {
@@ -179,30 +181,43 @@
   );
 }
 
-/* Match chat-head circle tools (back / peer toggle = 28px). */
+/* Match workspace tab thumb (.cursor-unified-tab-preview = 20px), not tool circles. */
 .studio-dm-chat-head .studio-profile-avatar {
-  width: 28px !important;
-  height: 28px !important;
-  font-size: 11px !important;
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  border: 0 !important;
+  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.studio-dm-chat-head .studio-profile-avatar-media {
+  background: color-mix(in srgb, var(--color-cursor-muted) 12%, transparent);
 }
 
 /* Typing pulse on avatar (replaces online dot while drafting). */
 .studio-dm-chat-peer-avatar-wrap .studio-dm-online-dot {
-  right: -1px;
-  bottom: -1px;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
 }
 
 .studio-dm-typing-dot {
   position: absolute;
-  right: -3px;
-  bottom: -2px;
+  right: -4px;
+  bottom: -3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  min-width: 16px;
-  height: 12px;
-  padding: 0 3px;
+  gap: 1.5px;
+  min-width: 14px;
+  height: 10px;
+  padding: 0 2px;
   border-radius: 999px;
   background: var(--mos-plate-strong, var(--mos-raised, #2a2a30));
   border: 1.5px solid var(--cursor-surface-raised, var(--mos-surface));
@@ -212,8 +227,8 @@
 
 .studio-dm-typing-dot > i {
   display: block;
-  width: 3px;
-  height: 3px;
+  width: 2px;
+  height: 2px;
   border-radius: 999px;
   background: currentColor;
   animation: studio-dm-typing-bounce 1s ease-in-out infinite;
