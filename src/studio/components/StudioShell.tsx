@@ -7309,17 +7309,6 @@ export function StudioShell({
         [data-appearance="light"] .studio-profile-menu-avatar {
           box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75) !important;
         }
-        .studio-profile-menu-popover {
-          position: absolute;
-          top: calc(100% + 8px);
-          right: 0;
-          z-index: 90;
-          min-width: 168px;
-        }
-        .studio-mobile-nav-tools .studio-profile-menu-popover {
-          top: auto;
-          bottom: calc(100% + 8px);
-        }
         /* Drag-armed feedback after short long-press (before context sheet). */
         .desk-file-list-row.is-drag-armed,
         .desk-file-grid-item.is-drag-armed,
@@ -18794,6 +18783,16 @@ export function StudioShell({
                 >
                   <Store className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isMessagesRail ? " is-active" : ""}`}
+                  onClick={openMessages}
+                  aria-label="Open messages"
+                  title="Messages"
+                  aria-pressed={isMessagesRail}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
@@ -18808,10 +18807,6 @@ export function StudioShell({
                   username={myPublicProfile?.username || sharedProfileAssets?.username}
                   isProfileTabActive={activeTab.startsWith("profile:")}
                   onViewProfile={openOwnProfile}
-                  onEditProfile={() => openSettingsTab("profile")}
-                  onOpenOffers={() => openNetworkTab()}
-                  onOpenMessages={openMessages}
-                  onSignOut={() => void signOut()}
                 />
                 {showHistory ? (
                   <button
@@ -19267,11 +19262,7 @@ export function StudioShell({
                 profile={myPublicProfile}
                 username={myPublicProfile?.username || sharedProfileAssets?.username}
                 isProfileTabActive={activeTab.startsWith("profile:")}
-                mode="direct"
                 onViewProfile={openOwnProfile}
-                onEditProfile={() => openSettingsTab("profile")}
-                onOpenOffers={() => openNetworkTab()}
-                onSignOut={() => void signOut()}
               />
               <button
                 type="button"
@@ -21708,20 +21699,14 @@ function StudioSidebarBrand() {
   );
 }
 
+/** Header avatar — click opens own profile (no dropdown). */
 function StudioProfileMenu({
   currentUser,
   profile,
   username,
   isProfileTabActive,
-  mode = "dropdown",
   onViewProfile,
-  onEditProfile,
-  onOpenOffers,
-  onOpenMessages,
-  onSignOut,
 }) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
   const avatarUrl = profile?.avatarUrl;
   const handle = String(username || profile?.username || "")
     .trim()
@@ -21734,43 +21719,17 @@ function StudioProfileMenu({
     displayName: profile?.displayName,
   });
   const label = handle ? `@${handle}` : currentUser?.name || "Profile";
-  const direct = mode === "direct";
-
-  useEffect(() => {
-    if (!open || direct) return;
-    const onDoc = (event) => {
-      if (wrapRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    const onKey = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [direct, open]);
 
   return (
-    <div ref={wrapRef} className="studio-profile-menu-wrap">
+    <div className="studio-profile-menu-wrap">
       <button
         type="button"
         className={`studio-settings-pill studio-settings-trigger studio-profile-menu-trigger${
-          open || isProfileTabActive ? " is-active" : ""
+          isProfileTabActive ? " is-active" : ""
         }`}
-        aria-label={direct ? "View profile" : "Profile menu"}
-        aria-expanded={direct ? undefined : open}
-        aria-haspopup={direct ? undefined : "menu"}
+        aria-label="View profile"
         title={label}
-        onClick={() => {
-          if (direct) {
-            onViewProfile?.();
-            return;
-          }
-          setOpen((value) => !value);
-        }}
+        onClick={() => onViewProfile?.()}
       >
         {avatarUrl || initials ? (
           <StudioProfileAvatar
@@ -21785,81 +21744,6 @@ function StudioProfileMenu({
           />
         ) : null}
       </button>
-      {!direct && open ? (
-        <div className="cursor-tab-context-menu studio-profile-menu-popover" role="menu">
-          <button
-            type="button"
-            className="cursor-tab-context-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onViewProfile?.();
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <UserRound className="h-3.5 w-3.5" aria-hidden="true" />
-              View profile
-            </span>
-          </button>
-          <button
-            type="button"
-            className="cursor-tab-context-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onEditProfile?.();
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-              Edit profile
-            </span>
-          </button>
-          <button
-            type="button"
-            className="cursor-tab-context-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onOpenOffers?.();
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <Award className="h-3.5 w-3.5" aria-hidden="true" />
-              Creative Network
-            </span>
-          </button>
-          <button
-            type="button"
-            className="cursor-tab-context-item"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onOpenMessages?.();
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
-              Messages
-            </span>
-          </button>
-          <div className="cursor-tab-context-sep" role="separator" />
-          <button
-            type="button"
-            className="cursor-tab-context-item is-danger"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onSignOut?.();
-            }}
-          >
-            <span className="inline-flex items-center gap-2">
-              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-              Sign out
-            </span>
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
