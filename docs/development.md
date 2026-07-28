@@ -85,7 +85,7 @@ PayWise Checkout (set on Convex deployment):
 - `PAYWISE_PAYEE_MOBILE`
 - `PAYWISE_ORIGIN_COUNTRY`
 - `PAYWISE_IP_ADDRESS` (`127.0.0.1` is permitted by PayWise sandbox; production requires the deployed backend's public egress IP)
-- `PAYWISE_PAID_STATUSES` (comma-separated values captured and verified in the target PayWise environment)
+- `PAYWISE_PAID_STATUSES` (comma-separated values captured and verified in the target PayWise environment). `Payment Authorized` / `authorized` always count as paid for Studio credit grant, even when capture amount is still `0`.
 - optional contract overrides: `PAYWISE_PENDING_STATUSES`, `PAYWISE_REJECTED_STATUSES`, `PAYWISE_CANCELLED_STATUSES`
 
 Browser return URLs use `SITE_URL`; PayWise notify/callback URLs use `CONVEX_SITE_URL`.

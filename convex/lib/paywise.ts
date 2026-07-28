@@ -8,12 +8,9 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_RETRIES = 3;
 const DEFAULT_REJECTED_STATUSES = new Set(["failed", "rejected", "declined"]);
 const DEFAULT_CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
-const DEFAULT_PENDING_STATUSES = new Set([
-  "pending",
-  "processing",
-  "payment authorized",
-  "authorized",
-]);
+const DEFAULT_PENDING_STATUSES = new Set(["pending", "processing"]);
+/** Card auth on PayWise = funds held; treat as paid for Studio credit grant (Dallas). */
+const AUTHORIZED_AS_PAID_STATUSES = new Set(["payment authorized", "authorized"]);
 
 export type PaywiseNormalizedStatus = "paid" | "pending" | "rejected" | "cancelled" | "unknown";
 
@@ -160,7 +157,7 @@ export function getPaywiseConfig(): PaywiseConfig {
     payeeMobile,
     originCountry,
     ipAddress,
-    paidStatuses,
+    paidStatuses: new Set([...paidStatuses, ...AUTHORIZED_AS_PAID_STATUSES]),
     pendingStatuses: parseStatusSet(process.env.PAYWISE_PENDING_STATUSES, DEFAULT_PENDING_STATUSES),
     rejectedStatuses: parseStatusSet(process.env.PAYWISE_REJECTED_STATUSES, DEFAULT_REJECTED_STATUSES),
     cancelledStatuses: parseStatusSet(process.env.PAYWISE_CANCELLED_STATUSES, DEFAULT_CANCELLED_STATUSES),
@@ -211,7 +208,7 @@ export function normalizePaywiseStatus(
     .trim()
     .toLowerCase();
   if (!status) return "unknown";
-  if (config?.paidStatuses.has(status)) return "paid";
+  if (config?.paidStatuses.has(status) || AUTHORIZED_AS_PAID_STATUSES.has(status)) return "paid";
   if ((config?.rejectedStatuses ?? DEFAULT_REJECTED_STATUSES).has(status)) return "rejected";
   if ((config?.cancelledStatuses ?? DEFAULT_CANCELLED_STATUSES).has(status)) return "cancelled";
   if ((config?.pendingStatuses ?? DEFAULT_PENDING_STATUSES).has(status)) return "pending";
@@ -530,8 +527,8 @@ function moneyFieldToCents(raw: unknown): number | null {
 
 /**
  * PayWise often keeps payment_details.status at "Processing" while the payer
- * row moves to "Payment Authorized" and payments_status.paid tracks capture.
- * Prefer the payer status when the envelope is still a coarse pending state.
+ * row moves to "Payment Authorized". Prefer the payer status when the envelope
+ * is still a coarse pending state. Authorized counts as paid for Studio.
  */
 function extractProviderStatus(
   payload: Record<string, unknown>,
@@ -718,7 +715,7 @@ export async function getPaymentStatus(
     });
   }
   let normalizedStatus = normalizePaywiseStatus(providerStatus, config);
-  // Capture can lag the coarse "Processing" label — trust payments_status.paid.
+  // Capture amount may lag; still trust payments_status.paid when fully captured.
   const capturedPaidCents = extractCapturedPaidCents(payload);
   if (
     normalizedStatus !== "paid" &&

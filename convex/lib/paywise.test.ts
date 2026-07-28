@@ -176,7 +176,7 @@ describe("PayWise status contract", () => {
     });
   });
 
-  test("Payment Authorized without captured paid stays pending", async () => {
+  test("Payment Authorized counts as paid even when capture amount is still zero", async () => {
     const liveConfig: PaywiseConfig = {
       ...config,
       paidStatuses: new Set([
@@ -186,13 +186,10 @@ describe("PayWise status contract", () => {
         "successful",
         "payment_completed",
         "settled",
-      ]),
-      pendingStatuses: new Set([
-        "pending",
-        "processing",
         "payment authorized",
         "authorized",
       ]),
+      pendingStatuses: new Set(["pending", "processing"]),
     };
     vi.stubGlobal(
       "fetch",
@@ -224,9 +221,14 @@ describe("PayWise status contract", () => {
 
     await expect(getPaymentStatus("430", { maxRetries: 0 }, liveConfig)).resolves.toMatchObject({
       providerStatus: "Payment Authorized",
-      normalizedStatus: "pending",
+      normalizedStatus: "paid",
       amountCents: 5_000,
     });
+  });
+
+  test("authorized / Payment Authorized normalize to paid without config paidStatuses", () => {
+    expect(normalizePaywiseStatus("Payment Authorized", config)).toBe("paid");
+    expect(normalizePaywiseStatus("authorized", config)).toBe("paid");
   });
 
   test("checkout payload uses payment_link card and omits rejected fields", async () => {
