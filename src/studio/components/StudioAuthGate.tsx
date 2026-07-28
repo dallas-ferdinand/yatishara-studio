@@ -769,7 +769,7 @@ function StudioSignIn({
                 className="studio-auth-field is-code is-email-otp"
                 name="code"
                 value={emailCodeDigits}
-                placeholder="000000"
+                placeholder="000-000"
                 aria-label="Email code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
