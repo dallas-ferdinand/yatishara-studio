@@ -1219,7 +1219,7 @@ function AuthFrame({
           border: 0;
           background: transparent;
           color: inherit;
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 500;
           line-height: 1.3;
           outline: none;
@@ -1228,7 +1228,7 @@ function AuthFrame({
         .studio-auth-field textarea::placeholder,
         input.studio-auth-field::placeholder {
           color: color-mix(in srgb, var(--mos-text) 42%, transparent);
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 450;
         }
         /* Flat dark pill — same ink as landing Sign in / Enter Studio CTAs. */
