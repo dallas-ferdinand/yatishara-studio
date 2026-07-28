@@ -93,8 +93,8 @@ const pricingReturn = v.object({
 });
 
 const creditPriceCents = 50;
-/** Must match UI min in src/studio/lib/money.ts. TEMP smoke: 10 credits = TT$5 at 0.50/credit (was 100 / TT$50). */
-const TOP_UP_MIN_CREDITS = 10;
+/** Must match UI min in src/studio/lib/money.ts (100 credits = TT$50 at 0.50/credit). */
+const TOP_UP_MIN_CREDITS = 100;
 const PAYWISE_INITIAL_CHECK_DELAY_MS = 30_000;
 const PAYWISE_MAX_STATUS_CHECKS = 48;
 const PAYWISE_REVIEW_CHECK_DELAY_MS = 24 * 60 * 60 * 1000;

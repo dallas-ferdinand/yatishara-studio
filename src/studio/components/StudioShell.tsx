@@ -9481,14 +9481,13 @@ export function StudioShell({
           align-items: center;
           gap: 14px;
           min-height: 58px;
-          padding: 14px 2px;
+          padding: 14px 18px;
           border-bottom: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 88%, transparent);
           color: var(--color-cursor-muted);
           font-size: 12px;
         }
         .studio-settings-invoice-row:last-child {
           border-bottom: 0;
-          padding-bottom: 4px;
         }
         .studio-settings-invoice-copy {
           display: grid;
@@ -10011,7 +10010,7 @@ export function StudioShell({
         .studio-settings-invoice-list {
           display: grid;
           gap: 0;
-          padding: 0 18px 12px;
+          padding: 0;
           border-top: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 72%, transparent);
         }
         .studio-settings-rate-strip {
