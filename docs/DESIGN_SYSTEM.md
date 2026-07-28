@@ -281,10 +281,11 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - Fill: `color-mix(mos-surface 58%, transparent)` · border soft 82% · **radius 18px**
 - Shadow: inset top highlight + soft 1px/4px drop (light mode uses white inset)
 
-**History chat bubbles** (no group containers / accordions):
+**History + Messages chat-list bubbles** (shared soft bubble language):
 
-- Flat newest-first list of `.studio-history-item` bubbles (`16px` radius, surface
-  wash, soft border). Active = accent wash + inset ring. Memory: **759**.
+- Flat list rows: `.studio-history-item` and `.studio-dm-row` — `16px` radius,
+  `mos-surface` 58% wash, soft border, inset top highlight. Active = accent wash
+  + inset ring. List pad/gap `10px` / `8px`. Memory: **759**.
 
 **Mobile bottom sheets** (Studio chrome — shared edge language):
 
