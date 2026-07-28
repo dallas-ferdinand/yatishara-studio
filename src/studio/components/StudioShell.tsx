@@ -11241,6 +11241,30 @@ export function StudioShell({
           color: #991b1b;
           background: color-mix(in srgb, #fecaca 55%, transparent);
         }
+        .studio-account-signout {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          min-height: 40px;
+          border: 1px solid color-mix(in srgb, #fb7185 28%, var(--color-cursor-border-soft));
+          border-radius: var(--studio-save-radius, 999px);
+          background: color-mix(in srgb, #fb7185 10%, transparent);
+          color: color-mix(in srgb, #9f1239 52%, var(--color-cursor-text-bright));
+          font-size: var(--studio-fs-md, 13px);
+          font-weight: 650;
+          cursor: pointer;
+          transition: background 0.12s ease, border-color 0.12s ease;
+        }
+        .studio-account-signout:hover:not(:disabled) {
+          background: color-mix(in srgb, #fb7185 16%, transparent);
+          border-color: color-mix(in srgb, #fb7185 42%, var(--color-cursor-border-soft));
+        }
+        .studio-account-signout:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
         .studio-account-password {
           padding: 0 !important;
         }
@@ -28040,7 +28064,9 @@ function DefaultStudioTabSettings({ value }) {
 }
 
 function AccountDetailsCard({ currentUser, onSave }) {
+  const { signOut } = useAuthActions();
   const setPassword = useAction(api.passwordAuth.setPassword);
+  const [signOutBusy, setSignOutBusy] = useState(false);
   const legacyParts = (() => {
     const trimmed = String(currentUser?.name ?? "").trim();
     if (!trimmed) return { firstName: "", lastName: "" };
@@ -28311,10 +28337,26 @@ function AccountDetailsCard({ currentUser, onSave }) {
           </div>
         ) : null}
       </section>
+
+      <section className="cursor-settings-section studio-account-card">
+        <div className="studio-account-actions">
+          <button
+            type="button"
+            className="studio-account-signout"
+            disabled={signOutBusy}
+            onClick={() => {
+              setSignOutBusy(true);
+              void Promise.resolve(signOut()).finally(() => setSignOutBusy(false));
+            }}
+          >
+            {signOutBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
+            <span>{signOutBusy ? "Signing out…" : "Sign out"}</span>
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
-
 
 function BankLine({ label, value }) {
   return (
