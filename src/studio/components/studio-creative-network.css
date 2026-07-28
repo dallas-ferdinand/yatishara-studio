@@ -233,12 +233,12 @@
 .studio-cn-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 0;
   flex: 0 0 auto;
   min-height: var(--cursor-head-h, 32px);
   height: var(--cursor-head-h, 32px);
-  padding: 0 12px;
+  /* No horizontal pad — tabs are full-width like Settings; CTA pads itself. */
+  padding: 0;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
   /* L1 — match workspace / panel heads (not L2 mos-bg/plate). */
   background: var(--mos-panel, var(--mos-page, var(--color-cursor-bg)));
@@ -248,8 +248,9 @@
   display: flex;
   align-items: center;
   flex: 1 1 auto;
-  gap: 4px;
+  width: 100%;
   min-width: 0;
+  gap: 4px;
   height: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -296,7 +297,10 @@
 }
 
 .studio-cn-head-action {
+  display: flex;
+  align-items: center;
   flex: 0 0 auto;
+  padding: 0 12px 0 8px;
 }
 
 .studio-cn-seller-cta {

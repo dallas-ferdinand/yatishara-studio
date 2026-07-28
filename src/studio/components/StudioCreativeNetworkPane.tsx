@@ -445,8 +445,8 @@ export function StudioCreativeNetworkPane({
             </button>
           </nav>
         )}
-        <div className="studio-cn-head-action">
-          {!cn.isSellerApproved && !cn.sellerLoading ? (
+        {!cn.isSellerApproved && !cn.sellerLoading ? (
+          <div className="studio-cn-head-action">
             <button
               type="button"
               className="studio-cn-seller-cta"
@@ -455,8 +455,8 @@ export function StudioCreativeNetworkPane({
             >
               {sellerCtaLabel}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </header>
 
       <div className={bodyClass}>
