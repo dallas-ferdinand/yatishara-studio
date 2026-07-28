@@ -7970,10 +7970,29 @@ textarea.cursor-input {
   Same soft right-edge language as .cursor-unified-tabs-scroll; left+right when
   mid-scroll. data-scroll-fade from useHorizontalScrollFade — clears a side when
   scrolled flush so items can fully reach that edge.
+
+  ::before/::after are scrollable end spacers (not container pad): first/last pill
+  starts inset, but can scroll flush under the fade to the track edge.
 */
 .cursor-h-scroll-fade {
   -webkit-mask-image: none;
   mask-image: none;
+}
+.cursor-h-scroll-fade::before,
+.cursor-h-scroll-fade::after {
+  content: "";
+  flex: 0 0 12px;
+  width: 12px;
+  min-width: 12px;
+  height: 1px;
+  pointer-events: none;
+}
+/* Cancel row gap so rest inset stays 12px, not 12+gap. */
+.cursor-h-scroll-fade::before {
+  margin-inline-end: -4px;
+}
+.cursor-h-scroll-fade::after {
+  margin-inline-start: -4px;
 }
 .cursor-h-scroll-fade[data-scroll-fade="right"] {
   -webkit-mask-image: linear-gradient(
