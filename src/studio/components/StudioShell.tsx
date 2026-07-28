@@ -10391,7 +10391,7 @@ export function StudioShell({
           display: grid;
           place-items: center;
           padding: 24px;
-          background: color-mix(in srgb, var(--mos-page, #0b0b0f) 78%, transparent);
+          background: color-mix(in srgb, var(--mos-page, #0b0b0f) 94%, transparent);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
         }
