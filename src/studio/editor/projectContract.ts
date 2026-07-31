@@ -4,6 +4,14 @@
  */
 
 import type { FrameRatio } from "./types";
+import {
+  CLIP_SPEED_MAX,
+  CLIP_SPEED_MIN,
+  clampClipSpeed,
+  clipSpeedFromEffects,
+} from "../../../convex/lib/naturalAudioSpeed";
+
+export { CLIP_SPEED_MAX, CLIP_SPEED_MIN, clampClipSpeed, clipSpeedFromEffects as clipSpeed };
 
 export const EDITOR_PROJECT_VERSION = 2;
 
@@ -44,8 +52,16 @@ export function exportSizeForRatio(ratio: FrameRatio | undefined): {
   return { width: preset.width, height: preset.height, cssRatio: preset.cssRatio };
 }
 
-export function clipDurationSec(clip: { trimIn: number; trimOut: number }): number {
+export function sourceTrimSec(clip: { trimIn: number; trimOut: number }): number {
   return Math.max(0.05, clip.trimOut - clip.trimIn);
+}
+
+export function clipDurationSec(clip: {
+  trimIn: number;
+  trimOut: number;
+  effects?: { speed?: number } | null;
+}): number {
+  return Math.max(0.05, sourceTrimSec(clip) / clipSpeedFromEffects(clip.effects));
 }
 
 export function sortedClipsOnTrack<T extends { trackId: string; startTime: number }>(

@@ -35,4 +35,18 @@ describe("export audio mute / volume / fade", () => {
     expect(af).toContain("afade=t=in:st=0:d=0.5:curve=qsin");
     expect(af).toContain("afade=t=out:st=3:d=1:curve=qsin");
   });
+
+  it("prepends natural atempo+EQ when sped", () => {
+    const af = videoClipAudioFilter(
+      {
+        effects: { speed: 1.1 },
+        trimIn: 0,
+        trimOut: 4,
+      },
+      false,
+    );
+    expect(af).toContain("atempo=1.100000");
+    expect(af).toContain("equalizer=f=3200");
+    expect(af).toContain("aresample=44100");
+  });
 });

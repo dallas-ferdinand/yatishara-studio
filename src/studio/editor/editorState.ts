@@ -19,7 +19,7 @@ import {
 } from "./editorTimelineUtils";
 import { computeRippleInsertForNewClip, arrangeTrackForDrop, resolveTrackOverlaps, collapseTrackLeft, isMainStoryTrack } from "./editorRipple";
 import { labelsForSplit } from "./clipNaming";
-import { normalizeFrameRatio } from "./projectContract";
+import { clipDurationSec, normalizeFrameRatio } from "./projectContract";
 import { DEFAULT_TEXT_EFFECTS, DEFAULT_TEXT_STYLE } from "./editorEffects";
 
 export function newClipId(): string {
@@ -30,7 +30,7 @@ export function newClipId(): string {
 }
 
 export function clipDuration(clip: EditorClip): number {
-  return Math.max(0.05, clip.trimOut - clip.trimIn);
+  return clipDurationSec(clip);
 }
 
 const JOINT_GAP_SEC = 0.05;

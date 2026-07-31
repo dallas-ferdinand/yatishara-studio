@@ -1,5 +1,7 @@
 import type { ClipEffects, EditorMediaItem } from "../types";
 import { audioFadeGainAtLocalTime } from "../editorEffects";
+import { clipSpeed } from "../projectContract";
+import { isIdentitySpeed } from "../../../../convex/lib/naturalAudioSpeed";
 import type { RenderSlice } from "./timeline-compiler";
 
 type ActiveSource = {
@@ -85,6 +87,8 @@ export class AudioMixer {
   private readonly active = new Map<string, ActiveSource>();
   private readonly activeMedia = new Map<string, ActiveMediaElement>();
   private disposed = false;
+  /** Natural atempo+EQ preview URLs keyed by clip id (speed ≠ 1). */
+  private naturalAudioByClipId: ReadonlyMap<string, string> = new Map();
 
   constructor(context?: AudioContext) {
     this.context =
@@ -119,11 +123,31 @@ export class AudioMixer {
     return this.masterVolume;
   }
 
+  setNaturalAudioUrls(urls: ReadonlyMap<string, string> | null | undefined): void {
+    this.naturalAudioByClipId = urls ?? new Map();
+  }
+
+  private naturalBufferKey(clipId: string): string {
+    return `natural:${clipId}`;
+  }
+
+  private resolveBufferKey(clipId: string, assetId: string, effects: ClipEffects | undefined): string | null {
+    const speed = clipSpeed(effects);
+    if (!isIdentitySpeed(speed)) {
+      if (this.naturalAudioByClipId.has(clipId) && this.buffers.has(this.naturalBufferKey(clipId))) {
+        return this.naturalBufferKey(clipId);
+      }
+      // Speed ≠ 1 without a ready bake — stay silent (never chipmunk playbackRate).
+      return null;
+    }
+    return assetId;
+  }
+
   async prepare(
     slice: RenderSlice,
     mediaById: ReadonlyMap<string, EditorMediaItem>,
   ): Promise<boolean> {
-    const bedAssetIds = new Set<string>();
+    const bedKeys = new Set<string>();
     const requests: Promise<AudioBuffer>[] = [];
 
     for (const item of [...slice.audio, ...(slice.preloadAudio ?? [])]) {
@@ -131,16 +155,22 @@ export class AudioMixer {
       if (!clip.assetId || clip.muted) continue;
       const media = mediaById.get(clip.assetId);
       if (!media || media.kind === "image") continue;
-      // Beds: prefer the original signed file (already small AAC/MP3). Proxy is
-      // a fallback when the original fetch/decode fails.
+      const speed = clipSpeed(clip.clip.effects);
+      const activeBed = slice.audio.some((active) => active.clip.clipId === clip.clipId);
+      if (!isIdentitySpeed(speed)) {
+        const naturalUrl = this.naturalAudioByClipId.get(clip.clipId);
+        if (!naturalUrl) continue;
+        const key = this.naturalBufferKey(clip.clipId);
+        if (activeBed) bedKeys.add(key);
+        requests.push(this.load(key, naturalUrl));
+        continue;
+      }
       const url = media.url ?? media.proxyUrl;
       const fallback = media.url && media.proxyUrl && media.url !== media.proxyUrl
         ? media.proxyUrl
         : undefined;
       if (!url) continue;
-      if (slice.audio.some((active) => active.clip.clipId === clip.clipId)) {
-        bedAssetIds.add(clip.assetId);
-      }
+      if (activeBed) bedKeys.add(clip.assetId);
       requests.push(this.load(clip.assetId, url, fallback));
     }
 
@@ -149,6 +179,13 @@ export class AudioMixer {
       if (!clip.assetId || clip.muted) continue;
       const media = mediaById.get(clip.assetId);
       if (!media || media.kind === "image") continue;
+      const speed = clipSpeed(clip.clip.effects);
+      if (!isIdentitySpeed(speed)) {
+        const naturalUrl = this.naturalAudioByClipId.get(clip.clipId);
+        if (!naturalUrl) continue;
+        requests.push(this.load(this.naturalBufferKey(clip.clipId), naturalUrl));
+        continue;
+      }
       const url = media.proxyUrl ?? media.url;
       const fallback = media.proxyUrl && media.url && media.proxyUrl !== media.url
         ? media.url
@@ -158,15 +195,11 @@ export class AudioMixer {
     }
 
     if (requests.length) {
-      // Video assets without an audio stream reject decode; wait for the ones
-      // that succeed so dedicated timeline audio still lands in the cache.
       await Promise.allSettled(requests);
     }
 
-    // Beds are ready only when every active bed buffered — callers use this for
-    // post-prepare sync, not for stalling the video frame pipeline.
-    for (const assetId of bedAssetIds) {
-      if (!this.buffers.has(assetId)) return false;
+    for (const key of bedKeys) {
+      if (!this.buffers.has(key)) return false;
     }
     return true;
   }
@@ -175,6 +208,11 @@ export class AudioMixer {
   bedsReady(slice: RenderSlice): boolean {
     for (const item of slice.audio) {
       if (!item.clip.assetId || item.clip.muted) continue;
+      const speed = clipSpeed(item.clip.clip.effects);
+      if (!isIdentitySpeed(speed)) {
+        if (!this.buffers.has(this.naturalBufferKey(item.clip.clipId))) return false;
+        continue;
+      }
       if (!this.buffers.has(item.clip.assetId)) return false;
     }
     return true;
@@ -196,10 +234,11 @@ export class AudioMixer {
       if (!item.clip.muted && item.clip.assetId) {
         const localTime = slice.timelineTime - item.clip.timelineStart;
         const clipDuration = item.clip.timelineEnd - item.clip.timelineStart;
+        const sped = !isIdentitySpeed(clipSpeed(item.clip.clip.effects));
         desired.set(item.clip.clipId, {
-          sourceTime: item.sourceTime,
+          sourceTime: sped ? localTime : item.sourceTime,
           gain: item.gain,
-          clipEnd: item.clip.sourceEnd,
+          clipEnd: sped ? clipDuration : item.clip.sourceEnd,
           localTime,
           clipDuration,
           volume: item.clip.volume,
@@ -227,10 +266,11 @@ export class AudioMixer {
         slice.transition?.progress ?? (sample.role === "incoming" ? 1 : 0),
       );
       const fade = audioFadeGainAtLocalTime(clip.clip.effects, clipDuration, localTime);
+      const sped = !isIdentitySpeed(clipSpeed(clip.clip.effects));
       desired.set(`video:${clip.clipId}`, {
-        sourceTime: sample.sourceTime,
+        sourceTime: sped ? localTime : sample.sourceTime,
         gain: clip.volume * fade * transitionGain,
-        clipEnd: clip.sourceEnd,
+        clipEnd: sped ? clipDuration : clip.sourceEnd,
         localTime,
         clipDuration,
         volume: clip.volume,
@@ -267,12 +307,17 @@ export class AudioMixer {
         slice.video.find((sample) => sample.clip.clipId === clipId)?.clip ??
         slice.audio.find((sample) => sample.clip.clipId === clipId)?.clip;
       if (!clip?.assetId) continue;
-      const buffer = this.buffers.get(clip.assetId);
+      const bufferKey = this.resolveBufferKey(clip.clipId, clip.assetId, clip.clip.effects);
+      if (!bufferKey) continue;
+      const buffer = this.buffers.get(bufferKey);
       if (!buffer) {
-        const media = mediaById.get(clip.assetId);
-        const url = media?.url ?? media?.proxyUrl;
-        if (clip.kind === "audio" && url) {
-          this.syncMediaElement(key, url, item, generation);
+        // Media-element fallback only at 1× — sped audio must use the natural bake.
+        if (isIdentitySpeed(clipSpeed(clip.clip.effects))) {
+          const media = mediaById.get(clip.assetId);
+          const url = media?.url ?? media?.proxyUrl;
+          if (clip.kind === "audio" && url) {
+            this.syncMediaElement(key, url, item, generation);
+          }
         }
         continue;
       }

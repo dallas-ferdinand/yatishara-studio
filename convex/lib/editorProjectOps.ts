@@ -8,6 +8,7 @@ import {
   type EditorTransitionName,
   normalizeEditorTransition,
 } from "./editorEffectContract";
+import { clipSpeedFromEffects } from "./naturalAudioSpeed";
 
 export const DEFAULT_IMAGE_CLIP_SEC = 3;
 export const DEFAULT_MEDIA_CLIP_SEC = 5;
@@ -19,6 +20,8 @@ export type EditorClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
   volume?: number;
+  /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */
+  speed?: number;
   scale?: number;
   x?: number;
   y?: number;
@@ -130,8 +133,16 @@ export function newClipId(now = Date.now()): string {
   return `clip_${now.toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function clipDurationSec(clip: { trimIn: number; trimOut: number }): number {
+export function sourceTrimSec(clip: { trimIn: number; trimOut: number }): number {
   return Math.max(MIN_CLIP_SEC, clip.trimOut - clip.trimIn);
+}
+
+export function clipDurationSec(clip: {
+  trimIn: number;
+  trimOut: number;
+  effects?: { speed?: number } | null;
+}): number {
+  return Math.max(MIN_CLIP_SEC, sourceTrimSec(clip) / clipSpeedFromEffects(clip.effects));
 }
 
 export function normalizeFrameRatio(value: unknown): FrameRatio {

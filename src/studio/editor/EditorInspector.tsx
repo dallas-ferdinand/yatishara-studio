@@ -36,6 +36,7 @@ import {
   Sun,
   Type,
   Underline,
+  Gauge,
   Volume2,
   ZoomIn,
 } from "lucide-react";
@@ -55,7 +56,15 @@ import {
   normalizeClipTransform,
 } from "./clipTransform";
 import { normalizeTextTransform } from "./textLayout";
-import { FRAME_RATIO_PRESETS, normalizeFrameRatio } from "./projectContract";
+import {
+  CLIP_SPEED_MAX,
+  CLIP_SPEED_MIN,
+  FRAME_RATIO_PRESETS,
+  clampClipSpeed,
+  clipSpeed,
+  normalizeFrameRatio,
+  sourceTrimSec,
+} from "./projectContract";
 import {
   DEFAULT_EXPORT_RESOLUTION,
   EXPORT_RESOLUTION_PRESETS,
@@ -925,9 +934,12 @@ function TransformPanel({ clip, onUpdateClip }) {
   );
 }
 
+const SPEED_PRESETS = [0.75, 1, 1.1, 1.25, 1.5, 2];
+
 function AudioPanel({ clip, onUpdateClip }) {
   const effects = clip.effects ?? {};
   const volume = effects.volume ?? 1;
+  const speed = clipSpeed(effects);
   const duration = clipDuration(clip);
   const { fadeIn, fadeOut } = clampAudioFadePair(
     effects.fadeIn ?? 0,
@@ -947,6 +959,21 @@ function AudioPanel({ clip, onUpdateClip }) {
     });
   };
 
+  const setSpeed = (raw) => {
+    const nextSpeed = clampClipSpeed(raw);
+    const nextDuration = Math.max(0.05, sourceTrimSec(clip) / nextSpeed);
+    const fades = clampAudioFadePair(
+      effects.fadeIn ?? 0,
+      effects.fadeOut ?? 0,
+      nextDuration,
+    );
+    patchEffects({
+      speed: nextSpeed,
+      fadeIn: fades.fadeIn,
+      fadeOut: fades.fadeOut,
+    });
+  };
+
   return (
     <InspectorSection
       title="Audio"
@@ -955,9 +982,40 @@ function AudioPanel({ clip, onUpdateClip }) {
           volume: 1,
           fadeIn: 0,
           fadeOut: 0,
+          speed: 1,
         })
       }
     >
+      <SliderRow
+        label={
+          <>
+            <Gauge size={14} aria-hidden="true" /> Speed
+          </>
+        }
+        min={CLIP_SPEED_MIN}
+        max={CLIP_SPEED_MAX}
+        step={0.05}
+        value={speed}
+        defaultValue={1}
+        formatValue={(v) => `${Number(v).toFixed(2)}×`}
+        parseInput={(raw) => {
+          const n = parseNumberInput(String(raw).replace(/×/g, ""), {});
+          return n == null ? null : clampClipSpeed(n);
+        }}
+        onValueChange={(next) => setSpeed(next)}
+      />
+      <div className="studio-editor-chip-row" role="group" aria-label="Speed presets">
+        {SPEED_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            className={`studio-editor-chip${Math.abs(speed - preset) < 0.001 ? " is-active" : ""}`}
+            onClick={() => setSpeed(preset)}
+          >
+            {preset === 1 ? "1×" : `${preset}×`}
+          </button>
+        ))}
+      </div>
       <SliderRow
         label={
           <>

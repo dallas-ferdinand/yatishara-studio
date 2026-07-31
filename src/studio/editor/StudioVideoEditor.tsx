@@ -42,6 +42,12 @@ import {
   clipIsMuted,
   TimelineClipContextMenu,
 } from "./TimelineClipContextMenu";
+import {
+  clampClipSpeed,
+  clipSpeed,
+  sourceTrimSec,
+} from "./projectContract";
+import { clampAudioFadePair } from "./editorEffects";
 import { MAX_PPS, MIN_PPS } from "./types";
 
 const TRASH_FOLDER_ID = "__trash__";
@@ -499,6 +505,28 @@ export function StudioVideoEditor({
         });
         return;
       }
+      if (typeof actionId === "string" && actionId.startsWith("speed:")) {
+        const nextSpeed = clampClipSpeed(Number(actionId.slice("speed:".length)));
+        const nextDuration = Math.max(0.05, sourceTrimSec(clip) / nextSpeed);
+        const fades = clampAudioFadePair(
+          clip.effects?.fadeIn ?? 0,
+          clip.effects?.fadeOut ?? 0,
+          nextDuration,
+        );
+        dispatch({
+          type: "update_clip",
+          clipId: clip.id,
+          patch: {
+            effects: {
+              ...(clip.effects ?? {}),
+              speed: nextSpeed,
+              fadeIn: fades.fadeIn,
+              fadeOut: fades.fadeOut,
+            },
+          },
+        });
+        return;
+      }
       if (actionId === "duplicate") {
         dispatch({ type: "select_clip", clipId: clip.id });
         dispatch({ type: "duplicate_selected" });
@@ -547,6 +575,7 @@ export function StudioVideoEditor({
             trimOut: clip.trimOut,
             mode: wantAudio ? "audio" : "video",
             filename: baseName,
+            speed: clipSpeed(clip.effects),
           });
           const ok = await downloadMediaUrl(cut.url, cut.filename);
           onStatus?.(ok ? "Clipped media saved." : "Download started.");

@@ -383,6 +383,8 @@ export function usePlaybackEngine(args: {
   playhead: number;
   playing: boolean;
   mediaById: ReadonlyMap<string, EditorMediaItem>;
+  /** Natural atempo+EQ preview URLs for sped clips. */
+  naturalAudioByClipId?: ReadonlyMap<string, string>;
   width: number;
   height: number;
   onPlayheadChange: (time: number) => void;
@@ -393,6 +395,7 @@ export function usePlaybackEngine(args: {
     playhead,
     playing,
     mediaById,
+    naturalAudioByClipId,
     width,
     height,
     onPlayheadChange,
@@ -456,6 +459,7 @@ export function usePlaybackEngine(args: {
     }
     try {
       const audio = new AudioMixer();
+      audio.setNaturalAudioUrls(naturalAudioByClipId);
       const clock = new TransportClock(
         compileTimeline(projectRef.current).duration,
         audio.clockSeconds,
@@ -704,6 +708,22 @@ export function usePlaybackEngine(args: {
       });
     }
   }, [mediaById]);
+
+  useEffect(() => {
+    runtimeRef.current?.audio.setNaturalAudioUrls(naturalAudioByClipId);
+    const runtime = runtimeRef.current;
+    if (!runtime || !playingRef.current) return;
+    const time = runtime.clock.currentTime();
+    void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
+      if (!playingRef.current || runtimeRef.current !== runtime) return;
+      runtime.audio.sync(
+        sliceAt(runtime.plan, runtime.clock.currentTime()),
+        runtime.clock.generation,
+        mediaRef.current,
+        true,
+      );
+    });
+  }, [naturalAudioByClipId]);
 
   return {
     canvasRef,

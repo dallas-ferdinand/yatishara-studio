@@ -12,7 +12,17 @@ import { action, internalAction, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
-import { videoClipAudioFilter } from "./lib/editorExportAudio";
+import {
+  bedClipAudioFilters,
+  timelineDurationSec,
+  videoClipAudioFilter,
+} from "./lib/editorExportAudio";
+import {
+  buildNaturalSpeedAudioFilters,
+  buildSpeedSetptsFilter,
+  clipSpeedFromEffects,
+  isIdentitySpeed,
+} from "./lib/naturalAudioSpeed";
 import {
   DEFAULT_EXPORT_RESOLUTION,
   exportSizeForRatioAndResolution,
@@ -27,6 +37,7 @@ type ClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
   volume?: number;
+  speed?: number;
   scale?: number;
   x?: number;
   y?: number;
@@ -83,8 +94,12 @@ type EditorProject = {
   frameRatio?: "16:9" | "9:16" | "1:1";
 };
 
-function clipDuration(clip: EditorClip): number {
+function sourceTrim(clip: EditorClip): number {
   return Math.max(0.05, clip.trimOut - clip.trimIn);
+}
+
+function clipDuration(clip: EditorClip): number {
+  return timelineDurationSec(clip);
 }
 
 function escapeDrawtext(value: string): string {
@@ -286,6 +301,7 @@ function normalizeVf(
   height: number,
   effects?: ClipEffects,
 ): string {
+  const speedPts = buildSpeedSetptsFilter(clipSpeedFromEffects(effects));
   const scale = Number.isFinite(effects?.scale) ? Number(effects?.scale) : 1;
   const panX = Number.isFinite(effects?.x) ? Number(effects?.x) : 0;
   const panY = Number.isFinite(effects?.y) ? Number(effects?.y) : 0;
@@ -296,6 +312,7 @@ function normalizeVf(
   const panPxX = Math.round(panX * width);
   const panPxY = Math.round(panY * height);
   const filters = [
+    ...(speedPts ? [speedPts] : []),
     `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
   ];
   if (Math.abs(rotation) > 0.05) {
@@ -477,13 +494,15 @@ async function renderClipSegment(args: {
   // ffmpeg silently emits a video-only file when `-af` matches no audio, so
   // probe first: silent / muted sources must get anullsrc or concat/xfade
   // graphs fail with "Stream specifier ':a' matches no streams".
+  const sourceLen = sourceTrim(args.clip);
+  const inputTrimArgs =
+    isIdentitySpeed(clipSpeedFromEffects(args.clip.effects))
+      ? ["-ss", String(args.clip.trimIn), "-i", args.sourcePath]
+      : ["-ss", String(args.clip.trimIn), "-t", String(sourceLen), "-i", args.sourcePath];
   if (audioFilter && (await hasAudioStream(args.sourcePath))) {
     await execFileAsync("ffmpeg", [
       "-y",
-      "-ss",
-      String(args.clip.trimIn),
-      "-i",
-      args.sourcePath,
+      ...inputTrimArgs,
       "-vf",
       videoFilter,
       "-af",
@@ -493,10 +512,7 @@ async function renderClipSegment(args: {
   } else {
     await execFileAsync("ffmpeg", [
       "-y",
-      "-ss",
-      String(args.clip.trimIn),
-      "-i",
-      args.sourcePath,
+      ...inputTrimArgs,
       "-f",
       "lavfi",
       "-i",
@@ -755,13 +771,9 @@ async function mixAudioTrack(args: {
     audioInputs.push("-i", sourcePath);
     const delayMs = Math.max(0, Math.round(clip.startTime * 1000));
     const duration = clipDuration(clip);
-    const volume = clip.effects?.volume ?? 1;
-    const fadeIn = clip.effects?.fadeIn ?? 0;
-    const fadeOut = clip.effects?.fadeOut ?? 0;
+    const bedFilters = bedClipAudioFilters(clip, duration);
     let chain = `[${inputIndex}:a]atrim=start=${clip.trimIn}:end=${clip.trimOut},asetpts=PTS-STARTPTS`;
-    if (fadeIn > 0) chain += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
-    if (fadeOut > 0) chain += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
-    if (volume !== 1) chain += `,volume=${volume}`;
+    if (bedFilters) chain += `,${bedFilters}`;
     chain += `,adelay=${delayMs}|${delayMs}[a${index}]`;
     filterParts.push(chain);
     mixLabels.push(`[a${index}]`);
@@ -1015,6 +1027,7 @@ export const downloadClipSegment = action({
     trimOut: v.number(),
     mode: v.union(v.literal("video"), v.literal("audio")),
     filename: v.optional(v.string()),
+    speed: v.optional(v.number()),
   },
   returns: v.object({
     url: v.string(),
@@ -1039,7 +1052,11 @@ export const downloadClipSegment = action({
 
     const trimIn = Math.max(0, args.trimIn);
     const trimOut = Math.max(trimIn + 0.05, args.trimOut);
-    const duration = trimOut - trimIn;
+    const sourceLen = Math.max(0.05, trimOut - trimIn);
+    const speed = clipSpeedFromEffects({ speed: args.speed });
+    const duration = Math.max(0.05, sourceLen / speed);
+    const naturalAf = buildNaturalSpeedAudioFilters(speed);
+    const speedPts = buildSpeedSetptsFilter(speed);
 
     const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
       userId,
@@ -1067,15 +1084,23 @@ export const downloadClipSegment = action({
       const outPath = join(tempDir, audioOnly ? "clip.wav" : "clip.mp4");
 
       if (audioOnly) {
-        await execFileAsync("ffmpeg", [
+        const afParts = [naturalAf, "aformat=sample_fmts=s16:channel_layouts=stereo"].filter(Boolean);
+        const audioArgs = [
           "-y",
           "-ss",
           String(trimIn),
+          "-t",
+          String(sourceLen),
           "-i",
           sourcePath,
           "-t",
           String(duration),
           "-vn",
+        ];
+        if (afParts.length) {
+          audioArgs.push("-af", afParts.join(","));
+        }
+        audioArgs.push(
           "-acodec",
           "pcm_s16le",
           "-ar",
@@ -1083,16 +1108,25 @@ export const downloadClipSegment = action({
           "-ac",
           "2",
           outPath,
-        ]);
+        );
+        await execFileAsync("ffmpeg", audioArgs);
       } else if (await hasAudioStream(sourcePath)) {
+        const vf = speedPts || "null";
+        const af = naturalAf || "anull";
         await execFileAsync("ffmpeg", [
           "-y",
           "-ss",
           String(trimIn),
+          "-t",
+          String(sourceLen),
           "-i",
           sourcePath,
           "-t",
           String(duration),
+          "-vf",
+          vf,
+          "-af",
+          af,
           "-c:v",
           "libx264",
           "-preset",
@@ -1112,10 +1146,13 @@ export const downloadClipSegment = action({
           outPath,
         ]);
       } else {
+        const vfSilent = speedPts || "null";
         await execFileAsync("ffmpeg", [
           "-y",
           "-ss",
           String(trimIn),
+          "-t",
+          String(sourceLen),
           "-i",
           sourcePath,
           "-f",
@@ -1124,6 +1161,8 @@ export const downloadClipSegment = action({
           "anullsrc=channel_layout=stereo:sample_rate=44100",
           "-t",
           String(duration),
+          "-vf",
+          vfSilent,
           "-map",
           "0:v:0",
           "-map",
@@ -1161,6 +1200,110 @@ export const downloadClipSegment = action({
       });
       const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
       return { url, filename, contentType };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  },
+});
+
+
+/**
+ * Bake trim+natural-speed audio for editor preview (atempo + EQ, no chipmunk).
+ * Cached on Bunny by asset/trim/speed key.
+ */
+export const renderNaturalSpeedAudio = action({
+  args: {
+    assetId: v.id("assets"),
+    trimIn: v.number(),
+    trimOut: v.number(),
+    speed: v.number(),
+  },
+  returns: v.object({
+    url: v.string(),
+    durationSec: v.number(),
+    speed: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ url: string; durationSec: number; speed: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Sign in to process audio speed.");
+    try {
+      await execFileAsync("ffmpeg", ["-version"]);
+    } catch {
+      throw new Error("Natural speed requires ffmpeg on the Convex action runtime.");
+    }
+
+    const trimIn = Math.max(0, args.trimIn);
+    const trimOut = Math.max(trimIn + 0.05, args.trimOut);
+    const sourceLen = Math.max(0.05, trimOut - trimIn);
+    const speed = clipSpeedFromEffects({ speed: args.speed });
+    const durationSec = Math.max(0.05, sourceLen / speed);
+
+    if (isIdentitySpeed(speed)) {
+      throw new Error("Natural speed bake is only needed when speed ≠ 1.");
+    }
+
+    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId,
+      assetId: args.assetId,
+    });
+    if (!source?.bunnyPath) throw new Error("Source media not found.");
+
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60 * 6;
+    const speedKey = speed.toFixed(3);
+    const cacheName = `${args.assetId}-${trimIn.toFixed(3)}-${trimOut.toFixed(3)}-${speedKey}.wav`;
+    const bunnyPath = `users/${userId}/speed-audio-proxy/${cacheName}`;
+
+    // Reuse cached bake when present (HEAD via signed GET is fine if put already).
+    try {
+      const existingUrl = await signBunnyCdnUrl(bunnyPath, expiresUnix);
+      const head = await fetch(existingUrl, { method: "GET", headers: { Range: "bytes=0-1" } });
+      if (head.ok || head.status === 206) {
+        return { url: existingUrl, durationSec, speed };
+      }
+    } catch {
+      /* bake fresh */
+    }
+
+    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+    const tempDir = await mkdtemp(join(tmpdir(), "studio-speed-audio-"));
+    try {
+      const sourcePath = join(tempDir, "source.bin");
+      await downloadToFile(signedSource, sourcePath);
+      const outPath = join(tempDir, "sped.wav");
+      const naturalAf = buildNaturalSpeedAudioFilters(speed);
+      await execFileAsync("ffmpeg", [
+        "-y",
+        "-ss",
+        String(trimIn),
+        "-t",
+        String(sourceLen),
+        "-i",
+        sourcePath,
+        "-t",
+        String(durationSec),
+        "-vn",
+        "-af",
+        `${naturalAf},aformat=sample_fmts=s16:channel_layouts=stereo`,
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "48000",
+        "-ac",
+        "1",
+        outPath,
+      ]);
+      const body = await readFile(outPath);
+      if (body.byteLength < 64) throw new Error("Sped audio is empty.");
+      await putObject({
+        path: bunnyPath,
+        body,
+        contentType: "audio/wav",
+      });
+      const url = await signBunnyCdnUrl(bunnyPath, expiresUnix);
+      return { url, durationSec, speed };
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

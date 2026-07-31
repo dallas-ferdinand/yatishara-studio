@@ -25,6 +25,19 @@ function clip(
 }
 
 describe("timeline compiler", () => {
+  it("honors effects.speed for timeline duration and source mapping", () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    const sped: EditorClip = {
+      ...clip("a", 0, 2),
+      effects: { speed: 2 },
+    };
+    project.clips = [sped];
+    const plan = compileTimeline(project);
+    expect(plan.video[0]?.timelineEnd).toBeCloseTo(1);
+    const mid = sliceAt(plan, 0.5);
+    expect(mid.video[0]?.sourceTime).toBeCloseTo(1);
+  });
+
   it("uses half-open intervals and continuous outgoing timestamps", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.clips = [clip("a", 0, 2, true), clip("b", 2, 2)];

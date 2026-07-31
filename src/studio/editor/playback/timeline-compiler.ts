@@ -4,7 +4,7 @@ import type {
   TransitionType,
 } from "../types";
 import { audioFadeGainAtLocalTime } from "../editorEffects";
-import { clipDurationSec, sortedClipsOnTrack } from "../projectContract";
+import { clipDurationSec, clipSpeed, sortedClipsOnTrack } from "../projectContract";
 
 export type CompiledClip = {
   clipId: string;
@@ -163,9 +163,11 @@ function contains(start: number, end: number, time: number): boolean {
 }
 
 function sourceAt(clip: CompiledClip, timelineTime: number): number {
+  const speed = clipSpeed(clip.clip.effects);
+  const local = timelineTime - clip.timelineStart;
   return Math.max(
     clip.sourceStart,
-    Math.min(clip.sourceEnd - 0.001, clip.sourceStart + timelineTime - clip.timelineStart),
+    Math.min(clip.sourceEnd - 0.001, clip.sourceStart + local * speed),
   );
 }
 

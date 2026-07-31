@@ -24,6 +24,18 @@ export function buildClipMenuItems({ clip, media, canSplit }) {
     items.push({ id: "mute", label: muted ? "Unmute" : "Mute" });
   }
 
+  if (!isText && hasAsset) {
+    items.push({ id: "sep-speed", sep: true });
+    for (const preset of [0.75, 1, 1.1, 1.25, 1.5, 2]) {
+      const current = Number(clip?.effects?.speed ?? 1);
+      const active = Math.abs(current - preset) < 0.001;
+      items.push({
+        id: `speed:${preset}`,
+        label: active ? `Speed ${preset}× ✓` : `Speed ${preset}×`,
+      });
+    }
+  }
+
   items.push({ id: "sep-edit", sep: true });
   items.push({ id: "duplicate", label: "Duplicate" });
   if (!isText) {

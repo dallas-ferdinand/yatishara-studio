@@ -22,6 +22,8 @@ export type ClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
   volume?: number;
+  /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */
+  speed?: number;
   /** Canvas zoom. 1 = 100% cover fill. */
   scale?: number;
   /** Horizontal pan as a fraction of canvas width. */

@@ -1,19 +1,42 @@
 /** Shared export audio rules — keep preview mute/volume/fade parity here. */
 
-function clipDurationSec(clip: { trimIn?: number; trimOut?: number }, fallback = 0.05): number {
+import {
+  buildNaturalSpeedAudioFilters,
+  clipSpeedFromEffects,
+  isIdentitySpeed,
+} from "./naturalAudioSpeed";
+
+function sourceTrimSec(
+  clip: { trimIn?: number; trimOut?: number },
+  fallback = 0.05,
+): number {
   const trimIn = Number(clip.trimIn ?? 0);
   const trimOut = Number(clip.trimOut ?? trimIn + fallback);
   const duration = trimOut - trimIn;
   return Number.isFinite(duration) && duration > 0.05 ? duration : Math.max(0.05, fallback);
 }
 
+/** Timeline duration after CapCut-style speed. */
+export function timelineDurationSec(
+  clip: {
+    trimIn?: number;
+    trimOut?: number;
+    effects?: { speed?: number; volume?: number; fadeIn?: number; fadeOut?: number };
+  },
+  fallback = 0.05,
+): number {
+  const source = sourceTrimSec(clip, fallback);
+  const speed = clipSpeedFromEffects(clip.effects);
+  return Math.max(0.05, source / speed);
+}
+
 /**
  * Build ffmpeg -af chain for a video clip's embedded audio.
- * Applies volume + afade in/out (qsin ≈ preview quarter-sine ease-out).
+ * Natural atempo+EQ (when speed ≠ 1) then volume + afade in timeline time.
  */
 export function videoClipAudioFilter(
   clip: {
-    effects?: { volume?: number; fadeIn?: number; fadeOut?: number };
+    effects?: { volume?: number; fadeIn?: number; fadeOut?: number; speed?: number };
     trimIn?: number;
     trimOut?: number;
   },
@@ -25,12 +48,19 @@ export function videoClipAudioFilter(
 
   const duration = Math.max(
     0.05,
-    durationSec != null && Number.isFinite(durationSec) ? durationSec : clipDurationSec(clip),
+    durationSec != null && Number.isFinite(durationSec)
+      ? durationSec
+      : timelineDurationSec(clip),
   );
   const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
   const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
+  const speed = clipSpeedFromEffects(clip.effects);
+  const natural = buildNaturalSpeedAudioFilters(speed);
 
-  let af = "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo";
+  const parts: string[] = [];
+  if (natural) parts.push(natural);
+  parts.push("aresample=44100", "aformat=sample_fmts=fltp:channel_layouts=stereo");
+  let af = parts.join(",");
   if (fadeIn > 0) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
   if (fadeOut > 0) {
     af += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
@@ -38,3 +68,37 @@ export function videoClipAudioFilter(
   if (Math.abs(volume - 1) > 0.001) af += `,volume=${volume}`;
   return af;
 }
+
+/** Fragment for bed mix after atrim/asetpts (no aresample). */
+export function bedClipAudioFilters(
+  clip: {
+    effects?: { volume?: number; fadeIn?: number; fadeOut?: number; speed?: number };
+    trimIn?: number;
+    trimOut?: number;
+  },
+  durationSec?: number,
+): string {
+  const volume = Math.max(0, Math.min(2, clip.effects?.volume ?? 1));
+  const duration = Math.max(
+    0.05,
+    durationSec != null && Number.isFinite(durationSec)
+      ? durationSec
+      : timelineDurationSec(clip),
+  );
+  const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
+  const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
+  const speed = clipSpeedFromEffects(clip.effects);
+  const natural = buildNaturalSpeedAudioFilters(speed);
+  const parts: string[] = [];
+  if (natural) parts.push(natural);
+  if (fadeIn > 0) parts.push(`afade=t=in:st=0:d=${fadeIn}:curve=qsin`);
+  if (fadeOut > 0) {
+    parts.push(
+      `afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`,
+    );
+  }
+  if (Math.abs(volume - 1) > 0.001) parts.push(`volume=${volume}`);
+  return parts.join(",");
+}
+
+export { isIdentitySpeed, clipSpeedFromEffects };
