@@ -1756,7 +1756,7 @@ function StudioCnOfferBookSidebar({
         {offer.sellerUsername ? (
           <button
             type="button"
-            className="public-offers-btn is-icon is-quiet"
+            className="public-offers-btn is-icon"
             aria-label="Message seller"
             title="Message seller"
             onClick={messageSeller}
@@ -1939,7 +1939,7 @@ export function StudioOfferDetailEmbed({
               {offer.sellerUsername ? (
                 <button
                   type="button"
-                  className="public-offers-btn is-icon is-quiet studio-cn-book-bar-msg"
+                  className="public-offers-btn is-icon studio-cn-book-bar-msg"
                   aria-label="Message seller"
                   title="Message seller"
                   onClick={() => {

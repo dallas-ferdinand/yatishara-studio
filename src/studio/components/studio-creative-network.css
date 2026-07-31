@@ -832,17 +832,19 @@ button.studio-cn-card-btn.public-offers-card {
   display: none;
 }
 
-/* Mobile book bar = same height as Studio bottom nav / head. */
+/* Mobile book bar sits ABOVE Studio bottom nav (main-panels already clear
+   nav + safe-area). Match nav content height only — do not add safe-area again
+   or the bar reads too tall in Capacitor / fullscreen. */
 .studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav.studio-cn-book-bar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   z-index: 40;
-  height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
-  min-height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
-  max-height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
-  padding: 0 10px env(safe-area-inset-bottom, 0px);
+  height: var(--studio-mobile-nav-height, 38px) !important;
+  min-height: var(--studio-mobile-nav-height, 38px) !important;
+  max-height: var(--studio-mobile-nav-height, 38px) !important;
+  padding: 0 10px !important;
   border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
   background: var(--mos-bg, var(--mos-panel, var(--color-cursor-bg, #f5f5f7)));
   box-sizing: border-box;
@@ -868,17 +870,33 @@ button.studio-cn-card-btn.public-offers-card {
   min-width: 0;
 }
 
-.studio-cn-book-bar-msg {
+/* Circle plate like header icon buttons (not a quiet ghost icon). */
+.studio-cn-book-bar-msg,
+.studio-cn-book-sidebar-head .public-offers-btn.is-icon {
   width: 28px !important;
   min-width: 28px !important;
   height: 28px !important;
   min-height: 28px !important;
   padding: 0 !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised)) !important;
+  color: var(--color-cursor-text, var(--mos-text)) !important;
 }
 
-.studio-cn-book-bar-msg svg {
+.studio-cn-book-bar-msg:hover:not(:disabled),
+.studio-cn-book-sidebar-head .public-offers-btn.is-icon:hover:not(:disabled) {
+  background: var(--mos-active, var(--color-cursor-active)) !important;
+}
+
+.studio-cn-book-bar-msg svg,
+.studio-cn-book-sidebar-head .public-offers-btn.is-icon svg {
   width: 15px;
   height: 15px;
+}
+
+.studio-cn-offer-detail.is-mobile .studio-cn-book-bar .public-offers-btn {
+  min-height: 0 !important;
 }
 
 .studio-cn-book-bar-cta {
@@ -887,6 +905,7 @@ button.studio-cn-card-btn.public-offers-card {
   min-height: 28px !important;
   padding: 0 12px !important;
   font-size: 12px !important;
+  border-radius: var(--cursor-radius-pill, 999px) !important;
 }
 
 .studio-cn-book-bar-cta svg {

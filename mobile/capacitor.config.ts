@@ -17,6 +17,7 @@ const config: CapacitorConfig = {
       "studio.yatishara.com",
       "*.yatishara.com",
       "convex-studio-api.yatishara.com",
+      "convex-studio.yatishara.com",
       "*.b-cdn.net",
     ],
   },
@@ -25,8 +26,11 @@ const config: CapacitorConfig = {
     backgroundColor: "#000000",
   },
   plugins: {
+    // No branded splash — hand off to the WebView immediately.
     SplashScreen: {
+      launchShowDuration: 0,
       launchAutoHide: true,
+      launchFadeOutDuration: 0,
       backgroundColor: "#000000",
       showSpinner: false,
     },
