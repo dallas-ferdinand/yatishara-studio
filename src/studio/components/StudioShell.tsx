@@ -18964,6 +18964,58 @@ export function StudioShell({
           aspect-ratio: auto;
           min-height: 72px;
         }
+        /* Audio in-progress: stack loader + phrase (not absolute overlay on a short banner). */
+        .studio-gen-status-card.is-audio.is-progress {
+          width: fit-content;
+          max-width: 100%;
+          align-self: flex-start;
+        }
+        .studio-gen-status-card.is-audio.is-progress .studio-gen-status-frame {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          min-height: 0;
+          height: auto;
+          aspect-ratio: auto;
+          padding: 16px 22px 14px;
+          overflow: visible;
+          border-radius: 8px 18px 18px 18px;
+          background: var(--mos-plate, var(--cursor-surface-raised));
+          border: 1px solid color-mix(in srgb, var(--studio-composer-glass-border) 80%, transparent);
+          box-shadow: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-audio.is-progress .studio-gen-status-frame {
+          background: color-mix(in srgb, #fff 92%, #0f172a 8%);
+          border-color: color-mix(in srgb, #94a3b8 35%, transparent);
+        }
+        .studio-gen-status-card.is-audio.is-progress .studio-gen-ghost-loader,
+        .studio-gen-status-card.is-audio.is-progress .studio-gen-status-frame.has-media-loader > .media-load-frame-wave {
+          position: relative;
+          inset: auto;
+          width: auto;
+          height: auto;
+          display: grid;
+          place-items: center;
+        }
+        .studio-gen-status-card.is-audio.is-progress .studio-gen-ghost-caption {
+          position: relative;
+          left: auto;
+          right: auto;
+          bottom: auto;
+          margin: 0;
+          padding: 0;
+          font-size: 12px;
+          font-weight: 650;
+          letter-spacing: 0.02em;
+          line-height: 1.2;
+          color: color-mix(in srgb, var(--color-cursor-text-bright, #f4f6fb) 78%, transparent);
+          text-shadow: none;
+        }
+        [data-appearance="light"] .studio-polish .studio-gen-status-card.is-audio.is-progress .studio-gen-ghost-caption {
+          color: color-mix(in srgb, #0f172a 72%, transparent);
+        }
         /* Audio terminal states: natural-height banner (not aspect-ratio media frame). */
         .studio-gen-status-card.is-audio:not(.is-progress) {
           width: min(100%, 420px);
@@ -25807,7 +25859,11 @@ function StudioGenerationStatusCard({ stage, error, mode = "video", aspectRatio 
         aria-label={progressAria}
       >
         {isProgress ? (
-          <MediaLoadWave className="studio-gen-ghost-loader" size="lg" appearance="light" />
+          <MediaLoadWave
+            className="studio-gen-ghost-loader"
+            size={isAudio ? "md" : "lg"}
+            appearance="light"
+          />
         ) : null}
         {isProgress ? (
           <p className="studio-gen-ghost-caption">
