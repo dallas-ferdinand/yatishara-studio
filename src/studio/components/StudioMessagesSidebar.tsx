@@ -17,6 +17,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,6 +56,7 @@ import {
   type DmConversationId,
 } from "./StudioMessagesPane";
 import {
+  bindDmCacheOwner,
   dmLiveOrCached,
   readDmConversations,
   rememberDmConversations,
@@ -119,6 +121,11 @@ export function StudioMessagesSidebar({
   useHorizontalWheelScroll(labelRailRef);
   useHorizontalScrollFade(labelRailRef);
 
+  const me = useQuery(api.users.current, {});
+  const cacheReady = Boolean(me?.userId);
+  useLayoutEffect(() => {
+    bindDmCacheOwner(me?.userId ?? null);
+  }, [me?.userId]);
   const labels = useQuery(api.dmLabels.listMine, {});
   const removeLabel = useMutation(api.dmLabels.remove);
   const ackDelivered = useMutation(api.dms.ackDelivered);
@@ -127,11 +134,12 @@ export function StudioMessagesSidebar({
     labelId: activeLabelId ?? undefined,
   });
   useEffect(() => {
+    if (!cacheReady) return;
     rememberDmConversations(conversationsLive, activeLabelId);
-  }, [activeLabelId, conversationsLive]);
-  const { data: conversations } = dmLiveOrCached(
+  }, [activeLabelId, cacheReady, conversationsLive]);
+  const { data: conversations, pending: conversationsPending } = dmLiveOrCached(
     conversationsLive,
-    readDmConversations(activeLabelId),
+    cacheReady ? readDmConversations(activeLabelId) : null,
   );
 
   // Warm recent threads so opening a chat paints instantly (Convex + client cache).
@@ -154,12 +162,13 @@ export function StudioMessagesSidebar({
   }, [conversations, expiresUnix]);
   const warmMessageResults = useQueries(warmMessageQueries);
   useEffect(() => {
+    if (!cacheReady) return;
     for (const [key, result] of Object.entries(warmMessageResults)) {
       if (result === undefined || result instanceof Error) continue;
       const conversationId = key.slice("dm:".length) as DmConversationId;
       rememberDmMessages(conversationId, result);
     }
-  }, [warmMessageResults]);
+  }, [cacheReady, warmMessageResults]);
 
   const searchResults = useQuery(
     api.dms.searchSidebar,
@@ -190,8 +199,9 @@ export function StudioMessagesSidebar({
   }, [activeLabelId, labels]);
 
   // Delivery ACK while the chat list is open (inbound last message).
+  // Only against live Convex rows — never session-cache leftovers.
   useEffect(() => {
-    if (!conversations?.length) return;
+    if (conversationsPending || !conversations?.length) return;
     for (const row of conversations) {
       if (row.lastMessageFromMe) continue;
       void ackDelivered({
@@ -199,7 +209,7 @@ export function StudioMessagesSidebar({
         upToCreatedAt: row.lastMessageAt,
       });
     }
-  }, [ackDelivered, conversations]);
+  }, [ackDelivered, conversations, conversationsPending]);
 
   const filteredConversations = useMemo(() => {
     if (!conversations) return conversations;

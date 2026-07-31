@@ -28,6 +28,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -44,6 +45,7 @@ import { useLongPress } from "@/desk/hooks/use-long-press";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import {
+  bindDmCacheOwner,
   dmLiveOrCached,
   readDmConversations,
   readDmMessages,
@@ -1765,6 +1767,11 @@ export function StudioMessagesPane({
       peerSidebarOpen ? "1" : "0",
     );
   }, [embeddedInRail, peerSidebarOpen]);
+  const me = useQuery(api.users.current, {});
+  const cacheReady = Boolean(me?.userId);
+  useLayoutEffect(() => {
+    bindDmCacheOwner(me?.userId ?? null);
+  }, [me?.userId]);
   const myProfile = useQuery(api.profiles.getMine, { expiresUnix });
   const conversationsLive = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messagesLive = useQuery(
@@ -1773,16 +1780,21 @@ export function StudioMessagesPane({
   );
 
   useEffect(() => {
+    if (!cacheReady) return;
     rememberDmConversations(conversationsLive);
-  }, [conversationsLive]);
+  }, [cacheReady, conversationsLive]);
   useEffect(() => {
-    if (conversationId) rememberDmMessages(conversationId, messagesLive);
-  }, [conversationId, messagesLive]);
+    if (!cacheReady || !conversationId) return;
+    rememberDmMessages(conversationId, messagesLive);
+  }, [cacheReady, conversationId, messagesLive]);
 
-  const conversationsCached = readDmConversations<typeof conversationsLive>();
-  const messagesCached = conversationId
-    ? readDmMessages<typeof messagesLive>(conversationId)
+  const conversationsCached = cacheReady
+    ? readDmConversations<typeof conversationsLive>()
     : null;
+  const messagesCached =
+    cacheReady && conversationId
+      ? readDmMessages<typeof messagesLive>(conversationId)
+      : null;
   const { data: conversations } = dmLiveOrCached(
     conversationsLive,
     conversationsCached ?? null,
@@ -2110,13 +2122,14 @@ export function StudioMessagesPane({
   }, [conversationId, lastMessageId]);
 
   useEffect(() => {
-    if (!conversationId || !activeRow?.unread) return;
+    if (messagesPending || !conversationId || !activeRow?.unread) return;
     void markRead({ conversationId });
-  }, [activeRow?.unread, conversationId, lastMessageId, markRead]);
+  }, [activeRow?.unread, conversationId, lastMessageId, markRead, messagesPending]);
 
   // Device delivery ACK — when inbound messages arrive over the Convex WS.
+  // Skip while painting from session cache (wrong-account leftovers).
   useEffect(() => {
-    if (!conversationId || !messages?.length) return;
+    if (messagesPending || !conversationId || !messages?.length) return;
     let maxInbound = 0;
     for (const message of messages) {
       if (!message.fromMe && message.createdAt > maxInbound) {
@@ -2125,7 +2138,7 @@ export function StudioMessagesPane({
     }
     if (maxInbound <= 0) return;
     void ackDelivered({ conversationId, upToCreatedAt: maxInbound });
-  }, [ackDelivered, conversationId, lastMessageId, messages]);
+  }, [ackDelivered, conversationId, lastMessageId, messages, messagesPending]);
 
   useEffect(() => {
     setDraft("");

@@ -1626,6 +1626,7 @@ export const deleteMessageForEveryoneForApi = internalMutation({
 /**
  * Recipient device ACK — advances my delivery watermark so the sender sees
  * double gray ticks. Idempotent: only moves forward.
+ * Soft-fails on missing/non-member (stale session cache after account switch).
  */
 export const ackDelivered = authedMutation({
   args: {
@@ -1634,11 +1635,14 @@ export const ackDelivered = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const conversation = await requireMemberConversation(
-      ctx,
-      args.conversationId,
-      ctx.user._id,
-    );
+    const conversation = await ctx.db.get("dmConversations", args.conversationId);
+    if (!conversation) return null;
+    if (
+      conversation.userLowId !== ctx.user._id &&
+      conversation.userHighId !== ctx.user._id
+    ) {
+      return null;
+    }
     if (!Number.isFinite(args.upToCreatedAt) || args.upToCreatedAt <= 0) {
       return null;
     }
