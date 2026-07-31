@@ -248,6 +248,10 @@ import {
   TEXT_GENERATION_BASE_CREDITS,
   textCreditCost,
 } from "../../../convex/lib/generationPricing";
+import {
+  orbSeedForVoice,
+  StudioOrbAvatar,
+} from "./StudioOrbPlayButton";
 import { StudioVoicePicker } from "./StudioVoicePicker";
 import "./post-compose-tab.css";
 import "./profile-post-viewer.css";
@@ -14545,6 +14549,50 @@ export function StudioShell({
           font-weight: 700;
           text-overflow: ellipsis;
         }
+        /* Voice chip: match inline-setting height; dashed border; EL Orb */
+        .studio-audio-voice-chip {
+          height: 26px;
+          min-height: 26px;
+          max-height: 26px;
+          max-width: 148px;
+          padding: 0 8px 0 5px;
+          gap: 5px;
+          font-size: 10px;
+          font-weight: 650;
+          line-height: 1;
+          border-style: dashed;
+          border-color: var(--studio-composer-glass-border);
+          background: var(--studio-composer-glass-muted);
+          backdrop-filter: var(--studio-composer-glass-blur);
+          -webkit-backdrop-filter: var(--studio-composer-glass-blur);
+          color: var(--color-cursor-text-bright);
+          box-sizing: border-box;
+        }
+        .studio-audio-voice-chip.is-empty {
+          border-style: dashed;
+          color: color-mix(in srgb, var(--color-cursor-text-bright) 62%, transparent);
+        }
+        .studio-audio-voice-chip.is-open,
+        .studio-audio-voice-chip:hover {
+          border-color: color-mix(in srgb, var(--cursor-accent) 30%, var(--color-cursor-border-soft));
+          background: color-mix(in srgb, var(--cursor-accent-dim) 28%, var(--studio-composer-glass) 72%);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+        }
+        .studio-audio-voice-chip > span {
+          overflow: hidden;
+          max-width: 96px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .studio-audio-voice-chip .studio-orb-play,
+        .studio-audio-voice-chip-orb.studio-orb-play {
+          width: 16px;
+          height: 16px;
+          flex: 0 0 auto;
+        }
+        .studio-audio-voice-chip .studio-orb-frame {
+          padding: 1px;
+        }
         .studio-composer-actions {
           display: flex;
           align-items: center;
@@ -21108,6 +21156,13 @@ export function StudioShell({
   );
 }
 
+/** Chip label: first segment only ("Matilda - Knowledgeable…" → "Matilda"). */
+function shortVoiceChipLabel(name: string | null | undefined): string {
+  if (!name?.trim()) return "Choose voice";
+  const primary = name.trim().split(/\s+[—–-]\s+/)[0]?.trim();
+  return primary || name.trim();
+}
+
 function StudioComposer({
   draft,
   setDraft,
@@ -22214,8 +22269,13 @@ function StudioComposer({
                 setVoicePickerOpen((open) => !open);
               }}
             >
-              <Mic size={12} aria-hidden="true" />
-              <span>{selectedVoice?.name ?? "Choose voice"}</span>
+              {selectedVoice ? (
+                <StudioOrbAvatar
+                  seed={orbSeedForVoice(selectedVoice.voiceId, selectedVoice.name)}
+                  className="studio-audio-voice-chip-orb"
+                />
+              ) : null}
+              <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
             </button>
           ) : null}
           {!isElementMode && !isAudioMode ? (
@@ -22375,8 +22435,13 @@ function StudioComposerControlStrip({
                   className={`studio-audio-voice-chip${selectedVoice ? "" : " is-empty"}`}
                   onClick={() => onOpenVoicePicker?.()}
                 >
-                  <Mic size={12} aria-hidden="true" />
-                  <span>{selectedVoice?.name ?? "Choose voice"}</span>
+                  {selectedVoice ? (
+                    <StudioOrbAvatar
+                      seed={orbSeedForVoice(selectedVoice.voiceId, selectedVoice.name)}
+                      className="studio-audio-voice-chip-orb"
+                    />
+                  ) : null}
+                  <span>{shortVoiceChipLabel(selectedVoice?.name)}</span>
                 </button>
               </div>
             ) : null}
