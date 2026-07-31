@@ -26,6 +26,7 @@ import {
   type SharedVoice,
   type SharedVoiceSort,
 } from "./lib/elevenlabs";
+import { voiceMatchesExploreFilters } from "./lib/voiceExploreFilters";
 import { friendlyGenerationErrorText } from "./lib/generationUserErrors";
 import { generationAssetFileName } from "./lib/generationAssetNames";
 
@@ -173,26 +174,29 @@ async function browseVoices(args: ExploreVoicesArgs): Promise<ExploreVoicesResul
   const canUseLibrary = libraryVoicesAvailable();
 
   // Premade/account voices work for TTS on current plan; show them first on page 0.
+  // Always honor language/gender/accent/age/category — previously filters only hit shared library.
   let accountVoices: SharedVoice[] = [];
   if (page === 0 || !canUseLibrary) {
     try {
       accountVoices = await listAccountVoices();
-      const q = args.search?.trim().toLowerCase();
-      if (q) {
-        accountVoices = accountVoices.filter(
-          (voice) =>
-            voice.name.toLowerCase().includes(q) ||
-            voice.description?.toLowerCase().includes(q),
-        );
-      }
     } catch {
       accountVoices = [];
     }
   }
 
+  const exploreFilters = {
+    search: args.search,
+    language: args.language,
+    accent: args.accent,
+    gender: args.gender,
+    age: args.age,
+    category: args.category,
+  };
+
   // Hide voices the current plan can't use — no Unavailable tags in the UI.
   const usableAccount = accountVoices
     .filter((voice) => voiceUsableOnCurrentPlan(voice.category))
+    .filter((voice) => voiceMatchesExploreFilters(voice, exploreFilters))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   if (!canUseLibrary) {

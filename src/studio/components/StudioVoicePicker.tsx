@@ -25,6 +25,7 @@ import {
   StudioOrbAvatar,
 } from "@/studio/components/StudioOrbPlayButton";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { voiceMatchesExploreFilters } from "../../../convex/lib/voiceExploreFilters";
 import "./studio-voice-picker.css";
 
 export type StudioVoiceSelection = {
@@ -188,8 +189,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
     return () => window.clearTimeout(timer);
   }, [search]);
 
+  // Reset page in the same turn as filter changes (avoids fetching stale page first).
   useEffect(() => {
     setPage(0);
+    setVoices([]);
   }, [
     debouncedSearch,
     sort,
@@ -314,14 +317,26 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       : mineRows.filter(
           (voice) => (voice.category ?? "").trim().toLowerCase() === "premade",
         );
-    const q = debouncedSearch.toLowerCase();
-    if (!q) return usable;
-    return usable.filter(
-      (voice) =>
-        voice.name.toLowerCase().includes(q) ||
-        voice.description?.toLowerCase().includes(q),
+    return usable.filter((voice) =>
+      voiceMatchesExploreFilters(voice, {
+        search: debouncedSearch,
+        language,
+        accent,
+        gender,
+        age,
+        category,
+      }),
     );
-  }, [mineRows, debouncedSearch, libraryVoicesAvailable]);
+  }, [
+    mineRows,
+    debouncedSearch,
+    libraryVoicesAvailable,
+    language,
+    accent,
+    gender,
+    age,
+    category,
+  ]);
 
   const rows = tab === "explore" ? voices : filteredMine;
   const advancedActive =
@@ -343,7 +358,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       value: language,
       display: optionLabel(LANGUAGE_OPTIONS, language),
       options: LANGUAGE_OPTIONS,
-      setValue: setLanguage,
+      setValue: (next) => {
+        setLanguage(next);
+        setPage(0);
+      },
     },
     {
       key: "accent",
@@ -351,7 +369,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       value: accent,
       display: optionLabel(ACCENT_OPTIONS, accent) ?? (accent || null),
       options: ACCENT_OPTIONS,
-      setValue: setAccent,
+      setValue: (next) => {
+        setAccent(next);
+        setPage(0);
+      },
     },
     {
       key: "category",
@@ -359,7 +380,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       value: category,
       display: optionLabel(CATEGORY_OPTIONS, category),
       options: CATEGORY_OPTIONS,
-      setValue: setCategory,
+      setValue: (next) => {
+        setCategory(next);
+        setPage(0);
+      },
     },
     {
       key: "gender",
@@ -367,7 +391,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       value: gender,
       display: optionLabel(GENDER_OPTIONS, gender),
       options: GENDER_OPTIONS,
-      setValue: setGender,
+      setValue: (next) => {
+        setGender(next);
+        setPage(0);
+      },
     },
     {
       key: "age",
@@ -375,7 +402,10 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
       value: age,
       display: optionLabel(AGE_OPTIONS, age),
       options: AGE_OPTIONS,
-      setValue: setAge,
+      setValue: (next) => {
+        setAge(next);
+        setPage(0);
+      },
     },
   ];
 
@@ -492,6 +522,7 @@ function StudioVoicePickerInner({ selectedVoiceId, onSelect, onClose }: Props) {
                       className={`studio-voice-picker-menu-item${sort === option.value ? " is-active" : ""}`}
                       onClick={() => {
                         setSort(option.value);
+                        setPage(0);
                         setOpenMenu(null);
                       }}
                     >
