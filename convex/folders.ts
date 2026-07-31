@@ -9,6 +9,7 @@ import {
   PEEK_TRANSFORM,
   signBunnyCdnUrl,
 } from "./lib/bunny";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -26,6 +27,7 @@ const folderReturn = v.object({
       v.literal("public_assets"),
     ),
   ),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -483,6 +485,25 @@ export const update = authedMutation({
       ...(args.parentId !== undefined
         ? { parentId: args.parentId === null ? undefined : args.parentId }
         : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+
+export const setReaction = authedMutation({
+  args: {
+    folderId: v.id("folders"),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const folder = await requireFolderOwner(ctx, args.folderId);
+    assertSystemFolderMutable(folder);
+    const reactionEmoji = normalizeReactionEmoji(args.emoji);
+    await ctx.db.patch(args.folderId, {
+      reactionEmoji,
       updatedAt: Date.now(),
     });
     return null;

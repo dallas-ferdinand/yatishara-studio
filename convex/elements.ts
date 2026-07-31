@@ -9,6 +9,7 @@ import {
 } from "./lib/elementAssetModel";
 import { inferElementSourceMode } from "./lib/elementSheetGuides";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
 
 const elementType = v.union(
@@ -44,6 +45,7 @@ const elementReturn = v.object({
   renderMode: v.optional(elementRenderMode),
   builtAt: v.optional(v.number()),
   sourceDocumentId: v.optional(v.id("documents")),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -269,6 +271,25 @@ export const setBuiltSheet = authedMutation({
     return null;
   },
 });
+
+
+export const setReaction = authedMutation({
+  args: {
+    elementId: v.id("elements"),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireElementOwner(ctx, args.elementId);
+    const reactionEmoji = normalizeReactionEmoji(args.emoji);
+    await ctx.db.patch(args.elementId, {
+      reactionEmoji,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 
 export const moveToTrash = authedMutation({
   args: { elementId: v.id("elements") },

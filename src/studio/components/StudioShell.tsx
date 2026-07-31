@@ -89,7 +89,9 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
+import { FileReactionPicker } from "@/studio/components/FileReactionPicker";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
+import { isAllowedReactionEmoji } from "@/studio/lib/itemReactions";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
 import {
   GenerationStatusPhrase,
@@ -273,6 +275,7 @@ import "./studio-asset-picker.css";
 import "./studio-profile-avatar.css";
 import "./media-load-frame.css";
 import "./logo-loader.css";
+import "./file-reaction-picker.css";
 
 const StudioApiKeysSettings = dynamic(
   () => import("./StudioApiKeysSettings").then((m) => m.StudioApiKeysSettings),
@@ -1037,19 +1040,23 @@ export function StudioShell({
   const openDmConversation = useMutation(api.dms.openConversation);
   const createFolder = useMutation(api.folders.create);
   const updateFolder = useMutation(api.folders.update);
+  const setFolderReaction = useMutation(api.folders.setReaction);
   const trashFolder = useMutation(api.folders.moveToTrash);
   const restoreFolder = useMutation(api.folders.restore);
   const createDocument = useMutation(api.documents.create);
   const updateDocument = useMutation(api.documents.update);
+  const setDocumentReaction = useMutation(api.documents.setReaction);
   const trashDocument = useMutation(api.documents.moveToTrash);
   const restoreDocument = useMutation(api.documents.restore);
   const createElement = useMutation(api.elements.create);
   const updateElement = useMutation(api.elements.update);
+  const setElementReaction = useMutation(api.elements.setReaction);
   const trashElement = useMutation(api.elements.moveToTrash);
   const restoreElement = useMutation(api.elements.restore);
   const reserveUpload = useMutation(api.assets.reserveUpload);
   const commitStagingUpload = useAction(api.assetActions.commitStagingUpload);
   const updateAsset = useMutation(api.assets.update);
+  const setAssetReaction = useMutation(api.assets.setReaction);
   const duplicateAsset = useMutation(api.assets.duplicate);
   const trashAsset = useMutation(api.assets.moveToTrash);
   const restoreAsset = useMutation(api.assets.restore);
@@ -1057,6 +1064,7 @@ export function StudioShell({
   const emptyTrash = useMutation(api.assets.emptyTrash);
   const createVideoEdit = useMutation(api.videoEdits.create);
   const updateVideoEdit = useMutation(api.videoEdits.update);
+  const setVideoEditReaction = useMutation(api.videoEdits.setReaction);
   const trashVideoEdit = useMutation(api.videoEdits.moveToTrash);
   const restoreVideoEdit = useMutation(api.videoEdits.restore);
   const createThread = useMutation(api.generation.createThread);
@@ -1279,6 +1287,7 @@ export function StudioShell({
     return window.localStorage.getItem(STUDIO_CUSTOM_CURSOR_KEY) !== "off";
   });
   const [contextMenu, setContextMenu] = useState(null);
+  const [reactionPickerEntry, setReactionPickerEntry] = useState(null);
   const [fileSelectionMode, setFileSelectionMode] = useState(false);
   const [selectedFileEntries, setSelectedFileEntries] = useState([]);
   const [fileTransfers, setFileTransfers] = useState([]);
@@ -4645,6 +4654,9 @@ export function StudioShell({
   useMobileBackLayer("explorer-context", Boolean(contextMenu), () => {
     setContextMenu(null);
   });
+  useMobileBackLayer("file-reaction-picker", Boolean(reactionPickerEntry), () => {
+    setReactionPickerEntry(null);
+  });
   useMobileBackLayer("feed-mode-menu", feedModeMenuOpen, () => {
     setFeedModeMenuOpen(false);
     setFeedModeMenuKey(null);
@@ -5352,6 +5364,37 @@ export function StudioShell({
         contentMarkdown: doc?.contentMarkdown ?? entry.description ?? "",
       });
       openTab(`document:${id}`);
+    }
+  }
+
+  async function applyEntryReaction(entry, emoji) {
+    if (!entry?.studioId) return;
+    if (
+      isTrashNav ||
+      entry.studioKind === "trash" ||
+      entry.studioKind === "recents" ||
+      isLockedSystemFolder(entry)
+    ) {
+      return;
+    }
+    const next =
+      emoji === null || emoji === entry.reactionEmoji ? null : emoji;
+    try {
+      if (entry.studioKind === "folder") {
+        await setFolderReaction({ folderId: entry.studioId, emoji: next });
+      } else if (entry.studioKind === "document") {
+        await setDocumentReaction({ documentId: entry.studioId, emoji: next });
+      } else if (entry.studioKind === "asset") {
+        await setAssetReaction({ assetId: entry.studioId, emoji: next });
+      } else if (entry.studioKind === "element") {
+        await setElementReaction({ elementId: entry.studioId, emoji: next });
+      } else if (entry.studioKind === "videoEdit") {
+        await setVideoEditReaction({ projectId: entry.studioId, emoji: next });
+      } else {
+        return;
+      }
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not update reaction"));
     }
   }
 
@@ -21070,6 +21113,21 @@ export function StudioShell({
             else void trashEntry(entry);
           }}
           onAction={(action, entry) => {
+            if (action === "react-open") {
+              setContextMenu(null);
+              setReactionPickerEntry(entry);
+              return;
+            }
+            if (action === "react:clear") {
+              setContextMenu(null);
+              void applyEntryReaction(entry, null);
+              return;
+            }
+            if (typeof action === "string" && action.startsWith("react:")) {
+              setContextMenu(null);
+              void applyEntryReaction(entry, action.slice("react:".length));
+              return;
+            }
             setContextMenu(null);
             if (action === "open") handleEntryOpen(entry);
             if (action === "refresh") {
@@ -21201,6 +21259,16 @@ export function StudioShell({
           }}
         />
       ) : null}
+      <FileReactionPicker
+        open={Boolean(reactionPickerEntry)}
+        currentEmoji={reactionPickerEntry?.reactionEmoji ?? null}
+        onClose={() => setReactionPickerEntry(null)}
+        onSelect={(emoji) => {
+          const entry = reactionPickerEntry;
+          setReactionPickerEntry(null);
+          if (entry) void applyEntryReaction(entry, emoji);
+        }}
+      />
       <StudioRenameDialog
         open={Boolean(renameTarget)}
         entry={renameTarget}
@@ -30406,6 +30474,7 @@ function folderToEntry(folder) {
     studioId: folder._id,
     systemKind: folder.systemKind,
     peekItems: folder.peekItems ?? [],
+    reactionEmoji: folder.reactionEmoji,
   };
 }
 
@@ -30423,6 +30492,7 @@ function documentToEntry(doc) {
     folderId: doc.folderId,
     kindLabel: "Ad copy",
     description: doc.contentMarkdown,
+    reactionEmoji: doc.reactionEmoji,
   };
 }
 
@@ -30462,6 +30532,7 @@ function videoEditToEntry(project) {
     thumbnailLqipUrl: project.signedThumbnailLqipUrl ?? project.thumbnailLqipUrl,
     mediaUrl,
     previewKind,
+    reactionEmoji: project.reactionEmoji,
   };
 }
 
@@ -30507,6 +30578,7 @@ function assetToEntry(asset) {
     height: asset.height,
     licenseKind: asset.licenseKind,
     sourceListingId: asset.sourceListingId,
+    reactionEmoji: asset.reactionEmoji,
   };
 }
 
@@ -30612,6 +30684,7 @@ function elementToEntry(element, assets = []) {
             ? "Place"
             : "Notes",
     description: element.description,
+    reactionEmoji: element.reactionEmoji,
   };
 }
 

@@ -823,7 +823,17 @@ export function FileEntryThumb({
 
   return (
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>
-      <div className="desk-file-thumb-visual">{visual}</div>
+      <div className="desk-file-thumb-visual">
+        {visual}
+        {entry?.reactionEmoji ? (
+          <span
+            className="desk-file-thumb-reaction"
+            aria-label={`Reaction ${entry.reactionEmoji}`}
+          >
+            {entry.reactionEmoji}
+          </span>
+        ) : null}
+      </div>
       {showLabel && !inlinePeekLabel ? (
         renaming ? (
           <InlineRenameInput

@@ -27,6 +27,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFloatingMenuPosition } from "@/desk/lib/use-floating-menu-position";
+import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
 
 const EXPLORER_MENU_ICONS = {
   open: FolderOpen,
@@ -80,6 +81,7 @@ function buildMenuItems(entry, {
   networkListingStatus = null,
   networkPurchaseCount = 0,
   networkPlatformOwned = false,
+  presentation = "menu",
 }) {
   if (!entry) return [];
 
@@ -172,6 +174,25 @@ function buildMenuItems(entry, {
     id: "attach",
     label: isDir ? "Use folder in chat" : "Use in chat",
   });
+
+  // —— React ——
+  items.push({ id: "sep-react", sep: true });
+  if (presentation === "sheet") {
+    items.push({ id: "react-open", label: "React" });
+  } else {
+    const reactChildren = REACTION_EMOJIS.map((emoji) => ({
+      id: `react:${emoji}`,
+      label: emoji,
+    }));
+    if (entry.reactionEmoji) {
+      reactChildren.push({ id: "react:clear", label: "Clear reaction" });
+    }
+    items.push({
+      id: "react",
+      label: "React",
+      children: reactChildren,
+    });
+  }
 
   // —— Organize ——
   items.push({ id: "sep-organize", sep: true });
@@ -388,6 +409,7 @@ export function ExplorerContextMenu({
         networkListingStatus,
         networkPurchaseCount,
         networkPlatformOwned,
+        presentation,
       }),
     [
       entry,
@@ -407,6 +429,7 @@ export function ExplorerContextMenu({
       networkListingStatus,
       networkPurchaseCount,
       networkPlatformOwned,
+      presentation,
     ],
   );
 

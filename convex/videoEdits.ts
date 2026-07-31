@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 import {
   assetThumbnailPath,
   LQIP_TRANSFORM,
@@ -41,6 +42,7 @@ const projectReturn = v.object({
   project: v.any(),
   sourceAssetId: v.optional(v.id("assets")),
   outputAssetId: v.optional(v.id("assets")),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -54,6 +56,7 @@ const listRowReturn = v.object({
   name: v.string(),
   sourceAssetId: v.optional(v.id("assets")),
   outputAssetId: v.optional(v.id("assets")),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -129,6 +132,7 @@ function toListRow(row: {
   name: string;
   sourceAssetId?: Id<"assets">;
   outputAssetId?: Id<"assets">;
+  reactionEmoji?: string;
   deletedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -141,6 +145,7 @@ function toListRow(row: {
     name: row.name,
     sourceAssetId: row.sourceAssetId,
     outputAssetId: row.outputAssetId,
+    reactionEmoji: row.reactionEmoji,
     deletedAt: row.deletedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -463,6 +468,27 @@ export const update = authedMutation({
     await ctx.db.patch(args.projectId, {
       ...(nextName ? { name: nextName, projectJson } : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+
+export const setReaction = authedMutation({
+  args: {
+    projectId: v.id("videoEditProjects"),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
+    if (row.deletedAt) {
+      throw new Error("Edit project is in trash.");
+    }
+    const reactionEmoji = normalizeReactionEmoji(args.emoji);
+    await ctx.db.patch(args.projectId, {
+      reactionEmoji,
       updatedAt: Date.now(),
     });
     return null;

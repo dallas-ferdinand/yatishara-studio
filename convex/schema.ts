@@ -324,6 +324,8 @@ export default defineSchema({
      * Network audio). Cannot be renamed, moved, or trashed.
      */
     systemKind: v.optional(folderSystemKind),
+    /** Owner emoji sticker in the file manager (not Lucide icon). */
+    reactionEmoji: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -378,6 +380,8 @@ export default defineSchema({
     sourceListingId: v.optional(v.id("assetListings")),
     /** When set, trash/delete/move-out is blocked (pay-once Network license). */
     licenseKind: v.optional(assetLicenseKind),
+    /** Owner emoji sticker in the file manager. */
+    reactionEmoji: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
     /**
      * Hard-deleted: Bunny objects are being removed and the bytes are already
@@ -422,6 +426,8 @@ export default defineSchema({
     title: v.string(),
     contentMarkdown: v.string(),
     assetId: v.optional(v.id("assets")),
+    /** Owner emoji sticker in the file manager. */
+    reactionEmoji: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -455,6 +461,8 @@ export default defineSchema({
     renderMode: v.optional(elementRenderMode),
     builtAt: v.optional(v.number()),
     sourceDocumentId: v.optional(v.id("documents")),
+    /** Owner emoji sticker in the file manager. */
+    reactionEmoji: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1034,6 +1042,8 @@ export default defineSchema({
     projectJson: v.string(),
     sourceAssetId: v.optional(v.id("assets")),
     outputAssetId: v.optional(v.id("assets")),
+    /** Owner emoji sticker in the file manager. */
+    reactionEmoji: v.optional(v.string()),
     deletedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

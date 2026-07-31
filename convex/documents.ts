@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 
 const documentReturn = v.object({
   _id: v.id("documents"),
@@ -11,6 +12,7 @@ const documentReturn = v.object({
   title: v.string(),
   contentMarkdown: v.string(),
   assetId: v.optional(v.id("assets")),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -86,6 +88,24 @@ export const update = authedMutation({
         ? { contentMarkdown: args.contentMarkdown }
         : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+
+export const setReaction = authedMutation({
+  args: {
+    documentId: v.id("documents"),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireDocumentOwner(ctx, args.documentId);
+    const reactionEmoji = normalizeReactionEmoji(args.emoji);
+    await ctx.db.patch(args.documentId, {
+      reactionEmoji,
       updatedAt: Date.now(),
     });
     return null;

@@ -12,6 +12,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { assertUploadsAllowed, beginAssetPurge } from "./lib/storageBilling";
 
 const assetKind = v.union(
@@ -68,6 +69,7 @@ const assetReturn = v.object({
   licenseKind: v.optional(
     v.union(v.literal("purchased_network"), v.literal("listed_network")),
   ),
+  reactionEmoji: v.optional(v.string()),
   deletedAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -353,6 +355,24 @@ export const update = authedMutation({
     await ctx.db.patch(asset._id, {
       ...(args.name !== undefined ? { name: args.name.trim() } : {}),
       ...(args.folderId !== undefined ? { folderId: args.folderId } : {}),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+
+export const setReaction = authedMutation({
+  args: {
+    assetId: v.id("assets"),
+    emoji: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAssetOwner(ctx, args.assetId);
+    const reactionEmoji = normalizeReactionEmoji(args.emoji);
+    await ctx.db.patch(args.assetId, {
+      reactionEmoji,
       updatedAt: Date.now(),
     });
     return null;
