@@ -222,7 +222,7 @@ async function buildSegmentVideoFilters(
         : align === "right"
           ? `${anchorX}-text_w`
           : `${anchorX}-text_w/2`;
-    let yExpr =
+    const yExpr =
       vAlign === "top"
         ? anchorY
         : vAlign === "bottom"

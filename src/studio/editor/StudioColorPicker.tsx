@@ -167,7 +167,7 @@ export function StudioColorPicker({
     if (!open || !anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
     const width = Math.min(300, window.innerWidth - 16);
-    let left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.right - width));
+    const left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.right - width));
     let top = rect.bottom + 6;
     if (top + 360 > window.innerHeight) {
       top = Math.max(8, rect.top - 360);

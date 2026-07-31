@@ -43,7 +43,7 @@ export function GoogleFontSelect({ value, onChange }: GoogleFontSelectProps) {
     if (!open || !anchorRef.current) return;
     const rect = anchorRef.current.getBoundingClientRect();
     const width = Math.min(320, Math.max(rect.width, 240));
-    let left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.left));
+    const left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.left));
     let top = rect.bottom + 6;
     if (top + 360 > window.innerHeight) top = Math.max(8, rect.top - 360);
     setPos({ top, left, width });

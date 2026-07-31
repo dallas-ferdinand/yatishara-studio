@@ -63,8 +63,9 @@ export function StudioAssetStoreManagePane() {
   const [selectedId, setSelectedId] = useState<Id<"assetListings"> | null>(null);
   const [busy, setBusy] = useState(false);
   const expiresUnix = useStickySignedUrlExpiry(URL_EXPIRES_SEC);
+  const [nowMs] = useState(() => Date.now());
 
-  const summary = useQuery(api.assetStore.myAssetStoreSummary, { nowMs: Date.now() });
+  const summary = useQuery(api.assetStore.myAssetStoreSummary, { nowMs });
   const listings = useQuery(api.assetStore.listMyListings, {});
   const detail = useQuery(
     api.assetStore.getMyListingDetail,
