@@ -3,6 +3,7 @@
 
 import dynamic from "next/dynamic";
 import { StudioMobileBottomNav } from "./StudioMobileBottomNav";
+import { StudioRatioGlyph } from "./StudioRatioGlyph";
 import { StudioPromptMessage } from "./StudioPromptMessage";
 import { StudioChatMarkdown } from "./StudioChatMarkdown";
 import { AssistanceToggle } from "./guided-video/AssistanceToggle";
@@ -127,6 +128,22 @@ import {
   removePinnedFoldersUnder,
 } from "@/desk/lib/explorer-pins";
 import {
+  FOLDER_ACCESS_FREQUENT_LIMIT,
+  FOLDER_ACCESS_RECENT_LIMIT,
+  listFrequentFolders,
+  listRecentFolders,
+  loadFolderAccess,
+  recordFolderVisit,
+} from "@/desk/lib/explorer-folder-access";
+import {
+  RECENT_ACTIVITY,
+  RECENT_FILES_LIMIT,
+  listRecentFiles,
+  loadRecentFiles,
+  recordFileOpen,
+  recordRecentItem,
+} from "@/desk/lib/explorer-file-access";
+import {
   isHiddenStyleSheet,
   StudioStyleSheetPickerPanel,
   StudioStyleSheetTriggerButton,
@@ -236,6 +253,8 @@ import "./profile-post-viewer.css";
 /* Turbopack: CSS for dynamic() panes / shared chrome must also be static-imported
    here, or HMR throws "No link element found for chunk …src_studio_components_*.css". */
 import "./public-offers.css";
+import { StudioFilesNavPane } from "./StudioFilesNavPane";
+import { StudioFilesNavMobileSheet } from "./StudioFilesNavMobileSheet";
 import "./studio-creative-network.css";
 import "./studio-creative-network-store.css";
 import "./marketplace-offers-pane.css";
@@ -365,9 +384,12 @@ const WORKSPACE_ID = "yatishara-studio";
 const COMPOSER_TAB = "composer:main";
 /** Single Messages tab — the chat window; the sidebar becomes the chat list. */
 const MESSAGES_TAB = "messages:main";
+/** Full-pane Files tab — file manager in the workspace (no custom sidebar). */
+const FILES_TAB = "files:main";
 /** Creative Network marketplace + seller manage (replaces offers:). */
 const NETWORK_TAB = "network:home";
 const TRASH_FOLDER_ID = "__trash__";
+const RECENTS_FOLDER_ID = "__recents__";
 /** Newest-N live chat window — always visible; older turns via "Load earlier". */
 const CHAT_LIVE_EVENT_LIMIT = 80;
 const CHAT_EARLIER_EVENT_LIMIT = 80;
@@ -420,6 +442,17 @@ const TRASH_FOLDER_ENTRY = {
   studioKind: "trash",
   studioId: TRASH_FOLDER_ID,
 };
+const RECENTS_ACTIVE_FOLDER = { _id: RECENTS_FOLDER_ID, name: "Recents" };
+const RECENTS_FOLDER_ENTRY = {
+  type: "dir",
+  name: "Recents",
+  path: "/Studio/Recents",
+  displayPath: displayWorkspacePath("/Studio/Recents"),
+  modified: 0,
+  mtimeMs: 0,
+  studioKind: "recents",
+  studioId: RECENTS_FOLDER_ID,
+};
 const CREATE_MENU_ITEMS_BASE = [
   { action: "upload", label: "Upload media", icon: Upload },
   { action: "new-folder", label: "Folder", icon: Plus },
@@ -445,7 +478,8 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   if (
     tab.startsWith("composer:") ||
     tab.startsWith("thread:") ||
-    tab.startsWith("create:")
+    tab.startsWith("create:") ||
+    tab.startsWith("files:")
   ) {
     return "composer";
   }
@@ -611,6 +645,7 @@ const PERSISTABLE_TAB_PREFIXES = [
   "thread:",
   "feed:",
   "messages:",
+  "files:",
   "profile:",
   "profilePost:",
   "asset:",
@@ -1224,6 +1259,8 @@ export function StudioShell({
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`).matches;
   });
   const [filesDockExpanded, setFilesDockExpanded] = useState(false);
+  /** Mobile Places / Quick access sheet (desktop Files left rail). */
+  const [filesNavSheetOpen, setFilesNavSheetOpen] = useState(false);
   const filesDockOpenGenRef = useRef(0);
   /** Synced from Creative Network context — openChatWith can't call the hook. */
   const cnModeRef = useRef("network");
@@ -1285,6 +1322,16 @@ export function StudioShell({
   const attachEntryRef = useRef(null);
   /** Mobile: restore keyboard when Files closes if composer had focus/keyboard before. */
   const composerWantedKeyboardRef = useRef(false);
+  /** Mobile: reopen Generate Files dock after keyboard dismiss if it was open on composer focus. */
+  const filesDockRestoreAfterKeyboardRef = useRef(false);
+  const deferMobileFilesBusyRef = useRef(false);
+  /** Bump to cancel pending composer focus kicks (stops Files↔KB ping-pong). */
+  const composerFocusGenRef = useRef(0);
+  /** Ignore composer→hide-Files intents after opening the dock. */
+  const ignoreComposerFilesIntentUntilRef = useRef(0);
+  const openMobileSectionRef = useRef(null);
+  const deferMobileFilesForComposerKeyboardRef = useRef(null);
+  const restoreMobileFilesAfterKeyboardRef = useRef(null);
   const composerKeyRef = useRef(initialComposerKey);
   const composerTabIndexRef = useRef(0);
   const createTabIndexRef = useRef(0);
@@ -1313,6 +1360,7 @@ export function StudioShell({
       activeTab.startsWith("listAsset:") ||
       activeTab.startsWith("post:compose:") ||
       (!activeTab.startsWith("messages:") &&
+        !activeTab.startsWith("files:") &&
         !activeTab.startsWith("feed:") &&
         !activeTab.startsWith("profile:") &&
         !activeTab.startsWith("profilePost:") &&
@@ -1325,13 +1373,6 @@ export function StudioShell({
     historyOpen ||
     Boolean(activeTab?.startsWith("thread:")) ||
     openTabs.some((tab) => tab.startsWith("thread:"));
-  const needsSellerListings =
-    settingsOpen ||
-    Boolean(activeTab?.startsWith("network:")) ||
-    Boolean(activeTab?.startsWith("offers:")) ||
-    openTabs.some(
-      (tab) => tab.startsWith("network:") || tab.startsWith("offers:"),
-    );
   // Skip heavy folder contents while Files UI is not actually shown.
   // Desktop: Messages / Feed / Network filters own the left rail.
   // Mobile: dock stays mounted for instant open, but don't subscribe until
@@ -1339,7 +1380,9 @@ export function StudioShell({
   const needsExplorerFolderContents =
     Boolean(assetPickRequest) ||
     (isMobile
-      ? mobileSection === "files" || filesDockExpanded
+      ? mobileSection === "files" ||
+        filesDockExpanded ||
+        (typeof activeTab === "string" && activeTab.startsWith("files:"))
       : !(
           typeof activeTab === "string" &&
           (activeTab.startsWith("messages:") ||
@@ -1354,17 +1397,34 @@ export function StudioShell({
     api.marketplace.getMySellerStatus,
     hasCurrentUser ? {} : "skip",
   );
-  const myAssetListings = useQuery(
-    api.assetStore.listMyListings,
-    hasCurrentUser && needsSellerListings ? {} : "skip",
+  /** Per-asset listing status for explorer context menu — never boot listMyListings here. */
+  const contextMenuAssetId =
+    contextMenu?.entry?.studioKind === "asset" &&
+    contextMenu?.entry?.kind === "audio" &&
+    contextMenu?.entry?.studioId
+      ? contextMenu.entry.studioId
+      : null;
+  const myListingForContextAsset = useQuery(
+    api.assetStore.getMyListingForAsset,
+    hasCurrentUser && contextMenuAssetId
+      ? { assetId: contextMenuAssetId }
+      : "skip",
   );
   const explorerUserId = currentUser?._id ?? null;
   const [pinnedFolders, setPinnedFolders] = useState(() =>
     typeof window === "undefined" ? [] : loadPinnedFolders(null),
   );
+  const [folderAccessRows, setFolderAccessRows] = useState(() =>
+    typeof window === "undefined" ? [] : loadFolderAccess(null),
+  );
+  const [recentFileRows, setRecentFileRows] = useState(() =>
+    typeof window === "undefined" ? [] : loadRecentFiles(null),
+  );
 
   useEffect(() => {
     setPinnedFolders(loadPinnedFolders(explorerUserId));
+    setFolderAccessRows(loadFolderAccess(explorerUserId));
+    setRecentFileRows(loadRecentFiles(explorerUserId));
   }, [explorerUserId]);
 
   // Prefetch Feed / Network / History chunks after auth so first open isn't a spinner.
@@ -1497,6 +1557,7 @@ export function StudioShell({
     hasCurrentUser ? {} : "skip",
   );
   const isTrashView = activeFolderId === TRASH_FOLDER_ID;
+  const isRecentsView = activeFolderId === RECENTS_FOLDER_ID;
   const isTrashNav = navTrail.some((crumb) => crumb.id === TRASH_FOLDER_ID);
   const isTrashBrowse = isTrashNav && !isTrashView;
   // Keep trash folder rows subscribed while browsing inside a deleted folder so
@@ -1507,12 +1568,14 @@ export function StudioShell({
   );
   const selectedFolder = useQuery(
     api.folders.get,
-    hasCurrentUser && activeFolderId && !isTrashView
+    hasCurrentUser && activeFolderId && !isTrashView && !isRecentsView
       ? { folderId: activeFolderId, includeDeleted: isTrashBrowse }
       : "skip",
   );
   const activeFolder = isTrashView
     ? TRASH_ACTIVE_FOLDER
+    : isRecentsView
+      ? RECENTS_ACTIVE_FOLDER
     : activeFolderId
       ? (selectedFolder ??
           folderByIdRef.current.get(activeFolderId) ??
@@ -1532,6 +1595,8 @@ export function StudioShell({
       setFilesDockMounted(false);
       setFilesDockExpanded(false);
       shellRef.current?.removeAttribute("data-files-open");
+      setFilesNavSheetOpen(false);
+      filesDockRestoreAfterKeyboardRef.current = false;
       return;
     }
     setFilesDockMounted(true);
@@ -1542,7 +1607,84 @@ export function StudioShell({
     }
     setFilesDockExpanded(false);
     shellRef.current?.removeAttribute("data-files-open");
+    setFilesNavSheetOpen(false);
   }, [isMobile, mobileSection]);
+
+  // Files open on Generate + composer input / keyboard → hide dock; restore on KB dismiss.
+  // IMPORTANT: do not listen to focusin — programmatic focus would re-enter and ping-pong.
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const eventElement = (node) => {
+      if (node instanceof Element) return node;
+      if (node && node.parentElement instanceof Element) return node.parentElement;
+      return null;
+    };
+
+    const isComposerInputTarget = (node) => {
+      const el = eventElement(node);
+      if (!el) return false;
+      const root = shellRef.current;
+      if (!(root instanceof HTMLElement)) return false;
+      const composer = root.querySelector(".studio-composer.cursor-composer-shell");
+      if (!composer?.contains(el)) return false;
+      return Boolean(
+        el.closest(
+          ".cursor-composer-mention-editor, .cursor-composer-textarea, .cursor-composer-box, .studio-composer-inputline, [contenteditable='true']",
+        ),
+      );
+    };
+
+    const onComposerInputIntent = (event) => {
+      if (Date.now() < ignoreComposerFilesIntentUntilRef.current) return;
+      if (!isComposerInputTarget(event.target)) return;
+      deferMobileFilesForComposerKeyboardRef.current?.({ focusEditor: true });
+    };
+
+    let lastInset = 0;
+    let restoreTimer = 0;
+    const syncKeyboardDock = () => {
+      const inset = getStudioKeyboardInset();
+      const root = shellRef.current;
+      if (inset > 0) {
+        // Keyboard present/rising — never restore Files mid-gesture.
+        if (restoreTimer) {
+          window.clearTimeout(restoreTimer);
+          restoreTimer = 0;
+        }
+        if (lastInset === 0) {
+          const filesOpen =
+            root?.getAttribute("data-files-open") === "1" ||
+            root?.querySelector(".studio-files-dock.is-expanded");
+          if (filesOpen) {
+            deferMobileFilesForComposerKeyboardRef.current?.({ focusEditor: false });
+          }
+        }
+      } else if (lastInset > 0 && inset === 0) {
+        if (restoreTimer) window.clearTimeout(restoreTimer);
+        // Long debounce so vv flicker during KB show/hide cannot reopen Files.
+        restoreTimer = window.setTimeout(() => {
+          restoreTimer = 0;
+          if (getStudioKeyboardInset() > 0) return;
+          restoreMobileFilesAfterKeyboardRef.current?.();
+        }, 400);
+      }
+      lastInset = inset;
+    };
+
+    document.addEventListener("pointerdown", onComposerInputIntent, true);
+    window.visualViewport?.addEventListener("resize", syncKeyboardDock);
+    window.visualViewport?.addEventListener("scroll", syncKeyboardDock);
+    window.addEventListener("resize", syncKeyboardDock);
+    syncKeyboardDock();
+    return () => {
+      document.removeEventListener("pointerdown", onComposerInputIntent, true);
+      window.visualViewport?.removeEventListener("resize", syncKeyboardDock);
+      window.visualViewport?.removeEventListener("scroll", syncKeyboardDock);
+      window.removeEventListener("resize", syncKeyboardDock);
+      if (restoreTimer) window.clearTimeout(restoreTimer);
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -1627,7 +1769,7 @@ export function StudioShell({
   }, [isMobile]);
   const childFoldersQuery = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && activeFolder && !isTrashView && needsExplorerFolderContents
+    hasCurrentUser && activeFolder && !isTrashView && !isRecentsView && needsExplorerFolderContents
       ? {
           parentId: activeFolder._id,
           expiresUnix: assetUrlExpiresUnix,
@@ -1646,6 +1788,22 @@ export function StudioShell({
       : activeFolder?._id
         ? readStudioLive(folderChildrenCacheKey(activeFolder._id)) ?? undefined
         : undefined;
+  /** Children of the workspace root — Feeds Places/Folders in the Files rail (not the root row itself). */
+  const filesNavHomeRootId = navTrail[0]?.id ?? topFolders?.[0]?._id ?? null;
+  const filesNavHomeFolders = useQuery(
+    api.folders.listWithPeeks,
+    hasCurrentUser && filesNavHomeRootId
+      ? { parentId: filesNavHomeRootId }
+      : "skip",
+  );
+
+  /** Recent ready assets — seeds Places → Recents and hydrates open history. */
+  const recentReadyAssets = useQuery(
+    api.assets.listRecentReady,
+    hasCurrentUser && isRecentsView
+      ? { limit: RECENT_FILES_LIMIT, expiresUnix: assetUrlExpiresUnix }
+      : "skip",
+  );
   const trashedAssets = useQuery(
     api.assets.listTrash,
     hasCurrentUser && isTrashView && needsExplorerFolderContents
@@ -1671,6 +1829,7 @@ export function StudioShell({
     hasCurrentUser &&
       activeFolder &&
       !isTrashView &&
+      !isRecentsView &&
       needsExplorerFolderContents
       ? {
           folderId: activeFolder._id,
@@ -1695,6 +1854,7 @@ export function StudioShell({
     hasCurrentUser &&
       activeFolder &&
       !isTrashView &&
+      !isRecentsView &&
       needsExplorerFolderContents
       ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
       : "skip",
@@ -1716,6 +1876,7 @@ export function StudioShell({
     hasCurrentUser &&
       activeFolder &&
       !isTrashView &&
+      !isRecentsView &&
       videoEditorEnabled &&
       needsExplorerFolderContents
       ? {
@@ -2288,12 +2449,16 @@ export function StudioShell({
         mediaUrl: full,
       });
     }
+    for (const asset of recentReadyAssets ?? []) {
+      if (!byId.has(asset._id)) byId.set(asset._id, asset);
+    }
     return [...byId.values()];
   }, [
     assetsWithPreviewUrls,
     chatReferencedAssets,
     linkedElementAssets,
     styleSheetPreviewAssets,
+    recentReadyAssets,
   ]);
   const trashedAssetsWithPreviewUrls = useMemo(
     () =>
@@ -2758,9 +2923,29 @@ export function StudioShell({
   useEffect(() => {
     if (!activeFolderId && topFolders?.[0]) {
       setActiveFolderId(topFolders[0]._id);
-      setNavTrail([{ id: topFolders[0]._id, name: topFolders[0].name }]);
+      setNavTrail([{ id: topFolders[0]._id, name: "Files" }]);
     }
   }, [activeFolderId, topFolders]);
+
+  // Never show DB name "Studio" as the Files workspace root crumb.
+  useEffect(() => {
+    const rootId = topFolders?.[0]?._id;
+    if (!rootId) return;
+    setNavTrail((trail) => {
+      if (!trail.length) return trail;
+      const head = trail[0];
+      const isRoot = head.id === rootId;
+      const looksStudio =
+        typeof head.name === "string" && head.name.toLowerCase() === "studio";
+      if (isRoot && head.name !== "Files") {
+        return [{ ...head, name: "Files" }, ...trail.slice(1)];
+      }
+      if (looksStudio && isRoot) {
+        return [{ ...head, name: "Files" }, ...trail.slice(1)];
+      }
+      return trail;
+    });
+  }, [topFolders]);
 
   useEffect(() => {
     for (const folder of [...(topFolders ?? []), ...(childFolders ?? []), ...(trashedFolders ?? [])]) {
@@ -2821,6 +3006,8 @@ export function StudioShell({
           trashedVideoEdits === undefined ||
           trashedElementsRaw === undefined,
       )
+    : isRecentsView
+      ? Boolean(recentReadyAssets === undefined && recentFileRows.length === 0)
     : Boolean(
         activeFolder &&
           needsExplorerFolderContents &&
@@ -2841,10 +3028,120 @@ export function StudioShell({
           type: "parent",
           // Root files workspace is labeled Files in the UI, not Studio.
           name: parentCrumb.id === navTrail[0]?.id ? "Files" : parentCrumb.name,
-          path: `/Studio/${parentCrumb.name}`,
+          path:
+            parentCrumb.id === navTrail[0]?.id
+              ? "/Files"
+              : `/Studio/${parentCrumb.name}`,
           studioId: parentCrumb.id,
         }
       : null;
+
+    if (isRecentsView) {
+      const clientRows = listRecentFiles(explorerUserId, RECENT_FILES_LIMIT);
+      void recentFileRows;
+      const seen = new Set();
+      const fileEntries = [];
+      const pushEntry = (entry) => {
+        if (!entry?.studioId || !entry?.studioKind) return;
+        const key = `${entry.studioKind}:${entry.studioId}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        fileEntries.push(entry);
+      };
+      for (const row of clientRows) {
+        if (row.studioKind === "folder" || row.type === "dir") {
+          const folder =
+            (topFolders ?? []).find((item) => item._id === row.studioId) ||
+            (childFolders ?? []).find((item) => item._id === row.studioId) ||
+            (activeFolder?._id === row.studioId ? activeFolder : null);
+          if (folder) {
+            pushEntry(folderToEntry(folder));
+            continue;
+          }
+          const path = row.path
+            ? row.path.startsWith("/")
+              ? row.path
+              : `/${row.path}`
+            : `/Studio/${row.name}`;
+          pushEntry({
+            type: "dir",
+            name: row.name,
+            path,
+            displayPath: displayWorkspacePath(path),
+            studioKind: "folder",
+            studioId: row.studioId,
+            modified: row.openedAt,
+            mtimeMs: row.openedAt,
+            recentActivity: row.activity,
+          });
+          continue;
+        }
+        if (row.studioKind === "asset") {
+          const asset =
+            (assetLookupPool ?? []).find((item) => item._id === row.studioId) ||
+            (recentReadyAssets ?? []).find((item) => item._id === row.studioId);
+          if (asset) {
+            pushEntry({ ...assetToEntry(asset), recentActivity: row.activity });
+            continue;
+          }
+        }
+        if (row.studioKind === "document") {
+          const doc = (documents ?? []).find((item) => item._id === row.studioId);
+          if (doc) {
+            pushEntry({ ...documentToEntry(doc), recentActivity: row.activity });
+            continue;
+          }
+        }
+        if (row.studioKind === "videoEdit") {
+          const project = (videoEdits ?? []).find((item) => item._id === row.studioId);
+          if (project) {
+            pushEntry({ ...videoEditToEntry(project), recentActivity: row.activity });
+            continue;
+          }
+        }
+        if (row.studioKind === "element") {
+          const element = (elements ?? []).find((item) => item._id === row.studioId);
+          if (element) {
+            pushEntry({
+              ...elementToEntry(element, assetLookupPool ?? []),
+              recentActivity: row.activity,
+            });
+            continue;
+          }
+        }
+        // Snapshot fallback so Recents still lists activity before hydration.
+        pushEntry({
+          type: "file",
+          name: row.name,
+          path: row.path
+            ? row.path.startsWith("/")
+              ? row.path
+              : `/${row.path}`
+            : `/Studio/recents/${row.studioKind}/${row.studioId}`,
+          displayPath: displayWorkspacePath(
+            row.path ? (row.path.startsWith("/") ? row.path : `/${row.path}`) : `/Studio/${row.name}`,
+          ),
+          studioKind: row.studioKind,
+          studioId: row.studioId,
+          kind: row.kind,
+          mediaKind: row.kind,
+          mimeType: row.mimeType,
+          thumbnailUrl: row.thumbnailUrl,
+          modified: row.openedAt,
+          mtimeMs: row.openedAt,
+          recentActivity: row.activity,
+        });
+      }
+      // Fill remaining slots from server recent-ready assets (newest first).
+      for (const asset of recentReadyAssets ?? []) {
+        if (fileEntries.length >= RECENT_FILES_LIMIT) break;
+        pushEntry(assetToEntry(asset));
+      }
+      return {
+        loading: recentReadyAssets === undefined && clientRows.length === 0,
+        entries: fileEntries.slice(0, RECENT_FILES_LIMIT),
+      };
+    }
 
     if (isTrashView) {
       return buildFlatEntries({
@@ -2886,6 +3183,7 @@ export function StudioShell({
       return {
         ...entries,
         entries: [
+          RECENTS_FOLDER_ENTRY,
           TRASH_FOLDER_ENTRY,
           ...(messagesEntry ? [messagesEntry] : []),
           ...(purchasedEntry ? [purchasedEntry] : []),
@@ -2897,7 +3195,9 @@ export function StudioShell({
     return entries;
   }, [
     activeFolderId,
+    activeFolder,
     navTrail,
+    topFolders,
     childFolders,
     assetsWithPreviewUrls,
     assetLookupPool,
@@ -2905,12 +3205,16 @@ export function StudioShell({
     elements,
     folderContentLoading,
     isTrashView,
+    isRecentsView,
     trashedFolders,
     trashedAssetsWithPreviewUrls,
     trashedDocuments,
     trashedVideoEdits,
     trashedElements,
     videoEdits,
+    recentFileRows,
+    recentReadyAssets,
+    explorerUserId,
   ]);
 
   const rootEntries = useMemo(
@@ -2939,6 +3243,12 @@ export function StudioShell({
   const displayRootEntries = rootEntries.loading
     ? (lastRootEntriesRef.current ?? rootEntries)
     : rootEntries;
+
+  /** Files left-nav: Trash + folders inside Home. Never list the workspace root as "Studio". */
+  const filesNavRootEntries = useMemo(() => {
+    const homeDirs = (filesNavHomeFolders ?? []).map(folderToEntry);
+    return [RECENTS_FOLDER_ENTRY, TRASH_FOLDER_ENTRY, ...homeDirs];
+  }, [filesNavHomeFolders]);
 
   // Warm only the first viewport of thumbs — not every peek in the folder.
   useEffect(() => {
@@ -3073,7 +3383,15 @@ export function StudioShell({
   }, [filteredCurrentEntries, deferredSearch]);
 
   const breadcrumbPath = useMemo(
-    () => navTrail.slice(1).map((crumb) => crumb.name).join("/"),
+    () =>
+      navTrail
+        .slice(1)
+        .map((crumb) => crumb.name)
+        .filter(
+          (name) =>
+            typeof name === "string" && name.trim() && name.toLowerCase() !== "studio",
+        )
+        .join("/"),
     [navTrail],
   );
 
@@ -3106,13 +3424,82 @@ export function StudioShell({
     [visibleExplorerPins],
   );
 
+  /** Root-level pins for the Files workspace Quick access rail (Windows-style). */
+  const filesQuickAccessPins = useMemo(
+    () => pinnedFolders.filter((pin) => !normalizeExplorerPath(pin.parentPath ?? "")),
+    [pinnedFolders],
+  );
+
+  const filesNavWorkspaceRootId = navTrail[0]?.id ?? topFolders?.[0]?._id ?? null;
+
+  // Track folder opens for Recents / Frequent (client-local, per user).
+  useEffect(() => {
+    if (!activeFolderId || !activeFolder) return;
+    if (activeFolderId === TRASH_FOLDER_ID) return;
+    if (activeFolderId === RECENTS_FOLDER_ID) return;
+    if (filesNavWorkspaceRootId && activeFolderId === filesNavWorkspaceRootId) return;
+    const studioKind =
+      activeFolder.systemKind === "messages"
+        ? "messages"
+        : activeFolder.systemKind === "purchased_assets"
+          ? "purchased"
+          : activeFolder.systemKind === "public_assets"
+            ? "public"
+            : "folder";
+    const next = recordFolderVisit(
+      {
+        studioId: activeFolder._id,
+        path: studioPathForFolder(activeFolder),
+        label: systemFolderDisplayName(activeFolder) || activeFolder.name,
+        systemKind: activeFolder.systemKind,
+        studioKind,
+        isWorkspaceRoot: Boolean(
+          filesNavWorkspaceRootId && activeFolder._id === filesNavWorkspaceRootId,
+        ),
+      },
+      explorerUserId,
+    );
+    setFolderAccessRows(next);
+    // Places → Recents also lists recently active folders.
+    if (studioKind === "folder") {
+      setRecentFileRows(
+        recordRecentItem(
+          {
+            type: "dir",
+            studioKind: "folder",
+            studioId: activeFolder._id,
+            name: systemFolderDisplayName(activeFolder) || activeFolder.name,
+            path: studioPathForFolder(activeFolder),
+          },
+          explorerUserId,
+          RECENT_ACTIVITY.opened,
+        ),
+      );
+    }
+  }, [activeFolderId, activeFolder?._id, explorerUserId, filesNavWorkspaceRootId]);
+
+  const filesRecentFolders = useMemo(() => {
+    void folderAccessRows;
+    return listRecentFolders(explorerUserId, FOLDER_ACCESS_RECENT_LIMIT);
+  }, [folderAccessRows, explorerUserId]);
+
+  const filesFrequentFolders = useMemo(() => {
+    void folderAccessRows;
+    const recentIds = filesRecentFolders.map((row) => row.studioId).filter(Boolean);
+    return listFrequentFolders(explorerUserId, {
+      limit: FOLDER_ACCESS_FREQUENT_LIMIT,
+      excludeStudioIds: recentIds,
+    });
+  }, [folderAccessRows, explorerUserId, filesRecentFolders]);
+
   function handlePinFolder(entry, parentPath) {
     if (!entry || entry.type === "parent" || entry.type !== "dir") return;
     if (
       entry.studioKind === "messages" ||
       entry.studioKind === "purchased" ||
       entry.studioKind === "public" ||
-      entry.studioKind === "trash"
+      entry.studioKind === "trash" ||
+      entry.studioKind === "recents"
     ) {
       return;
     }
@@ -3124,7 +3511,9 @@ export function StudioShell({
       entry.studioId ? { studioId: entry.studioId } : {},
     );
     setPinnedFolders(next);
-    toast.success(parentPath ? "Pinned here" : "Pinned to home");
+    toast.success(
+      parentPath ? "Pinned here" : "Added to Quick access",
+    );
   }
 
   function handleUnpinFolder(entry, parentPath) {
@@ -3179,6 +3568,9 @@ export function StudioShell({
       ...snapshots,
       [`videoEdit:${result.projectId}`]: entry,
     }));
+    setRecentFileRows(
+      recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
+    );
     openTab(`videoEdit:${result.projectId}`);
   }
 
@@ -3210,6 +3602,20 @@ export function StudioShell({
           [toKey]: entry,
         };
       });
+      setRecentFileRows(
+        recordRecentItem(
+          {
+            type: "file",
+            studioKind: "videoEdit",
+            studioId: projectId,
+            name: name
+              ? `${String(name).replace(/\.edit$/i, "")}.edit`
+              : "Untitled.edit",
+          },
+          explorerUserId,
+          RECENT_ACTIVITY.edited,
+        ),
+      );
       return;
     }
     if (fromTabKey && fromTabKey !== toKey) {
@@ -3230,6 +3636,20 @@ export function StudioShell({
         }),
       };
     });
+    setRecentFileRows(
+      recordRecentItem(
+        {
+          type: "file",
+          studioKind: "videoEdit",
+          studioId: projectId,
+          name: name
+            ? `${String(name).replace(/\.edit$/i, "")}.edit`
+            : "Untitled.edit",
+        },
+        explorerUserId,
+        RECENT_ACTIVITY.edited,
+      ),
+    );
   }
 
   function openTab(key) {
@@ -3325,6 +3745,23 @@ export function StudioShell({
     }
     openTab(MESSAGES_TAB);
     prefetchStudioSurface("messages");
+  }
+
+  function openFiles() {
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    if (isMobile) {
+      // Full Files tab on mobile. Generate Folder pill still opens the sheet dock.
+      filesDockOpenGenRef.current += 1;
+      paintMobileFilesDock(false);
+      mobileBackStack.release("files-dock");
+      setFilesDockExpanded(false);
+      setFilesNavSheetOpen(false);
+      setMobileSection("composer");
+    }
+    openTab(FILES_TAB);
+    prefetchStudioSurface("files");
   }
 
   /** Open (or create) the one-per-pair chat with a person and focus it. */
@@ -3631,20 +4068,140 @@ export function StudioShell({
     }
   }, [isMobile, openCreditsPane]);
 
-  function isStudioMobileKeyboardOpen() {
-    if (typeof window === "undefined") return false;
+  function getStudioKeyboardInset() {
+    if (typeof window === "undefined") return 0;
     const vv = window.visualViewport;
-    if (!vv) return false;
-    return window.innerHeight - vv.height > 80;
+    if (!vv) return 0;
+    const raw = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // Shared noise floor — do not use a second higher cliff for "is open".
+    return raw < 24 ? 0 : Math.round(raw);
+  }
+
+  function isStudioMobileKeyboardOpen() {
+    return getStudioKeyboardInset() > 0;
+  }
+
+  function bumpComposerFocusGen() {
+    composerFocusGenRef.current += 1;
+    return composerFocusGenRef.current;
+  }
+
+  function scheduleComposerFocusKick(gen, delayMs = 0) {
+    const run = () => {
+      if (composerFocusGenRef.current !== gen) return;
+      const root = shellRef.current;
+      if (root?.getAttribute("data-files-open") === "1") return;
+      if (root?.querySelector?.(".studio-files-dock.is-expanded")) return;
+      focusComposerEditorEnd(resolveComposerEditorEl());
+    };
+    if (delayMs > 0) window.setTimeout(run, delayMs);
+    else window.requestAnimationFrame(run);
   }
 
   function restoreComposerKeyboardIfWanted() {
     if (!composerWantedKeyboardRef.current) return;
     composerWantedKeyboardRef.current = false;
-    // One focus after paint — multi timeouts felt like a delayed second beat on close.
-    window.requestAnimationFrame(() => {
-      focusComposerEditorEnd(editorRef.current);
-    });
+    const gen = bumpComposerFocusGen();
+    scheduleComposerFocusKick(gen);
+  }
+
+  function resolveComposerEditorEl() {
+    const fromRef = editorRef.current;
+    if (fromRef instanceof HTMLElement) return fromRef;
+    const root = shellRef.current;
+    if (!(root instanceof HTMLElement)) return null;
+    return root.querySelector(
+      ".studio-composer .cursor-composer-mention-editor, .studio-composer [contenteditable='true']",
+    );
+  }
+
+  /**
+   * Generate Files dock open + composer/keyboard: tuck the dock away, then
+   * reopen when the keyboard dismisses (only if we hid it).
+   */
+  function deferMobileFilesForComposerKeyboard(opts = {}) {
+    if (!isMobile) return;
+    if (Date.now() < ignoreComposerFilesIntentUntilRef.current) return;
+    const focusEditor = Boolean(opts?.focusEditor);
+    const root = shellRef.current;
+    if (!(root instanceof HTMLElement)) return;
+    const dock = root.querySelector(".studio-files-dock");
+    const filesOpen =
+      root.getAttribute("data-files-open") === "1" ||
+      filesDockExpanded ||
+      mobileSection === "files" ||
+      (dock instanceof HTMLElement && dock.classList.contains("is-expanded"));
+    if (!filesOpen) {
+      if (focusEditor) {
+        const gen = bumpComposerFocusGen();
+        scheduleComposerFocusKick(gen);
+      }
+      return;
+    }
+    if (deferMobileFilesBusyRef.current) {
+      if (focusEditor) {
+        composerWantedKeyboardRef.current = true;
+        const gen = bumpComposerFocusGen();
+        scheduleComposerFocusKick(gen);
+      }
+      return;
+    }
+    deferMobileFilesBusyRef.current = true;
+
+    filesDockRestoreAfterKeyboardRef.current = true;
+    composerWantedKeyboardRef.current = focusEditor;
+
+    const focusGen = bumpComposerFocusGen();
+    if (focusEditor) {
+      const editor = resolveComposerEditorEl();
+      if (editor instanceof HTMLElement) {
+        try {
+          editor.focus({ preventScroll: true });
+        } catch {
+          editor.focus();
+        }
+        focusComposerEditorEnd(editor);
+      }
+    }
+
+    const closeGen = (filesDockOpenGenRef.current += 1);
+    paintMobileFilesDock(false);
+    if (dock instanceof HTMLElement) {
+      dock.classList.remove("is-expanded", "is-full");
+      dock.style.height = "0px";
+      dock.style.maxHeight = "0px";
+    }
+    mobileBackStack.release("files-dock");
+
+    window.setTimeout(() => {
+      if (filesDockOpenGenRef.current !== closeGen) {
+        deferMobileFilesBusyRef.current = false;
+        return;
+      }
+      setFilesDockExpanded(false);
+      setMobileSection("composer");
+      setFilesNavSheetOpen(false);
+      if (focusEditor) {
+        composerWantedKeyboardRef.current = true;
+        restoreComposerKeyboardIfWanted();
+        scheduleComposerFocusKick(focusGen, 60);
+      }
+      deferMobileFilesBusyRef.current = false;
+    }, 0);
+  }
+
+  function restoreMobileFilesAfterKeyboardIfNeeded() {
+    if (!filesDockRestoreAfterKeyboardRef.current) return;
+    if (Date.now() < ignoreComposerFilesIntentUntilRef.current) return;
+    if (getStudioKeyboardInset() > 0) return;
+    const editor = resolveComposerEditorEl();
+    // Still focused in the composer — user is typing; do not yank Files back.
+    if (editor instanceof HTMLElement && document.activeElement === editor) return;
+    filesDockRestoreAfterKeyboardRef.current = false;
+    // Cancel any leftover focus kicks so they cannot re-hide the dock.
+    bumpComposerFocusGen();
+    ignoreComposerFilesIntentUntilRef.current = Date.now() + 600;
+    openMobileSectionRef.current?.("files");
   }
 
   /**
@@ -3662,12 +4219,14 @@ export function StudioShell({
     // Sync — do not wrap in useTransition; nav is-active must paint on pointerdown.
     // Prefetch is deferred from the nav button after paint — do not import here.
     if (section === "settings") {
+      filesDockRestoreAfterKeyboardRef.current = false;
       setMobileAppMenuOpen(false);
       setHistoryOpen(false);
       setSettingsOpen(true);
       return;
     }
     if (section === "messages") {
+      filesDockRestoreAfterKeyboardRef.current = false;
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
       mobileBackStack.release("files-dock");
@@ -3680,6 +4239,7 @@ export function StudioShell({
       return;
     }
     if (section === "feed") {
+      filesDockRestoreAfterKeyboardRef.current = false;
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
       mobileBackStack.release("files-dock");
@@ -3691,6 +4251,7 @@ export function StudioShell({
       return;
     }
     if (section === "network") {
+      filesDockRestoreAfterKeyboardRef.current = false;
       filesDockOpenGenRef.current += 1;
       paintMobileFilesDock(false);
       mobileBackStack.release("files-dock");
@@ -3702,10 +4263,13 @@ export function StudioShell({
       return;
     }
     if (section === "files" && isMobile) {
-      const editor = editorRef.current;
-      composerWantedKeyboardRef.current =
-        (editor instanceof HTMLElement && document.activeElement === editor) ||
-        isStudioMobileKeyboardOpen();
+      // Manual Folder open — Folder pill owns restore (not KB-dismiss auto-restore).
+      filesDockRestoreAfterKeyboardRef.current = false;
+      deferMobileFilesBusyRef.current = false;
+      bumpComposerFocusGen();
+      ignoreComposerFilesIntentUntilRef.current = Date.now() + 600;
+      // Closing Folder later should return to composer + keyboard.
+      composerWantedKeyboardRef.current = true;
       const root = shellRef.current;
       if (root) {
         root.style.setProperty("--studio-keyboard-inset", "0px");
@@ -3715,6 +4279,7 @@ export function StudioShell({
       const openGen = (filesDockOpenGenRef.current += 1);
       paintMobileFilesDock(true);
       mobileBackStack.push("files-dock", () => {
+        composerWantedKeyboardRef.current = true;
         openMobileSection("composer");
       });
       void root?.offsetHeight;
@@ -3726,6 +4291,7 @@ export function StudioShell({
         setSettingsOpen(false);
         setHistoryOpen(false);
         setMobileAppMenuOpen(false);
+        const editor = resolveComposerEditorEl();
         if (editor) {
           try {
             editor.blur?.();
@@ -3773,16 +4339,88 @@ export function StudioShell({
     }
   }
 
-  /** Files dock toggle — only used on Generate / My Assets. */
+  openMobileSectionRef.current = openMobileSection;
+  deferMobileFilesForComposerKeyboardRef.current = deferMobileFilesForComposerKeyboard;
+  restoreMobileFilesAfterKeyboardRef.current = restoreMobileFilesAfterKeyboardIfNeeded;
+
+  function isMobileFilesDockOpen() {
+    const root = shellRef.current;
+    const dock = root?.querySelector?.(".studio-files-dock");
+    return (
+      mobileSection === "files" ||
+      filesDockExpanded ||
+      root?.getAttribute("data-files-open") === "1" ||
+      (dock instanceof HTMLElement && dock.classList.contains("is-expanded"))
+    );
+  }
+
+  /**
+   * Generate Folder pill = Files dock ↔ composer/keyboard toggle.
+   * Open dock while typing → blur KB + show Files.
+   * Close dock (Folder again / back) → always return to composer + keyboard.
+   */
   function toggleMobileFilesAction() {
-    if (mobileSection === "files") {
-      openMobileSection("composer");
+    if (typeof activeTab === "string" && activeTab.startsWith("files:")) {
+      // Leave full Files tab → back to last chat (sheet is separate).
+      setFilesNavSheetOpen(false);
+      setMobileSection("composer");
+      openTab(lastChatTabRef.current || COMPOSER_TAB);
       return;
     }
+    deferMobileFilesBusyRef.current = false;
+    if (isMobileFilesDockOpen()) {
+      // Close → composer + keyboard (same restore path every time).
+      filesDockRestoreAfterKeyboardRef.current = false;
+      deferMobileFilesBusyRef.current = false;
+      composerWantedKeyboardRef.current = true;
+      setFilesNavSheetOpen(false);
+      const root = shellRef.current;
+      const dock = root?.querySelector?.(".studio-files-dock");
+      const closeGen = (filesDockOpenGenRef.current += 1);
+      const focusGen = bumpComposerFocusGen();
+      paintMobileFilesDock(false);
+      if (dock instanceof HTMLElement) {
+        dock.classList.remove("is-expanded", "is-full");
+        dock.style.height = "0px";
+        dock.style.maxHeight = "0px";
+      }
+      mobileBackStack.release("files-dock");
+      focusComposerEditorEnd(resolveComposerEditorEl());
+      window.setTimeout(() => {
+        if (filesDockOpenGenRef.current !== closeGen) return;
+        setFilesDockExpanded(false);
+        setMobileSection("composer");
+        setFilesNavSheetOpen(false);
+        composerWantedKeyboardRef.current = true;
+        restoreComposerKeyboardIfWanted();
+        scheduleComposerFocusKick(focusGen, 60);
+      }, 0);
+      return;
+    }
+    // Open → Files; remember KB so the next Folder close restores it.
     setSettingsOpen(false);
     setHistoryOpen(false);
     setMobileAppMenuOpen(false);
+    setFilesNavSheetOpen(false);
     openMobileSection("files");
+  }
+
+  /** Places sheet — mobile counterpart of the desktop Files left rail. */
+  function toggleMobileFilesNavAction() {
+    setSettingsOpen(false);
+    setHistoryOpen(false);
+    setMobileAppMenuOpen(false);
+    setFilesNavSheetOpen((open) => !open);
+  }
+
+  function openMobileFilesFromNav(run) {
+    setFilesNavSheetOpen(false);
+    const onFilesTab =
+      typeof activeTab === "string" && activeTab.startsWith("files:");
+    if (isMobile && mobileSection !== "files" && !onFilesTab) {
+      openMobileSection("files");
+    }
+    run?.();
   }
 
   // Browser/gesture Back closes overlays before leaving the page (mobile only).
@@ -3798,6 +4436,9 @@ export function StudioShell({
   });
   useMobileBackLayer("history-panel", historyOpen, () => {
     setHistoryOpen(false);
+  });
+  useMobileBackLayer("files-nav-sheet", filesNavSheetOpen, () => {
+    setFilesNavSheetOpen(false);
   });
   useMobileBackLayer("settings-overlay", settingsOpen, () => {
     setSettingsOpen(false);
@@ -3912,6 +4553,15 @@ export function StudioShell({
     // the pick and never open a tab. Explorer queries are owner-scoped so this
     // can only surface the signed-in user's own tree from their root.
     if (assetPickRequest) {
+      if (entry.studioKind === "recents") {
+        setActiveFolderId(RECENTS_FOLDER_ID);
+        setNavTrail((trail) => {
+          const root = trail[0];
+          if (root) return [root, { id: RECENTS_FOLDER_ID, name: "Recents" }];
+          return [{ id: RECENTS_FOLDER_ID, name: "Recents" }];
+        });
+        return;
+      }
       if (entry.studioKind === "trash") {
         setActiveFolderId(TRASH_FOLDER_ID);
         setNavTrail((trail) => {
@@ -3961,6 +4611,15 @@ export function StudioShell({
       );
       return;
     }
+    if (entry.studioKind === "recents") {
+      setActiveFolderId(RECENTS_FOLDER_ID);
+      setNavTrail((trail) => {
+        const root = trail[0];
+        if (root) return [root, { id: RECENTS_FOLDER_ID, name: "Recents" }];
+        return [{ id: RECENTS_FOLDER_ID, name: "Recents" }];
+      });
+      return;
+    }
     if (entry.studioKind === "trash") {
       setActiveFolderId(TRASH_FOLDER_ID);
       setNavTrail((trail) => {
@@ -3978,6 +4637,9 @@ export function StudioShell({
         return [...trail, { id: entry.studioId, name: entry.name }];
       });
       return;
+    }
+    if (entry.studioKind && entry.studioId && entry.type !== "dir") {
+      setRecentFileRows(recordFileOpen(entry, explorerUserId));
     }
     const key = `${entry.studioKind}:${entry.studioId}`;
     setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
@@ -4010,7 +4672,7 @@ export function StudioShell({
 
   function handleBreadcrumbNavigate(path) {
     if (!path) {
-      const root = navTrail[0] ?? (topFolders?.[0] ? { id: topFolders[0]._id, name: topFolders[0].name } : null);
+      const root = navTrail[0] ?? (topFolders?.[0] ? { id: topFolders[0]._id, name: "Files" } : null);
       if (!root) return;
       setActiveFolderId(root.id);
       setNavTrail([root]);
@@ -4200,6 +4862,9 @@ export function StudioShell({
       entry.buildStatus = "built";
     }
     attachEntry(entry);
+    setRecentFileRows(
+      recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
+    );
     return id;
   }
 
@@ -4212,6 +4877,19 @@ export function StudioShell({
         icon: "Folder",
         color: "#22c55e",
       });
+      setRecentFileRows(
+        recordRecentItem(
+          {
+            type: "dir",
+            studioKind: "folder",
+            studioId: id,
+            name: values.name.trim(),
+            path: `${studioPathForFolder(activeFolder)}/${values.name.trim()}`,
+          },
+          explorerUserId,
+          RECENT_ACTIVITY.created,
+        ),
+      );
       setActiveFolderId(id);
       setNavTrail((trail) => [...trail, { id, name: values.name.trim() }]);
       return;
@@ -4222,6 +4900,19 @@ export function StudioShell({
         title: values.name.trim(),
         contentMarkdown: "",
       });
+      setRecentFileRows(
+        recordRecentItem(
+          {
+            type: "file",
+            studioKind: "document",
+            studioId: id,
+            name: `${values.name.trim()}.md`,
+            path: `/Studio/scripts/${id}.md`,
+          },
+          explorerUserId,
+          RECENT_ACTIVITY.created,
+        ),
+      );
       openTab(`document:${id}`);
       return;
     }
@@ -4276,6 +4967,21 @@ export function StudioShell({
     } else {
       return;
     }
+    setRecentFileRows(
+      recordRecentItem(
+        {
+          ...entry,
+          name:
+            entry.studioKind === "document"
+              ? `${trimmed.replace(/\.md$/i, "")}.md`
+              : entry.studioKind === "videoEdit"
+                ? `${trimmed.replace(/\.edit$/i, "")}.edit`
+                : trimmed,
+        },
+        explorerUserId,
+        RECENT_ACTIVITY.edited,
+      ),
+    );
     const tabKey =
       entry.studioKind && entry.studioId
         ? `${entry.studioKind}:${entry.studioId}`
@@ -4396,20 +5102,24 @@ export function StudioShell({
       renderMode: values.renderMode,
       referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
     });
+    const nextEntry = {
+      ...entry,
+      name: `@${values.name.trim()}`,
+      description: values.description?.trim() || undefined,
+      styleRules: values.styleRules?.trim() || undefined,
+      renderMode: values.renderMode ?? entry.renderMode,
+      referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
+      referenceAssets: values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets,
+      sheetAsset: values.sheetAsset ?? entry.sheetAsset,
+      buildStatus: values.sheetAsset || entry.sheetAsset ? "built" : "unbuilt",
+    };
     setTabEntrySnapshots((snapshots) => ({
       ...snapshots,
-      [`element:${entry.studioId}`]: {
-        ...entry,
-        name: `@${values.name.trim()}`,
-        description: values.description?.trim() || undefined,
-        styleRules: values.styleRules?.trim() || undefined,
-        renderMode: values.renderMode ?? entry.renderMode,
-        referenceAssetIds: values.referenceAssetIds ?? values.sourceAssetIds ?? [],
-        referenceAssets: values.referenceAssets ?? values.sourceAssets ?? entry.referenceAssets,
-        sheetAsset: values.sheetAsset ?? entry.sheetAsset,
-        buildStatus: values.sheetAsset || entry.sheetAsset ? "built" : "unbuilt",
-      },
+      [`element:${entry.studioId}`]: nextEntry,
     }));
+    setRecentFileRows(
+      recordRecentItem(nextEntry, explorerUserId, RECENT_ACTIVITY.edited),
+    );
   }
 
   async function duplicateEntry(entry) {
@@ -4636,6 +5346,21 @@ export function StudioShell({
           total: payload.file.size,
           name: payload.file.name,
         });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "file",
+              studioKind: "asset",
+              studioId: assetId,
+              name: payload.file.name,
+              path: `/Studio/assets/${assetId}`,
+              kind: kindFromMime(payload.file.type),
+              mimeType: payload.file.type,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
         return assetId;
       }
 
@@ -4657,6 +5382,18 @@ export function StudioShell({
           icon: "Folder",
           color: "#22c55e",
         });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "dir",
+              studioKind: "folder",
+              studioId: rootFolderId,
+              name: extracted.folderName,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
         const folderIds = new Map([["", rootFolderId]]);
         const ensureFolder = async (relativeDir) => {
           if (folderIds.has(relativeDir)) return folderIds.get(relativeDir);
@@ -5976,6 +6713,9 @@ export function StudioShell({
   const isMessagesRail =
     typeof activeTab === "string" && activeTab.startsWith("messages:");
 
+  const isFilesTab =
+    typeof activeTab === "string" && activeTab.startsWith("files:");
+
   const isNetworkRail =
     typeof activeTab === "string" &&
     (activeTab.startsWith("network:") || activeTab.startsWith("offers:"));
@@ -5985,6 +6725,8 @@ export function StudioShell({
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
+  /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages. */
+  const effectiveFilesRail = isFilesTab && !pickingFromFiles;
   // My Assets uses the file manager rail (list from Files); Network = filters;
   // My offers/jobs = Messages.
   const effectiveNetworkRail =
@@ -6225,7 +6967,7 @@ export function StudioShell({
         .studio-polish.is-studio-bg-ready .studio-backdrop {
           opacity: 1;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish > .studio-mobile-bottom-nav {
@@ -6254,7 +6996,7 @@ export function StudioShell({
           background: var(--mos-bg, var(--color-cursor-bg, #05080f));
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
-          /* Shared KB lift with composer — compositor transform, not layout bottom. */
+          /* KB lift for nav (outside stage). Composer uses stage padding instead. */
           transform: translate3d(0, calc(-1 * var(--studio-keyboard-inset, 0px)), 0);
           filter: none;
           isolation: auto;
@@ -7058,7 +7800,7 @@ export function StudioShell({
           background: radial-gradient(circle, color-mix(in srgb, var(--cursor-accent-hover) 12%, transparent), transparent 70%);
           animation-duration: 12s;
         }
-        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
+        .studio-polish > :not(style, .studio-backdrop, .studio-mobile-bottom-nav, .studio-mobile-app-menu-sheet, .studio-history-mobile-sheet, .studio-files-nav-mobile-sheet, .profile-comments-sheet, .studio-explorer-context-sheet, .studio-explorer-context-sheet-backdrop) {
           position: relative;
         }
         .studio-polish ::selection {
@@ -7336,6 +8078,30 @@ export function StudioShell({
           touch-action: none;
         }
         /* Kill iOS image callout / native drag that steal the dual long-press. */
+
+        .studio-files-workspace-tab {
+          position: absolute;
+          inset: 0;
+          z-index: 4;
+          display: flex;
+          flex-direction: column;
+          width: 100%;
+          min-width: 0;
+          min-height: 0;
+          border: 0;
+          box-shadow: none;
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
+          color: var(--color-cursor-text, var(--mos-text));
+        }
+        .studio-files-workspace-tab .cursor-explorer-body {
+          flex: 1 1 auto;
+          width: 100%;
+          min-width: 0;
+          min-height: 0;
+          border: 0;
+          box-shadow: none;
+        }
+
         .studio-files-mobile-sheet .desk-file-list-row,
         .studio-files-mobile-sheet .desk-file-grid-item,
         .studio-files-mobile-sheet .desk-file-preview-item {
@@ -7404,7 +8170,7 @@ export function StudioShell({
           border-radius: 14px 14px 0 0;
           border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
           border-bottom: 0;
-          background: var(--mos-plate, var(--color-cursor-surface-raised, #121820));
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
           box-shadow: var(--studio-mobile-sheet-shadow, 0 -10px 32px color-mix(in srgb, #000 28%, transparent));
           overflow: hidden;
           transform: none;
@@ -7885,6 +8651,37 @@ export function StudioShell({
           background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         /*
+          Bottom sheets: canvas = L2 plate; drag-handle top band = L1 page
+          (whitish in light — same as menu handle). Other way from continuous
+          same-grey handle+body.
+        */
+        .studio-mobile-app-menu-sheet-handle,
+        .studio-history-mobile-sheet-handle,
+        .studio-files-dock-handle,
+        .studio-files-nav-mobile-sheet-handle,
+        .studio-explorer-context-sheet .studio-mobile-app-menu-sheet-handle,
+        .profile-comments-sheet .studio-mobile-app-menu-sheet-handle {
+          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+          border: 0 !important;
+          box-shadow: none !important;
+        }
+        .studio-mobile-app-menu-sheet,
+        .studio-history-mobile-sheet,
+        .studio-files-dock,
+        .studio-files-nav-mobile-sheet,
+        .studio-dm-peer-mobile-sheet {
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+        }
+        /* Files sheet chrome under handle: plate canvas shows; only handle is whitish. */
+        .studio-polish .studio-files-mobile-sheet .studio-files-source-toggle,
+        .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
+        .studio-polish .studio-files-mobile-sheet .studio-files-chrome,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-source-toggle,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-chrome {
+          background: transparent !important;
+        }
+        /*
           Settings = same chrome as hamburger menu (inherit bottom/shadow/transition).
           Only raise z-index, pin height via --studio-settings-sheet-h, kill glass.
           Do NOT redeclare transition here — it would override .is-dragging { transition:none }.
@@ -8088,7 +8885,7 @@ export function StudioShell({
         .studio-polish[data-files-open="1"] .studio-files-dock {
           pointer-events: auto;
         }
-        /* Handle = menu/History: grab only on plate, no filled band. */
+        /* Handle = whitish L1 page band (shared rule above); canvas = plate. */
         .studio-files-dock-handle {
           position: relative;
           z-index: 2;
@@ -8152,6 +8949,9 @@ export function StudioShell({
           flex: 0 0 auto;
           padding-right: 6px;
         }
+        .studio-folder-pathbar-tools > * {
+          margin: 0 !important;
+        }
         .studio-folder-pathbar > .desk-file-breadcrumbs {
           flex: 1 1 auto;
           min-width: 0;
@@ -8182,6 +8982,44 @@ export function StudioShell({
           gap: 4px;
           align-items: center;
         }
+        /* Desktop + mobile pathbar tools: ghost circles (no glow / drop shadow). */
+        .studio-folder-pathbar-tools .studio-settings-trigger,
+        .studio-folder-pathbar-tools .studio-file-select-toggle,
+        .studio-folder-pathbar-tools .studio-file-view-toggle,
+        .studio-folder-pathbar-tools .studio-file-add-toggle {
+          width: 24px !important;
+          min-width: 24px !important;
+          height: 24px !important;
+          min-height: 24px !important;
+          border-radius: 999px !important;
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
+          color: var(--color-cursor-muted, var(--mos-muted)) !important;
+          box-shadow: none !important;
+          filter: none !important;
+        }
+        .studio-folder-pathbar-tools .studio-settings-trigger:hover,
+        .studio-folder-pathbar-tools .studio-file-select-toggle:hover,
+        .studio-folder-pathbar-tools .studio-file-view-toggle:hover,
+        .studio-folder-pathbar-tools .studio-file-add-toggle:hover,
+        .studio-folder-pathbar-tools .studio-settings-trigger[aria-expanded="true"],
+        .studio-folder-pathbar-tools .studio-file-add-toggle[aria-expanded="true"],
+        .studio-folder-pathbar-tools .studio-file-select-toggle.is-active,
+        .studio-folder-pathbar-tools .studio-file-view-toggle.is-active {
+          border-color: var(--color-cursor-border, var(--mos-border)) !important;
+          background: var(--mos-hover, var(--color-cursor-hover)) !important;
+          color: var(--color-cursor-text-bright) !important;
+          box-shadow: none !important;
+          filter: none !important;
+        }
+        .studio-folder-pathbar-tools .studio-settings-trigger svg,
+        .studio-folder-pathbar-tools .studio-file-select-toggle svg,
+        .studio-folder-pathbar-tools .studio-file-view-toggle svg,
+        .studio-folder-pathbar-tools .studio-file-add-toggle svg {
+          width: 14px !important;
+          height: 14px !important;
+        }
+
         /* Ghost circle icon controls — no fill, soft grey ring, no glow/shadow. */
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-settings-trigger,
         .studio-files-mobile-sheet .studio-folder-pathbar-tools .studio-file-select-toggle,
@@ -8224,9 +9062,14 @@ export function StudioShell({
           width: 100%;
           border-top: none;
         }
-        .studio-files-dock .studio-files-source-toggle + .cursor-panel-search,
-        .studio-files-mobile-sheet .studio-files-source-toggle + .cursor-panel-search {
-          border-top: none;
+        .studio-files-dock .studio-files-search-row .cursor-panel-search,
+        .studio-files-mobile-sheet .studio-files-search-row .cursor-panel-search {
+          border-top: none !important;
+          border-bottom: none !important;
+          width: auto;
+          flex: 1 1 auto;
+          min-width: 0;
+          background: transparent !important;
         }
         .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-files-mobile-sheet .cursor-explorer-panel {
@@ -8235,13 +9078,15 @@ export function StudioShell({
         }
         /*
           Beat later .studio-polish / light pathbar+search fills (mos-bg / mos-panel)
-          so the Files sheet stays one continuous plate under the grab handle.
+          so the Files sheet stays one continuous grey-1 page under the grab handle.
         */
         .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
+        .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
         .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-folder-pathbar,
+        [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-panel-search,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-body,
         [data-appearance="light"] .studio-polish .studio-files-mobile-sheet .cursor-explorer-panel {
@@ -8826,8 +9671,16 @@ export function StudioShell({
           border-left-color: var(--mos-plate, #ececf0) !important;
         }
         [data-appearance="light"] .studio-polish .studio-folder-pathbar,
-        [data-appearance="light"] .studio-polish .cursor-panel-search {
+        [data-appearance="light"] .studio-polish .cursor-panel-search,
+        [data-appearance="light"] .studio-polish .studio-files-search-row,
+        [data-appearance="light"] .studio-polish .studio-files-source-toggle,
+        [data-appearance="light"] .studio-polish .studio-files-chrome {
           background: var(--mos-panel, #f5f5f7) !important;
+        }
+        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle,
+        [data-appearance="light"] .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row,
+        [data-appearance="light"] .studio-polish .studio-files-search-row > .cursor-panel-search {
+          background: transparent !important;
         }
         [data-appearance="light"] .studio-polish aside .cursor-panel-head,
         [data-appearance="light"] .studio-polish aside .cursor-sidebar-head,
@@ -8905,20 +9758,23 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
           .studio-settings-pill,
+          .studio-settings-trigger,
           .studio-credit-pill,
           .cursor-icon-btn,
           .studio-pill-btn
         ) {
           border-color: var(--color-cursor-border-soft) !important;
-          background: var(--color-cursor-panel) !important;
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7)) !important;
           color: var(--color-cursor-muted) !important;
           box-shadow: none !important;
+          filter: none !important;
         }
         [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) .studio-settings-pill.is-active {
           border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--color-cursor-border-soft)) !important;
-          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--color-cursor-panel)) !important;
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--color-cursor-panel))) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
+          filter: none !important;
         }
         [data-appearance="light"] .studio-polish .studio-credit-pill {
           background: var(--color-cursor-panel) !important;
@@ -8929,13 +9785,15 @@ export function StudioShell({
         }
         [data-appearance="light"] .studio-polish :where(aside .cursor-panel-head, .cursor-sidebar-head, .cursor-workspace-head) :where(
           .studio-settings-pill,
+          .studio-settings-trigger,
           .studio-credit-pill,
           .cursor-icon-btn,
           .studio-pill-btn
         ):hover:not(:disabled) {
-          background: var(--color-cursor-hover) !important;
+          background: var(--mos-hover, var(--color-cursor-hover)) !important;
           color: var(--color-cursor-text) !important;
           box-shadow: none !important;
+          filter: none !important;
           transform: none !important;
         }
         [data-appearance="light"] .studio-polish .cursor-unified-tab {
@@ -9062,16 +9920,41 @@ export function StudioShell({
           cursor: pointer;
         }
         .studio-settings-pill.is-active {
-          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border));
-          color: var(--color-cursor-text-bright);
-          background: color-mix(in srgb, var(--cursor-accent) 12%, transparent);
-          box-shadow: 0 0 18px color-mix(in srgb, var(--cursor-accent) 16%, transparent);
+          border-color: color-mix(in srgb, var(--cursor-accent) 42%, var(--color-cursor-border-soft, var(--color-cursor-border)));
+          color: var(--color-cursor-text-bright, var(--mos-text));
+          background: color-mix(in srgb, var(--cursor-accent) 10%, var(--mos-page, var(--color-cursor-panel)));
+          box-shadow: none;
         }
         .studio-polish .studio-file-select-toggle,
         .studio-polish .studio-file-select-toggle:hover,
         .studio-polish .studio-file-select-toggle:active,
         .studio-polish .studio-file-select-toggle.is-active,
-        .studio-polish .studio-file-select-toggle:focus-visible {
+        .studio-polish .studio-file-select-toggle:focus-visible,
+        .studio-polish .studio-file-view-toggle,
+        .studio-polish .studio-file-view-toggle:hover,
+        .studio-polish .studio-file-view-toggle:active,
+        .studio-polish .studio-file-view-toggle.is-active,
+        .studio-polish .studio-file-view-toggle:focus-visible,
+        .studio-polish .studio-file-add-toggle,
+        .studio-polish .studio-file-add-toggle:hover,
+        .studio-polish .studio-file-add-toggle:active,
+        .studio-polish .studio-file-add-toggle[aria-expanded="true"],
+        .studio-polish .studio-file-add-toggle:focus-visible {
+          box-shadow: none !important;
+        }
+        /* Add (+) must never keep the accent glow drop-shadow — matches sibling chrome icons. */
+        .studio-polish .studio-file-add-toggle,
+        .studio-polish .studio-file-add-toggle:hover,
+        .studio-polish .studio-file-add-toggle:active,
+        .studio-polish .studio-file-add-toggle[aria-expanded="true"] {
+          box-shadow: none !important;
+          filter: none !important;
+        }
+        .studio-polish aside .cursor-panel-head .studio-file-add-toggle,
+        .studio-polish aside .cursor-sidebar-head .studio-file-add-toggle {
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft)) !important;
+          background: var(--mos-page, var(--color-cursor-panel)) !important;
+          color: var(--color-cursor-muted, var(--mos-muted)) !important;
           box-shadow: none !important;
         }
         .studio-settings-floating-overlay {
@@ -11658,15 +12541,21 @@ export function StudioShell({
           background: transparent !important;
           pointer-events: none;
         }
-        /* Must follow the base bottom:0 above. Panels already clear the nav. */
+        /*
+          Must follow the base bottom:0 above.
+          Mobile stage already pads bottom-chrome + keyboard-inset, and main
+          (composer's containing block) shrinks with that padding — so the
+          composer must NOT also translate by --studio-keyboard-inset or it
+          double-lifts to the top when Files is closed. Nav (outside the stage)
+          still uses the transform lift.
+        */
         @media (max-width: 899px) {
           .studio-polish.is-studio-mobile .studio-composer.cursor-composer-shell,
           .studio-polish .studio-composer.cursor-composer-shell {
-            /* Rest above nav; same translate as nav so they ride the KB as one unit. */
             bottom: var(--studio-mobile-composer-gap, 8px);
-            transform: translate3d(0, calc(-1 * var(--studio-keyboard-inset, 0px)), 0);
+            transform: none;
           }
-          /* Files open: composer keeps the normal gap above the dock (same token as above nav). */
+          /* Files open: same gap above the dock; stay above dock stacking. */
           .studio-polish.is-studio-mobile.is-mobile-files .studio-composer.cursor-composer-shell,
           .studio-polish.is-studio-mobile.is-mobile-files-composer .studio-composer.cursor-composer-shell,
           .studio-polish.is-studio-mobile[data-files-open="1"] .studio-composer.cursor-composer-shell {
@@ -12083,10 +12972,10 @@ export function StudioShell({
           gap: 4px;
           padding-right: 2px;
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--mos-bg);
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
         .studio-polish .cursor-explorer-body {
-          background: var(--mos-bg);
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
         .studio-polish .cursor-panel-search {
           min-height: 32px;
@@ -12094,17 +12983,28 @@ export function StudioShell({
           padding: 0 8px 0 10px;
           border-top: 1px solid var(--studio-chrome-divider);
           border-bottom: 1px solid var(--studio-chrome-divider);
-          background: var(--mos-bg);
+          background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
         }
         /* Messages rail (Feed / My offers / My jobs): brand head already divides —
            keep a single hairline, not a double top border on the search strip. */
         .studio-polish .studio-dm-sidebar .cursor-panel-search {
           border-top: none;
         }
-        /* Files / CN Assets rail: source toggle already draws the bottom hairline —
-           search must not add a second top line (looks like a thick double border). */
-        .studio-polish .studio-files-source-toggle + .cursor-panel-search {
-          border-top: none;
+        /* Files chrome owns the bottom hairline — search has no own borders. */
+        .studio-polish .studio-files-search-row .cursor-panel-search,
+        .studio-polish .studio-files-chrome .cursor-panel-search {
+          border-top: none !important;
+          border-bottom: none !important;
+          background: transparent !important;
+        }
+        .studio-polish .studio-files-search-row,
+        .studio-polish .studio-files-source-toggle,
+        .studio-polish .studio-files-chrome {
+          background: var(--mos-page, var(--mos-panel, #f5f5f7));
+        }
+        .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle,
+        .studio-polish .cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row {
+          background: transparent;
         }
         .studio-polish .cursor-panel-search > .icon-inline {
           display: inline-flex;
@@ -13509,6 +14409,7 @@ export function StudioShell({
           height: 14px;
           flex: 0 0 auto;
         }
+        /* Chrome icon circles: flat page fill + soft ring — never darker plate or glow. */
         .studio-settings-trigger {
           width: 24px;
           min-width: 24px;
@@ -13516,14 +14417,11 @@ export function StudioShell({
           min-height: 24px;
           justify-content: center;
           border-radius: 999px;
-          border-color: color-mix(in srgb, var(--cursor-accent) 34%, var(--color-cursor-border));
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 16%, var(--color-cursor-panel)), var(--color-cursor-panel));
-          color: color-mix(in srgb, var(--color-cursor-text-bright) 92%, var(--cursor-accent));
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 16%, transparent) inset,
-            0 8px 20px color-mix(in srgb, #000 24%, transparent),
-            0 0 14px color-mix(in srgb, var(--cursor-accent) 12%, transparent);
+          border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+          background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+          color: var(--color-cursor-muted, var(--mos-muted));
+          box-shadow: none;
+          filter: none;
           padding: 0;
         }
         .studio-settings-trigger svg {
@@ -13541,21 +14439,18 @@ export function StudioShell({
           width: 12px;
           height: 12px;
         }
-        .studio-settings-trigger:hover {
-          border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--color-cursor-border));
-          background:
-            linear-gradient(180deg, color-mix(in srgb, var(--cursor-accent) 24%, var(--color-cursor-panel)), color-mix(in srgb, var(--cursor-accent) 8%, var(--color-cursor-panel)));
-          color: var(--color-cursor-text-bright);
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 24%, transparent) inset,
-            0 10px 22px color-mix(in srgb, #000 28%, transparent),
-            0 0 20px color-mix(in srgb, var(--cursor-accent) 20%, transparent);
+        .studio-settings-trigger:hover,
+        .studio-settings-trigger[aria-expanded="true"] {
+          border-color: var(--color-cursor-border, var(--mos-border));
+          background: var(--mos-hover, var(--color-cursor-hover));
+          color: var(--color-cursor-text, var(--mos-text));
+          box-shadow: none;
+          filter: none;
         }
         .studio-settings-trigger:active {
-          background: color-mix(in srgb, var(--cursor-accent) 18%, var(--color-cursor-panel));
-          box-shadow:
-            0 0 0 1px color-mix(in srgb, var(--cursor-accent) 28%, transparent) inset,
-            0 4px 10px color-mix(in srgb, #000 22%, transparent);
+          background: var(--mos-active, var(--color-cursor-active, var(--mos-hover)));
+          box-shadow: none;
+          filter: none;
         }
         .studio-upload-trigger {
           width: 30px;
@@ -16793,6 +17688,11 @@ export function StudioShell({
           position: absolute;
           inset: 0;
           z-index: 0;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          min-width: 0;
+          overflow: hidden;
           opacity: 0;
           pointer-events: none;
           /* Skip paint for covered panes; React + Convex stay warm. */
@@ -16857,7 +17757,7 @@ export function StudioShell({
           padding: 0;
           border: none;
           border-radius: 18px 18px 0 0;
-          /* L2 plate — same shade language as landing menu / section bars. */
+          /* L2 plate canvas; whitish L1 handle band (shared rule). */
           background: var(--mos-plate, var(--mos-panel, #ececf0));
           box-shadow: var(--studio-mobile-sheet-shadow);
           overflow: hidden;
@@ -18671,10 +19571,24 @@ export function StudioShell({
           minSize={STUDIO_MAIN_SIDEBAR_MIN}
           maxSize={STUDIO_MAIN_SIDEBAR_MAX}
         >
-      <aside className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}`}>
+      <aside
+        className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}${
+          effectiveFilesRail ? " is-files-nav" : ""
+        }`}
+      >
         <div className={STYLE.panelHead}>
-          <StudioSidebarBrand />
-          {!effectiveSocialRail && !effectiveMessagesRail && !effectiveNetworkRail ? (
+          {effectiveFilesRail ? (
+            <div className="cursor-project-btn cursor-explorer-title cursor-sidebar-brand studio-sidebar-brand min-w-0">
+              <Folder className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="studio-sidebar-brand-label truncate">Files</span>
+            </div>
+          ) : (
+            <StudioSidebarBrand />
+          )}
+          {!effectiveSocialRail &&
+          !effectiveMessagesRail &&
+          !effectiveNetworkRail &&
+          !effectiveFilesRail ? (
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -18730,6 +19644,50 @@ export function StudioShell({
             onOpenProfile={openPublicProfile}
             onOpenFeedPost={(postId) => openProfilePost("", postId)}
           />
+        ) : effectiveFilesRail ? (
+          <StudioFilesNavPane
+            activeFolderId={activeFolderId}
+            workspaceRootId={filesNavWorkspaceRootId}
+            isHomeActive={
+              Boolean(filesNavWorkspaceRootId) &&
+              activeFolderId === filesNavWorkspaceRootId
+            }
+            rootEntries={filesNavRootEntries}
+            quickPins={filesQuickAccessPins}
+            recentFolders={filesRecentFolders}
+            frequentFolders={filesFrequentFolders}
+            onOpenHome={() => handleBreadcrumbNavigate("")}
+            onOpenEntry={handleEntryOpen}
+            onOpenPin={(pin) => {
+              if (!pin.studioId) return;
+              handleEntryOpen({
+                type: "dir",
+                name: pin.label,
+                path: pin.path.startsWith("/") ? pin.path : `/${pin.path}`,
+                studioId: pin.studioId,
+                studioKind: "folder",
+              });
+            }}
+            onOpenAccessItem={(item) => {
+              if (!item?.studioId) return;
+              handleEntryOpen({
+                type: "dir",
+                name: item.label,
+                path: item.path?.startsWith("/")
+                  ? item.path
+                  : item.path
+                    ? `/${item.path}`
+                    : `/Studio/${item.label}`,
+                studioId: item.studioId,
+                studioKind: "folder",
+              });
+            }}
+            onPinFolder={(entry) => handlePinFolder(entry, "")}
+            onUnpinPath={(path) => {
+              setPinnedFolders(removePinnedFolder(path, "", explorerUserId));
+              toast.success("Removed from Quick access");
+            }}
+          />
         ) : (
           <StudioFilesExplorerBody
             search={search}
@@ -18779,6 +19737,7 @@ export function StudioShell({
             }
             filesBrowseMode={filesBrowseMode}
             onFilesBrowseModeChange={setFilesBrowseMode}
+            chromeLayout="sidebar"
             assetUrlExpiresUnix={assetUrlExpiresUnix}
             onOpenPurchasedAsset={(buyerAssetId) => {
               void openPurchasedFolder(buyerAssetId);
@@ -18971,6 +19930,16 @@ export function StudioShell({
                 >
                   <MessageCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
+                <button
+                  type="button"
+                  className={`studio-settings-pill studio-settings-trigger${isFilesTab ? " is-active" : ""}`}
+                  onClick={openFiles}
+                  aria-label="Open files"
+                  title="Files"
+                  aria-pressed={isFilesTab}
+                >
+                  <Folder className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
                 <CreditPill
                   creditBalance={billingAccount?.creditBalance}
                   creditPriceCents={pricing?.creditPriceCents}
@@ -19026,7 +19995,86 @@ export function StudioShell({
             ) : null}
           </div>
         </header>
-        <section className="flex min-h-0 flex-1 overflow-hidden">
+        <section className="relative flex min-h-0 flex-1 overflow-hidden">
+          {isFilesTab ? (
+            <div className="studio-files-workspace-tab" data-tab="files">
+              <StudioFilesExplorerBody
+                search={search}
+                setSearch={setSearch}
+                typeFilter={typeFilter}
+                setTypeFilter={setTypeFilter}
+                breadcrumbPath={breadcrumbPath}
+                onBreadcrumbNavigate={handleBreadcrumbNavigate}
+                onBreadcrumbDrop={handleBreadcrumbDrop}
+                viewMode={viewMode}
+                displayRootEntries={displayRootEntries}
+                displayCurrentEntries={filteredCurrentEntries}
+                pathToEntry={pathToEntry}
+                topFolders={topFolders}
+                childFolders={childFolders}
+                setActiveFolderId={setActiveFolderId}
+                setNavTrail={setNavTrail}
+                onOpenPath={handleOpenPath}
+                onEntryOpen={handleEntryOpen}
+                searchState={searchState}
+                deferredSearch={deferredSearch}
+                setContextMenu={setContextMenu}
+                activeFolder={activeFolder}
+                onEntryDrop={handleEntryDrop}
+                isMobile={isMobile}
+                pinnedPaths={explorerPinnedPaths}
+                pinnedShortcuts={explorerPinnedShortcuts}
+                onDropFiles={uploadFiles}
+                selectionMode={fileSelectionMode}
+                selectedPaths={selectedFilePaths}
+                selectedCount={selectedFileEntries.length}
+                onToggleSelectionMode={() => {
+                  setFileSelectionMode((current) => !current);
+                  setSelectedFileEntries([]);
+                }}
+                onEntrySelect={toggleFileSelection}
+                onDownloadSelected={() => startArchiveDownload(selectedFileEntries)}
+                onClearSelection={() => setSelectedFileEntries([])}
+                transfers={fileTransfers}
+                onCancelTransfer={cancelFileTransfer}
+                onDismissTransfer={dismissFileTransfer}
+                onRetryTransfer={retryFileTransfer}
+                pickedPaths={null}
+                filesBrowseMode={filesBrowseMode}
+                onFilesBrowseModeChange={setFilesBrowseMode}
+                chromeLayout={isMobile ? "sidebar" : "workspace"}
+                assetUrlExpiresUnix={assetUrlExpiresUnix}
+                onOpenPurchasedAsset={(buyerAssetId) => {
+                  void openPurchasedFolder(buyerAssetId);
+                }}
+                onNeedTopUp={openCreditsPane}
+                pathbarTools={
+                  <>
+                    <StudioAddMenu
+                      open={addMenuOpen}
+                      setOpen={setAddMenuOpen}
+                      onAction={runCreateAction}
+                    />
+                    <button
+                      type="button"
+                      className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
+                      title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                      aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                      onClick={() =>
+                        setViewMode((mode) => (mode === "grid" ? "list" : "grid"))
+                      }
+                    >
+                      {viewMode === "grid" ? (
+                        <List className="h-3.5 w-3.5" />
+                      ) : (
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </>
+                }
+              />
+            </div>
+          ) : null}
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
@@ -19153,6 +20201,11 @@ export function StudioShell({
             stylePresets={presets}
             onDocumentChange={(entry, contentMarkdown) => {
               void updateDocument({ documentId: entry.studioId, contentMarkdown });
+              if (entry?.studioId) {
+                setRecentFileRows(
+                  recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.edited),
+                );
+              }
             }}
             onSwitchThreadFolder={(threadId) => {
               if (!activeFolder) return;
@@ -19202,7 +20255,7 @@ export function StudioShell({
                     const rootFolder = topFolders?.[0];
                     if (rootFolder) {
                       setActiveFolderId(rootFolder._id);
-                      setNavTrail([{ id: rootFolder._id, name: rootFolder.name }]);
+                      setNavTrail([{ id: rootFolder._id, name: "Files" }]);
                     }
                     setAssetPickSelected([]);
                     setAssetPickRequest({
@@ -19321,7 +20374,12 @@ export function StudioShell({
       {isMobile && filesDockMounted ? (
         <StudioFilesMobileSheet
           expanded={filesDockExpanded}
-          onClose={() => openMobileSection("composer")}
+          onClose={() => {
+            filesDockRestoreAfterKeyboardRef.current = false;
+            deferMobileFilesBusyRef.current = false;
+            composerWantedKeyboardRef.current = true;
+            openMobileSection("composer");
+          }}
           addMenuOpen={addMenuOpen}
           setAddMenuOpen={setAddMenuOpen}
           onCreateAction={runCreateAction}
@@ -19396,6 +20454,58 @@ export function StudioShell({
           onToggleViewMode={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
         />
       ) : null}
+      {isMobile && filesNavSheetOpen ? (
+        <StudioFilesNavMobileSheet
+          activeFolderId={activeFolderId}
+          workspaceRootId={filesNavWorkspaceRootId}
+          isHomeActive={
+            Boolean(filesNavWorkspaceRootId) &&
+            activeFolderId === filesNavWorkspaceRootId
+          }
+          rootEntries={filesNavRootEntries}
+          quickPins={filesQuickAccessPins}
+          recentFolders={filesRecentFolders}
+          frequentFolders={filesFrequentFolders}
+          onOpenHome={() =>
+            openMobileFilesFromNav(() => handleBreadcrumbNavigate(""))
+          }
+          onOpenEntry={(entry) => openMobileFilesFromNav(() => handleEntryOpen(entry))}
+          onOpenPin={(pin) => {
+            if (!pin.studioId) return;
+            openMobileFilesFromNav(() =>
+              handleEntryOpen({
+                type: "dir",
+                name: pin.label,
+                path: pin.path.startsWith("/") ? pin.path : `/${pin.path}`,
+                studioId: pin.studioId,
+                studioKind: "folder",
+              }),
+            );
+          }}
+          onOpenAccessItem={(item) => {
+            if (!item?.studioId) return;
+            openMobileFilesFromNav(() =>
+              handleEntryOpen({
+                type: "dir",
+                name: item.label,
+                path: item.path?.startsWith("/")
+                  ? item.path
+                  : item.path
+                    ? `/${item.path}`
+                    : `/Studio/${item.label}`,
+                studioId: item.studioId,
+                studioKind: "folder",
+              }),
+            );
+          }}
+          onPinFolder={(entry) => handlePinFolder(entry, "")}
+          onUnpinPath={(path) => {
+            setPinnedFolders(removePinnedFolder(path, "", explorerUserId));
+            toast.success("Removed from Quick access");
+          }}
+          onClose={() => setFilesNavSheetOpen(false)}
+        />
+      ) : null}
       </StudioMobileStage>
 
       {isMobile ? (
@@ -19404,14 +20514,27 @@ export function StudioShell({
           onSelect={openMobileSection}
           onPrefetch={prefetchStudioSurface}
           action={
-            // Files dock only where desktop shows the file sidebar (Generate / My Assets).
-            // Linked pill: expands beside Create on Generate, beside Network on My Assets.
-            (!isSocialRail && !isMessagesRail && !isNetworkRail) || networkUsesFilesRail
+            // Sheet dock on Generate / My Assets; full Files tab also highlights Folder.
+            (!isSocialRail && !isMessagesRail && !isNetworkRail) ||
+            networkUsesFilesRail ||
+            isFilesTab
               ? {
                   id: "files",
                   anchor: networkUsesFilesRail ? "network" : "composer",
-                  active: mobileSection === "files",
+                  active: mobileSection === "files" || isFilesTab,
                   onClick: toggleMobileFilesAction,
+                }
+              : null
+          }
+          extrasAction={
+            // Places sidepanel — Files dock sheet OR full Files tab (no desktop sidebar on mobile).
+            (mobileSection === "files" || isFilesTab) &&
+            ((!isSocialRail && !isMessagesRail && !isNetworkRail) ||
+              networkUsesFilesRail ||
+              isFilesTab)
+              ? {
+                  active: filesNavSheetOpen,
+                  onClick: toggleMobileFilesNavAction,
                 }
               : null
           }
@@ -19422,7 +20545,12 @@ export function StudioShell({
                   onClick: () => {
                     setMobileAppMenuOpen(false);
                     setSettingsOpen(false);
-                    if (mobileSection === "files") openMobileSection("composer");
+                    setFilesNavSheetOpen(false);
+                    if (mobileSection === "files") {
+                      filesDockRestoreAfterKeyboardRef.current = false;
+                      openMobileSection("composer");
+                    }
+                    if (!historyOpen) filesDockRestoreAfterKeyboardRef.current = false;
                     setHistoryOpen((open) => !open);
                   },
                 }
@@ -19488,6 +20616,10 @@ export function StudioShell({
           }}
           onOpenSection={(section) => {
             setMobileAppMenuOpen(false);
+            if (section === "files") {
+              openFiles();
+              return;
+            }
             openMobileSection(section);
           }}
           onOpenSettings={(section) => {
@@ -19570,34 +20702,10 @@ export function StudioShell({
           canDownloadZip={!isTrashNav}
           canPin={!isTrashNav}
           canListOnNetwork={mySellerStatus?.status === "approved"}
-          networkListingId={
-            (myAssetListings ?? []).find(
-              (row) =>
-                row.sourceAssetId === contextMenu.entry?.studioId ||
-                row.originalAssetId === contextMenu.entry?.studioId,
-            )?._id ?? null
-          }
-          networkListingStatus={
-            (myAssetListings ?? []).find(
-              (row) =>
-                row.sourceAssetId === contextMenu.entry?.studioId ||
-                row.originalAssetId === contextMenu.entry?.studioId,
-            )?.status ?? null
-          }
-          networkPurchaseCount={
-            (myAssetListings ?? []).find(
-              (row) =>
-                row.sourceAssetId === contextMenu.entry?.studioId ||
-                row.originalAssetId === contextMenu.entry?.studioId,
-            )?.purchaseCount ?? 0
-          }
-          networkPlatformOwned={Boolean(
-            (myAssetListings ?? []).find(
-              (row) =>
-                row.sourceAssetId === contextMenu.entry?.studioId ||
-                row.originalAssetId === contextMenu.entry?.studioId,
-            )?.platformOwnedAt,
-          )}
+          networkListingId={myListingForContextAsset?._id ?? null}
+          networkListingStatus={myListingForContextAsset?.status ?? null}
+          networkPurchaseCount={myListingForContextAsset?.purchaseCount ?? 0}
+          networkPlatformOwned={Boolean(myListingForContextAsset?.platformOwnedAt)}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashNav) return;
@@ -19707,11 +20815,7 @@ export function StudioShell({
               })();
             }
             if (action === "unlist-network") {
-              const listing = (myAssetListings ?? []).find(
-                (row) =>
-                  row.sourceAssetId === entry?.studioId ||
-                  row.originalAssetId === entry?.studioId,
-              );
+              const listing = myListingForContextAsset;
               if (!listing) return;
               void (async () => {
                 try {
@@ -19727,11 +20831,7 @@ export function StudioShell({
               })();
             }
             if (action === "release-network") {
-              const listing = (myAssetListings ?? []).find(
-                (row) =>
-                  row.sourceAssetId === entry?.studioId ||
-                  row.originalAssetId === entry?.studioId,
-              );
+              const listing = myListingForContextAsset;
               if (!listing) return;
               const ok = window.confirm(
                 `Release "${listing.title}" to the platform? It stays live for buyers. Future sales profits go to the platform. This cannot be undone.`,
@@ -20020,8 +21120,8 @@ function StudioComposer({
     let lastKeyboardInset = -1;
     let keyboardSettledTimer = 0;
 
-    // Lightweight — tracks OS keyboard every frame. No React state, no layout reads
-    // beyond vv metrics, so nav + composer ride the same compositor transform.
+    // Lightweight — tracks OS keyboard every frame. No React state.
+    // Nav rides compositor transform; composer clears via stage padding-bottom.
     const syncKeyboardInset = () => {
       if (keyboardRafId) return;
       keyboardRafId = window.requestAnimationFrame(() => {
@@ -21367,7 +22467,7 @@ function StudioAddMenu({ open, setOpen, onAction }) {
     <div className="relative" ref={wrapRef}>
       <button
         type="button"
-        className="studio-settings-pill studio-settings-trigger"
+        className="studio-settings-pill studio-settings-trigger studio-file-add-toggle"
         title="Add"
         aria-label="Add"
         aria-expanded={open}
@@ -21752,15 +22852,6 @@ function StudioInlineSettingSelect({ icon, label, value, items, onChange, hideLa
         </div>
       )}
     </StudioInlineSettingPopover>
-  );
-}
-
-function StudioRatioGlyph({ ratio }) {
-  const className = `studio-ratio-glyph studio-ratio-glyph-${ratio.replace(":", "x")}`;
-  return (
-    <span className={className} aria-hidden="true">
-      <span />
-    </span>
   );
 }
 
@@ -23281,16 +24372,25 @@ function playStudioTapFeedback() {
   const now = performance.now();
   if (now - studioTapLast < 55) return;
   studioTapLast = now;
+  let coarse = false;
   try {
-    navigator.vibrate?.(8);
+    coarse = Boolean(window.matchMedia?.("(pointer: coarse)").matches);
   } catch {
-    // best-effort tactile feedback
+    coarse = false;
   }
-  // Coarse pointer: vibrate only — AudioContext oscillator work adds tap lag.
-  try {
-    if (window.matchMedia?.("(pointer: coarse)").matches) return;
-  } catch {
-    // continue to audio on desktop
+  // Haptics only on touch devices, and only while the frame has user activation.
+  // Calling vibrate without activation logs Chrome Intervention noise (iframes / first paint).
+  if (coarse) {
+    try {
+      const active = navigator.userActivation?.isActive ?? true;
+      if (active && typeof navigator.vibrate === "function") {
+        navigator.vibrate(8);
+      }
+    } catch {
+      // best-effort tactile feedback
+    }
+    // Coarse pointer: vibrate only — AudioContext oscillator work adds tap lag.
+    return;
   }
   try {
     studioTapAudioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
@@ -24875,6 +25975,7 @@ function ActivePane({
       <StudioCreativeNetworkPane
         onOpenCredits={onOpenCredits ?? onOpenSettings}
         creditPriceCents={creditPriceCents ?? pricing?.creditPriceCents}
+        onStartChat={onOpenChat}
       />
     </div>
   );
@@ -25032,6 +26133,10 @@ function ActivePane({
   }
   if (activeTab.startsWith("messages:")) {
     // Stay mounted in messagesKeepalive — no remount / resubscribe on tab switch.
+    return wrapPane(null);
+  }
+  if (activeTab.startsWith("files:")) {
+    // Files nav lives in studio-sidebar; explorer fills the main pane.
     return wrapPane(null);
   }
   if (feedPostId || profilePostMatch || profileUsername) {
@@ -26478,6 +27583,8 @@ function StudioFilesExplorerBody({
   onOpenPurchasedAsset,
   onNeedTopUp,
   pathbarTools = null,
+  /** "workspace" = full Files tab (toggle left of search). "sidebar" = left rail / mobile (toggle on its own row). */
+  chromeLayout = "sidebar",
 }) {
   const filterActive = typeFilter !== "all";
   const isNetworkMode = filesBrowseMode === "network";
@@ -26552,7 +27659,7 @@ function StudioFilesExplorerBody({
 
   return (
     <div
-      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}${isNetworkMode ? " is-network-store" : ""}`}
+      className={`cursor-explorer-body studio-files-drop-zone flex flex-col flex-1 min-h-0 overflow-hidden${dropOver ? " is-drop-target" : ""}${isNetworkMode ? " is-network-store" : ""}${chromeLayout === "workspace" ? " is-workspace-chrome" : " is-sidebar-chrome"}`}
       onDragOver={(event) => {
         if (isNetworkMode || !onDropFiles || !Array.from(event.dataTransfer.types).includes("Files")) return;
         event.preventDefault();
@@ -26569,49 +27676,61 @@ function StudioFilesExplorerBody({
         void onDropFiles(event.dataTransfer.files, activeFolder?._id);
       }}
     >
-      {onFilesBrowseModeChange ? (
-        <div className="studio-files-source-toggle" role="tablist" aria-label="Files source">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!isNetworkMode}
-            className={!isNetworkMode ? "is-active" : undefined}
-            onClick={() => onFilesBrowseModeChange("yours")}
-          >
-            <Folder aria-hidden="true" />
-            Your files
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={isNetworkMode}
-            className={isNetworkMode ? "is-active" : undefined}
-            onClick={() => onFilesBrowseModeChange("network")}
-          >
-            <Library aria-hidden="true" />
-            Asset library
-          </button>
-        </div>
-      ) : null}
-      {showSearch ? (
-        <PanelSearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder={isNetworkMode ? "Search music and sound effects" : "Search your content"}
-          aria-label={isNetworkMode ? "Search music and sound effects" : "Search your content"}
-          end={
-            isNetworkMode ? (
-              <ExplorerTypeFilter
-                value={networkAudioFilter}
-                onChange={setNetworkAudioFilter}
-                options={NETWORK_AUDIO_TYPE_FILTERS}
-                ariaLabel="Filter audio type"
-              />
-            ) : setTypeFilter ? (
-              <ExplorerTypeFilter value={typeFilter} onChange={setTypeFilter} />
-            ) : null
+      {onFilesBrowseModeChange || showSearch ? (
+        <div
+          className={
+            chromeLayout === "workspace" && onFilesBrowseModeChange
+              ? "studio-files-chrome"
+              : undefined
           }
-        />
+        >
+          {onFilesBrowseModeChange ? (
+            <div className="studio-files-source-toggle" role="tablist" aria-label="Files source">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!isNetworkMode}
+                className={!isNetworkMode ? "is-active" : undefined}
+                onClick={() => onFilesBrowseModeChange("yours")}
+              >
+                <Folder aria-hidden="true" />
+                Your files
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isNetworkMode}
+                className={isNetworkMode ? "is-active" : undefined}
+                onClick={() => onFilesBrowseModeChange("network")}
+              >
+                <Library aria-hidden="true" />
+                Asset library
+              </button>
+            </div>
+          ) : null}
+          {showSearch ? (
+            <div className="studio-files-search-row">
+              <PanelSearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder={isNetworkMode ? "Search music and sound effects" : "Search your content"}
+                aria-label={isNetworkMode ? "Search music and sound effects" : "Search your content"}
+                end={
+                  isNetworkMode ? (
+                    <ExplorerTypeFilter
+                      value={networkAudioFilter}
+                      onChange={setNetworkAudioFilter}
+                      options={NETWORK_AUDIO_TYPE_FILTERS}
+                      ariaLabel="Filter audio type"
+                    />
+                  ) : setTypeFilter ? (
+                    <ExplorerTypeFilter value={typeFilter} onChange={setTypeFilter} />
+                  ) : null
+                }
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
       {isNetworkMode ? (
         <StudioCreativeNetworkStore
@@ -26957,6 +28076,7 @@ function StudioFilesMobileSheet({
           isMobile
           showSearch
           showPathbar
+          chromeLayout="sidebar"
           viewMode={viewMode}
           onDropFiles={onUploadFiles}
           pathbarTools={(
@@ -28844,6 +29964,16 @@ function systemFolderDisplayName(folder) {
   if (folder?.systemKind === "public_assets") return "My Public";
   if (folder?.systemKind === "purchased_assets") return "Purchased";
   if (folder?.systemKind === "messages") return "Messages";
+  // Workspace root is stored as "Studio" in Convex — always show Files in UI.
+  if (
+    folder &&
+    folder.parentId == null &&
+    !folder.systemKind &&
+    typeof folder.name === "string" &&
+    folder.name.toLowerCase() === "studio"
+  ) {
+    return "Files";
+  }
   return folder?.name;
 }
 
@@ -29212,6 +30342,15 @@ function tabDescriptor({
       title: "Messages",
       status: "ready",
       studioKind: "messages",
+    };
+  }
+  if (key.startsWith("files:")) {
+    return {
+      key,
+      kind: "file",
+      title: "Files",
+      status: "ready",
+      studioKind: "files",
     };
   }
   if (key.startsWith("admin:")) {

@@ -22,7 +22,7 @@ type PreviewTransformOverlayProps = {
   canvasHeight: number;
   selected: boolean;
   playing: boolean;
-  onSelect: (clipId: string) => void;
+  onSelect: (clipId: string | null) => void;
   onUpdateClip: (clipId: string, patch: Partial<EditorClip>) => void;
   onPreviewTransform: (transform: ClipTransform) => void;
   onTogglePlay: () => void;
@@ -528,7 +528,6 @@ export function PreviewTransformOverlay({
     }
     event.preventDefault();
     event.stopPropagation();
-    onSelect(clip.id);
     const point = clientToNorm(event.clientX, event.clientY);
     const handle = hitHandle(
       point.x,
@@ -538,7 +537,12 @@ export function PreviewTransformOverlay({
       canvasWidth,
       canvasHeight,
     );
-    if (!handle) return;
+    // Empty canvas (outside the clip box) — deselect. Side panel / elsewhere leave selection alone.
+    if (!handle) {
+      onSelect(null);
+      return;
+    }
+    onSelect(clip.id);
     dragRef.current = {
       handle,
       start: transform,

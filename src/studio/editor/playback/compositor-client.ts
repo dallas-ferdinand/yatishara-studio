@@ -85,6 +85,33 @@ export class CompositorClient {
       opacity: number;
       translateY: number;
       scale: number;
+      fontFamily: string;
+      bold: boolean;
+      italic: boolean;
+      strokeColor: string;
+      strokeWidth: number;
+      flipX: boolean;
+      flipY: boolean;
+      poseX: number;
+      poseY: number;
+      poseScale: number;
+      rotation: number;
+      clipId?: string;
+      underline?: boolean;
+      textCase?: "none" | "upper" | "lower" | "title";
+      letterSpacing?: number;
+      lineHeight?: number;
+      verticalAlign?: "top" | "middle" | "bottom";
+      backgroundColor?: string | null;
+      backgroundPadding?: number;
+      backgroundRadius?: number;
+      shadowColor?: string | null;
+      shadowBlur?: number;
+      shadowOffsetX?: number;
+      shadowOffsetY?: number;
+      glow?: boolean;
+      glowColor?: string;
+      glowBlur?: number;
     }>;
     textsOver?: Array<{
       text: string;
@@ -94,6 +121,33 @@ export class CompositorClient {
       opacity: number;
       translateY: number;
       scale: number;
+      fontFamily: string;
+      bold: boolean;
+      italic: boolean;
+      strokeColor: string;
+      strokeWidth: number;
+      flipX: boolean;
+      flipY: boolean;
+      poseX: number;
+      poseY: number;
+      poseScale: number;
+      rotation: number;
+      clipId?: string;
+      underline?: boolean;
+      textCase?: "none" | "upper" | "lower" | "title";
+      letterSpacing?: number;
+      lineHeight?: number;
+      verticalAlign?: "top" | "middle" | "bottom";
+      backgroundColor?: string | null;
+      backgroundPadding?: number;
+      backgroundRadius?: number;
+      shadowColor?: string | null;
+      shadowBlur?: number;
+      shadowOffsetX?: number;
+      shadowOffsetY?: number;
+      glow?: boolean;
+      glowColor?: string;
+      glowBlur?: number;
     }>;
   }): Promise<void> {
     if (this.disposed) {
@@ -136,6 +190,40 @@ export class CompositorClient {
       if (!this.disposed) {
         this.worker.postMessage({ type: "transform", transformA: transform });
       }
+    });
+  }
+
+  /** Live text pose while dragging — mirrors updateTransform for video. */
+  updateTextTransform(
+    clipId: string,
+    transform: [number, number, number, number],
+  ): void {
+    if (this.disposed) return;
+    void this.ready.then(() => {
+      if (!this.disposed) {
+        this.worker.postMessage({
+          type: "textTransform",
+          clipId,
+          transform,
+        });
+      }
+    });
+  }
+
+
+  async ensureFonts(families: string[]): Promise<void> {
+    if (this.disposed) return;
+    const unique = [...new Set(families.map((f) => f.trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+    await this.ready;
+    const requestId = ++this.requestId;
+    return await new Promise<void>((resolve, reject) => {
+      this.pending.set(requestId, { resolve, reject });
+      this.worker.postMessage({
+        type: "ensureFonts",
+        requestId,
+        families: unique,
+      });
     });
   }
 

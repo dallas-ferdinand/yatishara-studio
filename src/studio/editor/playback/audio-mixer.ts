@@ -11,6 +11,8 @@ type ActiveSource = {
 type ActiveMediaElement = {
   element: HTMLAudioElement;
   generation: number;
+  /** Clip gain before master volume. */
+  baseGain: number;
 };
 
 type DesiredVoice = {
@@ -74,6 +76,7 @@ export function transitionAudioGain(
 export class AudioMixer {
   readonly context: AudioContext;
   private readonly master: GainNode;
+  private masterVolume = 1;
   private readonly buffers = new Map<string, AudioBuffer>();
   private readonly bufferTouched = new Map<string, number>();
   private readonly bufferBytes = new Map<string, number>();
@@ -99,6 +102,21 @@ export class AudioMixer {
 
   async resume(): Promise<void> {
     if (this.context.state === "suspended") await this.context.resume();
+  }
+
+  /** Preview master gain (0–1). Affects Web Audio beds and HTML media voices. */
+  setMasterVolume(volume: number): void {
+    const next = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 0));
+    this.masterVolume = next;
+    this.master.gain.value = next;
+    for (const source of this.activeMedia.values()) {
+      const base = source.baseGain ?? source.element.volume;
+      source.element.volume = Math.max(0, Math.min(1, base * next));
+    }
+  }
+
+  getMasterVolume(): number {
+    return this.masterVolume;
   }
 
   async prepare(
@@ -262,7 +280,11 @@ export class AudioMixer {
       // switching outputs mid-play when a late Web Audio decode succeeds.
       const activeMedia = this.activeMedia.get(key);
       if (activeMedia?.generation === generation) {
-        activeMedia.element.volume = Math.max(0, Math.min(1, item.gain));
+        activeMedia.baseGain = item.gain;
+        activeMedia.element.volume = Math.max(
+          0,
+          Math.min(1, item.gain * this.masterVolume),
+        );
         continue;
       }
       const existing = this.active.get(key);
@@ -335,7 +357,11 @@ export class AudioMixer {
   ): void {
     const existing = this.activeMedia.get(key);
     if (existing?.generation === generation) {
-      existing.element.volume = Math.max(0, Math.min(1, item.gain));
+      existing.baseGain = item.gain;
+      existing.element.volume = Math.max(
+        0,
+        Math.min(1, item.gain * this.masterVolume),
+      );
       if (existing.element.paused) {
         void existing.element.play().catch(() => undefined);
       }
@@ -345,11 +371,11 @@ export class AudioMixer {
 
     const element = new Audio();
     element.preload = "auto";
-    element.volume = Math.max(0, Math.min(1, item.gain));
+    element.volume = Math.max(0, Math.min(1, item.gain * this.masterVolume));
     // Deliberately do not set crossOrigin: CDN media playback is permitted,
     // while CORS fetch/Web Audio decoding may be blocked by the pull zone.
     element.src = url;
-    this.activeMedia.set(key, { element, generation });
+    this.activeMedia.set(key, { element, generation, baseGain: item.gain });
 
     const seekToSource = () => {
       if (this.activeMedia.get(key)?.element !== element) return;

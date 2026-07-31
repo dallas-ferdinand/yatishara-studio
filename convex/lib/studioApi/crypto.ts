@@ -21,7 +21,7 @@ export async function hashApiKey(fullKey: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "hex")).join("");
 }
 
-export const VALID_SCOPES = ["read", "write", "generate"] as const;
+export const VALID_SCOPES = ["read", "write", "generate", "messages", "social", "marketplace"] as const;
 export type ApiKeyScope = (typeof VALID_SCOPES)[number];
 
 export function normalizeScopes(scopes: string[]): ApiKeyScope[] {

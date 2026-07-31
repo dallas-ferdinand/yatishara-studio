@@ -28,6 +28,25 @@ import {
 } from "./lib/generationPricing";
 import { compactElementPromptLine } from "./lib/klingGatewayPrompt";
 import { applyStorageBytesDelta, assertUploadsAllowed } from "./lib/storageBilling";
+import { normalizeScopes } from "./lib/studioApi/crypto";
+
+/** Admin/CLI helper: grant scopes on an API key (e.g. add messages for MCP DMs). */
+export const adminSetApiKeyScopes = internalMutation({
+  args: {
+    apiKeyId: v.id("apiKeys"),
+    scopes: v.array(v.string()),
+  },
+  returns: v.array(v.string()),
+  handler: async (ctx, args) => {
+    const key = await ctx.db.get("apiKeys", args.apiKeyId);
+    if (!key || key.revokedAt) {
+      throw new Error("API key not found");
+    }
+    const scopes = normalizeScopes(args.scopes);
+    await ctx.db.patch("apiKeys", args.apiKeyId, { scopes });
+    return scopes;
+  },
+});
 
 const folderShape = v.object({
   id: v.id("folders"),

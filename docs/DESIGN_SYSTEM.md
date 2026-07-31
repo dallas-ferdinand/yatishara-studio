@@ -62,6 +62,14 @@ Supporting tokens (also both modes):
 .menu-item:hover  { background: var(--mos-plate-strong); }  /* L3 */
 ```
 
+### Mobile action sheets (locked)
+
+History, Files dock, Places/Extras, app menu, settings, and explorer context
+sheets use **L2 `--mos-plate`** for the sheet canvas. The **drag-handle top band**
+is **L1 `--mos-page`** (whitish in light — menu-style). Nested folder/file tiles
+stay L2 plate with their own edge treatment. Never paint the handle L2 (muddy
+under the grab) or the whole sheet L3.
+
 ### File manager tiles (locked)
 
 The explorer canvas is L1 (`--mos-panel` in light = `--mos-page`), so **file / folder
@@ -79,23 +87,39 @@ from `--mos-plate`:
   only. **System folders** (Trash / Messages / Purchased / My Public): center glyph
   only (`trash` / `message` / `shoppingBag` / `globe`) — **no** bottom-left type
   chip.
-- File-manager **search strip** (`.cursor-panel-search`): chrome divider on
-  **top and bottom** when it is the first chrome after the brand head. When it
-  follows `.studio-files-source-toggle` (Your files / Asset library) or sits
-  under a brand head that already drew a line (Messages `.studio-dm-sidebar`),
-  **no top border** — only the bottom hairline. Never stack two adjacent lines
-  (reads as a thick double border). Type filter is a **labeled dropdown** in the
-  search end (`.desk-explorer-type-filter`) with leading icons on the trigger and
-  every menu row — same CursorSelect language (`ArrowDown`, plate menu). Creative
-  Network Files mode uses the same control for All / Music / SFX (no pill row).
+- File-manager **search strip** (`.cursor-panel-search`): always nested in
+  `.studio-files-search-row` (or workspace `.studio-files-chrome`) so the bottom
+  hairline belongs to that container — search itself has no top/bottom border.
+  Under a brand head that already drew a line (Messages `.studio-dm-sidebar`),
+  **no top border**. Never stack two adjacent lines. Type filter is a **labeled
+  dropdown** in the search end (`.desk-explorer-type-filter`) with leading icons
+  — same CursorSelect language (`ArrowDown`, plate menu). Creative Network Files
+  mode uses the same control for All / Music / SFX (no pill row).
 - **Messages rail** search (Feed / My offers / My jobs `.studio-dm-sidebar
   .cursor-panel-search`): **no top border** — brand head already draws that
   divider; only the bottom hairline.
-- Files source toggle (`.studio-files-source-toggle`): **same height as other chrome
-  heads** (`--cursor-head-h` / 32px) — horizontal `8px` pad only, 24px pills, bottom
-  hairline. Folder = Your files, Library = **Asset library** (stock music/SFX browse).
-  Never a taller padded strip. Owned library cards are HTML5-draggable onto the
-  timeline (same explorer/asset payload as files); play/scrub row stays interactive.
+- **Files workspace tab** (`files:main`, desktop only): Windows-style left nav
+  (`.studio-files-nav-pane`) **is** the resizable `studio-sidebar` Panel content
+  (same drag handle as Messages / explorer) — not a nested panel inside it. Full
+  sidebar width, one right divider only (`aside.is-files-nav`). Head label
+  **Files**. Stays open while browsing folders. **Active** highlight only on
+  **Home** and **Places** (Recents / Trash / …) — Quick access / Recent folders /
+  Frequent rows open the folder with **no** selected/active wash. Home, Places
+  (**Recents** = last 20 opens/creates/edits + folders; Trash; Messages; …), Quick
+  access (drag folders to pin), **Recent folders** (last 5 folder opens),
+  **Frequent** (most-visited folders). File activity: `explorer-file-access.js`
+  (prune 20). Folder visits: `explorer-folder-access.js`. Main pane = explorer
+  body + add/view controls in the pathbar.
+- Files source toggle (`.studio-files-source-toggle`): **full Files workspace**
+  only — left of search in `.studio-files-chrome` with a **full-height** vertical
+  divider. Search ↔ type-filter keeps the **short** hairline
+  (`.cursor-panel-search-end::before`). **Sidebar explorer** (editing / left rail)
+  and mobile: toggle stays on its **own row above** search (stacked). Search
+  always lives inside `.studio-files-search-row` so the bottom hairline wraps the
+  whole strip. Chrome fill = L1 `--mos-page` / `--mos-panel` (same grey as the
+  rail — never a darker `--mos-bg` band). Folder = Your files, Library = **Asset
+  library**. Owned library cards are HTML5-draggable onto the timeline; play/scrub
+  row stays interactive.
 - Active *controls* inside the file manager (breadcrumb `.is-current`) stay L3
   — that's the control affordance, not a plate.
 - File / folder **hover** (grid tile visual, preview tile, list row): accent
@@ -304,8 +328,9 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 
 **Mobile bottom sheets** (Studio chrome — shared edge language):
 
-- Surfaces: menu, Settings, History, Files dock (when open), DM peer actions — L2
-  `--mos-plate`, top radii `18px` (peek) / `14px` (full), grab handle `44×5`.
+- Surfaces: menu, Settings, History, Files dock (when open), DM peer actions —
+  canvas L2 `--mos-plate`, handle band L1 `--mos-page` (whitish), top radii
+  `18px` (peek) / `14px` (full), grab handle `44×5`.
 - Shadow token: `--studio-mobile-sheet-shadow` (inset top highlight + upward soft lift).
   Do **not** use inset glass panels with title+X for Settings on mobile.
 - Menu / History / Settings share peek↔full drag: bottom-anchored, band-capped under
@@ -333,13 +358,14 @@ same head-tab language: idle labels are plain (transparent, muted); **only**
 `.is-active` gets the accent pill. Never glass-fill every section chip. Same rule as
 `studio-admin-head-tab` / `studio-cn-head-tab`.
 
-**Horizontal overflow edge fades** (Settings section nav + Creative Network second
-head tabs): use `.cursor-h-scroll-fade` + `useHorizontalScrollFade`. Soft mask matches
-workspace tab strip (`.cursor-unified-tabs-scroll` right fade). `data-scroll-fade` is
-`right` / `left` / `both` / `none` — clear a side when scrolled flush so items can
-fully reach that edge. No container pad on the track — `::before`/`::after` 12px
-spacers inset the first/last pill at rest but scroll away so pills can go flush under
-the fade. Memory: **806**.
+**Horizontal overflow edge fades** (Settings section nav, Creative Network head
+tabs, Messages **label rail**): use `.cursor-h-scroll-fade` + `useHorizontalScrollFade`
++ `useHorizontalWheelScroll` (desktop hover wheel → sideways, no Ctrl/Shift). Soft
+mask matches workspace tab strip (`.cursor-unified-tabs-scroll` right fade).
+`data-scroll-fade` is `right` / `left` / `both` / `none` — clear a side when scrolled
+flush so items can fully reach that edge. No container pad on the track —
+`::before`/`::after` spacers inset the first/last pill at rest but scroll away so
+pills can go flush under the fade. Memory: **806**.
 
 Inside that sidebar `cursor-settings-action` is **full-width** — never use it for an inline
 action inside a row. Job/offer summaries use `.studio-dm-peer-job-card` /
@@ -431,10 +457,25 @@ Before merge, a pane must:
 5. No unbounded signed-URL fan-out (respect `SIGNED_URL_BUDGET`)  
 6. Prefetch chunk on nav intent when first open is common  
 
+### Mobile Files: sheet vs tab (locked)
+
+- **Generate / My Assets Folder pill** → **sheet dock** under Create (see below).
+- **App menu Files** (and desktop-parity `openFiles()`) → full workspace **tab**
+  `files:main` on mobile too. Explorer fills the main pane; **Extras** opens the
+  Places sidepanel sheet (no left rail on phone). Folder pill active while the
+  tab is open; tap again to return to the last chat.
+- Do **not** route app-menu Files through `openMobileSection("files")` (sheet).
+
 ### Mobile Generate Files dock (locked)
 
 Bottom-nav **Files** on Generate is an **in-flow flex dock** under Generate — not a
 floating/absolute overlay sheet.
+
+**Folder pill ↔ keyboard (locked):** Generate Folder toggles the dock with the
+composer keyboard — open Folder to browse (blurs KB); Folder again / back returns
+to composer and restores the keyboard. Composer input focus while the dock is open
+also hides the dock and focuses the editor. Keyboard-dismiss restore only applies
+when the dock was tucked away for typing (not after a manual Folder close).
 
 Structure:
 
@@ -471,13 +512,36 @@ Structure:
   paint frame as `data-files-open`. Docs/memory: **757**, taps **786**.
 - Composer stays absolute in Generate and rides the flex shrink.
 - z-index: Files dock `25` < Generate content; bottom nav `60`.
-- No "Files" title bar. Grab handle = menu/History (transparent on L2 plate —
-  no pathbar/search `mos-bg` / `mos-panel` band under the grab). Chrome =
+- No "Files" title bar. Grab handle = menu/History (transparent on L1 `--mos-page` —
+  no pathbar/search band under the grab). Sheet canvas = **grey 1** `--mos-page`
+  (same as desktop Files); folder/file tiles stay L2 `--mos-plate`. Chrome =
   search + pathbar (desktop layout): breadcrumbs + select + view toggle + Add.
-  Pathbar tools = ghost **circle** icon buttons (transparent, soft grey border,
-  no shadow). Your files / Asset library = L1 `--mos-page` fill + border-soft;
+  Pathbar tools = ghost **circle** icon buttons (L1 `--mos-page` fill — never
+  darker `--mos-plate` grey — soft border, **no** drop shadow / accent glow).
+  Same language as desktop workspace-head `.studio-settings-trigger` circles.
+  Your files / Asset library = L1 `--mos-page` fill + border-soft;
   active = accent wash/border. Bottom nav **Files** and **Create** are icon-only.
   Memory: **757**, instant taps **786**.
+
+### Mobile Places sheet (locked)
+
+Desktop Files left rail (`StudioFilesNavPane`: Home, Places, Quick access,
+Recent folders, Frequent) has no in-flow dock on phone. On Generate / My Assets
+it opens as a **History-style floating sheet** (`StudioFilesNavMobileSheet`):
+grab handle, peek ↔ full height drag, flick dismiss, portal under `.studio-polish`.
+
+- **Generate** bottom-nav cluster: Create | **Files** | **History** only.
+- While **Files dock is open**: History is replaced by **Extras** (`PanelLeft`)
+  — opens the Places sidepanel sheet. Shell passes `extrasAction` only when
+  `mobileSection === "files"`. Closing Files also closes the Places sheet.
+- Picking Home / a place / pin / recent / frequent navigates in the Files dock
+  and closes the Places sheet.
+- Browser Back: `useMobileBackLayer("files-nav-sheet")`. z-index `55` (with
+  History), above Files dock `25`, below bottom nav `60`.
+- Shade: L1 `--mos-page` (grey 1) sheet — same canvas as desktop Files; folder
+  tiles stay L2 `--mos-plate`. Handle/grab matches menu/History.
+
+Memory: **869**.
 
 ### Studio Files asset picker (locked)
 

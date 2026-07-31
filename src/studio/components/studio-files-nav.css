@@ -1,0 +1,359 @@
+/* Desktop Files rail — fills the shared resizable studio-sidebar Panel (no nested card). */
+
+.studio-files-nav-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-cursor-text, var(--mos-text));
+  box-shadow: none;
+}
+
+.studio-files-nav-scroll {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px 4px 12px;
+  scrollbar-width: thin;
+}
+
+.studio-files-nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.studio-files-nav-section:last-child {
+  margin-bottom: 0;
+}
+
+.studio-files-nav-section-label {
+  padding: 4px 8px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  user-select: none;
+}
+
+.studio-files-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-files-nav-item[draggable="true"] {
+  cursor: grab;
+}
+
+.studio-files-nav-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.studio-files-nav-item svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-files-nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-files-nav-item:hover {
+  background: var(--mos-hover, color-mix(in srgb, var(--mos-text) 6%, transparent));
+}
+
+.studio-files-nav-item:hover svg {
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-files-nav-item.is-active {
+  background: var(--mos-plate-strong, var(--mos-raised, var(--mos-active)));
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-files-nav-item.is-active svg {
+  color: var(--cursor-accent, var(--mos-accent));
+}
+
+.studio-files-nav-quick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 8px;
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.studio-files-nav-quick.is-drop-target {
+  background: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 10%,
+    var(--mos-plate, transparent)
+  );
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 42%, transparent);
+}
+
+.studio-files-nav-quick-empty {
+  margin: 0;
+  padding: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  user-select: none;
+}
+
+.studio-files-nav-pin-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-files-nav-pin-row .studio-files-nav-item {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.studio-files-nav-unpin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  cursor: pointer;
+  opacity: 0;
+}
+
+.studio-files-nav-pin-row:hover .studio-files-nav-unpin,
+.studio-files-nav-unpin:focus-visible {
+  opacity: 1;
+}
+
+.studio-files-nav-unpin:hover {
+  background: var(--mos-hover, color-mix(in srgb, var(--mos-text) 8%, transparent));
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-files-nav-unpin svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Files rail: one divider only (resize handle hit-area is transparent). */
+.studio-polish aside.is-files-nav {
+  border-right: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border))) !important;
+  width: 100%;
+  max-width: none;
+}
+
+.studio-polish aside.is-files-nav .cursor-panel-head,
+.studio-polish aside.is-files-nav .cursor-sidebar-head {
+  width: 100%;
+}
+
+.studio-polish .studio-main-panels > [data-panel-id="studio-sidebar"]:has(aside.is-files-nav) {
+  overflow: hidden;
+}
+
+.studio-polish .studio-files-workspace-tab {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+}
+
+.studio-polish .studio-files-workspace-tab .cursor-explorer-body {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Mobile Places sheet — History-style floating overlay (peek ↔ full drag). */
+.studio-files-nav-mobile-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(
+    var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+      + var(--studio-keyboard-inset, 0px)
+  );
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  --studio-mobile-files-nav-sheet-band: calc(
+    100dvh
+      - var(--studio-mobile-top-chrome, calc(44px + env(safe-area-inset-top, 0px)))
+      - var(--studio-mobile-bottom-chrome, calc(44px + env(safe-area-inset-bottom, 0px)))
+      - var(--studio-keyboard-inset, 0px)
+      - 8px
+  );
+  --studio-mobile-files-nav-sheet-height: calc(0.55 * var(--studio-mobile-files-nav-sheet-band));
+  --studio-mobile-files-nav-sheet-full: calc(0.82 * var(--studio-mobile-files-nav-sheet-band));
+  height: min(
+    var(--studio-files-nav-sheet-h, var(--studio-mobile-files-nav-sheet-height, 55dvh)),
+    var(--studio-mobile-files-nav-sheet-band)
+  );
+  max-height: min(
+    var(--studio-mobile-files-nav-sheet-full, 72dvh),
+    var(--studio-mobile-files-nav-sheet-band)
+  );
+  padding: 0;
+  border: none;
+  border-radius: 18px 18px 0 0;
+  background: var(--mos-plate, var(--mos-panel, #ececf0));
+  box-shadow: var(--studio-mobile-sheet-shadow, 0 -8px 28px rgba(0, 0, 0, 0.18));
+  overflow: hidden;
+  animation: studio-files-nav-mobile-rise 110ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 120ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 120ms ease;
+  will-change: height;
+}
+
+.studio-polish[data-keyboard-open="1"] .studio-files-nav-mobile-sheet {
+  top: calc(var(--studio-mobile-top-chrome, calc(44px + env(safe-area-inset-top, 0px))) + 8px);
+  height: auto !important;
+  max-height: none !important;
+  border-radius: 14px 14px 0 0;
+}
+
+.studio-files-nav-mobile-sheet.is-entered {
+  animation: none;
+}
+
+.studio-files-nav-mobile-sheet.is-full {
+  border-radius: 14px 14px 0 0;
+}
+
+.studio-files-nav-mobile-sheet.is-dragging {
+  transition: none !important;
+  animation: none !important;
+}
+
+.studio-files-nav-mobile-sheet.is-settling {
+  transition:
+    height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 120ms ease;
+}
+
+@keyframes studio-files-nav-mobile-rise {
+  from {
+    transform: translate3d(0, 18px, 0);
+    opacity: 0.92;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+.studio-files-nav-mobile-sheet-handle {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 12px 0 8px;
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+  border: 0;
+  box-shadow: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.studio-files-nav-mobile-sheet-handle:active {
+  cursor: grabbing;
+}
+
+.studio-files-nav-mobile-sheet-grab {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-cursor-text-bright) 22%, transparent);
+  pointer-events: none;
+}
+
+[data-appearance="light"] .studio-files-nav-mobile-sheet-grab {
+  background: color-mix(in srgb, #1c1c1e 22%, transparent);
+}
+
+.studio-files-nav-mobile-sheet-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-files-nav-mobile-sheet .studio-files-nav-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.studio-files-nav-mobile-sheet .studio-files-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 10px 12px;
+}

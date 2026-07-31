@@ -73,6 +73,7 @@ export function listRecentStudioPaints(limit = 8): Array<{ surface: string; ms: 
 export function surfaceFromTabKey(key: string | null | undefined): StudioPaintSurface | null {
   if (!key || typeof key !== "string") return null;
   if (key.startsWith("messages:")) return "messages";
+  if (key.startsWith("files:")) return "files";
   if (key.startsWith("feed:")) return "feed";
   if (key.startsWith("network:") || key.startsWith("offers:")) return "network";
   if (key.startsWith("thread:")) return "thread";

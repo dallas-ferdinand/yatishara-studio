@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  addTextClip,
   appendClips,
   clipAtPlayhead,
   clipDurationSec,
+  detachAudioFromVideo,
+  duplicateClip,
   emptyEditorProject,
   patchClips,
   removeClips,
   reorderTrackClips,
   seedClipsFromAssets,
   setClipTransition,
+  setTrackMuted,
   splitClipAtTime,
 } from "./editorProjectOps";
 
@@ -92,5 +96,31 @@ describe("editorProjectOps", () => {
     const hit = clipAtPlayhead(withTx.project, 1.5);
     expect(hit?.clip.id).toBe(clipId);
     expect(hit?.localTime).toBeCloseTo(1.5, 3);
+  });
+
+  it("adds text, duplicates, detaches audio, mutes track", () => {
+    let { project } = seedClipsFromAssets(baseProject(), [
+      { id: "v1", name: "clip.mp4", kind: "video", durationSeconds: 4 },
+    ]);
+    const videoId = project.clips[0]!.id;
+    const texted = addTextClip(project, { startTime: 0, text: { text: "Hello" } });
+    project = texted.project;
+    expect(project.tracks.some((track) => track.kind === "text")).toBe(true);
+    expect(project.clips.some((clip) => clip.kind === "text")).toBe(true);
+
+    const dup = duplicateClip(project, videoId);
+    project = dup.project;
+    expect(project.clips.filter((clip) => clip.assetId === "v1")).toHaveLength(2);
+
+    const detached = detachAudioFromVideo(project, videoId);
+    project = detached.project;
+    const video = project.clips.find((clip) => clip.id === videoId)!;
+    expect(video.effects?.volume).toBe(0);
+    expect(project.clips.some((clip) => clip.kind === "audio" && clip.assetId === "v1")).toBe(
+      true,
+    );
+
+    const muted = setTrackMuted(project, "track-v1", true);
+    expect(muted.project.tracks.find((track) => track.id === "track-v1")!.muted).toBe(true);
   });
 });

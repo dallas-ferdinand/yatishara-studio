@@ -1,7 +1,7 @@
 "use node";
 
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,12 @@ import { internal } from "./_generated/api";
 import { putObject, signBunnyCdnUrl } from "./lib/bunny";
 import { ffmpegTransitionFor } from "./lib/editorEffectContract";
 import { videoClipAudioFilter } from "./lib/editorExportAudio";
+import {
+  DEFAULT_EXPORT_RESOLUTION,
+  exportSizeForRatioAndResolution,
+  normalizeExportResolution,
+  type ExportResolution,
+} from "./lib/editorExport";
 import { clipAtPlayhead } from "./lib/editorProjectOps";
 
 const execFileAsync = promisify(execFile);
@@ -32,6 +38,29 @@ type TextClipContent = {
   fontSize?: number;
   color?: string;
   align?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  fontFamily?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textCase?: "none" | "upper" | "lower" | "title";
+  letterSpacing?: number;
+  lineHeight?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  backgroundColor?: string | null;
+  backgroundPadding?: number;
+  backgroundRadius?: number;
+  shadowColor?: string | null;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  glow?: boolean;
+  glowColor?: string;
+  glowBlur?: number;
+  opacity?: number;
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 type EditorClip = {
@@ -66,17 +95,91 @@ function escapeDrawtext(value: string): string {
     .replace(/\n/g, " ");
 }
 
-function hexToFfmpegColor(hex?: string): string {
+function hexToFfmpegColor(hex?: string, alpha = 1): string {
   const raw = (hex ?? "#ffffff").replace("#", "");
-  if (raw.length === 6) return `0x${raw}`;
-  return "white";
+  const a = Math.max(0, Math.min(1, alpha));
+  if (raw.length === 6) {
+    if (a >= 0.999) return `0x${raw}`;
+    const aa = Math.round(a * 255).toString(16).padStart(2, "0");
+    return `0x${raw}${aa}`;
+  }
+  return a >= 0.999 ? "white" : `white@${a.toFixed(3)}`;
+}
+
+function applyTextCase(text: string, mode?: TextClipContent["textCase"]): string {
+  if (mode === "upper") return text.toUpperCase();
+  if (mode === "lower") return text.toLowerCase();
+  if (mode === "title") {
+    return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  }
+  return text;
+}
+
+function isLegacySystemFont(family: string | undefined): boolean {
+  return (
+    !family ||
+    family === "system" ||
+    family === "sans" ||
+    family === "serif" ||
+    family === "mono" ||
+    family === "display"
+  );
 }
 
 function xfadeTransition(type: string): string {
   return ffmpegTransitionFor(type);
 }
 
-function buildSegmentVideoFilters(clip: EditorClip, duration: number, textClips: EditorClip[]): string {
+const DEJAVU_DIR = "/usr/share/fonts/truetype/dejavu";
+
+function textFontFile(content: TextClipContent | undefined): string | null {
+  const family = content?.fontFamily ?? "system";
+  const bold = Boolean(content?.bold) || family === "display";
+  const italic = Boolean(content?.italic);
+  if (family === "mono") {
+    if (bold && italic) return `${DEJAVU_DIR}/DejaVuSansMono-BoldOblique.ttf`;
+    if (bold) return `${DEJAVU_DIR}/DejaVuSansMono-Bold.ttf`;
+    if (italic) return `${DEJAVU_DIR}/DejaVuSansMono-Oblique.ttf`;
+    return `${DEJAVU_DIR}/DejaVuSansMono.ttf`;
+  }
+  if (family === "serif") {
+    if (bold) return `${DEJAVU_DIR}/DejaVuSerif-Bold.ttf`;
+    return `${DEJAVU_DIR}/DejaVuSerif.ttf`;
+  }
+  // system / sans / display
+  if (bold) return `${DEJAVU_DIR}/DejaVuSans-Bold.ttf`;
+  return `${DEJAVU_DIR}/DejaVuSans.ttf`;
+}
+
+function normalizeTextPose(effects: ClipEffects | undefined): {
+  scale: number;
+  x: number;
+  y: number;
+  rotation: number;
+} {
+  const hasPose =
+    Boolean(effects) &&
+    (effects?.x !== undefined ||
+      effects?.y !== undefined ||
+      effects?.scale !== undefined ||
+      effects?.rotation !== undefined);
+  if (!hasPose) {
+    return { scale: 1, x: 0, y: 0.32, rotation: 0 };
+  }
+  return {
+    scale: Math.min(4, Math.max(0.2, Number(effects?.scale) || 1)),
+    x: Math.min(1.5, Math.max(-1.5, Number(effects?.x) || 0)),
+    y: Math.min(1.5, Math.max(-1.5, Number(effects?.y) || 0)),
+    rotation: Number(effects?.rotation) || 0,
+  };
+}
+
+async function buildSegmentVideoFilters(
+  clip: EditorClip,
+  duration: number,
+  textClips: EditorClip[],
+  fontCacheDir: string,
+): Promise<string> {
   const parts: string[] = [];
   // Picture edge fades removed — effects.fadeIn/fadeOut are audio-only (afade).
   // Transitions handle visual dissolves between clips.
@@ -84,34 +187,98 @@ function buildSegmentVideoFilters(clip: EditorClip, duration: number, textClips:
   const clipStart = clip.startTime;
   const clipEnd = clip.startTime + duration;
   for (const textClip of textClips) {
-    const text = textClip.text?.text?.trim();
-    if (!text) continue;
+    const rawText = textClip.text?.text?.trim();
+    if (!rawText) continue;
     const textStart = textClip.startTime;
     const textEnd = textClip.startTime + clipDuration(textClip);
     if (textEnd <= clipStart || textStart >= clipEnd) continue;
 
     const localStart = Math.max(0, textStart - clipStart);
     const localEnd = Math.min(duration, textEnd - clipStart);
-    const fontSize = textClip.text?.fontSize ?? 42;
-    const color = hexToFfmpegColor(textClip.text?.color);
-    const align = textClip.text?.align ?? "center";
-    const x =
-      align === "left" ? "w*0.08" : align === "right" ? "w*0.92-text_w" : "(w-text_w)/2";
-    parts.push(
-      `drawtext=text='${escapeDrawtext(text)}':fontsize=${fontSize}:fontcolor=${color}:x=${x}:y=h*0.82:enable='between(t\\,${localStart.toFixed(3)}\\,${localEnd.toFixed(3)})'`,
-    );
+    const content = textClip.text;
+    const text = applyTextCase(rawText, content?.textCase);
+    const pose = normalizeTextPose(textClip.effects);
+    const fontSize = Math.max(12, Math.min(600, Math.round((content?.fontSize ?? 42) * pose.scale)));
+    const styleAlpha = Math.max(0, Math.min(1, Number(content?.opacity) ?? 1));
+    const color = hexToFfmpegColor(content?.color, styleAlpha);
+    const align = content?.align ?? "center";
+    const vAlign = content?.verticalAlign ?? "middle";
+    const strokeWidth = Math.max(0, Math.round(Number(content?.strokeWidth) || 0));
+    const strokeColor = hexToFfmpegColor(content?.strokeColor ?? "#000000", styleAlpha);
+    let fontfile = textFontFile(content);
+    if (!isLegacySystemFont(content?.fontFamily) && content?.fontFamily) {
+      const google = await resolveGoogleFontFile(
+        content.fontFamily,
+        Boolean(content.bold),
+        fontCacheDir,
+      );
+      if (google) fontfile = google;
+    }
+    const anchorX = `w*(0.5+${pose.x.toFixed(4)})`;
+    const anchorY = `h*(0.5+${pose.y.toFixed(4)})`;
+    let xExpr =
+      align === "left"
+        ? anchorX
+        : align === "right"
+          ? `${anchorX}-text_w`
+          : `${anchorX}-text_w/2`;
+    let yExpr =
+      vAlign === "top"
+        ? anchorY
+        : vAlign === "bottom"
+          ? `${anchorY}-text_h`
+          : `${anchorY}-text_h/2`;
+    if (content?.flipX) {
+      xExpr =
+        align === "left"
+          ? `${anchorX}-text_w`
+          : align === "right"
+            ? anchorX
+            : `${anchorX}-text_w/2`;
+    }
+    const opts = [
+      `text='${escapeDrawtext(text)}'`,
+      `fontsize=${fontSize}`,
+      `fontcolor=${color}`,
+      `x=${xExpr}`,
+      `y=${yExpr}`,
+      `enable='between(t\,${localStart.toFixed(3)}\,${localEnd.toFixed(3)})'`,
+    ];
+    if (fontfile) {
+      opts.push(`fontfile='${fontfile.replace(/'/g, "\\'")}'`);
+    }
+    if (strokeWidth > 0) {
+      opts.push(`borderw=${strokeWidth}`);
+      opts.push(`bordercolor=${strokeColor}`);
+    }
+    if (content?.backgroundColor) {
+      const pad = Math.max(0, Math.round(Number(content.backgroundPadding) || 8));
+      opts.push("box=1");
+      opts.push(`boxcolor=${hexToFfmpegColor(content.backgroundColor, styleAlpha)}`);
+      opts.push(`boxborderw=${pad}`);
+    }
+    if (content?.shadowColor) {
+      opts.push(`shadowcolor=${hexToFfmpegColor(content.shadowColor, styleAlpha)}`);
+      opts.push(`shadowx=${Math.round(Number(content.shadowOffsetX) || 0)}`);
+      opts.push(`shadowy=${Math.round(Number(content.shadowOffsetY) || 2)}`);
+    } else if (content?.glow) {
+      opts.push(
+        `shadowcolor=${hexToFfmpegColor(content.glowColor ?? "#ffffff", styleAlpha * 0.7)}`,
+      );
+      opts.push("shadowx=0");
+      opts.push("shadowy=0");
+    }
+    if (Math.abs(pose.rotation) > 0.05) {
+      const rad = (-pose.rotation * Math.PI) / 180;
+      opts.push(`angle=${rad.toFixed(5)}`);
+    }
+    parts.push(`drawtext=${opts.join(":")}`);
   }
 
   return parts.length ? parts.join(",") : "null";
 }
 
 const EXPORT_FPS = 30;
-
-function exportSizeForRatio(ratio: unknown): { width: number; height: number } {
-  if (ratio === "9:16") return { width: 720, height: 1280 };
-  if (ratio === "1:1") return { width: 1080, height: 1080 };
-  return { width: 1280, height: 720 };
-}
 
 /** Contain-crop to the project frame so every segment matches export canvas. */
 function normalizeVf(
@@ -154,6 +321,37 @@ async function downloadToFile(url: string, dest: string): Promise<void> {
   const buffer = Buffer.from(await response.arrayBuffer());
   await writeFile(dest, buffer);
 }
+
+async function resolveGoogleFontFile(
+  family: string,
+  bold: boolean,
+  destDir: string,
+): Promise<string | null> {
+  const weight = bold ? 700 : 400;
+  const cssFamily = family.trim().replace(/\s+/g, "+");
+  const cssUrl = `https://fonts.googleapis.com/css2?family=${cssFamily}:wght@${weight}&display=swap`;
+  try {
+    const res = await fetch(cssUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
+    if (!res.ok) return null;
+    const css = await res.text();
+    const match = css.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/);
+    const fontUrl = match?.[1];
+    if (!fontUrl) return null;
+    const ext = fontUrl.includes(".otf") ? "otf" : "ttf";
+    const safe = family.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 64);
+    const dest = `${destDir}/gf_${safe}_${weight}.${ext}`;
+    await downloadToFile(fontUrl, dest);
+    return dest;
+  } catch {
+    return null;
+  }
+}
+
 
 async function makeBlackSegment(
   dest: string,
@@ -241,10 +439,16 @@ async function renderClipSegment(args: {
   textClips: EditorClip[];
   width: number;
   height: number;
+  fontCacheDir: string;
   /** When the video track is muted in the timeline, keep picture but silence audio. */
   muteAudio?: boolean;
 }): Promise<void> {
-  const effects = buildSegmentVideoFilters(args.clip, args.duration, args.textClips);
+  const effects = await buildSegmentVideoFilters(
+    args.clip,
+    args.duration,
+    args.textClips,
+    args.fontCacheDir,
+  );
   const baseVf = normalizeVf(args.width, args.height, args.clip.effects);
   const videoFilter = effects === "null" ? baseVf : `${baseVf},${effects}`;
   const encodeArgs = [
@@ -600,6 +804,7 @@ async function runExportVideo(
     folderId: Id<"folders">;
     name: string;
     project: EditorProject;
+    exportResolution?: ExportResolution;
   },
 ): Promise<{ assetId: Id<"assets"> }> {
   try {
@@ -612,7 +817,13 @@ async function runExportVideo(
   }
 
   const project = args.project;
-  const { width: exportWidth, height: exportHeight } = exportSizeForRatio(project.frameRatio);
+  const resolution = normalizeExportResolution(
+    args.exportResolution ?? DEFAULT_EXPORT_RESOLUTION,
+  );
+  const { width: exportWidth, height: exportHeight } = exportSizeForRatioAndResolution(
+    project.frameRatio,
+    resolution,
+  );
   const videoTrack = project.tracks.find((track) => track.kind === "video");
   const audioTrack = project.tracks.find((track) => track.kind === "audio");
   const textTrack = project.tracks.find((track) => track.kind === "text");
@@ -640,6 +851,8 @@ async function runExportVideo(
 
   const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
   const tempDir = await mkdtemp(join(tmpdir(), "studio-edit-"));
+  const fontCacheDir = join(tempDir, "fonts");
+  await mkdir(fontCacheDir, { recursive: true });
   const segmentPaths: string[] = [];
   const transitionClips: Array<EditorClip | null> = [];
 
@@ -669,6 +882,7 @@ async function runExportVideo(
           textClips,
           width: exportWidth,
           height: exportHeight,
+          fontCacheDir,
           muteAudio: Boolean(videoTrack.muted),
         });
         transitionClips.push(segment.clip);
@@ -698,7 +912,8 @@ async function runExportVideo(
     });
 
     const body = await readFile(composedPath);
-    const filename = `${(args.name || "export").replace(/[^\w.-]+/g, "-").slice(0, 48)}.mp4`;
+    const rawName = (args.name || "export").replace(/\.(mp4|mov|webm)$/i, "");
+    const filename = `${rawName.replace(/[^\w.-]+/g, "-").slice(0, 48) || "export"}.mp4`;
     const prepared = await ctx.runMutation(internal.videoEditInternal.createExportAsset, {
       userId,
       folderId: args.folderId,
@@ -726,12 +941,19 @@ async function runExportVideo(
   }
 }
 
+const exportResolutionValidator = v.union(
+  v.literal("720p"),
+  v.literal("1080p"),
+  v.literal("4K"),
+);
+
 export const exportVideo = action({
   args: {
     projectId: v.optional(v.id("videoEditProjects")),
     folderId: v.id("folders"),
     name: v.string(),
     project: v.any(),
+    exportResolution: v.optional(exportResolutionValidator),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -746,6 +968,7 @@ export const exportVideo = action({
       folderId: args.folderId,
       name: args.name,
       project: args.project as EditorProject,
+      exportResolution: args.exportResolution,
     });
   },
 });
@@ -756,6 +979,7 @@ export const exportVideoForApi = internalAction({
     sandboxFolderId: v.id("folders"),
     projectId: v.id("videoEditProjects"),
     name: v.optional(v.string()),
+    exportResolution: v.optional(exportResolutionValidator),
   },
   returns: v.object({
     assetId: v.id("assets"),
@@ -775,6 +999,7 @@ export const exportVideoForApi = internalAction({
       folderId: row.folderId,
       name: exportName,
       project: row.project as EditorProject,
+      exportResolution: args.exportResolution,
     });
   },
 });

@@ -1,6 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { jsonResult, studioFetch } from "../client.js";
+import {
+  getTextPreset,
+  listTextPresets,
+  type TextPresetCategory,
+  type TextStylePatch,
+} from "../data/textPresets.js";
 
 const clipSpec = z.object({
   assetId: z.string(),
@@ -24,6 +30,42 @@ const clipPatch = z.object({
     .object({
       type: z.string(),
       duration: z.number(),
+    })
+    .nullable()
+    .optional(),
+  text: z
+    .object({
+      text: z.string().optional(),
+      fontSize: z.number().optional(),
+      color: z.string().optional(),
+      align: z.enum(["left", "center", "right"]).optional(),
+      animation: z
+        .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
+        .optional(),
+      animationDuration: z.number().optional(),
+      fontFamily: z.string().optional(),
+      underline: z.boolean().optional(),
+      textCase: z.enum(["none", "upper", "lower", "title"]).optional(),
+      letterSpacing: z.number().optional(),
+      lineHeight: z.number().optional(),
+      verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
+      backgroundColor: z.string().nullable().optional(),
+      backgroundPadding: z.number().optional(),
+      backgroundRadius: z.number().optional().describe("BG corner radius px (0=sharp)"),
+      shadowColor: z.string().nullable().optional(),
+      shadowBlur: z.number().optional(),
+      shadowOffsetX: z.number().optional(),
+      shadowOffsetY: z.number().optional(),
+      glow: z.boolean().optional(),
+      glowColor: z.string().optional(),
+      glowBlur: z.number().optional(),
+      opacity: z.number().optional(),
+      bold: z.boolean().optional(),
+      italic: z.boolean().optional(),
+      strokeColor: z.string().optional(),
+      strokeWidth: z.number().optional(),
+      flipX: z.boolean().optional(),
+      flipY: z.boolean().optional(),
     })
     .nullable()
     .optional(),
@@ -115,7 +157,7 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_edit_update_clips",
-    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects, transitionOut.",
+    "[preferred] Patch clips by id: trimIn/trimOut, startTime, trackId, label, effects, transitionOut, text (text clips).",
     {
       projectId: z.string(),
       clips: z.array(clipPatch).min(1),
@@ -237,17 +279,338 @@ export function registerEditTools(server: McpServer) {
 
   server.tool(
     "studio_export_edit",
-    "Export a saved edit project to a video asset (ffmpeg). Requires generate scope. Returns { assetId }. Optional name overrides the export filename.",
+    "Export a saved edit project to a video asset (ffmpeg). Requires generate scope. Returns { assetId }. Optional name overrides the export filename. Optional exportResolution: 720p | 1080p | 4K (default 1080p).",
     {
       projectId: z.string(),
       name: z.string().optional(),
+      exportResolution: z.enum(["720p", "1080p", "4K"]).optional(),
     },
-    async ({ projectId, name }) =>
+    async ({ projectId, name, exportResolution }) =>
       jsonResult(
         await studioFetch(`/edits/${encodeURIComponent(projectId)}/export`, {
           method: "POST",
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, exportResolution }),
         }),
       ),
   );
+
+
+  server.tool(
+    "studio_edit_add_text",
+    "[preferred] Add a title/text overlay clip. Creates a Title track if needed. Patch text later via studio_edit_update_clips.",
+    {
+      projectId: z.string(),
+      startTime: z.number().optional(),
+      duration: z.number().optional().describe("Default 3s"),
+      trackId: z.string().optional(),
+      label: z.string().optional(),
+      text: z.string().optional().describe("Caption body (default Your text)"),
+      fontSize: z.number().optional(),
+      color: z.string().optional(),
+      align: z.enum(["left", "center", "right"]).optional(),
+      animation: z
+        .enum(["none", "fadeIn", "fadeOut", "slideUp", "slideDown", "popIn"])
+        .optional(),
+      animationDuration: z.number().optional(),
+      fontFamily: z.string().optional(),
+      underline: z.boolean().optional(),
+      textCase: z.enum(["none", "upper", "lower", "title"]).optional(),
+      letterSpacing: z.number().optional(),
+      lineHeight: z.number().optional(),
+      verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
+      backgroundColor: z.string().nullable().optional(),
+      backgroundPadding: z.number().optional(),
+      backgroundRadius: z.number().optional().describe("BG corner radius px (0=sharp)"),
+      shadowColor: z.string().nullable().optional(),
+      shadowBlur: z.number().optional(),
+      shadowOffsetX: z.number().optional(),
+      shadowOffsetY: z.number().optional(),
+      glow: z.boolean().optional(),
+      glowColor: z.string().optional(),
+      glowBlur: z.number().optional(),
+      opacity: z.number().optional(),
+      bold: z.boolean().optional(),
+      italic: z.boolean().optional(),
+      strokeColor: z.string().optional(),
+      strokeWidth: z.number().optional(),
+      flipX: z.boolean().optional(),
+      flipY: z.boolean().optional(),
+      compact: z.boolean().optional(),
+    },
+    async ({
+      projectId,
+      text,
+      fontSize,
+      color,
+      align,
+      verticalAlign,
+      animation,
+      animationDuration,
+      fontFamily,
+      bold,
+      italic,
+      underline,
+      textCase,
+      letterSpacing,
+      lineHeight,
+      strokeColor,
+      strokeWidth,
+      backgroundColor,
+      backgroundPadding,
+      backgroundRadius,
+      shadowColor,
+      shadowBlur,
+      shadowOffsetX,
+      shadowOffsetY,
+      glow,
+      glowColor,
+      glowBlur,
+      opacity,
+      flipX,
+      flipY,
+      ...rest
+    }) =>
+      jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/text`, {
+          method: "POST",
+          body: JSON.stringify({
+            ...rest,
+            text: {
+              text,
+              fontSize,
+              color,
+              align,
+              verticalAlign,
+              animation,
+              animationDuration,
+              fontFamily,
+              bold,
+              italic,
+              underline,
+              textCase,
+              letterSpacing,
+              lineHeight,
+              strokeColor,
+              strokeWidth,
+              backgroundColor,
+              backgroundPadding,
+              backgroundRadius,
+              shadowColor,
+              shadowBlur,
+              shadowOffsetX,
+              shadowOffsetY,
+              glow,
+              glowColor,
+              glowBlur,
+              opacity,
+              flipX,
+              flipY,
+            },
+          }),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_edit_duplicate_clip",
+    "Duplicate a clip immediately after it on the same track.",
+    {
+      projectId: z.string(),
+      clipId: z.string(),
+      compact: z.boolean().optional(),
+    },
+    async ({ projectId, ...body }) =>
+      jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/clips/duplicate`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_edit_detach_audio",
+    "CapCut-style: mute the video clip and add a synced audio bed from the same asset.",
+    {
+      projectId: z.string(),
+      clipId: z.string(),
+      compact: z.boolean().optional(),
+    },
+    async ({ projectId, ...body }) =>
+      jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/clips/detach-audio`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      ),
+  );
+
+  server.tool(
+    "studio_edit_set_track_muted",
+    "Mute or unmute a timeline track (video/audio/text).",
+    {
+      projectId: z.string(),
+      trackId: z.string(),
+      muted: z.boolean(),
+      compact: z.boolean().optional(),
+    },
+    async ({ projectId, trackId, muted, compact }) =>
+      jsonResult(
+        await studioFetch(
+          `/edits/${encodeURIComponent(projectId)}/tracks/${encodeURIComponent(trackId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ muted, compact }),
+          },
+        ),
+      ),
+  );
+
+  server.tool(
+    "studio_edit_set_frame_ratio",
+    "Set canvas frame ratio: 16:9 | 9:16 | 1:1 (affects export composition).",
+    {
+      projectId: z.string(),
+      frameRatio: z.enum(["16:9", "9:16", "1:1"]),
+      compact: z.boolean().optional(),
+    },
+    async ({ projectId, ...body }) =>
+      jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/frame-ratio`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
+      ),
+  );
+
+
+  server.tool(
+    "studio_list_text_presets",
+    "[preferred] List CapCut-like built-in text style templates (Grease, Dark Pill, etc.). Use studio_edit_apply_text_preset to apply. Filter by category: title | pop | soft | neon | badge | all.",
+    {
+      category: z
+        .enum(["all", "title", "pop", "soft", "neon", "badge"])
+        .optional()
+        .describe("Default all"),
+    },
+    async ({ category }) => {
+      const presets = listTextPresets(
+        (category ?? "all") as TextPresetCategory | "all",
+      );
+      return jsonResult({
+        count: presets.length,
+        presets: presets.map((preset) => ({
+          id: preset.id,
+          name: preset.name,
+          category: preset.category,
+          sample: preset.sample,
+          style: preset.style,
+          effects: [
+            Number(preset.style.strokeWidth ?? 0) > 0 ? "stroke" : null,
+            preset.style.glow ? "glow" : null,
+            preset.style.shadowColor ? "shadow" : null,
+            preset.style.backgroundColor ? "background" : null,
+          ].filter(Boolean),
+        })),
+      });
+    },
+  );
+
+  server.tool(
+    "studio_edit_apply_text_preset",
+    "[preferred] Apply a built-in text style template by id (from studio_list_text_presets). Pass clipId to restyle an existing text clip, or omit clipId to add a new text clip with that look. Optional text overrides the caption body.",
+    {
+      projectId: z.string(),
+      presetId: z.string().describe("e.g. grease, pill-dark, lower-third"),
+      clipId: z
+        .string()
+        .optional()
+        .describe("Existing text clip to restyle; omit to create one"),
+      text: z.string().optional().describe("Caption body override"),
+      startTime: z.number().optional(),
+      duration: z.number().optional(),
+      trackId: z.string().optional(),
+      label: z.string().optional(),
+      compact: z.boolean().optional(),
+    },
+    async ({
+      projectId,
+      presetId,
+      clipId,
+      text,
+      startTime,
+      duration,
+      trackId,
+      label,
+      compact,
+    }) => {
+      const preset = getTextPreset(presetId);
+      if (!preset) {
+        return jsonResult({
+          error: `Unknown text preset: ${presetId}`,
+          hint: "Call studio_list_text_presets for ids",
+        });
+      }
+      const style: TextStylePatch = { ...preset.style };
+      // Match UI applyTextStylePreset: clear omitted stroke/bg/shadow/glow.
+      const applied = {
+        ...style,
+        strokeWidth: style.strokeWidth ?? 0,
+        strokeColor: style.strokeColor ?? "#000000",
+        backgroundColor:
+          style.backgroundColor === undefined ? null : style.backgroundColor,
+        backgroundPadding: style.backgroundPadding ?? 8,
+        backgroundRadius:
+          style.backgroundRadius ??
+          (style.backgroundColor ? 0 : 0),
+        shadowColor:
+          style.shadowColor === undefined ? null : style.shadowColor,
+        shadowBlur: style.shadowBlur ?? 0,
+        shadowOffsetX: style.shadowOffsetX ?? 0,
+        shadowOffsetY: style.shadowOffsetY ?? 0,
+        glow: style.glow ?? false,
+        glowColor: style.glowColor ?? "#ffffff",
+        glowBlur: style.glowBlur ?? 12,
+      };
+      if (clipId) {
+        return jsonResult(
+          await studioFetch(
+            `/edits/${encodeURIComponent(projectId)}/clips`,
+            {
+              method: "PATCH",
+              body: JSON.stringify({
+                compact,
+                clips: [
+                  {
+                    clipId,
+                    text: {
+                      ...applied,
+                      ...(text !== undefined ? { text } : {}),
+                    },
+                  },
+                ],
+              }),
+            },
+          ),
+        );
+      }
+      return jsonResult(
+        await studioFetch(`/edits/${encodeURIComponent(projectId)}/text`, {
+          method: "POST",
+          body: JSON.stringify({
+            startTime,
+            duration,
+            trackId,
+            label: label ?? preset.name,
+            compact,
+            text: {
+              ...applied,
+              text: text ?? preset.sample,
+            },
+          }),
+        }),
+      );
+    },
+  );
+
 }

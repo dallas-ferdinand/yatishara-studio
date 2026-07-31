@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 
 const notificationKind = v.union(
@@ -112,3 +112,40 @@ export const getPushDelivery = internalQuery({
     };
   },
 });
+
+// --- Studio HTTP/MCP ForApi (Wave 4) ---
+// Intended routes (mount via studioApiAccountExtra / later http.ts):
+//   GET  /api/v1/notifications              -> listMineForApi   (scope: social)
+//   POST /api/v1/notifications/:id/read    -> markReadForApi   (scope: social)
+
+export const listMineForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(notificationReturn),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    return await ctx.db
+      .query("notifications")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .collect();
+  },
+});
+
+export const markReadForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    notificationId: v.id("notifications"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    const notification = await ctx.db.get("notifications", args.notificationId);
+    if (!notification || notification.userId !== args.userId) {
+      throw new Error("Notification not found");
+    }
+    await ctx.db.patch(notification._id, { readAt: Date.now() });
+    return null;
+  },
+});
+

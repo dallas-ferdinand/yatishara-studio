@@ -152,6 +152,7 @@ export function workspaceTabIcon(tab) {
   if (tab.kind === "settings") return "settings";
   if (tab.studioKind === "feed") return "cloud";
   if (tab.studioKind === "messages") return "message";
+  if (tab.studioKind === "files") return "folder";
   if (tab.studioKind === "profile") return "user";
   if (tab.studioKind === "videoEdit") return "clapperboard";
   if (tab.studioKind === "element") {

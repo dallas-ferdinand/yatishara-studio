@@ -15,7 +15,7 @@ Cursor config: `~/.cursor/mcp.json` → `yatishara-studio` server.
 
 ## Credentials
 
-1. Studio → **Settings → API keys** → create key with `read` + `generate` (and `write` if uploading).
+1. Studio → **Settings → API keys** → create key with `read` + `generate` (and `write` if uploading; add `messages` for DMs).
 2. Put the key in **`/opt/yatishara-studio/_system/env/studio-mcp.env`**:
 
 ```bash
@@ -104,6 +104,15 @@ Never pass raw upload refs to video/image generation for a built element — use
 | `studio_generate_audio` | Voiceover / SFX / Music |
 | `studio_validate_production_gates` | Pre-flight cartoon gate check |
 | `studio_generate_script` | Script → document |
+| `studio_list_conversations` / `studio_open_conversation` / `studio_list_messages` | DM inbox + thread |
+| `studio_send_message` / `studio_send_image_message` / `studio_share_post_to_dm` | Send text, image, or feed share |
+| `studio_mark_conversation_read` / `studio_unread_count` / `studio_search_messages` | Read receipts, badge, search |
+| `studio_*_dm_label*` / `studio_*_peer_*` | Labels, notes, block/unblock |
+| `studio_get_my_profile` / `studio_list_feed` / `studio_share_asset_post` / `studio_*_like|save|follow` | Feed + profiles (`social` scope) |
+| `studio_list_network_offers` / `studio_book_offer` / `studio_*_job*` | Creative Network offers + jobs (`marketplace`) |
+| `studio_browse_network_listings` / `studio_list_on_network` / `studio_purchase_network_listing` | Stock-audio listings (`marketplace`) |
+| `studio_list_payments` / `studio_list_credit_transactions` / `studio_get_storage` / `studio_get_subscription` | Billing depth (`read`) |
+| `studio_list_notifications` / `studio_mark_notification_read` | Notifications (`social`) |
 
 ## Style Sheets + direct handoff
 
@@ -129,7 +138,7 @@ Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
 
 **Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cartoon-ad-production/references/start-frame-workflow.md`.
 
-Budget: `studio_estimate_production` before `plan` mode budget approval.
+Budget: `studio_estimate_batch` (alias `studio_estimate_production`) before `plan` mode budget approval.
 
 ## vs Higgsfield
 
@@ -147,3 +156,10 @@ cd /opt/yatishara-studio/packages/studio-mcp && npm run build
 ```
 
 Restart Cursor MCP or reload the `yatishara-studio` server.
+
+## Timeline edits (MCP)
+
+Preferred: `studio_create_edit` → `studio_edit_append_clips` / `studio_edit_add_text` → trim/reorder/split/transition → `studio_edit_detach_audio` when needed → `studio_pull_frame` → `studio_export_edit` (`exportResolution`).
+
+Also: `studio_edit_duplicate_clip`, `studio_edit_set_track_muted`, `studio_edit_set_frame_ratio`. Patch text/volume/fades via `studio_edit_update_clips`.
+

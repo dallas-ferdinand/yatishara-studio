@@ -67,6 +67,7 @@ const VALUE_PROPS = [
 type StudioCreativeNetworkPaneProps = {
   onOpenCredits: () => void;
   creditPriceCents?: number;
+  onStartChat?: (username: string) => void;
 };
 
 function RatingStars({ value, size = 14 }: { value: number; size?: number }) {
@@ -135,7 +136,11 @@ function usePreloadCreativeNetworkHero() {
   }, []);
 }
 
-function NetworkBrowse() {
+function NetworkBrowse({
+  onStartChat,
+}: {
+  onStartChat?: (username: string) => void;
+}) {
   const cn = useCreativeNetwork();
   usePreloadCreativeNetworkHero();
   const valuesScrollRef = useRef<HTMLDivElement | null>(null);
@@ -175,7 +180,7 @@ function NetworkBrowse() {
 
   if (cn.browseSlug) {
     return (
-      <StudioOfferDetailEmbed slug={cn.browseSlug} />
+      <StudioOfferDetailEmbed slug={cn.browseSlug} onStartChat={onStartChat} />
     );
   }
 
@@ -359,6 +364,7 @@ function NetworkBrowse() {
 export function StudioCreativeNetworkPane({
   onOpenCredits,
   creditPriceCents,
+  onStartChat,
 }: StudioCreativeNetworkPaneProps) {
   const cn = useCreativeNetwork();
   const [applyBusy, setApplyBusy] = useState(false);
@@ -497,7 +503,7 @@ export function StudioCreativeNetworkPane({
             }
           />
         ) : (
-          <NetworkBrowse />
+          <NetworkBrowse onStartChat={onStartChat} />
         )}
       </div>
     </div>

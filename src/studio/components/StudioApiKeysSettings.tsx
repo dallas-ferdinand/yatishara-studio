@@ -18,6 +18,9 @@ const SCOPES = [
   { id: "read", label: "Read" },
   { id: "write", label: "Write" },
   { id: "generate", label: "Generate" },
+  { id: "messages", label: "Messages" },
+  { id: "social", label: "Social" },
+  { id: "marketplace", label: "Marketplace" },
 ] as const;
 
 function buildMcpConfig(apiKey: string, apiUrl: string) {
@@ -161,7 +164,8 @@ export function StudioApiKeysSettings() {
     <div className="studio-settings-stack studio-api-keys-panel">
       <p className="studio-api-keys-lead">
         Connect Cursor or scripts to your Studio workspace. Agents start in your root folder and
-        pick subfolders via MCP. Each key only sees that tree.
+        pick subfolders via MCP. Each key only sees that tree. Messages, Social, and Marketplace
+        scopes are user-level (not limited to the key&apos;s sandbox).
       </p>
 
       <section className="studio-api-keys-card">

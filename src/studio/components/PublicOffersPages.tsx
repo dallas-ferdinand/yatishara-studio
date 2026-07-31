@@ -12,7 +12,9 @@ import {
   Check,
   Clock,
   ListFilter,
+  MessageCircle,
   MessageSquareText,
+  ShoppingBag,
   PackageCheck,
   PackageSearch,
   Search,
@@ -46,6 +48,7 @@ import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMercurySidebarLogo } from "@/lib/use-appearance-mode";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
+import { MediaLoadFrame } from "@/studio/components/media-load-frame";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
 import { formatTtdCents, formatTtdFromCredits } from "@/studio/lib/money";
 import { useStickySignedUrlExpiry } from "@/studio/lib/signedUrlExpiry";
@@ -1194,17 +1197,69 @@ type GalleryItem = {
 
 function OfferGallery({ items }: { items: GalleryItem[] }) {
   const [index, setIndex] = useState(0);
-  const active = items[Math.min(index, items.length - 1)];
-  if (!active) return null;
+  const activeIndex = Math.min(index, Math.max(items.length - 1, 0));
+  const active = items[activeIndex];
+  const galleryKey = items.map((item) => `${item.kind}:${item.url ?? ""}`).join("|");
+
+  // Warm neighbors in the HTTP cache (do not keep opacity:0 <img>s — browsers starve those).
+  useEffect(() => {
+    for (const item of items) {
+      if (!item.url || item.kind === "video") continue;
+      const img = new Image();
+      img.decoding = "async";
+      img.src = item.url;
+    }
+  }, [galleryKey]); // eslint-disable-line react-hooks/exhaustive-deps -- keyed by urls
+
+  useEffect(() => {
+    setIndex(0);
+  }, [galleryKey]);
+
+  if (!active?.url) return null;
+
+  const isVideo = active.kind === "video";
+
   return (
     <section className="public-offers-gallery" aria-label="Work samples">
       <div className="public-offers-gallery-stage">
-        {active.kind === "video" && active.url ? (
-          <video key={active.url} src={active.url} controls playsInline preload="metadata" />
-        ) : active.url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={active.url} alt={active.name ?? "Work sample"} />
-        ) : null}
+        <MediaLoadFrame
+          key={`stage-${activeIndex}-${active.url}`}
+          kind={isVideo ? "video" : "image"}
+          src={active.url}
+          cacheKey={active.url}
+          ratio="fill"
+          loaderSize="lg"
+          className="public-offers-gallery-frame"
+        >
+          {({ loaded, onLoad, onError }) =>
+            isVideo ? (
+              <video
+                src={active.url}
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedData={onLoad}
+                onError={onError}
+                className={loaded ? "is-ready" : undefined}
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={active.url}
+                alt={active.name ?? "Work sample"}
+                decoding="async"
+                fetchPriority="high"
+                onLoad={onLoad}
+                onError={onError}
+                className={loaded ? "is-ready" : undefined}
+                ref={(el) => {
+                  // Cached CDN hits may skip onLoad after mount — settle loader manually.
+                  if (el?.complete && el.naturalWidth > 0) onLoad();
+                }}
+              />
+            )
+          }
+        </MediaLoadFrame>
       </div>
       {items.length > 1 ? (
         <div className="public-offers-gallery-thumbs" role="tablist" aria-label="Gallery items">
@@ -1213,14 +1268,19 @@ function OfferGallery({ items }: { items: GalleryItem[] }) {
               key={`gallery-${i}`}
               type="button"
               role="tab"
-              aria-selected={i === index}
-              className={i === index ? "is-active" : undefined}
+              aria-selected={i === activeIndex}
+              className={i === activeIndex ? "is-active" : undefined}
               onClick={() => setIndex(i)}
               title={item.name}
             >
               {item.thumbnailUrl ?? item.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.thumbnailUrl ?? item.url} alt="" loading="lazy" />
+                <img
+                  src={item.thumbnailUrl ?? item.url}
+                  alt=""
+                  loading={i < 4 ? "eager" : "lazy"}
+                  decoding="async"
+                />
               ) : null}
               {item.kind === "video" ? <span className="public-offers-gallery-badge">▶</span> : null}
             </button>
@@ -1591,12 +1651,14 @@ type StudioOfferBookProps = {
     deliveryDays: number;
     category?: string | null;
     packages?: OfferPackageView[] | null;
+    sellerUsername?: string | null;
   };
   pkgIndex: number;
   onPkgIndex: (index: number) => void;
   isAuthenticated: boolean;
-  /** Hide the dock head when nested in the mobile filters sheet (sheet already titles Book). */
+  /** Hide the dock head when nested in the mobile bottom sheet (grab-only chrome). */
   showHead?: boolean;
+  onStartChat?: (username: string) => void;
 };
 
 /**
@@ -1609,12 +1671,37 @@ function StudioCnOfferBookSidebar({
   onPkgIndex,
   isAuthenticated,
   showHead = true,
+  onStartChat,
 }: StudioOfferBookProps) {
   const packages = offer.packages ?? [];
   const hasPackages = packages.length > 0;
 
+  const messageSeller = () => {
+    const username = offer.sellerUsername?.trim();
+    if (!username) return;
+    if (!isAuthenticated) {
+      toast.message("Sign in to message the seller");
+      return;
+    }
+    if (!onStartChat) {
+      toast.error("Messaging is unavailable right now");
+      return;
+    }
+    onStartChat(username);
+  };
+
   const body = (
     <div className="public-offers-rail-detail">
+      {!showHead && offer.sellerUsername ? (
+        <button
+          type="button"
+          className="public-offers-btn is-quiet is-block studio-cn-book-message-row"
+          onClick={messageSeller}
+        >
+          <MessageCircle aria-hidden="true" />
+          Message seller
+        </button>
+      ) : null}
       {hasPackages ? (
         <PackagePicker
           packages={packages}
@@ -1666,6 +1753,17 @@ function StudioCnOfferBookSidebar({
     <aside className="studio-cn-book-sidebar" aria-label="Packages and booking">
       <div className="studio-cn-book-sidebar-head cursor-panel-head cursor-sidebar-head shrink-0">
         <strong>Book</strong>
+        {offer.sellerUsername ? (
+          <button
+            type="button"
+            className="public-offers-btn is-icon is-quiet"
+            aria-label="Message seller"
+            title="Message seller"
+            onClick={messageSeller}
+          >
+            <MessageCircle aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
       <div className="studio-cn-book-sidebar-body">{body}</div>
     </aside>
@@ -1678,8 +1776,10 @@ function StudioCnOfferBookSidebar({
  */
 export function StudioOfferDetailEmbed({
   slug,
+  onStartChat,
 }: {
   slug: string;
+  onStartChat?: (username: string) => void;
 }) {
   const { isMobile } = useMobileLayout();
   const mediaExpiresUnix = useStickySignedUrlExpiry();
@@ -1730,50 +1830,58 @@ export function StudioOfferDetailEmbed({
       />
     );
   } else {
+    const deliveryDays = activePkg?.deliveryDays ?? offer.deliveryDays;
+    const priceLabel = `${hasPackages && packages.length > 1 ? "From " : ""}${formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}`;
+    const ratingLabel =
+      offer.ratingCount > 0 && offer.ratingAvg != null
+        ? `${offer.ratingAvg.toFixed(1)} · ${offer.ratingCount}`
+        : "None yet";
     detailBody = (
       <div className="studio-cn-detail-main">
         {offer.gallery && offer.gallery.length > 0 ? (
           <OfferGallery items={offer.gallery} />
         ) : null}
-        <section className="public-offers-detail-intro">
-          <div className="public-offers-detail-intro-copy">
-            {offer.category ? (
-              <p className="public-offers-kicker">{offer.category}</p>
-            ) : (
-              <p className="public-offers-kicker">Creative Network</p>
-            )}
+        <section className="studio-cn-offer-hero" aria-label="Service overview">
+          <header className="studio-cn-offer-hero-bar">
+            <span className="studio-cn-offer-hero-kicker">
+              {offer.category || "Creative Network"}
+            </span>
+          </header>
+          <div className="studio-cn-offer-hero-body">
             <h1>{offer.title}</h1>
-            <p>
+            <p className="studio-cn-offer-hero-seller">
               {offer.sellerBusinessName}
-              {offer.sellerUsername ? (
-                <>
-                  {" · "}
-                  <Link href={`/u/${offer.sellerUsername}`}>
-                    @{offer.sellerUsername}
-                  </Link>
-                </>
-              ) : null}
             </p>
-          </div>
-          <div className="public-offers-detail-intro-meta">
-            <span className="public-offers-chip">
-              <Clock aria-hidden="true" />
-              {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
-            </span>
-            <span className="public-offers-chip">
-              {hasPackages && packages.length > 1 ? "From " : ""}
-              {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
-            </span>
-            <OfferStatsChips
-              ratingAvg={offer.ratingAvg}
-              ratingCount={offer.ratingCount}
-              purchaseCount={offer.purchaseCount}
-            />
+            <dl className="studio-cn-offer-hero-stats">
+              <div className="studio-cn-offer-hero-stat">
+                <dt>Delivery</dt>
+                <dd>
+                  <Clock aria-hidden="true" />
+                  {deliveryDays} day{deliveryDays === 1 ? "" : "s"}
+                </dd>
+              </div>
+              <div className="studio-cn-offer-hero-stat">
+                <dt>Price</dt>
+                <dd>{priceLabel}</dd>
+              </div>
+              <div className="studio-cn-offer-hero-stat">
+                <dt>Rating</dt>
+                <dd>{ratingLabel}</dd>
+              </div>
+              <div className="studio-cn-offer-hero-stat">
+                <dt>Orders</dt>
+                <dd>{offer.purchaseCount}</dd>
+              </div>
+            </dl>
           </div>
         </section>
-        <section className="public-offers-panel">
-          <h2>What you get</h2>
-          <p className="public-offers-prose">{offer.description}</p>
+        <section className="studio-cn-offer-section">
+          <header className="studio-cn-offer-section-bar">
+            <h2>What you get</h2>
+          </header>
+          <div className="studio-cn-offer-section-body">
+            <p className="public-offers-prose">{offer.description}</p>
+          </div>
         </section>
         <OfferReviewsList offerId={offer._id} />
       </div>
@@ -1796,10 +1904,12 @@ export function StudioOfferDetailEmbed({
           deliveryDays: offer.deliveryDays,
           category: offer.category,
           packages,
+          sellerUsername: offer.sellerUsername,
         }}
         pkgIndex={pkgIndex}
         onPkgIndex={setPkgIndex}
         isAuthenticated={isAuthenticated}
+        onStartChat={onStartChat}
       />
     ) : (
       <aside className="studio-cn-book-sidebar" aria-label="Packages and booking">
@@ -1815,60 +1925,68 @@ export function StudioOfferDetailEmbed({
     );
 
   if (isMobile) {
+    const priceLabel = `${hasPackages && packages.length > 1 ? "From " : ""}${formatTtdCents(activePkg?.priceCents ?? offer?.priceCents ?? 0)}`;
     return (
       <div className="public-offers-main studio-cn-catalog studio-cn-offer-detail is-mobile">
         {mainColumn}
         {offer != null ? (
           <nav
-            className="public-offers-mobile-book-nav"
+            className="public-offers-mobile-book-nav studio-cn-book-bar"
             aria-label="Book this service"
           >
-            <div className="public-offers-mobile-book-meta">
-              <strong>
-                {hasPackages && packages.length > 1 ? "From " : ""}
-                {formatTtdCents(activePkg?.priceCents ?? offer.priceCents)}
-              </strong>
-              <span>
-                {(activePkg?.deliveryDays ?? offer.deliveryDays)} day delivery
-              </span>
+            <span className="studio-cn-book-bar-price">{priceLabel}</span>
+            <div className="studio-cn-book-bar-actions">
+              {offer.sellerUsername ? (
+                <button
+                  type="button"
+                  className="public-offers-btn is-icon is-quiet studio-cn-book-bar-msg"
+                  aria-label="Message seller"
+                  title="Message seller"
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      toast.message("Sign in to message the seller");
+                      return;
+                    }
+                    if (!onStartChat) {
+                      toast.error("Messaging is unavailable right now");
+                      return;
+                    }
+                    onStartChat(offer.sellerUsername!);
+                  }}
+                >
+                  <MessageCircle aria-hidden="true" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="public-offers-btn is-primary studio-cn-book-bar-cta"
+                aria-expanded={bookSheetOpen}
+                onClick={() => setBookSheetOpen(true)}
+              >
+                <ShoppingBag aria-hidden="true" />
+                Book now
+              </button>
             </div>
-            <button
-              type="button"
-              className="public-offers-btn is-primary"
-              aria-expanded={bookSheetOpen}
-              onClick={() => setBookSheetOpen(true)}
-            >
-              <Wallet aria-hidden="true" />
-              {hasPackages ? "Choose package" : "Book"}
-            </button>
           </nav>
         ) : null}
         {bookSheetOpen && offer != null ? (
           <div
-            className="public-offers-filters-sheet"
+            className="studio-cn-book-sheet"
             role="dialog"
             aria-modal="true"
             aria-label="Packages and booking"
           >
             <button
               type="button"
-              className="public-offers-filters-backdrop"
+              className="studio-cn-book-sheet-backdrop"
               aria-label="Dismiss booking"
               onClick={() => setBookSheetOpen(false)}
             />
-            <div className="public-offers-filters-panel">
-              <div className="public-offers-filters-head">
-                <strong>Book</strong>
-                <button
-                  type="button"
-                  className="public-offers-btn is-icon is-quiet"
-                  aria-label="Close booking"
-                  onClick={() => setBookSheetOpen(false)}
-                >
-                  <X aria-hidden="true" />
-                </button>
+            <div className="studio-cn-book-sheet-panel">
+              <div className="studio-cn-book-sheet-handle" aria-hidden="true">
+                <span className="studio-cn-book-sheet-grab" />
               </div>
-              <div className="public-offers-filters-body">
+              <div className="studio-cn-book-sheet-body">
                 <StudioCnOfferBookSidebar
                   offer={{
                     _id: offer._id,
@@ -1877,11 +1995,13 @@ export function StudioOfferDetailEmbed({
                     deliveryDays: offer.deliveryDays,
                     category: offer.category,
                     packages,
+                    sellerUsername: offer.sellerUsername,
                   }}
                   pkgIndex={pkgIndex}
                   onPkgIndex={setPkgIndex}
                   isAuthenticated={isAuthenticated}
                   showHead={false}
+                  onStartChat={onStartChat}
                 />
               </div>
             </div>
@@ -1903,7 +2023,7 @@ export function StudioOfferDetailEmbed({
           order={1}
           defaultSize={72}
           minSize={45}
-          className="min-h-0 min-w-0"
+          className="studio-cn-offer-main-panel min-h-0 min-w-0 h-full overflow-hidden"
         >
           {mainColumn}
         </Panel>
@@ -1914,7 +2034,7 @@ export function StudioOfferDetailEmbed({
           defaultSize={28}
           minSize={20}
           maxSize={40}
-          className="min-h-0 min-w-0 studio-cn-book-panel"
+          className="studio-cn-book-panel min-h-0 min-w-0 h-full overflow-hidden"
         >
           {bookSidebar}
         </Panel>

@@ -71,8 +71,10 @@
   background: var(--mos-panel, #f5f5f7);
 }
 
-/* Match chrome head icon controls (24px settings triggers), not composer 30px. */
-.studio-dm-back {
+/* Match chrome head icon controls (24px settings triggers), not composer 30px.
+   Need head + circle-btn specificity so StudioShell .studio-composer-circle-btn
+   (30px, later) cannot win — same nesting as .studio-dm-peer-toggle. */
+.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back {
   width: 24px;
   min-width: 24px;
   height: 24px;
@@ -80,7 +82,7 @@
   flex: 0 0 auto;
 }
 
-.studio-dm-back svg {
+.studio-dm-chat-head .studio-composer-circle-btn.studio-dm-back svg {
   width: 13px;
   height: 13px;
 }
@@ -142,14 +144,14 @@
 }
 
 /* Nest 24px hammer circle in 32px head; accent when Action panel is open. */
-.studio-dm-chat-head-tools .studio-dm-peer-toggle {
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle {
   width: 24px;
   min-width: 24px;
   height: 24px;
   min-height: 24px;
 }
 
-.studio-dm-chat-head-tools .studio-dm-peer-toggle svg {
+.studio-dm-chat-head-tools .studio-composer-circle-btn.studio-dm-peer-toggle svg {
   width: 13px;
   height: 13px;
 }
@@ -343,8 +345,13 @@
   display: flex;
   justify-content: flex-start;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   will-change: transform;
   touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .studio-dm-bubble-row.is-mine {
@@ -353,27 +360,42 @@
 
 .studio-dm-bubble {
   display: inline-flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
   max-width: min(72%, 42rem);
+  /* Shrink below voice-player min-content so meta stays in-pane. */
+  width: fit-content;
   padding: 7px 10px;
   border-radius: 14px;
   border-bottom-left-radius: 5px;
   background: var(--mos-plate, var(--mos-panel));
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  overflow: hidden;
 }
 
 .studio-dm-bubble.has-reply {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
+  /* Quote can be wider than body text — keep bubble within pane. */
+  width: min(100%, 22rem);
+  max-width: min(72%, 42rem);
 }
 
 .studio-dm-bubble-body {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   min-width: 0;
+  width: 100%;
+}
+
+.studio-dm-bubble-body > p {
+  width: 100%;
 }
 
 .studio-dm-bubble-row.is-mine .studio-dm-bubble {
@@ -398,7 +420,10 @@
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 5px 8px;
   border: 0;
@@ -408,6 +433,7 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  overflow: hidden;
 }
 
 .studio-dm-feed-share {
@@ -661,6 +687,8 @@
   align-items: flex-start;
   gap: 1px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   border: 0;
@@ -669,6 +697,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .studio-dm-reply-quote strong,
@@ -690,10 +719,19 @@
 }
 
 .studio-dm-reply-snippet {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.studio-dm-reply-snippet > :not(svg) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-dm-reply-snippet svg {
@@ -706,17 +744,19 @@
 .studio-dm-reply-voice {
   min-width: 0;
   width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
-.studio-dm-reply-voice .studio-chat-audio-player {
-  min-width: 0;
+.studio-dm-reply-voice .studio-chat-audio-player,
+.studio-dm-reply-voice .studio-chat-audio-player.is-compact {
+  min-width: 0 !important;
   width: 100%;
   max-width: 100%;
   border: 0;
   background: transparent;
-  padding: 0;
-  transform: scale(0.92);
-  transform-origin: left center;
+  padding: 2px 0;
+  transform: none;
 }
 
 /* DM voice play/pause: white glyph on Orb (shadow keeps it readable on pastel seeds). */
@@ -830,7 +870,9 @@
   align-items: center;
   gap: 3px;
   flex: 0 0 auto;
-  transform: translateY(1px);
+  align-self: flex-end;
+  margin-top: 2px;
+  transform: none;
 }
 
 .studio-dm-meta time {
@@ -838,6 +880,93 @@
   font-weight: 600;
   color: var(--color-cursor-muted, var(--mos-muted));
   white-space: nowrap;
+}
+
+.studio-dm-edited {
+  font-size: 9.5px;
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  white-space: nowrap;
+}
+
+.studio-dm-tombstone {
+  margin: 0;
+  font-style: italic;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-bubble.is-deleted {
+  opacity: 0.92;
+}
+
+.studio-dm-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(100%, 28rem);
+  min-width: min(100%, 16rem);
+}
+
+.studio-dm-edit-input {
+  -webkit-user-select: text;
+  user-select: text;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 10rem;
+  max-height: min(60vh, 28rem);
+  resize: vertical;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--mos-plate-strong, var(--mos-panel));
+  color: var(--mos-text, inherit);
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  field-sizing: content;
+}
+
+.studio-dm-edit-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.studio-dm-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.studio-dm-edit-cancel,
+.studio-dm-edit-save {
+  appearance: none;
+  border-radius: 8px;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  background: var(--mos-plate, var(--mos-panel));
+  color: var(--mos-text, inherit);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.studio-dm-edit-save {
+  background: var(--mos-plate-strong, var(--mos-panel));
+  border-color: color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 40%, var(--color-cursor-border, var(--mos-border)));
+}
+
+.studio-dm-edit-cancel:hover,
+.studio-dm-edit-save:hover {
+  background: var(--mos-plate-strong, var(--mos-panel));
+}
+
+.studio-dm-edit-cancel:disabled,
+.studio-dm-edit-save:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .studio-dm-ticks {
@@ -1055,12 +1184,23 @@
   padding: 4px 8px 5px 4px;
 }
 
-.studio-dm-bubble.is-voice .studio-dm-bubble-body {
-  width: 100%;
+.studio-dm-bubble.is-voice.has-reply {
+  align-items: stretch;
+  width: min(88%, 26rem);
 }
 
-.studio-dm-bubble.is-voice .studio-chat-audio-player {
-  min-width: 200px;
+.studio-dm-bubble.is-voice .studio-dm-bubble-body {
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.studio-dm-bubble.is-voice .studio-dm-bubble-body > .studio-chat-audio-player {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   border: 0;
   background: transparent;
   padding: 4px 2px;
@@ -1110,6 +1250,157 @@
   max-height: 280px;
   object-fit: cover;
   vertical-align: middle;
+}
+
+
+/* —— WhatsApp-style image albums (ratio-aware layouts) —— */
+
+.studio-dm-bubble.is-album {
+  max-width: min(78%, 17.5rem);
+}
+
+.studio-dm-bubble.is-album.is-album-tall {
+  max-width: min(88%, 22rem);
+}
+
+.studio-dm-bubble.is-album.is-album-wide {
+  max-width: min(86%, 20rem);
+}
+
+.studio-dm-album {
+  display: grid;
+  gap: 2px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mos-text, #111) 8%, transparent);
+}
+
+.studio-dm-album.is-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Two portraits: side-by-side, share full height */
+.studio-dm-album.is-2.is-orient-tall {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: min(52vh, 26rem);
+  height: min(52vh, 26rem);
+}
+
+.studio-dm-album.is-2.is-orient-tall .studio-dm-album-cell {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Two landscapes: stack full width */
+.studio-dm-album.is-2.is-orient-wide {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+}
+
+.studio-dm-album.is-2.is-orient-wide .studio-dm-album-cell {
+  aspect-ratio: 16 / 9;
+}
+
+.studio-dm-album.is-2.is-orient-mixed .studio-dm-album-cell {
+  aspect-ratio: 3 / 4;
+}
+
+.studio-dm-album.is-3 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.studio-dm-album.is-3.is-orient-mixed .studio-dm-album-cell:first-child,
+.studio-dm-album.is-3.is-orient-pending .studio-dm-album-cell:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 10;
+}
+
+/* Three tall: equal columns */
+.studio-dm-album.is-3.is-orient-tall {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: min(48vh, 22rem);
+  height: min(48vh, 22rem);
+}
+
+.studio-dm-album.is-3.is-orient-tall .studio-dm-album-cell,
+.studio-dm-album.is-3.is-orient-tall .studio-dm-album-cell:first-child {
+  grid-column: auto;
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Three mostly wide: hero + two */
+.studio-dm-album.is-3.is-orient-wide {
+  grid-template-columns: 1fr 1fr;
+}
+
+.studio-dm-album.is-3.is-orient-wide .studio-dm-album-cell:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 9;
+}
+
+.studio-dm-album.is-3.is-orient-wide .studio-dm-album-cell {
+  aspect-ratio: 16 / 10;
+}
+
+.studio-dm-album.is-4 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.studio-dm-album.is-4.is-orient-tall .studio-dm-album-cell {
+  aspect-ratio: 9 / 14;
+}
+
+.studio-dm-album.is-4.is-orient-wide .studio-dm-album-cell {
+  aspect-ratio: 16 / 10;
+}
+
+.studio-dm-album-cell {
+  position: relative;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  aspect-ratio: 1;
+  background: var(--mos-plate, var(--cursor-surface));
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.studio-dm-album-cell img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-dm-album-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #000 46%, transparent);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.studio-dm-attach-thumb-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  background: var(--mos-plate-strong, var(--mos-raised));
+}
+
+.studio-dm-attach-thumb-fallback svg {
+  width: 18px;
+  height: 18px;
 }
 
 /* —— Attach preview + paperclip —— */
@@ -1242,51 +1533,371 @@
   background: color-mix(in srgb, var(--mos-danger, #f87171) 12%, transparent);
 }
 
-/* —— Image lightbox —— */
+/* —— WA-style photo viewer (Messages chat pane only, not whole Studio) —— */
+
+.studio-dm-pane.is-lightbox-open {
+  overflow: hidden;
+}
+
+/* Keep Action / chat chrome under the viewer. */
+.studio-dm-pane.is-lightbox-open .studio-dm-chat-head,
+.studio-dm-pane.is-lightbox-open .studio-dm-chat-head-tools,
+.studio-dm-pane.is-lightbox-open .studio-dm-peer-toggle {
+  z-index: 0 !important;
+  pointer-events: none;
+}
 
 .studio-dm-lightbox {
   position: absolute;
   inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: color-mix(in srgb, #000 72%, transparent);
-  cursor: zoom-out;
+  z-index: 300;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* L1 canvas — never hardcoded white/black overlay. */
+  background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
+  color: var(--color-cursor-text, var(--mos-text));
 }
 
-.studio-dm-lightbox img {
-  max-width: min(100%, 720px);
-  max-height: min(100%, 80vh);
-  object-fit: contain;
-  border-radius: 10px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
-  cursor: default;
+.studio-dm-lightbox-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex: 0 0 auto;
+  z-index: 2;
+  height: var(--cursor-head-h, 32px);
+  min-height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
 }
 
+.studio-dm-lightbox-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.studio-dm-lightbox-meta .studio-profile-avatar {
+  width: 20px !important;
+  height: 20px !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  flex: 0 0 auto;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.studio-dm-lightbox-meta-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.studio-dm-lightbox-meta-copy strong {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-dm-lightbox-meta-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-dm-lightbox-meta-you {
+  flex: 0 0 auto;
+  font-weight: 400;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-dm-lightbox-meta-copy > span {
+  font-size: 11px;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-dm-lightbox-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  height: 100%;
+}
+
+/* Match chrome head icon circles (24px / 13px glyph). */
+.studio-dm-lightbox-tool,
 .studio-dm-lightbox-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  flex: 0 0 auto;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  border-radius: 999px;
+  background: var(--mos-plate-strong, var(--mos-raised));
+  color: var(--color-cursor-text, var(--mos-text));
+  cursor: pointer;
+}
+
+.studio-dm-lightbox-tool svg,
+.studio-dm-lightbox-close svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.25;
+  flex: 0 0 auto;
+}
+
+.studio-dm-lightbox-tool:hover:not(:disabled),
+.studio-dm-lightbox-close:hover {
+  background: var(--mos-hover, color-mix(in srgb, var(--mos-text) 8%, transparent));
+  border-color: color-mix(
+    in srgb,
+    var(--cursor-accent, var(--mos-accent)) 34%,
+    var(--color-cursor-border-soft, var(--mos-border))
+  );
+}
+
+.studio-dm-lightbox-tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.studio-dm-lightbox-zoom-label {
+  min-width: 2.4rem;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  user-select: none;
+}
+
+.studio-dm-lightbox-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.studio-dm-lightbox-stage.is-dragging {
+  cursor: grabbing;
+}
+
+/* Absolute fill so max-height:100% on the img is vs a real box (not intrinsic). */
+.studio-dm-lightbox-canvas {
+  position: absolute;
+  inset: 8px 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.studio-dm-lightbox-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  object-position: center;
+  transform-origin: center center;
+  transition: transform 100ms ease;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.studio-dm-lightbox-stage.is-dragging .studio-dm-lightbox-image {
+  transition: none;
+}
+
+.studio-dm-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: color-mix(in srgb, #000 45%, transparent);
   color: #fff;
+  transform: translateY(-50%);
   cursor: pointer;
 }
 
+[data-appearance="light"] .studio-dm-lightbox-nav {
+  background: color-mix(in srgb, #111 18%, transparent);
+  color: #111;
+}
+
+.studio-dm-lightbox-nav svg {
+  width: 22px;
+  height: 22px;
+}
+
+.studio-dm-lightbox-nav.is-prev {
+  left: 6px;
+}
+
+.studio-dm-lightbox-nav.is-next {
+  right: 6px;
+}
+
+.studio-dm-lightbox-nav:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.studio-dm-lightbox-nav:not(:disabled):hover {
+  background: color-mix(in srgb, #000 62%, transparent);
+}
+
+[data-appearance="light"] .studio-dm-lightbox-nav:not(:disabled):hover {
+  background: color-mix(in srgb, #111 28%, transparent);
+}
+
+.studio-dm-lightbox-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 8px 0 10px;
+  box-sizing: border-box;
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--mos-bg)));
+}
+
+.studio-dm-lightbox-caption {
+  margin: 0;
+  padding: 0 16px;
+  max-width: 36rem;
+  align-self: center;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--color-cursor-text, var(--mos-text));
+  overflow-wrap: anywhere;
+}
+
+.studio-dm-lightbox-thumbs {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.studio-dm-lightbox-thumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-dm-lightbox-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, #fff 10%, transparent);
+  cursor: pointer;
+}
+
+[data-appearance="light"] .studio-dm-lightbox-thumb {
+  background: color-mix(in srgb, #111 6%, transparent);
+}
+
+.studio-dm-lightbox-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-dm-lightbox-thumb.is-active {
+  border-color: var(--cursor-accent, #3dd68c);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent, #3dd68c) 40%, transparent);
+}
+
+.studio-dm-lightbox-thumb:hover:not(.is-active) {
+  border-color: color-mix(in srgb, #fff 35%, transparent);
+}
+
+[data-appearance="light"] .studio-dm-lightbox-thumb:hover:not(.is-active) {
+  border-color: color-mix(in srgb, #111 22%, transparent);
+}
+
 /* Voice bubble meta sits like the old time stamp */
-.studio-dm-bubble.is-voice {
+.studio-dm-bubble.is-voice:not(.has-reply) {
   align-items: flex-end;
+}
+
+.studio-dm-bubble.is-voice.has-reply {
+  align-items: stretch;
 }
 
 .studio-dm-bubble.is-voice .studio-dm-meta {
   align-self: flex-end;
+  flex: 0 0 auto;
 }
 
 /* —— Inline list (mobile, no chat selected) —— */
@@ -1889,7 +2500,10 @@
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
 }
 
+/* Full-bleed + fade spacers — hover-wheel scrolls horizontally; L/R masks. */
 .studio-dm-label-rail {
+  --cursor-h-scroll-fade-pad: 8px;
+  --cursor-h-scroll-fade-gap: 4px;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -1897,10 +2511,12 @@
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
-  padding: 0 6px 0 8px;
+  padding: 0;
   box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
@@ -2145,6 +2761,41 @@
 .studio-dm-context-menu {
   z-index: 120;
 }
+
+/* DM action sheet — hamburger/peer sheet chrome; content-height, slide-down dismiss. */
+.studio-mobile-app-menu-sheet.studio-dm-context-sheet {
+  height: auto;
+  max-height: min(
+    48dvh,
+    var(--studio-mobile-app-menu-sheet-band, 48dvh)
+  );
+  z-index: 72;
+}
+.studio-dm-context-sheet-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 4px 8px 12px;
+}
+.studio-dm-context-sheet .cursor-tab-context-item {
+  min-height: 44px;
+  padding: 12px 12px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+.studio-dm-context-menu .cursor-tab-context-item.is-confirm,
+.studio-dm-context-sheet .cursor-tab-context-item.is-confirm {
+  background: color-mix(in srgb, var(--mos-danger, #e5484d) 18%, var(--mos-plate-strong, var(--mos-plate)));
+  color: var(--mos-danger, #e5484d);
+  font-weight: 600;
+}
+
 
 /* —— Label dialogs —— */
 

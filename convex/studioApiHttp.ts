@@ -2129,12 +2129,18 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
       const auth = await authFor("generate", "write");
       if (auth instanceof Response) return finish(auth);
       const projectId = editExportMatch[1] as Id<"videoEditProjects">;
-      const body = await readJsonBody<{ name?: string }>(request).catch(() => ({} as { name?: string }));
+      const body = await readJsonBody<{
+        name?: string;
+        exportResolution?: "720p" | "1080p" | "4K";
+      }>(request).catch(
+        () => ({} as { name?: string; exportResolution?: "720p" | "1080p" | "4K" }),
+      );
       const result = await ctx.runAction(internal.videoEditActions.exportVideoForApi, {
         userId: auth.userId,
         sandboxFolderId: auth.sandboxFolderId,
         projectId,
         name: body.name,
+        exportResolution: body.exportResolution,
       });
       return finish(jsonResponse(result));
     }
@@ -2278,6 +2284,7 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
             label?: string;
             effects?: unknown;
             transitionOut?: unknown;
+            text?: unknown;
           }>;
           compact?: boolean;
         }>(request);
@@ -2315,6 +2322,140 @@ export const studioApiV1 = httpAction(async (ctx, request) => {
         return finish(jsonResponse(result));
       }
     }
+
+
+    const editTextMatch = route.match(/^edits\/([^/]+)\/text$/);
+    if (request.method === "POST" && editTextMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editTextMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        startTime?: number;
+        trackId?: string;
+        duration?: number;
+        label?: string;
+        text?: {
+          text?: string;
+          fontSize?: number;
+          color?: string;
+          align?: "left" | "center" | "right";
+          animation?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
+          animationDuration?: number;
+          fontFamily?: string;
+          underline?: boolean;
+          textCase?: "none" | "upper" | "lower" | "title";
+          letterSpacing?: number;
+          lineHeight?: number;
+          verticalAlign?: "top" | "middle" | "bottom";
+          backgroundColor?: string | null;
+          backgroundPadding?: number;
+          backgroundRadius?: number;
+          shadowColor?: string | null;
+          shadowBlur?: number;
+          shadowOffsetX?: number;
+          shadowOffsetY?: number;
+          glow?: boolean;
+          glowColor?: string;
+          glowBlur?: number;
+          opacity?: number;
+          bold?: boolean;
+          italic?: boolean;
+          strokeColor?: string;
+          strokeWidth?: number;
+          flipX?: boolean;
+          flipY?: boolean;
+        };
+        compact?: boolean;
+      }>(request);
+      const result = await ctx.runMutation(internal.videoEdits.addTextClipForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        startTime: body.startTime,
+        trackId: body.trackId,
+        duration: body.duration,
+        label: body.label,
+        text: body.text,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editDuplicateMatch = route.match(/^edits\/([^/]+)\/clips\/duplicate$/);
+    if (request.method === "POST" && editDuplicateMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editDuplicateMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{ clipId?: string; compact?: boolean }>(request);
+      if (!body.clipId) return finish(errorResponse("clipId is required"));
+      const result = await ctx.runMutation(internal.videoEdits.duplicateClipForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        clipId: body.clipId,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editDetachMatch = route.match(/^edits\/([^/]+)\/clips\/detach-audio$/);
+    if (request.method === "POST" && editDetachMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editDetachMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{ clipId?: string; compact?: boolean }>(request);
+      if (!body.clipId) return finish(errorResponse("clipId is required"));
+      const result = await ctx.runMutation(internal.videoEdits.detachAudioForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        clipId: body.clipId,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editTrackMuteMatch = route.match(/^edits\/([^/]+)\/tracks\/([^/]+)$/);
+    if (request.method === "PATCH" && editTrackMuteMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editTrackMuteMatch[1] as Id<"videoEditProjects">;
+      const trackId = editTrackMuteMatch[2]!;
+      const body = await readJsonBody<{ muted?: boolean; compact?: boolean }>(request);
+      if (typeof body.muted !== "boolean") {
+        return finish(errorResponse("muted boolean is required"));
+      }
+      const result = await ctx.runMutation(internal.videoEdits.setTrackMutedForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        trackId,
+        muted: body.muted,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
+    const editFrameRatioMatch = route.match(/^edits\/([^/]+)\/frame-ratio$/);
+    if (request.method === "POST" && editFrameRatioMatch) {
+      const auth = await authFor("write", "write");
+      if (auth instanceof Response) return finish(auth);
+      const projectId = editFrameRatioMatch[1] as Id<"videoEditProjects">;
+      const body = await readJsonBody<{
+        frameRatio?: "16:9" | "9:16" | "1:1";
+        compact?: boolean;
+      }>(request);
+      if (!body.frameRatio) return finish(errorResponse("frameRatio is required"));
+      const result = await ctx.runMutation(internal.videoEdits.setFrameRatioForApi, {
+        userId: auth.userId,
+        sandboxFolderId: auth.sandboxFolderId,
+        projectId,
+        frameRatio: body.frameRatio,
+        compact: body.compact,
+      });
+      return finish(jsonResponse(result));
+    }
+
 
     const editMatch = route.match(/^edits\/([^/]+)$/);
     if (editMatch) {

@@ -321,9 +321,11 @@
 .studio-cn-pane {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   height: 100%;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .studio-cn-head {
@@ -516,7 +518,11 @@ button.studio-cn-card-btn.public-offers-card {
 }
 
 .studio-cn-offer-detail {
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .studio-cn-offer-detail.is-split,
@@ -526,18 +532,252 @@ button.studio-cn-card-btn.public-offers-card {
 }
 
 .studio-cn-offer-panels {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+
+/* PanelGroup panels must own height so the detail scrollport stays in-viewport. */
+.studio-cn-offer-panels > [data-panel],
+.studio-cn-offer-main-panel,
+.studio-cn-book-panel {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .studio-cn-detail-scroll {
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .studio-cn-detail-main {
   display: grid;
   gap: 14px;
   min-width: 0;
+}
+
+/* Studio offer body — match Files / Messages density, not a loose marketing page. */
+.studio-cn-offer-detail .public-offers-body {
+  gap: 12px;
+  max-width: 920px;
+  margin: 0;
+  padding: 14px 16px 28px;
+}
+
+/* Settings-like overview card (section bar + body + stats grid). */
+.studio-cn-offer-hero,
+.studio-cn-offer-section {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+  border-radius: 14px;
+  background: var(--mos-plate, var(--cursor-surface));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent),
+    0 1px 2px color-mix(in srgb, #000 6%, transparent);
+}
+
+[data-appearance="dark"] .studio-cn-offer-hero,
+[data-appearance="dark"] .studio-cn-offer-section {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+    0 1px 2px color-mix(in srgb, #000 18%, transparent);
+}
+
+.studio-cn-offer-hero-bar,
+.studio-cn-offer-section-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: color-mix(in srgb, var(--mos-page, var(--mos-panel)) 55%, transparent);
+  box-sizing: border-box;
+}
+
+.studio-cn-offer-hero-kicker,
+.studio-cn-offer-section-bar h2 {
+  margin: 0;
+  min-width: 0;
+  color: var(--color-cursor-text, var(--mos-text));
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.studio-cn-offer-hero-body,
+.studio-cn-offer-section-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 12px;
+}
+
+.studio-cn-offer-hero-body h1 {
+  margin: 0;
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+}
+
+.studio-cn-offer-hero-seller {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-cn-offer-hero-seller a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.studio-cn-offer-hero-seller a:hover {
+  color: var(--cursor-accent);
+}
+
+.studio-cn-offer-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 2px 0 0;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-radius: 10px;
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+  overflow: hidden;
+}
+
+.studio-cn-offer-hero-stat {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+}
+
+.studio-cn-offer-hero-stat:nth-child(2n) {
+  border-right: 0;
+}
+
+.studio-cn-offer-hero-stat:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.studio-cn-offer-hero-stat dt {
+  margin: 0;
+  color: var(--color-cursor-muted, var(--mos-muted));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.studio-cn-offer-hero-stat dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  min-width: 0;
+  color: var(--color-cursor-text-bright, var(--mos-text));
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-cn-offer-hero-stat dd svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-cn-offer-section-body .public-offers-prose {
+  font-size: 13px;
+}
+
+/* Reviews / leftover panels inherit the same Settings card language. */
+.studio-cn-offer-detail .public-offers-panel {
+  gap: 10px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-cursor-border-soft) 82%, transparent);
+  border-radius: 14px;
+  background: var(--mos-plate, var(--cursor-surface));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent),
+    0 1px 2px color-mix(in srgb, #000 6%, transparent);
+}
+
+[data-appearance="dark"] .studio-cn-offer-detail .public-offers-panel {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+    0 1px 2px color-mix(in srgb, #000 18%, transparent);
+}
+
+.studio-cn-offer-detail .public-offers-panel > h2 {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  background: color-mix(in srgb, var(--mos-page, var(--mos-panel)) 55%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.studio-cn-offer-detail .public-offers-panel > :not(h2) {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+.studio-cn-offer-detail .public-offers-panel > :not(h2):last-child {
+  margin-bottom: 12px;
+}
+
+.studio-cn-offer-detail .public-offers-panel > :not(h2):first-of-type {
+  margin-top: 12px;
+}
+
+/* Nested Studio pane: keep gallery inside the scrollport (public page keeps 68vh). */
+.studio-cn-offer-detail .public-offers-gallery-stage {
+  aspect-ratio: 16 / 9;
+  min-height: 160px;
+  height: auto;
+  max-height: min(40vh, 380px);
+}
+
+@media (min-width: 861px) {
+  .studio-cn-offer-detail .public-offers-gallery-stage {
+    aspect-ratio: 16 / 9;
+    min-height: 200px;
+    height: auto;
+    max-height: min(42vh, 420px);
+  }
 }
 
 /* Right book dock — secondary panel chrome (settings / DM peer language). */
@@ -560,14 +800,23 @@ button.studio-cn-card-btn.public-offers-card {
 }
 
 .studio-cn-book-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   flex: 0 0 auto;
   min-height: var(--cursor-head-h, 32px);
-  padding: 0 10px;
+  padding: 0 8px 0 10px;
   border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   font-size: 12px;
   font-weight: 650;
   color: var(--color-cursor-text-bright, var(--mos-text));
 }
+
+.studio-cn-book-sidebar-head strong {
+  min-width: 0;
+}
+
 
 .studio-cn-book-sidebar-body {
   flex: 1 1 auto;
@@ -583,50 +832,201 @@ button.studio-cn-card-btn.public-offers-card {
   display: none;
 }
 
-/* Studio mobile book bar is JS-gated; force visible when rendered. */
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav {
+/* Mobile book bar = same height as Studio bottom nav / head. */
+.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav.studio-cn-book-bar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   z-index: 40;
-  min-height: calc(52px + env(safe-area-inset-bottom, 0px));
-  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
+  height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
+  min-height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
+  max-height: calc(var(--studio-mobile-nav-height, 38px) + env(safe-area-inset-bottom, 0px));
+  padding: 0 10px env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft, var(--mos-border-soft)));
   background: var(--mos-bg, var(--mos-panel, var(--color-cursor-bg, #f5f5f7)));
   box-sizing: border-box;
 }
 
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta {
-  display: grid;
-  gap: 2px;
+.studio-cn-book-bar-price {
   min-width: 0;
   flex: 1 1 auto;
-}
-
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta strong {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-cursor-text-bright, var(--mos-text));
 }
 
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-meta span {
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--color-cursor-muted, var(--mos-muted));
-}
-
-.studio-cn-offer-detail.is-mobile .public-offers-mobile-book-nav .public-offers-btn {
+.studio-cn-book-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 14px;
+  min-width: 0;
 }
 
-/* Sheet already has a Book head — flush nested book body. */
-.studio-cn-offer-detail .public-offers-filters-body .public-offers-rail-detail {
-  padding-top: 4px;
+.studio-cn-book-bar-msg {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+}
+
+.studio-cn-book-bar-msg svg {
+  width: 15px;
+  height: 15px;
+}
+
+.studio-cn-book-bar-cta {
+  flex: 0 0 auto !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+}
+
+.studio-cn-book-bar-cta svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Bottom sheet — Settings / menu language (grab + L2 plate). */
+.studio-cn-book-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: auto;
+}
+
+.studio-cn-book-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, #000 42%, transparent);
+  cursor: pointer;
+}
+
+.studio-cn-book-sheet-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: min(72dvh, 640px);
+  max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px));
+  overflow: hidden;
+  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+  background: var(--mos-plate, var(--cursor-surface, var(--color-cursor-sidebar)));
+  box-shadow: var(
+    --studio-mobile-sheet-shadow,
+    0 -10px 32px color-mix(in srgb, #000 28%, transparent)
+  );
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: studio-cn-book-sheet-in 220ms cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+@keyframes studio-cn-book-sheet-in {
+  from {
+    transform: translate3d(0, 16px, 0);
+    opacity: 0.88;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+.studio-cn-book-sheet-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 10px 0 4px;
+}
+
+.studio-cn-book-sheet-grab {
+  width: 44px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-cursor-text-bright, #111) 22%, transparent);
+}
+
+[data-appearance="light"] .studio-cn-book-sheet-grab {
+  background: color-mix(in srgb, #1c1c1e 22%, transparent);
+}
+
+.studio-cn-book-sheet-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 12px 16px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.studio-cn-book-sheet-body::-webkit-scrollbar {
+  display: none;
+}
+
+.studio-cn-book-sheet-body .public-offers-rail-detail {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Offer-detail panel gutters (14px L/R) break width:100% CTAs inside book chrome. */
+.studio-cn-book-sheet .public-offers-panel > :not(h2),
+.studio-cn-book-sidebar .public-offers-panel > :not(h2) {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.studio-cn-book-sheet .public-offers-panel > :not(h2):first-of-type,
+.studio-cn-book-sidebar .public-offers-panel > :not(h2):first-of-type {
+  margin-top: 0;
+}
+
+.studio-cn-book-sheet .public-offers-panel > :not(h2):last-child,
+.studio-cn-book-sidebar .public-offers-panel > :not(h2):last-child {
+  margin-bottom: 0;
+}
+
+.studio-cn-book-sheet .public-offers-panel,
+.studio-cn-book-sidebar .public-offers-panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.studio-cn-book-sheet .public-offers-btn.is-block,
+.studio-cn-book-sidebar .public-offers-btn.is-block {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.studio-cn-book-message-row {
+  justify-content: flex-start !important;
+  gap: 8px !important;
+  min-height: 34px !important;
+  padding: 0 10px !important;
+  font-weight: 650;
 }

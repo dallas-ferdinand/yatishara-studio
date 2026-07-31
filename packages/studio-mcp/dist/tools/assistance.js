@@ -108,6 +108,41 @@ function registerAssistanceTools(server) {
     )
   );
   server.tool(
+    "studio_edit_brief",
+    "Patch assisted brief content fields (subject, objective, keyMessage, production, notes, etc.). Requires expectedRevision. Prefer studio_patch_brief_production for production-only knobs.",
+    {
+      briefId: z.string(),
+      expectedRevision: z.number(),
+      patch: z.object({
+        subject: z.string().optional(),
+        objective: z.string().optional(),
+        audience: z.string().optional(),
+        keyMessage: z.string().optional(),
+        offer: z.string().optional(),
+        platform: z.string().optional(),
+        hook: z.string().optional(),
+        setting: z.string().optional(),
+        visualDirection: z.string().optional(),
+        notes: z.string().optional(),
+        production: productionSchema,
+        brand: z.record(z.unknown()).optional(),
+        audio: z.record(z.unknown()).optional(),
+        timedBeats: z.array(z.unknown()).optional()
+      }).passthrough(),
+      lockFields: z.array(z.string()).optional()
+    },
+    async ({ briefId, expectedRevision, patch, lockFields }) => jsonResult(
+      await studioFetch(`/assistance/briefs/${encodeURIComponent(briefId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          expectedRevision,
+          patch,
+          ...lockFields ? { lockFields } : {}
+        })
+      })
+    )
+  );
+  server.tool(
     "studio_list_pending_approvals",
     "List pending review_ready briefs and workspace side-effect approvals.",
     {

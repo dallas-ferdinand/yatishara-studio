@@ -6,6 +6,7 @@ import {
   normalizeClipTransform,
   type ClipTransform,
 } from "../clipTransform";
+import { normalizeTextTransform } from "../textLayout";
 import { clipOpacityAtLocalTime, textAnimationStyle } from "../editorEffects";
 import type { ClipEffects, EditorMediaItem, EditorProject } from "../types";
 import { AudioMixer } from "./audio-mixer";
@@ -19,6 +20,7 @@ import { FrameScheduler, type FrameConsumer, type SchedulerMetrics } from "./fra
 import { compileTimeline, sliceAt } from "./timeline-compiler";
 import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
+import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
 
 function transformTuple(
   effects: ClipEffects | undefined,
@@ -38,6 +40,18 @@ function mapTextItems(
   opacity: number;
   translateY: number;
   scale: number;
+  fontFamily: string;
+  bold: boolean;
+  italic: boolean;
+  strokeColor: string;
+  strokeWidth: number;
+  flipX: boolean;
+  flipY: boolean;
+  poseX: number;
+  poseY: number;
+  poseScale: number;
+  rotation: number;
+  clipId: string;
 }> {
   return items
     .filter((item) => Boolean(item.clip.text?.text))
@@ -52,16 +66,46 @@ function mapTextItems(
       );
       const translateY = /translateY\((-?[\d.]+)px\)/.exec(animation.transform);
       const scale = /scale\(([\d.]+)\)/.exec(animation.transform);
+      const pose = normalizeTextTransform(item.clip.effects);
+      const t = item.clip.text;
       return {
-        text: item.clip.text?.text ?? "",
-        fontSize: item.clip.text?.fontSize ?? 42,
-        color: item.clip.text?.color ?? "#fff",
-        align: item.clip.text?.align ?? "center",
+        clipId: item.clipId,
+        text: t?.text ?? "",
+        fontSize: Math.max(12, Math.min(200, Number(t?.fontSize) || 42)),
+        color: t?.color ?? "#fff",
+        align: t?.align ?? "center",
         opacity:
           animation.opacity *
-          clipOpacityAtLocalTime(item.clip.effects, duration, local),
+          clipOpacityAtLocalTime(item.clip.effects, duration, local) *
+          Math.max(0, Math.min(1, Number(t?.opacity) ?? 1)),
         translateY: translateY ? Number(translateY[1]) : 0,
         scale: scale ? Number(scale[1]) : 1,
+        fontFamily: t?.fontFamily ?? "system",
+        bold: Boolean(t?.bold),
+        italic: Boolean(t?.italic),
+        strokeColor: t?.strokeColor ?? "#000000",
+        strokeWidth: Math.max(0, Number(t?.strokeWidth) || 0),
+        flipX: Boolean(t?.flipX),
+        flipY: Boolean(t?.flipY),
+        poseX: pose.x,
+        poseY: pose.y,
+        poseScale: pose.scale,
+        rotation: pose.rotation,
+        underline: Boolean(t?.underline),
+        textCase: t?.textCase ?? "none",
+        letterSpacing: Number(t?.letterSpacing) || 0,
+        lineHeight: Math.max(0.8, Number(t?.lineHeight) || 1.2),
+        verticalAlign: t?.verticalAlign ?? "middle",
+        backgroundColor: t?.backgroundColor ?? null,
+        backgroundPadding: Math.max(0, Number(t?.backgroundPadding) ?? 8),
+        backgroundRadius: Math.max(0, Number(t?.backgroundRadius) ?? 0),
+        shadowColor: t?.shadowColor ?? null,
+        shadowBlur: Math.max(0, Number(t?.shadowBlur) || 0),
+        shadowOffsetX: Number(t?.shadowOffsetX) || 0,
+        shadowOffsetY: Number(t?.shadowOffsetY) || 0,
+        glow: Boolean(t?.glow),
+        glowColor: t?.glowColor ?? "#ffffff",
+        glowBlur: Math.max(0, Number(t?.glowBlur) || 12),
       };
     });
 }
@@ -165,8 +209,8 @@ class EngineConsumer implements FrameConsumer {
     // Touch the promise so failures aren't unhandled; do not await for readiness.
     void audioReady;
     const valid = decoded.filter((item): item is DecodedFrame => item != null);
+    const hasText = slice.textOver.length > 0 || slice.textUnder.length > 0;
     if (valid.length < slice.video.length) {
-      for (const item of valid) item.frame.close();
       // Keep fade envelopes moving even when video decode isn't ready yet.
       this.audio.sync(
         slice,
@@ -174,7 +218,11 @@ class EngineConsumer implements FrameConsumer {
         this.mediaRef.current,
         this.playingRef.current,
       );
-      return false;
+      // Still paint text style changes — don't gate the canvas on video decode.
+      if (!hasText) {
+        for (const item of valid) item.frame.close();
+        return false;
+      }
     }
     // Sync whatever audio is already cached (video stems and/or beds).
     this.onAudioReady();
@@ -235,6 +283,15 @@ class EngineConsumer implements FrameConsumer {
       return;
     }
     this.prepared = null;
+    const textsUnder = mapTextItems(slice.textUnder, slice.timelineTime);
+    const textsOver = mapTextItems(slice.textOver, slice.timelineTime);
+    const families = [
+      ...textsUnder.map((item) => item.fontFamily),
+      ...textsOver.map((item) => item.fontFamily),
+    ].filter((family) => family && !isLegacySystemFont(family));
+    // Document + worker FontFace sets are separate — load both before paint.
+    await Promise.all(families.map((family) => loadGoogleFont(family)));
+    await this.compositor.ensureFonts(families);
     await this.compositor.render({
       frameA: prepared.frameA,
       frameB: prepared.frameB,
@@ -242,8 +299,8 @@ class EngineConsumer implements FrameConsumer {
       transformB: transformTuple(prepared.slice.video[1]?.clip.clip.effects),
       transition: slice.transition?.type,
       progress: slice.transition?.progress,
-      textsUnder: mapTextItems(slice.textUnder, slice.timelineTime),
-      textsOver: mapTextItems(slice.textOver, slice.timelineTime),
+      textsUnder,
+      textsOver,
     });
     if (slice.transition && this.transitionStartedAt > 0) {
       reportPerfMetric(
@@ -316,6 +373,8 @@ export type PlaybackEngineState = {
     height: number;
   } | null;
   previewTransform: (transform: ClipTransform) => void;
+  previewTextTransform: (clipId: string, transform: ClipTransform) => void;
+  setMasterVolume: (volume: number) => void;
   metrics: () => SchedulerMetrics | null;
 };
 
@@ -659,6 +718,29 @@ export function usePlaybackEngine(args: {
         transform.y,
         transform.rotation,
       ]);
+    },
+    previewTextTransform: (clipId: string, transform: ClipTransform) => {
+      const compositor = runtimeRef.current?.compositor;
+      if (!compositor) return;
+      const tuple: [number, number, number, number] = [
+        transform.scale,
+        transform.x,
+        transform.y,
+        transform.rotation,
+      ];
+      // Prefer instance method; fall back to current prototype so HMR-stale
+      // compositor instances (created before updateTextTransform shipped) still work.
+      if (typeof compositor.updateTextTransform === "function") {
+        compositor.updateTextTransform(clipId, tuple);
+        return;
+      }
+      const protoFn = CompositorClient.prototype.updateTextTransform;
+      if (typeof protoFn === "function") {
+        protoFn.call(compositor, clipId, tuple);
+      }
+    },
+    setMasterVolume: (volume: number) => {
+      runtimeRef.current?.audio.setMasterVolume(volume);
     },
     metrics: () => runtimeRef.current?.scheduler.metrics() ?? null,
   };

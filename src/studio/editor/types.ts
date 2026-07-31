@@ -16,6 +16,8 @@ export type TextAnimation = "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDo
 
 export type EditorMode = "select" | "transition" | "text";
 
+export type EditorSidePanel = "inspect" | "export";
+
 export type ClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
@@ -35,13 +37,49 @@ export type ClipTransition = {
   duration: number;
 };
 
+/** Legacy stack ids or any Google Font family name. */
+export type TextFontFamily = string;
+
+export type TextCase = "none" | "upper" | "lower" | "title";
+
+export type TextVerticalAlign = "top" | "middle" | "bottom";
+
 export type TextClipContent = {
   text: string;
   fontSize?: number;
   color?: string;
   align?: "left" | "center" | "right";
+  verticalAlign?: TextVerticalAlign;
   animation?: TextAnimation;
   animationDuration?: number;
+  /** Legacy stack id or Google Font family name. */
+  fontFamily?: TextFontFamily;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textCase?: TextCase;
+  /** Em units relative to font size (0 = default). */
+  letterSpacing?: number;
+  /** Multiplier of font size (1 = default). */
+  lineHeight?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  /** Empty / omitted = no background box. */
+  backgroundColor?: string | null;
+  backgroundPadding?: number;
+  /** Corner radius of the background box (px at 1× pose scale). */
+  backgroundRadius?: number;
+  shadowColor?: string | null;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  glow?: boolean;
+  glowColor?: string;
+  glowBlur?: number;
+  /** Static opacity 0–1 (multiplied with motion animation opacity). */
+  opacity?: number;
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 export type EditorTrack = {
@@ -120,6 +158,7 @@ export type EditorUiState = {
   playing: boolean;
   inspectorOpen: boolean;
   editorMode: EditorMode;
+  sidePanel: EditorSidePanel;
 };
 
 export type EditorState = {

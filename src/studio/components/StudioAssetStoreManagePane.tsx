@@ -64,7 +64,7 @@ export function StudioAssetStoreManagePane() {
   const [busy, setBusy] = useState(false);
   const expiresUnix = useStickySignedUrlExpiry(URL_EXPIRES_SEC);
 
-  const summary = useQuery(api.assetStore.myAssetStoreSummary, {});
+  const summary = useQuery(api.assetStore.myAssetStoreSummary, { nowMs: Date.now() });
   const listings = useQuery(api.assetStore.listMyListings, {});
   const detail = useQuery(
     api.assetStore.getMyListingDetail,

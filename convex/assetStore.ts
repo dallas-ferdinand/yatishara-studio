@@ -1,12 +1,15 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import {
   ensurePublicAssetsFolder,
   ensurePurchasedAssetsFolder,
 } from "./folders";
-import { getMarketplaceSellerForUser, requireApprovedSeller } from "./lib/auth";
+import {
+  getMarketplaceSellerForUser,
+  requireApprovedSellerForUser,
+} from "./lib/auth";
 import {
   assetStorePriceCredits,
   assetStoreSplit,
@@ -308,75 +311,122 @@ export const quoteListPrice = authedQuery({
   },
 });
 
+const myListingRowReturn = v.object({
+  _id: v.id("assetListings"),
+  sourceAssetId: v.id("assets"),
+  originalAssetId: v.optional(v.id("assets")),
+  title: v.string(),
+  description: v.optional(v.string()),
+  audioType: listingAudioType,
+  status: listingStatus,
+  priceCredits: v.number(),
+  priceCents: v.number(),
+  purchaseCount: v.number(),
+  durationSeconds: v.optional(v.number()),
+  submittedAt: v.optional(v.number()),
+  listedAt: v.optional(v.number()),
+  rejectionReason: v.optional(v.string()),
+  platformOwnedAt: v.optional(v.number()),
+  releasedAt: v.optional(v.number()),
+  profitBannedAt: v.optional(v.number()),
+  updatedAt: v.number(),
+});
+
+/** Cap manage-pane fan-out — unbounded .collect() hits the 1s query limit. */
+const MY_LISTINGS_LIMIT = 200;
+
+function toMyListingRow(
+  row: Doc<"assetListings">,
+  creditPriceCents: number,
+) {
+  return {
+    _id: row._id,
+    sourceAssetId: row.sourceAssetId,
+    originalAssetId: row.originalAssetId,
+    title: row.title,
+    description: row.description,
+    audioType: row.audioType,
+    status: row.status,
+    priceCredits: row.priceCredits,
+    priceCents: Math.round(row.priceCredits * creditPriceCents),
+    purchaseCount: row.purchaseCount,
+    durationSeconds: row.durationSeconds,
+    submittedAt: row.submittedAt,
+    listedAt: row.listedAt,
+    rejectionReason: row.rejectionReason,
+    platformOwnedAt: row.platformOwnedAt,
+    releasedAt: row.releasedAt,
+    profitBannedAt: row.profitBannedAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export const listMyListings = authedQuery({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("assetListings"),
-      sourceAssetId: v.id("assets"),
-      originalAssetId: v.optional(v.id("assets")),
-      title: v.string(),
-      description: v.optional(v.string()),
-      audioType: listingAudioType,
-      status: listingStatus,
-      priceCredits: v.number(),
-      priceCents: v.number(),
-      purchaseCount: v.number(),
-      durationSeconds: v.optional(v.number()),
-      submittedAt: v.optional(v.number()),
-      listedAt: v.optional(v.number()),
-      rejectionReason: v.optional(v.string()),
-      platformOwnedAt: v.optional(v.number()),
-      releasedAt: v.optional(v.number()),
-      profitBannedAt: v.optional(v.number()),
-      updatedAt: v.number(),
-    }),
-  ),
+  returns: v.array(myListingRowReturn),
   handler: async (ctx) => {
     const creditPriceCents = await getCreditPriceCents(ctx);
+    // Prefer updatedAt order via compound index; fall back to creation order.
     const rows = await ctx.db
       .query("assetListings")
-      .withIndex("by_seller_user", (q) => q.eq("sellerUserId", ctx.user._id))
-      .collect();
+      .withIndex("by_seller_user_and_updated", (q) =>
+        q.eq("sellerUserId", ctx.user._id),
+      )
+      .order("desc")
+      .take(MY_LISTINGS_LIMIT);
     return rows
       .filter((row) => row.status !== "removed")
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map((row) => ({
-        _id: row._id,
-        sourceAssetId: row.sourceAssetId,
-        originalAssetId: row.originalAssetId,
-        title: row.title,
-        description: row.description,
-        audioType: row.audioType,
-        status: row.status,
-        priceCredits: row.priceCredits,
-        priceCents: Math.round(row.priceCredits * creditPriceCents),
-        purchaseCount: row.purchaseCount,
-        durationSeconds: row.durationSeconds,
-        submittedAt: row.submittedAt,
-        listedAt: row.listedAt,
-        rejectionReason: row.rejectionReason,
-        platformOwnedAt: row.platformOwnedAt,
-        releasedAt: row.releasedAt,
-        profitBannedAt: row.profitBannedAt,
-        updatedAt: row.updatedAt,
-      }));
+      .map((row) => toMyListingRow(row, creditPriceCents));
+  },
+});
+
+/** Slim per-asset lookup for explorer context menu (avoids listMyListings on shell boot). */
+export const getMyListingForAsset = authedQuery({
+  args: { assetId: v.id("assets") },
+  returns: v.union(myListingRowReturn, v.null()),
+  handler: async (ctx, args) => {
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    const bySource = await ctx.db
+      .query("assetListings")
+      .withIndex("by_source_asset", (q) => q.eq("sourceAssetId", args.assetId))
+      .take(8);
+    const byOriginal = await ctx.db
+      .query("assetListings")
+      .withIndex("by_original_asset", (q) =>
+        q.eq("originalAssetId", args.assetId),
+      )
+      .take(8);
+    const seen = new Set<string>();
+    const candidates: Doc<"assetListings">[] = [];
+    for (const row of [...bySource, ...byOriginal]) {
+      if (seen.has(row._id)) continue;
+      seen.add(row._id);
+      if (row.sellerUserId !== ctx.user._id) continue;
+      if (row.status === "removed") continue;
+      candidates.push(row);
+    }
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+    return toMyListingRow(candidates[0]!, creditPriceCents);
   },
 });
 
 export const myAssetStoreSummary = authedQuery({
-  args: {},
+  args: {
+    /** Wall clock from client — never Date.now() inside the query. */
+    nowMs: v.number(),
+  },
   returns: v.object({
     listedCount: v.number(),
     pendingCount: v.number(),
     totalFundsCents: v.number(),
     monthProfitCents: v.number(),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const listings = await ctx.db
       .query("assetListings")
       .withIndex("by_seller_user", (q) => q.eq("sellerUserId", ctx.user._id))
-      .collect();
+      .take(500);
     const listedCount = listings.filter((row) => row.status === "listed").length;
     const pendingCount = listings.filter(
       (row) => row.status === "pending_review",
@@ -385,9 +435,9 @@ export const myAssetStoreSummary = authedQuery({
     const purchases = await ctx.db
       .query("assetPurchases")
       .withIndex("by_seller", (q) => q.eq("sellerUserId", ctx.user._id))
-      .collect();
+      .take(2000);
 
-    const now = new Date();
+    const now = new Date(args.nowMs);
     const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
     let totalFundsCents = 0;
     let monthProfitCents = 0;
@@ -603,15 +653,14 @@ const listPrepareReturn = v.object({
  * Prepare a locked Public-folder catalog copy for listing.
  * Client/action then Bunny-copies (unless alreadyReady) and commits the listing.
  */
-export const prepareListOnNetwork = authedMutation({
-  args: {
-    assetId: v.id("assets"),
-    title: v.string(),
-    description: v.optional(v.string()),
-  },
-  returns: listPrepareReturn,
-  handler: async (ctx, args) => {
-    const { user } = await requireApprovedSeller(ctx);
+
+async function prepareListOnNetworkHandler(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) {
+
+    const { user } = await requireApprovedSellerForUser(ctx, ctx.user._id);
     const asset = await ctx.db.get("assets", args.assetId);
     if (!asset || asset.ownerId !== user._id) {
       throw new Error("Asset not found");
@@ -810,7 +859,17 @@ export const prepareListOnNetwork = authedMutation({
       generateCredits: resolved.generateCredits,
       priceCredits,
     };
+  
+}
+
+export const prepareListOnNetwork = authedMutation({
+  args: {
+    assetId: v.id("assets"),
+    title: v.string(),
+    description: v.optional(v.string()),
   },
+  returns: listPrepareReturn,
+  handler: async (ctx, args) => prepareListOnNetworkHandler(ctx, args),
 });
 
 export const finalizeListCopyInternal = internalMutation({
@@ -891,21 +950,14 @@ export const failListCopy = authedMutation({
 });
 
 /** Insert or refresh listing after Public copy is ready. */
-export const commitListOnNetwork = authedMutation({
-  args: {
-    publicAssetId: v.id("assets"),
-    originalAssetId: v.id("assets"),
-    existingListingId: v.optional(v.id("assetListings")),
-    title: v.string(),
-    description: v.optional(v.string()),
-    audioType: listingAudioType,
-    durationSeconds: v.optional(v.number()),
-    generateCredits: v.number(),
-    priceCredits: v.number(),
-  },
-  returns: v.id("assetListings"),
-  handler: async (ctx, args) => {
-    const { user, seller } = await requireApprovedSeller(ctx);
+
+async function commitListOnNetworkHandler(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) {
+
+    const { user, seller } = await requireApprovedSellerForUser(ctx, ctx.user._id);
     const publicAsset = await ctx.db.get("assets", args.publicAssetId);
     if (
       !publicAsset ||
@@ -998,13 +1050,32 @@ export const commitListOnNetwork = authedMutation({
       createdAt: now,
       updatedAt: now,
     });
+  
+}
+
+export const commitListOnNetwork = authedMutation({
+  args: {
+    publicAssetId: v.id("assets"),
+    originalAssetId: v.id("assets"),
+    existingListingId: v.optional(v.id("assetListings")),
+    title: v.string(),
+    description: v.optional(v.string()),
+    audioType: listingAudioType,
+    durationSeconds: v.optional(v.number()),
+    generateCredits: v.number(),
+    priceCredits: v.number(),
   },
+  returns: v.id("assetListings"),
+  handler: async (ctx, args) => commitListOnNetworkHandler(ctx, args),
 });
 
-export const unlistFromNetwork = authedMutation({
-  args: { listingId: v.id("assetListings") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
+
+async function unlistFromNetworkHandler(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) {
+
     const listing = await ctx.db.get("assetListings", args.listingId);
     if (!listing || listing.sellerUserId !== ctx.user._id) {
       throw new Error("Listing not found");
@@ -1028,7 +1099,13 @@ export const unlistFromNetwork = authedMutation({
       updatedAt: Date.now(),
     });
     return null;
-  },
+  
+}
+
+export const unlistFromNetwork = authedMutation({
+  args: { listingId: v.id("assetListings") },
+  returns: v.null(),
+  handler: async (ctx, args) => unlistFromNetworkHandler(ctx, args),
 });
 
 /** Seller releases a sold listing to the platform — stays live, future profits = platform. */
@@ -1062,17 +1139,13 @@ export const releaseListingToPlatform = authedMutation({
 /**
  * Debit buyer, create pending copy + purchase + payout, return paths for the action.
  */
-export const preparePurchase = authedMutation({
-  args: { listingId: v.id("assetListings") },
-  returns: v.object({
-    purchaseId: v.id("assetPurchases"),
-    buyerAssetId: v.id("assets"),
-    sourceBunnyPath: v.string(),
-    destBunnyPath: v.string(),
-    mimeType: v.string(),
-    alreadyOwned: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
+
+async function preparePurchaseHandler(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) {
+
     const listing = await ctx.db.get("assetListings", args.listingId);
     if (!listing || listing.status !== "listed") {
       throw new Error("Listing is not available");
@@ -1254,18 +1327,29 @@ export const preparePurchase = authedMutation({
       mimeType: source.mimeType || "audio/mpeg",
       alreadyOwned: false,
     };
-  },
+  
+}
+
+export const preparePurchase = authedMutation({
+  args: { listingId: v.id("assetListings") },
+  returns: v.object({
+    purchaseId: v.id("assetPurchases"),
+    buyerAssetId: v.id("assets"),
+    sourceBunnyPath: v.string(),
+    destBunnyPath: v.string(),
+    mimeType: v.string(),
+    alreadyOwned: v.boolean(),
+  }),
+  handler: async (ctx, args) => preparePurchaseHandler(ctx, args),
 });
 
-export const finalizePurchaseCopy = authedMutation({
-  args: {
-    purchaseId: v.id("assetPurchases"),
-    bunnyPath: v.string(),
-    byteSize: v.number(),
-    mimeType: v.string(),
-  },
-  returns: v.id("assets"),
-  handler: async (ctx, args) => {
+
+async function finalizePurchaseCopyHandler(
+  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any,
+) {
+
     const purchase = await ctx.db.get("assetPurchases", args.purchaseId);
     if (!purchase || purchase.buyerUserId !== ctx.user._id) {
       throw new Error("Purchase not found");
@@ -1295,7 +1379,18 @@ export const finalizePurchaseCopy = authedMutation({
       });
     }
     return asset._id;
+  
+}
+
+export const finalizePurchaseCopy = authedMutation({
+  args: {
+    purchaseId: v.id("assetPurchases"),
+    bunnyPath: v.string(),
+    byteSize: v.number(),
+    mimeType: v.string(),
   },
+  returns: v.id("assets"),
+  handler: async (ctx, args) => finalizePurchaseCopyHandler(ctx, args),
 });
 
 export const failPurchaseCopy = authedMutation({
@@ -1645,3 +1740,792 @@ export const enforceUnpaidStorageListingPolicy = internalMutation({
     return { sellersChecked, listingsRemoved };
   },
 });
+
+// —— API (ForApi) ——
+// Internal entrypoints for HTTP / MCP. userId first; list/commit require approved seller.
+
+type ApiUser = Doc<"users"> & { _id: Id<"users"> };
+
+async function loadUserForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApiUser> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return { ...user, _id: userId };
+}
+
+async function asAuthedMutationForApi(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+): Promise<MutationCtx & { user: ApiUser }> {
+  const user = await loadUserForApi(ctx, userId);
+  return Object.assign(ctx, { user });
+}
+
+export const browseListingsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    audioType: v.optional(listingAudioType),
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    expiresUnix: v.number(),
+  },
+  returns: v.array(listingCardReturn),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 48, 1), 100);
+    const search = args.search?.trim().toLowerCase();
+    let rows: Doc<"assetListings">[];
+    if (args.audioType) {
+      rows = await ctx.db
+        .query("assetListings")
+        .withIndex("by_audio_type_and_status", (q) =>
+          q.eq("audioType", args.audioType!).eq("status", "listed"),
+        )
+        .order("desc")
+        .take(limit * 3);
+    } else {
+      rows = await ctx.db
+        .query("assetListings")
+        .withIndex("by_status_and_listed", (q) => q.eq("status", "listed"))
+        .order("desc")
+        .take(limit * 3);
+    }
+    const filtered = search
+      ? rows.filter(
+          (row) =>
+            row.title.toLowerCase().includes(search) ||
+            (row.description?.toLowerCase().includes(search) ?? false),
+        )
+      : rows;
+    const out = [];
+    for (const listing of filtered.slice(0, limit)) {
+      out.push(
+        await toListingCard(ctx, listing, {
+          expiresUnix: args.expiresUnix,
+          buyerUserId: args.userId,
+        }),
+      );
+    }
+    return out;
+  },
+});
+
+export const getListingForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+    expiresUnix: v.number(),
+  },
+  returns: v.union(listingCardReturn, v.null()),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing || listing.status !== "listed") return null;
+    return await toListingCard(ctx, listing, {
+      expiresUnix: args.expiresUnix,
+      buyerUserId: args.userId,
+    });
+  },
+});
+
+export const quoteListPriceForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+  },
+  returns: v.object({
+    audioType: listingAudioType,
+    durationSeconds: v.optional(v.number()),
+    generateCredits: v.number(),
+    priceCredits: v.number(),
+    priceCents: v.number(),
+    canList: v.boolean(),
+    reason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const asset = await ctx.db.get("assets", args.assetId);
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    if (!asset || asset.ownerId !== args.userId) {
+      return {
+        audioType: "sfx" as const,
+        generateCredits: 0,
+        priceCredits: 0,
+        priceCents: 0,
+        canList: false,
+        reason: "Asset not found",
+      };
+    }
+    const seller = await getMarketplaceSellerForUser(ctx, args.userId);
+    if (!seller || seller.status !== "approved") {
+      return {
+        audioType: "sfx" as const,
+        generateCredits: 0,
+        priceCredits: 0,
+        priceCents: 0,
+        canList: false,
+        reason: "Approved Creative Network seller required",
+      };
+    }
+    try {
+      const resolved = await resolveListableAudio(ctx, asset);
+      const priceCredits = assetStorePriceCredits(resolved.generateCredits);
+      return {
+        audioType: resolved.audioType,
+        durationSeconds: resolved.durationSeconds,
+        generateCredits: resolved.generateCredits,
+        priceCredits,
+        priceCents: Math.round(priceCredits * creditPriceCents),
+        canList: true,
+      };
+    } catch (error) {
+      return {
+        audioType: "sfx" as const,
+        generateCredits: 0,
+        priceCredits: 0,
+        priceCents: 0,
+        canList: false,
+        reason: error instanceof Error ? error.message : "Cannot list",
+      };
+    }
+  },
+});
+
+export const listMyListingsForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(myListingRowReturn),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    const rows = await ctx.db
+      .query("assetListings")
+      .withIndex("by_seller_user_and_updated", (q) =>
+        q.eq("sellerUserId", args.userId),
+      )
+      .order("desc")
+      .take(MY_LISTINGS_LIMIT);
+    return rows
+      .filter((row) => row.status !== "removed")
+      .map((row) => toMyListingRow(row, creditPriceCents));
+  },
+});
+
+export const getMyListingForAssetForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+  },
+  returns: v.union(myListingRowReturn, v.null()),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    const bySource = await ctx.db
+      .query("assetListings")
+      .withIndex("by_source_asset", (q) => q.eq("sourceAssetId", args.assetId))
+      .take(8);
+    const byOriginal = await ctx.db
+      .query("assetListings")
+      .withIndex("by_original_asset", (q) =>
+        q.eq("originalAssetId", args.assetId),
+      )
+      .take(8);
+    const seen = new Set<string>();
+    const candidates: Doc<"assetListings">[] = [];
+    for (const row of [...bySource, ...byOriginal]) {
+      if (seen.has(row._id)) continue;
+      seen.add(row._id);
+      if (row.sellerUserId !== args.userId) continue;
+      if (row.status === "removed") continue;
+      candidates.push(row);
+    }
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+    return toMyListingRow(candidates[0]!, creditPriceCents);
+  },
+});
+
+export const myAssetStoreSummaryForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    nowMs: v.number(),
+  },
+  returns: v.object({
+    listedCount: v.number(),
+    pendingCount: v.number(),
+    totalFundsCents: v.number(),
+    monthProfitCents: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const listings = await ctx.db
+      .query("assetListings")
+      .withIndex("by_seller_user", (q) => q.eq("sellerUserId", args.userId))
+      .take(500);
+    const listedCount = listings.filter((row) => row.status === "listed").length;
+    const pendingCount = listings.filter(
+      (row) => row.status === "pending_review",
+    ).length;
+    const purchases = await ctx.db
+      .query("assetPurchases")
+      .withIndex("by_seller", (q) => q.eq("sellerUserId", args.userId))
+      .take(2000);
+    const now = new Date(args.nowMs);
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    let totalFundsCents = 0;
+    let monthProfitCents = 0;
+    for (const purchase of purchases) {
+      const gross = Math.round(purchase.priceCredits * purchase.creditPriceCents);
+      totalFundsCents += gross;
+      if (purchase.createdAt >= monthStart) {
+        monthProfitCents += purchase.sellerPayoutCents;
+      }
+    }
+    return { listedCount, pendingCount, totalFundsCents, monthProfitCents };
+  },
+});
+
+const myListingDetailReturnForApi = v.union(
+  v.object({
+    _id: v.id("assetListings"),
+    sourceAssetId: v.id("assets"),
+    originalAssetId: v.optional(v.id("assets")),
+    title: v.string(),
+    description: v.optional(v.string()),
+    audioType: listingAudioType,
+    status: listingStatus,
+    priceCredits: v.number(),
+    priceCents: v.number(),
+    purchaseCount: v.number(),
+    durationSeconds: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    listedAt: v.optional(v.number()),
+    rejectionReason: v.optional(v.string()),
+    platformOwnedAt: v.optional(v.number()),
+    releasedAt: v.optional(v.number()),
+    profitBannedAt: v.optional(v.number()),
+    profitBanReason: v.optional(v.string()),
+    previewUrl: v.optional(v.string()),
+    canUnlist: v.boolean(),
+    canRelease: v.boolean(),
+    canResubmit: v.boolean(),
+    orders: v.array(
+      v.object({
+        _id: v.id("assetPurchases"),
+        createdAt: v.number(),
+        priceCents: v.number(),
+        sellerPayoutCents: v.number(),
+        platformCents: v.number(),
+        buyerLabel: v.string(),
+      }),
+    ),
+    updatedAt: v.number(),
+  }),
+  v.null(),
+);
+
+export const getMyListingDetailForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+    expiresUnix: v.number(),
+  },
+  returns: myListingDetailReturnForApi,
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing || listing.sellerUserId !== args.userId) return null;
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    let previewUrl: string | undefined;
+    const source = await ctx.db.get("assets", listing.sourceAssetId);
+    if (source?.bunnyPath && !source.deletedAt && !source.purgedAt) {
+      previewUrl = await signBunnyFullUrl(
+        source.bunnyPath,
+        args.expiresUnix,
+        "audio",
+      );
+    }
+    const purchases = await ctx.db
+      .query("assetPurchases")
+      .withIndex("by_listing", (q) => q.eq("listingId", listing._id))
+      .collect();
+    purchases.sort((a, b) => b.createdAt - a.createdAt);
+    const orders = [];
+    for (const purchase of purchases) {
+      const buyer = await ctx.db.get("users", purchase.buyerUserId);
+      const platformCents = Math.round(
+        purchase.platformCredits * purchase.creditPriceCents,
+      );
+      orders.push({
+        _id: purchase._id,
+        createdAt: purchase.createdAt,
+        priceCents: Math.round(purchase.priceCredits * purchase.creditPriceCents),
+        sellerPayoutCents: purchase.sellerPayoutCents,
+        platformCents,
+        buyerLabel: buyer?.name
+          ? buyer.name
+          : buyer?.email
+            ? `${buyer.email.slice(0, 3)}…`
+            : "Buyer",
+      });
+    }
+    const platformOwned = Boolean(listing.platformOwnedAt);
+    return {
+      _id: listing._id,
+      sourceAssetId: listing.sourceAssetId,
+      originalAssetId: listing.originalAssetId,
+      title: listing.title,
+      description: listing.description,
+      audioType: listing.audioType,
+      status: listing.status,
+      priceCredits: listing.priceCredits,
+      priceCents: Math.round(listing.priceCredits * creditPriceCents),
+      purchaseCount: listing.purchaseCount,
+      durationSeconds: listing.durationSeconds,
+      submittedAt: listing.submittedAt,
+      listedAt: listing.listedAt,
+      rejectionReason: listing.rejectionReason,
+      platformOwnedAt: listing.platformOwnedAt,
+      releasedAt: listing.releasedAt,
+      profitBannedAt: listing.profitBannedAt,
+      profitBanReason: listing.profitBanReason,
+      previewUrl,
+      canUnlist:
+        !platformOwned &&
+        listing.purchaseCount === 0 &&
+        (listing.status === "listed" || listing.status === "pending_review"),
+      canRelease:
+        !platformOwned &&
+        listing.status === "listed" &&
+        listing.purchaseCount > 0,
+      canResubmit:
+        !platformOwned &&
+        (listing.status === "rejected" || listing.status === "unlisted"),
+      orders,
+      updatedAt: listing.updatedAt,
+    };
+  },
+});
+
+export const prepareListOnNetworkForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+    title: v.string(),
+    description: v.optional(v.string()),
+  },
+  returns: listPrepareReturn,
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    return await prepareListOnNetworkHandler(authed, {
+      assetId: args.assetId,
+      title: args.title,
+      description: args.description,
+    });
+  },
+});
+
+export const commitListOnNetworkForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    publicAssetId: v.id("assets"),
+    originalAssetId: v.id("assets"),
+    existingListingId: v.optional(v.id("assetListings")),
+    title: v.string(),
+    description: v.optional(v.string()),
+    audioType: listingAudioType,
+    durationSeconds: v.optional(v.number()),
+    generateCredits: v.number(),
+    priceCredits: v.number(),
+  },
+  returns: v.id("assetListings"),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    return await commitListOnNetworkHandler(authed, {
+      publicAssetId: args.publicAssetId,
+      originalAssetId: args.originalAssetId,
+      existingListingId: args.existingListingId,
+      title: args.title,
+      description: args.description,
+      audioType: args.audioType,
+      durationSeconds: args.durationSeconds,
+      generateCredits: args.generateCredits,
+      priceCredits: args.priceCredits,
+    });
+  },
+});
+
+export const unlistFromNetworkForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    return await unlistFromNetworkHandler(authed, { listingId: args.listingId });
+  },
+});
+
+export const preparePurchaseForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+  },
+  returns: v.object({
+    purchaseId: v.id("assetPurchases"),
+    buyerAssetId: v.id("assets"),
+    sourceBunnyPath: v.string(),
+    destBunnyPath: v.string(),
+    mimeType: v.string(),
+    alreadyOwned: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    return await preparePurchaseHandler(authed, { listingId: args.listingId });
+  },
+});
+
+export const finalizePurchaseCopyForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    purchaseId: v.id("assetPurchases"),
+    bunnyPath: v.string(),
+    byteSize: v.number(),
+    mimeType: v.string(),
+  },
+  returns: v.id("assets"),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    return await finalizePurchaseCopyHandler(authed, {
+      purchaseId: args.purchaseId,
+      bunnyPath: args.bunnyPath,
+      byteSize: args.byteSize,
+      mimeType: args.mimeType,
+    });
+  },
+});
+
+
+function assertApiAdminUser(user: ApiUser): void {
+  if (user.role !== "admin" && user.role !== "super_admin") {
+    throw new Error("Admin access required");
+  }
+}
+
+export const releaseListingToPlatformForApi = internalMutation({
+  args: { userId: v.id("users"), listingId: v.id("assetListings") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing || listing.sellerUserId !== authed.user._id) {
+      throw new Error("Listing not found");
+    }
+    if (listing.platformOwnedAt) {
+      throw new Error("Already released to the platform");
+    }
+    if (listing.status !== "listed") {
+      throw new Error("Only live listings can be released");
+    }
+    if (listing.purchaseCount < 1) {
+      throw new Error("Release is for listings that have been purchased");
+    }
+    const now = Date.now();
+    await ctx.db.patch(listing._id, {
+      platformOwnedAt: now,
+      releasedAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminListAssetSubmissionsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    filter: v.optional(adminListingFilter),
+    expiresUnix: v.number(),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("assetListings"),
+      title: v.string(),
+      description: v.optional(v.string()),
+      audioType: listingAudioType,
+      status: listingStatus,
+      priceCents: v.number(),
+      purchaseCount: v.number(),
+      durationSeconds: v.optional(v.number()),
+      sellerBusinessName: v.string(),
+      sellerUserId: v.id("users"),
+      previewUrl: v.optional(v.string()),
+      submittedAt: v.optional(v.number()),
+      listedAt: v.optional(v.number()),
+      rejectionReason: v.optional(v.string()),
+      platformOwnedAt: v.optional(v.number()),
+      profitBannedAt: v.optional(v.number()),
+      profitBanReason: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await loadUserForApi(ctx, args.userId);
+    assertApiAdminUser(user);
+    const filter = args.filter ?? "pending_review";
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    let rows: Doc<"assetListings">[];
+    if (filter === "all") {
+      rows = await ctx.db.query("assetListings").order("desc").take(200);
+    } else if (filter === "platform_owned") {
+      const listed = await ctx.db
+        .query("assetListings")
+        .withIndex("by_status", (q) => q.eq("status", "listed"))
+        .order("desc")
+        .take(200);
+      rows = listed.filter((row) => Boolean(row.platformOwnedAt));
+    } else {
+      rows = await ctx.db
+        .query("assetListings")
+        .withIndex("by_status_and_submitted", (q) => q.eq("status", filter))
+        .order("desc")
+        .take(150);
+      if (rows.length === 0) {
+        rows = (
+          await ctx.db
+            .query("assetListings")
+            .withIndex("by_status", (q) => q.eq("status", filter))
+            .order("desc")
+            .take(150)
+        ).sort((a, b) => (b.submittedAt ?? b.createdAt) - (a.submittedAt ?? a.createdAt));
+      }
+    }
+    const out = [];
+    for (const listing of rows) {
+      const seller = await ctx.db.get("marketplaceSellers", listing.sellerId);
+      let previewUrl: string | undefined;
+      const source = await ctx.db.get("assets", listing.sourceAssetId);
+      if (source?.bunnyPath && !source.deletedAt && !source.purgedAt) {
+        previewUrl = await signBunnyFullUrl(
+          source.bunnyPath,
+          args.expiresUnix,
+          "audio",
+        );
+      }
+      out.push({
+        _id: listing._id,
+        title: listing.title,
+        description: listing.description,
+        audioType: listing.audioType,
+        status: listing.status,
+        priceCents: Math.round(listing.priceCredits * creditPriceCents),
+        purchaseCount: listing.purchaseCount,
+        durationSeconds: listing.durationSeconds,
+        sellerBusinessName: seller?.businessName ?? "Seller",
+        sellerUserId: listing.sellerUserId,
+        previewUrl,
+        submittedAt: listing.submittedAt,
+        listedAt: listing.listedAt,
+        rejectionReason: listing.rejectionReason,
+        platformOwnedAt: listing.platformOwnedAt,
+        profitBannedAt: listing.profitBannedAt,
+        profitBanReason: listing.profitBanReason,
+        createdAt: listing.createdAt,
+        updatedAt: listing.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const adminApproveListingForApi = internalMutation({
+  args: { userId: v.id("users"), listingId: v.id("assetListings") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await loadUserForApi(ctx, args.userId);
+    assertApiAdminUser(user);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing) throw new Error("Listing not found");
+    if (listing.status !== "pending_review") {
+      throw new Error("Only pending submissions can be approved");
+    }
+    const now = Date.now();
+    await ctx.db.patch(listing._id, {
+      status: "listed",
+      listedAt: now,
+      reviewedAt: now,
+      reviewedBy: user._id,
+      rejectionReason: undefined,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminRejectListingForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+    reason: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await loadUserForApi(ctx, args.userId);
+    assertApiAdminUser(user);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing) throw new Error("Listing not found");
+    if (listing.status !== "pending_review") {
+      throw new Error("Only pending submissions can be rejected");
+    }
+    const reason = args.reason.trim();
+    if (!reason) throw new Error("Rejection reason is required");
+    const now = Date.now();
+    await ctx.db.patch(listing._id, {
+      status: "rejected",
+      rejectionReason: reason.slice(0, 500),
+      reviewedAt: now,
+      reviewedBy: user._id,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminRemoveListingForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    listingId: v.id("assetListings"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await loadUserForApi(ctx, args.userId);
+    assertApiAdminUser(user);
+    const listing = await ctx.db.get("assetListings", args.listingId);
+    if (!listing) throw new Error("Listing not found");
+    const now = Date.now();
+    const reason = args.reason?.trim();
+    await ctx.db.patch(listing._id, {
+      status: "removed",
+      profitBannedAt: listing.profitBannedAt ?? now,
+      profitBanReason:
+        reason?.slice(0, 500) ||
+        listing.profitBanReason ||
+        "Removed by admin",
+      reviewedAt: now,
+      reviewedBy: user._id,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+
+export const failListCopyForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    publicAssetId: v.id("assets"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    const asset = await ctx.db.get("assets", args.publicAssetId);
+    if (
+      !asset ||
+      asset.ownerId !== authed.user._id ||
+      asset.licenseKind !== "listed_network"
+    ) {
+      throw new Error("Public catalog asset not found");
+    }
+    if (asset.storageStatus === "ready" && asset.bunnyPath) {
+      return null;
+    }
+    const listing = await ctx.db
+      .query("assetListings")
+      .withIndex("by_source_asset", (q) => q.eq("sourceAssetId", asset._id))
+      .unique();
+    if (listing) {
+      await ctx.db.patch(asset._id, {
+        storageStatus: "failed",
+        updatedAt: Date.now(),
+      });
+      return null;
+    }
+    await ctx.db.delete(asset._id);
+    return null;
+  },
+});
+
+export const failPurchaseCopyForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    purchaseId: v.id("assetPurchases"),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedMutationForApi(ctx, args.userId);
+    const purchase = await ctx.db.get("assetPurchases", args.purchaseId);
+    if (!purchase || purchase.buyerUserId !== authed.user._id) {
+      throw new Error("Purchase not found");
+    }
+    const asset = await ctx.db.get("assets", purchase.buyerAssetId);
+    if (asset && asset.storageStatus !== "ready") {
+      await ctx.db.patch(asset._id, {
+        storageStatus: "failed",
+        updatedAt: Date.now(),
+      });
+    }
+    if (!asset?.bunnyPath || asset.storageStatus !== "ready") {
+      const account = await ctx.db
+        .query("billingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", authed.user._id))
+        .unique();
+      if (account) {
+        const now = Date.now();
+        const balanceAfter = account.creditBalance + purchase.priceCredits;
+        await ctx.db.patch(account._id, {
+          creditBalance: balanceAfter,
+          updatedAt: now,
+        });
+        await ctx.db.insert("creditTransactions", {
+          userId: authed.user._id,
+          billingAccountId: account._id,
+          kind: "refunded",
+          amount: purchase.priceCredits,
+          balanceAfter,
+          assetPurchaseId: purchase._id,
+          reversesTransactionId: purchase.creditTransactionId,
+          reason: `Purchase copy failed: ${args.error.slice(0, 120)}`,
+          createdAt: now,
+        });
+      }
+      const payout = await ctx.db
+        .query("sellerPayouts")
+        .withIndex("by_asset_purchase", (q) =>
+          q.eq("assetPurchaseId", purchase._id),
+        )
+        .unique();
+      if (payout && payout.status === "owed") {
+        await ctx.db.patch(payout._id, {
+          status: "paid",
+          paidAt: Date.now(),
+          adminNote: "Voided — purchase copy failed; buyer refunded",
+          updatedAt: Date.now(),
+        });
+      }
+      const listing = await ctx.db.get("assetListings", purchase.listingId);
+      if (listing && listing.purchaseCount > 0) {
+        await ctx.db.patch(listing._id, {
+          purchaseCount: listing.purchaseCount - 1,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+    return null;
+  },
+});
+

@@ -4221,8 +4221,8 @@ input[type="search"]:focus-visible {
 }
 
 .studio-file-select-toggle {
-  margin-left: auto;
-  margin-right: 6px;
+  /* Spacing comes from pathbar-tools / inline-tools gap — no extra margin. */
+  margin: 0;
   flex: 0 0 auto;
   min-width: 24px;
   width: 24px;
@@ -4244,11 +4244,8 @@ input[type="search"]:focus-visible {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  gap: 4px;
   padding: 4px 8px 2px;
-}
-
-.studio-file-inline-tools .studio-file-select-toggle {
-  margin-right: 0;
 }
 
 .studio-file-selection-bar {

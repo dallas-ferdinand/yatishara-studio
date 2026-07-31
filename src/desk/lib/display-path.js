@@ -1,4 +1,4 @@
-export function displayWorkspacePath(path, rootLabel = "files") {
+export function displayWorkspacePath(path, rootLabel = "Files") {
   const clean = String(path ?? "")
     .replace(/\\/g, "/")
     .replace(/^\/+|\/+$/g, "");
@@ -7,6 +7,6 @@ export function displayWorkspacePath(path, rootLabel = "files") {
   return [rootLabel, ...visibleParts].filter(Boolean).join("/");
 }
 
-export function displayEntryPath(entry, rootLabel = "files") {
+export function displayEntryPath(entry, rootLabel = "Files") {
   return entry?.displayPath ?? displayWorkspacePath(entry?.path, rootLabel);
 }

@@ -3,6 +3,8 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Check,
   CheckCheck,
   FolderOpen,
@@ -11,13 +13,17 @@ import {
   Hammer,
   MessageCircle,
   Mic,
+  Copy,
   Paperclip,
+  Pencil,
   Reply,
   SendHorizontal,
   Tags,
   Trash2,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import {
   useCallback,
@@ -27,6 +33,7 @@ import {
   useState,
   memo,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -86,9 +93,17 @@ const ALLOWED_IMAGE_TYPES = new Set([
 ]);
 
 type PendingImage = {
-  file: File;
+  /** Local upload (device / paste). */
+  file?: File;
+  /** Already-owned Studio Files asset. */
+  assetId?: Id<"assets">;
+  name: string;
   previewUrl: string;
 };
+
+function revokePendingPreview(url: string) {
+  if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
 
 const MAX_PENDING_IMAGES = 10;
 
@@ -139,13 +154,16 @@ function DmMessageMeta({
   createdAt,
   fromMe,
   receipt,
+  edited,
 }: {
   createdAt: number;
   fromMe: boolean;
   receipt: DmReceipt;
+  edited?: boolean;
 }) {
   return (
     <span className="studio-dm-meta">
+      {edited ? <span className="studio-dm-edited">edited</span> : null}
       <time dateTime={new Date(createdAt).toISOString()}>
         {timeLabel(createdAt)}
       </time>
@@ -189,6 +207,8 @@ type DmMessageRow = {
   replyTo?: DmReplySnippet;
   feedShare?: DmFeedShare;
   createdAt: number;
+  editedAt?: number;
+  deleted?: boolean;
 };
 
 function replySnippetLabel(
@@ -226,6 +246,126 @@ function feedShareNote(
   if (shared && note === shared) return null;
   return note;
 }
+
+function copyableDmText(message: DmMessageRow): string | null {
+  if (message.deleted) return null;
+  if (message.kind === "voice") return null;
+  if (message.kind === "post" || message.kind === "comment") {
+    return feedShareNote(message);
+  }
+  const body = message.body.trim();
+  return body || null;
+}
+
+async function copyDmText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    // Ignore clipboard failures (permissions / insecure context).
+  }
+}
+
+function clearNativeTextSelection() {
+  const sel = window.getSelection?.();
+  if (sel && sel.rangeCount > 0) sel.removeAllRanges();
+}
+
+
+function autosizeDmEditTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "0px";
+  const minPx = 160;
+  const maxPx = Math.min(window.innerHeight * 0.6, 448);
+  el.style.height = `${Math.min(Math.max(el.scrollHeight, minPx), maxPx)}px`;
+}
+
+
+type DmMessageActionHandlers = {
+  onReply: (message: DmMessageRow) => void;
+  onStartEdit: (message: DmMessageRow) => void;
+  onDeleteForMe: (message: DmMessageRow) => void;
+  onDeleteForEveryone: (message: DmMessageRow) => void;
+  editingMessageId: Id<"dmMessages"> | null;
+  editDraft: string;
+  onEditDraftChange: (value: string) => void;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  editBusy: boolean;
+};
+
+function buildDmBubbleMenuItems(
+  message: DmMessageRow,
+  handlers: Pick<
+    DmMessageActionHandlers,
+    "onReply" | "onStartEdit" | "onDeleteForMe" | "onDeleteForEveryone"
+  >,
+): StudioDmContextMenuItem[] {
+  if (message.deleted) {
+    return [
+      {
+        key: "reply",
+        label: "Reply",
+        icon: <Reply aria-hidden="true" />,
+        onSelect: () => handlers.onReply(message),
+      },
+      {
+        key: "delete-me",
+        label: "Delete for me",
+        icon: <Trash2 aria-hidden="true" />,
+        danger: true,
+        onSelect: () => handlers.onDeleteForMe(message),
+      },
+    ];
+  }
+  const items: StudioDmContextMenuItem[] = [
+    {
+      key: "reply",
+      label: "Reply",
+      icon: <Reply aria-hidden="true" />,
+      onSelect: () => handlers.onReply(message),
+    },
+  ];
+  const copyText = copyableDmText(message);
+  if (copyText) {
+    items.push({
+      key: "copy",
+      label: "Copy",
+      icon: <Copy aria-hidden="true" />,
+      onSelect: () => {
+        void copyDmText(copyText);
+      },
+    });
+  }
+  const canEdit =
+    message.fromMe &&
+    (message.kind === "text" || message.kind === "image");
+  if (canEdit) {
+    items.push({
+      key: "edit",
+      label: "Edit",
+      icon: <Pencil aria-hidden="true" />,
+      onSelect: () => handlers.onStartEdit(message),
+    });
+  }
+  items.push({
+    key: "delete-me",
+    label: "Delete for me",
+    icon: <Trash2 aria-hidden="true" />,
+    danger: true,
+    onSelect: () => handlers.onDeleteForMe(message),
+  });
+  if (message.fromMe) {
+    items.push({
+      key: "delete-everyone",
+      label: "Delete for everyone",
+      icon: <Trash2 aria-hidden="true" />,
+      danger: true,
+      onSelect: () => handlers.onDeleteForEveryone(message),
+    });
+  }
+  return items;
+}
+
 
 function ReplyKindIcon({
   kind,
@@ -371,6 +511,7 @@ function DmReplyQuote({
             src={snippet.audioUrl!}
             title="Voice message"
             durationHint={snippet.durationSec}
+            compact
           />
         </div>
       ) : null}
@@ -392,21 +533,693 @@ function DmReplyQuote({
   );
 }
 
+
+type DmLightboxItem = {
+  url: string;
+  caption?: string;
+  fromMe: boolean;
+  createdAt: number;
+};
+
+type DmLightboxState = {
+  items: DmLightboxItem[];
+  index: number;
+};
+
+const DM_LB_ZOOM_MIN = 0.25;
+const DM_LB_ZOOM_MAX = 5;
+const DM_LB_ZOOM_STEP = 0.1;
+const DM_LB_ZOOM_FIT = 1;
+
+function clampDmLightboxZoom(value: number): number {
+  const stepped = Math.round(value * 100) / 100;
+  return Math.min(DM_LB_ZOOM_MAX, Math.max(DM_LB_ZOOM_MIN, stepped));
+}
+
+/** WhatsApp-style photo viewer — clipped to the Messages chat pane only. */
+function DmPhotoLightbox({
+  state,
+  peerLabel,
+  peerAvatarUrl,
+  peerUsername,
+  meLabel,
+  meAvatarUrl,
+  meUsername,
+  onClose,
+  onIndex,
+}: {
+  state: DmLightboxState;
+  peerLabel: string;
+  peerAvatarUrl?: string | null;
+  peerUsername?: string;
+  meLabel: string;
+  meAvatarUrl?: string | null;
+  meUsername?: string;
+  onClose: () => void;
+  onIndex: (index: number) => void;
+}) {
+  const { items, index } = state;
+  const active = items[Math.min(Math.max(index, 0), items.length - 1)];
+  const hasMany = items.length > 1;
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  } | null>(null);
+  const panRef = useRef({ x: 0, y: 0 });
+  const thumbStripRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [zoom, setZoom] = useState(DM_LB_ZOOM_FIT);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+
+  const applyPan = useCallback((next: { x: number; y: number }) => {
+    panRef.current = next;
+    setPan(next);
+  }, []);
+
+  const bumpZoom = useCallback((delta: number) => {
+    setZoom((current) => clampDmLightboxZoom(current + delta));
+  }, []);
+
+  useEffect(() => {
+    setZoom(DM_LB_ZOOM_FIT);
+    panRef.current = { x: 0, y: 0 };
+    setPan({ x: 0, y: 0 });
+    setDragging(false);
+    dragRef.current = null;
+  }, [index, active?.url]);
+
+  useEffect(() => {
+    const strip = thumbStripRef.current;
+    if (!strip) return;
+    const thumb = strip.querySelector<HTMLElement>(`[data-lb-thumb="${index}"]`);
+    thumb?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [index]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? -1 : 1;
+      bumpZoom(direction * DM_LB_ZOOM_STEP);
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [bumpZoom]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        bumpZoom(DM_LB_ZOOM_STEP);
+        return;
+      }
+      if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        bumpZoom(-DM_LB_ZOOM_STEP);
+        return;
+      }
+      if (event.key === "0") {
+        setZoom(DM_LB_ZOOM_FIT);
+        panRef.current = { x: 0, y: 0 };
+        setPan({ x: 0, y: 0 });
+        return;
+      }
+      if (!hasMany || zoom !== DM_LB_ZOOM_FIT) return;
+      if (event.key === "ArrowLeft") {
+        onIndex(Math.max(0, index - 1));
+      } else if (event.key === "ArrowRight") {
+        onIndex(Math.min(items.length - 1, index + 1));
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [bumpZoom, hasMany, index, items.length, onClose, onIndex, zoom]);
+
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("button")) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: panRef.current.x,
+        originY: panRef.current.y,
+        moved: false,
+      };
+      setDragging(true);
+    },
+    [],
+  );
+
+  const onPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (!drag.moved && dx * dx + dy * dy < 9) return;
+      drag.moved = true;
+      applyPan({
+        x: drag.originX + dx,
+        y: drag.originY + dy,
+      });
+    },
+    [applyPan],
+  );
+
+  const endPointerDrag = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = dragRef.current;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      dragRef.current = null;
+      setDragging(false);
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        /* already released */
+      }
+    },
+    [],
+  );
+
+  if (!active?.url) return null;
+
+  const senderLabel = active.fromMe ? meLabel : peerLabel;
+  const senderAvatarUrl = active.fromMe ? meAvatarUrl : peerAvatarUrl;
+  const senderUsername = active.fromMe ? meUsername : peerUsername;
+  const when = new Date(active.createdAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const zoomPct = Math.round(zoom * 100);
+
+  return (
+    <div
+      className="studio-dm-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Photo"
+      onTouchStart={(event) => {
+        if (zoom !== DM_LB_ZOOM_FIT || dragging) return;
+        const t = event.changedTouches[0];
+        if (!t) return;
+        swipeRef.current = { x: t.clientX, y: t.clientY };
+      }}
+      onTouchEnd={(event) => {
+        const start = swipeRef.current;
+        swipeRef.current = null;
+        const t = event.changedTouches[0];
+        if (
+          !start ||
+          !t ||
+          !hasMany ||
+          zoom !== DM_LB_ZOOM_FIT ||
+          dragging
+        ) {
+          return;
+        }
+        const dx = t.clientX - start.x;
+        const dy = t.clientY - start.y;
+        if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+        if (dx > 0) onIndex(Math.max(0, index - 1));
+        else onIndex(Math.min(items.length - 1, index + 1));
+      }}
+    >
+      <header className="studio-dm-lightbox-head">
+        <div className="studio-dm-lightbox-meta">
+          <StudioProfileAvatar
+            size="sm"
+            src={senderAvatarUrl}
+            displayName={senderLabel}
+            name={senderUsername}
+            alt=""
+          />
+          <div className="studio-dm-lightbox-meta-copy">
+            <strong>
+              <span className="studio-dm-lightbox-meta-name">{senderLabel}</span>
+              {active.fromMe ? (
+                <span className="studio-dm-lightbox-meta-you"> (you)</span>
+              ) : null}
+            </strong>
+            <span>{when}</span>
+          </div>
+        </div>
+        <div className="studio-dm-lightbox-tools">
+          <button
+            type="button"
+            className="studio-dm-lightbox-tool"
+            onClick={() => bumpZoom(-DM_LB_ZOOM_STEP)}
+            disabled={zoom <= DM_LB_ZOOM_MIN}
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <ZoomOut size={13} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+          <span className="studio-dm-lightbox-zoom-label" aria-live="polite">
+            {zoomPct}%
+          </span>
+          <button
+            type="button"
+            className="studio-dm-lightbox-tool"
+            onClick={() => bumpZoom(DM_LB_ZOOM_STEP)}
+            disabled={zoom >= DM_LB_ZOOM_MAX}
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <ZoomIn size={13} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="studio-dm-lightbox-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X size={13} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      <div
+        ref={stageRef}
+        className={`studio-dm-lightbox-stage${dragging ? " is-dragging" : ""}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endPointerDrag}
+        onPointerCancel={endPointerDrag}
+      >
+        {hasMany ? (
+          <button
+            type="button"
+            className="studio-dm-lightbox-nav is-prev"
+            aria-label="Previous photo"
+            disabled={index <= 0 || zoom !== DM_LB_ZOOM_FIT}
+            onClick={() => onIndex(Math.max(0, index - 1))}
+          >
+            <ChevronLeft aria-hidden="true" />
+          </button>
+        ) : null}
+        <div className="studio-dm-lightbox-canvas">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="studio-dm-lightbox-image"
+            src={active.url}
+            alt={active.caption || "Photo"}
+            draggable={false}
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            }}
+          />
+        </div>
+        {hasMany ? (
+          <button
+            type="button"
+            className="studio-dm-lightbox-nav is-next"
+            aria-label="Next photo"
+            disabled={index >= items.length - 1 || zoom !== DM_LB_ZOOM_FIT}
+            onClick={() => onIndex(Math.min(items.length - 1, index + 1))}
+          >
+            <ChevronRight aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+
+      <footer className="studio-dm-lightbox-foot">
+        {active.caption ? (
+          <p className="studio-dm-lightbox-caption">{active.caption}</p>
+        ) : null}
+        {hasMany ? (
+          <div
+            ref={thumbStripRef}
+            className="studio-dm-lightbox-thumbs"
+            role="tablist"
+            aria-label="Photos in this album"
+          >
+            {items.map((item, i) => (
+              <button
+                key={`${item.url}-${i}`}
+                type="button"
+                role="tab"
+                data-lb-thumb={i}
+                aria-selected={i === index}
+                aria-label={`Photo ${i + 1}`}
+                className={`studio-dm-lightbox-thumb${i === index ? " is-active" : ""}`}
+                onClick={() => onIndex(i)}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.url} alt="" draggable={false} />
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </footer>
+    </div>
+  );
+}
+
 const SWIPE_REPLY_THRESHOLD = 56;
 const SWIPE_REPLY_MAX = 72;
+
+type AlbumOrient = "portrait" | "landscape" | "square";
+
+function classifyAlbumOrient(width: number, height: number): AlbumOrient {
+  if (!(width > 0 && height > 0)) return "square";
+  const ratio = width / height;
+  if (ratio < 0.85) return "portrait";
+  if (ratio > 1.2) return "landscape";
+  return "square";
+}
+
+/** Pick grid structure from count + measured orientations. */
+function albumLayoutClass(
+  count: number,
+  orients: Array<AlbumOrient | undefined>,
+): string {
+  const n = count >= 4 ? 4 : count;
+  const known = orients.filter((o): o is AlbumOrient => Boolean(o));
+  const ready = known.length >= Math.min(n, orients.length) && known.length > 0;
+  const portraits = known.filter((o) => o === "portrait").length;
+  const landscapes = known.filter((o) => o === "landscape").length;
+  const countClass = n === 2 ? "is-2" : n === 3 ? "is-3" : "is-4";
+
+  if (!ready) return `${countClass} is-orient-pending`;
+
+  if (n === 2) {
+    const a = known[0]!;
+    const b = known[1] ?? a;
+    if (a === "portrait" && b === "portrait") {
+      return "is-2 is-orient-tall";
+    }
+    if (a === "landscape" && b === "landscape") {
+      return "is-2 is-orient-wide";
+    }
+    // One tall + one wide: side-by-side with medium cells
+    return "is-2 is-orient-mixed";
+  }
+
+  if (n === 3) {
+    // Three portraits → equal columns, full height
+    if (portraits >= 2 && landscapes === 0) {
+      return "is-3 is-orient-tall";
+    }
+    // Mostly wide → hero + row, landscape cells
+    if (landscapes >= 2) {
+      return "is-3 is-orient-wide";
+    }
+    return "is-3 is-orient-mixed";
+  }
+
+  // 4+
+  if (portraits >= 3 && landscapes === 0) {
+    return "is-4 is-orient-tall";
+  }
+  if (landscapes >= 3) {
+    return "is-4 is-orient-wide";
+  }
+  return "is-4 is-orient-mixed";
+}
+
+/** WhatsApp-style multi-image album (consecutive image messages). */
+const DmImageAlbum = memo(function DmImageAlbum({
+  messages,
+  peerLabel,
+  onOpenGallery,
+  actions,
+}: {
+  messages: DmMessageRow[];
+  peerLabel: string;
+  onOpenGallery: (items: DmLightboxItem[], index: number) => void;
+  actions: DmMessageActionHandlers;
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [orients, setOrients] = useState<
+    Record<string, AlbumOrient | undefined>
+  >({});
+  const head = messages[0]!;
+  const tail = messages[messages.length - 1]!;
+  const caption =
+    messages.map((m) => m.body.trim()).find((body) => body.length > 0) ?? "";
+  const visible = messages.slice(0, 4);
+  const layoutClass = albumLayoutClass(
+    messages.length,
+    visible.map((m) => orients[m._id]),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls = visible
+      .map((m) => ({ id: m._id, url: m.imageUrl }))
+      .filter(
+        (row): row is { id: Id<"dmMessages">; url: string } =>
+          typeof row.url === "string" && row.url.length > 0,
+      );
+
+    for (const row of urls) {
+      if (orients[row.id]) continue;
+      const img = new Image();
+      img.decoding = "async";
+      const settle = () => {
+        if (cancelled) return;
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!(w > 0 && h > 0)) return;
+        const orient = classifyAlbumOrient(w, h);
+        setOrients((prev) =>
+          prev[row.id] === orient ? prev : { ...prev, [row.id]: orient },
+        );
+      };
+      img.addEventListener("load", settle);
+      img.src = row.url;
+      if (img.complete) settle();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    // Only re-probe when album membership / urls change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible.map((m) => `${m._id}:${m.imageUrl}`).join("|")]);
+
+  const isEditing = actions.editingMessageId === head._id;
+  const openMenu = useCallback(
+    (coords: { x: number; y: number }) => {
+      if (actions.editingMessageId === head._id) return;
+      clearNativeTextSelection();
+      setMenu(coords);
+    },
+    [actions.editingMessageId, head._id],
+  );
+  const { longPressHandlers, longPressFired, clearLongPressFired } =
+    useLongPress(isEditing ? undefined : openMenu, {
+      onMenuArmed: () => clearNativeTextSelection(),
+    });
+
+  const albumEditTarget: DmMessageRow = {
+    ...head,
+    body: caption || head.body,
+  };
+  const menuItems = buildDmBubbleMenuItems(albumEditTarget, {
+    ...actions,
+    onStartEdit: () => actions.onStartEdit(albumEditTarget),
+  });
+
+  return (
+    <>
+      <div
+        id={`dm-msg-${head._id}`}
+        className={`studio-dm-swipe-shell${head.fromMe ? " is-mine" : ""}`}
+      >
+        <div
+          className={`studio-dm-bubble-row${head.fromMe ? " is-mine" : ""}`}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (isEditing) return;
+            clearNativeTextSelection();
+            openMenu({ x: event.clientX, y: event.clientY });
+          }}
+          onTouchStart={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchStart?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchStart?.(event);
+          }}
+          onTouchMove={(event: ReactTouchEvent) => {
+            const lp = longPressHandlers as {
+              onTouchMove?: (e: ReactTouchEvent) => void;
+            };
+            lp.onTouchMove?.(event);
+          }}
+          onTouchEnd={() => {
+            const lp = longPressHandlers as { onTouchEnd?: () => void };
+            lp.onTouchEnd?.();
+          }}
+          onTouchCancel={() => {
+            const lp = longPressHandlers as { onTouchCancel?: () => void };
+            lp.onTouchCancel?.();
+          }}
+          onClick={() => {
+            if (longPressFired()) clearLongPressFired();
+          }}
+        >
+          <div
+            className={`studio-dm-bubble is-image is-album${
+              layoutClass.includes("is-orient-tall")
+                ? " is-album-tall"
+                : layoutClass.includes("is-orient-wide")
+                  ? " is-album-wide"
+                  : ""
+            }`}
+          >
+            {head.replyTo ? (
+              <DmReplyQuote
+                snippet={head.replyTo}
+                peerLabel={peerLabel}
+              />
+            ) : null}
+            <div
+              className={`studio-dm-album ${layoutClass}`}
+              role="group"
+              aria-label={`${messages.length} photos`}
+            >
+              {visible.map((message, index) => {
+                // For 5+: overlay +N on the 4th tile (N = length - 3)
+                const plus =
+                  index === 3 && messages.length > 4
+                    ? messages.length - 4
+                    : 0;
+                return (
+                  <button
+                    key={message._id}
+                    type="button"
+                    className="studio-dm-album-cell"
+                    id={index === 0 ? undefined : `dm-msg-${message._id}`}
+                    onClick={() => {
+                      const items = messages
+                        .filter((row) => Boolean(row.imageUrl))
+                        .map((row) => ({
+                          url: row.imageUrl!,
+                          caption: row.body.trim() || undefined,
+                          fromMe: row.fromMe,
+                          createdAt: row.createdAt,
+                        }));
+                      const at = items.findIndex((item) => item.url === message.imageUrl);
+                      if (items.length) onOpenGallery(items, Math.max(0, at));
+                    }}
+                    aria-label={
+                      plus > 0
+                        ? `View photo, ${plus} more`
+                        : "View photo"
+                    }
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={message.imageUrl} alt="" />
+                    {plus > 0 ? (
+                      <span className="studio-dm-album-more" aria-hidden="true">
+                        +{plus}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {isEditing ? (
+              <div
+                className="studio-dm-edit"
+                onContextMenu={(event) => event.preventDefault()}
+                onTouchStart={(event) => event.stopPropagation()}
+              >
+                <textarea
+                  className="studio-dm-edit-input"
+                  value={actions.editDraft}
+                  ref={(el) => autosizeDmEditTextarea(el)}
+                  onChange={(event) => {
+                    actions.onEditDraftChange(event.target.value);
+                    autosizeDmEditTextarea(event.currentTarget);
+                  }}
+                  rows={8}
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      actions.onCancelEdit();
+                    }
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      actions.onSaveEdit();
+                    }
+                  }}
+                />
+                <div className="studio-dm-edit-actions">
+                  <button
+                    type="button"
+                    className="studio-dm-edit-cancel"
+                    onClick={actions.onCancelEdit}
+                    disabled={actions.editBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="studio-dm-edit-save"
+                    onClick={actions.onSaveEdit}
+                    disabled={actions.editBusy}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : caption ? (
+              <p>{caption}</p>
+            ) : null}
+            <DmMessageMeta
+              createdAt={tail.createdAt}
+              fromMe={tail.fromMe}
+              receipt={tail.receipt}
+              edited={Boolean(tail.editedAt || head.editedAt)}
+            />
+          </div>
+        </div>
+      </div>
+      {menu && !isEditing ? (
+        <StudioDmContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          title="Message"
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
+    </>
+  );
+});
 
 const DmMessageBubble = memo(function DmMessageBubble({
   message,
   peerLabel,
-  onReply,
-  onOpenImage,
+  onOpenGallery,
   onOpenFeedPost,
+  actions,
 }: {
   message: DmMessageRow;
   peerLabel: string;
-  onReply: (message: DmMessageRow) => void;
-  onOpenImage: (url: string) => void;
+  onOpenGallery: (items: DmLightboxItem[], index: number) => void;
   onOpenFeedPost?: (postId: Id<"profilePosts">) => void;
+  actions: DmMessageActionHandlers;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [swipeX, setSwipeX] = useState(0);
@@ -418,12 +1231,20 @@ const DmMessageBubble = memo(function DmMessageBubble({
     dx: number;
   } | null>(null);
 
-  const openMenu = useCallback((coords: { x: number; y: number }) => {
-    setMenu(coords);
-  }, []);
+  const isEditing = actions.editingMessageId === message._id;
+  const openMenu = useCallback(
+    (coords: { x: number; y: number }) => {
+      if (actions.editingMessageId === message._id) return;
+      clearNativeTextSelection();
+      setMenu(coords);
+    },
+    [actions.editingMessageId, message._id],
+  );
 
   const { longPressHandlers, longPressFired, clearLongPressFired } =
-    useLongPress(openMenu);
+    useLongPress(isEditing ? undefined : openMenu, {
+      onMenuArmed: () => clearNativeTextSelection(),
+    });
 
   const jumpToReply = useCallback(() => {
     if (!message.replyTo) return;
@@ -431,17 +1252,12 @@ const DmMessageBubble = memo(function DmMessageBubble({
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [message.replyTo]);
 
-  const menuItems: StudioDmContextMenuItem[] = [
-    {
-      key: "reply",
-      label: "Reply",
-      icon: <Reply aria-hidden="true" />,
-      onSelect: () => onReply(message),
-    },
-  ];
+  const menuItems = buildDmBubbleMenuItems(message, actions);
+  const onReply = actions.onReply;
 
   const bubbleClass = [
     "studio-dm-bubble",
+    message.deleted ? "is-deleted" : "",
     message.kind === "voice" ? "is-voice" : "",
     message.kind === "image" ? "is-image" : "",
     message.kind === "post" || message.kind === "comment" ? "is-feed-share" : "",
@@ -475,6 +1291,8 @@ const DmMessageBubble = memo(function DmMessageBubble({
           style={rowStyle}
           onContextMenu={(event) => {
             event.preventDefault();
+            if (isEditing) return;
+            clearNativeTextSelection();
             openMenu({ x: event.clientX, y: event.clientY });
           }}
           onTouchStart={(event: ReactTouchEvent) => {
@@ -543,14 +1361,23 @@ const DmMessageBubble = memo(function DmMessageBubble({
           }}
         >
           <div className={bubbleClass}>
-            {message.replyTo ? (
+            {message.replyTo && !message.deleted ? (
               <DmReplyQuote
                 snippet={message.replyTo}
                 peerLabel={peerLabel}
                 onJump={jumpToReply}
               />
             ) : null}
-            {message.kind === "voice" ? (
+            {message.deleted ? (
+              <div className="studio-dm-bubble-body">
+                <p className="studio-dm-tombstone">This message was deleted</p>
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                />
+              </div>
+            ) : message.kind === "voice" ? (
               <div className="studio-dm-bubble-body">
                 {message.audioUrl ? (
                   <StudioChatAudioPlayer
@@ -567,6 +1394,7 @@ const DmMessageBubble = memo(function DmMessageBubble({
                   createdAt={message.createdAt}
                   fromMe={message.fromMe}
                   receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
                 />
               </div>
             ) : message.kind === "image" ? (
@@ -575,7 +1403,19 @@ const DmMessageBubble = memo(function DmMessageBubble({
                   <button
                     type="button"
                     className="studio-dm-image-btn"
-                    onClick={() => onOpenImage(message.imageUrl!)}
+                    onClick={() =>
+                      onOpenGallery(
+                        [
+                          {
+                            url: message.imageUrl!,
+                            caption: message.body.trim() || undefined,
+                            fromMe: message.fromMe,
+                            createdAt: message.createdAt,
+                          },
+                        ],
+                        0,
+                      )
+                    }
                     aria-label="View image"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -588,11 +1428,60 @@ const DmMessageBubble = memo(function DmMessageBubble({
                 ) : (
                   <p className="studio-dm-voice-missing">Photo unavailable</p>
                 )}
-                {message.body ? <p>{message.body}</p> : null}
+                {isEditing ? (
+                  <div
+                    className="studio-dm-edit"
+                    onContextMenu={(event) => event.preventDefault()}
+                    onTouchStart={(event) => event.stopPropagation()}
+                  >
+                    <textarea
+                      className="studio-dm-edit-input"
+                      value={actions.editDraft}
+                      ref={(el) => autosizeDmEditTextarea(el)}
+                      onChange={(event) => {
+                        actions.onEditDraftChange(event.target.value);
+                        autosizeDmEditTextarea(event.currentTarget);
+                      }}
+                      rows={8}
+                      autoFocus
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          actions.onCancelEdit();
+                        }
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          actions.onSaveEdit();
+                        }
+                      }}
+                    />
+                    <div className="studio-dm-edit-actions">
+                      <button
+                        type="button"
+                        className="studio-dm-edit-cancel"
+                        onClick={actions.onCancelEdit}
+                        disabled={actions.editBusy}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-dm-edit-save"
+                        onClick={actions.onSaveEdit}
+                        disabled={actions.editBusy}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : message.body ? (
+                  <p>{message.body}</p>
+                ) : null}
                 <DmMessageMeta
                   createdAt={message.createdAt}
                   fromMe={message.fromMe}
                   receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
                 />
               </>
             ) : message.kind === "post" || message.kind === "comment" ? (
@@ -612,26 +1501,77 @@ const DmMessageBubble = memo(function DmMessageBubble({
                   createdAt={message.createdAt}
                   fromMe={message.fromMe}
                   receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
                 />
               </div>
             ) : (
               <div className="studio-dm-bubble-body">
-                <p>{message.body}</p>
+                {isEditing ? (
+                  <div
+                    className="studio-dm-edit"
+                    onContextMenu={(event) => event.preventDefault()}
+                    onTouchStart={(event) => event.stopPropagation()}
+                  >
+                    <textarea
+                      className="studio-dm-edit-input"
+                      value={actions.editDraft}
+                      ref={(el) => autosizeDmEditTextarea(el)}
+                      onChange={(event) => {
+                        actions.onEditDraftChange(event.target.value);
+                        autosizeDmEditTextarea(event.currentTarget);
+                      }}
+                      rows={8}
+                      autoFocus
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          actions.onCancelEdit();
+                        }
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          actions.onSaveEdit();
+                        }
+                      }}
+                    />
+                    <div className="studio-dm-edit-actions">
+                      <button
+                        type="button"
+                        className="studio-dm-edit-cancel"
+                        onClick={actions.onCancelEdit}
+                        disabled={actions.editBusy}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="studio-dm-edit-save"
+                        onClick={actions.onSaveEdit}
+                        disabled={actions.editBusy}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p>{message.body}</p>
+                )}
                 <DmMessageMeta
                   createdAt={message.createdAt}
                   fromMe={message.fromMe}
                   receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
                 />
               </div>
             )}
           </div>
         </div>
       </div>
-      {menu ? (
+      {menu && !isEditing ? (
         <StudioDmContextMenu
           x={menu.x}
           y={menu.y}
           items={menuItems}
+          title="Message"
           onClose={() => setMenu(null)}
         />
       ) : null}
@@ -716,6 +1656,52 @@ function dayLabel(value: number): string {
   });
 }
 
+/** Consecutive same-sender images within this gap may form one WhatsApp-style album. */
+const DM_ALBUM_GAP_MS = 120_000;
+/** WA-style: 1–2 stay separate media bubbles; collage only at 3+. */
+const DM_ALBUM_MIN_COUNT = 3;
+
+type DmTimelineItem =
+  | { type: "day"; key: string; label: string }
+  | { type: "message"; key: string; message: DmMessageRow }
+  | { type: "album"; key: string; messages: DmMessageRow[] };
+
+function buildDmTimeline(messages: DmMessageRow[]): DmTimelineItem[] {
+  const items: DmTimelineItem[] = [];
+  let lastDay = "";
+  let i = 0;
+  while (i < messages.length) {
+    const msg = messages[i]!;
+    const day = dayLabel(msg.createdAt);
+    if (day !== lastDay) {
+      items.push({ type: "day", key: `day-${msg._id}`, label: day });
+      lastDay = day;
+    }
+    if (msg.kind === "image" && msg.imageUrl) {
+      const album = [msg];
+      let j = i + 1;
+      while (j < messages.length) {
+        const next = messages[j]!;
+        if (dayLabel(next.createdAt) !== day) break;
+        if (next.kind !== "image" || !next.imageUrl) break;
+        if (next.fromMe !== msg.fromMe) break;
+        const prevAt = album[album.length - 1]!.createdAt;
+        if (next.createdAt - prevAt > DM_ALBUM_GAP_MS) break;
+        album.push(next);
+        j += 1;
+      }
+      if (album.length >= DM_ALBUM_MIN_COUNT) {
+        items.push({ type: "album", key: `album-${msg._id}`, messages: album });
+        i = j;
+        continue;
+      }
+    }
+    items.push({ type: "message", key: msg._id, message: msg });
+    i += 1;
+  }
+  return items;
+}
+
 /** WhatsApp-style relative stamp for the chat-list rail. */
 export function conversationTimeLabel(value: number, now = Date.now()): string {
   const date = new Date(value);
@@ -779,6 +1765,7 @@ export function StudioMessagesPane({
       peerSidebarOpen ? "1" : "0",
     );
   }, [embeddedInRail, peerSidebarOpen]);
+  const myProfile = useQuery(api.profiles.getMine, { expiresUnix });
   const conversationsLive = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messagesLive = useQuery(
     api.dms.listMessages,
@@ -815,18 +1802,39 @@ export function StudioMessagesPane({
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
   const sendFeedShare = useMutation(api.dms.sendFeedShare);
+  const editMessage = useMutation(api.dms.editMessage);
+  const deleteMessageForMe = useMutation(api.dms.deleteMessageForMe);
+  const deleteMessageForEveryone = useMutation(api.dms.deleteMessageForEveryone);
 
   const [draft, setDraft] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState<Id<"dmMessages"> | null>(
+    null,
+  );
+  const [editDraft, setEditDraft] = useState("");
+  const [editBusy, setEditBusy] = useState(false);
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
   const lastTypingPingRef = useRef(0);
   const typingActiveRef = useRef(false);
   const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<DmLightboxState | null>(null);
+  const openGallery = useCallback((items: DmLightboxItem[], index: number) => {
+    if (!items.length) return;
+    setLightbox({
+      items,
+      index: Math.min(Math.max(index, 0), items.length - 1),
+    });
+  }, []);
   const [replyTo, setReplyTo] = useState<DmReplySnippet | null>(null);
   const replyToRef = useRef<DmReplySnippet | null>(null);
   replyToRef.current = replyTo;
+
+  useEffect(() => {
+    setEditingMessageId(null);
+    setEditDraft("");
+    setEditBusy(false);
+  }, [conversationId]);
   const pendingFeedShareStore = usePendingDmFeedShare();
   const pendingFeedShare =
     conversationId &&
@@ -862,8 +1870,8 @@ export function StudioMessagesPane({
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
 
-  useMobileBackLayer("dm-lightbox", Boolean(lightboxUrl), () => {
-    setLightboxUrl(null);
+  useMobileBackLayer("dm-lightbox", Boolean(lightbox), () => {
+    setLightbox(null);
   });
   useMobileBackLayer("dm-attach-menu", Boolean(attachMenu), () => {
     setAttachMenu(null);
@@ -884,7 +1892,7 @@ export function StudioMessagesPane({
 
   const clearPendingImages = useCallback(() => {
     setPendingImages((prev) => {
-      for (const item of prev) URL.revokeObjectURL(item.previewUrl);
+      for (const item of prev) revokePendingPreview(item.previewUrl);
       return [];
     });
   }, []);
@@ -892,7 +1900,7 @@ export function StudioMessagesPane({
   const removePendingImageAt = useCallback((index: number) => {
     setPendingImages((prev) => {
       const target = prev[index];
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target) revokePendingPreview(target.previewUrl);
       return prev.filter((_, i) => i !== index);
     });
   }, []);
@@ -1123,7 +2131,7 @@ export function StudioMessagesPane({
     setDraft("");
     setSendError("");
     clearPendingImages();
-    setLightboxUrl(null);
+    setLightbox(null);
     setReplyTo(null);
     if (conversationId) inputRef.current?.focus();
   }, [clearPendingImages, conversationId]);
@@ -1148,6 +2156,92 @@ export function StudioMessagesPane({
     });
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
+  const onStartEdit = useCallback((message: DmMessageRow) => {
+    setEditingMessageId(message._id);
+    setEditDraft(message.body);
+  }, []);
+
+  const onCancelEdit = useCallback(() => {
+    setEditingMessageId(null);
+    setEditDraft("");
+    setEditBusy(false);
+  }, []);
+
+  const onSaveEdit = useCallback(async () => {
+    if (!editingMessageId) return;
+    setEditBusy(true);
+    setSendError("");
+    try {
+      await editMessage({ messageId: editingMessageId, body: editDraft });
+      setEditingMessageId(null);
+      setEditDraft("");
+    } catch (error) {
+      setSendError(friendlyConvexError(error, "Could not edit message"));
+    } finally {
+      setEditBusy(false);
+    }
+  }, [editDraft, editMessage, editingMessageId]);
+
+  const onDeleteForMe = useCallback(
+    async (message: DmMessageRow) => {
+      setSendError("");
+      try {
+        await deleteMessageForMe({ messageId: message._id });
+        if (editingMessageId === message._id) onCancelEdit();
+      } catch (error) {
+        setSendError(friendlyConvexError(error, "Could not delete message"));
+      }
+    },
+    [deleteMessageForMe, editingMessageId, onCancelEdit],
+  );
+
+  const onDeleteForEveryone = useCallback(
+    async (message: DmMessageRow) => {
+      setSendError("");
+      try {
+        await deleteMessageForEveryone({ messageId: message._id });
+        if (editingMessageId === message._id) onCancelEdit();
+      } catch (error) {
+        setSendError(
+          friendlyConvexError(error, "Could not delete message for everyone"),
+        );
+      }
+    },
+    [deleteMessageForEveryone, editingMessageId, onCancelEdit],
+  );
+
+  const messageActions: DmMessageActionHandlers = useMemo(
+    () => ({
+      onReply: armReply,
+      onStartEdit,
+      onDeleteForMe: (message) => {
+        void onDeleteForMe(message);
+      },
+      onDeleteForEveryone: (message) => {
+        void onDeleteForEveryone(message);
+      },
+      editingMessageId,
+      editDraft,
+      onEditDraftChange: setEditDraft,
+      onSaveEdit: () => {
+        void onSaveEdit();
+      },
+      onCancelEdit,
+      editBusy,
+    }),
+    [
+      armReply,
+      editBusy,
+      editDraft,
+      editingMessageId,
+      onCancelEdit,
+      onDeleteForEveryone,
+      onDeleteForMe,
+      onSaveEdit,
+      onStartEdit,
+    ],
+  );
+
 
   function appendImageFiles(files: File[]) {
     if (files.length === 0) return;
@@ -1166,6 +2260,7 @@ export function StudioMessagesPane({
       }
       accepted.push({
         file,
+        name: file.name,
         previewUrl: URL.createObjectURL(file),
       });
     }
@@ -1178,12 +2273,12 @@ export function StudioMessagesPane({
       const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
       if (room <= 0) {
         setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
-        for (const item of accepted) URL.revokeObjectURL(item.previewUrl);
+        for (const item of accepted) revokePendingPreview(item.previewUrl);
         return prev;
       }
       const next = accepted.slice(0, room);
       for (const item of accepted.slice(room)) {
-        URL.revokeObjectURL(item.previewUrl);
+        revokePendingPreview(item.previewUrl);
       }
       if (accepted.length > room) {
         setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
@@ -1197,38 +2292,51 @@ export function StudioMessagesPane({
     appendImageFiles([file]);
   }
 
-  async function pickStudioFileAssets(assets: StudioAssetPick[]) {
-    if (assets.length === 0 || !conversationId) return;
-    setFilesPickBusy(true);
-    setSendError("");
-    try {
-      let sent = 0;
-      for (const asset of assets) {
-        const mime = (asset.mimeType || "").toLowerCase();
-        if (!ALLOWED_IMAGE_TYPES.has(mime)) {
-          setSendError("Only JPEG, PNG, WebP, or GIF images are allowed");
-          continue;
-        }
-        await sendImageMessage({
-          conversationId,
-          assetId: asset._id,
-          caption:
-            sent === 0 && draft.trim() ? draft.trim() : undefined,
-          replyToMessageId: sent === 0 ? replyTo?._id : undefined,
-        });
-        sent += 1;
+  function stageStudioFileAssets(assets: StudioAssetPick[]) {
+    if (assets.length === 0) return;
+    clearPendingDmFeedShare();
+    const accepted: PendingImage[] = [];
+    let error = "";
+    for (const asset of assets) {
+      const mime = (asset.mimeType || "").toLowerCase();
+      if (mime && !ALLOWED_IMAGE_TYPES.has(mime)) {
+        error = "Only JPEG, PNG, WebP, or GIF images are allowed";
+        continue;
       }
-      if (sent > 0) {
-        setDraft("");
-        pingTyping(false);
-        setReplyTo(null);
-        setFilesPickerOpen(false);
-      }
-    } catch (error) {
-      setSendError(friendlyConvexError(error, "Could not load that file"));
-    } finally {
-      setFilesPickBusy(false);
+      accepted.push({
+        assetId: asset._id,
+        name: asset.name,
+        previewUrl: (asset.signedThumbnailUrl || "").trim(),
+      });
     }
+    if (accepted.length === 0) {
+      if (error) setSendError(error);
+      return;
+    }
+    setSendError(error);
+    setPendingImages((prev) => {
+      const seen = new Set(
+        prev.map((item) => item.assetId).filter((id): id is Id<"assets"> => Boolean(id)),
+      );
+      const room = Math.max(0, MAX_PENDING_IMAGES - prev.length);
+      if (room <= 0) {
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+        return prev;
+      }
+      const staged: PendingImage[] = [];
+      for (const item of accepted) {
+        if (staged.length >= room) break;
+        if (item.assetId && seen.has(item.assetId)) continue;
+        staged.push(item);
+        if (item.assetId) seen.add(item.assetId);
+      }
+      if (accepted.length > staged.length) {
+        setSendError(`You can attach up to ${MAX_PENDING_IMAGES} photos`);
+      }
+      return staged.length ? [...prev, ...staged] : prev;
+    });
+    setFilesPickerOpen(false);
+    window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
   async function handleSend() {
@@ -1252,19 +2360,25 @@ export function StudioMessagesPane({
       } else if (pendingImages.length > 0) {
         for (let i = 0; i < pendingImages.length; i += 1) {
           const pending = pendingImages[i]!;
-          const assetId = await uploadDmMediaAsset({
-            blob: pending.file,
-            name: dmPhotoAssetName({
-              peerLabel: peerLabelRef.current,
-              fileName: pending.file.name,
+          let assetId = pending.assetId;
+          if (!assetId) {
+            if (!pending.file) {
+              throw new Error("Attachment is missing");
+            }
+            assetId = await uploadDmMediaAsset({
+              blob: pending.file,
+              name: dmPhotoAssetName({
+                peerLabel: peerLabelRef.current,
+                fileName: pending.name || pending.file.name,
+                mimeType: pending.file.type || "image/jpeg",
+              }),
+              kind: "image",
               mimeType: pending.file.type || "image/jpeg",
-            }),
-            kind: "image",
-            mimeType: pending.file.type || "image/jpeg",
-            ensureMessagesFolder: () => ensureMessagesFolder({}),
-            reserveUpload,
-            commitStagingUpload,
-          });
+              ensureMessagesFolder: () => ensureMessagesFolder({}),
+              reserveUpload,
+              commitStagingUpload,
+            });
+          }
           await sendImageMessage({
             conversationId,
             assetId,
@@ -1359,6 +2473,7 @@ export function StudioMessagesPane({
               x={listContext.x}
               y={listContext.y}
               items={listMenuItems}
+              title="Chat"
               onClose={() => setListContext(null)}
             />
           ) : null}
@@ -1382,8 +2497,10 @@ export function StudioMessagesPane({
     activeRow?.peer.username ||
     "Chat";
   peerLabelRef.current = peerLabel;
-
-  let lastDay = "";
+  const meLabel =
+    myProfile?.displayName?.trim() ||
+    myProfile?.username ||
+    "You";
 
   const chatColumn = (
     <div className="studio-dm-chat-column">
@@ -1395,7 +2512,7 @@ export function StudioMessagesPane({
             onClick={() => onSelectConversation(null)}
             aria-label="Back to chats"
           >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            <ArrowLeft size={13} strokeWidth={2.25} aria-hidden="true" />
           </button>
         ) : null}
         <button
@@ -1466,23 +2583,36 @@ export function StudioMessagesPane({
           )
         ) : (
           <div className="studio-dm-messages">
-            {messages.map((message) => {
-              const day = dayLabel(message.createdAt);
-              const showDay = day !== lastDay;
-              lastDay = day;
-              return (
-                <div key={message._id} className="studio-dm-message-block">
-                  {showDay ? (
+            {buildDmTimeline(messages).map((item) => {
+              if (item.type === "day") {
+                return (
+                  <div key={item.key} className="studio-dm-message-block">
                     <div className="studio-dm-day" role="separator">
-                      <span>{day}</span>
+                      <span>{item.label}</span>
                     </div>
-                  ) : null}
+                  </div>
+                );
+              }
+              if (item.type === "album") {
+                return (
+                  <div key={item.key} className="studio-dm-message-block">
+                    <DmImageAlbum
+                      messages={item.messages}
+                      peerLabel={peerLabel}
+                      onOpenGallery={openGallery}
+                      actions={messageActions}
+                    />
+                  </div>
+                );
+              }
+              return (
+                <div key={item.key} className="studio-dm-message-block">
                   <DmMessageBubble
-                    message={message}
+                    message={item.message}
                     peerLabel={peerLabel}
-                    onReply={armReply}
-                    onOpenImage={setLightboxUrl}
+                    onOpenGallery={openGallery}
                     onOpenFeedPost={onOpenFeedPost}
+                    actions={messageActions}
                   />
                 </div>
               );
@@ -1563,14 +2693,23 @@ export function StudioMessagesPane({
         <div className="studio-dm-attach-preview is-multi">
           <div className="studio-dm-attach-thumbs">
             {pendingImages.map((pending, index) => (
-              <div key={`${pending.file.name}-${index}`} className="studio-dm-attach-thumb">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={pending.previewUrl} alt="" />
+              <div
+                key={`${pending.assetId ?? pending.name}-${index}`}
+                className="studio-dm-attach-thumb"
+              >
+                {pending.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={pending.previewUrl} alt="" />
+                ) : (
+                  <span className="studio-dm-attach-thumb-fallback" aria-hidden="true">
+                    <ImageIcon />
+                  </span>
+                )}
                 <button
                   type="button"
                   className="studio-dm-attach-clear is-overlay"
                   onClick={() => removePendingImageAt(index)}
-                  aria-label={`Remove ${pending.file.name}`}
+                  aria-label={`Remove ${pending.name}`}
                 >
                   <X className="h-3 w-3" aria-hidden="true" />
                 </button>
@@ -1579,7 +2718,7 @@ export function StudioMessagesPane({
           </div>
           <span className="studio-dm-attach-name">
             {pendingImages.length === 1
-              ? pendingImages[0]!.file.name
+              ? pendingImages[0]!.name
               : `${pendingImages.length} photos`}
           </span>
           <button
@@ -1781,7 +2920,7 @@ export function StudioMessagesPane({
           items={[
             {
               key: "upload",
-              label: "Upload photo",
+              label: "Upload photos",
               icon: <Upload className="h-3.5 w-3.5" aria-hidden="true" />,
               onSelect: () => fileInputRef.current?.click(),
             },
@@ -1795,10 +2934,10 @@ export function StudioMessagesPane({
                 if (onRequestPickAsset && !isMobile) {
                   onRequestPickAsset({
                     kinds: ["image"],
-                    title: "Pick photos to send",
+                    title: "Attach photos",
                     maxSelected: MAX_PENDING_IMAGES,
                     onConfirm: (assets) => {
-                      void pickStudioFileAssets(assets);
+                      stageStudioFileAssets(assets);
                     },
                   });
                   return;
@@ -1813,7 +2952,7 @@ export function StudioMessagesPane({
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet
-          title="Choose photos to send"
+          title="Attach photos"
           kinds={["image"]}
           multi
           stayOpen
@@ -1835,7 +2974,7 @@ export function StudioMessagesPane({
             const picked = mobilePickSelected;
             setMobilePickSelected([]);
             setFilesPickerOpen(false);
-            if (picked.length > 0) void pickStudioFileAssets(picked);
+            if (picked.length > 0) stageStudioFileAssets(picked);
           }}
           onClose={() => {
             if (filesPickBusy) return;
@@ -1845,30 +2984,6 @@ export function StudioMessagesPane({
         />
       ) : null}
 
-      {lightboxUrl ? (
-        <div
-          className="studio-dm-lightbox"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Photo"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <button
-            type="button"
-            className="studio-dm-lightbox-close"
-            onClick={() => setLightboxUrl(null)}
-            aria-label="Close"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightboxUrl}
-            alt=""
-            onClick={(event) => event.stopPropagation()}
-          />
-        </div>
-      ) : null}
     </div>
   );
 
@@ -1888,16 +3003,31 @@ export function StudioMessagesPane({
   if (embeddedInRail || isMobile || !peerSidebarOpen || !activeRow) {
     return (
       <div
-        className={`studio-dm-pane${embeddedInRail ? " is-rail-embedded" : ""}`}
+        className={`studio-dm-pane${embeddedInRail ? " is-rail-embedded" : ""}${lightbox ? " is-lightbox-open" : ""}`}
       >
         {chatColumn}
         {peerSidebar}
+        {lightbox ? (
+          <DmPhotoLightbox
+            state={lightbox}
+            peerLabel={peerLabel}
+            peerAvatarUrl={activeRow?.peer.avatarUrl}
+            peerUsername={activeRow?.peer.username}
+            meLabel={meLabel}
+            meAvatarUrl={myProfile?.avatarUrl}
+            meUsername={myProfile?.username}
+            onClose={() => setLightbox(null)}
+            onIndex={(index) =>
+              setLightbox((prev) => (prev ? { ...prev, index } : prev))
+            }
+          />
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="studio-dm-pane is-split">
+    <div className={`studio-dm-pane is-split${lightbox ? " is-lightbox-open" : ""}`}>
       <PanelGroup
         direction="horizontal"
         autoSaveId="studio-dm-peer-h"
@@ -1924,6 +3054,21 @@ export function StudioMessagesPane({
           {peerSidebar}
         </Panel>
       </PanelGroup>
+        {lightbox ? (
+          <DmPhotoLightbox
+            state={lightbox}
+            peerLabel={peerLabel}
+            peerAvatarUrl={activeRow?.peer.avatarUrl}
+            peerUsername={activeRow?.peer.username}
+            meLabel={meLabel}
+            meAvatarUrl={myProfile?.avatarUrl}
+            meUsername={myProfile?.username}
+            onClose={() => setLightbox(null)}
+            onIndex={(index) =>
+              setLightbox((prev) => (prev ? { ...prev, index } : prev))
+            }
+          />
+        ) : null}
     </div>
   );
 }

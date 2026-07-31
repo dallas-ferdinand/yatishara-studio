@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { clipAtPlayhead, clipDuration } from "./editorState";
 import { textAnimationStyle } from "./editorEffects";
+import { textLayoutRect } from "./textLayout";
+import { isLegacySystemFont, loadGoogleFont } from "./loadGoogleFont";
 import type { EditorClip, EditorProject } from "./types";
 
 type PreviewTextOverlaysProps = {
@@ -15,9 +18,10 @@ type PreviewTextOverlaysProps = {
   onTogglePlay: () => void;
   /** Match timeline stack: over = above video, under = below video. */
   layer?: "over" | "under";
+  /** Hide hit target for the clip that owns the transform overlay. */
+  suppressClipId?: string | null;
 };
 
-/** Match compositor.worker text placement (baseline middle at ~82% height). */
 function textHitRect(
   clip: EditorClip,
   canvasWidth: number,
@@ -25,9 +29,6 @@ function textHitRect(
   playhead: number,
 ): { left: number; top: number; width: number; height: number } {
   const content = clip.text;
-  const text = content?.text ?? "";
-  const fontSize = content?.fontSize ?? 42;
-  const align = content?.align ?? "center";
   const duration = clipDuration(clip);
   const local = playhead - clip.startTime;
   const animation = textAnimationStyle(
@@ -39,33 +40,20 @@ function textHitRect(
   const translateYMatch = /translateY\((-?[\d.]+)px\)/.exec(animation.transform);
   const scaleMatch = /scale\(([\d.]+)\)/.exec(animation.transform);
   const translateY = translateYMatch ? Number(translateYMatch[1]) : 0;
-  const scale = scaleMatch ? Number(scaleMatch[1]) : 1;
-
-  const height = Math.max(18, fontSize * 1.35 * scale);
-  const width = Math.min(
-    canvasWidth * 0.84,
-    Math.max(fontSize * 1.4 * scale, text.length * fontSize * 0.55 * scale),
+  const animScale = scaleMatch ? Number(scaleMatch[1]) : 1;
+  const layout = textLayoutRect(
+    content,
+    clip.effects,
+    canvasWidth,
+    canvasHeight,
+    translateY,
+    animScale,
   );
-  const anchorX =
-    align === "left"
-      ? canvasWidth * 0.08
-      : align === "right"
-        ? canvasWidth * 0.92
-        : canvasWidth * 0.5;
-  const left =
-    align === "left"
-      ? anchorX
-      : align === "right"
-        ? anchorX - width
-        : anchorX - width / 2;
-  const centerY = canvasHeight * 0.82 + translateY;
-  const top = centerY - height / 2;
-
   return {
-    left: Math.max(0, left),
-    top: Math.max(0, top),
-    width: Math.min(width, canvasWidth - Math.max(0, left)),
-    height: Math.min(height, canvasHeight - Math.max(0, top)),
+    left: Math.max(0, layout.left),
+    top: Math.max(0, layout.top),
+    width: Math.min(layout.width, canvasWidth - Math.max(0, layout.left)),
+    height: Math.min(layout.height, canvasHeight - Math.max(0, layout.top)),
   };
 }
 
@@ -76,7 +64,6 @@ function activeTextClipsAtPlayhead(
   const under: EditorClip[] = [];
   const over: EditorClip[] = [];
   const videoIndex = project.tracks.findIndex((track) => track.kind === "video");
-  // Topmost active video lane (lowest track index among video tracks with a clip).
   let topVideoIndex = Number.POSITIVE_INFINITY;
   for (let i = 0; i < project.tracks.length; i += 1) {
     const track = project.tracks[i]!;
@@ -109,9 +96,22 @@ export function PreviewTextOverlays({
   onSelect,
   onTogglePlay,
   layer = "over",
+  suppressClipId = null,
 }: PreviewTextOverlaysProps) {
   const { under, over } = activeTextClipsAtPlayhead(project, playhead);
   const clips = layer === "under" ? under : over;
+
+  useEffect(() => {
+    const families = new Set<string>();
+    for (const clip of project.clips) {
+      const family = clip.text?.fontFamily;
+      if (!family || isLegacySystemFont(family)) continue;
+      families.add(family);
+    }
+    for (const family of families) {
+      void loadGoogleFont(family);
+    }
+  }, [project.clips]);
 
   if (clips.length === 0 || canvasWidth <= 0 || canvasHeight <= 0) return null;
 
@@ -120,7 +120,9 @@ export function PreviewTextOverlays({
       className={`studio-editor-text-layer is-${layer}`}
       data-text-layer={layer}
     >
-      {clips.map((clip) => {
+      {clips
+        .filter((clip) => clip.id !== suppressClipId)
+        .map((clip) => {
         const rect = textHitRect(clip, canvasWidth, canvasHeight, playhead);
         const selected = selectedClipId === clip.id;
         const label = clip.text?.text ?? clip.label;
@@ -138,7 +140,6 @@ export function PreviewTextOverlays({
             aria-label={`Select text: ${label.slice(0, 48)}`}
             title={label}
             onPointerDown={(event) => {
-              // Beat the video transform hit layer underneath (over layer only).
               event.preventDefault();
               event.stopPropagation();
               if (playing) {

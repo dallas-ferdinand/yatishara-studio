@@ -25,6 +25,8 @@ import type { ReactNode } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
+import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
+import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import type { StudioFeedSharePayload } from "@/studio/lib/studioFeedShare";
 import {
@@ -112,6 +114,10 @@ export function StudioMessagesSidebar({
     avatarUrl?: string | null;
   } | null>(null);
   const [context, setContext] = useState<ContextTarget | null>(null);
+
+  const labelRailRef = useRef<HTMLDivElement | null>(null);
+  useHorizontalWheelScroll(labelRailRef);
+  useHorizontalScrollFade(labelRailRef);
 
   const labels = useQuery(api.dmLabels.listMine, {});
   const removeLabel = useMutation(api.dmLabels.remove);
@@ -319,6 +325,7 @@ export function StudioMessagesSidebar({
 
         <div className="studio-dm-rail-row">
           <div
+            ref={labelRailRef}
             className="studio-dm-label-rail"
             role="tablist"
             aria-label="Labels"

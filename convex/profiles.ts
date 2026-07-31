@@ -6,6 +6,7 @@ import {
   query,
   mutation,
   internalMutation,
+  internalQuery,
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
@@ -1008,13 +1009,12 @@ export const updatePostCaption = authedMutation({
   },
 });
 
-export const getPublicByUsername = query({
-  args: {
-    username: v.string(),
-    expiresUnix: v.optional(v.number()),
-  },
-  returns: publicProfileReturn,
-  handler: async (ctx, args) => {
+
+async function getPublicByUsernameImpl(
+  ctx: QueryCtx,
+  viewer: Doc<"users"> | null,
+  args: { username: string; expiresUnix?: number },
+) {
     let username: string;
     try {
       username = validateUsername(args.username);
@@ -1027,7 +1027,6 @@ export const getPublicByUsername = query({
       .unique();
     if (!profile || !profile.isPublic) return null;
 
-    const viewer = await getOptionalUser(ctx);
     const isOwner = viewer?._id === profile.userId;
     let isFollowing = false;
     if (viewer && !isOwner) {
@@ -1062,8 +1061,20 @@ export const getPublicByUsername = query({
       isFollowing,
       viewerAuthenticated: Boolean(viewer),
     };
+  }
+
+export const getPublicByUsername = query({
+  args: {
+    username: v.string(),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: publicProfileReturn,
+  handler: async (ctx, args) => {
+    const viewer = await getOptionalUser(ctx);
+    return await getPublicByUsernameImpl(ctx, viewer, args);
   },
 });
+
 
 export const listPublicPosts = query({
   args: {
@@ -1172,20 +1183,21 @@ export const listMyCollection = authedQuery({
  * Following: only people you follow (chronology + light engagement).
  * Optional seedPostId is pinned first so opening a grid tile lands on that post.
  */
-export const listFeed = query({
+
+async function listFeedImpl(
+  ctx: QueryCtx,
+  viewerId: Id<"users"> | null,
   args: {
-    expiresUnix: v.optional(v.number()),
-    limit: v.optional(v.number()),
-    seedPostId: v.optional(v.id("profilePosts")),
-    mode: v.optional(v.union(v.literal("forYou"), v.literal("following"))),
+    expiresUnix?: number;
+    limit?: number;
+    seedPostId?: Id<"profilePosts">;
+    mode?: "forYou" | "following";
   },
-  returns: v.array(feedPostReturn),
-  handler: async (ctx, args) => {
+) {
     const mode: FeedMode = args.mode === "following" ? "following" : "forYou";
     const limit = Math.min(Math.max(args.limit ?? 24, 1), 40);
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    const viewerId = await getAuthUserId(ctx);
     const now = Date.now();
 
     const followingIds = new Set<Id<"profiles">>();
@@ -1556,8 +1568,22 @@ export const listFeed = query({
     }
 
     return results;
+  }
+
+export const listFeed = query({
+  args: {
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    seedPostId: v.optional(v.id("profilePosts")),
+    mode: v.optional(v.union(v.literal("forYou"), v.literal("following"))),
+  },
+  returns: v.array(feedPostReturn),
+  handler: async (ctx, args) => {
+    const viewerId = await getAuthUserId(ctx);
+    return await listFeedImpl(ctx, viewerId, args);
   },
 });
+
 
 export const getPublicPostMedia = query({
   args: {
@@ -2096,8 +2122,9 @@ async function hydrateComments(
   rows: Doc<"profileComments">[],
   postOwnerId: Id<"users"> | undefined,
   expiresUnix: number,
+  viewerId: Id<"users"> | null = null,
 ): Promise<CommentReturn[]> {
-  const viewerId = await getAuthUserId(ctx);
+  const resolvedViewerId = viewerId ?? (await getAuthUserId(ctx));
   const prepared: Array<{
     _id: Id<"profileComments">;
     body: string;
@@ -2124,11 +2151,11 @@ async function hydrateComments(
       ? await resolvedDisplayNameForProfile(ctx, authorProfile, user)
       : accountNameFromUser(user) || "User";
     let likedByMe = false;
-    if (viewerId) {
+    if (resolvedViewerId) {
       const like = await ctx.db
         .query("profileCommentLikes")
         .withIndex("by_user_and_comment", (q) =>
-          q.eq("userId", viewerId).eq("commentId", row._id),
+          q.eq("userId", resolvedViewerId).eq("commentId", row._id),
         )
         .unique();
       likedByMe = Boolean(like);
@@ -2141,7 +2168,7 @@ async function hydrateComments(
       displayName,
       username: authorProfile?.username,
       isOwner: postOwnerId ? row.userId === postOwnerId : false,
-      isMine: viewerId === row.userId,
+      isMine: resolvedViewerId === row.userId,
       parentId: row.parentId,
       likeCount: row.likeCount ?? 0,
       replyCount: row.replyCount ?? 0,
@@ -2382,5 +2409,1222 @@ export const deleteComment = authedMutation({
     const commentCount = Math.max(0, (post.commentCount ?? 1) - 1);
     await ctx.db.patch(post._id, { commentCount });
     return { commentCount };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// API key / HTTP layer — internalQuery / internalMutation *ForApi
+// HTTP routes (Wave HTTP agent) call these with the key's userId.
+// ---------------------------------------------------------------------------
+
+async function requireUserForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Doc<"users">> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+export const getMineForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: myProfileReturn,
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) return null;
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    let avatarUrl: string | undefined;
+    if (profile.avatarAssetId) {
+      const avatar = await ctx.db.get("assets", profile.avatarAssetId);
+      avatarUrl = await signAvatarUrl(avatar, expiresUnix);
+    }
+    const seller = await getMarketplaceSellerForUser(ctx, user._id);
+    const approved = seller?.status === "approved";
+    const sellerBusinessName =
+      approved && seller.businessName.trim()
+        ? seller.businessName.trim()
+        : undefined;
+    const accountName = accountNameFromUser(user);
+    const displayName = resolvePublicDisplayName({
+      username: profile.username,
+      useSellerDisplayName: profile.useSellerDisplayName,
+      user,
+      seller,
+    });
+    return {
+      _id: profile._id,
+      username: profile.username,
+      displayName,
+      accountName,
+      useSellerDisplayName: Boolean(profile.useSellerDisplayName),
+      canUseSellerDisplayName: Boolean(sellerBusinessName),
+      sellerBusinessName,
+      bio: profile.bio,
+      avatarAssetId: profile.avatarAssetId,
+      avatarUrl,
+      contactLinks: profile.contactLinks,
+      isPublic: profile.isPublic,
+      followerCount: profile.followerCount,
+      followingCount: profile.followingCount,
+      postCount: profile.postCount,
+      publicUrlPath: publicUrlPath(profile.username),
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+    };
+  },
+});
+
+export const updateMineForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    useSellerDisplayName: v.optional(v.boolean()),
+    bio: v.optional(v.string()),
+    isPublic: v.optional(v.boolean()),
+    contactLinks: v.optional(v.array(contactLinkValidator)),
+    avatarAssetId: v.optional(v.union(v.id("assets"), v.null())),
+  },
+  returns: v.object({
+    profileId: v.id("profiles"),
+    username: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) {
+      throw new Error("Claim a username before editing your profile");
+    }
+    const patch: Partial<Doc<"profiles">> = { updatedAt: Date.now() };
+    if (args.useSellerDisplayName !== undefined) {
+      if (args.useSellerDisplayName) {
+        const seller = await getMarketplaceSellerForUser(ctx, user._id);
+        if (
+          !seller ||
+          seller.status !== "approved" ||
+          !seller.businessName.trim()
+        ) {
+          throw new Error(
+            "Verified marketplace seller trading name required to show business name",
+          );
+        }
+        patch.useSellerDisplayName = true;
+      } else {
+        patch.useSellerDisplayName = false;
+      }
+    }
+    if (args.bio !== undefined) {
+      patch.bio = sanitizeBio(args.bio);
+    }
+    if (args.isPublic !== undefined) {
+      patch.isPublic = args.isPublic;
+    }
+    if (args.contactLinks !== undefined) {
+      patch.contactLinks = sanitizeContactLinks(args.contactLinks);
+    }
+    if (args.avatarAssetId !== undefined) {
+      if (args.avatarAssetId === null) {
+        patch.avatarAssetId = undefined;
+      } else {
+        const asset = await requireOwnedAsset(ctx, user._id, args.avatarAssetId);
+        if (asset.kind !== "image") {
+          throw new Error("Avatar must be an image");
+        }
+        patch.avatarAssetId = asset._id;
+      }
+    }
+    await ctx.db.patch(profile._id, patch);
+    return { profileId: profile._id, username: profile.username };
+  },
+});
+
+export const getPublicByUsernameForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: publicProfileReturn,
+  handler: async (ctx, args) => {
+    const viewer = await requireUserForApi(ctx, args.userId);
+    return await getPublicByUsernameImpl(ctx, viewer, {
+      username: args.username,
+      expiresUnix: args.expiresUnix,
+    });
+  },
+});
+
+export const checkUsernameAvailableForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+  },
+  returns: v.object({
+    available: v.boolean(),
+    normalized: v.optional(v.string()),
+    reason: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    let normalized: string;
+    try {
+      normalized = validateUsername(args.username);
+    } catch (error) {
+      return {
+        available: false,
+        reason: error instanceof Error ? error.message : "Invalid username",
+      };
+    }
+    const existing = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", normalized))
+      .unique();
+    if (existing && existing.userId !== user._id) {
+      return { available: false, normalized, reason: "Username is taken" };
+    }
+    return { available: true, normalized };
+  },
+});
+
+export const claimUsernameForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+  },
+  returns: v.object({
+    profileId: v.id("profiles"),
+    username: v.string(),
+    publicUrlPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const existing = await getProfileByUser(ctx, user._id);
+    const username = validateUsername(args.username);
+    const taken = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (taken && taken.userId !== user._id) {
+      throw new Error("Username is taken");
+    }
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        username,
+        updatedAt: now,
+      });
+      return {
+        profileId: existing._id,
+        username,
+        publicUrlPath: publicUrlPath(username),
+      };
+    }
+    const profileId = await ctx.db.insert("profiles", {
+      userId: user._id,
+      username,
+      bio: undefined,
+      avatarAssetId: undefined,
+      contactLinks: [],
+      isPublic: true,
+      followerCount: 0,
+      followingCount: 0,
+      postCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      profileId,
+      username,
+      publicUrlPath: publicUrlPath(username),
+    };
+  },
+});
+
+export const changeUsernameForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+  },
+  returns: v.object({
+    profileId: v.id("profiles"),
+    username: v.string(),
+    publicUrlPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) {
+      throw new Error("Claim a username before changing it");
+    }
+    const username = validateUsername(args.username);
+    if (username === profile.username) {
+      return {
+        profileId: profile._id,
+        username: profile.username,
+        publicUrlPath: publicUrlPath(profile.username),
+      };
+    }
+    const taken = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (taken && taken.userId !== user._id) {
+      throw new Error("Username is taken");
+    }
+    await ctx.db.patch(profile._id, {
+      username,
+      updatedAt: Date.now(),
+    });
+    return {
+      profileId: profile._id,
+      username,
+      publicUrlPath: publicUrlPath(username),
+    };
+  },
+});
+
+export const listFeedForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    seedPostId: v.optional(v.id("profilePosts")),
+    mode: v.optional(v.union(v.literal("forYou"), v.literal("following"))),
+  },
+  returns: v.array(feedPostReturn),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    return await listFeedImpl(ctx, args.userId, {
+      expiresUnix: args.expiresUnix,
+      limit: args.limit,
+      seedPostId: args.seedPostId,
+      mode: args.mode,
+    });
+  },
+});
+
+export const listPublicPostsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicPostReturn),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    let username: string;
+    try {
+      username = validateUsername(args.username);
+    } catch {
+      return [];
+    }
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile || !profile.isPublic) return [];
+    const limit = Math.min(Math.max(args.limit ?? 36, 1), 48);
+    const scanned = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_profile_and_published", (q) => q.eq("profileId", profile._id))
+      .order("desc")
+      .take(Math.min(limit + 16, 64));
+    const active: Doc<"profilePosts">[] = [];
+    for (const post of scanned) {
+      if (post.unpublishedAt) continue;
+      active.push(post);
+      if (active.length >= limit) break;
+    }
+    if (active.length === 0) return [];
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    return await hydratePublicPosts(ctx, active, expiresUnix, args.userId);
+  },
+});
+
+export const listMyCollectionForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    kind: v.union(v.literal("saved"), v.literal("liked"), v.literal("shared")),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicPostReturn),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 36, 1), 48);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const scan = Math.min(limit + 24, 72);
+    let postIds: Id<"profilePosts">[] = [];
+    if (args.kind === "liked") {
+      const rows = await ctx.db
+        .query("profileLikes")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    } else if (args.kind === "saved") {
+      const rows = await ctx.db
+        .query("profileSaves")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    } else {
+      const rows = await ctx.db
+        .query("profileShares")
+        .withIndex("by_user_and_created", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .take(scan);
+      postIds = rows.map((row) => row.postId);
+    }
+    const posts: Doc<"profilePosts">[] = [];
+    const seen = new Set<string>();
+    for (const postId of postIds) {
+      if (seen.has(postId)) continue;
+      seen.add(postId);
+      const post = await ctx.db.get("profilePosts", postId);
+      if (!post || post.unpublishedAt) continue;
+      const profile = await ctx.db.get("profiles", post.profileId);
+      if (!profile || !profile.isPublic) continue;
+      posts.push(post);
+      if (posts.length >= limit) break;
+    }
+    return await hydratePublicPosts(ctx, posts, expiresUnix, user._id);
+  },
+});
+
+export const shareAssetForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+    caption: v.optional(v.string()),
+    hashtags: v.optional(v.array(v.string())),
+    keywords: v.optional(v.array(v.string())),
+  },
+  returns: v.object({
+    postId: v.id("profilePosts"),
+    publicUrlPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) {
+      throw new Error("Claim a username in Settings → Profile before sharing");
+    }
+    if (!profile.isPublic) {
+      throw new Error("Turn on your public profile before sharing");
+    }
+    await requireOwnedAsset(ctx, user._id, args.assetId);
+    const existing = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
+      .unique();
+    const caption = args.caption?.trim() || undefined;
+    const fromCaptionTags = extractHashtagsFromCaption(caption);
+    const fromCaptionKeywords = extractKeywordsFromCaption(caption);
+    const fromCaptionMentions = extractMentionsFromCaption(caption);
+    const hashtags = normalizeHashtagList([
+      ...(args.hashtags ?? []),
+      ...fromCaptionTags,
+    ]);
+    const keywords = normalizeKeywordList([
+      ...(args.keywords ?? []),
+      ...fromCaptionKeywords,
+    ]);
+    const now = Date.now();
+
+    async function attachMeta(postId: Id<"profilePosts">) {
+      await syncPostHashtags(ctx, {
+        postId,
+        profileId: profile!._id,
+        ownerId: user._id,
+        rawTags: hashtags,
+        now,
+      });
+      await syncPostMentions(ctx, {
+        postId,
+        ownerId: user._id,
+        usernames: fromCaptionMentions,
+        now,
+      });
+    }
+
+    if (existing) {
+      if (!existing.unpublishedAt && existing.ownerId === user._id) {
+        await ctx.db.patch(existing._id, {
+          caption,
+          keywords: keywords.length ? keywords : undefined,
+          publishedAt: now,
+          unpublishedAt: undefined,
+        });
+        await attachMeta(existing._id);
+        return {
+          postId: existing._id,
+          publicUrlPath: publicUrlPath(profile.username),
+        };
+      }
+      if (existing.ownerId !== user._id) {
+        throw new Error("This asset is already shared");
+      }
+      await ctx.db.patch(existing._id, {
+        profileId: profile._id,
+        caption,
+        keywords: keywords.length ? keywords : undefined,
+        publishedAt: now,
+        unpublishedAt: undefined,
+      });
+      await attachMeta(existing._id);
+      await adjustProfileCounts(ctx, profile._id, {
+        postCount: profile.postCount + 1,
+      });
+      return {
+        postId: existing._id,
+        publicUrlPath: publicUrlPath(profile.username),
+      };
+    }
+    const postId = await ctx.db.insert("profilePosts", {
+      profileId: profile._id,
+      ownerId: user._id,
+      assetId: args.assetId,
+      caption,
+      keywords: keywords.length ? keywords : undefined,
+      likeCount: 0,
+      viewCount: 0,
+      commentCount: 0,
+      saveCount: 0,
+      shareCount: 0,
+      publishedAt: now,
+    });
+    await attachMeta(postId);
+    await adjustProfileCounts(ctx, profile._id, {
+      postCount: profile.postCount + 1,
+    });
+    return {
+      postId,
+      publicUrlPath: publicUrlPath(profile.username),
+    };
+  },
+});
+
+export const unshareAssetForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) return null;
+    const post = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_asset", (q) => q.eq("assetId", args.assetId))
+      .unique();
+    if (!post || post.ownerId !== user._id || post.unpublishedAt) {
+      return null;
+    }
+    const now = Date.now();
+    await clearPostHashtags(ctx, post, now);
+    await clearPostMentions(ctx, post._id);
+    await ctx.db.patch(post._id, { unpublishedAt: now });
+    await adjustProfileCounts(ctx, profile._id, {
+      postCount: Math.max(0, profile.postCount - 1),
+    });
+    return null;
+  },
+});
+
+export const updatePostCaptionForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    caption: v.optional(v.string()),
+  },
+  returns: v.object({
+    postId: v.id("profilePosts"),
+    caption: v.optional(v.string()),
+    editedAt: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      throw new Error("Post not found");
+    }
+    if (post.ownerId !== user._id) {
+      throw new Error("You can only edit your own posts");
+    }
+    const captionRaw = (args.caption ?? "").trim();
+    if (captionRaw.length > POST_CAPTION_MAX) {
+      throw new Error(`Description must be ${POST_CAPTION_MAX} characters or fewer`);
+    }
+    const caption = captionRaw || undefined;
+    const fromCaptionTags = extractHashtagsFromCaption(caption);
+    const fromCaptionKeywords = extractKeywordsFromCaption(caption);
+    const fromCaptionMentions = extractMentionsFromCaption(caption);
+    const hashtags = normalizeHashtagList(fromCaptionTags);
+    const keywords = normalizeKeywordList(fromCaptionKeywords);
+    const now = Date.now();
+    await ctx.db.patch(post._id, {
+      caption,
+      keywords: keywords.length ? keywords : undefined,
+      editedAt: now,
+    });
+    await syncPostHashtags(ctx, {
+      postId: post._id,
+      profileId: post.profileId,
+      ownerId: user._id,
+      rawTags: hashtags,
+      now,
+    });
+    await syncPostMentions(ctx, {
+      postId: post._id,
+      ownerId: user._id,
+      usernames: fromCaptionMentions,
+      now,
+    });
+    return {
+      postId: post._id,
+      caption,
+      editedAt: now,
+    };
+  },
+});
+
+export const isAssetSharedForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    assetId: v.id("assets"),
+  },
+  returns: v.object({
+    shared: v.boolean(),
+    postId: v.optional(v.id("profilePosts")),
+    hasProfile: v.boolean(),
+    username: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) {
+      return { shared: false, hasProfile: false };
+    }
+    const post = await getActivePostByAsset(ctx, args.assetId);
+    if (!post || post.ownerId !== user._id) {
+      return {
+        shared: false,
+        hasProfile: true,
+        username: profile.username,
+      };
+    }
+    return {
+      shared: true,
+      postId: post._id,
+      hasProfile: true,
+      username: profile.username,
+    };
+  },
+});
+
+export const listMySharedAssetIdsForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.object({
+    hasProfile: v.boolean(),
+    username: v.optional(v.string()),
+    assetIds: v.array(v.id("assets")),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await getProfileByUser(ctx, user._id);
+    if (!profile) {
+      return { hasProfile: false, assetIds: [] };
+    }
+    const posts = await ctx.db
+      .query("profilePosts")
+      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+      .collect();
+    return {
+      hasProfile: true,
+      username: profile.username,
+      assetIds: posts.filter((post) => !post.unpublishedAt).map((post) => post.assetId),
+    };
+  },
+});
+
+export const getPublicPostMediaForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      postId: v.id("profilePosts"),
+      kind: v.union(v.literal("image"), v.literal("video")),
+      thumbnailUrl: v.optional(v.string()),
+      mediaUrl: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) return null;
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) return null;
+    const asset = await ctx.db.get("assets", post.assetId);
+    if (!asset || asset.deletedAt || (asset.kind !== "image" && asset.kind !== "video")) {
+      return null;
+    }
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const thumbPath = assetThumbnailPath(asset);
+    const [thumbs, mediaUrl] = await Promise.all([
+      thumbPath
+        ? signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM)
+        : Promise.resolve(new Map<string, string>()),
+      asset.bunnyPath
+        ? signBunnyFullUrl(asset.bunnyPath, expiresUnix, asset.kind)
+        : Promise.resolve(undefined),
+    ]);
+    return {
+      postId: post._id,
+      kind: asset.kind,
+      thumbnailUrl: thumbPath ? thumbs.get(thumbPath) : undefined,
+      mediaUrl,
+    };
+  },
+});
+
+export const toggleLikeForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.object({
+    liked: v.boolean(),
+    likeCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      throw new Error("Post not found");
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      throw new Error("Post not found");
+    }
+    const existing = await ctx.db
+      .query("profileLikes")
+      .withIndex("by_user_and_post", (q) =>
+        q.eq("userId", user._id).eq("postId", post._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const likeCount = Math.max(0, post.likeCount - 1);
+      await ctx.db.patch(post._id, { likeCount });
+      await applyPostAffinity(ctx, {
+        userId: user._id,
+        post,
+        event: "like",
+        direction: -1,
+      });
+      return { liked: false, likeCount };
+    }
+    await ctx.db.insert("profileLikes", {
+      userId: user._id,
+      postId: post._id,
+      createdAt: Date.now(),
+    });
+    const likeCount = post.likeCount + 1;
+    await ctx.db.patch(post._id, { likeCount });
+    await applyPostAffinity(ctx, {
+      userId: user._id,
+      post,
+      event: "like",
+      direction: 1,
+    });
+    return { liked: true, likeCount };
+  },
+});
+
+export const toggleSaveForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.object({
+    saved: v.boolean(),
+    saveCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await requirePublicPost(ctx, args.postId);
+    const existing = await ctx.db
+      .query("profileSaves")
+      .withIndex("by_user_and_post", (q) =>
+        q.eq("userId", user._id).eq("postId", post._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const saveCount = Math.max(0, (post.saveCount ?? 1) - 1);
+      await ctx.db.patch(post._id, { saveCount });
+      await applyPostAffinity(ctx, {
+        userId: user._id,
+        post,
+        event: "save",
+        direction: -1,
+      });
+      return { saved: false, saveCount };
+    }
+    await ctx.db.insert("profileSaves", {
+      userId: user._id,
+      postId: post._id,
+      createdAt: Date.now(),
+    });
+    const saveCount = (post.saveCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { saveCount });
+    await applyPostAffinity(ctx, {
+      userId: user._id,
+      post,
+      event: "save",
+      direction: 1,
+    });
+    return { saved: true, saveCount };
+  },
+});
+
+export const recordShareForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.object({
+    shared: v.boolean(),
+    shareCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await requirePublicPost(ctx, args.postId);
+    const existing = await ctx.db
+      .query("profileShares")
+      .withIndex("by_user_and_post", (q) =>
+        q.eq("userId", user._id).eq("postId", post._id),
+      )
+      .unique();
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { createdAt: now });
+    } else {
+      await ctx.db.insert("profileShares", {
+        userId: user._id,
+        postId: post._id,
+        createdAt: now,
+      });
+    }
+    const shareCount = (post.shareCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { shareCount });
+    if (!existing) {
+      await applyPostAffinity(ctx, {
+        userId: user._id,
+        post,
+        event: "share",
+        direction: 1,
+      });
+    }
+    return { shared: true, shareCount };
+  },
+});
+
+export const recordPostViewForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+  },
+  returns: v.object({ viewCount: v.number() }),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      return { viewCount: 0 };
+    }
+    const profile = await ctx.db.get("profiles", post.profileId);
+    if (!profile || !profile.isPublic) {
+      return { viewCount: post.viewCount ?? 0 };
+    }
+    const viewCount = (post.viewCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { viewCount });
+    await applyPostAffinity(ctx, {
+      userId: args.userId,
+      post,
+      event: "view",
+      direction: 1,
+    });
+    return { viewCount };
+  },
+});
+
+export const listCommentsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(commentReturnValidator),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    try {
+      await requirePublicPost(ctx, args.postId);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const rows = await ctx.db
+      .query("profileComments")
+      .withIndex("by_post_and_created", (q) => q.eq("postId", args.postId))
+      .order("desc")
+      .take(limit * 3 + 40);
+    const post = await ctx.db.get("profilePosts", args.postId);
+    const topLevel: Doc<"profileComments">[] = [];
+    for (const row of rows) {
+      if (row.deletedAt || row.parentId) continue;
+      topLevel.push(row);
+      if (topLevel.length >= limit) break;
+    }
+    topLevel.reverse();
+    return hydrateComments(ctx, topLevel, post?.ownerId, expiresUnix, args.userId);
+  },
+});
+
+export const listCommentRepliesForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    parentId: v.id("profileComments"),
+    expiresUnix: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(commentReturnValidator),
+  handler: async (ctx, args) => {
+    await requireUserForApi(ctx, args.userId);
+    const parent = await ctx.db.get("profileComments", args.parentId);
+    if (!parent || parent.deletedAt) return [];
+    try {
+      await requirePublicPost(ctx, parent.postId);
+    } catch {
+      return [];
+    }
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const rows = await ctx.db
+      .query("profileComments")
+      .withIndex("by_parent_and_created", (q) => q.eq("parentId", args.parentId))
+      .order("asc")
+      .take(limit + 20);
+    const post = await ctx.db.get("profilePosts", parent.postId);
+    const alive = rows.filter((row) => !row.deletedAt).slice(0, limit);
+    return hydrateComments(ctx, alive, post?.ownerId, expiresUnix, args.userId);
+  },
+});
+
+export const addCommentForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    postId: v.id("profilePosts"),
+    body: v.string(),
+    parentId: v.optional(v.id("profileComments")),
+    imageAssetId: v.optional(v.id("assets")),
+  },
+  returns: v.object({
+    commentId: v.id("profileComments"),
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const post = await requirePublicPost(ctx, args.postId);
+    const body = sanitizeCommentBody(args.body, {
+      allowEmpty: Boolean(args.imageAssetId),
+    });
+    let imageAssetId: Id<"assets"> | undefined;
+    if (args.imageAssetId) {
+      const asset = await ctx.db.get("assets", args.imageAssetId);
+      if (
+        !asset ||
+        asset.ownerId !== user._id ||
+        asset.deletedAt ||
+        asset.kind !== "image" ||
+        !asset.bunnyPath
+      ) {
+        throw new Error("Image not found");
+      }
+      imageAssetId = asset._id;
+    }
+    if (!body && !imageAssetId) {
+      throw new Error("Comment cannot be empty");
+    }
+    let parent: Doc<"profileComments"> | null = null;
+    if (args.parentId) {
+      parent = await ctx.db.get("profileComments", args.parentId);
+      if (!parent || parent.deletedAt || parent.postId !== args.postId) {
+        throw new Error("Comment not found");
+      }
+    }
+    const commentId = await ctx.db.insert("profileComments", {
+      postId: args.postId,
+      userId: user._id,
+      body,
+      createdAt: Date.now(),
+      parentId: parent?._id,
+      likeCount: 0,
+      replyCount: 0,
+      imageAssetId,
+    });
+    if (parent) {
+      await ctx.db.patch(parent._id, {
+        replyCount: (parent.replyCount ?? 0) + 1,
+      });
+    }
+    const commentCount = (post.commentCount ?? 0) + 1;
+    await ctx.db.patch(post._id, { commentCount });
+    return { commentId, commentCount };
+  },
+});
+
+export const toggleCommentLikeForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    commentId: v.id("profileComments"),
+  },
+  returns: v.object({
+    liked: v.boolean(),
+    likeCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const comment = await ctx.db.get("profileComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      throw new Error("Comment not found");
+    }
+    await requirePublicPost(ctx, comment.postId);
+    const existing = await ctx.db
+      .query("profileCommentLikes")
+      .withIndex("by_user_and_comment", (q) =>
+        q.eq("userId", user._id).eq("commentId", comment._id),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+      const likeCount = Math.max(0, (comment.likeCount ?? 1) - 1);
+      await ctx.db.patch(comment._id, { likeCount });
+      return { liked: false, likeCount };
+    }
+    await ctx.db.insert("profileCommentLikes", {
+      userId: user._id,
+      commentId: comment._id,
+      createdAt: Date.now(),
+    });
+    const likeCount = (comment.likeCount ?? 0) + 1;
+    await ctx.db.patch(comment._id, { likeCount });
+    return { liked: true, likeCount };
+  },
+});
+
+export const deleteCommentForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    commentId: v.id("profileComments"),
+  },
+  returns: v.object({
+    commentCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const comment = await ctx.db.get("profileComments", args.commentId);
+    if (!comment || comment.deletedAt) {
+      return { commentCount: 0 };
+    }
+    const post = await ctx.db.get("profilePosts", comment.postId);
+    const isAuthor = comment.userId === user._id;
+    const isPostOwner = post?.ownerId === user._id;
+    if (!isAuthor && !isPostOwner) {
+      throw new Error("You cannot delete this comment");
+    }
+    await ctx.db.patch(comment._id, { deletedAt: Date.now() });
+    if (comment.parentId) {
+      const parent = await ctx.db.get("profileComments", comment.parentId);
+      if (parent && !parent.deletedAt) {
+        await ctx.db.patch(parent._id, {
+          replyCount: Math.max(0, (parent.replyCount ?? 1) - 1),
+        });
+      }
+    }
+    if (!post) return { commentCount: 0 };
+    const commentCount = Math.max(0, (post.commentCount ?? 1) - 1);
+    await ctx.db.patch(post._id, { commentCount });
+    return { commentCount };
+  },
+});
+
+export const followForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    profileId: v.id("profiles"),
+  },
+  returns: v.object({
+    following: v.boolean(),
+    followerCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await ctx.db.get("profiles", args.profileId);
+    if (!profile || !profile.isPublic) {
+      throw new Error("Profile not found");
+    }
+    if (profile.userId === user._id) {
+      throw new Error("You cannot follow yourself");
+    }
+    const existing = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_pair", (q) =>
+        q.eq("followerUserId", user._id).eq("followingProfileId", profile._id),
+      )
+      .unique();
+    if (existing) {
+      return { following: true, followerCount: profile.followerCount };
+    }
+    const viewerProfile = await getProfileByUser(ctx, user._id);
+    await ctx.db.insert("profileFollows", {
+      followerUserId: user._id,
+      followingProfileId: profile._id,
+      createdAt: Date.now(),
+    });
+    const followerCount = profile.followerCount + 1;
+    await ctx.db.patch(profile._id, {
+      followerCount,
+      updatedAt: Date.now(),
+    });
+    if (viewerProfile) {
+      await ctx.db.patch(viewerProfile._id, {
+        followingCount: viewerProfile.followingCount + 1,
+        updatedAt: Date.now(),
+      });
+    }
+    return { following: true, followerCount };
+  },
+});
+
+export const unfollowForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    profileId: v.id("profiles"),
+  },
+  returns: v.object({
+    following: v.boolean(),
+    followerCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const profile = await ctx.db.get("profiles", args.profileId);
+    if (!profile) {
+      throw new Error("Profile not found");
+    }
+    const existing = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_pair", (q) =>
+        q.eq("followerUserId", user._id).eq("followingProfileId", profile._id),
+      )
+      .unique();
+    if (!existing) {
+      return { following: false, followerCount: profile.followerCount };
+    }
+    await ctx.db.delete(existing._id);
+    const followerCount = Math.max(0, profile.followerCount - 1);
+    await ctx.db.patch(profile._id, {
+      followerCount,
+      updatedAt: Date.now(),
+    });
+    const viewerProfile = await getProfileByUser(ctx, user._id);
+    if (viewerProfile) {
+      await ctx.db.patch(viewerProfile._id, {
+        followingCount: Math.max(0, viewerProfile.followingCount - 1),
+        updatedAt: Date.now(),
+      });
+    }
+    return { following: false, followerCount };
+  },
+});
+
+export const listMyFollowingForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    limit: v.optional(v.number()),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(socialPersonReturn),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 60);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", user._id))
+      .order("desc")
+      .take(limit);
+    const profiles: Doc<"profiles">[] = [];
+    for (const follow of follows) {
+      const profile = await ctx.db.get("profiles", follow.followingProfileId);
+      if (profile?.isPublic) profiles.push(profile);
+    }
+    return await hydrateSocialPeople(ctx, profiles, expiresUnix);
+  },
+});
+
+export const listPlatformPeopleForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    limit: v.optional(v.number()),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(socialPersonReturn),
+  handler: async (ctx, args) => {
+    const user = await requireUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 60, 1), 100);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", user._id))
+      .take(200);
+    const followingIds = new Set(
+      follows.map((follow) => follow.followingProfileId),
+    );
+    const myProfile = await getProfileByUser(ctx, user._id);
+    const scanned = await ctx.db
+      .query("profiles")
+      .withIndex("by_username")
+      .order("asc")
+      .take(Math.min(limit + followingIds.size + 8, 200));
+    const candidates = scanned
+      .filter(
+        (profile) =>
+          profile.isPublic &&
+          profile.userId !== user._id &&
+          (!myProfile || profile._id !== myProfile._id) &&
+          !followingIds.has(profile._id),
+      )
+      .slice(0, limit);
+    return await hydrateSocialPeople(ctx, candidates, expiresUnix);
   },
 });

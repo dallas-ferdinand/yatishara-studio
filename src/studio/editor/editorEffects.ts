@@ -52,9 +52,40 @@ export const DEFAULT_TEXT_STYLE: TextClipContent = {
   fontSize: 42,
   color: "#ffffff",
   align: "center",
+  verticalAlign: "middle",
   animation: "fadeIn",
   animationDuration: 0.5,
+  fontFamily: "system",
+  bold: false,
+  italic: false,
+  underline: false,
+  textCase: "none",
+  letterSpacing: 0,
+  lineHeight: 1.2,
+  strokeColor: "#000000",
+  strokeWidth: 0,
+  backgroundColor: null,
+  backgroundPadding: 8,
+  backgroundRadius: 0,
+  shadowColor: null,
+  shadowBlur: 0,
+  shadowOffsetX: 0,
+  shadowOffsetY: 0,
+  glow: false,
+  glowColor: "#ffffff",
+  glowBlur: 12,
+  opacity: 1,
+  flipX: false,
+  flipY: false,
 };
+
+/** Default canvas pose for new text clips (lower-third). */
+export const DEFAULT_TEXT_EFFECTS = {
+  scale: 1,
+  x: 0,
+  y: 0.32,
+  rotation: 0,
+} as const;
 
 /** Clip picture edge fades were removed — transitions handle dissolves. Kept for call sites. */
 export function clipOpacityAtLocalTime(

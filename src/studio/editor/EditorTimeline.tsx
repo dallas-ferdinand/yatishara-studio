@@ -1179,12 +1179,10 @@ export function EditorTimeline({
         return;
       }
 
-      // Shift + wheel → horizontal pan in time.
-      if (event.shiftKey) {
-        event.preventDefault();
-        scroll.scrollLeft += event.deltaY;
-        return;
-      }
+      const overRuler = Boolean(
+        event.target instanceof Element &&
+          event.target.closest(".studio-editor-ruler"),
+      );
 
       // Horizontal trackpad swipe → pan in time.
       if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
@@ -1193,7 +1191,18 @@ export function EditorTimeline({
         return;
       }
 
-      // Plain vertical scroll moves the timeline space up/down (native).
+      // Wheel over the ruler → horizontal pan in time (no Shift).
+      if (overRuler) {
+        event.preventDefault();
+        scroll.scrollLeft += event.deltaY;
+        return;
+      }
+
+      // Lanes: Shift + wheel → horizontal pan; plain wheel → native vertical.
+      if (event.shiftKey) {
+        event.preventDefault();
+        scroll.scrollLeft += event.deltaY;
+      }
     },
     [zoomAtClientX],
   );
@@ -1298,8 +1307,10 @@ export function EditorTimeline({
       if (!scroll) return 0;
       const canvas = scroll.querySelector(".studio-editor-timeline-canvas");
       if (!canvas) return 0;
+      // Canvas lives inside the scroller — getBoundingClientRect already
+      // includes horizontal scroll. Do not add scrollLeft again.
       const canvasRect = canvas.getBoundingClientRect();
-      const x = clientX - canvasRect.left + scroll.scrollLeft - TRACK_RAIL_WIDTH;
+      const x = clientX - canvasRect.left - TRACK_RAIL_WIDTH;
       return Math.max(0, Math.min(project.duration, x / Math.max(pixelsPerSecond, 1)));
     },
     [pixelsPerSecond, project.duration],
@@ -1358,10 +1369,10 @@ export function EditorTimeline({
 
   const timeFromClientX = useCallback(
     (clientX, laneEl) => {
-      const scroll = scrollRef.current;
-      if (!scroll || !laneEl) return 0;
+      if (!laneEl) return 0;
+      // Lane is inside the scrolled canvas; rect.left already reflects scroll.
       const rect = laneEl.getBoundingClientRect();
-      const x = clientX - rect.left + scroll.scrollLeft;
+      const x = clientX - rect.left;
       return Math.max(0, Math.min(project.duration, x / pixelsPerSecond));
     },
     [pixelsPerSecond, project.duration],
@@ -1381,17 +1392,17 @@ export function EditorTimeline({
       const el = event.currentTarget;
       const apply = (clientX) => {
         if (source === "ruler") {
+          // Ruler is scrolled content (marginLeft = rail); rect already includes scroll.
           const rect = el.getBoundingClientRect();
-          const x = clientX - rect.left + (scrollRef.current?.scrollLeft ?? 0);
+          const x = clientX - rect.left;
           onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
           return;
         }
         if (source === "playhead") {
           const canvas = el.closest(".studio-editor-timeline-canvas");
-          const scroll = scrollRef.current;
-          if (!canvas || !scroll) return;
+          if (!canvas) return;
           const canvasRect = canvas.getBoundingClientRect();
-          const x = clientX - canvasRect.left + scroll.scrollLeft - TRACK_RAIL_WIDTH;
+          const x = clientX - canvasRect.left - TRACK_RAIL_WIDTH;
           onSetPlayhead(Math.max(0, Math.min(project.duration, x / pixelsPerSecond)));
           return;
         }
@@ -1674,7 +1685,17 @@ export function EditorTimeline({
                   className="studio-editor-track-lane"
                   style={track.kind === "text" ? { minHeight: 0 } : undefined}
                   onPointerDown={(event) => {
-                    if (event.target !== event.currentTarget) return;
+                    if (event.button !== 0 || event.altKey) return;
+                    const target = event.target;
+                    if (!(target instanceof Element)) return;
+                    // Keep selection when clicking clips/joints/handles — empty lane only.
+                    if (
+                      target.closest(
+                        ".studio-editor-clip, .studio-editor-joint, .studio-editor-clip-fade-handle, .studio-editor-clip-handle, .studio-editor-track-btn",
+                      )
+                    ) {
+                      return;
+                    }
                     onSelectClip(null);
                     onSelectJoint?.(null);
                     beginPlayheadScrub(event, "lane");

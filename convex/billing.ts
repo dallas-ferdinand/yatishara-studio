@@ -332,6 +332,226 @@ export const getMyPayment = authedQuery({
   },
 });
 
+
+// --- Studio HTTP/MCP ForApi (Wave 4) ---
+// Intended routes (mount via studioApiAccountExtra / later http.ts — NOT wired yet):
+//   GET /api/v1/account              already exists (creditBalance via studioApiInternal.getAccount)
+//   GET /api/v1/account/payments     -> listMyPaymentsForApi       (scope: read)
+//   GET /api/v1/account/payments/:id -> getMyPaymentForApi         (scope: read)
+//   GET /api/v1/account/credits      -> listMyCreditTransactionsForApi (scope: read)
+//   GET /api/v1/account/plans        -> listSubscriptionPlansForApi (scope: read)
+//   GET /api/v1/account/pricing      -> getPricingForApi           (scope: read)
+//   GET /api/v1/account/storage      -> storageBilling.getMyStorageForApi (scope: read)
+// Subscription extras (optional enrichment of /account later):
+//   currentAccountForApi — same shape as currentAccount (includes subscription)
+
+const accountSubscriptionReturn = v.union(
+  v.object({
+    status: v.union(
+      v.literal("active"),
+      v.literal("past_due"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+    ),
+    currentPeriodStart: v.number(),
+    currentPeriodEnd: v.number(),
+    planName: v.optional(v.string()),
+    includedMonthlyCredits: v.optional(v.number()),
+    monthlyPriceCents: v.optional(v.number()),
+  }),
+  v.null(),
+);
+
+const paymentWithReceiptReturn = v.object({
+  ...paymentReturnFields,
+  receiptUrl: v.optional(v.string()),
+});
+
+const creditTxPageReturn = v.object({
+  page: v.array(
+    v.object({
+      _id: v.id("creditTransactions"),
+      _creationTime: v.number(),
+      kind: creditTransactionKind,
+      amount: v.number(),
+      balanceAfter: v.number(),
+      reason: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  isDone: v.boolean(),
+  continueCursor: v.string(),
+  splitCursor: v.optional(v.union(v.string(), v.null())),
+  pageStatus: v.optional(v.union(v.string(), v.null())),
+});
+
+async function requireApiUser(ctx: QueryCtx | MutationCtx, userId: Id<"users">) {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+export const getPricingForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: pricingReturn,
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const settings = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    return {
+      creditPriceCents: settings?.creditPriceCents ?? creditPriceCents,
+      imageCredits1K: imageCreditCost({ resolution: "1K", quality: "medium" }),
+      imageCredits2K: imageCreditCost({ resolution: "2K", quality: "medium" }),
+      imageCredits4K: imageCreditCost({ resolution: "4K", quality: "medium" }),
+      imageReferenceSurcharge: IMAGE_REFERENCE_SURCHARGE,
+      videoCredits480p: videoCreditCost({
+        resolution: "854x480",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      videoCredits720p: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      videoCredits1080p: videoCreditCost({
+        resolution: "1920x1080",
+        durationSeconds: 5,
+        videoModel: "seedance-2.0",
+      }),
+      klingVideoCredits720p: videoCreditCost({
+        resolution: "1280x720",
+        durationSeconds: 5,
+        videoModel: "kling-3.0-i2v",
+        audioEnabled: false,
+      }),
+      klingVideoCredits1080p: videoCreditCost({
+        resolution: "1920x1080",
+        durationSeconds: 5,
+        videoModel: "kling-3.0-i2v",
+        audioEnabled: false,
+      }),
+      platformOverheadCreditsMedia: PLATFORM_OVERHEAD_CREDITS_MEDIA,
+      platformOverheadCreditsText: PLATFORM_OVERHEAD_CREDITS_TEXT,
+      textCredits: textCreditCost({}),
+    };
+  },
+});
+
+export const currentAccountForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.object({
+    creditBalance: v.number(),
+    reservedCredits: v.number(),
+    subscription: accountSubscriptionReturn,
+  }),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    const subscription = account?.activeSubscriptionId
+      ? await ctx.db.get(account.activeSubscriptionId)
+      : await ctx.db
+          .query("subscriptions")
+          .withIndex("by_user_and_status", (q) =>
+            q.eq("userId", args.userId).eq("status", "active"),
+          )
+          .first();
+    const plan = subscription ? await ctx.db.get(subscription.planId) : null;
+    return {
+      creditBalance: account?.creditBalance ?? 0,
+      reservedCredits: account?.reservedCredits ?? 0,
+      subscription: subscription
+        ? {
+            status: subscription.status,
+            currentPeriodStart: subscription.currentPeriodStart,
+            currentPeriodEnd: subscription.currentPeriodEnd,
+            planName: plan?.name,
+            includedMonthlyCredits: plan?.includedMonthlyCredits,
+            monthlyPriceCents: plan?.monthlyPriceCents,
+          }
+        : null,
+    };
+  },
+});
+
+export const listMyPaymentsForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(paymentWithReceiptReturn),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const payments = await ctx.db
+      .query("payments")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .take(50);
+    return await withReceiptUrls(ctx, payments);
+  },
+});
+
+export const listMyCreditTransactionsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: creditTxPageReturn,
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const page = await ctx.db
+      .query("creditTransactions")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+    return {
+      ...page,
+      page: page.page.map((tx) => ({
+        _id: tx._id,
+        _creationTime: tx._creationTime,
+        kind: tx.kind,
+        amount: tx.amount,
+        balanceAfter: tx.balanceAfter,
+        reason: tx.reason,
+        createdAt: tx.createdAt,
+      })),
+    };
+  },
+});
+
+export const listSubscriptionPlansForApi = internalQuery({
+  args: { userId: v.optional(v.id("users")) },
+  returns: v.array(subscriptionPlanReturn),
+  handler: async (ctx, args) => {
+    if (args.userId) {
+      await requireApiUser(ctx, args.userId);
+    }
+    return await ctx.db
+      .query("subscriptionPlans")
+      .withIndex("by_enabled_and_sort", (q) => q.eq("enabled", true))
+      .take(20);
+  },
+});
+
+export const getMyPaymentForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    paymentId: v.id("payments"),
+  },
+  returns: v.union(paymentWithReceiptReturn, v.null()),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.userId !== args.userId) {
+      return null;
+    }
+    const [withUrl] = await withReceiptUrls(ctx, [payment]);
+    return withUrl ?? null;
+  },
+});
+
 function validateTopUpAmount(
   amountCents: number,
   creditsRequested: number | undefined,

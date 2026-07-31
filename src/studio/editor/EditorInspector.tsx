@@ -3,12 +3,26 @@
 
 import { useEffect, useState } from "react";
 import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  AlignVerticalDistributeCenter,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
   ArrowUp,
   Blend,
+  Bold,
+  CaseSensitive,
   Download,
+  FlipHorizontal2,
+  FlipVertical2,
   Image as ImageIcon,
+  Italic,
   LayoutTemplate,
   Moon,
   MousePointer2,
@@ -18,13 +32,19 @@ import {
   RotateCcw,
   Scissors,
   Sparkles,
+  Trash2,
   Sun,
   Type,
+  Underline,
   Volume2,
   ZoomIn,
 } from "lucide-react";
+import { StudioColorPicker } from "./StudioColorPicker";
+import { GoogleFontSelect } from "./GoogleFontSelect";
 import {
   EDITOR_MODES,
+  DEFAULT_TEXT_STYLE,
+  TEXT_ANIMATION_TEMPLATES,
   TRANSITION_LIBRARY,
   clampAudioFadePair,
   clampAudioFadeSec,
@@ -34,10 +54,31 @@ import {
   CLIP_TRANSFORM_LIMITS,
   normalizeClipTransform,
 } from "./clipTransform";
+import { normalizeTextTransform } from "./textLayout";
 import { FRAME_RATIO_PRESETS, normalizeFrameRatio } from "./projectContract";
-import { clipDuration } from "./editorState";
+import {
+  DEFAULT_EXPORT_RESOLUTION,
+  EXPORT_RESOLUTION_PRESETS,
+  exportSizeForRatioAndResolution,
+  normalizeExportResolution,
+} from "../../../convex/lib/editorExport";
+import { clipDuration, projectEndTime } from "./editorState";
 import { jointByKey, leftClipForJoint } from "./editorTimelineUtils";
 import { resolveClipPoster } from "./videoPoster";
+import { StudioRatioGlyph } from "../components/StudioRatioGlyph";
+import { MotionPresetGlyph } from "./MotionPresetGlyph";
+import { loadGoogleFont } from "./loadGoogleFont";
+import {
+  BUILTIN_TEXT_PRESETS,
+  TEXT_PRESET_CATEGORIES,
+  applyTextStylePreset,
+  loadCustomTextPresets,
+  presetEffectLabels,
+  presetPreviewStyle,
+  saveCustomTextPresets,
+  textStyleMatchesPreset,
+  textStyleSnapshot,
+} from "./textPresets";
 
 const ICON = 16;
 const MODE_ICONS = {
@@ -80,11 +121,38 @@ function TransitionRow({ template, active, disabled, onClick }) {
   );
 }
 
-function InspectorSection({ title, hint, onReset, children }) {
+function InspectorSection({
+  title,
+  hint,
+  onReset,
+  children,
+  collapsible = false,
+  open = true,
+  onToggle,
+  meta,
+}) {
+  const showBody = !collapsible || open;
   return (
-    <section className="studio-editor-inspector-section">
+    <section
+      className={`studio-editor-inspector-section${collapsible ? " is-collapsible" : ""}${collapsible && open ? " is-open" : ""}`}
+    >
       <div className="studio-editor-inspector-section-head">
-        <h4>{title}</h4>
+        {collapsible ? (
+          <button
+            type="button"
+            className="studio-editor-inspector-section-toggle"
+            aria-expanded={open}
+            onClick={onToggle}
+          >
+            <h4>{title}</h4>
+            {meta && !open ? (
+              <span className="studio-editor-inspector-section-meta">{meta}</span>
+            ) : null}
+            <ArrowDown size={14} aria-hidden="true" className="studio-editor-inspector-section-caret" />
+          </button>
+        ) : (
+          <h4>{title}</h4>
+        )}
         {onReset ? (
           <button
             type="button"
@@ -97,9 +165,90 @@ function InspectorSection({ title, hint, onReset, children }) {
           </button>
         ) : null}
       </div>
-      {hint ? <p className="studio-editor-inspector-hint">{hint}</p> : null}
-      <div className="studio-editor-inspector-section-body">{children}</div>
+      {showBody ? (
+        <>
+          {hint ? <p className="studio-editor-inspector-hint">{hint}</p> : null}
+          <div className="studio-editor-inspector-section-body">{children}</div>
+        </>
+      ) : null}
     </section>
+  );
+}
+
+/** Contained Style rows only — Fill/Stroke/… (not top-level sections). */
+function StyleAccordion({
+  label,
+  open,
+  onToggle,
+  expandable = true,
+  summary,
+  onReset,
+  children,
+}) {
+  const onSummaryClick = (event) => {
+    if (!expandable) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    // Keep color swatches / inputs / nested buttons working; title rows toggle.
+    if (
+      target.closest(
+        "input, select, textarea, a, .studio-editor-color-row-actions, .studio-editor-color-swatch, .studio-editor-toggle",
+      )
+    ) {
+      return;
+    }
+    onToggle();
+  };
+
+  return (
+    <div className={`studio-editor-style-card${open ? " is-open" : ""}`}>
+      <div className="studio-editor-style-card-head">
+        <div
+          className="studio-editor-style-card-summary"
+          onClick={onSummaryClick}
+          onKeyDown={
+            expandable
+              ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSummaryClick(event);
+                  }
+                }
+              : undefined
+          }
+          role={expandable ? "button" : undefined}
+          tabIndex={expandable ? 0 : undefined}
+          aria-expanded={expandable ? open : undefined}
+        >
+          {summary}
+        </div>
+        {onReset ? (
+          <button
+            type="button"
+            className="studio-editor-inspector-reset"
+            onClick={onReset}
+            title={`Reset ${label.toLowerCase()}`}
+            aria-label={`Reset ${label.toLowerCase()}`}
+          >
+            <RotateCcw size={13} aria-hidden="true" />
+          </button>
+        ) : null}
+        {expandable ? (
+          <button
+            type="button"
+            className="studio-editor-style-card-caret"
+            aria-expanded={open}
+            aria-label={open ? `Hide ${label} options` : `Show ${label} options`}
+            onClick={onToggle}
+          >
+            <ArrowDown size={14} aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+      {expandable && open ? (
+        <div className="studio-editor-style-card-body">{children}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -218,26 +367,27 @@ function modeAvailability({ modeId, joint }) {
 }
 
 /** True when the inspector content pane should be open (not just the mode rail). */
-export function inspectorPanelOpen({ editorMode, clip, joint }) {
+export function inspectorPanelOpen({ editorMode, clip, joint, sidePanel }) {
   void editorMode;
   void clip;
   void joint;
+  void sidePanel;
   return true;
 }
 
 export function EditorModeRail({
   editorMode,
+  sidePanel = "inspect",
   onModeChange,
-  exporting,
-  onExport,
-  canExport,
+  onOpenExport,
   joint,
 }) {
+  const exportActive = sidePanel === "export";
   return (
     <nav className="studio-editor-mode-stack" role="tablist" aria-label="Edit tools">
       {EDITOR_MODES.map((mode) => {
         const Icon = MODE_ICONS[mode.icon] ?? MousePointer2;
-        const active = editorMode === mode.id;
+        const active = !exportActive && editorMode === mode.id;
         const { enabled, reason } = modeAvailability({ modeId: mode.id, joint });
         return (
           <button
@@ -255,28 +405,137 @@ export function EditorModeRail({
               onModeChange(mode.id);
             }}
           >
-            <Icon size={17} aria-hidden="true" />
+            <Icon size={14} aria-hidden="true" />
           </button>
         );
       })}
       <div className="studio-editor-mode-stack-spacer" />
       <button
         type="button"
-        className="studio-editor-mode-export"
-        disabled={exporting || !canExport}
-        aria-label={exporting ? "Exporting" : "Export video"}
-        title={
-          exporting
-            ? "Exporting…"
-            : !canExport
-              ? "Add a video clip before exporting"
-              : "Export"
-        }
-        onClick={onExport}
+        role="tab"
+        aria-selected={exportActive}
+        className={`studio-editor-mode-export${exportActive ? " is-active" : ""}`}
+        aria-label="Export settings"
+        title="Export"
+        onClick={onOpenExport}
       >
-        <Download size={17} aria-hidden="true" />
+        <Download size={14} aria-hidden="true" />
       </button>
     </nav>
+  );
+}
+
+function ExportPanel({
+  project,
+  resolution,
+  filename,
+  exporting,
+  canExport,
+  onResolutionChange,
+  onFilenameChange,
+  onExport,
+  onUpdateProject,
+}) {
+  const frameRatio = normalizeFrameRatio(project.frameRatio);
+  const size = exportSizeForRatioAndResolution(frameRatio, resolution);
+  const placeholder = project.name?.trim() || "export";
+
+  return (
+    <>
+      <header className="studio-editor-inspector-panel-head">
+        <div className="studio-editor-inspector-identity">
+          <InspectorThumb kind="canvas" />
+          <span className="studio-editor-inspector-name">Export</span>
+        </div>
+      </header>
+
+      <div className="studio-editor-inspector-body">
+        <InspectorSection
+          title="Resolution"
+          hint="How many pixels to render. Does not change frame shape."
+        >
+          <div className="studio-editor-export-tiers" role="group" aria-label="Export resolution">
+            {EXPORT_RESOLUTION_PRESETS.map((preset) => {
+              const active = resolution === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-editor-export-tier${active ? " is-active" : ""}`}
+                  aria-pressed={active}
+                  title={preset.label}
+                  onClick={() => onResolutionChange(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="studio-editor-export-size">
+            {size.width} × {size.height}
+          </p>
+        </InspectorSection>
+
+        <InspectorSection
+          title="Frame"
+          hint="Output canvas ratio. Zoom the preview separately with canvas controls."
+        >
+          <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
+            {FRAME_RATIO_PRESETS.map((preset) => {
+              const active = frameRatio === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
+                  aria-pressed={active}
+                  title={`${preset.label} ${preset.shortLabel}`}
+                  onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
+                >
+                  <span className="studio-editor-frame-preset-glyph">
+                    <StudioRatioGlyph ratio={preset.id} />
+                  </span>
+                  <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+        </InspectorSection>
+
+        <InspectorSection title="Filename" hint="Optional. Leave blank to use the project name.">
+          <label className="studio-editor-field-full">
+            <span className="sr-only">Export filename</span>
+            <input
+              type="text"
+              value={filename}
+              placeholder={placeholder}
+              onChange={(event) => onFilenameChange(event.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+        </InspectorSection>
+
+        <div className="studio-editor-export-actions">
+          <button
+            type="button"
+            className="studio-editor-export-cta"
+            disabled={exporting || !canExport}
+            onClick={onExport}
+            title={
+              exporting
+                ? "Exporting…"
+                : !canExport
+                  ? "Add a video clip before exporting"
+                  : "Export video"
+            }
+          >
+            <Download size={15} aria-hidden="true" />
+            {exporting ? "Exporting…" : "Export"}
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -397,6 +656,7 @@ function InspectorHeader({ clip, media, joint }) {
 
 export function EditorInspector({
   editorMode,
+  sidePanel = "inspect",
   clip,
   media,
   jointKey,
@@ -406,6 +666,13 @@ export function EditorInspector({
   onUpdateProject,
   onSetJointTransition,
   onAddTextClip,
+  exportResolution = DEFAULT_EXPORT_RESOLUTION,
+  exportFilename = "",
+  exporting = false,
+  canExport = false,
+  onExportResolutionChange,
+  onExportFilenameChange,
+  onExport,
 }) {
   const joint = jointByKey(project, jointKey);
   const jointLeft = joint ? leftClipForJoint(project, joint) : null;
@@ -413,7 +680,27 @@ export function EditorInspector({
   const showAudio = Boolean(clip) && (clip.kind === "audio" || clip.kind === "video");
   const showVideo = Boolean(clip) && clip.kind === "video";
   const showText = editorMode === "text" || clip?.kind === "text";
-  const frameRatio = normalizeFrameRatio(project.frameRatio);
+  const resolution = normalizeExportResolution(exportResolution);
+
+  if (sidePanel === "export") {
+    return (
+      <aside className="studio-editor-inspector">
+        <div className="studio-editor-inspector-main">
+          <ExportPanel
+            project={project}
+            resolution={resolution}
+            filename={exportFilename}
+            exporting={exporting}
+            canExport={canExport}
+            onResolutionChange={onExportResolutionChange}
+            onFilenameChange={onExportFilenameChange}
+            onExport={onExport}
+            onUpdateProject={onUpdateProject}
+          />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside className="studio-editor-inspector">
@@ -425,34 +712,6 @@ export function EditorInspector({
         />
 
         <div className="studio-editor-inspector-body">
-          <InspectorSection
-            title="Frame"
-            hint="Output canvas ratio. Zoom the preview view separately with the canvas controls."
-          >
-            <div className="studio-editor-frame-presets" role="group" aria-label="Frame ratio">
-              {FRAME_RATIO_PRESETS.map((preset) => {
-                const active = frameRatio === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`studio-editor-frame-preset${active ? " is-active" : ""}`}
-                    aria-pressed={active}
-                    title={`${preset.label} ${preset.shortLabel}`}
-                    onClick={() => onUpdateProject?.({ frameRatio: preset.id })}
-                  >
-                    <span
-                      className="studio-editor-frame-preset-icon"
-                      style={{ aspectRatio: preset.cssRatio }}
-                      aria-hidden="true"
-                    />
-                    <span className="studio-editor-frame-preset-label">{preset.shortLabel}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </InspectorSection>
-
           {showTransition ? (
             <InspectorSection
               title="Transitions"
@@ -522,28 +781,78 @@ export function EditorInspector({
           ) : null}
 
           {clip ? (
-            <InspectorSection title="Details">
-              <div className="studio-editor-detail-grid">
-                <div className="studio-editor-detail-row">
-                  <span>Start</span>
-                  <strong>{clip.startTime.toFixed(2)}s</strong>
-                </div>
-                <div className="studio-editor-detail-row">
-                  <span>Length</span>
-                  <strong>{clipDuration(clip).toFixed(2)}s</strong>
-                </div>
-                {clip.transitionOut?.type && clip.transitionOut.type !== "none" ? (
-                  <div className="studio-editor-detail-row">
-                    <span>Out</span>
-                    <strong>{transitionLabel(clip.transitionOut.type)}</strong>
-                  </div>
-                ) : null}
-              </div>
-            </InspectorSection>
+            <ClipTimingCard clip={clip} project={project} />
           ) : null}
         </div>
       </div>
     </aside>
+  );
+}
+
+function formatSec(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "0.00";
+  return Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
+}
+
+function ClipTimingCard({ clip, project }) {
+  const start = Math.max(0, clip.startTime ?? 0);
+  const length = clipDuration(clip);
+  const end = start + length;
+  const span = Math.max(project.duration ?? 0, projectEndTime(project), end, 0.01);
+  const leftPct = Math.min(100, (start / span) * 100);
+  const widthPct = Math.min(100 - leftPct, Math.max(1.5, (length / span) * 100));
+  const hasOut =
+    Boolean(clip.transitionOut?.type) && clip.transitionOut.type !== "none";
+  const outLabel = hasOut ? transitionLabel(clip.transitionOut.type) : null;
+
+  return (
+    <InspectorSection title="Timing">
+      <div className="studio-editor-timing">
+        <div
+          className="studio-editor-timing-ruler"
+          role="img"
+          aria-label={`Clip from ${formatSec(start)} to ${formatSec(end)} seconds on a ${formatSec(span)} second timeline`}
+        >
+          <div className="studio-editor-timing-ruler-track">
+            <div
+              className="studio-editor-timing-ruler-range"
+              style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+            />
+          </div>
+          <div className="studio-editor-timing-ruler-ends">
+            <span>0s</span>
+            <span>{formatSec(span)}s</span>
+          </div>
+        </div>
+
+        <div className="studio-editor-timing-metrics" role="list">
+          <div className="studio-editor-timing-metric" role="listitem">
+            <span className="studio-editor-timing-metric-label">In</span>
+            <span className="studio-editor-timing-metric-value">{formatSec(start)}s</span>
+          </div>
+          <div className="studio-editor-timing-metric" role="listitem">
+            <span className="studio-editor-timing-metric-label">Length</span>
+            <span className="studio-editor-timing-metric-value">{formatSec(length)}s</span>
+          </div>
+          <div className="studio-editor-timing-metric" role="listitem">
+            <span className="studio-editor-timing-metric-label">Out</span>
+            <span className="studio-editor-timing-metric-value">{formatSec(end)}s</span>
+          </div>
+        </div>
+
+        {hasOut ? (
+          <div className="studio-editor-timing-chip-row">
+            <span className="studio-editor-timing-chip">
+              Transition · {outLabel}
+              {clip.transitionOut?.duration
+                ? ` · ${Number(clip.transitionOut.duration).toFixed(2)}s`
+                : ""}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    </InspectorSection>
   );
 }
 
@@ -694,72 +1003,870 @@ function AudioPanel({ clip, onUpdateClip }) {
   );
 }
 
+function TextPresetCard({ preset, active, onApply, onDelete }) {
+  useEffect(() => {
+    const family = preset.style.fontFamily;
+    if (family && family !== "system") void loadGoogleFont(family);
+  }, [preset.style.fontFamily]);
+
+  return (
+    <button
+      type="button"
+      className={`studio-editor-text-preset-card${active ? " is-active" : ""}`}
+      title={`Apply ${preset.name}`}
+      aria-pressed={active}
+      onClick={() => onApply(preset)}
+      onMouseEnter={() => {
+        const family = preset.style.fontFamily;
+        if (family && family !== "system") void loadGoogleFont(family);
+      }}
+    >
+      <span className="studio-editor-text-preset-card-stage" aria-hidden="true">
+        <span
+          className="studio-editor-text-preset-card-sample"
+          style={presetPreviewStyle(preset.style)}
+        >
+          {preset.sample}
+        </span>
+      </span>
+      <span className="studio-editor-text-preset-card-foot">
+        <span className="studio-editor-text-preset-card-meta">
+          <span className="studio-editor-text-preset-card-name">{preset.name}</span>
+          {presetEffectLabels(preset.style).length ? (
+            <span className="studio-editor-text-preset-card-fx">
+              {presetEffectLabels(preset.style).join(" · ")}
+            </span>
+          ) : null}
+        </span>
+        {onDelete ? (
+          <span
+            role="button"
+            tabIndex={0}
+            className="studio-editor-text-preset-card-delete"
+            title="Delete preset"
+            aria-label={`Delete ${preset.name}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(preset.id);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete(preset.id);
+              }
+            }}
+          >
+            <Trash2 size={12} aria-hidden="true" />
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
 function TextPanel({ clip, playhead, onUpdateClip, onAddTextClip }) {
-  if (!clip) {
-    return (
-      <InspectorSection title="Text">
-        <button type="button" className="studio-editor-primary-btn" onClick={() => onAddTextClip()}>
-          <Type size={ICON} aria-hidden="true" />
-          Add text at {playhead.toFixed(1)}s
-        </button>
-      </InspectorSection>
-    );
-  }
+  const [textTab, setTextTab] = useState(() => (clip ? "edit" : "presets"));
+  const [presetCategory, setPresetCategory] = useState("all");
+  const [customPresets, setCustomPresets] = useState(() => loadCustomTextPresets());
+  const [alignOpen, setAlignOpen] = useState(false);
+  const [spacingOpen, setSpacingOpen] = useState(false);
+  const [strokeOpen, setStrokeOpen] = useState(false);
+  const [bgOpen, setBgOpen] = useState(false);
+  const [shadowOpen, setShadowOpen] = useState(false);
+  const [glowOpen, setGlowOpen] = useState(false);
+  const [sectionOpen, setSectionOpen] = useState({
+    opacity: false,
+    transform: false,
+    motion: false,
+  });
+  const toggleSection = (key) =>
+    setSectionOpen((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const tabs = (
+    <div className="studio-editor-text-tabs" role="tablist" aria-label="Text tools">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={textTab === "edit"}
+        className={`studio-editor-text-tab${textTab === "edit" ? " is-active" : ""}`}
+        onClick={() => setTextTab("edit")}
+      >
+        <Type size={13} aria-hidden="true" />
+        Edit
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={textTab === "presets"}
+        className={`studio-editor-text-tab${textTab === "presets" ? " is-active" : ""}`}
+        onClick={() => setTextTab("presets")}
+      >
+        <LayoutTemplate size={13} aria-hidden="true" />
+        Preset library
+      </button>
+    </div>
+  );
+
+  const text = clip?.text ?? { text: "" };
+  const effects = clip?.effects ?? {};
+  const pose = normalizeTextTransform(effects);
 
   const patchText = (next) => {
+    if (!clip) return;
+    const merged = { ...text, ...next };
+    if (merged.fontSize != null) {
+      const n = Number(merged.fontSize);
+      merged.fontSize = Number.isFinite(n)
+        ? Math.max(12, Math.min(200, Math.round(n)))
+        : 42;
+    }
     onUpdateClip(clip.id, {
-      text: { ...(clip.text ?? {}), ...next },
-      label: next.text?.slice(0, 28) || clip.label,
+      text: merged,
+      label: (next.text ?? text.text)?.slice(0, 28) || clip.label,
     });
   };
 
-  return (
-    <InspectorSection title="Text">
-      <label className="studio-editor-field-full">
-        Content
-        <textarea
-          className="studio-editor-textarea"
-          rows={4}
-          placeholder="Headline"
-          value={clip.text?.text ?? ""}
-          onChange={(e) => patchText({ text: e.target.value })}
-        />
-      </label>
-      <div className="studio-editor-field-row">
-        <label>
-          Size
-          <input
-            type="number"
-            min={12}
-            max={120}
-            value={clip.text?.fontSize ?? 42}
-            onChange={(e) => patchText({ fontSize: Number(e.target.value) || 42 })}
-          />
-        </label>
-        <label>
-          Color
-          <input
-            type="color"
-            value={clip.text?.color ?? "#ffffff"}
-            onChange={(e) => patchText({ color: e.target.value })}
-          />
-        </label>
-      </div>
-      <div className="studio-editor-control-block">
-        <span className="studio-editor-slider-label">Align</span>
-        <div className="studio-editor-align-row">
-          {(["left", "center", "right"]).map((align) => (
+  const patchPose = (next) => {
+    if (!clip) return;
+    onUpdateClip(clip.id, {
+      effects: {
+        ...effects,
+        scale: Number(next.scale.toFixed(3)),
+        x: Number(next.x.toFixed(3)),
+        y: Number(next.y.toFixed(3)),
+        rotation: Number(next.rotation.toFixed(1)),
+      },
+    });
+  };
+
+  const applyPreset = (preset) => {
+    const family = preset.style.fontFamily;
+    if (family && family !== "system") void loadGoogleFont(family);
+    const base = clip?.text ?? { ...DEFAULT_TEXT_STYLE, text: preset.sample };
+    const merged = applyTextStylePreset(
+      { ...base, text: clip?.text?.text?.trim() ? base.text : preset.sample },
+      preset.style,
+    );
+    if (!clip) {
+      onAddTextClip({ text: merged });
+      return;
+    }
+    onUpdateClip(clip.id, {
+      text: merged,
+      label: (merged.text ?? text.text)?.slice(0, 28) || clip.label,
+    });
+    if ((preset.style.strokeWidth ?? 0) > 0) setStrokeOpen(true);
+    if (preset.style.backgroundColor) setBgOpen(true);
+    if (preset.style.shadowColor) setShadowOpen(true);
+    if (preset.style.glow) setGlowOpen(true);
+  };
+
+  const saveCurrentPreset = () => {
+    if (!clip) return;
+    const sample = (text.text || "Aa").trim().slice(0, 12) || "Aa";
+    const preset = {
+      id: `custom-${Date.now().toString(36)}`,
+      name: sample.length > 18 ? `${sample.slice(0, 16)}…` : sample,
+      category: "pop",
+      sample,
+      style: textStyleSnapshot(text),
+    };
+    const next = [preset, ...customPresets].slice(0, 40);
+    setCustomPresets(next);
+    saveCustomTextPresets(next);
+    setPresetCategory("mine");
+  };
+
+  const deleteCustomPreset = (id) => {
+    const next = customPresets.filter((p) => p.id !== id);
+    setCustomPresets(next);
+    saveCustomTextPresets(next);
+  };
+
+  const caseCycle = ["none", "upper", "lower", "title"];
+  const caseLabel = {
+    none: "As typed",
+    upper: "UPPERCASE",
+    lower: "lowercase",
+    title: "Title Case",
+  };
+  const currentCase = text.textCase ?? "none";
+
+  const AlignHIcon =
+    text.align === "right" ? AlignRight : text.align === "left" ? AlignLeft : AlignCenter;
+  const VAlignIcon =
+    text.verticalAlign === "top"
+      ? AlignVerticalJustifyStart
+      : text.verticalAlign === "bottom"
+        ? AlignVerticalJustifyEnd
+        : AlignVerticalJustifyCenter;
+
+  const library =
+    presetCategory === "mine"
+      ? customPresets
+      : presetCategory === "all"
+        ? BUILTIN_TEXT_PRESETS
+        : BUILTIN_TEXT_PRESETS.filter((p) => p.category === presetCategory);
+
+  if (textTab === "presets") {
+    return (
+      <div className="studio-editor-text-section">
+        {tabs}
+        <InspectorSection
+          title="Preset library"
+          hint={
+            clip
+              ? "Tap a look to apply. Your wording stays; style updates."
+              : "Browse freely — tap a look to add text with that style."
+          }
+        >
+          <div className="studio-editor-text-preset-toolbar">
             <button
-              key={align}
               type="button"
-              className={`studio-editor-preset-btn${clip.text?.align === align ? " is-active" : ""}`}
-              onClick={() => patchText({ align })}
+              className="studio-editor-text-chip"
+              onClick={saveCurrentPreset}
+              disabled={!clip}
+              title={
+                clip
+                  ? "Save the current text style as a preset"
+                  : "Select text to save a custom preset"
+              }
             >
-              {align}
+              <Sparkles size={14} aria-hidden="true" />
+              Save current
             </button>
-          ))}
-        </div>
+          </div>
+          <div className="studio-editor-text-preset-cats" role="tablist" aria-label="Preset categories">
+            {TEXT_PRESET_CATEGORIES.map((cat) => {
+              const active = presetCategory === cat.id;
+              const count =
+                cat.id === "mine"
+                  ? customPresets.length
+                  : cat.id === "all"
+                    ? BUILTIN_TEXT_PRESETS.length
+                    : BUILTIN_TEXT_PRESETS.filter((p) => p.category === cat.id).length;
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={`studio-editor-text-preset-cat${active ? " is-active" : ""}`}
+                  onClick={() => setPresetCategory(cat.id)}
+                >
+                  {cat.label}
+                  <span className="studio-editor-text-preset-cat-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+          {library.length === 0 ? (
+            <p className="studio-editor-inspector-hint">
+              {presetCategory === "mine"
+                ? "No saved presets yet. Style text on Edit, then Save current."
+                : "No presets in this category."}
+            </p>
+          ) : (
+            <div className="studio-editor-text-preset-grid">
+              {library.map((preset) => (
+                <TextPresetCard
+                  key={preset.id}
+                  preset={preset}
+                  active={textStyleMatchesPreset(text, preset.style)}
+                  onApply={applyPreset}
+                  onDelete={
+                    String(preset.id).startsWith("custom-")
+                      ? deleteCustomPreset
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </InspectorSection>
       </div>
-    </InspectorSection>
+    );
+  }
+
+  if (!clip) {
+    return (
+      <div className="studio-editor-text-section">
+        {tabs}
+        <InspectorSection title="Text">
+          <button type="button" className="studio-editor-primary-btn" onClick={() => onAddTextClip()}>
+            <Type size={ICON} aria-hidden="true" />
+            Add text at {playhead.toFixed(1)}s
+          </button>
+          <p className="studio-editor-inspector-hint">
+            Or open Presets to pick a look — it adds text for you.
+          </p>
+        </InspectorSection>
+      </div>
+    );
+  }
+
+  return (
+    <div className="studio-editor-text-section">
+      {tabs}
+      <InspectorSection title="Content">
+        <label className="studio-editor-field-full">
+          Text
+          <textarea
+            className="studio-editor-textarea"
+            rows={3}
+            placeholder="Add heading"
+            value={text.text ?? ""}
+            onChange={(e) => patchText({ text: e.target.value })}
+          />
+        </label>
+      </InspectorSection>
+
+      <InspectorSection title="Type">
+        <div className="studio-editor-font-size-row">
+          <GoogleFontSelect
+            value={text.fontFamily ?? "system"}
+            onChange={(fontFamily) => patchText({ fontFamily })}
+          />
+          <label className="studio-editor-font-size">
+            <span className="sr-only">Size</span>
+            <input
+              type="number"
+              min={12}
+              max={200}
+              step={1}
+              value={text.fontSize ?? 42}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") return;
+                patchText({ fontSize: Number(raw) || 42 });
+              }}
+              onBlur={(e) => {
+                const n = Number(e.target.value);
+                patchText({ fontSize: Number.isFinite(n) ? n : 42 });
+              }}
+            />
+          </label>
+        </div>
+        <SliderRow
+          label="Size"
+          min={12}
+          max={200}
+          step={1}
+          value={text.fontSize ?? 42}
+          defaultValue={42}
+          formatValue={(v) => `${Math.round(Number(v))}px`}
+          parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+          onValueChange={(next) => patchText({ fontSize: next })}
+        />
+
+        <div className="studio-editor-text-toolbar">
+          <button
+            type="button"
+            className={`studio-editor-text-tool${text.bold ? " is-active" : ""}`}
+            onClick={() => patchText({ bold: !text.bold })}
+            aria-pressed={Boolean(text.bold)}
+            title="Bold"
+          >
+            <Bold size={14} />
+          </button>
+          <button
+            type="button"
+            className={`studio-editor-text-tool${text.italic ? " is-active" : ""}`}
+            onClick={() => patchText({ italic: !text.italic })}
+            aria-pressed={Boolean(text.italic)}
+            title="Italic"
+          >
+            <Italic size={14} />
+          </button>
+          <button
+            type="button"
+            className={`studio-editor-text-tool${text.underline ? " is-active" : ""}`}
+            onClick={() => patchText({ underline: !text.underline })}
+            aria-pressed={Boolean(text.underline)}
+            title="Underline"
+          >
+            <Underline size={14} />
+          </button>
+          <span className="studio-editor-text-tool-sep" aria-hidden="true" />
+          <div className="studio-editor-text-tool-wrap">
+            <button
+              type="button"
+              className={`studio-editor-text-tool${alignOpen ? " is-active" : ""}`}
+              onClick={() => {
+                setAlignOpen((v) => !v);
+                setSpacingOpen(false);
+              }}
+              aria-expanded={alignOpen}
+              title="Alignment"
+            >
+              <AlignHIcon size={14} />
+            </button>
+            {alignOpen ? (
+              <div className="studio-editor-align-popover" role="menu">
+                <button type="button" className={(text.align ?? "center") === "left" ? "is-active" : ""} onClick={() => patchText({ align: "left" })} title="Left"><AlignLeft size={14} /></button>
+                <button type="button" className={(text.align ?? "center") === "center" ? "is-active" : ""} onClick={() => patchText({ align: "center" })} title="Center"><AlignCenter size={14} /></button>
+                <button type="button" className={(text.align ?? "center") === "right" ? "is-active" : ""} onClick={() => patchText({ align: "right" })} title="Right"><AlignRight size={14} /></button>
+                <button type="button" disabled title="Justify"><AlignJustify size={14} /></button>
+                <button type="button" className={(text.verticalAlign ?? "middle") === "top" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "top" })} title="Top"><AlignVerticalJustifyStart size={14} /></button>
+                <button type="button" className={(text.verticalAlign ?? "middle") === "middle" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "middle" })} title="Middle"><VAlignIcon size={14} /></button>
+                <button type="button" className={(text.verticalAlign ?? "middle") === "bottom" ? "is-active" : ""} onClick={() => patchText({ verticalAlign: "bottom" })} title="Bottom"><AlignVerticalJustifyEnd size={14} /></button>
+                <button type="button" disabled title="Distribute"><AlignVerticalDistributeCenter size={14} /></button>
+              </div>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className={`studio-editor-text-tool${currentCase !== "none" ? " is-active" : ""}`}
+            onClick={() => {
+              const idx = caseCycle.indexOf(currentCase);
+              patchText({ textCase: caseCycle[(idx + 1) % caseCycle.length] });
+            }}
+            title={`Case · ${caseLabel[currentCase]}`}
+          >
+            <CaseSensitive size={14} />
+          </button>
+          <div className="studio-editor-text-tool-wrap">
+            <button
+              type="button"
+              className={`studio-editor-text-tool${spacingOpen ? " is-active" : ""}`}
+              onClick={() => {
+                setSpacingOpen((v) => !v);
+                setAlignOpen(false);
+              }}
+              aria-expanded={spacingOpen}
+              title="Spacing"
+            >
+              <AlignVerticalDistributeCenter size={14} />
+            </button>
+            {spacingOpen ? (
+              <div className="studio-editor-spacing-popover">
+                <SliderRow
+                  label="Letter"
+                  min={-0.1}
+                  max={0.5}
+                  step={0.01}
+                  value={text.letterSpacing ?? 0}
+                  defaultValue={0}
+                  formatValue={(v) => Number(v).toFixed(2)}
+                  parseInput={(raw) => parseNumberInput(raw)}
+                  onValueChange={(next) => patchText({ letterSpacing: next })}
+                />
+                <SliderRow
+                  label="Line"
+                  min={0.8}
+                  max={2.4}
+                  step={0.05}
+                  value={text.lineHeight ?? 1.2}
+                  defaultValue={1.2}
+                  formatValue={(v) => Number(v).toFixed(2)}
+                  parseInput={(raw) => parseNumberInput(raw)}
+                  onValueChange={(next) => patchText({ lineHeight: next })}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </InspectorSection>
+
+      <InspectorSection
+        title="Style"
+        onReset={() =>
+          patchText({
+            color: "#ffffff",
+            strokeColor: "#000000",
+            strokeWidth: 0,
+            backgroundColor: null,
+            backgroundPadding: 8,
+            backgroundRadius: 0,
+            shadowColor: null,
+            shadowBlur: 0,
+            shadowOffsetX: 0,
+            shadowOffsetY: 0,
+          })
+        }
+      >
+        <div className="studio-editor-style-stack">
+          <StyleAccordion
+            label="Fill"
+            expandable={false}
+            open={false}
+            onToggle={() => {}}
+            summary={
+              <StudioColorPicker
+                label="Fill"
+                value={text.color ?? "#ffffff"}
+                allowNone={false}
+                onChange={(color) => patchText({ color: color ?? "#ffffff" })}
+              />
+            }
+          />
+
+          <StyleAccordion
+            label="Stroke"
+            open={strokeOpen}
+            onToggle={() => setStrokeOpen((v) => !v)}
+            summary={
+              <StudioColorPicker
+                label="Stroke"
+                value={(text.strokeWidth ?? 0) > 0 ? text.strokeColor : null}
+                allowNone
+                onChange={(strokeColor) => {
+                  if (strokeColor == null) {
+                    patchText({ strokeWidth: 0 });
+                    setStrokeOpen(false);
+                  } else {
+                    patchText({
+                      strokeColor,
+                      strokeWidth: Math.max(1, text.strokeWidth ?? 2),
+                    });
+                    setStrokeOpen(true);
+                  }
+                }}
+              />
+            }
+          >
+            <SliderRow
+              label="Width"
+              min={0}
+              max={24}
+              step={1}
+              value={text.strokeWidth ?? 0}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => {
+                patchText({ strokeWidth: next });
+                if (next > 0) setStrokeOpen(true);
+              }}
+            />
+          </StyleAccordion>
+
+          <StyleAccordion
+            label="Background"
+            open={bgOpen}
+            onToggle={() => setBgOpen((v) => !v)}
+            summary={
+              <StudioColorPicker
+                label="Background"
+                value={text.backgroundColor}
+                allowNone
+                onChange={(backgroundColor) => {
+                  patchText({ backgroundColor });
+                  setBgOpen(Boolean(backgroundColor));
+                }}
+              />
+            }
+          >
+            <SliderRow
+              label="Padding"
+              min={0}
+              max={48}
+              step={1}
+              value={text.backgroundPadding ?? 8}
+              defaultValue={8}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ backgroundPadding: next })}
+            />
+            <SliderRow
+              label="Rounding"
+              min={0}
+              max={80}
+              step={1}
+              value={text.backgroundRadius ?? 0}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ backgroundRadius: next })}
+            />
+          </StyleAccordion>
+
+          <StyleAccordion
+            label="Shadow"
+            open={shadowOpen}
+            onToggle={() => setShadowOpen((v) => !v)}
+            summary={
+              <StudioColorPicker
+                label="Shadow"
+                value={text.shadowColor}
+                allowNone
+                onChange={(shadowColor) => {
+                  if (shadowColor == null) {
+                    patchText({
+                      shadowColor: null,
+                      shadowBlur: 0,
+                      shadowOffsetX: 0,
+                      shadowOffsetY: 0,
+                    });
+                    setShadowOpen(false);
+                  } else {
+                    patchText({
+                      shadowColor,
+                      shadowBlur: Math.max(2, text.shadowBlur ?? 6),
+                      shadowOffsetY: text.shadowOffsetY ?? 2,
+                    });
+                    setShadowOpen(true);
+                  }
+                }}
+              />
+            }
+          >
+            <SliderRow
+              label="Blur"
+              min={0}
+              max={40}
+              step={1}
+              value={text.shadowBlur ?? 0}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ shadowBlur: next })}
+            />
+            <SliderRow
+              label="Offset X"
+              min={-40}
+              max={40}
+              step={1}
+              value={text.shadowOffsetX ?? 0}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ shadowOffsetX: next })}
+            />
+            <SliderRow
+              label="Offset Y"
+              min={-40}
+              max={40}
+              step={1}
+              value={text.shadowOffsetY ?? 0}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ shadowOffsetY: next })}
+            />
+          </StyleAccordion>
+
+          <StyleAccordion
+            label="Glow"
+            open={glowOpen}
+            onToggle={() => setGlowOpen((v) => !v)}
+            summary={
+              <label className="studio-editor-style-card-toggle-row">
+                <span>Glow</span>
+                <input
+                  type="checkbox"
+                  className="studio-editor-toggle"
+                  checked={Boolean(text.glow)}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    patchText({ glow: on });
+                    setGlowOpen(on);
+                  }}
+                />
+              </label>
+            }
+          >
+            <StudioColorPicker
+              label="Glow color"
+              value={text.glowColor ?? "#ffffff"}
+              allowNone={false}
+              onChange={(glowColor) =>
+                patchText({ glowColor: glowColor ?? "#ffffff" })
+              }
+            />
+            <SliderRow
+              label="Blur"
+              min={0}
+              max={48}
+              step={1}
+              value={text.glowBlur ?? 12}
+              defaultValue={12}
+              formatValue={(v) => `${Math.round(Number(v))}px`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "px" })}
+              onValueChange={(next) => patchText({ glowBlur: next })}
+            />
+          </StyleAccordion>
+        </div>
+      </InspectorSection>
+
+      <section className="studio-editor-inspector-section">
+        <div className="studio-editor-style-stack">
+          <StyleAccordion
+            label="Opacity"
+            open={sectionOpen.opacity}
+            onToggle={() => toggleSection("opacity")}
+            onReset={() => patchText({ opacity: 1 })}
+            summary={
+              <div className="studio-editor-style-card-toggle-row">
+                <span>Opacity</span>
+                <span className="studio-editor-style-card-meta">
+                  {Math.round((text.opacity ?? 1) * 100)}%
+                </span>
+              </div>
+            }
+          >
+            <SliderRow
+              label="Opacity"
+              min={0}
+              max={1}
+              step={0.01}
+              value={text.opacity ?? 1}
+              defaultValue={1}
+              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+              onValueChange={(next) => patchText({ opacity: next })}
+            />
+          </StyleAccordion>
+
+          <StyleAccordion
+            label="Transform"
+            open={sectionOpen.transform}
+            onToggle={() => toggleSection("transform")}
+            onReset={() => patchPose({ scale: 1, x: 0, y: 0.32, rotation: 0 })}
+            summary={
+              <div className="studio-editor-style-card-toggle-row">
+                <span>Transform</span>
+                <span className="studio-editor-style-card-meta">
+                  {Math.round(pose.scale * 100)}% · {Math.round(pose.rotation)}°
+                </span>
+              </div>
+            }
+          >
+            <p className="studio-editor-inspector-hint">
+              Drag text on the canvas to move, scale, and rotate.
+            </p>
+            <div className="studio-editor-text-chip-row">
+              <button
+                type="button"
+                className={`studio-editor-text-chip${text.flipX ? " is-active" : ""}`}
+                onClick={() => patchText({ flipX: !text.flipX })}
+                aria-pressed={Boolean(text.flipX)}
+              >
+                <FlipHorizontal2 size={14} aria-hidden="true" />
+                Flip H
+              </button>
+              <button
+                type="button"
+                className={`studio-editor-text-chip${text.flipY ? " is-active" : ""}`}
+                onClick={() => patchText({ flipY: !text.flipY })}
+                aria-pressed={Boolean(text.flipY)}
+              >
+                <FlipVertical2 size={14} aria-hidden="true" />
+                Flip V
+              </button>
+            </div>
+            <SliderRow
+              label="Scale"
+              min={0.25}
+              max={6}
+              step={0.05}
+              value={pose.scale}
+              defaultValue={1}
+              formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
+              parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
+              onValueChange={(next) => patchPose({ ...pose, scale: next })}
+            />
+            <SliderRow
+              label="Position X"
+              min={CLIP_TRANSFORM_LIMITS.panMin}
+              max={CLIP_TRANSFORM_LIMITS.panMax}
+              step={0.01}
+              value={pose.x}
+              defaultValue={0}
+              formatValue={(v) => Number(v).toFixed(2)}
+              parseInput={(raw) => parseNumberInput(raw)}
+              onValueChange={(next) => patchPose({ ...pose, x: next })}
+            />
+            <SliderRow
+              label="Position Y"
+              min={CLIP_TRANSFORM_LIMITS.panMin}
+              max={CLIP_TRANSFORM_LIMITS.panMax}
+              step={0.01}
+              value={pose.y}
+              defaultValue={0.32}
+              formatValue={(v) => Number(v).toFixed(2)}
+              parseInput={(raw) => parseNumberInput(raw)}
+              onValueChange={(next) => patchPose({ ...pose, y: next })}
+            />
+            <SliderRow
+              label="Rotate"
+              min={0}
+              max={359}
+              step={1}
+              value={pose.rotation}
+              defaultValue={0}
+              formatValue={(v) => `${Math.round(Number(v))}°`}
+              parseInput={(raw) => parseNumberInput(raw, { suffix: "°" })}
+              onValueChange={(next) => patchPose({ ...pose, rotation: next })}
+            />
+          </StyleAccordion>
+
+          <StyleAccordion
+            label="Motion"
+            open={sectionOpen.motion}
+            onToggle={() => toggleSection("motion")}
+            summary={
+              <div className="studio-editor-style-card-toggle-row">
+                <span>Motion</span>
+                <span className="studio-editor-style-card-meta">
+                  {TEXT_ANIMATION_TEMPLATES.find((t) => t.id === (text.animation ?? "none"))
+                    ?.label ?? "Static"}
+                </span>
+              </div>
+            }
+          >
+            <p className="studio-editor-inspector-hint">
+              How the text enters or exits on the canvas.
+            </p>
+            <div className="studio-editor-motion-grid" role="group" aria-label="Text motion">
+              {TEXT_ANIMATION_TEMPLATES.map((template) => {
+                const active = (text.animation ?? "none") === template.id;
+                return (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`studio-editor-motion-card${active ? " is-active" : ""}`}
+                    aria-pressed={active}
+                    title={template.label}
+                    onClick={() =>
+                      patchText({
+                        animation: template.id,
+                        animationDuration:
+                          template.id === "none"
+                            ? 0
+                            : (text.animationDuration ?? (template.duration || 0.5)),
+                      })
+                    }
+                  >
+                    <span className="studio-editor-motion-card-glyph">
+                      <MotionPresetGlyph id={template.id} />
+                    </span>
+                    <span className="studio-editor-motion-card-label">{template.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {(text.animation ?? "none") !== "none" ? (
+              <div className="studio-editor-control-block">
+                <span className="studio-editor-slider-label">
+                  Duration · {(text.animationDuration ?? 0.5).toFixed(1)}s
+                </span>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={2}
+                  step={0.1}
+                  value={text.animationDuration ?? 0.5}
+                  onChange={(e) =>
+                    patchText({ animationDuration: Number(e.target.value) || 0.5 })
+                  }
+                />
+              </div>
+            ) : null}
+          </StyleAccordion>
+        </div>
+      </section>
+    </div>
   );
 }

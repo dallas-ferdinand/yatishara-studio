@@ -162,18 +162,27 @@
   }
 }
 
+/*
+  Files chrome:
+  - Sidebar / mobile: Asset library toggle on its own row above search.
+  - Full Files workspace: toggle left of search with a full-height divider;
+    search ↔ type-filter keeps the short hairline.
+  Same L1 page grey as the rest of the rail (never plate --mos-bg strip).
+*/
 .studio-files-source-toggle {
   display: flex;
   align-items: center;
   gap: 4px;
-  /* Match search / pathbar / chrome heads — not a taller padded strip. */
   box-sizing: border-box;
-  height: var(--cursor-head-h, 32px);
+  flex: 0 0 auto;
+  width: 100%;
   min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
   max-height: var(--cursor-head-h, 32px);
   padding: 0 8px;
-  flex: 0 0 auto;
+  border: none;
   border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
 }
 
 .studio-files-source-toggle button {
@@ -182,10 +191,10 @@
   justify-content: center;
   gap: 6px;
   flex: 1 1 0;
+  min-width: 0;
   min-height: 24px;
   height: 24px;
   padding: 0 10px;
-  /* L1 grey + soft ring at rest; accent wash when active. */
   border: 1px solid var(--color-cursor-border-soft, var(--mos-border-soft));
   border-radius: var(--cursor-radius-pill, 999px);
   background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel)));
@@ -195,6 +204,7 @@
   font-weight: 650;
   cursor: pointer;
   box-shadow: none;
+  white-space: nowrap;
 }
 
 .studio-files-source-toggle button > svg {
@@ -210,9 +220,72 @@
   box-shadow: none;
 }
 
-/* Source toggle already has border-bottom — don't stack search border-top. */
-.studio-files-source-toggle + .cursor-panel-search {
-  border-top: none;
+.studio-files-search-row {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
+}
+
+.studio-files-search-row > .cursor-panel-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  border-top: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
+}
+
+/* Full Files workspace only: switcher shares the search strip. */
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  max-height: var(--cursor-head-h, 32px);
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: var(--mos-page, var(--mos-panel, var(--color-cursor-panel, #f5f5f7)));
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  align-self: stretch;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+  /* Full-height rail divider on the left of search; filter side stays short hairline. */
+  border-right: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+  background: transparent;
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-source-toggle button {
+  flex: 0 0 auto;
+}
+
+.cursor-explorer-body.is-workspace-chrome .studio-files-chrome > .studio-files-search-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+  background: transparent;
 }
 
 .cursor-explorer-body.is-network-store {

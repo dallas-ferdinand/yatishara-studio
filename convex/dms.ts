@@ -5,7 +5,12 @@
  */
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { peerIdsInLabel } from "./dmLabels";
 import {
   assertCanMessagePeer,
@@ -73,7 +78,10 @@ async function resolveReplyToMessageId(
   return replyToMessageId;
 }
 
+const DELETED_MESSAGE_PREVIEW = "This message was deleted";
+
 function replyPreviewBody(row: Doc<"dmMessages">): string {
+  if (row.deletedAt) return DELETED_MESSAGE_PREVIEW;
   const kind = row.kind ?? "text";
   if (kind === "voice") return VOICE_PREVIEW;
   if (kind === "post") return POST_PREVIEW;
@@ -220,12 +228,13 @@ async function resolveDmMediaUrls(
 }
 
 async function requireOwnedReadyAsset(
-  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: MutationCtx,
+  ownerId: Id<"users">,
   assetId: Id<"assets">,
   expectedKind: "image" | "audio",
 ): Promise<Doc<"assets">> {
   const asset = await ctx.db.get(assetId);
-  if (!asset || asset.ownerId !== ctx.user._id || asset.deletedAt || asset.purgedAt) {
+  if (!asset || asset.ownerId !== ownerId || asset.deletedAt || asset.purgedAt) {
     throw new Error("Media not found");
   }
   if (asset.kind !== expectedKind) {
@@ -378,6 +387,184 @@ async function requireMemberConversation(
     throw new Error("You are not part of this conversation");
   }
   return conversation;
+}
+
+
+function isDmHiddenForUser(
+  row: Doc<"dmMessages">,
+  userId: Id<"users">,
+): boolean {
+  return (row.hiddenForUserIds ?? []).some((id) => id === userId);
+}
+
+function conversationPreviewFromMessage(row: Doc<"dmMessages">): string {
+  if (row.deletedAt) return DELETED_MESSAGE_PREVIEW;
+  const kind = row.kind ?? "text";
+  if (kind === "voice") return VOICE_PREVIEW;
+  if (kind === "post") return feedShareListPreview("post", row.body);
+  if (kind === "comment") return feedShareListPreview("comment", row.body);
+  if (kind === "image") {
+    const caption = row.body.trim();
+    if (!caption) return IMAGE_PREVIEW;
+    return caption.length > DM_PREVIEW_MAX
+      ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+      : caption;
+  }
+  const body = row.body.trim();
+  if (!body) return "";
+  return body.length > DM_PREVIEW_MAX
+    ? `${body.slice(0, DM_PREVIEW_MAX)}…`
+    : body;
+}
+
+async function isLatestConversationMessage(
+  ctx: { db: MutationCtx["db"] },
+  conversationId: Id<"dmConversations">,
+  messageId: Id<"dmMessages">,
+): Promise<boolean> {
+  const latest = await ctx.db
+    .query("dmMessages")
+    .withIndex("by_conversation_and_created", (q) =>
+      q.eq("conversationId", conversationId),
+    )
+    .order("desc")
+    .first();
+  return latest?._id === messageId;
+}
+
+type ListedDmMessage = {
+  _id: Id<"dmMessages">;
+  body: string;
+  kind: "text" | "voice" | "image" | "post" | "comment";
+  audioUrl?: string;
+  imageUrl?: string;
+  contentType?: string;
+  durationSec?: number;
+  fromMe: boolean;
+  receipt: "sent" | "delivered" | "read";
+  replyTo?: {
+    _id: Id<"dmMessages">;
+    body: string;
+    kind: "text" | "voice" | "image" | "post" | "comment";
+    fromMe: boolean;
+    audioUrl?: string;
+    imageUrl?: string;
+    durationSec?: number;
+  };
+  feedShare?: FeedShareCard;
+  createdAt: number;
+  editedAt?: number;
+  deleted?: boolean;
+};
+
+async function listConversationMessages(
+  ctx: QueryCtx,
+  args: {
+    conversation: Doc<"dmConversations">;
+    viewerId: Id<"users">;
+    limit: number;
+    expiresUnix: number;
+  },
+): Promise<ListedDmMessage[]> {
+  const peerReadWatermark = peerReadAt(args.conversation, args.viewerId);
+  const peerDeliveredWatermark = peerDeliveredAt(
+    args.conversation,
+    args.viewerId,
+  );
+  const expiresUnix = args.expiresUnix;
+  const limit = Math.min(Math.max(args.limit, 1), MESSAGES_PAGE_MAX);
+  const raw = await ctx.db
+    .query("dmMessages")
+    .withIndex("by_conversation_and_created", (q) =>
+      q.eq("conversationId", args.conversation._id),
+    )
+    .order("desc")
+    .take(MESSAGES_PAGE_MAX);
+  const visible = raw
+    .filter((row) => !isDmHiddenForUser(row, args.viewerId))
+    .slice(0, limit);
+  const chronological = visible.reverse();
+  const replyIds = [
+    ...new Set(
+      chronological
+        .map((row) => row.replyToMessageId)
+        .filter((id): id is Id<"dmMessages"> => Boolean(id)),
+    ),
+  ];
+  const replyDocs = await Promise.all(replyIds.map((id) => ctx.db.get(id)));
+  const replyById = new Map<
+    Id<"dmMessages">,
+    NonNullable<ListedDmMessage["replyTo"]>
+  >();
+  await Promise.all(
+    replyDocs.map(async (doc) => {
+      if (!doc) return;
+      const deleted = Boolean(doc.deletedAt);
+      const media = deleted
+        ? {}
+        : await resolveDmMediaUrls(ctx, doc, expiresUnix);
+      replyById.set(doc._id, {
+        _id: doc._id,
+        body: replyPreviewBody(doc),
+        kind: deleted ? "text" : (doc.kind ?? "text"),
+        fromMe: doc.senderId === args.viewerId,
+        audioUrl: media.audioUrl,
+        imageUrl: media.imageUrl,
+        durationSec: deleted ? undefined : doc.durationSec,
+      });
+    }),
+  );
+  return await Promise.all(
+    chronological.map(async (row) => {
+      const deleted = Boolean(row.deletedAt);
+      const fromMe = row.senderId === args.viewerId;
+      if (deleted) {
+        return {
+          _id: row._id,
+          body: "",
+          kind: "text" as const,
+          fromMe,
+          receipt: fromMe
+            ? receiptFor(
+                row.createdAt,
+                peerReadWatermark,
+                peerDeliveredWatermark,
+              )
+            : ("sent" as const),
+          replyTo: row.replyToMessageId
+            ? replyById.get(row.replyToMessageId)
+            : undefined,
+          createdAt: row.createdAt,
+          deleted: true,
+        };
+      }
+      const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
+      const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
+      return {
+        _id: row._id,
+        body: row.body,
+        kind: row.kind ?? "text",
+        audioUrl: media.audioUrl,
+        imageUrl: media.imageUrl,
+        contentType: media.contentType,
+        durationSec: row.durationSec,
+        fromMe,
+        receipt: fromMe
+          ? receiptFor(
+              row.createdAt,
+              peerReadWatermark,
+              peerDeliveredWatermark,
+            )
+          : ("sent" as const),
+        replyTo: row.replyToMessageId
+          ? replyById.get(row.replyToMessageId)
+          : undefined,
+        feedShare,
+        createdAt: row.createdAt,
+        ...(row.editedAt !== undefined ? { editedAt: row.editedAt } : {}),
+      };
+    }),
+  );
 }
 
 const conversationLabelReturn = v.object({
@@ -885,6 +1072,8 @@ export const searchSidebar = authedQuery({
         : [];
     const messages = searchedMessages
       .map((message) => {
+        if (message.deletedAt) return null;
+        if (isDmHiddenForUser(message, me)) return null;
         const conversation = conversationById.get(
           String(message.conversationId),
         );
@@ -922,6 +1111,29 @@ export const searchSidebar = authedQuery({
   },
 });
 
+const listMessagesReturn = v.array(
+  v.object({
+    _id: v.id("dmMessages"),
+    body: v.string(),
+    kind: dmMessageKind,
+    audioUrl: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    contentType: v.optional(v.string()),
+    durationSec: v.optional(v.number()),
+    fromMe: v.boolean(),
+    /**
+     * WhatsApp-style receipt for outbound messages:
+     * sent (1 tick) → delivered (2 gray, peer ACK) → read (2 colored).
+     */
+    receipt: receiptStatus,
+    replyTo: v.optional(replySnippet),
+    feedShare: v.optional(feedShareCard),
+    createdAt: v.number(),
+    editedAt: v.optional(v.number()),
+    deleted: v.optional(v.boolean()),
+  }),
+);
+
 /** Messages for one conversation, oldest → newest (reactive). */
 export const listMessages = authedQuery({
   args: {
@@ -930,113 +1142,19 @@ export const listMessages = authedQuery({
     /** Bunny URL expiry — membership-signed for peer playback. */
     expiresUnix: v.number(),
   },
-  returns: v.array(
-    v.object({
-      _id: v.id("dmMessages"),
-      body: v.string(),
-      kind: dmMessageKind,
-      audioUrl: v.optional(v.string()),
-      imageUrl: v.optional(v.string()),
-      contentType: v.optional(v.string()),
-      durationSec: v.optional(v.number()),
-      fromMe: v.boolean(),
-      /**
-       * WhatsApp-style receipt for outbound messages:
-       * sent (1 tick) → delivered (2 gray, peer ACK) → read (2 colored).
-       */
-      receipt: receiptStatus,
-      replyTo: v.optional(replySnippet),
-      feedShare: v.optional(feedShareCard),
-      createdAt: v.number(),
-    }),
-  ),
+  returns: listMessagesReturn,
   handler: async (ctx, args) => {
     const conversation = await requireMemberConversation(
       ctx,
       args.conversationId,
       ctx.user._id,
     );
-    const peerReadWatermark = peerReadAt(conversation, ctx.user._id);
-    const peerDeliveredWatermark = peerDeliveredAt(
+    return await listConversationMessages(ctx, {
       conversation,
-      ctx.user._id,
-    );
-    const expiresUnix = args.expiresUnix;
-    const limit = Math.min(Math.max(args.limit ?? 120, 1), MESSAGES_PAGE_MAX);
-    const rows = await ctx.db
-      .query("dmMessages")
-      .withIndex("by_conversation_and_created", (q) =>
-        q.eq("conversationId", conversation._id),
-      )
-      .order("desc")
-      .take(limit);
-    const chronological = rows.reverse();
-    const replyIds = [
-      ...new Set(
-        chronological
-          .map((row) => row.replyToMessageId)
-          .filter((id): id is Id<"dmMessages"> => Boolean(id)),
-      ),
-    ];
-    const replyDocs = await Promise.all(
-      replyIds.map((id) => ctx.db.get(id)),
-    );
-    const replyById = new Map<
-      Id<"dmMessages">,
-      {
-        _id: Id<"dmMessages">;
-        body: string;
-        kind: "text" | "voice" | "image" | "post" | "comment";
-        fromMe: boolean;
-        audioUrl?: string;
-        imageUrl?: string;
-        durationSec?: number;
-      }
-    >();
-    await Promise.all(
-      replyDocs.map(async (doc) => {
-        if (!doc) return;
-        const media = await resolveDmMediaUrls(ctx, doc, expiresUnix);
-        replyById.set(doc._id, {
-          _id: doc._id,
-          body: replyPreviewBody(doc),
-          kind: doc.kind ?? "text",
-          fromMe: doc.senderId === ctx.user._id,
-          audioUrl: media.audioUrl,
-          imageUrl: media.imageUrl,
-          durationSec: doc.durationSec,
-        });
-      }),
-    );
-    return await Promise.all(
-      chronological.map(async (row) => {
-        const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
-        const fromMe = row.senderId === ctx.user._id;
-        const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
-        return {
-          _id: row._id,
-          body: row.body,
-          kind: row.kind ?? "text",
-          audioUrl: media.audioUrl,
-          imageUrl: media.imageUrl,
-          contentType: media.contentType,
-          durationSec: row.durationSec,
-          fromMe,
-          receipt: fromMe
-            ? receiptFor(
-                row.createdAt,
-                peerReadWatermark,
-                peerDeliveredWatermark,
-              )
-            : "sent",
-          replyTo: row.replyToMessageId
-            ? replyById.get(row.replyToMessageId)
-            : undefined,
-          feedShare,
-          createdAt: row.createdAt,
-        };
-      }),
-    );
+      viewerId: ctx.user._id,
+      limit: args.limit ?? 120,
+      expiresUnix: args.expiresUnix,
+    });
   },
 });
 
@@ -1204,7 +1322,7 @@ export const sendVoiceMessage = authedMutation({
     ) {
       throw new Error("Voice notes must be between 1 second and 5 minutes");
     }
-    await requireOwnedReadyAsset(ctx, args.assetId, "audio");
+    await requireOwnedReadyAsset(ctx, ctx.user._id, args.assetId, "audio");
     const replyToMessageId = await resolveReplyToMessageId(
       ctx,
       conversation._id,
@@ -1255,7 +1373,7 @@ export const sendImageMessage = authedMutation({
       ctx.user._id,
       peerIdOf(conversation, ctx.user._id),
     );
-    const asset = await requireOwnedReadyAsset(ctx, args.assetId, "image");
+    const asset = await requireOwnedReadyAsset(ctx, ctx.user._id, args.assetId, "image");
     const contentType = (asset.mimeType || "").toLowerCase();
     if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
       throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
@@ -1301,6 +1419,210 @@ export const sendImageMessage = authedMutation({
     return messageId;
   },
 });
+
+export const editMessage = authedMutation({
+  args: {
+    messageId: v.id("dmMessages"),
+    body: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    if (message.deletedAt) throw new Error("Cannot edit a deleted message");
+    if (message.senderId !== ctx.user._id) {
+      throw new Error("You can only edit your own messages");
+    }
+    const conversation = await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      ctx.user._id,
+    );
+    const kind = message.kind ?? "text";
+    if (kind !== "text" && kind !== "image") {
+      throw new Error("Only text and photo captions can be edited");
+    }
+    const body = args.body.trim();
+    if (kind === "text" && !body) {
+      throw new Error("Message cannot be empty");
+    }
+    if (body.length > DM_BODY_MAX) {
+      throw new Error(`Message must be at most ${DM_BODY_MAX} characters`);
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.messageId, {
+      body,
+      editedAt: now,
+    });
+    if (await isLatestConversationMessage(ctx, conversation._id, args.messageId)) {
+      await ctx.db.patch(conversation._id, {
+        lastMessagePreview: conversationPreviewFromMessage({
+          ...message,
+          body,
+          deletedAt: undefined,
+        }),
+      });
+    }
+    return null;
+  },
+});
+
+export const deleteMessageForMe = authedMutation({
+  args: { messageId: v.id("dmMessages") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      ctx.user._id,
+    );
+    const hidden = message.hiddenForUserIds ?? [];
+    if (hidden.includes(ctx.user._id)) return null;
+    await ctx.db.patch(args.messageId, {
+      hiddenForUserIds: [...hidden, ctx.user._id],
+    });
+    return null;
+  },
+});
+
+export const deleteMessageForEveryone = authedMutation({
+  args: { messageId: v.id("dmMessages") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    if (message.senderId !== ctx.user._id) {
+      throw new Error("You can only delete your own messages for everyone");
+    }
+    const conversation = await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      ctx.user._id,
+    );
+    if (message.deletedAt) return null;
+    const now = Date.now();
+    await ctx.db.patch(args.messageId, {
+      deletedAt: now,
+      body: "",
+    });
+    if (await isLatestConversationMessage(ctx, conversation._id, args.messageId)) {
+      await ctx.db.patch(conversation._id, {
+        lastMessagePreview: DELETED_MESSAGE_PREVIEW,
+      });
+    }
+    return null;
+  },
+});
+
+
+export const editMessageForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("dmMessages"),
+    body: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    if (message.deletedAt) throw new Error("Cannot edit a deleted message");
+    if (message.senderId !== args.userId) {
+      throw new Error("You can only edit your own messages");
+    }
+    const conversation = await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      args.userId,
+    );
+    const kind = message.kind ?? "text";
+    if (kind !== "text" && kind !== "image") {
+      throw new Error("Only text and photo captions can be edited");
+    }
+    const body = args.body.trim();
+    if (kind === "text" && !body) {
+      throw new Error("Message cannot be empty");
+    }
+    if (body.length > DM_BODY_MAX) {
+      throw new Error(`Message must be at most ${DM_BODY_MAX} characters`);
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.messageId, {
+      body,
+      editedAt: now,
+    });
+    if (await isLatestConversationMessage(ctx, conversation._id, args.messageId)) {
+      await ctx.db.patch(conversation._id, {
+        lastMessagePreview: conversationPreviewFromMessage({
+          ...message,
+          body,
+          deletedAt: undefined,
+        }),
+      });
+    }
+    return null;
+  },
+});
+
+export const deleteMessageForMeForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("dmMessages"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      args.userId,
+    );
+    const hidden = message.hiddenForUserIds ?? [];
+    if (hidden.includes(args.userId)) return null;
+    await ctx.db.patch(args.messageId, {
+      hiddenForUserIds: [...hidden, args.userId],
+    });
+    return null;
+  },
+});
+
+export const deleteMessageForEveryoneForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    messageId: v.id("dmMessages"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const message = await ctx.db.get("dmMessages", args.messageId);
+    if (!message) throw new Error("Message not found");
+    if (message.senderId !== args.userId) {
+      throw new Error("You can only delete your own messages for everyone");
+    }
+    const conversation = await requireMemberConversation(
+      ctx,
+      message.conversationId,
+      args.userId,
+    );
+    if (message.deletedAt) return null;
+    const now = Date.now();
+    await ctx.db.patch(args.messageId, {
+      deletedAt: now,
+      body: "",
+    });
+    if (await isLatestConversationMessage(ctx, conversation._id, args.messageId)) {
+      await ctx.db.patch(conversation._id, {
+        lastMessagePreview: DELETED_MESSAGE_PREVIEW,
+      });
+    }
+    return null;
+  },
+});
+
 /**
  * Recipient device ACK — advances my delivery watermark so the sender sees
  * double gray ticks. Idempotent: only moves forward.
@@ -1359,6 +1681,834 @@ export const unreadConversationCount = authedQuery({
   returns: v.number(),
   handler: async (ctx) => {
     const me = ctx.user._id;
+    const asLow = await ctx.db
+      .query("dmConversations")
+      .withIndex("by_low_and_time", (q) => q.eq("userLowId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX);
+    const asHigh = await ctx.db
+      .query("dmConversations")
+      .withIndex("by_high_and_time", (q) => q.eq("userHighId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX);
+    let count = 0;
+    for (const conversation of [...asLow, ...asHigh]) {
+      if (
+        conversation.lastMessageSenderId &&
+        conversation.lastMessageSenderId !== me &&
+        conversation.lastMessageAt > myReadAt(conversation, me)
+      ) {
+        count += 1;
+      }
+    }
+    return count;
+  },
+});
+
+
+async function requireApiUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<Doc<"users">> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+const openConversationReturn = v.object({
+  conversationId: v.id("dmConversations"),
+  username: v.string(),
+});
+
+
+const searchSidebarReturn = v.object({
+  people: v.array(searchPersonReturn),
+  chats: v.array(
+    v.object({
+      conversationId: v.id("dmConversations"),
+      peer: searchPeerReturn,
+      labels: v.array(conversationLabelReturn),
+      lastMessagePreview: v.optional(v.string()),
+      lastMessageAt: v.number(),
+      peerOnline: v.boolean(),
+    }),
+  ),
+  messages: v.array(
+    v.object({
+      messageId: v.id("dmMessages"),
+      conversationId: v.id("dmConversations"),
+      peer: searchPeerReturn,
+      body: v.string(),
+      createdAt: v.number(),
+      fromMe: v.boolean(),
+    }),
+  ),
+  labels: v.array(
+    v.object({
+      labelId: v.id("dmLabels"),
+      name: v.string(),
+      icon: v.string(),
+      memberCount: v.number(),
+    }),
+  ),
+});
+
+// ─── API key surface (Studio HTTP / MCP) ─────────────────────────────────────
+
+export const openConversationForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+  },
+  returns: openConversationReturn,
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const username = args.username.trim().toLowerCase().replace(/^@/, "");
+    if (!username) throw new Error("Username required");
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile || !profile.isPublic) throw new Error("Profile not found");
+    if (profile.userId === args.userId) {
+      throw new Error("You cannot message yourself");
+    }
+
+    const pair = sortPair(args.userId, profile.userId);
+    const existing = await ctx.db
+      .query("dmConversations")
+      .withIndex("by_pair", (q) =>
+        q.eq("userLowId", pair.low).eq("userHighId", pair.high),
+      )
+      .unique();
+    if (existing) {
+      return { conversationId: existing._id, username };
+    }
+
+    const now = Date.now();
+    const conversationId = await ctx.db.insert("dmConversations", {
+      userLowId: pair.low,
+      userHighId: pair.high,
+      lastMessageAt: now,
+      lowLastReadAt: now,
+      highLastReadAt: now,
+      lowLastDeliveredAt: 0,
+      highLastDeliveredAt: 0,
+      createdAt: now,
+    });
+    return { conversationId, username };
+  },
+});
+
+export const listMyConversationsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    expiresUnix: v.optional(v.number()),
+    labelId: v.optional(v.id("dmLabels")),
+  },
+  returns: v.array(conversationRowReturn),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const expiresUnix =
+      args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
+    const me = args.userId;
+
+    const labelFilter = args.labelId
+      ? await peerIdsInLabel(ctx, me, args.labelId)
+      : undefined;
+    if (args.labelId && !labelFilter) {
+      throw new Error("Label not found");
+    }
+
+    const asLow = await ctx.db
+      .query("dmConversations")
+      .withIndex("by_low_and_time", (q) => q.eq("userLowId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX);
+    const asHigh = await ctx.db
+      .query("dmConversations")
+      .withIndex("by_high_and_time", (q) => q.eq("userHighId", me))
+      .order("desc")
+      .take(CONVERSATIONS_MAX);
+    let conversations = [...asLow, ...asHigh]
+      .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+      .slice(0, CONVERSATIONS_MAX);
+
+    if (labelFilter) {
+      conversations = conversations.filter((conversation) =>
+        labelFilter.has(peerIdOf(conversation, me)),
+      );
+    }
+
+    const peerProfiles: Array<Doc<"profiles"> | null> = await Promise.all(
+      conversations.map((conversation) =>
+        ctx.db
+          .query("profiles")
+          .withIndex("by_user", (q) =>
+            q.eq("userId", peerIdOf(conversation, me)),
+          )
+          .unique(),
+      ),
+    );
+
+    const visible: Array<{
+      conversation: Doc<"dmConversations">;
+      profile: Doc<"profiles">;
+    }> = [];
+    for (let i = 0; i < conversations.length; i++) {
+      const profile = peerProfiles[i];
+      if (profile) visible.push({ conversation: conversations[i]!, profile });
+    }
+
+    const peers = await hydrateSocialPeople(
+      ctx,
+      visible.map((row) => row.profile),
+      expiresUnix,
+    );
+
+    return await Promise.all(
+      visible.map(async (row, i) => {
+        const { conversation, profile } = row;
+        const lastMessageFromMe = conversation.lastMessageSenderId === me;
+        const peerUser = await ctx.db.get("users", profile.userId);
+        const memberships = await ctx.db
+          .query("dmLabelMembers")
+          .withIndex("by_owner_and_peer", (q) =>
+            q.eq("ownerUserId", me).eq("peerUserId", profile.userId),
+          )
+          .collect();
+        const labelDocs = await Promise.all(
+          memberships.map((m) => ctx.db.get("dmLabels", m.labelId)),
+        );
+        const labels = labelDocs
+          .filter((label): label is Doc<"dmLabels"> => Boolean(label))
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((label) => ({
+            labelId: label._id,
+            name: label.name,
+            icon: label.icon,
+          }));
+        const person = peers[i]!;
+        const now = Date.now();
+        const sellerTag = await sellerTagForUser(ctx, profile.userId);
+        return {
+          conversationId: conversation._id,
+          peer: {
+            userId: profile.userId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+            sellerTag: sellerTag ?? undefined,
+          },
+          labels,
+          lastMessagePreview: conversation.lastMessagePreview,
+          lastMessageAt: conversation.lastMessageAt,
+          lastMessageFromMe,
+          lastMessageReceipt: lastMessageFromMe
+            ? receiptFor(
+                conversation.lastMessageAt,
+                peerReadAt(conversation, me),
+                peerDeliveredAt(conversation, me),
+              )
+            : "sent",
+          peerOnline: isStudioOnline(peerUser, now),
+          peerTypingAt: peerTypingAtOf(conversation, me),
+          unread: Boolean(
+            conversation.lastMessageSenderId &&
+              conversation.lastMessageSenderId !== me &&
+              conversation.lastMessageAt > myReadAt(conversation, me),
+          ),
+        };
+      }),
+    );
+  },
+});
+
+export const searchSidebarForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    query: v.string(),
+    expiresUnix: v.number(),
+    now: v.number(),
+  },
+  returns: searchSidebarReturn,
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const rawQuery = args.query.trim().slice(0, 80);
+    const needle = rawQuery.replace(/^@+/, "").toLowerCase();
+    if (!needle) {
+      return { people: [], chats: [], messages: [], labels: [] };
+    }
+
+    const me = args.userId;
+    const conversations = await memberConversations(ctx, me);
+    const conversationById = new Map(
+      conversations.map((conversation) => [
+        String(conversation._id),
+        conversation,
+      ]),
+    );
+
+    const peerProfiles = (
+      await Promise.all(
+        conversations.map(async (conversation) => {
+          return await ctx.db
+            .query("profiles")
+            .withIndex("by_user", (q) =>
+              q.eq("userId", peerIdOf(conversation, me)),
+            )
+            .unique();
+        }),
+      )
+    ).filter((profile): profile is Doc<"profiles"> => Boolean(profile));
+
+    const follows = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_follower", (q) => q.eq("followerUserId", me))
+      .take(200);
+    const followingIds = new Set(
+      follows.map((follow) => String(follow.followingProfileId)),
+    );
+    const followedProfiles = (
+      await Promise.all(
+        follows.map((follow) =>
+          ctx.db.get("profiles", follow.followingProfileId),
+        ),
+      )
+    ).filter((profile): profile is Doc<"profiles"> => Boolean(profile));
+
+    const upper = `${needle}\uffff`;
+    const usernameProfiles = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) =>
+        q.gte("username", needle).lt("username", upper),
+      )
+      .take(SEARCH_PEOPLE_MAX * 2);
+
+    const candidateById = new Map<string, Doc<"profiles">>();
+    for (const profile of [
+      ...peerProfiles,
+      ...followedProfiles,
+      ...usernameProfiles,
+    ]) {
+      if (!profile.isPublic || profile.userId === me) continue;
+      candidateById.set(String(profile._id), profile);
+    }
+    const candidateProfiles = [...candidateById.values()];
+    const hydratedCandidates = await hydrateSocialPeople(
+      ctx,
+      candidateProfiles,
+      args.expiresUnix,
+    );
+    const candidatePersonByProfileId = new Map(
+      hydratedCandidates.map((person) => [String(person.profileId), person]),
+    );
+    const profileByUserId = new Map(
+      peerProfiles.map((profile) => [String(profile.userId), profile]),
+    );
+    const personByUserId = new Map<
+      string,
+      {
+        profileId: Id<"profiles">;
+        username: string;
+        displayName?: string;
+        avatarUrl?: string;
+      }
+    >();
+    for (const profile of candidateProfiles) {
+      const person = candidatePersonByProfileId.get(String(profile._id));
+      if (person) personByUserId.set(String(profile.userId), person);
+    }
+
+    const chatUserIds = new Set(
+      conversations.map((conversation) =>
+        String(peerIdOf(conversation, me)),
+      ),
+    );
+    const sellerTagByUserId = new Map<string, "freelancer" | "business">();
+    for (const profile of candidateProfiles) {
+      const tag = await sellerTagForUser(ctx, profile.userId);
+      if (tag) sellerTagByUserId.set(String(profile.userId), tag);
+    }
+
+    const people = candidateProfiles
+      .map((profile) => {
+        const person = candidatePersonByProfileId.get(String(profile._id));
+        if (!person) return null;
+        const haystack =
+          `${person.username} ${person.displayName ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return null;
+        return {
+          userId: profile.userId,
+          profileId: person.profileId,
+          username: person.username,
+          displayName: person.displayName,
+          avatarUrl: person.avatarUrl,
+          following: followingIds.has(String(profile._id)),
+          hasChat: chatUserIds.has(String(profile.userId)),
+          sellerTag: sellerTagByUserId.get(String(profile.userId)),
+        };
+      })
+      .filter((person): person is NonNullable<typeof person> => Boolean(person))
+      .sort((a, b) => {
+        if (a.following !== b.following) return a.following ? -1 : 1;
+        if (a.hasChat !== b.hasChat) return a.hasChat ? -1 : 1;
+        return a.username.localeCompare(b.username);
+      })
+      .slice(0, SEARCH_PEOPLE_MAX);
+
+    const ownedLabels = await ctx.db
+      .query("dmLabels")
+      .withIndex("by_owner_and_order", (q) => q.eq("ownerUserId", me))
+      .collect();
+    const labelMembers = await Promise.all(
+      ownedLabels.map((label) =>
+        ctx.db
+          .query("dmLabelMembers")
+          .withIndex("by_label", (q) => q.eq("labelId", label._id))
+          .take(501),
+      ),
+    );
+    const labels = ownedLabels
+      .map((label, index) => ({
+        labelId: label._id,
+        name: label.name,
+        icon: label.icon,
+        memberCount: Math.min(labelMembers[index]?.length ?? 0, 500),
+      }))
+      .filter((label) => label.name.toLowerCase().includes(needle));
+
+    const labelByPeerUserId = new Map<
+      string,
+      Array<{ labelId: Id<"dmLabels">; name: string; icon: string }>
+    >();
+    for (let index = 0; index < ownedLabels.length; index++) {
+      const label = ownedLabels[index]!;
+      for (const membership of labelMembers[index] ?? []) {
+        const key = String(membership.peerUserId);
+        const rows = labelByPeerUserId.get(key) ?? [];
+        rows.push({ labelId: label._id, name: label.name, icon: label.icon });
+        labelByPeerUserId.set(key, rows);
+      }
+    }
+
+    const chats = conversations
+      .map((conversation) => {
+        const peerUserId = peerIdOf(conversation, me);
+        const profile = profileByUserId.get(String(peerUserId));
+        const person = personByUserId.get(String(peerUserId));
+        if (!profile || !person) return null;
+        const peerLabels = labelByPeerUserId.get(String(peerUserId)) ?? [];
+        const haystack = [
+          person.username,
+          person.displayName ?? "",
+          conversation.lastMessagePreview ?? "",
+          ...peerLabels.map((label) => label.name),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(needle)) return null;
+        return {
+          conversationId: conversation._id,
+          peer: {
+            userId: peerUserId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+            sellerTag: sellerTagByUserId.get(String(peerUserId)),
+          },
+          labels: peerLabels,
+          lastMessagePreview: conversation.lastMessagePreview,
+          lastMessageAt: conversation.lastMessageAt,
+          peerOnline: false,
+        };
+      })
+      .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
+      .slice(0, SEARCH_CHATS_MAX);
+
+    for (const chat of chats) {
+      const peerUser = await ctx.db.get("users", chat.peer.userId);
+      chat.peerOnline = isStudioOnline(peerUser, args.now);
+    }
+
+    const searchedMessages =
+      rawQuery.length >= 2
+        ? await ctx.db
+            .query("dmMessages")
+            .withSearchIndex("search_body", (q) =>
+              q.search("body", rawQuery),
+            )
+            .take(SEARCH_MESSAGE_SCAN_MAX)
+        : [];
+    const messages = searchedMessages
+      .map((message) => {
+        if (message.deletedAt) return null;
+        if (isDmHiddenForUser(message, me)) return null;
+        const conversation = conversationById.get(
+          String(message.conversationId),
+        );
+        if (!conversation) return null;
+        const peerUserId = peerIdOf(conversation, me);
+        const person = personByUserId.get(String(peerUserId));
+        if (!person) return null;
+        return {
+          messageId: message._id,
+          conversationId: conversation._id,
+          peer: {
+            userId: peerUserId,
+            profileId: person.profileId,
+            username: person.username,
+            displayName: person.displayName,
+            avatarUrl: person.avatarUrl,
+            sellerTag: sellerTagByUserId.get(String(peerUserId)),
+          },
+          body: message.body.slice(0, 240),
+          createdAt: message.createdAt,
+          fromMe: message.senderId === me,
+        };
+      })
+      .filter((message): message is NonNullable<typeof message> =>
+        Boolean(message),
+      )
+      .slice(0, SEARCH_MESSAGES_MAX);
+
+    return {
+      people,
+      chats,
+      messages,
+      labels,
+    };
+  },
+});
+
+export const listMessagesForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    limit: v.optional(v.number()),
+    expiresUnix: v.number(),
+  },
+  returns: listMessagesReturn,
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    return await listConversationMessages(ctx, {
+      conversation,
+      viewerId: args.userId,
+      limit: args.limit ?? 120,
+      expiresUnix: args.expiresUnix,
+    });
+  },
+});
+
+export const sendMessageForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    body: v.string(),
+    replyToMessageId: v.optional(v.id("dmMessages")),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      args.userId,
+      peerIdOf(conversation, args.userId),
+    );
+    const body = args.body.trim();
+    if (!body) throw new Error("Message cannot be empty");
+    if (body.length > DM_BODY_MAX) {
+      throw new Error(`Message must be at most ${DM_BODY_MAX} characters`);
+    }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: args.userId,
+      body,
+      kind: "text",
+      ...(replyToMessageId ? { replyToMessageId } : {}),
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === args.userId;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview:
+        body.length > DM_PREVIEW_MAX ? `${body.slice(0, DM_PREVIEW_MAX)}…` : body,
+      lastMessageSenderId: args.userId,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    return messageId;
+  },
+});
+
+export const sendFeedShareForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    postId: v.id("profilePosts"),
+    commentId: v.optional(v.id("profileComments")),
+    note: v.optional(v.string()),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      args.userId,
+      peerIdOf(conversation, args.userId),
+    );
+
+    const post = await ctx.db.get("profilePosts", args.postId);
+    if (!post || post.unpublishedAt) {
+      throw new Error("Post not found");
+    }
+
+    let kind: "post" | "comment" = "post";
+    let body = (args.note ?? "").trim();
+    let sharedCommentId: Id<"profileComments"> | undefined;
+    let previewFallback = (post.caption ?? "").trim();
+
+    if (args.commentId) {
+      const comment = await ctx.db.get("profileComments", args.commentId);
+      if (
+        !comment ||
+        comment.deletedAt ||
+        comment.postId !== post._id
+      ) {
+        throw new Error("Comment not found");
+      }
+      kind = "comment";
+      sharedCommentId = comment._id;
+      previewFallback = comment.body.trim();
+    }
+
+    if (body.length > DM_BODY_MAX) {
+      body = `${body.slice(0, DM_BODY_MAX - 1)}…`;
+    }
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: args.userId,
+      body,
+      kind,
+      sharedPostId: post._id,
+      ...(sharedCommentId ? { sharedCommentId } : {}),
+      createdAt: now,
+    });
+
+    const isLow = conversation.userLowId === args.userId;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: feedShareListPreview(
+        kind,
+        body || previewFallback,
+      ),
+      lastMessageSenderId: args.userId,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+
+    if (kind === "post") {
+      await ctx.db.patch(post._id, {
+        shareCount: (post.shareCount ?? 0) + 1,
+      });
+    }
+
+    return messageId;
+  },
+});
+
+export const sendImageMessageForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    assetId: v.id("assets"),
+    caption: v.optional(v.string()),
+    replyToMessageId: v.optional(v.id("dmMessages")),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      args.userId,
+      peerIdOf(conversation, args.userId),
+    );
+    const asset = await requireOwnedReadyAsset(
+      ctx,
+      args.userId,
+      args.assetId,
+      "image",
+    );
+    const contentType = (asset.mimeType || "").toLowerCase();
+    if (!ALLOWED_IMAGE_TYPES.has(contentType)) {
+      throw new Error("Only JPEG, PNG, WebP, or GIF images are allowed");
+    }
+    if ((asset.byteSize ?? 0) > IMAGE_MAX_BYTES) {
+      throw new Error("Images must be 10 MB or smaller");
+    }
+    const caption = (args.caption ?? "").trim();
+    if (caption.length > DM_BODY_MAX) {
+      throw new Error(`Caption must be at most ${DM_BODY_MAX} characters`);
+    }
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: args.userId,
+      body: caption,
+      kind: "image",
+      assetId: args.assetId,
+      contentType,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === args.userId;
+    const preview = caption
+      ? caption.length > DM_PREVIEW_MAX
+        ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+        : caption
+      : IMAGE_PREVIEW;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: preview,
+      lastMessageSenderId: args.userId,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    return messageId;
+  },
+});
+
+
+export const sendVoiceMessageForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+    assetId: v.id("assets"),
+    durationSec: v.number(),
+    replyToMessageId: v.optional(v.id("dmMessages")),
+  },
+  returns: v.id("dmMessages"),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    await assertCanMessagePeer(
+      ctx,
+      args.userId,
+      peerIdOf(conversation, args.userId),
+    );
+    if (
+      !Number.isFinite(args.durationSec) ||
+      args.durationSec <= 0 ||
+      args.durationSec > VOICE_NOTE_MAX_SECONDS
+    ) {
+      throw new Error("Voice notes must be between 1 second and 5 minutes");
+    }
+    await requireOwnedReadyAsset(ctx, args.userId, args.assetId, "audio");
+    const replyToMessageId = await resolveReplyToMessageId(
+      ctx,
+      conversation._id,
+      args.replyToMessageId,
+    );
+
+    const now = Date.now();
+    const messageId = await ctx.db.insert("dmMessages", {
+      conversationId: conversation._id,
+      senderId: args.userId,
+      body: "",
+      kind: "voice",
+      assetId: args.assetId,
+      durationSec: Math.round(args.durationSec * 10) / 10,
+      ...(replyToMessageId ? { replyToMessageId } : {}),
+      createdAt: now,
+    });
+    const isLow = conversation.userLowId === args.userId;
+    await ctx.db.patch(conversation._id, {
+      lastMessageAt: now,
+      lastMessagePreview: VOICE_PREVIEW,
+      lastMessageSenderId: args.userId,
+      ...(isLow
+        ? { lowLastReadAt: now, lowTypingAt: 0 }
+        : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    return messageId;
+  },
+});
+
+export const markReadForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    conversationId: v.id("dmConversations"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const conversation = await requireMemberConversation(
+      ctx,
+      args.conversationId,
+      args.userId,
+    );
+    const now = Date.now();
+    const isLow = conversation.userLowId === args.userId;
+    const delivered = Math.max(myDeliveredAt(conversation, args.userId), now);
+    await ctx.db.patch(conversation._id, {
+      ...(isLow
+        ? { lowLastReadAt: now, lowLastDeliveredAt: delivered }
+        : { highLastReadAt: now, highLastDeliveredAt: delivered }),
+    });
+    return null;
+  },
+});
+
+export const unreadConversationCountForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    await requireApiUser(ctx, args.userId);
+    const me = args.userId;
     const asLow = await ctx.db
       .query("dmConversations")
       .withIndex("by_low_and_time", (q) => q.eq("userLowId", me))

@@ -11,13 +11,19 @@ import {
 } from "./lib/bunny";
 import { isFolderInSandbox } from "./lib/studioApi/folderScope";
 import {
+  addTextClip,
   appendClips,
   clipsSummary,
+  detachAudioFromVideo,
+  duplicateClip,
   parseEditorProject,
   patchClips,
   removeClips,
   reorderTrackClips,
+  seedClipsFromAssets,
   setClipTransition,
+  setProjectFrameRatio,
+  setTrackMuted,
   splitClipAtTime,
   type AppendClipSpec,
   type ClipPatch,
@@ -386,11 +392,21 @@ export const save = authedMutation({
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const name = args.name.trim() || "Untitled";
+    const PLACEHOLDER = new Set(["untitled", "new edit"]);
+    let name = args.name.trim() || "Untitled";
     if (args.projectId) {
       const existing = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
       if (existing.deletedAt) {
         throw new Error("Edit project is in trash.");
+      }
+      // Stale editor autosave can still carry the bootstrap "Untitled" after a
+      // Files-rail rename — keep the custom row name in that case.
+      const incomingPlaceholder = PLACEHOLDER.has(name.toLowerCase());
+      const existingCustom =
+        Boolean(existing.name?.trim()) &&
+        !PLACEHOLDER.has(existing.name.trim().toLowerCase());
+      if (incomingPlaceholder && existingCustom) {
+        name = existing.name.trim();
       }
       // Autosave must not relocate the .edit file when the user browses folders.
       // Intentional moves go through videoEdits.update({ folderId }).
@@ -910,6 +926,7 @@ export const patchClipsForApi = internalMutation({
         label: v.optional(v.string()),
         effects: v.optional(v.any()),
         transitionOut: v.optional(v.any()),
+        text: v.optional(v.any()),
       }),
     ),
     compact: v.optional(v.boolean()),
@@ -1020,6 +1037,175 @@ export const setTransitionForApi = internalMutation({
     await saveProjectJson(ctx, row._id, result.project, row.name);
     const updated = await ctx.db.get("videoEditProjects", row._id);
     if (!updated) throw new Error("Edit project missing after transition");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+
+export const addTextClipForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    startTime: v.optional(v.number()),
+    trackId: v.optional(v.string()),
+    duration: v.optional(v.number()),
+    label: v.optional(v.string()),
+    text: v.optional(
+      v.object({
+        text: v.optional(v.string()),
+        fontSize: v.optional(v.number()),
+        color: v.optional(v.string()),
+        align: v.optional(
+          v.union(v.literal("left"), v.literal("center"), v.literal("right")),
+        ),
+        verticalAlign: v.optional(
+          v.union(v.literal("top"), v.literal("middle"), v.literal("bottom")),
+        ),
+        animation: v.optional(
+          v.union(
+            v.literal("none"),
+            v.literal("fadeIn"),
+            v.literal("fadeOut"),
+            v.literal("slideUp"),
+            v.literal("slideDown"),
+            v.literal("popIn"),
+          ),
+        ),
+        animationDuration: v.optional(v.number()),
+        fontFamily: v.optional(v.string()),
+        bold: v.optional(v.boolean()),
+        italic: v.optional(v.boolean()),
+        underline: v.optional(v.boolean()),
+        textCase: v.optional(
+          v.union(
+            v.literal("none"),
+            v.literal("upper"),
+            v.literal("lower"),
+            v.literal("title"),
+          ),
+        ),
+        letterSpacing: v.optional(v.number()),
+        lineHeight: v.optional(v.number()),
+        strokeColor: v.optional(v.string()),
+        strokeWidth: v.optional(v.number()),
+        backgroundColor: v.optional(v.union(v.string(), v.null())),
+        backgroundPadding: v.optional(v.number()),
+        backgroundRadius: v.optional(v.number()),
+        shadowColor: v.optional(v.union(v.string(), v.null())),
+        shadowBlur: v.optional(v.number()),
+        shadowOffsetX: v.optional(v.number()),
+        shadowOffsetY: v.optional(v.number()),
+        glow: v.optional(v.boolean()),
+        glowColor: v.optional(v.string()),
+        glowBlur: v.optional(v.number()),
+        opacity: v.optional(v.number()),
+        flipX: v.optional(v.boolean()),
+        flipY: v.optional(v.boolean()),
+      }),
+    ),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = addTextClip(project, {
+      startTime: args.startTime,
+      trackId: args.trackId,
+      duration: args.duration,
+      label: args.label,
+      text: args.text,
+    });
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after add text");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const duplicateClipForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clipId: v.string(),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = duplicateClip(project, args.clipId);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after duplicate");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const detachAudioForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    clipId: v.string(),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = detachAudioFromVideo(project, args.clipId);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after detach audio");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const setTrackMutedForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    trackId: v.string(),
+    muted: v.boolean(),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = setTrackMuted(project, args.trackId, args.muted);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after mute");
+    return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
+  },
+});
+
+export const setFrameRatioForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sandboxFolderId: v.id("folders"),
+    projectId: v.id("videoEditProjects"),
+    frameRatio: v.union(v.literal("16:9"), v.literal("9:16"), v.literal("1:1")),
+    compact: v.optional(v.boolean()),
+  },
+  returns: clipOpsReturn,
+  handler: async (ctx, args) => {
+    const row = await requireEditForApi(ctx, args);
+    const project = parseEditorProject(parseProject(row.projectJson)) as EditorProject;
+    project.folderId = row.folderId;
+    const result = setProjectFrameRatio(project, args.frameRatio);
+    await saveProjectJson(ctx, row._id, result.project, row.name);
+    const updated = await ctx.db.get("videoEditProjects", row._id);
+    if (!updated) throw new Error("Edit project missing after frame ratio");
     return toClipOpsReturn(updated, result.changedClipIds, args.compact !== false);
   },
 });

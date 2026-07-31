@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { requireConfig } from "./client.js";
 import { registerAccountTools } from "./tools/account.js";
+import { registerAccountExtraTools } from "./tools/accountExtra.js";
 import { registerAssistanceTools } from "./tools/assistance.js";
 import { registerAssetTools } from "./tools/assets.js";
 import { registerContextTools } from "./tools/context.js";
@@ -11,6 +12,10 @@ import { registerElementTools } from "./tools/elements.js";
 import { registerFolderTools } from "./tools/folders.js";
 import { registerGenerationTools } from "./tools/generations.js";
 import { registerProductionTools } from "./tools/production.js";
+import { registerMessageTools } from "./tools/messages.js";
+// Wave 2 social/feed — register after messages; keep both Wave agents' tool sets.
+import { registerSocialTools } from "./tools/social.js";
+import { registerNetworkTools } from "./tools/network.js";
 import { registerTrashTools } from "./tools/trash.js";
 import { registerVoiceTools } from "./tools/voices.js";
 
@@ -18,10 +23,11 @@ requireConfig();
 
 const server = new McpServer({
   name: "yatishara-studio",
-  version: "0.5.0",
+  version: "0.7.6",
 });
 
 registerAccountTools(server);
+registerAccountExtraTools(server);
 registerContextTools(server);
 registerFolderTools(server);
 registerAssetTools(server);
@@ -32,7 +38,11 @@ registerVoiceTools(server);
 registerAssistanceTools(server);
 registerEditTools(server);
 registerProductionTools(server);
+registerMessageTools(server);
+// Social feed/profiles (Wave 2 domain). HTTP routes wired by Wave HTTP agent.
+registerSocialTools(server);
 registerTrashTools(server);
+registerNetworkTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

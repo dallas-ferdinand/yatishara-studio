@@ -17,6 +17,9 @@ Create keys in Studio → Settings → API keys. Scopes:
 | `read` | Account, folders, assets, documents, elements, presets, catalogs, voices browse, list/get generations, briefs, edits |
 | `write` | Create/update folders, assets, documents, elements, edits, briefs, saved voices; trash/restore |
 | `generate` | Image, video, script, audio generation; brief approve; edit export (uses credits / compute) |
+| `messages` | Direct messages / inbox (user-level; not limited to the API key sandbox folder tree) |
+| `social` | Social feed, follows, profile social actions (user-level; not sandbox-limited) |
+| `marketplace` | Marketplace listings and offers (user-level; not sandbox-limited) |
 
 ## Discovery
 
@@ -30,9 +33,146 @@ Create keys in Studio → Settings → API keys. Scopes:
 
 ```http
 GET /api/v1/account
+GET /api/v1/account/payments
+GET /api/v1/account/payments/:id
+GET /api/v1/account/credits?numItems=&cursor=
+GET /api/v1/account/plans
+GET /api/v1/account/pricing
+GET /api/v1/account/storage
+GET /api/v1/account/subscription
 ```
 
-Returns credit balance, subscription status, and plan info.
+`GET /account` returns credit balance (and basic plan info). Deeper billing endpoints require `read` scope.
+`GET /account/subscription` returns balance plus active subscription summary.
+MCP: `studio_list_payments`, `studio_list_credit_transactions`, `studio_get_storage`, etc.
+
+## Messages (DMs)
+
+Requires `messages` scope. Not limited to the API key sandbox folder.
+
+```http
+GET /api/v1/messages/conversations?labelId=
+POST /api/v1/messages/conversations
+GET /api/v1/messages/search?q=
+GET /api/v1/messages/unread-count
+GET /api/v1/messages/conversations/:id/messages?limit=
+POST /api/v1/messages/conversations/:id/messages
+POST /api/v1/messages/conversations/:id/images
+POST /api/v1/messages/conversations/:id/share
+POST /api/v1/messages/conversations/:id/read
+GET|POST /api/v1/messages/labels
+PATCH|DELETE /api/v1/messages/labels/:id
+GET|PUT /api/v1/messages/peers/:userId/labels
+GET /api/v1/messages/peers/:userId/panel
+GET|POST /api/v1/messages/peers/:userId/notes
+PATCH|DELETE /api/v1/messages/notes/:id
+POST /api/v1/messages/peers/:userId/block
+POST /api/v1/messages/peers/:userId/unblock
+```
+
+`POST /conversations` body: `{ "username" }`.
+
+`POST .../messages` body: `{ "body", "replyToMessageId?" }`.
+
+`POST .../images` body: `{ "assetId", "caption?", "replyToMessageId?" }` — billable Studio image asset (typically in the Messages folder).
+
+`POST .../share` body: `{ "postId", "commentId?", "note?" }`.
+
+`POST /labels` body: `{ "name", "icon" }`. `PUT .../peers/:userId/labels` body: `{ "labelIds": [] }`.
+
+
+## Social (feed / profiles)
+
+Requires `social` scope. User-level (not limited to the API key sandbox folder).
+
+```http
+GET|PATCH /api/v1/profiles/me
+GET /api/v1/profiles/username-available?username=
+POST /api/v1/profiles/claim-username
+POST /api/v1/profiles/change-username
+GET /api/v1/profiles/:username
+POST|DELETE /api/v1/profiles/:profileId/follow
+GET /api/v1/profiles/me/following
+GET /api/v1/profiles/people
+GET /api/v1/feed?mode=forYou|following&limit=&seedPostId=
+GET|POST /api/v1/feed/posts
+GET /api/v1/feed/collection?kind=saved|liked|shared
+DELETE /api/v1/feed/posts/by-asset/:assetId
+PATCH /api/v1/feed/posts/:postId
+GET /api/v1/feed/assets/:assetId/shared
+GET /api/v1/feed/shared-asset-ids
+GET /api/v1/feed/posts/:postId/media
+POST /api/v1/feed/posts/:postId/like
+POST /api/v1/feed/posts/:postId/save
+POST /api/v1/feed/posts/:postId/share
+POST /api/v1/feed/posts/:postId/view
+GET|POST /api/v1/feed/posts/:postId/comments
+GET /api/v1/feed/comments/:parentId/replies
+POST /api/v1/feed/comments/:commentId/like
+DELETE /api/v1/feed/comments/:commentId
+GET /api/v1/feed/suggest/hashtags?query=&limit=
+GET /api/v1/feed/suggest/people?query=&limit=
+```
+
+`POST /feed/posts` body: `{ "assetId", "caption?", "hashtags?", "keywords?" }` (share owned image/video).
+`PATCH /profiles/me` body: `{ "bio?", "isPublic?", "contactLinks?", "avatarAssetId?", "useSellerDisplayName?" }`.
+MCP: `studio_list_feed`, `studio_share_asset_post`, `studio_toggle_like`, `studio_follow`, etc. (`packages/studio-mcp` social tools).
+
+## Notifications
+
+Requires `social` scope.
+
+```http
+GET /api/v1/notifications
+POST /api/v1/notifications/:id/read
+```
+
+MCP: `studio_list_notifications`, `studio_mark_notification_read`.
+
+## Creative Network (marketplace)
+
+Requires `marketplace` scope. User-level (not sandbox-limited).
+
+```http
+GET /api/v1/network/offers?category=&limit=&expiresUnix=
+GET /api/v1/network/offers/:slug?expiresUnix=
+GET /api/v1/network/offers/:offerId/reviews
+GET /api/v1/network/offers/:offerId/quote?packageIndex=
+POST /api/v1/network/offers/:offerId/book
+GET /api/v1/network/sellers/:username/offers
+GET /api/v1/network/sellers/:username/hire
+GET /api/v1/network/sellers/approved/:userId
+GET /api/v1/network/me/seller
+GET|POST /api/v1/network/me/offers
+PATCH /api/v1/network/me/offers/:offerId
+POST /api/v1/network/me/offers/:offerId/status
+GET /api/v1/network/jobs/seller?offerId=
+GET /api/v1/network/jobs/buyer
+GET /api/v1/network/jobs/with/:peerUserId
+GET /api/v1/network/jobs/:jobId
+POST /api/v1/network/jobs/:jobId/deliver
+POST /api/v1/network/jobs/:jobId/accept
+POST /api/v1/network/jobs/:jobId/cancel
+POST /api/v1/network/jobs/:jobId/review
+GET|POST /api/v1/network/listings
+GET /api/v1/network/listings/quote?assetId=
+GET /api/v1/network/listings/:listingId
+POST /api/v1/network/listings/:listingId/prepare-purchase
+POST /api/v1/network/listings/:listingId/purchase
+GET /api/v1/network/me/listings
+GET /api/v1/network/me/listings/summary?nowMs=
+GET /api/v1/network/me/listings/for-asset/:assetId
+GET /api/v1/network/me/listings/:listingId
+POST /api/v1/network/me/listings/prepare
+POST /api/v1/network/me/listings/commit
+POST /api/v1/network/me/listings/:listingId/unlist
+POST /api/v1/network/purchases/:purchaseId/finalize
+```
+
+`POST /network/listings` body: `{ "assetId", "title", "description?" }` — orchestrates prepare → Bunny copy → commit (approved seller).
+`POST /network/listings/:id/purchase` — orchestrates prepare → Bunny copy → finalize.
+`POST .../book` body: `{ "packageIndex?" }`. Seller offer create/update bodies match marketplace offer fields.
+MCP: `studio_list_network_offers`, `studio_book_offer`, `studio_list_on_network`, `studio_purchase_network_listing`, etc.
 
 ## Workspace context (agent-oriented)
 
@@ -359,6 +499,11 @@ POST /api/v1/edits/:id/clips/split
 POST /api/v1/edits/:id/clips/transition
 POST /api/v1/edits/:id/frame
 POST /api/v1/edits/:id/export
+POST /api/v1/edits/:id/text
+POST /api/v1/edits/:id/clips/duplicate
+POST /api/v1/edits/:id/clips/detach-audio
+PATCH /api/v1/edits/:id/tracks/:trackId
+POST /api/v1/edits/:id/frame-ratio
 ```
 
 `POST /edits` body: `{ "folderId?", "name?", "sourceAssetId?", "assetIds?", "frameRatio?" }`. When `assetIds` is set, clips are seeded on `track-v1` (video/image) and audio tracks.
@@ -372,7 +517,7 @@ POST /api/v1/edits/:id/export
 - `POST .../clips/split` — `{ "clipId", "timeSec" }`
 - `POST .../clips/transition` — `{ "clipId", "type?", "duration?", "clear?" }`
 - `POST .../frame` — ffmpeg still → image asset (`timeSec` playhead, or `assetId` + `localTimeSec`); `generate` scope
-- `POST .../export` — ffmpeg render → `{ "assetId" }` (`generate` scope); optional `{ "name" }`
+- `POST .../export` — ffmpeg render → `{ "assetId" }` (`generate` scope); optional `{ "name", "exportResolution": "720p"|"1080p"|"4K" }` (default `1080p`)
 
 Clip ops return compact timeline summaries by default (`compact: false` includes full `project`).
 
@@ -384,7 +529,7 @@ Concurrent in-flight generation jobs (image/video/audio): **10 per API key**.
 
 ## MCP
 
-Use `@yatishara/studio-mcp` **v0.6+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md). Preferred agent entry: `studio_bootstrap`, `studio_ensure_path`, `studio_generate_batch`, timeline edit tools (`studio_edit_*`, `studio_pull_frame`).
+Use `@yatishara/studio-mcp` **v0.7+** (or local `packages/studio-mcp`) with `STUDIO_API_KEY` and `STUDIO_API_URL`. See Settings → API keys and [`packages/studio-mcp/README.md`](../packages/studio-mcp/README.md). Preferred agent entry: `studio_bootstrap`, `studio_ensure_path`, `studio_generate_batch`, timeline edit tools (`studio_edit_*`, `studio_pull_frame`).
 
 ## Errors
 

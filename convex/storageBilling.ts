@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { authedQuery } from "./lib/customFunctions";
 import {
   OUTSTANDING_BLOCK_DAYS,
@@ -70,6 +70,60 @@ export const getMyStorage = authedQuery({
       .query("assets")
       .withIndex("by_owner_and_deleted", (q) =>
         q.eq("ownerId", ctx.user._id).gt("deletedAt", 0),
+      )
+      .collect();
+    const trashBytes = sumBillableBytes(trashed);
+    const usedBytes = row?.currentBytes ?? 0;
+    return {
+      usedBytes,
+      trashBytes,
+      ttdPerGibMonth: STORAGE_TTD_PER_GIB_MONTH,
+      monthlyRateTtd: monthlyRateTtd(usedBytes),
+      projectedChargeTtd: projectedMonthlyChargeTtd(usedBytes),
+      outstandingCredits: row?.outstandingCredits ?? 0,
+      outstandingDays: outstandingDays(row ?? null, now),
+      uploadsBlocked: storageUploadsBlocked(row ?? null, now),
+      blockAfterDays: OUTSTANDING_BLOCK_DAYS,
+      trashRetentionDays: TRASH_RETENTION_DAYS,
+      nextChargeAt: nextBillingMoment(currentBillingPeriodStart(now)),
+    };
+  },
+});
+
+
+// --- Studio HTTP/MCP ForApi (Wave 4) ---
+// Intended route: GET /api/v1/account/storage -> getMyStorageForApi (scope: read)
+
+const storageSummaryReturn = v.object({
+  usedBytes: v.number(),
+  trashBytes: v.number(),
+  ttdPerGibMonth: v.number(),
+  monthlyRateTtd: v.number(),
+  projectedChargeTtd: v.number(),
+  outstandingCredits: v.number(),
+  outstandingDays: v.number(),
+  uploadsBlocked: v.boolean(),
+  blockAfterDays: v.number(),
+  trashRetentionDays: v.number(),
+  nextChargeAt: v.number(),
+});
+
+export const getMyStorageForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    /** Client-supplied clock; avoid Date.now() inside the query. */
+    now: v.number(),
+  },
+  returns: storageSummaryReturn,
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get("users", args.userId);
+    if (!user) throw new Error("User not found");
+    const row = await getStorageRow(ctx, args.userId);
+    const now = args.now;
+    const trashed = await ctx.db
+      .query("assets")
+      .withIndex("by_owner_and_deleted", (q) =>
+        q.eq("ownerId", args.userId).gt("deletedAt", 0),
       )
       .collect();
     const trashBytes = sumBillableBytes(trashed);

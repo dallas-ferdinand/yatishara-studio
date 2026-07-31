@@ -76,3 +76,49 @@ export const deleteSellerKycPaths = internalAction({
     return null;
   },
 });
+
+
+export const commitSellerDocUploadForApi = internalAction({
+  args: {
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    docKind: v.string(),
+    mimeType: v.string(),
+    byteSize: v.optional(v.number()),
+  },
+  returns: v.object({ bunnyPath: v.string() }),
+  handler: async (ctx, args) => {
+    const blob = await ctx.storage.get(args.storageId);
+    if (!blob) throw new Error("Staging upload missing. Try again.");
+
+    const byteSize = args.byteSize ?? blob.size;
+    if (byteSize <= 0) {
+      await ctx.storage.delete(args.storageId).catch(() => undefined);
+      throw new Error("Empty file.");
+    }
+    if (byteSize > MAX_KYC_BYTES) {
+      await ctx.storage.delete(args.storageId).catch(() => undefined);
+      throw new Error("File exceeds the 25 MB limit for verification documents.");
+    }
+
+    const bunnyPath = buildSellerKycPath({
+      userId: args.userId,
+      docKind: args.docKind,
+      filename: args.filename,
+    });
+
+    try {
+      const body = new Uint8Array(await blob.arrayBuffer());
+      await putObject({
+        path: bunnyPath,
+        body,
+        contentType: args.mimeType || "application/octet-stream",
+      });
+      return { bunnyPath };
+    } finally {
+      await ctx.storage.delete(args.storageId).catch(() => undefined);
+    }
+  },
+});
+

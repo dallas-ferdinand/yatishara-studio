@@ -63,3 +63,19 @@ export async function requireApprovedSeller(
   }
   return { user, seller };
 }
+
+/** Same gate as requireApprovedSeller, but for API keys / ForApi (no session). */
+export async function requireApprovedSellerForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<{ user: AuthedUser; seller: ApprovedSeller }> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) {
+    throw new Error("User not found");
+  }
+  const seller = await getMarketplaceSellerForUser(ctx, userId);
+  if (!seller || seller.status !== "approved") {
+    throw new Error("Approved marketplace seller access required");
+  }
+  return { user: { ...user, _id: userId }, seller };
+}

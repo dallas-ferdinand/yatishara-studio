@@ -7,7 +7,7 @@ import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 
 function buildCrumbs(path: string) {
-  const crumbs = [{ label: "files", path: "" }];
+  const crumbs = [{ label: "Files", path: "" }];
   if (!path) return crumbs;
   const rawParts = String(path).split("/").filter(Boolean);
   const parts = rawParts[0]?.toLowerCase() === "studio" ? rawParts.slice(1) : rawParts;

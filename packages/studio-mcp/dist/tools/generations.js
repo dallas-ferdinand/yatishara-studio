@@ -127,32 +127,40 @@ function registerGenerationTools(server) {
     {},
     async () => jsonResult(await studioFetch("/video-models?scope=mcp"))
   );
+  const estimateBatchSchema = {
+    items: z.array(
+      z.object({
+        label: z.string(),
+        mode: z.enum(["image", "video", "script", "audio"]),
+        resolution: z.string().optional(),
+        durationSeconds: z.number().optional(),
+        audioEnabled: z.boolean().optional(),
+        audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
+        characterCount: z.number().optional(),
+        hasReferenceInput: z.boolean().optional(),
+        referenceAssetIds: z.array(z.string()).optional(),
+        maxRounds: z.number()
+      })
+    ),
+    contingencyPercent: z.number().optional().describe("Default 15")
+  };
+  const estimateBatchHandler = async (args) => jsonResult(
+    await studioFetch("/generations/estimate-batch", {
+      method: "POST",
+      body: JSON.stringify(args)
+    })
+  );
   server.tool(
     "studio_estimate_batch",
-    "[preferred] Estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval.",
-    {
-      items: z.array(
-        z.object({
-          label: z.string(),
-          mode: z.enum(["image", "video", "script", "audio"]),
-          resolution: z.string().optional(),
-          durationSeconds: z.number().optional(),
-          audioEnabled: z.boolean().optional(),
-          audioType: z.enum(["voiceover", "sfx", "music"]).optional(),
-          characterCount: z.number().optional(),
-          hasReferenceInput: z.boolean().optional(),
-          referenceAssetIds: z.array(z.string()).optional(),
-          maxRounds: z.number()
-        })
-      ),
-      contingencyPercent: z.number().optional().describe("Default 15")
-    },
-    async (args) => jsonResult(
-      await studioFetch("/generations/estimate-batch", {
-        method: "POST",
-        body: JSON.stringify(args)
-      })
-    )
+    "[preferred] Estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval. Alias: studio_estimate_production.",
+    estimateBatchSchema,
+    estimateBatchHandler
+  );
+  server.tool(
+    "studio_estimate_production",
+    "Alias of studio_estimate_batch \u2014 estimate total production budget for multiple generation items with contingency. Call before studio_generate_batch / cartoon budget approval.",
+    estimateBatchSchema,
+    estimateBatchHandler
   );
   server.tool(
     "studio_list_script_types",

@@ -30,11 +30,38 @@ export type EditorClipTransition = {
   duration: number;
 };
 
+export type EditorTextFontFamily = string;
+
 export type EditorTextContent = {
   text: string;
   fontSize?: number;
   color?: string;
   align?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  animation?: "none" | "fadeIn" | "fadeOut" | "slideUp" | "slideDown" | "popIn";
+  animationDuration?: number;
+  fontFamily?: EditorTextFontFamily;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  textCase?: "none" | "upper" | "lower" | "title";
+  letterSpacing?: number;
+  lineHeight?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  backgroundColor?: string | null;
+  backgroundPadding?: number;
+  backgroundRadius?: number;
+  shadowColor?: string | null;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
+  glow?: boolean;
+  glowColor?: string;
+  glowBlur?: number;
+  opacity?: number;
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 export type EditorTrack = {
@@ -86,6 +113,7 @@ export type ClipPatch = {
   label?: string;
   effects?: EditorClipEffects | null;
   transitionOut?: EditorClipTransition | null;
+  text?: EditorTextContent | null;
 };
 
 export type AppendClipSpec = {
@@ -172,6 +200,8 @@ export function clipsSummary(project: EditorProject) {
       trimOut: round3(clip.trimOut),
       duration: round3(clipDurationSec(clip)),
       transitionOut: clip.transitionOut ?? null,
+      effects: clip.effects ?? null,
+      text: clip.text ?? null,
     }));
 }
 
@@ -369,6 +399,18 @@ export function patchClips(
         patch.transitionOut === undefined
           ? clip.transitionOut
           : normalizeTransition(patch.transitionOut),
+      text:
+        patch.text === undefined
+          ? clip.text
+          : clip.kind !== "text"
+            ? clip.text
+            : patch.text === null
+              ? undefined
+              : {
+                  ...(clip.text ?? { text: "" }),
+                  ...patch.text,
+                  text: (patch.text.text ?? clip.text?.text ?? "").trim() || "Your text",
+                },
     };
   });
 
@@ -512,4 +554,269 @@ export function clipAtPlayhead(
     }
   }
   return null;
+}
+
+
+function nextTrackId(project: EditorProject, kind: EditorTrack["kind"]): string {
+  const ids = new Set(project.tracks.map((track) => track.id));
+  if (kind === "video") {
+    let n = 1;
+    while (ids.has(`track-v${n}`)) n += 1;
+    return `track-v${n}`;
+  }
+  if (kind === "text") {
+    let n = 1;
+    while (ids.has(`track-t${n}`)) n += 1;
+    return `track-t${n}`;
+  }
+  if (!ids.has("track-audio")) return "track-audio";
+  let n = 2;
+  while (ids.has(`track-audio-${n}`)) n += 1;
+  return `track-audio-${n}`;
+}
+
+function ensureTextTrack(project: EditorProject, preferredTrackId?: string): {
+  project: EditorProject;
+  trackId: string;
+} {
+  if (preferredTrackId) {
+    const track = requireTrack(project, preferredTrackId);
+    if (track.kind !== "text") throw new Error(`Track ${preferredTrackId} is not a text track.`);
+    return { project, trackId: track.id };
+  }
+  const existing = project.tracks.find((track) => track.kind === "text");
+  if (existing) return { project, trackId: existing.id };
+  const videoIdx = project.tracks.findIndex((track) => track.kind === "video");
+  const insertAt = videoIdx === -1 ? 0 : videoIdx;
+  const track: EditorTrack = {
+    id: nextTrackId(project, "text"),
+    kind: "text",
+    label: "Title",
+  };
+  const tracks = [...project.tracks];
+  tracks.splice(insertAt, 0, track);
+  return { project: { ...project, tracks }, trackId: track.id };
+}
+
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd - 0.001 && bStart < aEnd - 0.001;
+}
+
+function audioTrackBusyAt(
+  project: EditorProject,
+  trackId: string,
+  startTime: number,
+  duration: number,
+): boolean {
+  const end = startTime + duration;
+  return project.clips.some((clip) => {
+    if (clip.trackId !== trackId) return false;
+    return rangesOverlap(startTime, end, clip.startTime, clip.startTime + clipDurationSec(clip));
+  });
+}
+
+function placeDetachedAudioInLane(
+  project: EditorProject,
+  range: { startTime: number; duration: number },
+): { project: EditorProject; trackId: string } {
+  const audioTracks = project.tracks.filter((track) => track.kind === "audio");
+  if (audioTracks.length === 0) {
+    const track: EditorTrack = {
+      id: nextTrackId(project, "audio"),
+      kind: "audio",
+      label: "Audio",
+    };
+    return {
+      project: { ...project, tracks: [...project.tracks, track] },
+      trackId: track.id,
+    };
+  }
+  for (const track of audioTracks) {
+    if (!audioTrackBusyAt(project, track.id, range.startTime, range.duration)) {
+      return { project, trackId: track.id };
+    }
+  }
+  const track: EditorTrack = {
+    id: nextTrackId(project, "audio"),
+    kind: "audio",
+    label: `Audio ${audioTracks.length + 1}`,
+  };
+  return {
+    project: { ...project, tracks: [...project.tracks, track] },
+    trackId: track.id,
+  };
+}
+
+export type AddTextClipOptions = {
+  startTime?: number;
+  trackId?: string;
+  duration?: number;
+  label?: string;
+  text?: Partial<EditorTextContent> & { text?: string };
+};
+
+/** Add a title/text overlay clip (default 3s at startTime or 0). */
+export function addTextClip(
+  project: EditorProject,
+  options: AddTextClipOptions = {},
+): { project: EditorProject; changedClipIds: string[] } {
+  const ensured = ensureTextTrack(project, options.trackId);
+  const duration = Math.max(MIN_CLIP_SEC, options.duration ?? DEFAULT_IMAGE_CLIP_SEC);
+  const startTime = Math.max(0, options.startTime ?? 0);
+  const body = (options.text?.text ?? "Your text").trim() || "Your text";
+  const clip: EditorClip = {
+    id: newClipId(),
+    trackId: ensured.trackId,
+    startTime,
+    trimIn: 0,
+    trimOut: duration,
+    label: options.label?.trim() || "Text",
+    kind: "text",
+    effects: {
+      scale: 1,
+      x: 0,
+      y: 0.32,
+      rotation: 0,
+    },
+    text: {
+      text: body,
+      fontSize: options.text?.fontSize ?? 42,
+      color: options.text?.color ?? "#ffffff",
+      align: options.text?.align ?? "center",
+      verticalAlign: options.text?.verticalAlign ?? "middle",
+      animation: options.text?.animation ?? "fadeIn",
+      animationDuration: options.text?.animationDuration ?? 0.5,
+      fontFamily: options.text?.fontFamily ?? "system",
+      bold: options.text?.bold ?? false,
+      italic: options.text?.italic ?? false,
+      underline: options.text?.underline ?? false,
+      textCase: options.text?.textCase ?? "none",
+      letterSpacing: options.text?.letterSpacing ?? 0,
+      lineHeight: options.text?.lineHeight ?? 1.2,
+      strokeColor: options.text?.strokeColor ?? "#000000",
+      strokeWidth: options.text?.strokeWidth ?? 0,
+      backgroundColor: options.text?.backgroundColor ?? null,
+      backgroundPadding: options.text?.backgroundPadding ?? 8,
+      backgroundRadius: options.text?.backgroundRadius ?? 0,
+      shadowColor: options.text?.shadowColor ?? null,
+      shadowBlur: options.text?.shadowBlur ?? 0,
+      shadowOffsetX: options.text?.shadowOffsetX ?? 0,
+      shadowOffsetY: options.text?.shadowOffsetY ?? 0,
+      glow: options.text?.glow ?? false,
+      glowColor: options.text?.glowColor ?? "#ffffff",
+      glowBlur: options.text?.glowBlur ?? 12,
+      opacity: options.text?.opacity ?? 1,
+      flipX: options.text?.flipX ?? false,
+      flipY: options.text?.flipY ?? false,
+    },
+  };
+  const next = {
+    ...ensured.project,
+    clips: [...ensured.project.clips, clip],
+  };
+  return {
+    project: recomputeProjectDuration(next),
+    changedClipIds: [clip.id],
+  };
+}
+
+/** Duplicate a clip immediately after it on the same track. */
+export function duplicateClip(
+  project: EditorProject,
+  clipId: string,
+): { project: EditorProject; changedClipIds: string[] } {
+  const clip = project.clips.find((item) => item.id === clipId);
+  if (!clip) throw new Error(`Clip not found: ${clipId}`);
+  const copy: EditorClip = {
+    ...clip,
+    id: newClipId(),
+    startTime: clip.startTime + clipDurationSec(clip),
+    effects: clip.effects ? { ...clip.effects } : undefined,
+    transitionOut: clip.transitionOut ? { ...clip.transitionOut } : undefined,
+    text: clip.text ? { ...clip.text } : undefined,
+  };
+  return {
+    project: recomputeProjectDuration({
+      ...project,
+      clips: [...project.clips, copy],
+    }),
+    changedClipIds: [copy.id],
+  };
+}
+
+/**
+ * CapCut-style detach: mute video clip audio and add a synced audio bed clip.
+ */
+export function detachAudioFromVideo(
+  project: EditorProject,
+  clipId: string,
+): { project: EditorProject; changedClipIds: string[] } {
+  const clip = project.clips.find((item) => item.id === clipId);
+  if (!clip) throw new Error(`Clip not found: ${clipId}`);
+  if (clip.kind !== "video" || !clip.assetId) {
+    throw new Error("detachAudio only works on video clips with an asset.");
+  }
+  const priorVolume = clip.effects?.volume ?? 1;
+  const mutedVideo: EditorClip = {
+    ...clip,
+    effects: { ...clip.effects, volume: 0 },
+  };
+  let next: EditorProject = {
+    ...project,
+    clips: project.clips.map((item) => (item.id === clip.id ? mutedVideo : item)),
+  };
+  const placed = placeDetachedAudioInLane(next, {
+    startTime: clip.startTime,
+    duration: clipDurationSec(clip),
+  });
+  next = placed.project;
+  const audioClip: EditorClip = {
+    id: newClipId(),
+    assetId: clip.assetId,
+    trackId: placed.trackId,
+    startTime: clip.startTime,
+    trimIn: clip.trimIn,
+    trimOut: clip.trimOut,
+    sourceDuration: clip.sourceDuration,
+    label: `${clip.label} audio`,
+    kind: "audio",
+    effects: {
+      fadeIn: clip.effects?.fadeIn,
+      fadeOut: clip.effects?.fadeOut,
+      volume: priorVolume > 0.0005 ? priorVolume : 1,
+    },
+  };
+  next = {
+    ...next,
+    clips: [...next.clips, audioClip],
+  };
+  return {
+    project: recomputeProjectDuration(next),
+    changedClipIds: [clip.id, audioClip.id],
+  };
+}
+
+export function setTrackMuted(
+  project: EditorProject,
+  trackId: string,
+  muted: boolean,
+): { project: EditorProject; changedClipIds: string[] } {
+  requireTrack(project, trackId);
+  const tracks = project.tracks.map((track) =>
+    track.id === trackId ? { ...track, muted } : track,
+  );
+  return {
+    project: { ...project, tracks },
+    changedClipIds: [],
+  };
+}
+
+export function setProjectFrameRatio(
+  project: EditorProject,
+  frameRatio: FrameRatio,
+): { project: EditorProject; changedClipIds: string[] } {
+  return {
+    project: { ...project, frameRatio: normalizeFrameRatio(frameRatio) },
+    changedClipIds: [],
+  };
 }

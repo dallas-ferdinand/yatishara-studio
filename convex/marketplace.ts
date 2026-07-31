@@ -1,9 +1,9 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { getMarketplaceSellerForUser } from "./lib/auth";
+import { getMarketplaceSellerForUser, requireApprovedSellerForUser } from "./lib/auth";
 import {
   adminMutation,
   adminQuery,
@@ -2162,3 +2162,1723 @@ export const submitJobReview = authedMutation({
     return reviewId;
   },
 });
+
+
+// —— API (ForApi) ——
+// Internal entrypoints for HTTP / MCP. userId first; seller ops require approved seller.
+
+type ApiUser = Doc<"users"> & { _id: Id<"users"> };
+type ApiAuthedCtx = (QueryCtx | MutationCtx) & { user: ApiUser };
+type ApiSellerCtx = ApiAuthedCtx & {
+  seller: Doc<"marketplaceSellers"> & { _id: Id<"marketplaceSellers"> };
+};
+
+async function loadUserForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApiUser> {
+  const user = await ctx.db.get("users", userId);
+  if (!user) throw new Error("User not found");
+  return { ...user, _id: userId };
+}
+
+async function asAuthedForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApiAuthedCtx> {
+  const user = await loadUserForApi(ctx, userId);
+  return Object.assign(ctx, { user });
+}
+
+async function asSellerForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApiSellerCtx> {
+  const { user, seller } = await requireApprovedSellerForUser(ctx, userId);
+  return Object.assign(ctx, { user, seller });
+}
+
+const sellerStatusReturn = v.union(
+  v.null(),
+  v.object({
+    _id: v.id("marketplaceSellers"),
+    status: sellerStatus,
+    businessName: v.string(),
+    entityType: v.optional(sellerEntityType),
+    legalName: v.optional(v.string()),
+    businessType: v.optional(sellerBusinessType),
+    rejectionReason: v.optional(v.string()),
+  }),
+);
+
+const myOfferRowReturn = v.object({
+  _id: v.id("marketplaceOffers"),
+  title: v.string(),
+  slug: v.string(),
+  description: v.string(),
+  priceCents: v.number(),
+  category: v.optional(v.string()),
+  status: offerStatus,
+  deliveryDays: v.number(),
+  packages: v.optional(v.array(offerPackageValidator)),
+  coverAssetId: v.optional(v.id("assets")),
+  sampleAssetIds: v.optional(v.array(v.id("assets"))),
+  publishedAt: v.optional(v.number()),
+  updatedAt: v.number(),
+  bannerThumbUrl: v.optional(v.string()),
+  purchaseCount: v.number(),
+  ratingCount: v.number(),
+  ratingAvg: v.union(v.number(), v.null()),
+  sellerBusinessName: v.string(),
+  sellerUsername: v.optional(v.string()),
+});
+
+const jobDetailReturn = v.union(
+  v.null(),
+  v.object({
+    job: jobSummary,
+    events: v.array(
+      v.object({
+        _id: v.id("marketplaceJobEvents"),
+        kind: v.string(),
+        message: v.optional(v.string()),
+        createdAt: v.number(),
+      }),
+    ),
+    deliverables: v.array(
+      v.object({
+        _id: v.id("marketplaceDeliverables"),
+        assetId: v.id("assets"),
+        note: v.optional(v.string()),
+        deliveredAt: v.number(),
+        name: v.optional(v.string()),
+        kind: v.optional(v.string()),
+        signedReadUrl: v.optional(v.string()),
+        signedThumbnailUrl: v.optional(v.string()),
+      }),
+    ),
+    workFolderId: v.optional(v.id("folders")),
+    review: v.union(
+      v.null(),
+      v.object({
+        _id: v.id("marketplaceReviews"),
+        rating: v.number(),
+        body: v.optional(v.string()),
+        createdAt: v.number(),
+      }),
+    ),
+    canReview: v.boolean(),
+  }),
+);
+
+export const listPublicOffersForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    category: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    expiresUnix: v.number(),
+  },
+  returns: v.array(publicOfferReturn),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const limit = Math.min(Math.max(args.limit ?? 48, 1), 100);
+    const rows = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_status_and_published", (q) => q.eq("status", "published"))
+      .order("desc")
+      .take(limit * 2);
+    const filtered = args.category
+      ? rows.filter((o) => o.category === args.category)
+      : rows;
+    const out = [];
+    for (const offer of filtered.slice(0, limit)) {
+      out.push(
+        await toPublicOffer(ctx, offer, {
+          media: "thumb",
+          expiresUnix: args.expiresUnix,
+        }),
+      );
+    }
+    return out;
+  },
+});
+
+export const getPublicOfferBySlugForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    slug: v.string(),
+    expiresUnix: v.number(),
+  },
+  returns: v.union(publicOfferReturn, v.null()),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const slug = args.slug.trim().toLowerCase();
+    const offer = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!offer || offer.status !== "published") return null;
+    return await toPublicOffer(ctx, offer, {
+      media: "full",
+      expiresUnix: args.expiresUnix,
+    });
+  },
+});
+
+export const listPublicOffersByUsernameForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    username: v.string(),
+    expiresUnix: v.number(),
+  },
+  returns: v.array(publicOfferReturn),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const username = args.username.trim().toLowerCase().replace(/^@/, "");
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile) return [];
+    const seller = await getMarketplaceSellerForUser(ctx, profile.userId);
+    if (!seller || seller.status !== "approved") return [];
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
+      .collect();
+    const published = offers.filter((o) => o.status === "published");
+    const out = [];
+    for (const offer of published) {
+      out.push(
+        await toPublicOffer(ctx, offer, {
+          media: "thumb",
+          expiresUnix: args.expiresUnix,
+        }),
+      );
+    }
+    return out;
+  },
+});
+
+export const getMySellerStatusForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: sellerStatusReturn,
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const seller = await getMarketplaceSellerForUser(ctx, args.userId);
+    if (!seller) return null;
+    return {
+      _id: seller._id,
+      status: seller.status,
+      businessName: seller.businessName,
+      entityType: seller.entityType,
+      legalName: seller.legalName,
+      businessType: seller.businessType,
+      rejectionReason: seller.rejectionReason,
+    };
+  },
+});
+
+export const listMyOffersForApi = internalQuery({
+  args: { userId: v.id("users"), expiresUnix: v.number() },
+  returns: v.array(myOfferRowReturn),
+  handler: async (ctx, args) => {
+    const sellerCtx = await asSellerForApi(ctx, args.userId);
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", sellerCtx.seller._id))
+      .collect();
+    const sorted = offers.sort((a, b) => b.updatedAt - a.updatedAt);
+    const out = [];
+    for (const offer of sorted) {
+      const pub = await toPublicOffer(ctx, offer, {
+        media: "thumb",
+        expiresUnix: args.expiresUnix,
+      });
+      out.push({
+        _id: offer._id,
+        title: offer.title,
+        slug: offer.slug,
+        description: offer.description,
+        priceCents: pub.priceCents,
+        category: offer.category,
+        status: offer.status,
+        deliveryDays: pub.deliveryDays,
+        packages: offer.packages,
+        coverAssetId: offer.coverAssetId,
+        sampleAssetIds: offer.sampleAssetIds,
+        publishedAt: offer.publishedAt,
+        updatedAt: offer.updatedAt,
+        bannerThumbUrl: pub.bannerThumbUrl,
+        purchaseCount: pub.purchaseCount,
+        ratingCount: pub.ratingCount,
+        ratingAvg: pub.ratingAvg,
+        sellerBusinessName: pub.sellerBusinessName,
+        sellerUsername: pub.sellerUsername,
+      });
+    }
+    return out;
+  },
+});
+
+export const createOfferForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    title: v.string(),
+    description: v.string(),
+    priceCents: v.number(),
+    category: v.optional(v.string()),
+    deliveryDays: v.number(),
+    packages: v.optional(v.array(offerPackageValidator)),
+    coverAssetId: v.optional(v.id("assets")),
+    sampleAssetIds: v.optional(v.array(v.id("assets"))),
+  },
+  returns: v.id("marketplaceOffers"),
+  handler: async (ctx, args) => {
+    const sellerCtx = await asSellerForApi(ctx, args.userId);
+    const title = args.title.trim();
+    const description = args.description.trim();
+    if (!title) throw new Error("Title required");
+    if (!description) throw new Error("Description required");
+    let priceCents = Math.round(args.priceCents);
+    let deliveryDays = Math.floor(args.deliveryDays);
+    let packages: OfferPackage[] | undefined;
+    if (args.packages && args.packages.length > 0) {
+      const normalized = normalizePackages(args.packages);
+      packages = normalized.packages;
+      priceCents = normalized.startingPriceCents;
+      deliveryDays = normalized.startingDeliveryDays;
+    } else {
+      if (!Number.isFinite(args.priceCents) || args.priceCents < 50) {
+        throw new Error("Price must be at least $0.50 TTD");
+      }
+      if (!Number.isFinite(args.deliveryDays) || args.deliveryDays < 1) {
+        throw new Error("Delivery days must be at least 1");
+      }
+    }
+    if ((args.sampleAssetIds ?? []).length > 6) {
+      throw new Error("Up to 6 gallery items");
+    }
+    const now = Date.now();
+    const slug = await uniqueOfferSlug(ctx, title);
+    return await ctx.db.insert("marketplaceOffers", {
+      sellerId: sellerCtx.seller._id,
+      sellerUserId: sellerCtx.user._id,
+      title,
+      slug,
+      description,
+      priceCents,
+      category: args.category?.trim() || undefined,
+      status: "draft",
+      deliveryDays,
+      packages,
+      coverAssetId: args.coverAssetId,
+      sampleAssetIds: args.sampleAssetIds,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const updateOfferForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    priceCents: v.optional(v.number()),
+    category: v.optional(v.string()),
+    deliveryDays: v.optional(v.number()),
+    packages: v.optional(v.union(v.array(offerPackageValidator), v.null())),
+    coverAssetId: v.optional(v.union(v.id("assets"), v.null())),
+    sampleAssetIds: v.optional(v.array(v.id("assets"))),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sellerCtx = await asSellerForApi(ctx, args.userId);
+    const offer = await requireOwnedOffer(ctx, sellerCtx.seller._id, args.offerId);
+    const patch: Partial<Doc<"marketplaceOffers">> = { updatedAt: Date.now() };
+    if (args.title !== undefined) {
+      const title = args.title.trim();
+      if (!title) throw new Error("Title required");
+      patch.title = title;
+      patch.slug = await uniqueOfferSlug(ctx, title, offer._id);
+    }
+    if (args.description !== undefined) {
+      const description = args.description.trim();
+      if (!description) throw new Error("Description required");
+      patch.description = description;
+    }
+    if (args.priceCents !== undefined) {
+      if (args.priceCents < 50) throw new Error("Price must be at least $0.50 TTD");
+      patch.priceCents = Math.round(args.priceCents);
+    }
+    if (args.category !== undefined) {
+      patch.category = args.category.trim() || undefined;
+    }
+    if (args.deliveryDays !== undefined) {
+      if (args.deliveryDays < 1) throw new Error("Delivery days must be at least 1");
+      patch.deliveryDays = Math.floor(args.deliveryDays);
+    }
+    if (args.packages !== undefined) {
+      if (args.packages === null || args.packages.length === 0) {
+        patch.packages = undefined;
+      } else {
+        const normalized = normalizePackages(args.packages);
+        patch.packages = normalized.packages;
+        patch.priceCents = normalized.startingPriceCents;
+        patch.deliveryDays = normalized.startingDeliveryDays;
+      }
+    }
+    if (args.coverAssetId !== undefined) {
+      patch.coverAssetId = args.coverAssetId ?? undefined;
+    }
+    if (args.sampleAssetIds !== undefined) {
+      if (args.sampleAssetIds.length > 6) throw new Error("Up to 6 gallery items");
+      patch.sampleAssetIds = args.sampleAssetIds;
+    }
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
+export const setOfferStatusForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    status: offerStatus,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sellerCtx = await asSellerForApi(ctx, args.userId);
+    const offer = await requireOwnedOffer(ctx, sellerCtx.seller._id, args.offerId);
+    const now = Date.now();
+    const patch: Partial<Doc<"marketplaceOffers">> = {
+      status: args.status,
+      updatedAt: now,
+    };
+    if (args.status === "published" && !offer.publishedAt) {
+      patch.publishedAt = now;
+    }
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
+export const viewerCanSeeSellerOffersForApi = internalQuery({
+  args: { userId: v.id("users"), username: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      label: v.union(v.literal("Hire Me"), v.literal("Hire Us")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const username = args.username.trim().toLowerCase().replace(/^@/, "");
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_username", (q) => q.eq("username", username))
+      .unique();
+    if (!profile) return null;
+    const seller = await getMarketplaceSellerForUser(ctx, profile.userId);
+    if (!seller || seller.status !== "approved") return null;
+    const offers = await ctx.db
+      .query("marketplaceOffers")
+      .withIndex("by_seller", (q) => q.eq("sellerId", seller._id))
+      .collect();
+    if (!offers.some((o) => o.status === "published")) return null;
+    return {
+      label: seller.entityType === "business" ? ("Hire Us" as const) : ("Hire Me" as const),
+    };
+  },
+});
+
+export const isApprovedSellerUserForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    targetUserId: v.id("users"),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const seller = await getMarketplaceSellerForUser(ctx, args.targetUserId);
+    return Boolean(seller && seller.status === "approved");
+  },
+});
+
+export const quoteBookOfferForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    packageIndex: v.optional(v.number()),
+  },
+  returns: v.object({
+    priceCents: v.number(),
+    priceCredits: v.number(),
+    creditPriceCents: v.number(),
+    creditBalance: v.number(),
+    shortfallCredits: v.number(),
+    canBook: v.boolean(),
+    packageName: v.optional(v.string()),
+    deliveryDays: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") {
+      throw new Error("Offer not available");
+    }
+    const booked = resolveBookedPackage(offer, args.packageIndex);
+    const settings = await ctx.db
+      .query("pricingSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const creditPriceCents = settings?.creditPriceCents ?? 50;
+    const priceCredits = creditsFromOfferPriceCents(booked.priceCents, creditPriceCents);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", authed.user._id))
+      .unique();
+    const creditBalance = account?.creditBalance ?? 0;
+    const shortfallCredits = Math.max(0, priceCredits - creditBalance);
+    return {
+      priceCents: booked.priceCents,
+      priceCredits,
+      creditPriceCents,
+      creditBalance,
+      shortfallCredits,
+      canBook:
+        shortfallCredits === 0 &&
+        offer.sellerUserId !== authed.user._id,
+      packageName: booked.packageName,
+      deliveryDays: booked.deliveryDays,
+    };
+  },
+});
+
+export const bookOfferForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    packageIndex: v.optional(v.number()),
+  },
+  returns: v.object({
+    jobId: v.id("marketplaceJobs"),
+    priceCredits: v.number(),
+    shortfallCredits: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") {
+      throw new Error("Offer not available");
+    }
+    if (offer.sellerUserId === authed.user._id) {
+      throw new Error("Cannot book your own offer");
+    }
+    const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
+    if (!seller || seller.status !== "approved") {
+      throw new Error("Seller is not accepting jobs");
+    }
+    const booked = resolveBookedPackage(offer, args.packageIndex);
+    const creditPriceCents = await getCreditPriceCents(ctx);
+    const priceCredits = creditsFromOfferPriceCents(booked.priceCents, creditPriceCents);
+    const account = await ctx.db
+      .query("billingAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", authed.user._id))
+      .unique();
+    const balance = account?.creditBalance ?? 0;
+    if (balance < priceCredits) {
+      throw new Error(
+        `Insufficient credits. Need ${priceCredits} credits (${booked.priceCents} cents TTD). Shortfall: ${priceCredits - balance}`,
+      );
+    }
+    const now = Date.now();
+    const jobId = await ctx.db.insert("marketplaceJobs", {
+      offerId: offer._id,
+      sellerId: offer.sellerId,
+      sellerUserId: offer.sellerUserId,
+      buyerUserId: authed.user._id,
+      priceCredits,
+      priceCents: booked.priceCents,
+      creditPriceCents,
+      packageName: booked.packageName,
+      deliveryDays: booked.deliveryDays,
+      revisions: booked.revisions,
+      status: "pending_payment",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const { holdId, holdTransactionId } = await holdMarketplaceEscrow(ctx, {
+      buyerUserId: authed.user._id,
+      jobId,
+      credits: priceCredits,
+      reason: `Escrow for offer ${offer.slug}`,
+    });
+    const workFolderId = await ctx.db.insert("folders", {
+      ownerId: offer.sellerUserId,
+      name: `Job · ${offer.title}`.slice(0, 80),
+      icon: "folder",
+      sortOrder: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const heldAt = Date.now();
+    await ctx.db.patch(jobId, {
+      status: "in_escrow",
+      escrowHoldId: holdId,
+      escrowCreditTransactionId: holdTransactionId,
+      workFolderId,
+      updatedAt: heldAt,
+    });
+    await appendJobEvent(ctx, {
+      jobId,
+      actorUserId: authed.user._id,
+      kind: "booked",
+      message: booked.packageName
+        ? `Booked “${booked.packageName}” package — payment held in escrow`
+        : "Booked — payment held in escrow",
+    });
+    await ctx.db.patch(jobId, {
+      status: "in_progress",
+      updatedAt: Date.now(),
+    });
+    await appendJobEvent(ctx, {
+      jobId,
+      actorUserId: authed.user._id,
+      kind: "in_progress",
+      message: "Escrow held; work started",
+    });
+    return { jobId, priceCredits };
+  },
+});
+
+export const listMySellerJobsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    offerId: v.optional(v.id("marketplaceOffers")),
+  },
+  returns: v.array(jobSummary),
+  handler: async (ctx, args) => {
+    await asSellerForApi(ctx, args.userId);
+    let jobs = await ctx.db
+      .query("marketplaceJobs")
+      .withIndex("by_seller", (q) => q.eq("sellerUserId", args.userId))
+      .collect();
+    if (args.offerId) {
+      jobs = jobs.filter((j) => j.offerId === args.offerId);
+    }
+    const out = [];
+    for (const job of jobs.sort((a, b) => b.updatedAt - a.updatedAt)) {
+      out.push(await toJobSummary(ctx, job, "seller"));
+    }
+    return out;
+  },
+});
+
+export const listMyBuyerJobsForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.array(jobSummary),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const jobs = await ctx.db
+      .query("marketplaceJobs")
+      .withIndex("by_buyer", (q) => q.eq("buyerUserId", args.userId))
+      .collect();
+    const out = [];
+    for (const job of jobs.sort((a, b) => b.updatedAt - a.updatedAt)) {
+      out.push(await toJobSummary(ctx, job, "buyer"));
+    }
+    return out;
+  },
+});
+
+export const listJobsWithPeerForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    peerUserId: v.id("users"),
+  },
+  returns: v.object({
+    asBuyer: v.array(jobSummary),
+    asSeller: v.array(jobSummary),
+    sellerTotals: v.object({
+      jobCount: v.number(),
+      totalCredits: v.number(),
+    }),
+  }),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    if (args.peerUserId === args.userId) {
+      return {
+        asBuyer: [],
+        asSeller: [],
+        sellerTotals: { jobCount: 0, totalCredits: 0 },
+      };
+    }
+    const [buyerJobs, sellerJobs] = await Promise.all([
+      ctx.db
+        .query("marketplaceJobs")
+        .withIndex("by_buyer", (q) => q.eq("buyerUserId", args.userId))
+        .collect(),
+      ctx.db
+        .query("marketplaceJobs")
+        .withIndex("by_seller", (q) => q.eq("sellerUserId", args.userId))
+        .collect(),
+    ]);
+    const asBuyerDocs = buyerJobs
+      .filter((job) => job.sellerUserId === args.peerUserId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const asSellerDocs = sellerJobs
+      .filter((job) => job.buyerUserId === args.peerUserId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const asBuyer = [];
+    for (const job of asBuyerDocs) {
+      asBuyer.push(await toJobSummary(ctx, job, "buyer"));
+    }
+    const asSeller = [];
+    for (const job of asSellerDocs) {
+      asSeller.push(await toJobSummary(ctx, job, "seller"));
+    }
+    const sellerTotals = {
+      jobCount: asSeller.length,
+      totalCredits: asSeller.reduce((sum, job) => sum + job.priceCredits, 0),
+    };
+    return { asBuyer, asSeller, sellerTotals };
+  },
+});
+
+export const getJobForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+  },
+  returns: jobDetailReturn,
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) return null;
+    if (job.buyerUserId !== authed.user._id && job.sellerUserId !== authed.user._id) {
+      if (authed.user.role !== "admin" && authed.user.role !== "super_admin") {
+        return null;
+      }
+    }
+    const role =
+      job.sellerUserId === authed.user._id ? "seller" : ("buyer" as const);
+    const events = await ctx.db
+      .query("marketplaceJobEvents")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const deliverableRows = await ctx.db
+      .query("marketplaceDeliverables")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+    const deliverables = [];
+    for (const row of deliverableRows) {
+      const asset = await ctx.db.get("assets", row.assetId);
+      let signedReadUrl: string | undefined;
+      let signedThumbnailUrl: string | undefined;
+      if (asset?.bunnyPath) {
+        signedReadUrl = await signBunnyFullUrl(
+          asset.bunnyPath,
+          expiresUnix,
+          asset.kind,
+        );
+        const thumbPath = assetThumbnailPath(asset);
+        if (thumbPath) {
+          const signed = await signBunnyCdnUrls(
+            [thumbPath],
+            expiresUnix,
+            THUMB_TRANSFORM,
+          );
+          signedThumbnailUrl = signed.get(thumbPath);
+        }
+      }
+      deliverables.push({
+        _id: row._id,
+        assetId: row.assetId,
+        note: row.note,
+        deliveredAt: row.deliveredAt,
+        name: asset?.name,
+        kind: asset?.kind,
+        signedReadUrl,
+        signedThumbnailUrl,
+      });
+    }
+    let review: {
+      _id: Id<"marketplaceReviews">;
+      rating: number;
+      body?: string;
+      createdAt: number;
+    } | null = null;
+    if (job.reviewId) {
+      const row = await ctx.db.get("marketplaceReviews", job.reviewId);
+      if (row) {
+        review = {
+          _id: row._id,
+          rating: row.rating,
+          body: row.body,
+          createdAt: row.createdAt,
+        };
+      }
+    } else {
+      const existing = await ctx.db
+        .query("marketplaceReviews")
+        .withIndex("by_job", (q) => q.eq("jobId", job._id))
+        .unique();
+      if (existing) {
+        review = {
+          _id: existing._id,
+          rating: existing.rating,
+          body: existing.body,
+          createdAt: existing.createdAt,
+        };
+      }
+    }
+    return {
+      job: await toJobSummary(ctx, job, role),
+      events: events
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .map((e) => ({
+          _id: e._id,
+          kind: e.kind,
+          message: e.message,
+          createdAt: e.createdAt,
+        })),
+      deliverables,
+      workFolderId: job.workFolderId,
+      review,
+      canReview:
+        role === "buyer" && job.status === "completed" && review === null,
+    };
+  },
+});
+
+export const deliverJobAssetsForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+    assetIds: v.array(v.id("assets")),
+    note: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sellerCtx = await asSellerForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.sellerUserId !== sellerCtx.user._id) {
+      throw new Error("Job not found");
+    }
+    if (job.status !== "in_progress" && job.status !== "delivered") {
+      throw new Error("Job is not in progress");
+    }
+    if (!args.assetIds.length) throw new Error("Select at least one asset");
+    const now = Date.now();
+    for (const assetId of args.assetIds) {
+      const asset = await ctx.db.get("assets", assetId);
+      if (!asset || asset.ownerId !== sellerCtx.user._id || asset.deletedAt) {
+        throw new Error("Asset not found or not owned");
+      }
+      const existing = await ctx.db
+        .query("marketplaceDeliverables")
+        .withIndex("by_asset", (q) => q.eq("assetId", assetId))
+        .collect();
+      if (existing.some((d) => d.jobId === job._id)) continue;
+      await ctx.db.insert("marketplaceDeliverables", {
+        jobId: job._id,
+        assetId,
+        note: args.note?.trim(),
+        deliveredBy: sellerCtx.user._id,
+        deliveredAt: now,
+      });
+    }
+    await ctx.db.patch(job._id, {
+      status: "delivered",
+      deliveredAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: sellerCtx.user._id,
+      kind: "delivered",
+      message: args.note?.trim() || `Delivered ${args.assetIds.length} asset(s)`,
+    });
+    return null;
+  },
+});
+
+export const acceptJobDeliveryForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.buyerUserId !== authed.user._id) {
+      throw new Error("Job not found");
+    }
+    await completeJobWithRelease(ctx, job, authed.user._id, "Buyer accepted delivery");
+    return null;
+  },
+});
+
+export const cancelJobBeforeDeliveryForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) throw new Error("Job not found");
+    const isBuyer = job.buyerUserId === authed.user._id;
+    const isSeller = job.sellerUserId === authed.user._id;
+    if (!isBuyer && !isSeller) throw new Error("Unauthorized");
+    if (job.status !== "in_progress" && job.status !== "in_escrow") {
+      throw new Error("Can only cancel before delivery");
+    }
+    if (!job.escrowHoldId) throw new Error("No escrow hold");
+    await refundMarketplaceEscrow(ctx, {
+      holdId: job.escrowHoldId,
+      reason: args.reason ?? "Job cancelled before delivery",
+    });
+    const now = Date.now();
+    await ctx.db.patch(job._id, {
+      status: "cancelled",
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: authed.user._id,
+      kind: "cancelled",
+      message: args.reason ?? "Cancelled; escrow refunded",
+    });
+    return null;
+  },
+});
+
+export const listPublicOfferReviewsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(publicReviewReturn),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer || offer.status !== "published") return [];
+    const limit = Math.min(Math.max(args.limit ?? 20, 1), 50);
+    const rows = await ctx.db
+      .query("marketplaceReviews")
+      .withIndex("by_offer_and_created", (q) => q.eq("offerId", args.offerId))
+      .order("desc")
+      .take(limit);
+    const out = [];
+    for (const row of rows) {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", row.buyerUserId))
+        .unique();
+      const job = await ctx.db.get("marketplaceJobs", row.jobId);
+      out.push({
+        _id: row._id,
+        rating: row.rating,
+        body: row.body,
+        createdAt: row.createdAt,
+        buyerDisplayName:
+          profile?.displayName?.trim() ||
+          (profile?.username ? `@${profile.username}` : "Buyer"),
+        buyerUsername: profile?.username,
+        packageName: job?.packageName,
+      });
+    }
+    return out;
+  },
+});
+
+export const submitJobReviewForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+    rating: v.number(),
+    body: v.optional(v.string()),
+  },
+  returns: v.id("marketplaceReviews"),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job || job.buyerUserId !== authed.user._id) {
+      throw new Error("Job not found");
+    }
+    if (job.status !== "completed") {
+      throw new Error("Only completed purchases can be reviewed");
+    }
+    if (job.reviewId) {
+      throw new Error("You already reviewed this purchase");
+    }
+    const existing = await ctx.db
+      .query("marketplaceReviews")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .unique();
+    if (existing) {
+      throw new Error("You already reviewed this purchase");
+    }
+    const rating = Math.floor(args.rating);
+    if (rating < 1 || rating > 5) {
+      throw new Error("Rating must be 1 to 5 stars");
+    }
+    const body = args.body?.trim().slice(0, 2000) || undefined;
+    const now = Date.now();
+    const reviewId = await ctx.db.insert("marketplaceReviews", {
+      jobId: job._id,
+      offerId: job.offerId,
+      sellerUserId: job.sellerUserId,
+      buyerUserId: authed.user._id,
+      rating,
+      body,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(job._id, {
+      reviewId,
+      updatedAt: now,
+    });
+    const offer = await ctx.db.get("marketplaceOffers", job.offerId);
+    if (offer) {
+      await ctx.db.patch(offer._id, {
+        ratingSum: (offer.ratingSum ?? 0) + rating,
+        ratingCount: (offer.ratingCount ?? 0) + 1,
+        updatedAt: now,
+      });
+    }
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: authed.user._id,
+      kind: "reviewed",
+      message: body
+        ? `Rated ${rating}/5 — ${body.slice(0, 80)}`
+        : `Rated ${rating}/5`,
+    });
+    return reviewId;
+  },
+});
+
+
+function assertApiAdmin(user: ApiUser): void {
+  if (user.role !== "admin" && user.role !== "super_admin") {
+    throw new Error("Admin access required");
+  }
+}
+
+async function asAdminForApi(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<ApiAuthedCtx> {
+  const user = await loadUserForApi(ctx, userId);
+  assertApiAdmin(user);
+  return Object.assign(ctx, { user });
+}
+
+export const prepareSellerDocUploadForApi = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+async function requestSellerAccessHandler(
+  ctx: ApiAuthedCtx & MutationCtx,
+  args: {
+    entityType: "freelancer" | "business";
+    businessName: string;
+    legalName: string;
+    phone: string;
+    residentialAddress: string;
+    identityDoc1Kind: "national_id" | "passport" | "drivers_permit" | "birth_certificate";
+    identityDoc1BunnyPath: string;
+    identityDoc1BackBunnyPath?: string;
+    identityDoc2Kind: "national_id" | "passport" | "drivers_permit" | "birth_certificate";
+    identityDoc2BunnyPath: string;
+    identityDoc2BackBunnyPath?: string;
+    proofOfResidentialAddressBunnyPath: string;
+    businessType?: "sole_trader" | "limited_company" | "partnership" | "other";
+    businessRegistrationNumber?: string;
+    birNumber?: string;
+    businessAddress?: string;
+    businessRegistrationBunnyPath?: string;
+    proofOfBusinessAddressBunnyPath?: string;
+  },
+): Promise<Id<"marketplaceSellers">> {
+  const businessName = args.businessName.trim();
+  const legalName = args.legalName.trim();
+  const phone = args.phone.trim();
+  const residentialAddress = args.residentialAddress.trim();
+  if (!businessName) throw new Error("Display / trading name required");
+  if (!legalName) throw new Error("Legal name required");
+  if (!phone) throw new Error("Phone required");
+  if (!residentialAddress) throw new Error("Residential address required");
+  if (args.identityDoc1Kind === args.identityDoc2Kind) {
+    throw new Error("Choose two different identity document types");
+  }
+
+  const ownPrefix = `users/${ctx.user._id}/marketplace-kyc/`;
+  const assertOwnPath = (path: string, label: string) => {
+    const normalized = path.trim();
+    if (!normalized.startsWith(ownPrefix)) {
+      throw new Error(`Invalid ${label} upload path`);
+    }
+    return normalized;
+  };
+
+  const assertIdentity = (
+    kind: typeof args.identityDoc1Kind,
+    front: string,
+    back: string | undefined,
+    label: string,
+  ) => {
+    const frontPath = assertOwnPath(front, label);
+    if (isTwoSidedIdentityDoc(kind) && !back?.trim()) {
+      throw new Error(`Back of ${label} is required`);
+    }
+    const backPath = back?.trim() ? assertOwnPath(back, `${label} back`) : undefined;
+    return { frontPath, backPath };
+  };
+
+  const doc1 = assertIdentity(
+    args.identityDoc1Kind,
+    args.identityDoc1BunnyPath,
+    args.identityDoc1BackBunnyPath,
+    "first ID",
+  );
+  const doc2 = assertIdentity(
+    args.identityDoc2Kind,
+    args.identityDoc2BunnyPath,
+    args.identityDoc2BackBunnyPath,
+    "second ID",
+  );
+  const proofOfResidentialAddressBunnyPath = assertOwnPath(
+    args.proofOfResidentialAddressBunnyPath,
+    "residential address proof",
+  );
+
+  if (args.entityType === "business") {
+    if (!args.businessType) throw new Error("Business type required");
+    if (!args.businessAddress?.trim()) throw new Error("Business address required");
+    if (!args.businessRegistrationBunnyPath) {
+      throw new Error("Business registration / certificate of incorporation required");
+    }
+    if (!args.proofOfBusinessAddressBunnyPath) {
+      throw new Error("Proof of business address required");
+    }
+  }
+
+  const existing = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+  if (existing) {
+    if (existing.status === "suspended") {
+      throw new Error("Seller account is suspended");
+    }
+    if (existing.status === "approved") {
+      throw new Error("You are already an approved seller");
+    }
+    if (existing.status === "pending") {
+      throw new Error("You already have a pending seller request");
+    }
+  }
+
+  const now = Date.now();
+  const record = {
+    userId: ctx.user._id,
+    status: "pending" as const,
+    businessName,
+    entityType: args.entityType,
+    legalName,
+    phone,
+    residentialAddress,
+    businessType: args.entityType === "business" ? args.businessType : undefined,
+    businessRegistrationNumber: args.businessRegistrationNumber?.trim() || undefined,
+    birNumber: args.birNumber?.trim() || undefined,
+    businessAddress:
+      args.entityType === "business" ? args.businessAddress?.trim() : undefined,
+    identityDoc1Kind: args.identityDoc1Kind,
+    identityDoc1BunnyPath: doc1.frontPath,
+    identityDoc1BackBunnyPath: doc1.backPath,
+    identityDoc2Kind: args.identityDoc2Kind,
+    identityDoc2BunnyPath: doc2.frontPath,
+    identityDoc2BackBunnyPath: doc2.backPath,
+    proofOfResidentialAddressBunnyPath,
+    businessRegistrationBunnyPath:
+      args.entityType === "business"
+        ? assertOwnPath(args.businessRegistrationBunnyPath!, "business registration")
+        : undefined,
+    proofOfBusinessAddressBunnyPath:
+      args.entityType === "business"
+        ? assertOwnPath(args.proofOfBusinessAddressBunnyPath!, "business address proof")
+        : undefined,
+    rejectionReason: undefined,
+    rejectedBy: undefined,
+    rejectedAt: undefined,
+    suspendReason: undefined,
+    suspendedAt: undefined,
+    updatedAt: now,
+  };
+
+  if (existing?.status === "rejected") {
+    await ctx.db.patch(existing._id, record);
+    return existing._id;
+  }
+
+  return await ctx.db.insert("marketplaceSellers", {
+    ...record,
+    createdAt: now,
+  });
+}
+
+export const requestSellerAccessForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    entityType: sellerEntityType,
+    businessName: v.string(),
+    legalName: v.string(),
+    phone: v.string(),
+    residentialAddress: v.string(),
+    identityDoc1Kind: sellerIdentityDocKind,
+    identityDoc1BunnyPath: v.string(),
+    identityDoc1BackBunnyPath: v.optional(v.string()),
+    identityDoc2Kind: sellerIdentityDocKind,
+    identityDoc2BunnyPath: v.string(),
+    identityDoc2BackBunnyPath: v.optional(v.string()),
+    proofOfResidentialAddressBunnyPath: v.string(),
+    businessType: v.optional(sellerBusinessType),
+    businessRegistrationNumber: v.optional(v.string()),
+    birNumber: v.optional(v.string()),
+    businessAddress: v.optional(v.string()),
+    businessRegistrationBunnyPath: v.optional(v.string()),
+    proofOfBusinessAddressBunnyPath: v.optional(v.string()),
+  },
+  returns: v.id("marketplaceSellers"),
+  handler: async (ctx, args) => {
+    const { userId, ...rest } = args;
+    const authed = await asAuthedForApi(ctx, userId);
+    return await requestSellerAccessHandler(authed as ApiAuthedCtx & MutationCtx, rest);
+  },
+});
+
+export const cancelSellerRequestForApi = internalMutation({
+  args: { userId: v.id("users") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const authed = await asAuthedForApi(ctx, args.userId);
+    const seller = await getMarketplaceSellerForUser(authed, authed.user._id);
+    if (!seller) return null;
+    if (seller.status !== "pending") {
+      throw new Error("Only a pending seller request can be cancelled");
+    }
+    const paths = sellerKycPaths(seller);
+    if (paths.length) {
+      await ctx.scheduler.runAfter(0, internal.marketplaceActions.deleteSellerKycPaths, {
+        paths,
+      });
+    }
+    await ctx.db.delete(seller._id);
+    return null;
+  },
+});
+
+export const getMyPayoutAccountForApi = internalQuery({
+  args: { userId: v.id("users") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      sellerStatus: sellerStatus,
+      account: v.union(v.null(), payoutAccountShape),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const seller = await getMarketplaceSellerForUser(ctx, args.userId);
+    if (!seller) return null;
+    return { sellerStatus: seller.status, account: toPayoutAccount(seller) };
+  },
+});
+
+export const saveMyPayoutAccountForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    bankName: v.string(),
+    accountName: v.string(),
+    accountNumber: v.string(),
+    accountType: payoutAccountType,
+    branch: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await loadUserForApi(ctx, args.userId);
+    const seller = await getMarketplaceSellerForUser(ctx, args.userId);
+    if (!seller) throw new Error("Apply as a seller before adding payout details");
+    const bankName = args.bankName.trim();
+    const accountName = args.accountName.trim();
+    const accountNumber = args.accountNumber.replace(/[\s-]/g, "");
+    if (!bankName) throw new Error("Bank name required");
+    if (!accountName) throw new Error("Account holder name required");
+    if (!/^\d{6,20}$/.test(accountNumber)) {
+      throw new Error("Enter a valid account number (digits only)");
+    }
+    const now = Date.now();
+    await ctx.db.patch(seller._id, {
+      payoutBankName: bankName,
+      payoutAccountName: accountName,
+      payoutAccountNumber: accountNumber,
+      payoutAccountType: args.accountType,
+      payoutBranch: args.branch?.trim() || undefined,
+      payoutNote: args.note?.trim() || undefined,
+      payoutUpdatedAt: now,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminListSellersForApi = internalQuery({
+  args: { userId: v.id("users"), status: v.optional(sellerStatus) },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceSellers"),
+      userId: v.id("users"),
+      status: sellerStatus,
+      businessName: v.string(),
+      entityType: v.optional(sellerEntityType),
+      legalName: v.optional(v.string()),
+      businessType: v.optional(sellerBusinessType),
+      email: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      name: v.optional(v.string()),
+      createdAt: v.number(),
+      approvedAt: v.optional(v.number()),
+      rejectionReason: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    const rows = args.status
+      ? await ctx.db
+          .query("marketplaceSellers")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .collect()
+      : await ctx.db.query("marketplaceSellers").collect();
+    const out = [];
+    for (const seller of rows) {
+      const user = await ctx.db.get("users", seller.userId);
+      out.push({
+        _id: seller._id,
+        userId: seller.userId,
+        status: seller.status,
+        businessName: seller.businessName,
+        entityType: seller.entityType,
+        legalName: seller.legalName,
+        businessType: seller.businessType,
+        email: user?.email,
+        phone: seller.phone ?? user?.phone,
+        name: user?.name,
+        createdAt: seller.createdAt,
+        approvedAt: seller.approvedAt,
+        rejectionReason: seller.rejectionReason,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const adminGetSellerApplicationForApi = internalQuery({
+  args: { userId: v.id("users"), sellerId: v.id("marketplaceSellers") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("marketplaceSellers"),
+      status: sellerStatus,
+      businessName: v.string(),
+      entityType: v.optional(sellerEntityType),
+      legalName: v.optional(v.string()),
+      phone: v.optional(v.string()),
+      residentialAddress: v.optional(v.string()),
+      businessType: v.optional(sellerBusinessType),
+      businessRegistrationNumber: v.optional(v.string()),
+      birNumber: v.optional(v.string()),
+      businessAddress: v.optional(v.string()),
+      identityDoc1Kind: v.optional(sellerIdentityDocKind),
+      identityDoc1Url: v.optional(v.string()),
+      identityDoc1BackUrl: v.optional(v.string()),
+      identityDoc2Kind: v.optional(sellerIdentityDocKind),
+      identityDoc2Url: v.optional(v.string()),
+      identityDoc2BackUrl: v.optional(v.string()),
+      proofOfResidentialAddressUrl: v.optional(v.string()),
+      businessRegistrationUrl: v.optional(v.string()),
+      proofOfBusinessAddressUrl: v.optional(v.string()),
+      rejectionReason: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    const seller = await ctx.db.get("marketplaceSellers", args.sellerId);
+    if (!seller) return null;
+    const expiresUnix = Math.floor(Date.now() / 1000) + 3600;
+    const sign = async (path: string | undefined) =>
+      path ? await signBunnyFullUrl(path, expiresUnix, "document") : undefined;
+    return {
+      _id: seller._id,
+      status: seller.status,
+      businessName: seller.businessName,
+      entityType: seller.entityType,
+      legalName: seller.legalName,
+      phone: seller.phone,
+      residentialAddress: seller.residentialAddress,
+      businessType: seller.businessType,
+      businessRegistrationNumber: seller.businessRegistrationNumber,
+      birNumber: seller.birNumber,
+      businessAddress: seller.businessAddress,
+      identityDoc1Kind: seller.identityDoc1Kind,
+      identityDoc1Url: await sign(seller.identityDoc1BunnyPath),
+      identityDoc1BackUrl: await sign(seller.identityDoc1BackBunnyPath),
+      identityDoc2Kind: seller.identityDoc2Kind,
+      identityDoc2Url: await sign(seller.identityDoc2BunnyPath),
+      identityDoc2BackUrl: await sign(seller.identityDoc2BackBunnyPath),
+      proofOfResidentialAddressUrl: await sign(
+        seller.proofOfResidentialAddressBunnyPath,
+      ),
+      businessRegistrationUrl: await sign(seller.businessRegistrationBunnyPath),
+      proofOfBusinessAddressUrl: await sign(seller.proofOfBusinessAddressBunnyPath),
+      rejectionReason: seller.rejectionReason,
+      createdAt: seller.createdAt,
+    };
+  },
+});
+
+export const adminDecideSellerForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    sellerId: v.id("marketplaceSellers"),
+    decision: v.union(
+      v.literal("approve"),
+      v.literal("reject"),
+      v.literal("suspend"),
+    ),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await asAdminForApi(ctx, args.userId);
+    const seller = await ctx.db.get("marketplaceSellers", args.sellerId);
+    if (!seller) throw new Error("Seller not found");
+    const now = Date.now();
+    const reason = args.reason?.trim() || undefined;
+
+    if (args.decision === "approve") {
+      await ctx.db.patch(seller._id, {
+        status: "approved",
+        approvedBy: admin.user._id,
+        approvedAt: now,
+        rejectionReason: undefined,
+        rejectedBy: undefined,
+        rejectedAt: undefined,
+        suspendReason: undefined,
+        suspendedAt: undefined,
+        updatedAt: now,
+      });
+      return null;
+    }
+
+    if (args.decision === "reject") {
+      if (seller.status !== "pending") {
+        throw new Error("Only pending applications can be rejected");
+      }
+      if (!reason) throw new Error("Rejection reason is required");
+      await ctx.db.patch(seller._id, {
+        status: "rejected",
+        rejectionReason: reason,
+        rejectedBy: admin.user._id,
+        rejectedAt: now,
+        updatedAt: now,
+      });
+      return null;
+    }
+
+    if (seller.status === "pending") {
+      throw new Error("Reject pending applications instead of suspending");
+    }
+    if (seller.status === "rejected") {
+      throw new Error("Rejected applications cannot be suspended");
+    }
+    await ctx.db.patch(seller._id, {
+      status: "suspended",
+      suspendedAt: now,
+      suspendReason: reason,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+export const adminListOffersForApi = internalQuery({
+  args: { userId: v.id("users"), status: v.optional(offerStatus) },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceOffers"),
+      title: v.string(),
+      status: offerStatus,
+      priceCents: v.number(),
+      sellerUserId: v.id("users"),
+      businessName: v.optional(v.string()),
+      publishedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    const rows = args.status
+      ? await ctx.db
+          .query("marketplaceOffers")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .order("desc")
+          .take(100)
+      : await ctx.db.query("marketplaceOffers").order("desc").take(100);
+    const out = [];
+    for (const offer of rows) {
+      const seller = await ctx.db.get("marketplaceSellers", offer.sellerId);
+      out.push({
+        _id: offer._id,
+        title: offer.title,
+        status: offer.status,
+        priceCents: offer.priceCents,
+        sellerUserId: offer.sellerUserId,
+        businessName: seller?.businessName,
+        publishedAt: offer.publishedAt,
+        createdAt: offer.createdAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const adminSetOfferStatusForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    offerId: v.id("marketplaceOffers"),
+    status: v.union(
+      v.literal("paused"),
+      v.literal("published"),
+      v.literal("archived"),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    const offer = await ctx.db.get("marketplaceOffers", args.offerId);
+    if (!offer) throw new Error("Offer not found");
+    const now = Date.now();
+    const patch: Partial<Doc<"marketplaceOffers">> = {
+      status: args.status,
+      updatedAt: now,
+    };
+    if (args.status === "published" && !offer.publishedAt) {
+      patch.publishedAt = now;
+    }
+    await ctx.db.patch(offer._id, patch);
+    return null;
+  },
+});
+
+export const adminListJobsForApi = internalQuery({
+  args: { userId: v.id("users"), status: v.optional(jobStatus) },
+  returns: v.array(
+    v.object({
+      _id: v.id("marketplaceJobs"),
+      offerTitle: v.string(),
+      status: jobStatus,
+      priceCents: v.number(),
+      priceCredits: v.number(),
+      buyerLabel: v.string(),
+      sellerLabel: v.string(),
+      hasEscrow: v.boolean(),
+      canRefund: v.boolean(),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    // Delegate to same shape as adminListJobs by inlining essential path:
+    const jobs = args.status
+      ? await ctx.db
+          .query("marketplaceJobs")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .order("desc")
+          .take(100)
+      : await ctx.db.query("marketplaceJobs").order("desc").take(100);
+    const out = [];
+    for (const job of jobs) {
+      const offer = await ctx.db.get("marketplaceOffers", job.offerId);
+      const buyer = await ctx.db.get("users", job.buyerUserId);
+      const seller = await getMarketplaceSellerForUser(ctx, job.sellerUserId);
+      const canRefund =
+        Boolean(job.escrowHoldId) &&
+        (job.status === "delivered" ||
+          job.status === "in_progress" ||
+          job.status === "in_escrow");
+      out.push({
+        _id: job._id,
+        offerTitle: offer?.title ?? "Offer",
+        status: job.status,
+        priceCents: job.priceCents,
+        priceCredits: job.priceCredits,
+        buyerLabel: buyer?.name || buyer?.email || String(job.buyerUserId),
+        sellerLabel: seller?.businessName || String(job.sellerUserId),
+        hasEscrow: Boolean(job.escrowHoldId),
+        canRefund,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+      });
+    }
+    return out;
+  },
+});
+
+export const adminRefundJobForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    jobId: v.id("marketplaceJobs"),
+    reason: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await asAdminForApi(ctx, args.userId);
+    const job = await ctx.db.get("marketplaceJobs", args.jobId);
+    if (!job) throw new Error("Job not found");
+    if (job.status !== "delivered" && job.status !== "in_progress" && job.status !== "in_escrow") {
+      throw new Error("Job cannot be refunded in current status");
+    }
+    if (!job.escrowHoldId) throw new Error("No escrow to refund");
+    await refundMarketplaceEscrow(ctx, {
+      holdId: job.escrowHoldId,
+      reason: args.reason ?? "Admin marketplace refund",
+      adminId: admin.user._id,
+    });
+    const now = Date.now();
+    await ctx.db.patch(job._id, {
+      status: "refunded",
+      cancelledAt: now,
+      updatedAt: now,
+    });
+    await appendJobEvent(ctx, {
+      jobId: job._id,
+      actorUserId: admin.user._id,
+      kind: "refunded",
+      message: args.reason ?? "Admin refunded escrow to buyer",
+    });
+    return null;
+  },
+});
+
+export const adminListPayoutsForApi = internalQuery({
+  args: {
+    userId: v.id("users"),
+    status: v.optional(v.union(v.literal("owed"), v.literal("paid"))),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("sellerPayouts"),
+      sellerUserId: v.id("users"),
+      jobId: v.optional(v.id("marketplaceJobs")),
+      assetPurchaseId: v.optional(v.id("assetPurchases")),
+      amountCents: v.number(),
+      status: v.union(v.literal("owed"), v.literal("paid")),
+      businessName: v.optional(v.string()),
+      offerTitle: v.optional(v.string()),
+      listingTitle: v.optional(v.string()),
+      payoutAccount: v.union(v.null(), payoutAccountShape),
+      paidAt: v.optional(v.number()),
+      adminNote: v.optional(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await asAdminForApi(ctx, args.userId);
+    const rows = args.status
+      ? await ctx.db
+          .query("sellerPayouts")
+          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .collect()
+      : await ctx.db.query("sellerPayouts").collect();
+    const out = [];
+    for (const payout of rows) {
+      const seller = await getMarketplaceSellerForUser(ctx, payout.sellerUserId);
+      let offerTitle: string | undefined;
+      let listingTitle: string | undefined;
+      if (payout.jobId) {
+        const job = await ctx.db.get("marketplaceJobs", payout.jobId);
+        const offer = job
+          ? await ctx.db.get("marketplaceOffers", job.offerId)
+          : null;
+        offerTitle = offer?.title;
+      }
+      if (payout.assetPurchaseId) {
+        const purchase = await ctx.db.get("assetPurchases", payout.assetPurchaseId);
+        const listing = purchase
+          ? await ctx.db.get("assetListings", purchase.listingId)
+          : null;
+        listingTitle = listing?.title
+          ? `Audio: ${listing.title}`
+          : "Creative Network audio";
+      }
+      out.push({
+        _id: payout._id,
+        sellerUserId: payout.sellerUserId,
+        jobId: payout.jobId,
+        assetPurchaseId: payout.assetPurchaseId,
+        amountCents: payout.amountCents,
+        status: payout.status,
+        businessName: seller?.businessName,
+        offerTitle,
+        listingTitle,
+        payoutAccount: toPayoutAccount(seller),
+        paidAt: payout.paidAt,
+        adminNote: payout.adminNote,
+        createdAt: payout.createdAt,
+      });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const adminMarkPayoutPaidForApi = internalMutation({
+  args: {
+    userId: v.id("users"),
+    payoutId: v.id("sellerPayouts"),
+    adminNote: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const admin = await asAdminForApi(ctx, args.userId);
+    const payout = await ctx.db.get("sellerPayouts", args.payoutId);
+    if (!payout) throw new Error("Payout not found");
+    if (payout.status === "paid") return null;
+    const now = Date.now();
+    await ctx.db.patch(payout._id, {
+      status: "paid",
+      paidAt: now,
+      markedPaidBy: admin.user._id,
+      adminNote: args.adminNote?.trim() || payout.adminNote,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+

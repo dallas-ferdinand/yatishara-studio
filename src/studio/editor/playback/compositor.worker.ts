@@ -53,6 +53,13 @@ type TransformMessage = {
   transformA: TransformTuple;
 };
 
+type TextTransformMessage = {
+  type: "textTransform";
+  clipId: string;
+  /** [scale, x, y, rotationDegrees] — same tuple as video preview. */
+  transform: TransformTuple;
+};
+
 type RenderMessage = {
   type: "render";
   requestId: number;
@@ -71,6 +78,33 @@ type RenderMessage = {
     opacity: number;
     translateY: number;
     scale: number;
+    fontFamily: string;
+    bold: boolean;
+    italic: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    flipX: boolean;
+    flipY: boolean;
+    poseX: number;
+    poseY: number;
+    poseScale: number;
+    rotation: number;
+    clipId?: string;
+    underline?: boolean;
+    textCase?: "none" | "upper" | "lower" | "title";
+    letterSpacing?: number;
+    lineHeight?: number;
+    verticalAlign?: "top" | "middle" | "bottom";
+    backgroundColor?: string | null;
+    backgroundPadding?: number;
+    backgroundRadius?: number;
+    shadowColor?: string | null;
+    shadowBlur?: number;
+    shadowOffsetX?: number;
+    shadowOffsetY?: number;
+    glow?: boolean;
+    glowColor?: string;
+    glowBlur?: number;
   }>;
   textsOver: Array<{
     text: string;
@@ -80,15 +114,49 @@ type RenderMessage = {
     opacity: number;
     translateY: number;
     scale: number;
+    fontFamily: string;
+    bold: boolean;
+    italic: boolean;
+    strokeColor: string;
+    strokeWidth: number;
+    flipX: boolean;
+    flipY: boolean;
+    poseX: number;
+    poseY: number;
+    poseScale: number;
+    rotation: number;
+    clipId?: string;
+    underline?: boolean;
+    textCase?: "none" | "upper" | "lower" | "title";
+    letterSpacing?: number;
+    lineHeight?: number;
+    verticalAlign?: "top" | "middle" | "bottom";
+    backgroundColor?: string | null;
+    backgroundPadding?: number;
+    backgroundRadius?: number;
+    shadowColor?: string | null;
+    shadowBlur?: number;
+    shadowOffsetX?: number;
+    shadowOffsetY?: number;
+    glow?: boolean;
+    glowColor?: string;
+    glowBlur?: number;
   }>;
 };
 
 type DisposeMessage = { type: "dispose" };
+type EnsureFontsMessage = {
+  type: "ensureFonts";
+  requestId: number;
+  families: string[];
+};
 type Incoming =
   | InitMessage
   | ResizeMessage
   | TransformMessage
+  | TextTransformMessage
   | RenderMessage
+  | EnsureFontsMessage
   | DisposeMessage;
 
 const vertexSource = `#version 300 es
@@ -220,6 +288,8 @@ let textureB: WebGLTexture | null = null;
 let textureTextUnder: WebGLTexture | null = null;
 let textureTextOver: WebGLTexture | null = null;
 let textCanvas: OffscreenCanvas | null = null;
+let lastTextsUnder: RenderMessage["textsUnder"] = [];
+let lastTextsOver: RenderMessage["textsOver"] = [];
 let textContext: OffscreenCanvasRenderingContext2D | null = null;
 
 function compileShader(context: WebGL2RenderingContext, type: number, source: string): WebGLShader {
@@ -321,6 +391,104 @@ function uniform(name: string): WebGLUniformLocation | null {
 
 type TextItem = RenderMessage["textsOver"][number];
 
+const SYSTEM_STACKS: Record<string, string> = {
+  system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  sans: "Inter, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+  serif: "Georgia, 'Times New Roman', Times, serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+  display: "Impact, Haettenschweiler, 'Arial Black', sans-serif",
+};
+
+const loadedWorkerFonts = new Set<string>();
+const loadingWorkerFonts = new Map<string, Promise<void>>();
+
+function isSystemFamily(family: string | undefined): boolean {
+  return !family || family in SYSTEM_STACKS;
+}
+
+function googleCssFamilyParam(family: string): string {
+  return family.trim().replace(/\s+/g, "+");
+}
+
+/** Load Google Fonts into the worker FontFaceSet (document fonts are not shared). */
+async function ensureWorkerFonts(families: string[]): Promise<void> {
+  const fonts = (self as unknown as { fonts?: FontFaceSet }).fonts;
+  if (!fonts) return;
+  const jobs: Promise<void>[] = [];
+  for (const raw of families) {
+    const family = (raw || "").trim();
+    if (!family || isSystemFamily(family) || loadedWorkerFonts.has(family)) continue;
+    const existing = loadingWorkerFonts.get(family);
+    if (existing) {
+      jobs.push(existing);
+      continue;
+    }
+    const job = (async () => {
+      try {
+        const cssUrl =
+          `https://fonts.googleapis.com/css2?family=${googleCssFamilyParam(family)}:wght@400;600;700&display=swap`;
+        const cssRes = await fetch(cssUrl, {
+          headers: {
+            // Request woff2 so FontFace works in Chromium workers.
+            Accept: "text/css,*/*;q=0.1",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+        if (!cssRes.ok) return;
+        const css = await cssRes.text();
+        const urls = [...css.matchAll(/url\(([^)]+)\)/g)].map((m) =>
+          m[1]!.replace(/['"]/g, ""),
+        );
+        const unique = [...new Set(urls)].slice(0, 6);
+        await Promise.all(
+          unique.map(async (src) => {
+            try {
+              const face = new FontFace(family, `url(${src})`, {
+                weight: "1 900",
+                style: "normal",
+                display: "swap",
+              });
+              const loaded = await face.load();
+              fonts.add(loaded);
+            } catch {
+              /* skip broken face */
+            }
+          }),
+        );
+        loadedWorkerFonts.add(family);
+        await Promise.all([
+          fonts.load(`400 42px "${family}"`).catch(() => undefined),
+          fonts.load(`600 42px "${family}"`).catch(() => undefined),
+          fonts.load(`700 42px "${family}"`).catch(() => undefined),
+        ]);
+      } finally {
+        loadingWorkerFonts.delete(family);
+      }
+    })();
+    loadingWorkerFonts.set(family, job);
+    jobs.push(job);
+  }
+  await Promise.all(jobs);
+}
+
+function cssFontFamily(family: string): string {
+  const id = family || "system";
+  if (id in SYSTEM_STACKS) return SYSTEM_STACKS[id]!;
+  const safe = id.includes(" ") ? `'${id.replace(/'/g, "\\'")}'` : id;
+  return `${safe}, system-ui, sans-serif`;
+}
+
+function applyCase(text: string, mode: TextItem["textCase"]): string {
+  if (mode === "upper") return text.toUpperCase();
+  if (mode === "lower") return text.toLowerCase();
+  if (mode === "title") {
+    return text.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  }
+  return text;
+}
+
+
 function uploadTextLayer(
   texture: WebGLTexture,
   unit: number,
@@ -336,19 +504,173 @@ function uploadTextLayer(
   for (const item of items) {
     textContext.save();
     textContext.globalAlpha = item.opacity;
-    textContext.fillStyle = item.color;
-    textContext.font = `600 ${item.fontSize}px system-ui, sans-serif`;
+    const weight = item.bold ? "700" : "600";
+    const style = item.italic ? "italic " : "";
+    const family = cssFontFamily(item.fontFamily);
+    // Bake pose/anim scale into font metrics instead of ctx.scale() so
+    // shadowBlur / stroke halos aren't clipped by transform bounding boxes.
+    const sizeScale = Math.max(0.05, item.poseScale * item.scale);
+    const fontSize = item.fontSize * sizeScale;
+    const strokeW = Math.max(0, item.strokeWidth) * sizeScale;
+    const glowBlur = (item.glowBlur ?? 12) * sizeScale;
+    const shadowBlur = (item.shadowBlur ?? 0) * sizeScale;
+    const shadowOx = (item.shadowOffsetX ?? 0) * sizeScale;
+    const shadowOy = (item.shadowOffsetY ?? 0) * sizeScale;
+    textContext.font = `${style}${weight} ${fontSize}px ${family}`;
     textContext.textAlign = item.align;
-    const x =
-      item.align === "left"
-        ? textCanvas.width * 0.08
-        : item.align === "right"
-          ? textCanvas.width * 0.92
-          : textCanvas.width * 0.5;
-    const y = textCanvas.height * 0.82 + item.translateY;
+    try {
+      (textContext as unknown as { letterSpacing?: string }).letterSpacing =
+        `${(item.letterSpacing ?? 0) * fontSize}px`;
+    } catch {
+      /* letterSpacing unsupported */
+    }
+    const display = applyCase(item.text, item.textCase ?? "none");
+    const lines = display.split("\n");
+    const lineHeight = fontSize * Math.max(0.8, item.lineHeight ?? 1.2);
+    const blockH = Math.max(lineHeight, lines.length * lineHeight);
+    let maxW = 0;
+    for (const line of lines) {
+      maxW = Math.max(maxW, textContext.measureText(line || " ").width);
+    }
+    // Inflate background so stroke + glow aren't boxed out.
+    const effectPad =
+      strokeW * 0.6 +
+      (item.glow ? glowBlur * 0.55 : 0) +
+      (item.shadowColor ? Math.max(Math.abs(shadowOx), Math.abs(shadowOy)) + shadowBlur * 0.35 : 0);
+    const pad =
+      (item.backgroundColor ? (item.backgroundPadding ?? 8) * sizeScale : 0) +
+      (item.backgroundColor ? effectPad * 0.35 : 0);
+    const x = (0.5 + item.poseX) * textCanvas.width;
+    const y = (0.5 + item.poseY) * textCanvas.height + item.translateY;
     textContext.translate(x, y);
-    textContext.scale(item.scale, item.scale);
-    textContext.fillText(item.text, 0, 0);
+    textContext.rotate((item.rotation * Math.PI) / 180);
+    // Flip only — size already baked into fontSize / stroke / blur.
+    textContext.scale(item.flipX ? -1 : 1, item.flipY ? -1 : 1);
+
+    const vAlign = item.verticalAlign ?? "middle";
+    const blockTop =
+      vAlign === "top" ? 0 : vAlign === "bottom" ? -blockH : -blockH / 2;
+    const boxLeft =
+      item.align === "left"
+        ? -pad
+        : item.align === "right"
+          ? -maxW - pad
+          : -maxW / 2 - pad;
+
+    if (item.backgroundColor) {
+      const bw = maxW + pad * 2;
+      const bh = blockH + pad * 2;
+      const bx = boxLeft;
+      const by = blockTop - pad;
+      const radius = Math.max(
+        0,
+        Math.min(
+          (item.backgroundRadius ?? 0) * sizeScale,
+          bw / 2,
+          bh / 2,
+        ),
+      );
+      textContext.fillStyle = item.backgroundColor;
+      if (radius <= 0.5) {
+        textContext.fillRect(bx, by, bw, bh);
+      } else {
+        textContext.beginPath();
+        const rr = (
+          textContext as OffscreenCanvasRenderingContext2D & {
+            roundRect?: (
+              x: number,
+              y: number,
+              w: number,
+              h: number,
+              r: number,
+            ) => void;
+          }
+        ).roundRect;
+        if (typeof rr === "function") {
+          rr.call(textContext, bx, by, bw, bh, radius);
+        } else {
+          // Fallback path for environments without roundRect.
+          textContext.moveTo(bx + radius, by);
+          textContext.arcTo(bx + bw, by, bx + bw, by + bh, radius);
+          textContext.arcTo(bx + bw, by + bh, bx, by + bh, radius);
+          textContext.arcTo(bx, by + bh, bx, by, radius);
+          textContext.arcTo(bx, by, bx + bw, by, radius);
+          textContext.closePath();
+        }
+        textContext.fill();
+      }
+    }
+
+    // Local alias: nested closures don't keep the null narrowing on textContext.
+    const ctx = textContext;
+    const drawGlyphLine = (line: string, ly: number) => {
+      if (strokeW > 0) {
+        ctx.lineWidth = strokeW;
+        ctx.strokeStyle = item.strokeColor || "#000000";
+        ctx.lineJoin = "round";
+        ctx.miterLimit = 2;
+        ctx.strokeText(line, 0, ly);
+      }
+      ctx.fillText(line, 0, ly);
+    };
+
+    const drawAllLines = () => {
+      ctx.fillStyle = item.color;
+      for (let i = 0; i < lines.length; i += 1) {
+        const ly = blockTop + lineHeight * i + lineHeight / 2;
+        drawGlyphLine(lines[i] ?? "", ly);
+      }
+    };
+
+    // Glow pass (halo) — independent from drop shadow so presets can use both.
+    if (item.glow) {
+      textContext.shadowColor = item.glowColor || "#ffffff";
+      textContext.shadowBlur = glowBlur;
+      textContext.shadowOffsetX = 0;
+      textContext.shadowOffsetY = 0;
+      drawAllLines();
+      textContext.shadowColor = "transparent";
+      textContext.shadowBlur = 0;
+      textContext.shadowOffsetX = 0;
+      textContext.shadowOffsetY = 0;
+    }
+
+    // Drop shadow and/or final crisp fill (also when no glow).
+    if (item.shadowColor) {
+      textContext.shadowColor = item.shadowColor;
+      textContext.shadowBlur = shadowBlur;
+      textContext.shadowOffsetX = shadowOx;
+      textContext.shadowOffsetY = shadowOy;
+    } else {
+      textContext.shadowColor = "transparent";
+      textContext.shadowBlur = 0;
+      textContext.shadowOffsetX = 0;
+      textContext.shadowOffsetY = 0;
+    }
+    drawAllLines();
+
+    if (item.underline) {
+      textContext.shadowColor = "transparent";
+      textContext.shadowBlur = 0;
+      textContext.fillStyle = item.color;
+      for (let i = 0; i < lines.length; i += 1) {
+        const ly = blockTop + lineHeight * i + lineHeight / 2;
+        const line = lines[i] ?? "";
+        const w = textContext.measureText(line || " ").width;
+        const ux =
+          item.align === "left"
+            ? 0
+            : item.align === "right"
+              ? -w
+              : -w / 2;
+        textContext.strokeStyle = item.color;
+        textContext.lineWidth = Math.max(1, fontSize * 0.06);
+        textContext.beginPath();
+        textContext.moveTo(ux, ly + fontSize * 0.35);
+        textContext.lineTo(ux + w, ly + fontSize * 0.35);
+        textContext.stroke();
+      }
+    }
     textContext.restore();
   }
   gl.activeTexture(unit);
@@ -383,8 +705,10 @@ function render(message: RenderMessage): void {
   try {
     upload(gl, textureA, gl.TEXTURE0, a);
     upload(gl, textureB, gl.TEXTURE1, b);
-    uploadTextLayer(textureTextUnder, gl.TEXTURE2, message.textsUnder);
-    uploadTextLayer(textureTextOver, gl.TEXTURE3, message.textsOver);
+    lastTextsUnder = message.textsUnder;
+    lastTextsOver = message.textsOver;
+    uploadTextLayer(textureTextUnder, gl.TEXTURE2, lastTextsUnder);
+    uploadTextLayer(textureTextOver, gl.TEXTURE3, lastTextsOver);
     gl.useProgram(program);
     gl.uniform2f(uniform("u_aSize"), a?.displayWidth ?? 1, a?.displayHeight ?? 1);
     gl.uniform2f(uniform("u_bSize"), b?.displayWidth ?? 1, b?.displayHeight ?? 1);
@@ -420,6 +744,14 @@ function render(message: RenderMessage): void {
   self.postMessage({ type: "rendered", requestId: message.requestId });
 }
 
+function redrawCompositor(): void {
+  if (!gl || !program || !canvas) return;
+  gl.useProgram(program);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  gl.flush();
+}
+
 function updateTransform(message: TransformMessage): void {
   if (!gl || !program || !canvas) return;
   gl.useProgram(program);
@@ -430,9 +762,30 @@ function updateTransform(message: TransformMessage): void {
     message.transformA[2],
     message.transformA[3],
   );
-  gl.viewport(0, 0, canvas.width, canvas.height);
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
-  gl.flush();
+  redrawCompositor();
+}
+
+/** Live text pose (no React) — same idea as video updateTransform. */
+function updateTextTransform(message: TextTransformMessage): void {
+  if (!gl || !program || !canvas || !textureTextUnder || !textureTextOver) return;
+  const [scale, x, y, rotation] = message.transform;
+  const patch = (items: TextItem[]): TextItem[] =>
+    items.map((item) =>
+      item.clipId === message.clipId
+        ? {
+            ...item,
+            poseScale: scale,
+            poseX: x,
+            poseY: y,
+            rotation,
+          }
+        : item,
+    );
+  lastTextsUnder = patch(lastTextsUnder);
+  lastTextsOver = patch(lastTextsOver);
+  uploadTextLayer(textureTextUnder, gl.TEXTURE2, lastTextsUnder);
+  uploadTextLayer(textureTextOver, gl.TEXTURE3, lastTextsOver);
+  redrawCompositor();
 }
 
 self.onmessage = (event: MessageEvent<Incoming>) => {
@@ -447,6 +800,18 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
       gl.viewport(0, 0, canvas.width, canvas.height);
     } else if (message.type === "transform") {
       updateTransform(message);
+    } else if (message.type === "textTransform") {
+      updateTextTransform(message);
+    } else if (message.type === "ensureFonts") {
+      void ensureWorkerFonts(message.families).then(() => {
+        self.postMessage({ type: "fontsReady", requestId: message.requestId });
+      }).catch((error) => {
+        self.postMessage({
+          type: "error",
+          requestId: message.requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     } else if (message.type === "render") {
       render(message);
     } else if (message.type === "dispose") {

@@ -48,6 +48,9 @@ export const apiKeyScope = v.union(
   v.literal("read"),
   v.literal("write"),
   v.literal("generate"),
+  v.literal("messages"),
+  v.literal("social"),
+  v.literal("marketplace"),
 );
 
 export const generationTier = v.union(
@@ -1291,6 +1294,12 @@ export default defineSchema({
     sharedPostId: v.optional(v.id("profilePosts")),
     /** Shared profile comment (kind comment). */
     sharedCommentId: v.optional(v.id("profileComments")),
+    /** Set when sender edits text/caption. */
+    editedAt: v.optional(v.number()),
+    /** Delete-for-everyone tombstone (row kept for reply integrity). */
+    deletedAt: v.optional(v.number()),
+    /** Delete-for-me: hide from these members only. */
+    hiddenForUserIds: v.optional(v.array(v.id("users"))),
     createdAt: v.number(),
   })
     .index("by_conversation_and_created", ["conversationId", "createdAt"])
@@ -1575,6 +1584,7 @@ export default defineSchema({
     .index("by_status_and_submitted", ["status", "submittedAt"])
     .index("by_seller", ["sellerId"])
     .index("by_seller_user", ["sellerUserId"])
+    .index("by_seller_user_and_updated", ["sellerUserId", "updatedAt"])
     .index("by_source_asset", ["sourceAssetId"])
     .index("by_original_asset", ["originalAssetId"])
     .index("by_audio_type_and_status", ["audioType", "status"]),

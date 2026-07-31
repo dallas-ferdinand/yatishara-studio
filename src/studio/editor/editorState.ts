@@ -4,6 +4,7 @@ import {
   LEGACY_TRACK_MAP,
   type EditorClip,
   type EditorMode,
+  type EditorSidePanel,
   type EditorProject,
   type EditorState,
   type EditorTrack,
@@ -19,6 +20,7 @@ import {
 import { computeRippleInsertForNewClip, arrangeTrackForDrop, resolveTrackOverlaps, collapseTrackLeft, isMainStoryTrack } from "./editorRipple";
 import { labelsForSplit } from "./clipNaming";
 import { normalizeFrameRatio } from "./projectContract";
+import { DEFAULT_TEXT_EFFECTS, DEFAULT_TEXT_STYLE } from "./editorEffects";
 
 export function newClipId(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
@@ -149,6 +151,7 @@ export function createInitialState(project: EditorProject): EditorState {
       playing: false,
       inspectorOpen: true,
       editorMode: "select",
+      sidePanel: "inspect",
     },
     past: [],
     future: [],
@@ -201,11 +204,12 @@ export type EditorAction =
   | { type: "set_zoom"; pixelsPerSecond: number }
   | { type: "set_inspector_open"; open: boolean }
   | { type: "set_editor_mode"; mode: EditorMode }
+  | { type: "set_side_panel"; panel: EditorSidePanel }
   | { type: "delete_selected" }
   | { type: "duplicate_selected" }
   | { type: "split_at_playhead" }
   | { type: "add_clip"; clip: Omit<EditorClip, "id"> }
-  | { type: "add_text_clip"; startTime?: number; trackId?: string; newLane?: boolean; insertTrackAt?: number }
+  | { type: "add_text_clip"; startTime?: number; trackId?: string; newLane?: boolean; insertTrackAt?: number; text?: import("./types").TextClipContent }
   | { type: "add_track_layer"; kind: "video" | "text" }
   | { type: "update_clip"; clipId: string; patch: Partial<EditorClip>; live?: boolean }
   | { type: "update_project"; patch: Partial<Pick<EditorProject, "frameRatio" | "name" | "duration">> }
@@ -370,8 +374,18 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         ui: {
           ...state.ui,
           editorMode: action.mode,
+          sidePanel: "inspect",
           inspectorOpen: true,
           selectedJointKey: action.mode === "transition" ? state.ui.selectedJointKey : null,
+        },
+      };
+    case "set_side_panel":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          sidePanel: action.panel,
+          inspectorOpen: true,
         },
       };
     case "delete_selected": {
@@ -435,22 +449,20 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         resolved = ensureTextTrack(state);
       }
       const startTime = Math.max(0, action.startTime ?? state.ui.playhead);
+      const textContent = {
+        ...DEFAULT_TEXT_STYLE,
+        ...(action.text ?? {}),
+      };
       const clip: EditorClip = {
         id: newClipId(),
         trackId: resolved.track.id,
         startTime,
         trimIn: 0,
         trimOut: 3,
-        label: "Text",
+        label: (textContent.text || "Text").slice(0, 28),
         kind: "text",
-        text: {
-          text: "Your text",
-          fontSize: 42,
-          color: "#ffffff",
-          align: "center",
-          animation: "fadeIn",
-          animationDuration: 0.5,
-        },
+        effects: { ...DEFAULT_TEXT_EFFECTS },
+        text: textContent,
       };
       const withClip = {
         ...resolved.project,
@@ -490,6 +502,11 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
           ? normalizeFrameRatio(action.patch.frameRatio)
           : state.project.frameRatio,
       });
+      // Name-only sync from Files rename — do not push undo history.
+      const keys = Object.keys(action.patch);
+      if (keys.length === 1 && keys[0] === "name") {
+        return { ...state, project: next };
+      }
       return withHistory(state, next);
     }
     case "set_joint_transition": {

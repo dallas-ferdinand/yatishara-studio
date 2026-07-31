@@ -29,6 +29,10 @@ import {
 import { useEditorHotkeys } from "./useEditorHotkeys";
 import { jointByKey } from "./editorTimelineUtils";
 import {
+  DEFAULT_EXPORT_RESOLUTION,
+  type ExportResolution,
+} from "../../../convex/lib/editorExport";
+import {
   DEFAULT_AUDIO_CLIP_SEC,
   DEFAULT_IMAGE_CLIP_SEC,
   DEFAULT_VIDEO_CLIP_SEC,
@@ -152,6 +156,12 @@ export function StudioVideoEditor({
   );
   const [hydrated, setHydrated] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportResolution, setExportResolution] = useState(
+    /** @type {import("../../../convex/lib/editorExport").ExportResolution} */ (
+      DEFAULT_EXPORT_RESOLUTION
+    ),
+  );
+  const [exportFilename, setExportFilename] = useState("");
   const [saveError, setSaveError] = useState(null);
   const [localProjectId, setLocalProjectId] = useState(projectId ?? null);
   const [clipMenu, setClipMenu] = useState(null);
@@ -243,10 +253,15 @@ export function StudioVideoEditor({
     }
 
     if (saved?.project) {
-      dispatch({ type: "replace_project", project: saved.project });
+      // Row name is source of truth after Files/tab rename; projectJson can lag.
+      const resolvedName = saved.name?.trim() || saved.project.name || "Untitled";
+      dispatch({
+        type: "replace_project",
+        project: { ...saved.project, name: resolvedName },
+      });
       setLocalProjectId(saved._id);
       if (saved.folderId) setHomeFolderId(saved.folderId);
-      onProjectSaved?.(saved._id, saved.name);
+      onProjectSaved?.(saved._id, resolvedName);
       setHydrated(true);
       return;
     }
@@ -282,6 +297,17 @@ export function StudioVideoEditor({
       cancelled = true;
     };
   }, [existing, existingBySource, folderAssets, hydrated, projectId, sourceAssetId, onProjectSaved]);
+
+
+  // Files-rail / tab rename updates the Convex row while this editor stays mounted.
+  // Pull the new name into state so the next autosave cannot write "Untitled" back.
+  useEffect(() => {
+    if (!hydrated || !existing?.name) return;
+    const remote = String(existing.name).trim();
+    if (!remote) return;
+    if (remote === state.project.name) return;
+    dispatch({ type: "update_project", patch: { name: remote } });
+  }, [existing?.name, existing?.updatedAt, hydrated, state.project.name]);
 
   const queueSave = useCallback(
     (projectSnapshot, name) => {
@@ -395,6 +421,7 @@ export function StudioVideoEditor({
     editorMode: state.ui.editorMode,
     clip: selectedClip,
     joint: selectedJoint,
+    sidePanel: state.ui.sidePanel,
   });
 
   // If the selection that a tool needs goes away, fall back to select mode.
@@ -588,8 +615,9 @@ export function StudioVideoEditor({
       const result = await exportProject({
         projectId: pid,
         folderId: homeFolderId,
-        name: state.project.name,
+        name: exportFilename.trim() || state.project.name,
         project: state.project,
+        exportResolution,
       });
       onStatus?.("Export ready.");
       if (result?.assetId) onOpenAsset?.(result.assetId);
@@ -600,7 +628,9 @@ export function StudioVideoEditor({
     }
   }, [
     canExport,
+    exportFilename,
     exportProject,
+    exportResolution,
     homeFolderId,
     localProjectId,
     onOpenAsset,
@@ -687,8 +717,8 @@ export function StudioVideoEditor({
                 onPlayheadChange={(time) => dispatch({ type: "set_playhead", time })}
                 onPlayingChange={(playing) => dispatch({ type: "set_playing", playing })}
                 onSelectClip={(clipId) => dispatch({ type: "select_clip", clipId })}
-                onUpdateClip={(clipId, patch) =>
-                  dispatch({ type: "update_clip", clipId, patch })
+                onUpdateClip={(clipId, patch, live) =>
+                  dispatch({ type: "update_clip", clipId, patch, live: Boolean(live) })
                 }
               />
             </Panel>
@@ -830,6 +860,7 @@ export function StudioVideoEditor({
                       trackId: opts?.trackId,
                       newLane: opts?.newLane,
                       insertTrackAt: opts?.insertTrackAt,
+                      text: opts?.text,
                     });
                   }}
                 />
@@ -847,6 +878,7 @@ export function StudioVideoEditor({
             {inspectorOpen ? (
               <EditorInspector
                 editorMode={state.ui.editorMode}
+                sidePanel={state.ui.sidePanel}
                 clip={selectedClip}
                 media={
                   selectedClip?.assetId
@@ -869,17 +901,24 @@ export function StudioVideoEditor({
                     trackId: opts?.trackId,
                     newLane: opts?.newLane,
                     insertTrackAt: opts?.insertTrackAt,
+                    text: opts?.text,
                   });
                 }}
+                exportResolution={exportResolution}
+                exportFilename={exportFilename}
+                exporting={exporting}
+                canExport={canExport}
+                onExportResolutionChange={setExportResolution}
+                onExportFilenameChange={setExportFilename}
+                onExport={() => void handleExport()}
               />
             ) : null}
           </aside>
           <EditorModeRail
             editorMode={state.ui.editorMode}
+            sidePanel={state.ui.sidePanel}
             onModeChange={(mode) => dispatch({ type: "set_editor_mode", mode })}
-            exporting={exporting}
-            canExport={canExport}
-            onExport={() => void handleExport()}
+            onOpenExport={() => dispatch({ type: "set_side_panel", panel: "export" })}
             joint={selectedJoint}
           />
         </div>

@@ -734,23 +734,6 @@ function StudioSignIn({
                 />
               </span>
             </label>
-            <button
-              className="studio-auth-secondary"
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setPending(true);
-                setError("");
-                setNotice("");
-                void startEmailCode(step.email, true)
-                  .catch((err: unknown) => {
-                    setError(friendlyConvexError(err, "Could not send code"));
-                  })
-                  .finally(() => setPending(false));
-              }}
-            >
-              Email me a code instead
-            </button>
           </>
         ) : null}
 
@@ -795,19 +778,6 @@ function StudioSignIn({
                 Press to paste
               </button>
             </div>
-            {step.hasPassword ? (
-              <button
-                className="studio-auth-secondary"
-                type="button"
-                onClick={() => {
-                  setError("");
-                  setNotice("");
-                  setStep({ email: step.email, phase: "password" });
-                }}
-              >
-                Enter password
-              </button>
-            ) : null}
           </>
         ) : null}
 
@@ -823,19 +793,45 @@ function StudioSignIn({
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
               <>
-                {isEmailCodeStep ? "Continue" : step === "identify" ? "Continue" : "Sign in"}
+                {isEmailCodeStep || step === "identify" || isPasswordStep
+                  ? "Continue"
+                  : "Sign in"}
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
               </>
             )}
           </button>
         ) : null}
-        {step !== "identify" ? (
+        {isPasswordStep ? (
+          <button
+            type="button"
+            className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={pending}
+            onClick={() => {
+              setPending(true);
+              setError("");
+              setNotice("");
+              void startEmailCode(step.email, true)
+                .catch((err: unknown) => {
+                  setError(friendlyConvexError(err, "Could not send code"));
+                })
+                .finally(() => setPending(false));
+            }}
+          >
+            Send code instead
+          </button>
+        ) : null}
+        {isEmailCodeStep && step.hasPassword ? (
           <button
             type="button"
             className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none"
-            onClick={resetToIdentify}
+            onClick={() => {
+              setError("");
+              setNotice("");
+              setEmailCode("");
+              setStep({ email: step.email, phase: "password" });
+            }}
           >
-            Use a different email
+            Use password instead
           </button>
         ) : null}
         {isEmailCodeStep ? (
@@ -856,6 +852,15 @@ function StudioSignIn({
             }}
           >
             Resend code
+          </button>
+        ) : null}
+        {step !== "identify" ? (
+          <button
+            type="button"
+            className="studio-auth-link w-full cursor-pointer py-1 text-center underline-offset-4 transition hover:underline focus:outline-none"
+            onClick={resetToIdentify}
+          >
+            Use a different email
           </button>
         ) : null}
       </form>

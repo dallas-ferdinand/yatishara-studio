@@ -1,12 +1,14 @@
 // @ts-nocheck
 "use client";
 
-import { Cloud, Folder, History, MessageCircle, Sparkles, Store } from "lucide-react";
+import { Cloud, Folder, History, MessageCircle, PanelLeft, Sparkles, Store } from "lucide-react";
 import { useRef } from "react";
 
 /** Optional context action — Files linked to Create (Generate) or Network (My Assets). */
 export const MOBILE_NAV_ACTION = {
   files: { id: "files", label: "Files", Icon: Folder },
+  /** Opens Places / Files left-rail sheet — only while Files dock is open. */
+  extras: { id: "extras", label: "Extras", Icon: PanelLeft },
   history: { id: "history", label: "History", Icon: History },
 };
 
@@ -87,25 +89,37 @@ function NavButton({
 
 /**
  * Permanent sections: Feed | Network | Messages | Create.
- * On Generate, Create expands into a linked pill with Files (+ History) to the right.
+ * Generate: Create expands with Files + History.
+ * Files dock open: Files + Extras (Places sidepanel sheet); History hidden.
  */
 export function StudioMobileBottomNav({
   section,
   onSelect,
   onPrefetch,
   action = null,
+  extrasAction = null,
   historyAction = null,
+  /** @deprecated use extrasAction */
+  placesAction = null,
   tools = null,
 }) {
   const filesAction = action?.id === "files" ? action : null;
   const filesAnchor = filesAction?.anchor === "network" ? "network" : "composer";
+  const extras = extrasAction || placesAction;
   const FilesIcon = MOBILE_NAV_ACTION.files.Icon;
+  const ExtrasIcon = MOBILE_NAV_ACTION.extras.Icon;
   const HistoryIcon = MOBILE_NAV_ACTION.history.Icon;
+  const filesOpen = Boolean(filesAction?.active);
   const linkFilesToNetwork = Boolean(filesAction) && filesAnchor === "network";
   const linkFilesToCreate = Boolean(filesAction) && filesAnchor === "composer";
-  const networkLinked = linkFilesToNetwork && section === "network";
+  // Extras only while Files dock is open (Generate or My Assets).
+  const showExtras = Boolean(extras) && filesOpen;
+  const showHistory = Boolean(historyAction) && !filesOpen;
+  const networkLinked =
+    section === "network" && (linkFilesToNetwork || showExtras);
   const createLinked =
-    section === "composer" && (linkFilesToCreate || Boolean(historyAction));
+    section === "composer" &&
+    (linkFilesToCreate || showExtras || showHistory);
 
   const filesBtn = (linked) =>
     filesAction ? (
@@ -121,8 +135,22 @@ export function StudioMobileBottomNav({
       </NavButton>
     ) : null;
 
+  const extrasBtn = (linked) =>
+    showExtras ? (
+      <NavButton
+        className={`studio-mobile-nav-btn studio-mobile-nav-extras is-icon-only${extras.active ? " is-active" : ""}${linked ? " is-cluster-slot" : ""}`}
+        ariaLabel="Extras"
+        title="Places"
+        ariaPressed={extras.active ? true : undefined}
+        onActivate={() => extras.onClick?.()}
+        onIntent={() => onPrefetch?.("places")}
+      >
+        <ExtrasIcon aria-hidden="true" />
+      </NavButton>
+    ) : null;
+
   const historyBtn = (linked) =>
-    historyAction ? (
+    showHistory ? (
       <NavButton
         className={`studio-mobile-nav-btn studio-mobile-nav-history is-icon-only${historyAction.active ? " is-active" : ""}${linked ? " is-cluster-slot" : ""}`}
         ariaLabel="History"
@@ -151,9 +179,9 @@ export function StudioMobileBottomNav({
 
         {networkLinked ? (
           <div
-            className={`studio-mobile-nav-cluster is-linked${filesAction.active ? " is-action-active" : ""}`}
+            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || extras?.active ? " is-action-active" : ""}`}
             role="group"
-            aria-label="Creative Network and Files"
+            aria-label={showExtras ? "Creative Network, Files, and Extras" : "Creative Network and Files"}
           >
             <NavButton
               className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
@@ -166,6 +194,7 @@ export function StudioMobileBottomNav({
               <Store aria-hidden="true" />
             </NavButton>
             {filesBtn(true)}
+            {extrasBtn(true)}
           </div>
         ) : (
           <NavButton
@@ -193,9 +222,13 @@ export function StudioMobileBottomNav({
 
         {createLinked ? (
           <div
-            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || historyAction?.active ? " is-action-active" : ""}`}
+            className={`studio-mobile-nav-cluster is-linked${filesAction?.active || extras?.active || historyAction?.active ? " is-action-active" : ""}`}
             role="group"
-            aria-label="Create, Files, and History"
+            aria-label={
+              showExtras
+                ? "Create, Files, and Extras"
+                : "Create, Files, and History"
+            }
           >
             <NavButton
               className={`studio-mobile-nav-btn is-icon-only is-cluster-slot is-active`}
@@ -208,6 +241,7 @@ export function StudioMobileBottomNav({
               <Sparkles aria-hidden="true" />
             </NavButton>
             {filesBtn(true)}
+            {extrasBtn(true)}
             {historyBtn(true)}
           </div>
         ) : (
