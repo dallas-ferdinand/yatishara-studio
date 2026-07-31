@@ -169,6 +169,10 @@ import {
 } from "@/studio/lib/studioPaintMarks";
 import { StudioPerfHud } from "@/studio/components/StudioPerfHud";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import {
+  insertPlainTextAtSelection,
+  plainTextFromClipboard,
+} from "@/studio/lib/composerPasteIntelligence";
 import { threadTitleFromPrompt, collectStudioAssetIdsFromPrompt } from "@/studio/lib/studio-prompt-display.js";
 import { profileAvatarStyle, profileNameInitials } from "@/studio/lib/profileAvatar";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
@@ -22217,6 +22221,32 @@ function StudioComposer({
               }
               void onSubmit();
             }
+          }}
+          onPaste={(event) => {
+            const editor = editorRef.current;
+            if (!editor) return;
+            // Always take over paste: sites put rich HTML into contentEditable.
+            const text = plainTextFromClipboard(event.clipboardData);
+            if (!text) {
+              // Allow native image/file paste paths only when there is no text.
+              const items = event.clipboardData?.items;
+              if (items) {
+                for (const item of items) {
+                  if (item.kind === "file") return;
+                }
+              }
+              event.preventDefault();
+              return;
+            }
+            event.preventDefault();
+            if (
+              removeComposerTokensInSelection(editor, setAttachments)
+            ) {
+              // Selection may have included chips; clear remaining range via insert.
+            }
+            insertPlainTextAtSelection(text);
+            pushDraftToParent(readComposerEditorText(editor), { immediate: true });
+            pruneComposerAttachmentsFromDom(editor, setAttachments);
           }}
         />
       </div>

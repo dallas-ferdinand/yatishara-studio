@@ -21,6 +21,10 @@ import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import {
+  insertPlainTextAtSelection,
+  plainTextFromClipboard,
+} from "@/studio/lib/composerPasteIntelligence";
 import { MediaLoadFrame } from "./media-load-frame";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import { CaptionChipText } from "./CaptionChipText";
@@ -900,8 +904,8 @@ export function PostComposeTab({ assetId, onCancel, onPublished }: PostComposeTa
               onKeyDown={onEditorKeyDown}
               onPaste={(event) => {
                 event.preventDefault();
-                const text = event.clipboardData.getData("text/plain").slice(0, MAX_CAPTION);
-                document.execCommand("insertText", false, text);
+                const text = plainTextFromClipboard(event.clipboardData).slice(0, MAX_CAPTION);
+                if (text) insertPlainTextAtSelection(text);
                 syncFromEditor();
               }}
             />
