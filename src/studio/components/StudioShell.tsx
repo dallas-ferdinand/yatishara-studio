@@ -120,6 +120,7 @@ import { CursorSelect } from "@/desk/components/CursorSelect";
 import { CursorTable } from "@/desk/components/CursorTable";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { matchesExplorerTypeFilter } from "@/desk/lib/file-kind";
+import { entryNamesSet, uniqueName } from "@/desk/lib/explorer-create.js";
 import {
   addPinnedFolder,
   loadPinnedFolders,
@@ -1284,6 +1285,8 @@ export function StudioShell({
     setFileSelectionMode(false);
   }, [activeFolderId]);
   const [renameTarget, setRenameTarget] = useState(null);
+  /** New create-menu items stay pinned at top until named or dismissed. */
+  const [inlineRenameStudioId, setInlineRenameStudioId] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [feedModeMenuOpen, setFeedModeMenuOpen] = useState(false);
@@ -3366,6 +3369,17 @@ export function StudioShell({
     };
   }, [displayCurrentEntries, typeFilter]);
 
+  const explorerCurrentEntries = useMemo(() => {
+    const base = filteredCurrentEntries;
+    if (!inlineRenameStudioId) return base;
+    const entries = [...(base.entries ?? [])];
+    const idx = entries.findIndex((entry) => entry.studioId === inlineRenameStudioId);
+    if (idx < 0) return base;
+    if (idx === 0) return base;
+    const [item] = entries.splice(idx, 1);
+    return { ...base, entries: [item, ...entries] };
+  }, [filteredCurrentEntries, inlineRenameStudioId]);
+
   const searchState = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     if (!q) return { entries: [], truncated: false };
@@ -3826,19 +3840,178 @@ export function StudioShell({
     openTab(`create:${kind}${elementType ? `:${elementType}` : ""}:${createTabIndexRef.current}`);
   }
 
+  function ensureFilesViewForInlineCreate() {
+    setAddMenuOpen(false);
+    setSearch("");
+    openTab(FILES_TAB);
+    if (isMobile) openMobileSection("files");
+  }
+
+  async function createInlineStudioItem(kind) {
+    if (!activeFolder || isTrashNav) return;
+    ensureFilesViewForInlineCreate();
+    const exists = entryNamesSet(displayCurrentEntries.entries);
+    try {
+      if (kind === "folder") {
+        const name = uniqueName("New folder", exists);
+        const id = await createFolder({
+          parentId: activeFolder._id,
+          name,
+          icon: "Folder",
+          color: "#22c55e",
+        });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "dir",
+              studioKind: "folder",
+              studioId: id,
+              name,
+              path: `${studioPathForFolder(activeFolder)}/${name}`,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
+        setInlineRenameStudioId(id);
+        return;
+      }
+      if (kind === "document") {
+        const fileName = uniqueName("Untitled.md", exists);
+        const title = fileName.replace(/\.md$/i, "");
+        const id = await createDocument({
+          folderId: activeFolder._id,
+          title,
+          contentMarkdown: "",
+        });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "file",
+              studioKind: "document",
+              studioId: id,
+              name: fileName,
+              path: `/Studio/scripts/${id}.md`,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
+        setInlineRenameStudioId(id);
+        return;
+      }
+      if (kind === "videoEdit") {
+        if (!isVideoEditorPreviewEnabled()) return;
+        const fileName = uniqueName("Untitled.edit", exists);
+        const name = fileName.replace(/\.edit$/i, "");
+        const result = await createVideoEdit({
+          folderId: activeFolder._id,
+          name,
+        });
+        const entry = videoEditToEntry({
+          _id: result.projectId,
+          name,
+          folderId: activeFolder._id,
+          updatedAt: wallClockMs(),
+        });
+        setTabEntrySnapshots((snapshots) => ({
+          ...snapshots,
+          [`videoEdit:${result.projectId}`]: entry,
+        }));
+        setRecentFileRows(
+          recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
+        );
+        setInlineRenameStudioId(result.projectId);
+        return;
+      }
+      if (kind === "element") {
+        const displayName = uniqueName("@Untitled", exists);
+        const name = displayName.replace(/^@/, "");
+        const id = await createElement({
+          folderId: activeFolder._id,
+          type: "character",
+          name,
+        });
+        setRecentFileRows(
+          recordRecentItem(
+            {
+              type: "file",
+              studioKind: "element",
+              studioId: id,
+              name: displayName,
+              path: `/Studio/elements/${id}.element`,
+            },
+            explorerUserId,
+            RECENT_ACTIVITY.created,
+          ),
+        );
+        setInlineRenameStudioId(id);
+        return;
+      }
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not create item"));
+    }
+  }
+
+  function dismissInlineRename() {
+    setInlineRenameStudioId(null);
+  }
+
+  async function commitInlineRename(entry, nextName) {
+    const id = inlineRenameStudioId;
+    setInlineRenameStudioId(null);
+    if (!entry && !id) return;
+    const target = entry ?? (displayCurrentEntries.entries ?? []).find((row) => row.studioId === id);
+    if (!target) {
+      const trimmed = String(nextName ?? "").trim();
+      if (!trimmed || !id) return;
+      try {
+        await updateFolder({ folderId: id, name: trimmed });
+      } catch {
+        /* entry may be non-folder; ignore */
+      }
+      return;
+    }
+    const trimmed = String(nextName ?? "").trim();
+    if (!trimmed) return;
+    const seed =
+      target.studioKind === "document"
+        ? String(target.name ?? "").replace(/\.md$/i, "")
+        : target.studioKind === "videoEdit"
+          ? String(target.name ?? "").replace(/\.edit$/i, "")
+          : target.studioKind === "element"
+            ? String(target.name ?? "").replace(/^@/, "")
+            : String(target.name ?? "");
+    if (trimmed === seed) return;
+    try {
+      await applyEntryRename(target, trimmed);
+    } catch (error) {
+      toast.error(friendlyConvexError(error, "Could not rename"));
+    }
+  }
+
   function runCreateAction(action) {
     if (isTrashNav) return;
     if (action === "upload") {
       fileInputRef.current?.click();
       return;
     }
-    if (action === "new-folder") openCreateTab("folder");
-    if (action === "new-file") openCreateTab("script");
-    if (action === "new-video-edit") {
-      if (isVideoEditorPreviewEnabled()) void createNewVideoEdit();
+    if (action === "new-folder") {
+      void createInlineStudioItem("folder");
       return;
     }
-    if (action === "new-element") openElementCreateInComposer();
+    if (action === "new-file") {
+      void createInlineStudioItem("document");
+      return;
+    }
+    if (action === "new-video-edit") {
+      void createInlineStudioItem("videoEdit");
+      return;
+    }
+    if (action === "new-element") {
+      void createInlineStudioItem("element");
+      return;
+    }
   }
 
   function openElementCreateInComposer() {
@@ -4426,6 +4599,9 @@ export function StudioShell({
   // Browser/gesture Back closes overlays before leaving the page (mobile only).
   useMobileBackLayer("rename-dialog", Boolean(renameTarget), () => {
     setRenameTarget(null);
+  });
+  useMobileBackLayer("inline-rename", Boolean(inlineRenameStudioId), () => {
+    setInlineRenameStudioId(null);
   });
   useMobileBackLayer("explorer-context", Boolean(contextMenu), () => {
     setContextMenu(null);
@@ -19699,7 +19875,7 @@ export function StudioShell({
             onBreadcrumbDrop={handleBreadcrumbDrop}
             viewMode={viewMode}
             displayRootEntries={displayRootEntries}
-            displayCurrentEntries={filteredCurrentEntries}
+            displayCurrentEntries={explorerCurrentEntries}
             pathToEntry={pathToEntry}
             topFolders={topFolders}
             childFolders={childFolders}
@@ -19715,6 +19891,9 @@ export function StudioShell({
             isMobile={false}
             pinnedPaths={explorerPinnedPaths}
             pinnedShortcuts={explorerPinnedShortcuts}
+            renamingStudioId={inlineRenameStudioId}
+            onInlineRenameCommit={commitInlineRename}
+            onInlineRenameDismiss={dismissInlineRename}
             onDropFiles={uploadFiles}
             selectionMode={fileSelectionMode}
             selectedPaths={selectedFilePaths}
@@ -20008,7 +20187,7 @@ export function StudioShell({
                 onBreadcrumbDrop={handleBreadcrumbDrop}
                 viewMode={viewMode}
                 displayRootEntries={displayRootEntries}
-                displayCurrentEntries={filteredCurrentEntries}
+                displayCurrentEntries={explorerCurrentEntries}
                 pathToEntry={pathToEntry}
                 topFolders={topFolders}
                 childFolders={childFolders}
@@ -20024,6 +20203,9 @@ export function StudioShell({
                 isMobile={isMobile}
                 pinnedPaths={explorerPinnedPaths}
                 pinnedShortcuts={explorerPinnedShortcuts}
+            renamingStudioId={inlineRenameStudioId}
+            onInlineRenameCommit={commitInlineRename}
+            onInlineRenameDismiss={dismissInlineRename}
                 onDropFiles={uploadFiles}
                 selectionMode={fileSelectionMode}
                 selectedPaths={selectedFilePaths}
@@ -20391,7 +20573,7 @@ export function StudioShell({
           onBreadcrumbNavigate={handleBreadcrumbNavigate}
           onBreadcrumbDrop={handleBreadcrumbDrop}
           displayRootEntries={displayRootEntries}
-          displayCurrentEntries={filteredCurrentEntries}
+          displayCurrentEntries={explorerCurrentEntries}
           pathToEntry={pathToEntry}
           topFolders={topFolders}
           childFolders={childFolders}
@@ -20427,6 +20609,9 @@ export function StudioShell({
           onEntryDrop={handleEntryDrop}
           pinnedPaths={explorerPinnedPaths}
           pinnedShortcuts={explorerPinnedShortcuts}
+            renamingStudioId={inlineRenameStudioId}
+            onInlineRenameCommit={commitInlineRename}
+            onInlineRenameDismiss={dismissInlineRename}
           selectionMode={fileSelectionMode}
           selectedPaths={selectedFilePaths}
           selectedCount={selectedFileEntries.length}
@@ -27585,6 +27770,9 @@ function StudioFilesExplorerBody({
   pathbarTools = null,
   /** "workspace" = full Files tab (toggle left of search). "sidebar" = left rail / mobile (toggle on its own row). */
   chromeLayout = "sidebar",
+  renamingStudioId = null,
+  onInlineRenameCommit,
+  onInlineRenameDismiss,
 }) {
   const filterActive = typeFilter !== "all";
   const isNetworkMode = filesBrowseMode === "network";
@@ -27654,6 +27842,9 @@ function StudioFilesExplorerBody({
         onEntryDrop={onEntryDrop}
         onTouchDrop={onMobileAttach}
         emptyHint={filterActive ? "No matching files" : undefined}
+        renamingStudioId={renamingStudioId}
+        onInlineRenameCommit={onInlineRenameCommit}
+        onInlineRenameDismiss={onInlineRenameDismiss}
       />
   );
 

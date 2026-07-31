@@ -40,7 +40,15 @@ function entryKind(entry) {
   return fileViewerKind(entry?.ext ?? fileExt(entry?.path ?? entry?.name ?? ""));
 }
 
-function ThumbWithPeek({ children, name, badge }) {
+function ThumbWithPeek({
+  children,
+  name,
+  badge,
+  renaming = false,
+  renameInitialName,
+  onRenameCommit,
+  onRenameDismiss,
+}) {
   return (
     <div className="desk-file-thumb-peek-wrap">
       {children}
@@ -49,7 +57,13 @@ function ThumbWithPeek({ children, name, badge }) {
           <Icon name={badge} size={14} />
         </span>
       ) : null}
-      <ThumbPeekLabel name={name} />
+      <ThumbPeekLabelOrRename
+        name={name}
+        renaming={renaming}
+        renameInitialName={renameInitialName}
+        onRenameCommit={onRenameCommit}
+        onRenameDismiss={onRenameDismiss}
+      />
     </div>
   );
 }
@@ -382,6 +396,72 @@ function ThumbPeekLabel({ name }) {
   );
 }
 
+export function InlineRenameInput({
+  initialName = "",
+  className = "desk-file-thumb-rename-input",
+  onCommit,
+  onDismiss,
+}) {
+  const inputRef = useRef(null);
+  const [value, setValue] = useState(() => String(initialName ?? ""));
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, []);
+
+  const finish = (mode) => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    if (mode === "commit") onCommit?.(value);
+    else onDismiss?.();
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      className={className}
+      value={value}
+      aria-label="Folder name"
+      onChange={(event) => setValue(event.target.value)}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish("commit");
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish("dismiss");
+        }
+      }}
+      onBlur={() => finish("commit")}
+    />
+  );
+}
+
+function ThumbPeekLabelOrRename({ name, renaming, renameInitialName, onRenameCommit, onRenameDismiss }) {
+  if (renaming) {
+    return (
+      <InlineRenameInput
+        initialName={renameInitialName ?? name}
+        onCommit={onRenameCommit}
+        onDismiss={onRenameDismiss}
+      />
+    );
+  }
+  return <ThumbPeekLabel name={name} />;
+}
+
 function TextSnippet({ path, workspaceId, className }) {
   const [snippet, setSnippet] = useState("");
   const [failed, setFailed] = useState(false);
@@ -426,6 +506,10 @@ export function FileEntryThumb({
   size = "grid",
   showLabel = true,
   pinned = false,
+  renaming = false,
+  renameInitialName,
+  onRenameCommit,
+  onRenameDismiss,
 }) {
   const name = entry?.name ?? entry?.path?.split("/").pop() ?? "?";
   const label = name;
@@ -504,7 +588,13 @@ export function FileEntryThumb({
               className="text-cursor-muted"
             />
           </div>
-          <ThumbPeekLabel name={label} />
+          <ThumbPeekLabelOrRename
+            name={label}
+            renaming={renaming}
+            renameInitialName={renameInitialName}
+            onRenameCommit={onRenameCommit}
+            onRenameDismiss={onRenameDismiss}
+          />
         </div>
       );
     } else {
@@ -529,31 +619,46 @@ export function FileEntryThumb({
               />
             </span>
           ) : null}
-          <ThumbPeekLabel name={label} />
+          <ThumbPeekLabelOrRename
+            name={label}
+            renaming={renaming}
+            renameInitialName={renameInitialName}
+            onRenameCommit={onRenameCommit}
+            onRenameDismiss={onRenameDismiss}
+          />
         </div>
       );
     }
   } else if (entry?.studioKind === "element") {
     const badge = elementBadgeIcon(entry.elementType);
     const sheetUrl = thumbUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : null;
-    visual = sheetUrl ? (
+    visual = (
       <div className="desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--element">
-        <ProgressiveThumb
-          src={sheetUrl}
-          lqipSrc={lqipUrl}
-          className="desk-file-thumb-image"
-          eager={eagerFirst}
-        />
+        {sheetUrl ? (
+          <ProgressiveThumb
+            src={sheetUrl}
+            lqipSrc={lqipUrl}
+            className="desk-file-thumb-image"
+            eager={eagerFirst}
+          />
+        ) : (
+          <div className="desk-file-thumb-fallback">
+            <Icon name={badge} size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+          </div>
+        )}
         <span className="desk-file-thumb-badge" aria-hidden>
           <Icon name={badge} size={14} />
         </span>
-        <ThumbPeekLabel name={label} />
-      </div>
-    ) : (
-      <div className="desk-file-thumb-fallback">
-        <Icon name={badge} size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+        <ThumbPeekLabelOrRename
+          name={label}
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}
+        />
       </div>
     );
+    inlinePeekLabel = true;
   } else {
     const isImage = kind === "image";
     const isVideo = kind === "video";
@@ -566,7 +671,11 @@ export function FileEntryThumb({
 
     if (isImage && (thumbUrl || mediaUrl)) {
       visual = (
-        <ThumbWithPeek name={label} badge="image">
+        <ThumbWithPeek name={label} badge="image"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}>
           <ProgressiveThumb
             src={thumbUrl || mediaUrl}
             lqipSrc={lqipUrl}
@@ -578,7 +687,11 @@ export function FileEntryThumb({
       inlinePeekLabel = true;
     } else if (isVideo) {
       visual = (
-        <ThumbWithPeek name={label} badge="play">
+        <ThumbWithPeek name={label} badge="play"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}>
           {videoPosterUrl ? (
             <ProgressiveThumb
               src={videoPosterUrl}
@@ -598,7 +711,11 @@ export function FileEntryThumb({
       inlinePeekLabel = true;
     } else if (isScript) {
       visual = (
-        <ThumbWithPeek name={label} badge="fileText">
+        <ThumbWithPeek name={label} badge="fileText"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}>
           {entry?.path && size === "preview" && entry?.studioKind !== "document" ? (
             <TextSnippet path={entry.path} workspaceId={workspaceId} className="desk-file-thumb-text-wrap" />
           ) : (
@@ -613,7 +730,11 @@ export function FileEntryThumb({
       const editPosterUrl =
         thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined;
       visual = (
-        <ThumbWithPeek name={label} badge="clapperboard">
+        <ThumbWithPeek name={label} badge="clapperboard"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}>
           {editPosterUrl ? (
             <ProgressiveThumb
               src={editPosterUrl}
@@ -637,7 +758,11 @@ export function FileEntryThumb({
       inlinePeekLabel = true;
     } else if (kind === "audio") {
       visual = (
-        <ThumbWithPeek name={label} badge="music">
+        <ThumbWithPeek name={label} badge="music"
+          renaming={renaming}
+          renameInitialName={renameInitialName}
+          onRenameCommit={onRenameCommit}
+          onRenameDismiss={onRenameDismiss}>
           <AudioWaveThumb
             seedKey={entry?.path ?? entry?._id ?? label}
             barCount={size === "preview" ? 36 : 28}
@@ -663,9 +788,18 @@ export function FileEntryThumb({
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>
       <div className="desk-file-thumb-visual">{visual}</div>
       {showLabel && !inlinePeekLabel ? (
-        <span className="desk-file-thumb-label" title={entry?.path ? displayEntryPath(entry) : label}>
-          {label}
-        </span>
+        renaming ? (
+          <InlineRenameInput
+            initialName={renameInitialName ?? label}
+            className="desk-file-thumb-rename-input desk-file-thumb-rename-input--below"
+            onCommit={onRenameCommit}
+            onDismiss={onRenameDismiss}
+          />
+        ) : (
+          <span className="desk-file-thumb-label" title={entry?.path ? displayEntryPath(entry) : label}>
+            {label}
+          </span>
+        )
       ) : null}
     </div>
   );

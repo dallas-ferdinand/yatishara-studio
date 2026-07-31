@@ -3,7 +3,7 @@
 
 import { Icon } from "./Icons";
 import { icon as svgIcon } from "@mos-app/icons.js";
-import { FileEntryThumb } from "./FileEntryThumb";
+import { FileEntryThumb, InlineRenameInput } from "./FileEntryThumb";
 import { explorerEntryIcon, fileExt, fileViewerKind } from "@/desk/lib/file-kind";
 import { formatFileDate } from "@/desk/lib/explorer-file-actions";
 import {
@@ -1043,6 +1043,7 @@ function FileEntryButton({
   selected = false,
   selectionMode = false,
   onSelect,
+  renaming = false,
 }) {
   const buttonRef = useRef(null);
   const touchDragActiveRef = useRef(false);
@@ -1053,7 +1054,7 @@ function FileEntryButton({
   const pointerMovedRef = useRef(false);
   const [dragArmed, setDragArmed] = useState(false);
   const canTouchDrag =
-    enableLongPress && entry.type !== "parent" && !selectionMode;
+    !renaming && enableLongPress && entry.type !== "parent" && !selectionMode;
 
   // Live Convex rows can unmount mid-hold. Cancel only *this* hold — never
   // tear down a drag another row already promoted.
@@ -1065,7 +1066,7 @@ function FileEntryButton({
 
   const { longPressHandlers, longPressFired, clearLongPressFired, dragIntentFired } =
     useLongPress(
-      enableLongPress && onLongPress
+      !renaming && enableLongPress && onLongPress
         ? (coords) => {
             // Never open the sheet if a Files touch-drag is in flight.
             if (
@@ -1143,6 +1144,10 @@ function FileEntryButton({
       title={entry.path ? displayEntryPath(entry) : label}
       aria-selected={entry.type === "parent" ? undefined : selected}
       onClick={(event) => {
+        if (renaming) {
+          event.preventDefault();
+          return;
+        }
         if (longPressFired() || dragIntentFired() || touchDragActiveRef.current) {
           clearLongPressFired();
           touchDragActiveRef.current = false;
@@ -1177,7 +1182,7 @@ function FileEntryButton({
         onContextMenu?.(event);
       }}
       // Mobile touch-drag owns the gesture — native HTML5 drag fights Android.
-      draggable={entry.type !== "parent" && !selectionMode && !canTouchDrag}
+      draggable={entry.type !== "parent" && !selectionMode && !canTouchDrag && !renaming}
       onDragStart={(event) => {
         if (canTouchDrag) {
           event.preventDefault();
@@ -1237,7 +1242,8 @@ function FileEntryButton({
           longPressFired() ||
           dragIntentFired() ||
           touchDragActiveRef.current ||
-          dragArmed
+          dragArmed ||
+          renaming
         ) {
           return;
         }
@@ -1337,7 +1343,32 @@ function renderEntryRows({
   pinnedFolderIconClass,
   entryLabel,
   entryMeta,
+  renamingStudioId = null,
+  onInlineRenameCommit,
+  onInlineRenameDismiss,
 }) {
+  const isRenaming = (e) =>
+    Boolean(renamingStudioId && e?.studioId && e.studioId === renamingStudioId);
+
+  const renameSeedName = (e) => {
+    const raw = e?.name ?? e?.path?.split("/").pop() ?? "";
+    if (e?.studioKind === "document") return String(raw).replace(/\.md$/i, "");
+    if (e?.studioKind === "videoEdit") return String(raw).replace(/\.edit$/i, "");
+    if (e?.studioKind === "element") return String(raw).replace(/^@/, "");
+    return String(raw);
+  };
+
+  const thumbRenameProps = (e) => {
+    const renaming = isRenaming(e);
+    if (!renaming) return { renaming: false };
+    return {
+      renaming: true,
+      renameInitialName: renameSeedName(e),
+      onRenameCommit: (next) => onInlineRenameCommit?.(e, next),
+      onRenameDismiss: () => onInlineRenameDismiss?.(e),
+    };
+  };
+
   if (viewMode === "preview") {
     return (
       <div className="desk-file-preview-grid">
@@ -1346,6 +1377,7 @@ function renderEntryRows({
             return <SearchDivider key={entryRowKey(e, index)} label={e.name} />;
           }
           const label = entryLabel(e);
+          const renaming = isRenaming(e);
           return (
             <FileEntryButton
               key={entryRowKey(e, index)}
@@ -1365,8 +1397,15 @@ function renderEntryRows({
               selected={selectedSet?.has(e.path)}
               selectionMode={selectionMode}
               onSelect={onEntrySelect}
+              renaming={renaming}
             >
-              <FileEntryThumb entry={e} workspaceId={workspaceId} size="preview" pinned={isPinnedEntry(e, pinnedPaths)} />
+              <FileEntryThumb
+                entry={e}
+                workspaceId={workspaceId}
+                size="preview"
+                pinned={isPinnedEntry(e, pinnedPaths)}
+                {...thumbRenameProps(e)}
+              />
             </FileEntryButton>
           );
         })}
@@ -1382,6 +1421,7 @@ function renderEntryRows({
             return <SearchDivider key={entryRowKey(e, index)} label={e.name} />;
           }
           const label = entryLabel(e);
+          const renaming = isRenaming(e);
           if (e.type === "parent") {
             return (
               <FileEntryButton
@@ -1421,8 +1461,15 @@ function renderEntryRows({
               selected={selectedSet?.has(e.path)}
               selectionMode={selectionMode}
               onSelect={onEntrySelect}
+              renaming={renaming}
             >
-              <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" pinned={isPinnedEntry(e, pinnedPaths)} />
+              <FileEntryThumb
+                entry={e}
+                workspaceId={workspaceId}
+                size="grid"
+                pinned={isPinnedEntry(e, pinnedPaths)}
+                {...thumbRenameProps(e)}
+              />
             </FileEntryButton>
           );
         })}
@@ -1442,6 +1489,7 @@ function renderEntryRows({
         }
         const label = entryLabel(e);
         const metaDate = entryMeta(e, searchActive, searchScope);
+        const renaming = isRenaming(e);
         return (
           <FileEntryButton
             key={entryRowKey(e, index)}
@@ -1460,6 +1508,7 @@ function renderEntryRows({
             selected={selectedSet?.has(e.path)}
             selectionMode={selectionMode}
             onSelect={onEntrySelect}
+            renaming={renaming}
           >
             <span className="desk-file-list-name">
               <Icon
@@ -1467,7 +1516,16 @@ function renderEntryRows({
                 size={16}
                 className={pinnedFolderIconClass(e)}
               />
-              <span className="truncate">{label}</span>
+              {renaming ? (
+                <InlineRenameInput
+                  initialName={renameSeedName(e)}
+                  className="desk-file-list-rename-input"
+                  onCommit={(next) => onInlineRenameCommit?.(e, next)}
+                  onDismiss={() => onInlineRenameDismiss?.(e)}
+                />
+              ) : (
+                <span className="truncate">{label}</span>
+              )}
             </span>
             <span className="desk-file-list-meta">{metaDate}</span>
           </FileEntryButton>
@@ -1506,6 +1564,9 @@ export function FileTree({
   selectedPaths = null,
   selectionMode = false,
   onEntrySelect,
+  renamingStudioId = null,
+  onInlineRenameCommit,
+  onInlineRenameDismiss,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -1627,6 +1688,9 @@ export function FileTree({
     pinnedFolderIconClass,
     entryLabel,
     entryMeta,
+    renamingStudioId,
+    onInlineRenameCommit,
+    onInlineRenameDismiss,
   });
 
   return (
