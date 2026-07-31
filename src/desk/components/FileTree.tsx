@@ -1346,6 +1346,7 @@ function renderEntryRows({
   renamingStudioId = null,
   onInlineRenameCommit,
   onInlineRenameDismiss,
+  onStartInlineRename,
 }) {
   const isRenaming = (e) =>
     Boolean(renamingStudioId && e?.studioId && e.studioId === renamingStudioId);
@@ -1358,9 +1359,39 @@ function renderEntryRows({
     return String(raw);
   };
 
+  const canInlineRename = (e) => {
+    if (!e?.studioId || e.isPinnedShortcut) return false;
+    if (e.type === "parent" || e.type === "search-divider") return false;
+    if (
+      e.studioKind === "trash" ||
+      e.studioKind === "messages" ||
+      e.studioKind === "purchased" ||
+      e.studioKind === "public" ||
+      e.studioKind === "recents" ||
+      e.systemKind === "messages" ||
+      e.systemKind === "purchased_assets" ||
+      e.systemKind === "public_assets"
+    ) {
+      return false;
+    }
+    if (e.type === "dir") return true;
+    return (
+      e.studioKind === "document" ||
+      e.studioKind === "videoEdit" ||
+      e.studioKind === "element" ||
+      e.studioKind === "asset"
+    );
+  };
+
   const thumbRenameProps = (e) => {
     const renaming = isRenaming(e);
-    if (!renaming) return { renaming: false };
+    const labelDbl =
+      canInlineRename(e) && onStartInlineRename
+        ? () => onStartInlineRename(e)
+        : undefined;
+    if (!renaming) {
+      return labelDbl ? { renaming: false, onLabelDoubleClick: labelDbl } : { renaming: false };
+    }
     return {
       renaming: true,
       renameInitialName: renameSeedName(e),
@@ -1524,7 +1555,29 @@ function renderEntryRows({
                   onDismiss={() => onInlineRenameDismiss?.(e)}
                 />
               ) : (
-                <span className="truncate">{label}</span>
+                <span
+                  className={`truncate${canInlineRename(e) ? " is-renameable" : ""}`}
+                  title={
+                    canInlineRename(e) ? `${label} — double-click to rename` : undefined
+                  }
+                  onClick={(event) => {
+                    if (!canInlineRename(e)) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onPointerDown={(event) => {
+                    if (!canInlineRename(e)) return;
+                    event.stopPropagation();
+                  }}
+                  onDoubleClick={(event) => {
+                    if (!canInlineRename(e) || !onStartInlineRename) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onStartInlineRename(e);
+                  }}
+                >
+                  {label}
+                </span>
               )}
             </span>
             <span className="desk-file-list-meta">{metaDate}</span>
@@ -1567,6 +1620,7 @@ export function FileTree({
   renamingStudioId = null,
   onInlineRenameCommit,
   onInlineRenameDismiss,
+  onStartInlineRename,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -1691,6 +1745,7 @@ export function FileTree({
     renamingStudioId,
     onInlineRenameCommit,
     onInlineRenameDismiss,
+    onStartInlineRename,
   });
 
   return (

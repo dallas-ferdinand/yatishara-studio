@@ -48,6 +48,7 @@ function ThumbWithPeek({
   renameInitialName,
   onRenameCommit,
   onRenameDismiss,
+  onDoubleClickRename,
 }) {
   return (
     <div className="desk-file-thumb-peek-wrap">
@@ -63,6 +64,7 @@ function ThumbWithPeek({
         renameInitialName={renameInitialName}
         onRenameCommit={onRenameCommit}
         onRenameDismiss={onRenameDismiss}
+        onDoubleClickRename={onDoubleClickRename}
       />
     </div>
   );
@@ -387,10 +389,29 @@ function FolderThumbVisual({ entry, icon, folderIconClass, size }) {
   );
 }
 
-function ThumbPeekLabel({ name }) {
+function ThumbPeekLabel({ name, onDoubleClickRename }) {
   const text = peekDisplayName(name);
+  const canRename = typeof onDoubleClickRename === "function";
   return (
-    <span className="desk-file-thumb-peek-label" title={name}>
+    <span
+      className={`desk-file-thumb-peek-label${canRename ? " is-renameable" : ""}`}
+      title={canRename ? `${name} — double-click to rename` : name}
+      onClick={(event) => {
+        if (!canRename) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onPointerDown={(event) => {
+        if (!canRename) return;
+        event.stopPropagation();
+      }}
+      onDoubleClick={(event) => {
+        if (!canRename) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onDoubleClickRename();
+      }}
+    >
       {text}
     </span>
   );
@@ -449,7 +470,14 @@ export function InlineRenameInput({
   );
 }
 
-function ThumbPeekLabelOrRename({ name, renaming, renameInitialName, onRenameCommit, onRenameDismiss }) {
+function ThumbPeekLabelOrRename({
+  name,
+  renaming,
+  renameInitialName,
+  onRenameCommit,
+  onRenameDismiss,
+  onDoubleClickRename,
+}) {
   if (renaming) {
     return (
       <InlineRenameInput
@@ -459,7 +487,7 @@ function ThumbPeekLabelOrRename({ name, renaming, renameInitialName, onRenameCom
       />
     );
   }
-  return <ThumbPeekLabel name={name} />;
+  return <ThumbPeekLabel name={name} onDoubleClickRename={onDoubleClickRename} />;
 }
 
 function TextSnippet({ path, workspaceId, className }) {
@@ -510,6 +538,7 @@ export function FileEntryThumb({
   renameInitialName,
   onRenameCommit,
   onRenameDismiss,
+  onLabelDoubleClick,
 }) {
   const name = entry?.name ?? entry?.path?.split("/").pop() ?? "?";
   const label = name;
@@ -594,6 +623,7 @@ export function FileEntryThumb({
             renameInitialName={renameInitialName}
             onRenameCommit={onRenameCommit}
             onRenameDismiss={onRenameDismiss}
+            onDoubleClickRename={onLabelDoubleClick}
           />
         </div>
       );
@@ -625,6 +655,7 @@ export function FileEntryThumb({
             renameInitialName={renameInitialName}
             onRenameCommit={onRenameCommit}
             onRenameDismiss={onRenameDismiss}
+            onDoubleClickRename={onLabelDoubleClick}
           />
         </div>
       );
@@ -655,6 +686,7 @@ export function FileEntryThumb({
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
           onRenameDismiss={onRenameDismiss}
+            onDoubleClickRename={onLabelDoubleClick}
         />
       </div>
     );
@@ -675,7 +707,8 @@ export function FileEntryThumb({
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
-          onRenameDismiss={onRenameDismiss}>
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
           <ProgressiveThumb
             src={thumbUrl || mediaUrl}
             lqipSrc={lqipUrl}
@@ -691,7 +724,8 @@ export function FileEntryThumb({
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
-          onRenameDismiss={onRenameDismiss}>
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
           {videoPosterUrl ? (
             <ProgressiveThumb
               src={videoPosterUrl}
@@ -715,7 +749,8 @@ export function FileEntryThumb({
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
-          onRenameDismiss={onRenameDismiss}>
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
           {entry?.path && size === "preview" && entry?.studioKind !== "document" ? (
             <TextSnippet path={entry.path} workspaceId={workspaceId} className="desk-file-thumb-text-wrap" />
           ) : (
@@ -734,7 +769,8 @@ export function FileEntryThumb({
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
-          onRenameDismiss={onRenameDismiss}>
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
           {editPosterUrl ? (
             <ProgressiveThumb
               src={editPosterUrl}
@@ -762,7 +798,8 @@ export function FileEntryThumb({
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
-          onRenameDismiss={onRenameDismiss}>
+          onRenameDismiss={onRenameDismiss}
+          onDoubleClickRename={onLabelDoubleClick}>
           <AudioWaveThumb
             seedKey={entry?.path ?? entry?._id ?? label}
             barCount={size === "preview" ? 36 : 28}

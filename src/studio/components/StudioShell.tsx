@@ -1287,6 +1287,7 @@ export function StudioShell({
   const [renameTarget, setRenameTarget] = useState(null);
   /** New create-menu items stay pinned at top until named or dismissed. */
   const [inlineRenameStudioId, setInlineRenameStudioId] = useState(null);
+  const [inlineRenamePinToTop, setInlineRenamePinToTop] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const [feedModeMenuOpen, setFeedModeMenuOpen] = useState(false);
@@ -3371,14 +3372,14 @@ export function StudioShell({
 
   const explorerCurrentEntries = useMemo(() => {
     const base = filteredCurrentEntries;
-    if (!inlineRenameStudioId) return base;
+    if (!inlineRenameStudioId || !inlineRenamePinToTop) return base;
     const entries = [...(base.entries ?? [])];
     const idx = entries.findIndex((entry) => entry.studioId === inlineRenameStudioId);
     if (idx < 0) return base;
     if (idx === 0) return base;
     const [item] = entries.splice(idx, 1);
     return { ...base, entries: [item, ...entries] };
-  }, [filteredCurrentEntries, inlineRenameStudioId]);
+  }, [filteredCurrentEntries, inlineRenameStudioId, inlineRenamePinToTop]);
 
   const searchState = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -3843,8 +3844,38 @@ export function StudioShell({
   function ensureFilesViewForInlineCreate() {
     setAddMenuOpen(false);
     setSearch("");
-    openTab(FILES_TAB);
-    if (isMobile) openMobileSection("files");
+    // Stay where New was opened (sidepanel explorer or full Files tab).
+    // Do not force-switch to files:main.
+  }
+
+  function beginInlineRename(studioId, { pinToTop = false } = {}) {
+    setInlineRenameStudioId(studioId);
+    setInlineRenamePinToTop(Boolean(pinToTop));
+  }
+
+  function clearInlineRename() {
+    setInlineRenameStudioId(null);
+    setInlineRenamePinToTop(false);
+  }
+
+  function startInlineRename(entry) {
+    if (!entry?.studioId || isTrashNav || isLockedSystemFolder(entry)) return;
+    if (entry.type === "parent") return;
+    if (isLockedNetworkAsset(entry)) return;
+    const kind = entry.studioKind;
+    if (
+      kind &&
+      kind !== "folder" &&
+      kind !== "document" &&
+      kind !== "videoEdit" &&
+      kind !== "element" &&
+      kind !== "asset"
+    ) {
+      return;
+    }
+    if (entry.type !== "dir" && !kind) return;
+    setAddMenuOpen(false);
+    beginInlineRename(entry.studioId, { pinToTop: false });
   }
 
   async function createInlineStudioItem(kind) {
@@ -3873,7 +3904,7 @@ export function StudioShell({
             RECENT_ACTIVITY.created,
           ),
         );
-        setInlineRenameStudioId(id);
+        beginInlineRename(id, { pinToTop: true });
         return;
       }
       if (kind === "document") {
@@ -3897,7 +3928,7 @@ export function StudioShell({
             RECENT_ACTIVITY.created,
           ),
         );
-        setInlineRenameStudioId(id);
+        beginInlineRename(id, { pinToTop: true });
         return;
       }
       if (kind === "videoEdit") {
@@ -3921,7 +3952,7 @@ export function StudioShell({
         setRecentFileRows(
           recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
         );
-        setInlineRenameStudioId(result.projectId);
+        beginInlineRename(result.projectId, { pinToTop: true });
         return;
       }
       if (kind === "element") {
@@ -3945,7 +3976,7 @@ export function StudioShell({
             RECENT_ACTIVITY.created,
           ),
         );
-        setInlineRenameStudioId(id);
+        beginInlineRename(id, { pinToTop: true });
         return;
       }
     } catch (error) {
@@ -3954,12 +3985,12 @@ export function StudioShell({
   }
 
   function dismissInlineRename() {
-    setInlineRenameStudioId(null);
+    clearInlineRename();
   }
 
   async function commitInlineRename(entry, nextName) {
     const id = inlineRenameStudioId;
-    setInlineRenameStudioId(null);
+    clearInlineRename();
     if (!entry && !id) return;
     const target = entry ?? (displayCurrentEntries.entries ?? []).find((row) => row.studioId === id);
     if (!target) {
@@ -4601,7 +4632,7 @@ export function StudioShell({
     setRenameTarget(null);
   });
   useMobileBackLayer("inline-rename", Boolean(inlineRenameStudioId), () => {
-    setInlineRenameStudioId(null);
+    clearInlineRename();
   });
   useMobileBackLayer("explorer-context", Boolean(contextMenu), () => {
     setContextMenu(null);
@@ -12875,7 +12906,9 @@ export function StudioShell({
           border-radius: 10px;
           background: var(--studio-grid-tile-bg) !important;
           box-shadow: none;
+          /* Crop every tile to a square; own box-shadow still paints outside */
           overflow: hidden;
+          clip-path: none;
           transition:
             background-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-fast) var(--studio-motion-ease);
@@ -12889,22 +12922,49 @@ export function StudioShell({
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
         }
-        .studio-polish .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-peek-wrap:not(.desk-file-thumb-peek-wrap--folder-peek)),
-        .studio-polish .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-peek-wrap:not(.desk-file-thumb-peek-wrap--folder-peek)) {
-          clip-path: inset(0 round 10px);
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap {
+          width: 100%;
+          height: 100%;
+          min-height: 0;
+          overflow: hidden;
+          border-radius: 10px;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-video,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-video,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-hi,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-hi,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-lqip,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-lqip,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual > .desk-file-thumb-image,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual > .desk-file-thumb-image,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual > .desk-file-thumb-video,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual > .desk-file-thumb-video,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual .desk-file-thumb-progressive,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual .desk-file-thumb-progressive,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual .desk-file-thumb-progressive img,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual .desk-file-thumb-progressive img {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: none !important;
+          max-height: none !important;
+          object-fit: cover !important;
+          object-position: center !important;
+        }
+        /* Folder peek cards may stick out of the tile */
+        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-visual {
+          overflow: visible;
+        }
+        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-peek-wrap--folder-peek,
+        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-peek-wrap--folder-peek {
+          overflow: visible;
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
-        }
-        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder-peek) .desk-file-thumb-visual {
-          overflow: visible;
-          clip-path: none;
-        }
-        .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder--peek) .desk-file-thumb-visual,
-        .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder--peek) .desk-file-thumb-visual {
-          overflow: visible;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
@@ -19894,6 +19954,7 @@ export function StudioShell({
             renamingStudioId={inlineRenameStudioId}
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
+            onStartInlineRename={startInlineRename}
             onDropFiles={uploadFiles}
             selectionMode={fileSelectionMode}
             selectedPaths={selectedFilePaths}
@@ -20206,6 +20267,7 @@ export function StudioShell({
             renamingStudioId={inlineRenameStudioId}
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
+            onStartInlineRename={startInlineRename}
                 onDropFiles={uploadFiles}
                 selectionMode={fileSelectionMode}
                 selectedPaths={selectedFilePaths}
@@ -20612,6 +20674,7 @@ export function StudioShell({
             renamingStudioId={inlineRenameStudioId}
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
+            onStartInlineRename={startInlineRename}
           selectionMode={fileSelectionMode}
           selectedPaths={selectedFilePaths}
           selectedCount={selectedFileEntries.length}
@@ -27773,6 +27836,7 @@ function StudioFilesExplorerBody({
   renamingStudioId = null,
   onInlineRenameCommit,
   onInlineRenameDismiss,
+  onStartInlineRename,
 }) {
   const filterActive = typeFilter !== "all";
   const isNetworkMode = filesBrowseMode === "network";
@@ -27845,6 +27909,7 @@ function StudioFilesExplorerBody({
         renamingStudioId={renamingStudioId}
         onInlineRenameCommit={onInlineRenameCommit}
         onInlineRenameDismiss={onInlineRenameDismiss}
+        onStartInlineRename={onStartInlineRename}
       />
   );
 
