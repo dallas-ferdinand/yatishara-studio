@@ -157,7 +157,7 @@ export class CompositorClient {
     }
     await this.ready;
     const requestId = ++this.requestId;
-    let frameA = args.frameA;
+    const frameA = args.frameA;
     let frameB = args.frameB;
     // postMessage transfer list cannot contain the same VideoFrame twice.
     if (frameA && frameB && frameA === frameB) {
