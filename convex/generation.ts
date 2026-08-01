@@ -773,7 +773,8 @@ export const createQueuedJob = authedMutation({
     forceInstrumental: v.optional(v.boolean()),
     /**
      * Per-job save folder (current Files browse folder). Defaults to thread.linkedFolderId.
-     * Updates chat home on generate only — never on browse. Past assets keep their own folderId.
+     * Does not rewrite thread.linkedFolderId — browsing or generating elsewhere must not
+     * retarget the chat home or make prior assets appear to move.
      */
     folderId: v.optional(v.id("folders")),
   },
@@ -782,13 +783,6 @@ export const createQueuedJob = authedMutation({
     const thread = await requireThreadOwner(ctx, args.threadId);
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderOwner(ctx, saveFolderId);
-    // Retarget chat home when this job saves elsewhere. Do not move prior assets.
-    if (args.folderId && args.folderId !== thread.linkedFolderId) {
-      await ctx.db.patch(thread._id, {
-        linkedFolderId: args.folderId,
-        updatedAt: Date.now(),
-      });
-    }
     if (args.mode === "video" && args.resolution === "3840x2160") {
       throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
     }
@@ -922,7 +916,8 @@ export const approveAssistedMedia = internalMutation({
     planFingerprint: v.string(),
     /**
      * Per-job save folder (current Files browse folder). Defaults to thread.linkedFolderId.
-     * Updates chat home on generate only — never on browse. Past assets keep their own folderId.
+     * Does not rewrite thread.linkedFolderId — browsing or generating elsewhere must not
+     * retarget the chat home or make prior assets appear to move.
      */
     folderId: v.optional(v.id("folders")),
   },
@@ -966,13 +961,6 @@ export const approveAssistedMedia = internalMutation({
     const thread = await requireThreadForUser(ctx, args.userId, brief.threadId);
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderForUser(ctx, args.userId, saveFolderId);
-    // Retarget chat home when this job saves elsewhere. Do not move prior assets.
-    if (args.folderId && args.folderId !== thread.linkedFolderId) {
-      await ctx.db.patch(thread._id, {
-        linkedFolderId: args.folderId,
-        updatedAt: Date.now(),
-      });
-    }
     const stylePresetId = plan.settings.stylePresetId as Id<"stylePresets"> | undefined;
     if (!stylePresetId) throw new Error("Select a style before approving.");
     const preset = await ctx.db.get("stylePresets", stylePresetId);

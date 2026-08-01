@@ -2146,29 +2146,24 @@ export function StudioShell({
     });
   }, [activeThreadId, events]);
 
-  // Newly finished chat results for the open folder — merge so the grid updates
-  // immediately even if listByFolder lags one paint behind storageStatus=ready.
+  // Newly finished chat results that belong to the open folder — merge so the
+  // grid updates immediately if listByFolder lags. Never ghost into other folders.
   const activeFolderResultAssets = useMemo(() => {
     if (!activeFolder?._id || !events?.length) return [];
-    const threadLinkedFolderId = threads?.find(
-      (item) => item._id === activeThreadId,
-    )?.linkedFolderId;
     const byId = new Map();
     for (const event of events) {
       if (event.kind !== "result" || !event.resultAssets?.length) continue;
       for (const asset of event.resultAssets) {
         if (!asset?._id) continue;
-        if (asset.folderId) {
-          if (asset.folderId !== activeFolder._id) continue;
-        } else if (threadLinkedFolderId !== activeFolder._id) {
-          continue;
-        }
+        // Require a real folderId match — do not use thread.linkedFolderId as a
+        // stand-in (that made gens appear in every folder after browse/retarget).
+        if (!asset.folderId || asset.folderId !== activeFolder._id) continue;
         if (asset.storageStatus === "pending" || asset.storageStatus === "failed") continue;
         byId.set(asset._id, asset);
       }
     }
     return [...byId.values()];
-  }, [activeFolder, activeThreadId, events, threads]);
+  }, [activeFolder, events]);
 
   const assetPreviewQueries = useMemo(() => {
     const queries = {};
@@ -2261,8 +2256,10 @@ export function StudioShell({
     return queries;
   }, [assetUrlExpiresUnix, attachments, hasCurrentUser]);
   const attachmentMediaUrls = useQueries(attachmentUrlQueries);
+  // Files-grid pool only — must stay scoped to the open folder.
+  // Out-of-folder chat results hydrate in assetLookupPool for chat playback.
   const assetsWithPreviewUrls = useMemo(() => {
-    if (assets === undefined && !(events?.length)) return undefined;
+    if (assets === undefined && !activeFolderResultAssets.length) return undefined;
     const byId = new Map();
     for (const asset of assets ?? []) {
       const lazyFullUrl = assetPreviewUrls[`asset:${asset._id}`];
@@ -2292,7 +2289,14 @@ export function StudioShell({
             : undefined),
       });
     }
-    // Hydrate chat result media with lazy playable URLs (outside current folder).
+    return [...byId.values()].sort(
+      (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
+    );
+  }, [activeFolderResultAssets, assetPreviewUrls, assets]);
+
+  /** Chat result assets (any folder) with lazy playable URLs — not for the Files grid. */
+  const chatResultAssetsForLookup = useMemo(() => {
+    const byId = new Map();
     for (const event of events ?? []) {
       if (event?.kind !== "result" || !event.resultAssets?.length) continue;
       for (const asset of event.resultAssets) {
@@ -2314,10 +2318,8 @@ export function StudioShell({
         });
       }
     }
-    return [...byId.values()].sort(
-      (a, b) => (b.updatedAt ?? b.createdAt ?? 0) - (a.updatedAt ?? a.createdAt ?? 0),
-    );
-  }, [activeFolderResultAssets, assetPreviewUrls, assets, events]);
+    return [...byId.values()];
+  }, [assetPreviewUrls, events]);
   const styleSheets = useQuery(
     api.elements.listStyleSheets,
     hasCurrentUser && needsComposerCatalog ? {} : "skip",
@@ -2402,11 +2404,14 @@ export function StudioShell({
       ? { assetIds: chatReferencedAssetIds, expiresUnix: assetUrlExpiresUnix }
       : "skip",
   );
-  /** Folder assets plus element-linked assets in other folders (sheets, upload refs). */
+  /** Folder assets + chat/element refs in other folders (playback/chips — not Files grid). */
   const assetLookupPool = useMemo(() => {
     const byId = new Map();
     for (const asset of assetsWithPreviewUrls ?? []) {
       byId.set(asset._id, asset);
+    }
+    for (const asset of chatResultAssetsForLookup) {
+      if (!byId.has(asset._id)) byId.set(asset._id, asset);
     }
     for (const asset of linkedElementAssets ?? []) {
       if (!byId.has(asset._id)) {
@@ -2440,6 +2445,7 @@ export function StudioShell({
   }, [
     assetsWithPreviewUrls,
     chatReferencedAssets,
+    chatResultAssetsForLookup,
     linkedElementAssets,
     styleSheetPreviewAssets,
     recentReadyAssets,
@@ -30385,6 +30391,12 @@ const CreditPill = memo(function CreditPill({ creditBalance, creditPriceCents, o
 
 function buildFlatEntries({ folder, parent, loading, folders, assets, documents, videoEdits, elements, assetLookupPool }) {
   const lookup = assetLookupPool ?? assets;
+  const folderId = folder?._id;
+  // Belt-and-suspenders: never paint assets from another folder into this grid
+  // (chat result hydration used to leak here via assetsWithPreviewUrls).
+  const folderAssets = folderId
+    ? (assets ?? []).filter((asset) => !asset?.folderId || asset.folderId === folderId)
+    : (assets ?? []);
   return {
     loading: loading ?? !folder,
     parent,
@@ -30392,7 +30404,7 @@ function buildFlatEntries({ folder, parent, loading, folders, assets, documents,
       ...(folders ?? []).map(folderToEntry),
       ...(documents ?? []).map(documentToEntry),
       ...(videoEdits ?? []).map(videoEditToEntry),
-      ...(assets ?? []).map(assetToEntry),
+      ...folderAssets.map(assetToEntry),
       ...(elements ?? []).map((element) => elementToEntry(element, lookup)),
     ],
   };
