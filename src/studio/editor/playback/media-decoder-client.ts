@@ -43,6 +43,12 @@ export class MediaDecoderClient {
     string,
     { sourceTime: number; generation: number; requestedAt: number }
   >();
+  /** Latest desired frame per asset — coalesce while a loop is in flight. */
+  private readonly frameDesire = new Map<
+    string,
+    { url: string; sourceTime: number; generation: number }
+  >();
+  private readonly frameLoops = new Map<string, Promise<DecodedFrame>>();
   private metricsValue: MediaDecoderMetrics = {
     pendingRequests: 0,
     framesReceived: 0,
@@ -122,13 +128,47 @@ export class MediaDecoderClient {
     sourceTime: number,
     generation: number,
   ): Promise<DecodedFrame> {
-    return this.request({
-      type: "frame",
-      assetId,
-      url,
-      sourceTime,
-      generation,
-    }) as Promise<DecodedFrame>;
+    this.frameDesire.set(assetId, { url, sourceTime, generation });
+    const existing = this.frameLoops.get(assetId);
+    if (existing) return existing;
+
+    const loop = (async (): Promise<DecodedFrame> => {
+      try {
+        for (;;) {
+          const desire = this.frameDesire.get(assetId);
+          if (!desire) {
+            throw new Error("Media decoder frame desire missing.");
+          }
+          try {
+            const result = (await this.request({
+              type: "frame",
+              assetId,
+              url: desire.url,
+              sourceTime: desire.sourceTime,
+              generation: desire.generation,
+            })) as DecodedFrame;
+            const latest = this.frameDesire.get(assetId);
+            if (
+              latest &&
+              latest.generation === desire.generation &&
+              Math.abs(latest.sourceTime - desire.sourceTime) < 0.0005
+            ) {
+              return result;
+            }
+            // Newer desire landed while decoding — close stale transfer and loop.
+            result.frame.close();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (message === "superseded") continue;
+            throw error;
+          }
+        }
+      } finally {
+        this.frameLoops.delete(assetId);
+      }
+    })();
+    this.frameLoops.set(assetId, loop);
+    return loop;
   }
 
   prefetch(
@@ -180,6 +220,8 @@ export class MediaDecoderClient {
 
   disposeAsset(assetId: string): void {
     this.prefetchState.delete(assetId);
+    this.frameDesire.delete(assetId);
+    this.frameLoops.delete(assetId);
     if (!this.disposed) this.worker.postMessage({ type: "dispose", assetId });
   }
 
@@ -196,6 +238,8 @@ export class MediaDecoderClient {
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
     this.prefetchState.clear();
+    this.frameDesire.clear();
+    this.frameLoops.clear();
   }
 
   private request(message: Record<string, unknown>): Promise<unknown> {

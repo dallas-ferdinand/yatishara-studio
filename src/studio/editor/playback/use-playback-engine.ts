@@ -457,6 +457,10 @@ export function usePlaybackEngine(args: {
         disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
       };
     }
+    const bufferHold = {
+      resumeAfterBuffer: false,
+      hardStopTimer: null as number | null,
+    };
     try {
       const audio = new AudioMixer();
       audio.setNaturalAudioUrls(naturalAudioByClipId);
@@ -499,22 +503,30 @@ export function usePlaybackEngine(args: {
         },
       });
       const plan = compileTimeline(projectRef.current);
-      let resumeAfterBuffer = false;
       const scheduler = new FrameScheduler(plan, clock, consumer, {
         onTime: (time) => {
           emittedTimeRef.current = time;
           callbacksRef.current.onPlayheadChange(time);
         },
         onBuffering: (value) => {
-          if (value && clock.playing) {
-            // Soft freeze — do not pause() (generation bump wipes decoder cache).
-            clock.hold();
-            audio.stopAll();
-            resumeAfterBuffer = true;
-          } else if (!value && resumeAfterBuffer && playingRef.current) {
-            resumeAfterBuffer = false;
-            clock.play();
-            // Beds were stopped with the buffer hold — restart once video resumes.
+          if (value) {
+            // Clock is already held by the scheduler during prepare. Soft-pause
+            // audio for brief stalls; only tear down media elements if held long.
+            if (!bufferHold.resumeAfterBuffer) {
+              audio.softPause();
+              bufferHold.resumeAfterBuffer = true;
+              bufferHold.hardStopTimer = window.setTimeout(() => {
+                if (bufferHold.resumeAfterBuffer) audio.stopAll();
+              }, 300);
+            }
+          } else if (bufferHold.resumeAfterBuffer && playingRef.current) {
+            bufferHold.resumeAfterBuffer = false;
+            if (bufferHold.hardStopTimer != null) {
+              window.clearTimeout(bufferHold.hardStopTimer);
+              bufferHold.hardStopTimer = null;
+            }
+            if (!clock.playing) clock.play();
+            // Restart beds after soft/hard pause once video is moving again.
             const runtime = runtimeRef.current;
             if (runtime) {
               const time = clock.currentTime();
@@ -527,6 +539,12 @@ export function usePlaybackEngine(args: {
                   true,
                 );
               });
+            }
+          } else {
+            bufferHold.resumeAfterBuffer = false;
+            if (bufferHold.hardStopTimer != null) {
+              window.clearTimeout(bufferHold.hardStopTimer);
+              bufferHold.hardStopTimer = null;
             }
           }
           if (runtimeRef.current) setBuffering(value);
@@ -587,6 +605,11 @@ export function usePlaybackEngine(args: {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
     return () => {
+      bufferHold.resumeAfterBuffer = false;
+      if (bufferHold.hardStopTimer != null) {
+        window.clearTimeout(bufferHold.hardStopTimer);
+        bufferHold.hardStopTimer = null;
+      }
       disposeTimerRef.current = window.setTimeout(disposeRuntime, 0);
     };
     // Canvas owns one OffscreenCanvas transfer for its lifetime.

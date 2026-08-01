@@ -57,4 +57,50 @@ describe("FrameScheduler", () => {
     expect(rendered).toBe(1);
     scheduler.stop();
   });
+
+  it("holds the clock during prepare so time cannot run ahead of decode", async () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.duration = 5;
+    const plan = compileTimeline(project);
+    let nowSeconds = 0;
+    const clock = new TransportClock(5, () => nowSeconds);
+    clock.seek(1);
+    clock.play();
+    const callbacks: FrameRequestCallback[] = [];
+    let release: (() => void) | null = null;
+    const scheduler = new FrameScheduler(
+      plan,
+      clock,
+      {
+        prepare: () =>
+          new Promise<boolean>((resolve) => {
+            release = () => resolve(true);
+          }),
+        render: () => undefined,
+      },
+      {
+        requestFrame: (next) => {
+          callbacks.push(next);
+          return callbacks.length;
+        },
+        cancelFrame: () => undefined,
+      },
+    );
+
+    scheduler.start();
+    const first = callbacks.shift();
+    first!(0);
+    await settle();
+    expect(clock.playing).toBe(false);
+    expect(clock.currentTime()).toBeCloseTo(1);
+    nowSeconds = 1;
+    // Wall clock advanced while held — timeline must stay put.
+    expect(clock.currentTime()).toBeCloseTo(1);
+    release?.();
+    await settle();
+    expect(clock.playing).toBe(true);
+    nowSeconds = 1.2;
+    expect(clock.currentTime()).toBeCloseTo(1.2);
+    scheduler.stop();
+  });
 });

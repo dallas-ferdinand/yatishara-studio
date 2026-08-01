@@ -33,6 +33,9 @@ const requestFrameDefault = (callback: FrameRequestCallback): number =>
   requestAnimationFrame(callback);
 const cancelFrameDefault = (id: number): void => cancelAnimationFrame(id);
 
+/** Signal buffering UI/audio soft-pause quickly; clock is held for every prepare. */
+const STALL_UI_MS = 32;
+
 export class FrameScheduler {
   private plan: PlaybackPlan;
   private readonly clock: TransportClock;
@@ -111,6 +114,12 @@ export class FrameScheduler {
     });
   }
 
+  private beginBuffering(now: number): void {
+    if (this.bufferingSince != null) return;
+    this.bufferingSince = now;
+    this.options.onBuffering?.(true);
+  }
+
   private async tick(now: number): Promise<void> {
     if (!this.started) return;
     this.metricsValue.requestedFrames += 1;
@@ -138,30 +147,36 @@ export class FrameScheduler {
 
     this.renderPending = true;
     const workStarted = performance.now();
-    // If decode work outlasts a few frames, freeze the transport through the
-    // buffering path. Otherwise the clock keeps running during the stall and
-    // playback visibly skips forward once decode completes.
+    // Freeze transport for the whole prepare so sourceTime cannot walk off the
+    // decode-ahead window while WebCodecs catches up (critical at clip speed > 1×).
+    const wasPlaying = this.clock.playing;
+    if (wasPlaying) this.clock.hold();
     const stallTimer = setTimeout(() => {
-      if (this.bufferingSince == null && this.clock.playing) {
-        this.bufferingSince = performance.now();
-        this.options.onBuffering?.(true);
-      }
-    }, 150);
+      this.beginBuffering(performance.now());
+    }, STALL_UI_MS);
     try {
       const slice = sliceAt(this.plan, timelineTime);
       const ready = await this.consumer.prepare(slice, generation);
       if (!this.started || generation !== this.clock.generation) return;
       if (!ready) {
-        if (this.bufferingSince == null) {
-          this.bufferingSince = performance.now();
-          this.options.onBuffering?.(true);
-        }
+        // Immediate hold UI — do not let the clock run ahead of a cache miss.
+        this.beginBuffering(performance.now());
         return;
       }
+      const wasBuffering = this.bufferingSince != null;
       this.finishBuffering(performance.now());
       await this.consumer.render(slice, generation);
       if (generation === this.clock.generation) {
         this.metricsValue.renderedFrames += 1;
+      }
+      // Resume after this prepare's hold, or after leaving a not-ready buffer.
+      if (
+        this.started &&
+        !this.clock.ended() &&
+        (wasPlaying || wasBuffering) &&
+        !this.clock.playing
+      ) {
+        this.clock.play();
       }
     } catch (reason) {
       if (generation === this.clock.generation) {

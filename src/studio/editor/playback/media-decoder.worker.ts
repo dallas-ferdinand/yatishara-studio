@@ -44,6 +44,13 @@ type Incoming =
   | WarmMessage
   | DisposeMessage;
 
+type FrameWaiter = {
+  targetIndex: number;
+  resolve: (frame: VideoFrame) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
 type Session = {
   assetId: string;
   url: string;
@@ -52,8 +59,14 @@ type Session = {
   decoderConfig: VideoDecoderConfig | null;
   annexB: boolean;
   generation: number;
+  /** Highest sample index successfully fed into the open decoder stream. */
   decodedThrough: number;
+  /** True when the decoder can accept forward delta chunks without reset. */
+  streamOpen: boolean;
   frames: Map<number, VideoFrame>;
+  waiters: FrameWaiter[];
+  /** Latest frame request wins — older chained jobs are skipped. */
+  pendingFrame: FrameMessage | null;
   touchedAt: number;
   abortController: AbortController;
   init: Promise<void>;
@@ -61,8 +74,10 @@ type Session = {
 };
 
 const sessions = new Map<string, Session>();
-const MAX_FRAMES_PER_ASSET = 24;
+const MAX_FRAMES_PER_ASSET = 48;
 const MAX_DECODER_SESSIONS = 6;
+const DECODE_LOOKAHEAD = 24;
+const FRAME_WAIT_MS = 2_500;
 
 function totalCacheBytes(): number {
   let total = 0;
@@ -76,7 +91,16 @@ function post(message: unknown, transfer: Transferable[] = []): void {
   self.postMessage(message, { transfer });
 }
 
+function rejectWaiters(session: Session, error: Error): void {
+  for (const waiter of session.waiters) {
+    clearTimeout(waiter.timer);
+    waiter.reject(error);
+  }
+  session.waiters = [];
+}
+
 function closeFrames(session: Session): void {
+  rejectWaiters(session, new Error("Decoder frames cleared."));
   for (const frame of session.frames.values()) frame.close();
   session.frames.clear();
 }
@@ -109,6 +133,40 @@ function nearestFrame(session: Session, targetIndex: number): VideoFrame | null 
   return distance <= 1 ? best : null;
 }
 
+function notifyWaiters(session: Session): void {
+  if (!session.waiters.length) return;
+  const remaining: FrameWaiter[] = [];
+  for (const waiter of session.waiters) {
+    const frame = nearestFrame(session, waiter.targetIndex);
+    if (frame) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(frame);
+    } else {
+      remaining.push(waiter);
+    }
+  }
+  session.waiters = remaining;
+}
+
+function waitForFrame(session: Session, targetIndex: number): Promise<VideoFrame> {
+  const existing = nearestFrame(session, targetIndex);
+  if (existing) return Promise.resolve(existing);
+  return new Promise<VideoFrame>((resolve, reject) => {
+    const waiter: FrameWaiter = {
+      targetIndex,
+      resolve,
+      reject,
+      timer: setTimeout(() => {
+        session.waiters = session.waiters.filter((item) => item !== waiter);
+        reject(new Error("Frame decode timeout."));
+      }, FRAME_WAIT_MS),
+    };
+    session.waiters.push(waiter);
+    // Output may have landed between the miss check and waiter registration.
+    notifyWaiters(session);
+  });
+}
+
 function createSession(assetId: string, url: string): Session {
   const source = new HttpRangeSource(url, assetId, {
     credentials: "omit",
@@ -124,7 +182,10 @@ function createSession(assetId: string, url: string): Session {
     annexB: false,
     generation: -1,
     decodedThrough: -1,
+    streamOpen: false,
     frames: new Map(),
+    waiters: [],
+    pendingFrame: null,
     touchedAt: performance.now(),
     abortController: new AbortController(),
     init: Promise.resolve(),
@@ -194,8 +255,11 @@ function createSession(assetId: string, url: string): Session {
         previous?.close();
         session.frames.set(index, frame);
         evictFrames(session, index);
+        notifyWaiters(session);
       },
       error: (error) => {
+        session.streamOpen = false;
+        rejectWaiters(session, error);
         post({
           type: "decoder-error",
           assetId,
@@ -242,8 +306,11 @@ function configureSessionDecoder(session: Session): VideoDecoder {
   const decoder = session.decoder;
   const config = session.decoderConfig;
   if (!decoder || !config) throw new Error("Decoder did not initialize.");
+  rejectWaiters(session, new Error("Decoder reset."));
   decoder.reset();
   decoder.configure(config);
+  session.streamOpen = false;
+  session.decodedThrough = -1;
   return decoder;
 }
 
@@ -287,13 +354,56 @@ function prependBytes(prefix: ArrayBuffer, body: ArrayBuffer): ArrayBuffer {
   return output.buffer;
 }
 
+async function feedSamples(
+  session: Session,
+  decoder: VideoDecoder,
+  first: number,
+  last: number,
+  forceKeyOnFirst: boolean,
+): Promise<void> {
+  const track = session.demuxer.videoTrack;
+  if (!track) throw new Error("Decoder did not initialize.");
+  for (let index = first; index <= last; index += 1) {
+    const sample = track.samples[index]!;
+    const isBatchKey =
+      (forceKeyOnFirst && index === first) || Boolean(sample.is_sync);
+    const sampleData = await session.demuxer.sampleData(
+      sample,
+      session.abortController.signal,
+    );
+    let data = session.annexB
+      ? avcToAnnexB(sampleData, track.avcLengthSize)
+      : sampleData;
+    if (session.annexB && isBatchKey && track.avcParameterSets) {
+      data = prependBytes(track.avcParameterSets, data);
+    }
+    decoder.decode(
+      new EncodedVideoChunk({
+        type: isBatchKey ? "key" : "delta",
+        timestamp: Math.round((sample.cts / sample.timescale) * 1_000_000),
+        duration: Math.max(
+          1,
+          Math.round((sample.duration / sample.timescale) * 1_000_000),
+        ),
+        data,
+      }),
+    );
+  }
+  session.decodedThrough = Math.max(session.decodedThrough, last);
+  session.streamOpen = true;
+}
+
+/**
+ * Continuous forward decode: on a forward miss, feed only new samples into the
+ * open decoder (no reset/flush). Keyframe reset only for seek/generation/cold.
+ */
 async function ensureFrame(
   session: Session,
   sourceTime: number,
   generation: number,
 ): Promise<VideoFrame> {
   await session.init;
-  let decoder = session.decoder;
+  const decoder = session.decoder;
   const track = session.demuxer.videoTrack;
   if (!decoder || !track) throw new Error("Decoder did not initialize.");
 
@@ -311,46 +421,51 @@ async function ensureFrame(
   if (session.generation !== generation) {
     closeFrames(session);
     session.decodedThrough = -1;
+    session.streamOpen = false;
     session.generation = generation;
   }
 
   let frame = nearestFrame(session, targetIndex);
-  if (!frame) {
-    // flush() puts VideoDecoder into "key chunk required" state. Every new
-    // batch must therefore reset/configure and begin at a sync sample.
-    // Decode farther ahead so 1.5×–2× clip speed (sourceTime advances faster
-    // than timeline) stays on cache hits instead of keyframe-seeking each tick.
-    decoder = configureSessionDecoder(session);
-    const first = session.demuxer.precedingSyncIndex(targetIndex);
-    const last = Math.min(track.samples.length - 1, targetIndex + 24);
-    for (let index = first; index <= last; index += 1) {
-      const sample = track.samples[index]!;
-      const isBatchKey = index === first;
-      const sampleData = await session.demuxer.sampleData(
-        sample,
-        session.abortController.signal,
-      );
-      let data = session.annexB
-        ? avcToAnnexB(sampleData, track.avcLengthSize)
-        : sampleData;
-      if (session.annexB && isBatchKey && track.avcParameterSets) {
-        data = prependBytes(track.avcParameterSets, data);
+  if (frame) return frame;
+
+  const last = Math.min(track.samples.length - 1, targetIndex + DECODE_LOOKAHEAD);
+  const canForward =
+    session.streamOpen &&
+    session.decodedThrough >= 0 &&
+    targetIndex > session.decodedThrough;
+
+  try {
+    if (canForward) {
+      const first = session.decodedThrough + 1;
+      if (first <= last) {
+        await feedSamples(session, decoder, first, last, false);
       }
-      decoder.decode(
-        new EncodedVideoChunk({
-          type: isBatchKey ? "key" : "delta",
-          timestamp: Math.round((sample.cts / sample.timescale) * 1_000_000),
-          duration: Math.max(
-            1,
-            Math.round((sample.duration / sample.timescale) * 1_000_000),
-          ),
-          data,
-        }),
-      );
+      frame = await waitForFrame(session, targetIndex);
+    } else {
+      // Backward seek, eviction miss, or cold start — keyframe batch, no flush
+      // so the stream stays open for subsequent forward ticks.
+      const resetDecoder = configureSessionDecoder(session);
+      closeFrames(session);
+      session.generation = generation;
+      const first = session.demuxer.precedingSyncIndex(targetIndex);
+      await feedSamples(session, resetDecoder, first, last, true);
+      frame = await waitForFrame(session, targetIndex);
     }
-    await decoder.flush();
+  } catch (error) {
+    // Latency path failed — fall back to classic flush after keyframe batch.
+    session.streamOpen = false;
+    const resetDecoder = configureSessionDecoder(session);
+    closeFrames(session);
+    session.generation = generation;
+    const first = session.demuxer.precedingSyncIndex(targetIndex);
+    await feedSamples(session, resetDecoder, first, last, true);
+    await resetDecoder.flush();
+    session.streamOpen = false;
     session.decodedThrough = Math.max(session.decodedThrough, last);
     frame = nearestFrame(session, targetIndex);
+    if (!frame) {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
   }
 
   if (!frame) throw new Error("Decoder produced no frame.");
@@ -411,7 +526,13 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     const session = getSession(message.assetId, message.url);
     session.chain = session.chain
       .then(async () => {
-        if (session.frames.size > 0 && session.generation === message.generation) return;
+        if (
+          session.frames.size > 0 &&
+          session.generation === message.generation &&
+          session.streamOpen
+        ) {
+          return;
+        }
         await ensureFrame(session, message.sourceTime, message.generation);
       })
       .catch(() => undefined);
@@ -447,8 +568,22 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     session.abortController.abort();
     session.abortController = new AbortController();
   }
+  // Latest frame request wins — skip superseded jobs on the serial chain.
+  session.pendingFrame = message;
   session.chain = session.chain
-    .then(() => decodeFrame(message))
+    .then(async () => {
+      const latest = session.pendingFrame;
+      if (!latest || latest.requestId !== message.requestId) {
+        post({
+          type: "error",
+          requestId: message.requestId,
+          error: "superseded",
+        });
+        return;
+      }
+      session.pendingFrame = null;
+      await decodeFrame(latest);
+    })
     .catch((error) => {
       post({
         type: "error",

@@ -461,8 +461,16 @@ export function EditorPreview({
               onTogglePlay={() => onPlayingChange(!playing)}
             />
           ) : null}
-          {engine.buffering || speedAudioProcessing ? (
-            <div className="studio-editor-preview-buffering" aria-busy="true" aria-label={speedAudioProcessing && !engine.buffering ? "Processing speed" : "Loading preview"}>
+          {engine.buffering || (speedAudioProcessing && !playing) ? (
+            <div
+              className="studio-editor-preview-buffering"
+              aria-busy="true"
+              aria-label={
+                speedAudioProcessing && !engine.buffering
+                  ? "Processing speed"
+                  : "Loading preview"
+              }
+            >
               <MediaLoadWave size="sm" />
             </div>
           ) : null}

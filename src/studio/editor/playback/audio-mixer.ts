@@ -355,6 +355,26 @@ export class AudioMixer {
     }
   }
 
+  /**
+   * Pause voices for a brief decode hold without tearing down media elements.
+   * Buffer sources must be recreated on sync (cheap); HTML beds keep their src.
+   */
+  softPause(): void {
+    for (const source of this.active.values()) {
+      try {
+        source.node.stop();
+      } catch {
+        /* already stopped */
+      }
+      source.node.disconnect();
+      source.gain.disconnect();
+    }
+    this.active.clear();
+    for (const source of this.activeMedia.values()) {
+      source.element.pause();
+    }
+  }
+
   stopAll(): void {
     for (const source of this.active.values()) {
       try {
