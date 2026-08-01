@@ -9404,12 +9404,12 @@ export function StudioShell({
           background: var(--studio-grid-tile-bg) !important;
           backdrop-filter: saturate(140%) blur(10px);
           -webkit-backdrop-filter: saturate(140%) blur(10px);
-          box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
+          box-shadow: none;
         }
-        .studio-polish.is-studio-mobile .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
-        .studio-polish.is-studio-mobile .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
-        .studio-files-mobile-sheet .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
-        .studio-files-mobile-sheet .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
+        .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)),
+        .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)),
+        .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)),
+        .studio-files-mobile-sheet .desk-file-preview-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)) {
           box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
@@ -9417,13 +9417,13 @@ export function StudioShell({
         .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-files-mobile-sheet .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
           background: var(--desk-transparency-bg) !important;
-          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
           backdrop-filter: none;
           -webkit-backdrop-filter: none;
         }
         .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
           background: color-mix(in srgb, var(--mos-text-bright) 5%, transparent) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         [data-appearance="light"] .studio-polish.is-studio-mobile .desk-file-thumb-peek-wrap,
         [data-appearance="light"] .studio-files-mobile-sheet .desk-file-thumb-peek-wrap {
@@ -12967,6 +12967,7 @@ export function StudioShell({
           border: none;
           border-radius: 10px;
           background: var(--studio-grid-tile-bg) !important;
+          /* Edge lives on peek-wrap (fills this box); keep outer hover ring here */
           box-shadow: none;
           /* Crop every tile to a square; own box-shadow still paints outside */
           overflow: hidden;
@@ -12975,15 +12976,17 @@ export function StudioShell({
             background-color var(--studio-motion-fast) var(--studio-motion-ease),
             box-shadow var(--studio-motion-fast) var(--studio-motion-ease);
         }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)),
+        .studio-polish .desk-file-preview-item .desk-file-thumb-visual:not(:has(.desk-file-thumb-peek-wrap)) {
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
+        }
         .studio-polish .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image) {
           background: var(--desk-transparency-bg) !important;
-          box-shadow: inset 0 0 0 1px var(--desk-transparency-border) !important;
         }
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
-          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap {
@@ -12992,6 +12995,28 @@ export function StudioShell({
           min-height: 0;
           overflow: hidden;
           border-radius: 10px;
+          /* Default border for folders AND files */
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive {
+          position: relative;
+          flex: 1 1 auto;
+          width: 100%;
+          min-height: 0;
+          height: 100%;
+          overflow: hidden;
+        }
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-skeleton,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-skeleton,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-hi,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-hi,
+        .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-lqip,
+        .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-progressive > .desk-file-thumb-lqip {
+          position: absolute !important;
+          inset: 0 !important;
+          width: 100% !important;
+          height: 100% !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,
@@ -13028,7 +13053,6 @@ export function StudioShell({
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
-          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
@@ -13163,7 +13187,6 @@ export function StudioShell({
           .studio-polish .desk-file-preview-item:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
             background: var(--desk-transparency-bg) !important;
             box-shadow:
-              inset 0 0 0 1px var(--desk-transparency-border),
               0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
               0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
           }
@@ -13173,15 +13196,19 @@ export function StudioShell({
           .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-visual:has(.desk-file-thumb-image) {
             background: var(--desk-transparency-bg) !important;
             box-shadow:
-              inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent),
               0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
               0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
+          }
+          .studio-polish .desk-file-grid-item[aria-selected="true"]:hover .desk-file-thumb-peek-wrap,
+          .studio-polish .desk-file-preview-item[aria-selected="true"]:hover .desk-file-thumb-peek-wrap,
+          .studio-polish .desk-file-grid-item.is-selected:hover .desk-file-thumb-peek-wrap,
+          .studio-polish .desk-file-preview-item.is-selected:hover .desk-file-thumb-peek-wrap {
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent) !important;
           }
           .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
           .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
             background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
             box-shadow:
-              inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)),
               0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
               0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
           }
@@ -13211,14 +13238,18 @@ export function StudioShell({
         .studio-polish .desk-file-grid-item.is-selected:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item.is-selected:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-selected)) !important;
-          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual:has(.desk-file-thumb-image) {
           background: var(--desk-transparency-bg) !important;
-          box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent);
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-peek-wrap,
+        .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-peek-wrap,
+        .studio-polish .desk-file-grid-item.is-selected .desk-file-thumb-peek-wrap,
+        .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-peek-wrap {
+          box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mos-accent) 55%, transparent) !important;
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-label,
         .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-label,
