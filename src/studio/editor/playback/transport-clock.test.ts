@@ -38,4 +38,22 @@ describe("TransportClock", () => {
     clock.setDuration(14);
     expect(clock.generation).toBe(generation + 1);
   });
+
+  it("hold freezes time without invalidating decode generation", () => {
+    let now = 5;
+    const clock = new TransportClock(20, () => now);
+    clock.seek(2);
+    clock.play();
+    now = 5.4;
+    const generation = clock.generation;
+    clock.hold();
+    expect(clock.playing).toBe(false);
+    expect(clock.currentTime()).toBeCloseTo(2.4);
+    expect(clock.generation).toBe(generation);
+    now = 6;
+    clock.play();
+    now = 6.2;
+    expect(clock.currentTime()).toBeCloseTo(2.6);
+    expect(clock.generation).toBe(generation);
+  });
 });

@@ -507,13 +507,14 @@ export function usePlaybackEngine(args: {
         },
         onBuffering: (value) => {
           if (value && clock.playing) {
-            clock.pause();
+            // Soft freeze — do not pause() (generation bump wipes decoder cache).
+            clock.hold();
             audio.stopAll();
             resumeAfterBuffer = true;
           } else if (!value && resumeAfterBuffer && playingRef.current) {
             resumeAfterBuffer = false;
             clock.play();
-            // Beds were stopped with the buffer pause — restart once video resumes.
+            // Beds were stopped with the buffer hold — restart once video resumes.
             const runtime = runtimeRef.current;
             if (runtime) {
               const time = clock.currentTime();

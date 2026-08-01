@@ -318,9 +318,11 @@ async function ensureFrame(
   if (!frame) {
     // flush() puts VideoDecoder into "key chunk required" state. Every new
     // batch must therefore reset/configure and begin at a sync sample.
+    // Decode farther ahead so 1.5×–2× clip speed (sourceTime advances faster
+    // than timeline) stays on cache hits instead of keyframe-seeking each tick.
     decoder = configureSessionDecoder(session);
     const first = session.demuxer.precedingSyncIndex(targetIndex);
-    const last = Math.min(track.samples.length - 1, targetIndex + 8);
+    const last = Math.min(track.samples.length - 1, targetIndex + 24);
     for (let index = first; index <= last; index += 1) {
       const sample = track.samples[index]!;
       const isBatchKey = index === first;

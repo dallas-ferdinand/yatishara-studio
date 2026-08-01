@@ -65,6 +65,20 @@ export class TransportClock {
     return this.snapshot();
   }
 
+  /**
+   * Freeze transport for a decode stall without bumping generation.
+   * Unlike pause(), this keeps in-flight frames and the decoder cache valid —
+   * critical when clip speed > 1× makes sourceTime advance faster and stalls
+   * more often (pause→generation wipe→cold keyframe = sticky playback).
+   */
+  hold(): TransportSnapshot {
+    if (this.running) {
+      this.anchorTimeline = this.currentTime();
+      this.running = false;
+    }
+    return this.snapshot();
+  }
+
   seek(time: number): TransportSnapshot {
     this.anchorTimeline = Math.max(0, Math.min(this.duration, time));
     this.anchorClock = this.now();
