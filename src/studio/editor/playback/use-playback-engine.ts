@@ -23,10 +23,13 @@ import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
 import { clipSpeed } from "../projectContract";
 
-/** Transient decode waits — buffer/underrun, never a red preview banner. */
-function isSoftDecodeFailure(reason: unknown): boolean {
+/** Transient decode waits — buffer/underrun / skip frame, never a red preview banner. */
+export function isSoftDecodeFailure(reason: unknown): boolean {
   const message = reason instanceof Error ? reason.message : String(reason ?? "");
-  return /frame decode timeout/i.test(message);
+  return (
+    /frame decode timeout/i.test(message) ||
+    /no video sample at requested time/i.test(message)
+  );
 }
 
 /** Kick the continuous decode pump for video assets in/near the playhead. */
@@ -245,13 +248,10 @@ class EngineConsumer implements FrameConsumer {
               aheadSec: this.playingRef.current ? 0.75 : 0.5,
             },
           );
-        } catch (reason) {
-          // Underrun / slow keyframe — same as a missing frame: buffer, don't
-          // paint a hard "Frame decode timeout." alert over the preview.
-          if (isSoftDecodeFailure(reason) || this.playingRef.current) {
-            return null;
-          }
-          throw reason;
+        } catch {
+          // Skip broken/slow samples — underrun/buffer; never throw into a
+          // red "Frame decode timeout." overlay.
+          return null;
         }
       }),
     );

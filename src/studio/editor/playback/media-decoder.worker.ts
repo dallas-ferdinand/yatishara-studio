@@ -117,8 +117,8 @@ const MAX_DECODER_SESSIONS = 6;
 const DECODE_CHUNK = 24;
 const DEFAULT_AHEAD_SEC = 0.75;
 const FRAME_WAIT_MS = 2_500;
-/** Playpath wait — short, but not so short a single slow chunk becomes a hard UI error. */
-const PLAY_WAIT_MS = 400;
+/** Playpath wait — short; timeout falls back to nearest good frame, not a banner. */
+const PLAY_WAIT_MS = 500;
 
 function totalCacheBytes(): number {
   let total = 0;
@@ -164,7 +164,11 @@ function evictFrames(session: Session, aroundIndex: number): void {
   }
 }
 
-function nearestFrame(session: Session, targetIndex: number): VideoFrame | null {
+function nearestFrame(
+  session: Session,
+  targetIndex: number,
+  maxDistance = 1,
+): VideoFrame | null {
   const exact = session.frames.get(targetIndex);
   if (exact) return exact;
   let best: VideoFrame | null = null;
@@ -176,7 +180,12 @@ function nearestFrame(session: Session, targetIndex: number): VideoFrame | null 
       distance = nextDistance;
     }
   }
-  return distance <= 1 ? best : null;
+  return distance <= maxDistance ? best : null;
+}
+
+/** Any cached frame closest to target — used to skip broken/slow samples. */
+function nearestFrameAny(session: Session, targetIndex: number): VideoFrame | null {
+  return nearestFrame(session, targetIndex, Number.POSITIVE_INFINITY);
 }
 
 function notifyWaiters(session: Session): void {
@@ -208,6 +217,13 @@ function waitForFrame(
       reject,
       timer: setTimeout(() => {
         session.waiters = session.waiters.filter((item) => item !== waiter);
+        // Never hard-fail the preview over a late sample — hold the closest
+        // good frame (skip the broken/slow one) and keep the pump moving.
+        const fallback = nearestFrameAny(session, waiter.targetIndex);
+        if (fallback) {
+          waiter.resolve(fallback);
+          return;
+        }
         reject(new Error("Frame decode timeout."));
       }, timeoutMs),
     };
@@ -634,7 +650,9 @@ async function ensureFrame(
     await resetDecoder.flush();
     session.streamOpen = false;
     session.decodedThrough = Math.max(session.decodedThrough, last);
-    const frame = nearestFrame(session, targetIndex);
+    // Prefer exact-ish, else any cached frame (skip the bad sample).
+    const frame =
+      nearestFrame(session, targetIndex) ?? nearestFrameAny(session, targetIndex);
     if (!frame) {
       throw error instanceof Error ? error : new Error(String(error));
     }

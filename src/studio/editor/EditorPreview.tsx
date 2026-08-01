@@ -26,7 +26,10 @@ import {
   projectEndTime,
 } from "./editorState";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
-import { usePlaybackEngine } from "./playback/use-playback-engine";
+import {
+  isSoftDecodeFailure,
+  usePlaybackEngine,
+} from "./playback/use-playback-engine";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import { formatMediaTime } from "@/studio/lib/mediaPlayback";
 
@@ -467,7 +470,7 @@ export function EditorPreview({
               <MediaLoadWave size="sm" />
             </div>
           ) : null}
-          {engine.error ? (
+          {engine.error && !isSoftDecodeFailure(engine.error) ? (
             <div className="studio-editor-preview-status is-error" role="alert">
               {engine.error}
             </div>
