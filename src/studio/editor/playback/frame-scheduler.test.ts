@@ -67,14 +67,16 @@ describe("FrameScheduler", () => {
     clock.seek(1);
     clock.play();
     const callbacks: FrameRequestCallback[] = [];
-    let release: (() => void) | null = null;
+    const gate = {
+      release: null as null | ((value: boolean) => void),
+    };
     const scheduler = new FrameScheduler(
       plan,
       clock,
       {
         prepare: () =>
           new Promise<boolean>((resolve) => {
-            release = () => resolve(true);
+            gate.release = resolve;
           }),
         render: () => undefined,
       },
@@ -96,7 +98,7 @@ describe("FrameScheduler", () => {
     nowSeconds = 1;
     // Wall clock advanced while held — timeline must stay put.
     expect(clock.currentTime()).toBeCloseTo(1);
-    release?.();
+    gate.release?.(true);
     await settle();
     expect(clock.playing).toBe(true);
     nowSeconds = 1.2;
