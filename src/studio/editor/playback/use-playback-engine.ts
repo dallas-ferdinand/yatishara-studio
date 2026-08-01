@@ -22,6 +22,10 @@ import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
 import { clipSpeed } from "../projectContract";
+import {
+  DEFAULT_PREVIEW_LOAD_QUALITY,
+  playbackUrlForMedia,
+} from "../previewLoadQuality";
 
 /** Transient decode waits — buffer/underrun / skip frame, never a red preview banner. */
 export function isSoftDecodeFailure(reason: unknown): boolean {

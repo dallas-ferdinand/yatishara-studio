@@ -1433,7 +1433,7 @@
   min-width: 0;
 }
 
-/* Match zoom control plate greys (level-2 / level-3). */
+/* Same shell as .studio-editor-canvas-zoom-controls — plate fill, transparent trigger. */
 .studio-editor-preview-quality {
   display: flex;
   align-items: center;
@@ -1444,28 +1444,28 @@
   overflow: visible;
 }
 
-.studio-editor-preview-quality .studio-editor-preview-quality-select {
+.studio-editor-preview-quality .studio-editor-preview-quality-select,
+.studio-editor-preview-quality .cursor-select-menu {
   min-width: 4.25rem;
+  background: transparent !important;
 }
 
 .studio-editor-preview-quality .cursor-select-trigger {
-  min-height: 24px;
-  height: 24px;
+  min-height: 26px;
+  height: 26px;
   padding-inline: 8px 6px;
-  border: 0;
+  border: 0 !important;
   border-radius: 7px;
-  background: transparent;
+  background: transparent !important;
+  box-shadow: none !important;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--color-cursor-text, var(--mos-text));
 }
 
-.studio-editor-preview-quality .cursor-select-trigger:hover {
-  background: var(--mos-plate-strong, var(--mos-hover));
-}
-
+.studio-editor-preview-quality .cursor-select-trigger:hover,
 .studio-editor-preview-quality .cursor-select-menu.is-open .cursor-select-trigger {
-  background: var(--mos-plate-strong, var(--mos-hover));
+  background: var(--mos-hover, var(--mos-plate)) !important;
 }
 
 .studio-editor-preview-tool {
