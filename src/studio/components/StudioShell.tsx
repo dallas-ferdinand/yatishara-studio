@@ -6056,8 +6056,21 @@ export function StudioShell({
     return rows;
   }
 
-  /** Chat outputs save to the thread's pinned folder, not the explorer browse folder. */
+  /**
+   * Where NEW outputs land: the Files folder you're viewing.
+   * Past assets keep their own folderId from job.saveFolderId — browsing alone
+   * must not retarget them (no auto switchThreadFolder on activeFolder change).
+   */
   function generationSaveFolderId(threadId) {
+    if (
+      activeFolder?._id &&
+      !isTrashView &&
+      !isRecentsView &&
+      activeFolder._id !== TRASH_FOLDER_ID &&
+      activeFolder._id !== RECENTS_FOLDER_ID
+    ) {
+      return activeFolder._id;
+    }
     if (threadId && threads?.length) {
       const linked = threads.find((item) => item._id === threadId)?.linkedFolderId;
       if (linked) return linked;
