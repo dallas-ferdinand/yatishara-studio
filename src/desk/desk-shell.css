@@ -66,6 +66,8 @@
   --cursor-surface-input: color-mix(in srgb, var(--mos-panel) 88%, var(--mos-bg));
   --cursor-border-subtle: var(--mos-border-subtle, var(--mos-border-soft));
   --cursor-border-focus: color-mix(in srgb, var(--mos-accent) 38%, var(--mos-border-subtle, var(--mos-border-soft)));
+  /* Folder tiles / peek cards — darker grey edge than soft chrome hairlines */
+  --desk-folder-edge: color-mix(in srgb, var(--mos-text) 22%, transparent);
   --cursor-shadow-pop: 0 8px 28px rgba(0, 0, 0, 0.48);
   /* Menu shadow: y=0 so the top edge lifts too (down-only offset left the top flat). */
   --cursor-shadow-menu: 0 0 1px rgba(0, 0, 0, 0.4), 0 0 8px rgba(0, 0, 0, 0.28);
@@ -1149,7 +1151,8 @@ select.cursor-select:focus {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--color-cursor-border, var(--mos-border));
+  /* Darker grey edge than soft chrome hairlines — folder peeks need definition */
+  border: 1px solid var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
   border-radius: 8px;
   background: var(--mos-panel);
   box-shadow: none;
@@ -1198,7 +1201,7 @@ select.cursor-select:focus {
   padding: 2px 4px;
   overflow: hidden;
   background-color: var(--mos-panel);
-  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  box-shadow: inset 0 1px 0 var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
   color: var(--mos-text-soft, var(--color-cursor-muted));
   font-size: 10px;
   font-weight: 600;
@@ -1211,7 +1214,7 @@ select.cursor-select:focus {
 [data-appearance="light"] .desk-folder-peek-label {
   background-color: var(--mos-plate, #ececf0);
   color: var(--color-cursor-text);
-  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  box-shadow: inset 0 1px 0 var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
 }
 
 .desk-folder-peek-card--element .desk-folder-peek-label {
@@ -1229,7 +1232,7 @@ select.cursor-select:focus {
   overflow: hidden;
   background-color: var(--mos-panel);
   border: none;
-  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  box-shadow: inset 0 1px 0 var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
   color: var(--mos-text-soft, var(--color-cursor-muted));
   font-size: 10px;
   font-weight: 600;
@@ -1307,7 +1310,7 @@ select.cursor-select:focus {
 [data-appearance="light"] .desk-file-thumb-peek-label {
   background-color: var(--mos-plate, #ececf0);
   color: var(--color-cursor-text);
-  box-shadow: inset 0 1px 0 var(--color-cursor-border-soft, var(--mos-border-soft));
+  box-shadow: inset 0 1px 0 var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
 }
 
 .desk-file-thumb-peek-wrap--element .desk-file-thumb-peek-label {

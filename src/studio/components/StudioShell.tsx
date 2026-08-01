@@ -9406,6 +9406,12 @@ export function StudioShell({
           -webkit-backdrop-filter: saturate(140%) blur(10px);
           box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mos-text-bright) 8%, transparent);
         }
+        .studio-polish.is-studio-mobile .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-polish.is-studio-mobile .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-files-mobile-sheet .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-files-mobile-sheet .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
+        }
         .studio-polish.is-studio-mobile .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish.is-studio-mobile .desk-file-preview-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-files-mobile-sheet .desk-file-grid-item .desk-file-thumb-visual:has(.desk-file-thumb-image),
@@ -12977,6 +12983,7 @@ export function StudioShell({
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap {
@@ -13021,6 +13028,7 @@ export function StudioShell({
         .studio-polish .desk-file-grid-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item:has(.desk-file-thumb-peek-wrap--folder) .desk-file-thumb-visual {
           background: var(--studio-grid-folder-tile-bg, var(--studio-grid-tile-bg)) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
@@ -13172,6 +13180,10 @@ export function StudioShell({
           .studio-polish .desk-file-grid-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual,
           .studio-polish .desk-file-preview-item:has(.desk-file-thumb-folder):hover .desk-file-thumb-visual {
             background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-hover)) !important;
+            box-shadow:
+              inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)),
+              0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, var(--mos-accent)) 62%, transparent),
+              0 4px 12px color-mix(in srgb, #000 16%, transparent) !important;
           }
           .studio-polish .desk-file-grid-item:hover .desk-file-thumb-label,
           .studio-polish .desk-file-preview-item:hover .desk-file-thumb-label {
@@ -13193,6 +13205,13 @@ export function StudioShell({
         .studio-polish .desk-file-preview-item.is-selected .desk-file-thumb-visual {
           background: var(--studio-grid-tile-selected) !important;
           box-shadow: none;
+        }
+        .studio-polish .desk-file-grid-item[aria-selected="true"]:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item[aria-selected="true"]:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-polish .desk-file-grid-item.is-selected:has(.desk-file-thumb-folder) .desk-file-thumb-visual,
+        .studio-polish .desk-file-preview-item.is-selected:has(.desk-file-thumb-folder) .desk-file-thumb-visual {
+          background: var(--studio-grid-folder-tile-hover, var(--studio-grid-tile-selected)) !important;
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
         .studio-polish .desk-file-preview-item[aria-selected="true"] .desk-file-thumb-visual:has(.desk-file-thumb-image),
