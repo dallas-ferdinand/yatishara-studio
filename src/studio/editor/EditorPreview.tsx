@@ -27,7 +27,6 @@ import {
 } from "./editorState";
 import type { EditorClip, EditorMediaItem, EditorProject } from "./types";
 import { usePlaybackEngine } from "./playback/use-playback-engine";
-import { useNaturalSpeedAudio } from "./playback/useNaturalSpeedAudio";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import { formatMediaTime } from "@/studio/lib/mediaPlayback";
 
@@ -99,14 +98,12 @@ export function EditorPreview({
   const activeMedia = activeClip?.assetId
     ? mediaById.get(activeClip.assetId)
     : undefined;
-  const { naturalAudioByClipId, processing: speedAudioProcessing } =
-    useNaturalSpeedAudio(project.clips);
   const engine = usePlaybackEngine({
     project,
     playhead,
     playing,
     mediaById,
-    naturalAudioByClipId,
+    naturalAudioByClipId: undefined,
     width: frame.width,
     height: frame.height,
     onPlayheadChange,
@@ -461,15 +458,11 @@ export function EditorPreview({
               onTogglePlay={() => onPlayingChange(!playing)}
             />
           ) : null}
-          {engine.buffering || (speedAudioProcessing && !playing) ? (
+          {engine.buffering ? (
             <div
               className="studio-editor-preview-buffering"
               aria-busy="true"
-              aria-label={
-                speedAudioProcessing && !engine.buffering
-                  ? "Processing speed"
-                  : "Loading preview"
-              }
+              aria-label="Loading preview"
             >
               <MediaLoadWave size="sm" />
             </div>

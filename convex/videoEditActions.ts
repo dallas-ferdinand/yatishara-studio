@@ -301,7 +301,7 @@ function normalizeVf(
   height: number,
   effects?: ClipEffects,
 ): string {
-  const speedPts = buildSpeedSetptsFilter(clipSpeedFromEffects(effects));
+  // Draft effects.speed is process-on-demand (bake → new asset). Do not setpts here.
   const scale = Number.isFinite(effects?.scale) ? Number(effects?.scale) : 1;
   const panX = Number.isFinite(effects?.x) ? Number(effects?.x) : 0;
   const panY = Number.isFinite(effects?.y) ? Number(effects?.y) : 0;
@@ -312,7 +312,6 @@ function normalizeVf(
   const panPxX = Math.round(panX * width);
   const panPxY = Math.round(panY * height);
   const filters = [
-    ...(speedPts ? [speedPts] : []),
     `scale=${scaledW}:${scaledH}:force_original_aspect_ratio=decrease`,
   ];
   if (Math.abs(rotation) > 0.05) {
@@ -1208,8 +1207,239 @@ export const downloadClipSegment = action({
 
 
 /**
+ * Process-on-demand clip speed: bake trim+speed into a new folder asset.
+ * Timeline then plays the copy at 1× — no live remapping.
+ */
+export const processClipSpeed = action({
+  args: {
+    assetId: v.id("assets"),
+    folderId: v.id("folders"),
+    trimIn: v.number(),
+    trimOut: v.number(),
+    speed: v.number(),
+    mode: v.union(v.literal("video"), v.literal("audio")),
+    filename: v.optional(v.string()),
+  },
+  returns: v.object({
+    assetId: v.id("assets"),
+    durationSec: v.number(),
+    speed: v.number(),
+    kind: v.union(v.literal("video"), v.literal("audio")),
+    name: v.string(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    assetId: Id<"assets">;
+    durationSec: number;
+    speed: number;
+    kind: "video" | "audio";
+    name: string;
+  }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Sign in to process clip speed.");
+    }
+    try {
+      await execFileAsync("ffmpeg", ["-version"]);
+    } catch {
+      throw new Error(
+        "Speed process requires ffmpeg on the Convex action runtime.",
+      );
+    }
+
+    const trimIn = Math.max(0, args.trimIn);
+    const trimOut = Math.max(trimIn + 0.05, args.trimOut);
+    const sourceLen = Math.max(0.05, trimOut - trimIn);
+    const speed = clipSpeedFromEffects({ speed: args.speed });
+    if (isIdentitySpeed(speed)) {
+      throw new Error("Choose a speed other than 1× before processing.");
+    }
+    const durationSec = Math.max(0.05, sourceLen / speed);
+    const naturalAf = buildNaturalSpeedAudioFilters(speed);
+    const speedPts = buildSpeedSetptsFilter(speed);
+
+    const source = await ctx.runQuery(internal.videoEditInternal.getAssetForExport, {
+      userId,
+      assetId: args.assetId,
+    });
+    if (!source?.bunnyPath) {
+      throw new Error("Source media not found.");
+    }
+
+    const expiresUnix = Math.floor(Date.now() / 1000) + 60 * 60;
+    const signedSource = await signBunnyCdnUrl(source.bunnyPath, expiresUnix);
+    const tempDir = await mkdtemp(join(tmpdir(), "studio-speed-process-"));
+    try {
+      const sourcePath = join(tempDir, "source.bin");
+      await downloadToFile(signedSource, sourcePath);
+
+      const audioOnly = args.mode === "audio";
+      const baseName = (args.filename ?? source.name ?? "clip")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^\w.\- ]+/g, " ")
+        .trim()
+        .slice(0, 60) || "clip";
+      const speedLabel = speed.toFixed(2).replace(/\.?0+$/, "");
+      const name = audioOnly
+        ? `${baseName} ${speedLabel}x.wav`
+        : `${baseName} ${speedLabel}x.mp4`;
+      const kind = audioOnly ? ("audio" as const) : ("video" as const);
+      const contentType = audioOnly ? "audio/wav" : "video/mp4";
+      const outPath = join(tempDir, audioOnly ? "out.wav" : "out.mp4");
+
+      if (audioOnly) {
+        const afParts = [
+          naturalAf,
+          "aformat=sample_fmts=s16:channel_layouts=stereo",
+        ].filter(Boolean);
+        const audioArgs = [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-t",
+          String(sourceLen),
+          "-i",
+          sourcePath,
+          "-t",
+          String(durationSec),
+          "-vn",
+        ];
+        if (afParts.length) {
+          audioArgs.push("-af", afParts.join(","));
+        }
+        audioArgs.push(
+          "-acodec",
+          "pcm_s16le",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          outPath,
+        );
+        await execFileAsync("ffmpeg", audioArgs);
+      } else if (await hasAudioStream(sourcePath)) {
+        const vf = speedPts || "null";
+        const af = naturalAf || "anull";
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-t",
+          String(sourceLen),
+          "-i",
+          sourcePath,
+          "-t",
+          String(durationSec),
+          "-vf",
+          vf,
+          "-af",
+          af,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "fast",
+          "-crf",
+          "22",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          "-movflags",
+          "+faststart",
+          outPath,
+        ]);
+      } else {
+        const vfSilent = speedPts || "null";
+        await execFileAsync("ffmpeg", [
+          "-y",
+          "-ss",
+          String(trimIn),
+          "-t",
+          String(sourceLen),
+          "-i",
+          sourcePath,
+          "-f",
+          "lavfi",
+          "-i",
+          "anullsrc=channel_layout=stereo:sample_rate=44100",
+          "-t",
+          String(durationSec),
+          "-vf",
+          vfSilent,
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "fast",
+          "-crf",
+          "22",
+          "-pix_fmt",
+          "yuv420p",
+          "-c:a",
+          "aac",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
+          "-shortest",
+          "-movflags",
+          "+faststart",
+          outPath,
+        ]);
+      }
+
+      const body = await readFile(outPath);
+      if (body.byteLength < 64) {
+        throw new Error("Processed media is empty.");
+      }
+
+      const created = await ctx.runMutation(
+        internal.videoEditInternal.createDerivedMediaAsset,
+        {
+          userId,
+          folderId: args.folderId,
+          name,
+          kind,
+          mimeType: contentType,
+        },
+      );
+      await putObject({
+        path: created.bunnyPath,
+        body,
+        contentType,
+      });
+      await ctx.runMutation(internal.videoEditInternal.finalizeExportAsset, {
+        assetId: created.assetId,
+        byteSize: body.byteLength,
+        durationSeconds: durationSec,
+      });
+
+      return {
+        assetId: created.assetId,
+        durationSec,
+        speed,
+        kind,
+        name,
+      };
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  },
+});
+
+/**
  * Bake trim+natural-speed audio for editor preview (atempo + EQ, no chipmunk).
  * Cached on Bunny by asset/trim/speed key.
+ * @deprecated Prefer processClipSpeed (bake to asset). Kept for older clients.
  */
 export const renderNaturalSpeedAudio = action({
   args: {

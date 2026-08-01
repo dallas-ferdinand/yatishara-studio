@@ -8,8 +8,6 @@ import {
   type EditorTransitionName,
   normalizeEditorTransition,
 } from "./editorEffectContract";
-import { clipSpeedFromEffects } from "./naturalAudioSpeed";
-
 export const DEFAULT_IMAGE_CLIP_SEC = 3;
 export const DEFAULT_MEDIA_CLIP_SEC = 5;
 export const MIN_CLIP_SEC = 0.05;
@@ -142,7 +140,9 @@ export function clipDurationSec(clip: {
   trimOut: number;
   effects?: { speed?: number } | null;
 }): number {
-  return Math.max(MIN_CLIP_SEC, sourceTrimSec(clip) / clipSpeedFromEffects(clip.effects));
+  // Draft effects.speed is process-on-demand only — bake creates a 1× asset.
+  void clip.effects;
+  return sourceTrimSec(clip);
 }
 
 export function normalizeFrameRatio(value: unknown): FrameRatio {

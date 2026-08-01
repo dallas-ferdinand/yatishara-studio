@@ -25,7 +25,7 @@ function clip(
 }
 
 describe("timeline compiler", () => {
-  it("honors effects.speed for timeline duration and source mapping", () => {
+  it("ignores draft effects.speed until Process bakes a new asset", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     const sped: EditorClip = {
       ...clip("a", 0, 2),
@@ -33,9 +33,10 @@ describe("timeline compiler", () => {
     };
     project.clips = [sped];
     const plan = compileTimeline(project);
-    expect(plan.video[0]?.timelineEnd).toBeCloseTo(1);
+    // Draft speed does not shrink the clip or remap sourceTime.
+    expect(plan.video[0]?.timelineEnd).toBeCloseTo(2);
     const mid = sliceAt(plan, 0.5);
-    expect(mid.video[0]?.sourceTime).toBeCloseTo(1);
+    expect(mid.video[0]?.sourceTime).toBeCloseTo(0.5);
   });
 
   it("uses half-open intervals and continuous outgoing timestamps", () => {

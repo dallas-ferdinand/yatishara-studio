@@ -1,7 +1,6 @@
 /** Shared export audio rules — keep preview mute/volume/fade parity here. */
 
 import {
-  buildNaturalSpeedAudioFilters,
   clipSpeedFromEffects,
   isIdentitySpeed,
 } from "./naturalAudioSpeed";
@@ -16,7 +15,10 @@ function sourceTrimSec(
   return Number.isFinite(duration) && duration > 0.05 ? duration : Math.max(0.05, fallback);
 }
 
-/** Timeline duration after CapCut-style speed. */
+/**
+ * Timeline duration for export. Draft effects.speed is ignored —
+ * Process bakes a new asset at 1× before length changes.
+ */
 export function timelineDurationSec(
   clip: {
     trimIn?: number;
@@ -25,14 +27,13 @@ export function timelineDurationSec(
   },
   fallback = 0.05,
 ): number {
-  const source = sourceTrimSec(clip, fallback);
-  const speed = clipSpeedFromEffects(clip.effects);
-  return Math.max(0.05, source / speed);
+  void clip.effects;
+  return sourceTrimSec(clip, fallback);
 }
 
 /**
  * Build ffmpeg -af chain for a video clip's embedded audio.
- * Natural atempo+EQ (when speed ≠ 1) then volume + afade in timeline time.
+ * Volume + afade in timeline time (speed is baked via processClipSpeed).
  */
 export function videoClipAudioFilter(
   clip: {
@@ -54,13 +55,8 @@ export function videoClipAudioFilter(
   );
   const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
   const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
-  const speed = clipSpeedFromEffects(clip.effects);
-  const natural = buildNaturalSpeedAudioFilters(speed);
 
-  const parts: string[] = [];
-  if (natural) parts.push(natural);
-  parts.push("aresample=44100", "aformat=sample_fmts=fltp:channel_layouts=stereo");
-  let af = parts.join(",");
+  let af = "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo";
   if (fadeIn > 0) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
   if (fadeOut > 0) {
     af += `,afade=t=out:st=${Math.max(0, duration - fadeOut)}:d=${fadeOut}:curve=qsin`;
@@ -87,10 +83,7 @@ export function bedClipAudioFilters(
   );
   const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
   const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
-  const speed = clipSpeedFromEffects(clip.effects);
-  const natural = buildNaturalSpeedAudioFilters(speed);
   const parts: string[] = [];
-  if (natural) parts.push(natural);
   if (fadeIn > 0) parts.push(`afade=t=in:st=0:d=${fadeIn}:curve=qsin`);
   if (fadeOut > 0) {
     parts.push(

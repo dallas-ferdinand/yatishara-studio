@@ -11,7 +11,12 @@ import {
   clipSpeedFromEffects,
 } from "../../../convex/lib/naturalAudioSpeed";
 
-export { CLIP_SPEED_MAX, CLIP_SPEED_MIN, clampClipSpeed, clipSpeedFromEffects as clipSpeed };
+export {
+  CLIP_SPEED_MAX,
+  CLIP_SPEED_MIN,
+  clampClipSpeed,
+  clipSpeedFromEffects as clipSpeed,
+};
 
 export const EDITOR_PROJECT_VERSION = 2;
 
@@ -56,12 +61,25 @@ export function sourceTrimSec(clip: { trimIn: number; trimOut: number }): number
   return Math.max(0.05, clip.trimOut - clip.trimIn);
 }
 
+/**
+ * Timeline duration for a clip. Speed is process-on-demand (bake → new asset),
+ * so live `effects.speed` does not remappeduration — only the baked file length does.
+ */
 export function clipDurationSec(clip: {
   trimIn: number;
   trimOut: number;
   effects?: { speed?: number } | null;
 }): number {
-  return Math.max(0.05, sourceTrimSec(clip) / clipSpeedFromEffects(clip.effects));
+  void clip.effects;
+  return sourceTrimSec(clip);
+}
+
+/** Duration after a pending Process at the given draft speed. */
+export function pendingSpeedDurationSec(
+  clip: { trimIn: number; trimOut: number },
+  speed: number,
+): number {
+  return Math.max(0.05, sourceTrimSec(clip) / clampClipSpeed(speed));
 }
 
 export function sortedClipsOnTrack<T extends { trackId: string; startTime: number }>(

@@ -36,7 +36,7 @@ describe("export audio mute / volume / fade", () => {
     expect(af).toContain("afade=t=out:st=3:d=1:curve=qsin");
   });
 
-  it("prepends natural atempo+EQ when sped", () => {
+  it("ignores draft speed on export (Process bakes a 1× asset)", () => {
     const af = videoClipAudioFilter(
       {
         effects: { speed: 1.1 },
@@ -45,8 +45,7 @@ describe("export audio mute / volume / fade", () => {
       },
       false,
     );
-    expect(af).toContain("atempo=1.100000");
-    expect(af).toContain("equalizer=f=3200");
+    expect(af).not.toContain("atempo=");
     expect(af).toContain("aresample=44100");
   });
 });

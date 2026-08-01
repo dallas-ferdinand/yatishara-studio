@@ -31,7 +31,9 @@ export function buildClipMenuItems({ clip, media, canSplit }) {
       const active = Math.abs(current - preset) < 0.001;
       items.push({
         id: `speed:${preset}`,
-        label: active ? `Speed ${preset}× ✓` : `Speed ${preset}×`,
+        label: active
+          ? `Draft speed ${preset}× ✓`
+          : `Draft speed ${preset}×`,
       });
     }
   }

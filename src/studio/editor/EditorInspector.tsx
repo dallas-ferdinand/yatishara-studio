@@ -1,7 +1,11 @@
 // @ts-nocheck
 "use client";
 
+import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { isIdentitySpeed } from "../../../convex/lib/naturalAudioSpeed";
 import {
   AlignCenter,
   AlignJustify,
@@ -63,7 +67,7 @@ import {
   clampClipSpeed,
   clipSpeed,
   normalizeFrameRatio,
-  sourceTrimSec,
+  pendingSpeedDurationSec,
 } from "./projectContract";
 import {
   DEFAULT_EXPORT_RESOLUTION,
@@ -776,7 +780,13 @@ export function EditorInspector({
             </InspectorSection>
           ) : null}
 
-          {showAudio && clip ? <AudioPanel clip={clip} onUpdateClip={onUpdateClip} /> : null}
+          {showAudio && clip ? (
+            <AudioPanel
+              clip={clip}
+              folderId={project.folderId}
+              onUpdateClip={onUpdateClip}
+            />
+          ) : null}
 
           {showVideo && clip ? <TransformPanel clip={clip} onUpdateClip={onUpdateClip} /> : null}
 
@@ -936,11 +946,16 @@ function TransformPanel({ clip, onUpdateClip }) {
 
 const SPEED_PRESETS = [0.75, 1, 1.1, 1.25, 1.5, 2];
 
-function AudioPanel({ clip, onUpdateClip }) {
+function AudioPanel({ clip, folderId, onUpdateClip }) {
+  const processClipSpeed = useAction(api.videoEditActions.processClipSpeed);
+  const [processing, setProcessing] = useState(false);
+  const [processError, setProcessError] = useState(null);
   const effects = clip.effects ?? {};
   const volume = effects.volume ?? 1;
   const speed = clipSpeed(effects);
   const duration = clipDuration(clip);
+  const pendingDuration = pendingSpeedDurationSec(clip, speed);
+  const needsProcess = !isIdentitySpeed(speed) && Boolean(clip.assetId);
   const { fadeIn, fadeOut } = clampAudioFadePair(
     effects.fadeIn ?? 0,
     effects.fadeOut ?? 0,
@@ -960,18 +975,48 @@ function AudioPanel({ clip, onUpdateClip }) {
   };
 
   const setSpeed = (raw) => {
-    const nextSpeed = clampClipSpeed(raw);
-    const nextDuration = Math.max(0.05, sourceTrimSec(clip) / nextSpeed);
-    const fades = clampAudioFadePair(
-      effects.fadeIn ?? 0,
-      effects.fadeOut ?? 0,
-      nextDuration,
-    );
-    patchEffects({
-      speed: nextSpeed,
-      fadeIn: fades.fadeIn,
-      fadeOut: fades.fadeOut,
-    });
+    // Draft only — preview stays 1× until Process bakes a new asset.
+    setProcessError(null);
+    patchEffects({ speed: clampClipSpeed(raw) });
+  };
+
+  const onProcessSpeed = async () => {
+    if (!clip.assetId || !folderId || !needsProcess || processing) return;
+    setProcessing(true);
+    setProcessError(null);
+    try {
+      const result = await processClipSpeed({
+        assetId: clip.assetId as Id<"assets">,
+        folderId: folderId as Id<"folders">,
+        trimIn: clip.trimIn,
+        trimOut: clip.trimOut,
+        speed,
+        mode: clip.kind === "audio" ? "audio" : "video",
+      });
+      const fades = clampAudioFadePair(
+        effects.fadeIn ?? 0,
+        effects.fadeOut ?? 0,
+        result.durationSec,
+      );
+      onUpdateClip(clip.id, {
+        assetId: result.assetId,
+        trimIn: 0,
+        trimOut: result.durationSec,
+        sourceDuration: result.durationSec,
+        effects: {
+          ...effects,
+          speed: 1,
+          fadeIn: fades.fadeIn,
+          fadeOut: fades.fadeOut,
+        },
+      });
+    } catch (reason) {
+      setProcessError(
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   return (
@@ -1011,11 +1056,33 @@ function AudioPanel({ clip, onUpdateClip }) {
             type="button"
             className={`studio-editor-chip${Math.abs(speed - preset) < 0.001 ? " is-active" : ""}`}
             onClick={() => setSpeed(preset)}
+            disabled={processing}
           >
             {preset === 1 ? "1×" : `${preset}×`}
           </button>
         ))}
       </div>
+      {needsProcess ? (
+        <div className="studio-editor-speed-process">
+          <p className="studio-editor-speed-process-hint">
+            Draft {speed.toFixed(2)}× → about {pendingDuration.toFixed(1)}s after Process.
+            Preview stays normal until then.
+          </p>
+          <button
+            type="button"
+            className="studio-editor-primary-btn"
+            disabled={processing || !clip.assetId}
+            onClick={() => void onProcessSpeed()}
+          >
+            {processing ? "Processing…" : "Process speed"}
+          </button>
+          {processError ? (
+            <p className="studio-editor-speed-process-error" role="alert">
+              {processError}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <SliderRow
         label={
           <>

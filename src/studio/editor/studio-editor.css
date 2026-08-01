@@ -933,6 +933,27 @@
   justify-content: center;
 }
 
+.studio-editor-speed-process {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.studio-editor-speed-process-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--color-cursor-muted, var(--mos-muted));
+}
+
+.studio-editor-speed-process-error {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--mos-danger, #c23b3b);
+}
+
 .studio-editor-secondary-btn {
   border: 1px solid #e5e7eb;
   background: var(--mos-hover, #e6e6ec);
