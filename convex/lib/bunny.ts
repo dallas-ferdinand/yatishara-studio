@@ -235,13 +235,29 @@ export const PREVIEW_TRANSFORM: BunnyImageTransform = {
 };
 
 /**
- * Full image views — high width ceiling + quality 100 so Bunny Optimizer Autopilot
+ * Full image views — high width ceiling so Bunny Optimizer Autopilot
  * does not downscale to ~1600px. Bunny will not upscale past the origin.
+ * Quality defaults to 100 (downloads / generation). Studio preview UI can
+ * pass a lower quality (default 60) for faster loads.
  */
 export const FULL_QUALITY_TRANSFORM: BunnyImageTransform = {
   width: 8192,
   quality: 100,
 };
+
+/** Clamp Bunny Optimizer quality to 1–100. */
+export function clampBunnyQuality(quality?: number | null): number {
+  if (quality == null || !Number.isFinite(quality)) return 100;
+  return Math.min(100, Math.max(1, Math.round(quality)));
+}
+
+/** Full-view transform at a chosen JPEG/WebP quality (width ceiling unchanged). */
+export function fullImageTransform(quality = 100): BunnyImageTransform {
+  return {
+    width: 8192,
+    quality: clampBunnyQuality(quality),
+  };
+}
 
 /** Folder peek cards — even smaller. */
 export const PEEK_TRANSFORM: BunnyImageTransform = {
@@ -322,16 +338,25 @@ export async function signBunnyThumbUrl(
   return signBunnyCdnUrl(path, expiresUnix, transform);
 }
 
-/** Sign a full-fidelity image URL (bypass Autopilot downscale). Videos: raw path. */
+/**
+ * Sign a full-view image URL (bypass Autopilot downscale). Videos: raw path.
+ * Optional `quality` (1–100) controls Bunny Optimizer quality; default 100.
+ */
 export async function signBunnyFullUrl(
   path: string,
   expiresUnix: number,
   kind?: string,
+  quality = 100,
 ): Promise<string> {
   if (kind && kind !== "image") {
     return signBunnyCdnUrl(path, expiresUnix);
   }
-  return signBunnyCdnUrl(path, expiresUnix, FULL_QUALITY_TRANSFORM);
+  const q = clampBunnyQuality(quality);
+  return signBunnyCdnUrl(
+    path,
+    expiresUnix,
+    q >= 100 ? FULL_QUALITY_TRANSFORM : fullImageTransform(q),
+  );
 }
 
 function normalizeStoragePath(path: string): string {

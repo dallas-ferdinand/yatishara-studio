@@ -9,7 +9,8 @@ export function isBunnyOptimizedUrl(url: string | null | undefined): boolean {
     const width = Number(parsed.searchParams.get("width") || 0);
     if (width > 0 && width <= THUMB_MAX_WIDTH) return true;
     const quality = Number(parsed.searchParams.get("quality") || 0);
-    // Full reads use quality=100 + a high width ceiling; thumbs use ~58–88.
+    // Full/preview reads use a high width ceiling (quality may be 40–100);
+    // thumbs use width ≤1280 and quality ~28–88.
     if (quality > 0 && quality < 95 && (width <= 0 || width <= THUMB_MAX_WIDTH)) return true;
     return false;
   } catch {

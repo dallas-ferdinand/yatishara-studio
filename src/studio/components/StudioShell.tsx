@@ -80,7 +80,18 @@ import {
   Zap,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, memo } from "react";
+import {
+  createContext,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+  memo,
+} from "react";
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { mobileBackStack } from "@/studio/lib/mobileBackStack";
@@ -506,6 +517,20 @@ const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
 const STUDIO_OPEN_TABS_KEY = "yatishara-studio-open-tabs-v1";
 const STUDIO_COMPOSER_CONTEXTS_KEY = "yatishara-studio-composer-contexts-v1";
+const STUDIO_PREVIEW_LOAD_QUALITY_KEY = "yatishara-studio-preview-load-quality";
+const DEFAULT_PREVIEW_LOAD_QUALITY = 60;
+const PREVIEW_LOAD_QUALITY_VALUES = [40, 60, 80, 100];
+const PREVIEW_LOAD_QUALITY_OPTIONS = PREVIEW_LOAD_QUALITY_VALUES.map((value) => ({
+  value: String(value),
+  label: `${value}%`,
+}));
+const PreviewLoadQualityContext = createContext(DEFAULT_PREVIEW_LOAD_QUALITY);
+
+function readPreviewLoadQuality() {
+  if (typeof window === "undefined") return DEFAULT_PREVIEW_LOAD_QUALITY;
+  const raw = Number(window.localStorage.getItem(STUDIO_PREVIEW_LOAD_QUALITY_KEY));
+  return PREVIEW_LOAD_QUALITY_VALUES.includes(raw) ? raw : DEFAULT_PREVIEW_LOAD_QUALITY;
+}
 
 function isComposerContextTabKey(key) {
   return typeof key === "string" && (key.startsWith("composer:") || key.startsWith("thread:"));
@@ -1179,6 +1204,14 @@ export function StudioShell({
   const [imageQuality, setImageQuality] = useState(
     () => initialComposerCtx.imageQuality ?? "medium",
   );
+  const [previewLoadQuality, setPreviewLoadQuality] = useState(readPreviewLoadQuality);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      STUDIO_PREVIEW_LOAD_QUALITY_KEY,
+      String(previewLoadQuality),
+    );
+  }, [previewLoadQuality]);
   const [resolution, setResolution] = useState(
     () => initialComposerCtx.resolution ?? "1280x720",
   );
@@ -2249,7 +2282,10 @@ export function StudioShell({
       ) {
         queries[`element-sheet:${attachment.id}`] = {
           query: api.assets.signedReadUrl,
-          args: { assetId: attachment.sheetAsset.studioId, expiresUnix: assetUrlExpiresUnix },
+          args: {
+            assetId: attachment.sheetAsset.studioId,
+            expiresUnix: assetUrlExpiresUnix,
+          },
         };
       }
     }
@@ -2550,6 +2586,7 @@ export function StudioShell({
       ? {
           assetId: activeStyleSheet.sheetAssetId,
           expiresUnix: assetUrlExpiresUnix,
+          quality: 100,
         }
       : "skip",
   );
@@ -4997,6 +5034,7 @@ export function StudioShell({
       const url = await convex.query(api.assets.signedReadUrl, {
         assetId: asset.assetId,
         expiresUnix,
+        ...(asset.kind === "image" ? { quality: 100 } : {}),
       });
       if (url) inputs.push({ kind: asset.kind, url, mimeType: asset.mimeType });
     }
@@ -6284,18 +6322,12 @@ export function StudioShell({
         throw new Error(entitlement.reason ?? "Content generation is not available right now.");
       }
 
-      let referenceUrl = fullQualityUrl(
-        fullEntry.mediaUrl,
-        attachment.mediaUrl,
-        poolAsset?.signedReadUrl,
-        poolAsset?.mediaUrl,
-      );
-      if (!referenceUrl || !/^https?:\/\//i.test(referenceUrl)) {
-        referenceUrl = await convex.query(api.assets.signedReadUrl, {
-          assetId: attachment.studioId,
-          expiresUnix: assetUrlExpiresUnix,
-        });
-      }
+      // Always re-sign at 100% — preview URLs may be lower quality for faster loads.
+      const referenceUrl = await convex.query(api.assets.signedReadUrl, {
+        assetId: attachment.studioId,
+        expiresUnix: assetUrlExpiresUnix,
+        quality: 100,
+      });
       if (!referenceUrl || !/^https?:\/\//i.test(referenceUrl)) {
         throw new Error("Could not load this image for upscale.");
       }
@@ -20253,6 +20285,23 @@ export function StudioShell({
             onCommitTabRename={commitTabRename}
             disableDrag={isMobile}
           />
+          {!isMobile ? (
+            <div className="studio-preview-quality-center">
+              <CursorSelect
+                value={String(previewLoadQuality)}
+                options={PREVIEW_LOAD_QUALITY_OPTIONS}
+                onChange={(next) => {
+                  const parsed = Number(next);
+                  if (PREVIEW_LOAD_QUALITY_VALUES.includes(parsed)) {
+                    setPreviewLoadQuality(parsed);
+                  }
+                }}
+                ariaLabel="Preview load quality"
+                align="start"
+                className="studio-preview-quality-select"
+              />
+            </div>
+          ) : null}
           {feedModeMenuOpen && typeof document !== "undefined"
             ? createPortal(
                 <div
@@ -20486,6 +20535,7 @@ export function StudioShell({
               />
             </div>
           ) : null}
+          <PreviewLoadQualityContext.Provider value={previewLoadQuality}>
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
@@ -20694,6 +20744,7 @@ export function StudioShell({
                   }
             }
           />
+          </PreviewLoadQualityContext.Provider>
         </section>
         {typeof activeTab === "string" &&
         (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) ? (
@@ -27090,25 +27141,55 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
 }
 
 function StudioAssetPreview({ entry }) {
+  const convex = useConvex();
+  const previewLoadQuality = useContext(PreviewLoadQualityContext);
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const needsFullSignedRead =
     Boolean(entry.studioId) &&
     (!entry.mediaUrl || isBunnyOptimizedUrl(entry.mediaUrl));
+  const needsImagePreviewSign = Boolean(entry.studioId) && kind === "image";
   const signedMediaUrl = useQuery(
     api.assets.signedReadUrl,
-    needsFullSignedRead
-      ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix }
-      : "skip",
+    needsImagePreviewSign
+      ? {
+          assetId: entry.studioId,
+          expiresUnix: previewExpiresUnix,
+          quality: previewLoadQuality,
+        }
+      : needsFullSignedRead
+        ? { assetId: entry.studioId, expiresUnix: previewExpiresUnix }
+        : "skip",
   );
   const mediaUrl =
-    fullQualityUrl(signedMediaUrl, entry.mediaUrl) ??
-    signedMediaUrl ??
-    entry.mediaUrl;
+    kind === "image"
+      ? (signedMediaUrl ?? entry.mediaUrl)
+      : (fullQualityUrl(signedMediaUrl, entry.mediaUrl) ??
+        signedMediaUrl ??
+        entry.mediaUrl);
   const thumbUrl =
     thumbnailDisplayUrl(entry.thumbnailUrl, entry.thumbnailLqipUrl) ?? mediaUrl;
   const videoPosterUrl = isVideoFileUrl(thumbUrl) ? undefined : thumbUrl;
   const downloadAsset = () => {
+    if (kind === "image" && entry.studioId) {
+      void (async () => {
+        try {
+          const url = await convex.query(api.assets.signedReadUrl, {
+            assetId: entry.studioId,
+            expiresUnix: Math.floor(Date.now() / 1000) + 60 * 60,
+            quality: 100,
+          });
+          if (url) {
+            await downloadMediaUrl(url, entry.name ?? "download");
+            return;
+          }
+        } catch {
+          /* fall through to preview URL */
+        }
+        if (mediaUrl) await downloadMediaUrl(mediaUrl, entry.name ?? "download");
+      })();
+      return;
+    }
     if (!mediaUrl) return;
     void downloadMediaUrl(mediaUrl, entry.name ?? "download");
   };
@@ -30640,6 +30721,7 @@ async function downloadStudioEntry(entry, convex, expiresUnix) {
         url = await convex.query(api.assets.signedReadUrl, {
           assetId,
           expiresUnix: expiresUnix ?? Math.floor(Date.now() / 1000) + 60 * 60,
+          quality: 100,
         });
       }
     } catch {

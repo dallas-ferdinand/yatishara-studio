@@ -270,6 +270,8 @@ export const signedReadUrl = authedQuery({
   args: {
     assetId: v.id("assets"),
     expiresUnix: v.number(),
+    /** Bunny Optimizer quality 1–100 for images. Default 100 (downloads / gen). */
+    quality: v.optional(v.number()),
   },
   returns: v.string(),
   handler: async (ctx, args) => {
@@ -277,7 +279,12 @@ export const signedReadUrl = authedQuery({
     if (!asset.bunnyPath) {
       throw new Error("Asset has no Bunny path");
     }
-    return await signBunnyFullUrl(asset.bunnyPath, args.expiresUnix, asset.kind);
+    return await signBunnyFullUrl(
+      asset.bunnyPath,
+      args.expiresUnix,
+      asset.kind,
+      args.quality,
+    );
   },
 });
 
