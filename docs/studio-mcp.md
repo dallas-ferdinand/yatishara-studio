@@ -116,7 +116,7 @@ Never pass raw upload refs to video/image generation for a built element — use
 
 ## Style Sheets + direct handoff
 
-**Direct (default for cartoon-ad-production):**
+**Direct (default for verbatim prompts; former cartoon-ad-production default):**
 
 ```json
 { "skipPromptEnhancement": true }
@@ -136,9 +136,9 @@ Element sheets: `stylePresetSlug: unstyled` on `studio_generate_element_sheet`.
 
 Prop sheets: prefer `studio_generate_element_sheet` over ad-hoc image gen.
 
-**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `.cursor/skills/cartoon-ad-production/references/start-frame-workflow.md`.
+**Video with people:** two steps per shot — `studio_generate_image` (storyboard → `startFrameAssetId`) then `studio_generate_video` with that ID. No `scene` element type. See `archive/2026-08-01-cartoon-ad-production/references/start-frame-workflow.md` (archived skill; Assistance / direct gen is the live path).
 
-Budget: `studio_estimate_batch` (alias `studio_estimate_production`) before `plan` mode budget approval.
+Budget: `studio_estimate_batch` (alias `studio_estimate_production`) before large paid runs.
 
 ## vs Higgsfield
 

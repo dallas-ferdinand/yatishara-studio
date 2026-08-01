@@ -218,7 +218,7 @@ export const ELEMENT_PRODUCTION_GUIDE = {
     "VIDEO storyboard (studio_generate_image): all referenceElementIds — compose cast + props + locations into one still",
     "VIDEO clip (studio_generate_video): startFrameAssetId required when people on camera; prop/location sheets as [Image N] refs only; character sheets NOT attached — identity lives in start frame + prompt",
     "No scene element type — start frame is a per-shot asset, not a registry element",
-    "Direct handoff: stylePreset unstyled + skipPromptEnhancement true on studio_generate_image and studio_generate_video — NO Flash/GPT rewrite; prompts reach Seedance/GPT Image 2 verbatim (see direct-prompt-handoff.md in cartoon-ad-production skill)",
+    "Direct handoff: stylePreset unstyled + skipPromptEnhancement true on studio_generate_image and studio_generate_video — NO Flash/GPT rewrite; prompts reach Seedance/GPT Image 2 verbatim (see archive/2026-08-01-cartoon-ad-production/references/direct-prompt-handoff.md)",
     "stylePresetSlug on studio_generate_element_sheet — unstyled|raw (photoreal sheet, no cartoon stylization) or toon-prime|toon-adult|toon-surreal|toon-family|toon-cgi|toon-neon-idol from production bible",
     "Visually inspect sheetUrl after build before production video",
   ],
