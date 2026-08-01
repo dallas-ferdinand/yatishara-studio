@@ -98,7 +98,7 @@ describe("FrameScheduler", () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.duration = 5;
     const plan = compileTimeline(project);
-    let nowSeconds = 0;
+    const nowSeconds = 0;
     const clock = new TransportClock(5, () => nowSeconds);
     clock.seek(1);
     clock.play();
