@@ -345,17 +345,17 @@ function FolderPeekStack({ items, size = "grid" }) {
           className={`desk-folder-peek-card desk-folder-peek-card--${index}${item.kind === "element" ? " desk-folder-peek-card--element" : ""}`}
         >
           <div className="desk-folder-peek-card-media">
-            {item.thumbnailUrl ? (
-              <ProgressiveThumb
-                src={item.thumbnailUrl}
-                lqipSrc={item.thumbnailLqipUrl}
-                eager={eager && index === 0}
-              />
-            ) : item.kind === "audio" || item.icon === "music" ? (
+            {item.kind === "audio" || item.icon === "music" ? (
               <AudioWaveThumb
                 seedKey={item.label ?? `peek-audio-${index}`}
                 barCount={size === "preview" ? 22 : 16}
                 className="desk-file-thumb-audio--peek"
+              />
+            ) : item.thumbnailUrl ? (
+              <ProgressiveThumb
+                src={item.thumbnailUrl}
+                lqipSrc={item.thumbnailLqipUrl}
+                eager={eager && index === 0}
               />
             ) : (
               <span className="desk-folder-peek-icon">

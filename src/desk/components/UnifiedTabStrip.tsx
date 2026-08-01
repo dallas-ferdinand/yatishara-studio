@@ -17,7 +17,22 @@ import {
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { workspaceTabIcon } from "@/desk/lib/file-kind";
 import { displayEntryPath } from "@/desk/lib/display-path";
+import {
+  orbSeedForVoice,
+  StudioOrbAvatar,
+} from "@/studio/components/StudioOrbPlayButton";
 import { TabContextMenu, tabCanRename } from "./TabContextMenu";
+
+function tabAudioOrbSeed(tab) {
+  if (typeof tab?.previewOrbSeed === "number" && Number.isFinite(tab.previewOrbSeed)) {
+    return tab.previewOrbSeed;
+  }
+  return orbSeedForVoice(String(tab?.key ?? "audio"), String(tab?.title ?? ""));
+}
+
+function isAudioTab(tab) {
+  return tab?.previewKind === "audio" || tab?.kind === "audio";
+}
 
 function tabFromKey(tabs, key) {
   return (tabs ?? []).find((t) => t.key === key) ?? null;
@@ -76,6 +91,7 @@ function stripTabsEqual(prev, next) {
       a[i].tabSignal !== b[i].tabSignal ||
       a[i].previewUrl !== b[i].previewUrl ||
       a[i].previewKind !== b[i].previewKind ||
+      a[i].previewOrbSeed !== b[i].previewOrbSeed ||
       a[i].studioKind !== b[i].studioKind ||
       a[i].previewInitials !== b[i].previewInitials ||
       a[i].previewAvatarStyle?.background !== b[i].previewAvatarStyle?.background ||
@@ -744,11 +760,20 @@ function UnifiedTabStripInner({
             onTransitionEnd={onGhostSettleEnd}
             aria-hidden
           >
-            <Icon
-              name={workspaceTabIcon(ghostTab)}
-              size={13}
-              className="text-cursor-muted shrink-0"
-            />
+            {isAudioTab(ghostTab) ? (
+              <span className="cursor-unified-tab-preview is-audio shrink-0" aria-hidden="true">
+                <StudioOrbAvatar
+                  seed={tabAudioOrbSeed(ghostTab)}
+                  className="cursor-unified-tab-audio-orb"
+                />
+              </span>
+            ) : (
+              <Icon
+                name={workspaceTabIcon(ghostTab)}
+                size={13}
+                className="text-cursor-muted shrink-0"
+              />
+            )}
             <span className="cursor-unified-tab-label">
               {ghostTab.kind === "file" && ghostTab.dirty ? "• " : ""}
               {ghostTab.title}
@@ -819,8 +844,9 @@ function UnifiedTabStripInner({
             tab.status === "error");
         const active = tab.key === activeKey;
         const previewUrl = tab.previewUrl;
-        const showPreview = Boolean(previewUrl || tab.previewInitials);
-        const previewOverlayIcon = tabPreviewOverlayIcon(tab);
+        const audioTab = isAudioTab(tab);
+        const showPreview = Boolean(previewUrl || tab.previewInitials || audioTab);
+        const previewOverlayIcon = audioTab ? null : tabPreviewOverlayIcon(tab);
         return (
           <div
             key={tab.key}
@@ -891,7 +917,17 @@ function UnifiedTabStripInner({
               onSelect(tab.key);
             }}
           >
-            {tab.previewUrl ? (
+            {audioTab ? (
+              <span
+                className="cursor-unified-tab-preview is-audio shrink-0 pointer-events-none"
+                aria-hidden="true"
+              >
+                <StudioOrbAvatar
+                  seed={tabAudioOrbSeed(tab)}
+                  className="cursor-unified-tab-audio-orb"
+                />
+              </span>
+            ) : tab.previewUrl ? (
               <span className="cursor-unified-tab-preview shrink-0 pointer-events-none" aria-hidden="true">
                 {tab.previewKind === "video" ? (
                   <video src={tab.previewUrl} muted playsInline preload="metadata" />

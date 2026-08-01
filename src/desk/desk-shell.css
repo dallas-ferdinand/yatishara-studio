@@ -8248,6 +8248,20 @@ textarea.cursor-input {
   border: 0;
   background: color-mix(in srgb, var(--color-cursor-panel) 72%, transparent);
 }
+/* Voiceover / audio tabs — ElevenLabs Orb (same as Voices picker), not <img>. */
+.cursor-unified-tab-preview.is-audio {
+  border-radius: 999px;
+  overflow: visible;
+  background: transparent;
+}
+.cursor-unified-tab-preview.is-audio .cursor-unified-tab-audio-orb.studio-orb-play,
+.cursor-unified-tab-preview.is-audio .studio-orb-play {
+  width: 18px;
+  height: 18px;
+}
+.cursor-unified-tab-preview.is-audio .studio-orb-frame {
+  padding: 1px;
+}
 .cursor-unified-tab.has-preview .cursor-unified-tab-label {
   max-width: 7.5rem;
 }

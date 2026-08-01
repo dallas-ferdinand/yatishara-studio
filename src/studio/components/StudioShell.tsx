@@ -18413,6 +18413,29 @@ export function StudioShell({
           border-radius: 8px;
           overflow: hidden;
         }
+        .studio-history-chip--audio {
+          width: 28px;
+          height: 28px;
+          min-width: 28px;
+          padding: 0;
+          border-radius: 999px;
+          overflow: visible;
+          display: inline-grid;
+          place-items: center;
+        }
+        .studio-history-chip--audio .studio-history-chip-audio-orb.studio-orb-play,
+        .studio-history-chip--audio .studio-orb-play {
+          width: 22px;
+          height: 22px;
+        }
+        .studio-history-chip--audio .studio-orb-frame {
+          padding: 1px;
+        }
+        .studio-asset-pick-selected-thumb .studio-asset-pick-audio-orb.studio-orb-play,
+        .studio-asset-pick-selected-thumb .studio-orb-play {
+          width: 28px;
+          height: 28px;
+        }
         .studio-history-chip-media {
           display: block;
           width: 28px;
@@ -20140,9 +20163,14 @@ export function StudioShell({
                         className="studio-asset-pick-selected-thumb"
                         title={item.name}
                       >
-                        {thumb ? (
+                        {thumb && item.kind !== "audio" ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={thumb} alt="" />
+                        ) : item.kind === "audio" ? (
+                          <StudioOrbAvatar
+                            seed={orbSeedForVoice(String(item._id), item.name)}
+                            className="studio-asset-pick-audio-orb"
+                          />
                         ) : item.kind === "video" ? (
                           <Video aria-hidden="true" />
                         ) : (
@@ -30545,14 +30573,19 @@ function assetToEntry(asset) {
     kindLabel: asset.kind === "image" ? "Image" : asset.kind === "video" ? "Video" : asset.kind === "audio" ? "Audio" : "Content",
   });
   const mediaUrl = fullQualityUrl(asset.signedReadUrl, asset.mediaUrl);
-  const thumbnailUrl = thumbnailDisplayUrl(
-    asset.signedThumbnailUrl,
-    asset.thumbnailUrl,
-    asset.previewUrl,
-    mediaUrl,
-    asset.signedReadUrl,
-    asset.mediaUrl,
-  );
+  // Audio has no image poster — never fall back to the .mp3/.m4a URL (tabs
+  // would render <img src=audio> → browser broken-landscape icon).
+  const thumbnailUrl =
+    asset.kind === "audio"
+      ? thumbnailDisplayUrl(asset.signedThumbnailUrl, asset.thumbnailUrl)
+      : thumbnailDisplayUrl(
+          asset.signedThumbnailUrl,
+          asset.thumbnailUrl,
+          asset.previewUrl,
+          mediaUrl,
+          asset.signedReadUrl,
+          asset.mediaUrl,
+        );
   return {
     type: "file",
     name,
@@ -30975,6 +31008,25 @@ function tabDescriptor({
   }
   const entry = findEntryByTab(key, { assets, documents, videoEdits, elements, snapshots });
   if (entry) {
+    if (entry.kind === "audio") {
+      const title = safeEntryTitle(entry);
+      return {
+        key,
+        kind: "file",
+        title,
+        path: entry.path,
+        displayPath: entry.displayPath ?? displayWorkspacePath(entry.path),
+        ext: entry.ext,
+        studioKind: entry.studioKind,
+        elementType: entry.elementType,
+        previewKind: "audio",
+        previewOrbSeed: orbSeedForVoice(
+          String(entry.studioId ?? entry.path ?? key),
+          title,
+        ),
+        status: "ready",
+      };
+    }
     const previewUrl =
       (typeof entry.thumbnailUrl === "string" && entry.thumbnailUrl) ||
       entry.sheetAsset?.thumbnailUrl ||

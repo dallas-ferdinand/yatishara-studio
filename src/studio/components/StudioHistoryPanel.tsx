@@ -23,6 +23,10 @@ import {
   readStudioLive,
 } from "@/studio/lib/studioLiveCache";
 import { markStudioPaint } from "@/studio/lib/studioPaintMarks";
+import {
+  orbSeedForVoice,
+  StudioOrbAvatar,
+} from "@/studio/components/StudioOrbPlayButton";
 
 function formatHistoryWhen(ts) {
   const diff = Date.now() - ts;
@@ -134,27 +138,46 @@ function HistoryThreadCard({ thread, active, onSelect }) {
         ) : null}
         {chips.length || thumbs.length ? (
           <span className="studio-history-item-chips">
-            {thumbs.map((thumb) => (
-              <span key={thumb._id} className="studio-history-chip studio-history-chip--image" title="Result">
-                {thumb.kind === "video" || isVideoThumbUrl(thumb.thumbnailUrl) ? (
-                  <video
-                    src={thumb.thumbnailUrl}
-                    className="studio-history-chip-media"
-                    muted
-                    playsInline
-                    preload="metadata"
+            {thumbs.map((thumb) =>
+              thumb.kind === "audio" ? (
+                <span
+                  key={thumb._id}
+                  className="studio-history-chip studio-history-chip--audio"
+                  title="Audio"
+                >
+                  <StudioOrbAvatar
+                    seed={orbSeedForVoice(String(thumb._id), "audio")}
+                    className="studio-history-chip-audio-orb"
                   />
-                ) : (
-                  <img
-                    src={thumb.thumbnailUrl}
-                    alt=""
-                    className="studio-history-chip-media"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                )}
-              </span>
-            ))}
+                </span>
+              ) : (
+                <span
+                  key={thumb._id}
+                  className="studio-history-chip studio-history-chip--image"
+                  title="Result"
+                >
+                  {thumb.kind === "video" || isVideoThumbUrl(thumb.thumbnailUrl) ? (
+                    <video
+                      src={thumb.thumbnailUrl}
+                      className="studio-history-chip-media"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : thumb.thumbnailUrl ? (
+                    <img
+                      src={thumb.thumbnailUrl}
+                      alt=""
+                      className="studio-history-chip-media"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <Music className="studio-history-chip-icon" aria-hidden="true" />
+                  )}
+                </span>
+              ),
+            )}
             {chips.map((chip, index) => (
               <HistoryChip key={`${chip.label}-${index}`} chip={chip} />
             ))}
