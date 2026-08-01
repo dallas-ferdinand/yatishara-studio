@@ -8020,24 +8020,6 @@ textarea.cursor-input {
   z-index: 240;
   /* isolation:isolate creates a containing group and blanks backdrop-filter glass */
   isolation: auto;
-  overflow: visible;
-}
-.studio-preview-quality-center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 255;
-  pointer-events: auto;
-}
-.studio-preview-quality-center .studio-preview-quality-select {
-  min-width: 4.5rem;
-}
-.studio-preview-quality-center .cursor-select-trigger {
-  min-height: 28px;
-  padding-inline: 8px 6px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 .cursor-workspace-tools {
   position: relative;

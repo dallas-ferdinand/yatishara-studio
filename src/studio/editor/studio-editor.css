@@ -1386,9 +1386,9 @@
 }
 
 .studio-editor-preview-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
   height: var(--cursor-head-h, 32px);
@@ -1398,6 +1398,22 @@
   box-sizing: border-box;
   border-bottom: 1px solid var(--color-cursor-border-soft, var(--mos-border));
   background: var(--mos-panel, var(--mos-bg));
+  overflow: visible;
+}
+
+.studio-editor-preview-head-left {
+  justify-self: start;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.studio-editor-preview-head-center {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
 }
 
 .studio-editor-preview-tools {
@@ -1410,10 +1426,46 @@
 .studio-editor-preview-head-right {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
-  margin-left: auto;
+  justify-self: end;
+  min-width: 0;
+}
+
+/* Match zoom control plate greys (level-2 / level-3). */
+.studio-editor-preview-quality {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  border: 1px solid var(--color-cursor-border-soft, var(--mos-border));
+  border-radius: 8px;
+  background: var(--mos-plate, var(--mos-bg));
+  overflow: visible;
+}
+
+.studio-editor-preview-quality .studio-editor-preview-quality-select {
+  min-width: 4.25rem;
+}
+
+.studio-editor-preview-quality .cursor-select-trigger {
+  min-height: 24px;
+  height: 24px;
+  padding-inline: 8px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-cursor-text, var(--mos-text));
+}
+
+.studio-editor-preview-quality .cursor-select-trigger:hover {
+  background: var(--mos-plate-strong, var(--mos-hover));
+}
+
+.studio-editor-preview-quality .cursor-select-menu.is-open .cursor-select-trigger {
+  background: var(--mos-plate-strong, var(--mos-hover));
 }
 
 .studio-editor-preview-tool {

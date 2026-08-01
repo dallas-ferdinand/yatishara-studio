@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CursorSelect } from "@/desk/components/CursorSelect";
+import {
+  DEFAULT_PREVIEW_LOAD_QUALITY,
+  PREVIEW_LOAD_QUALITY_EVENT,
+  PREVIEW_LOAD_QUALITY_OPTIONS,
+  isPreviewLoadQuality,
+  readPreviewLoadQuality,
+  writePreviewLoadQuality,
+  type PreviewLoadQuality,
+} from "./previewLoadQuality";
 import {
   FastForward,
   Hand,
@@ -32,6 +42,30 @@ import {
 } from "./playback/use-playback-engine";
 import { MediaLoadWave } from "@/studio/components/media-load-frame";
 import { formatMediaTime } from "@/studio/lib/mediaPlayback";
+
+
+function subscribePreviewLoadQuality(onStoreChange: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const onChange = () => onStoreChange();
+  window.addEventListener("storage", onChange);
+  window.addEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
+  };
+}
+
+function usePreviewLoadQuality(): [
+  PreviewLoadQuality,
+  (next: PreviewLoadQuality) => void,
+] {
+  const quality = useSyncExternalStore(
+    subscribePreviewLoadQuality,
+    readPreviewLoadQuality,
+    () => DEFAULT_PREVIEW_LOAD_QUALITY,
+  );
+  return [quality, writePreviewLoadQuality];
+}
 
 type CanvasTool = "select" | "pan";
 
@@ -68,6 +102,7 @@ export function EditorPreview({
   const [viewportPan, setViewportPan] = useState({ x: 0, y: 0 });
   const [canvasTool, setCanvasTool] = useState<CanvasTool>("select");
   const [zoomDraft, setZoomDraft] = useState<string | null>(null);
+  const [previewLoadQuality, setPreviewLoadQuality] = usePreviewLoadQuality();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [previewVolume, setPreviewVolume] = useState(0.85);
   const [previewMuted, setPreviewMuted] = useState(false);
@@ -107,6 +142,7 @@ export function EditorPreview({
     playing,
     mediaById,
     naturalAudioByClipId: undefined,
+    previewLoadQuality,
     width: frame.width,
     height: frame.height,
     onPlayheadChange,
@@ -229,27 +265,48 @@ export function EditorPreview({
       className={`studio-editor-preview${isFullscreen ? " is-fullscreen" : ""}${panMode ? " is-pan-tool" : ""}`}
     >
       <header className="studio-editor-preview-head">
-        <div className="studio-editor-preview-tools" role="group" aria-label="Canvas tool">
-          <button
-            type="button"
-            className={`studio-editor-preview-tool${canvasTool === "select" ? " is-active" : ""}`}
-            aria-pressed={canvasTool === "select"}
-            title="Select — click clips on the canvas"
-            aria-label="Select tool"
-            onClick={() => setCanvasTool("select")}
+        <div className="studio-editor-preview-head-left">
+          <div className="studio-editor-preview-tools" role="group" aria-label="Canvas tool">
+            <button
+              type="button"
+              className={`studio-editor-preview-tool${canvasTool === "select" ? " is-active" : ""}`}
+              aria-pressed={canvasTool === "select"}
+              title="Select — click clips on the canvas"
+              aria-label="Select tool"
+              onClick={() => setCanvasTool("select")}
+            >
+              <MousePointer2 size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`studio-editor-preview-tool${canvasTool === "pan" ? " is-active" : ""}`}
+              aria-pressed={canvasTool === "pan"}
+              title="Pan — drag to move the canvas view"
+              aria-label="Pan tool"
+              onClick={() => setCanvasTool("pan")}
+            >
+              <Hand size={14} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="studio-editor-preview-head-center">
+          <div
+            className="studio-editor-preview-quality"
+            title="Preview load quality — lower loads faster (720p); higher uses 1080p when available"
           >
-            <MousePointer2 size={14} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={`studio-editor-preview-tool${canvasTool === "pan" ? " is-active" : ""}`}
-            aria-pressed={canvasTool === "pan"}
-            title="Pan — drag to move the canvas view"
-            aria-label="Pan tool"
-            onClick={() => setCanvasTool("pan")}
-          >
-            <Hand size={14} aria-hidden="true" />
-          </button>
+            <CursorSelect
+              value={String(previewLoadQuality)}
+              options={PREVIEW_LOAD_QUALITY_OPTIONS}
+              onChange={(next) => {
+                const parsed = Number(next);
+                if (isPreviewLoadQuality(parsed)) setPreviewLoadQuality(parsed);
+              }}
+              ariaLabel="Preview load quality"
+              align="start"
+              className="studio-editor-preview-quality-select"
+            />
+          </div>
         </div>
 
         <div className="studio-editor-preview-head-right">

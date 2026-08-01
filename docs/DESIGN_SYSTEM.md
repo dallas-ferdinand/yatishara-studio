@@ -721,4 +721,4 @@ Update memory when you change a rule here:
 - **807** — Landing auth embeds in content; dark Sign in pill; Continue = flat dark (not 3D green).
 - Button/chip heights — profile compact actions **28px** / chrome heads **32px** / form primaries 34–36px (`docs/DESIGN_SYSTEM.md` §5b).
 - **668** (pinned) — Chrome + inline panel heads = `--cursor-head-h` 32px (DM New label, Offers steps, etc.); close 24px.
-- **Preview load quality** — Desktop workspace header center `CursorSelect` (40/60/80/100%, default **60%**) sets Bunny Optimizer quality for image previews via `signedReadUrl.quality`. Downloads / generation / upscale stay at 100%. Persisted `yatishara-studio-preview-load-quality`.
+- **Preview load quality** — Video editor preview header center `CursorSelect` (40/60/80/100%, default **60%**), same plate greys as zoom controls. ≤60% loads 720 edit proxy; ≥80% prefers 1080 proxy. Also drives opened-image Bunny `signedReadUrl.quality`. Downloads / generation stay at 100%. Persisted `yatishara-studio-preview-load-quality`.

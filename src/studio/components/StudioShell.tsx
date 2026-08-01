@@ -81,8 +81,6 @@ import {
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
-  createContext,
-  useContext,
   useDeferredValue,
   useEffect,
   useLayoutEffect,
@@ -90,6 +88,7 @@ import {
   useRef,
   useState,
   useCallback,
+  useSyncExternalStore,
   memo,
 } from "react";
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
@@ -114,6 +113,11 @@ import {
   StudioChatAudioPlayerLoading,
 } from "./StudioChatAudioPlayer";
 import { isVideoEditorPreviewEnabled } from "@/studio/lib/studio-preview-host";
+import {
+  DEFAULT_PREVIEW_LOAD_QUALITY,
+  PREVIEW_LOAD_QUALITY_EVENT,
+  readPreviewLoadQuality,
+} from "@/studio/editor/previewLoadQuality";
 import {
   STUDIO_DEFAULT_TAB_LABELS,
   STUDIO_DEFAULT_TAB_VALUES,
@@ -517,21 +521,6 @@ const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
 const STUDIO_OPEN_TABS_KEY = "yatishara-studio-open-tabs-v1";
 const STUDIO_COMPOSER_CONTEXTS_KEY = "yatishara-studio-composer-contexts-v1";
-const STUDIO_PREVIEW_LOAD_QUALITY_KEY = "yatishara-studio-preview-load-quality";
-const DEFAULT_PREVIEW_LOAD_QUALITY = 60;
-const PREVIEW_LOAD_QUALITY_VALUES = [40, 60, 80, 100];
-const PREVIEW_LOAD_QUALITY_OPTIONS = PREVIEW_LOAD_QUALITY_VALUES.map((value) => ({
-  value: String(value),
-  label: `${value}%`,
-}));
-const PreviewLoadQualityContext = createContext(DEFAULT_PREVIEW_LOAD_QUALITY);
-
-function readPreviewLoadQuality() {
-  if (typeof window === "undefined") return DEFAULT_PREVIEW_LOAD_QUALITY;
-  const raw = Number(window.localStorage.getItem(STUDIO_PREVIEW_LOAD_QUALITY_KEY));
-  return PREVIEW_LOAD_QUALITY_VALUES.includes(raw) ? raw : DEFAULT_PREVIEW_LOAD_QUALITY;
-}
-
 function isComposerContextTabKey(key) {
   return typeof key === "string" && (key.startsWith("composer:") || key.startsWith("thread:"));
 }
@@ -1204,14 +1193,6 @@ export function StudioShell({
   const [imageQuality, setImageQuality] = useState(
     () => initialComposerCtx.imageQuality ?? "medium",
   );
-  const [previewLoadQuality, setPreviewLoadQuality] = useState(readPreviewLoadQuality);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      STUDIO_PREVIEW_LOAD_QUALITY_KEY,
-      String(previewLoadQuality),
-    );
-  }, [previewLoadQuality]);
   const [resolution, setResolution] = useState(
     () => initialComposerCtx.resolution ?? "1280x720",
   );
@@ -20285,23 +20266,6 @@ export function StudioShell({
             onCommitTabRename={commitTabRename}
             disableDrag={isMobile}
           />
-          {!isMobile ? (
-            <div className="studio-preview-quality-center">
-              <CursorSelect
-                value={String(previewLoadQuality)}
-                options={PREVIEW_LOAD_QUALITY_OPTIONS}
-                onChange={(next) => {
-                  const parsed = Number(next);
-                  if (PREVIEW_LOAD_QUALITY_VALUES.includes(parsed)) {
-                    setPreviewLoadQuality(parsed);
-                  }
-                }}
-                ariaLabel="Preview load quality"
-                align="start"
-                className="studio-preview-quality-select"
-              />
-            </div>
-          ) : null}
           {feedModeMenuOpen && typeof document !== "undefined"
             ? createPortal(
                 <div
@@ -20535,7 +20499,6 @@ export function StudioShell({
               />
             </div>
           ) : null}
-          <PreviewLoadQualityContext.Provider value={previewLoadQuality}>
           <ActivePane
             activeTab={activeTab}
             activeEntry={activeEntry}
@@ -20744,7 +20707,6 @@ export function StudioShell({
                   }
             }
           />
-          </PreviewLoadQualityContext.Provider>
         </section>
         {typeof activeTab === "string" &&
         (activeTab.startsWith("composer:") || activeTab.startsWith("thread:")) ? (
@@ -27140,9 +27102,24 @@ function StudioElementDetailPane({ entry, assets, onAttach, onRename, onUpdate, 
   );
 }
 
+function subscribePreviewLoadQuality(onStoreChange) {
+  if (typeof window === "undefined") return () => {};
+  const onChange = () => onStoreChange();
+  window.addEventListener("storage", onChange);
+  window.addEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(PREVIEW_LOAD_QUALITY_EVENT, onChange);
+  };
+}
+
 function StudioAssetPreview({ entry }) {
   const convex = useConvex();
-  const previewLoadQuality = useContext(PreviewLoadQualityContext);
+  const previewLoadQuality = useSyncExternalStore(
+    subscribePreviewLoadQuality,
+    readPreviewLoadQuality,
+    () => DEFAULT_PREVIEW_LOAD_QUALITY,
+  );
   const kind = inferAttachmentKind(entry);
   const [previewExpiresUnix] = useState(() => Math.floor(Date.now() / 1000) + 60 * 60 * 12);
   const needsFullSignedRead =

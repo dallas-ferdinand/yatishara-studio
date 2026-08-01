@@ -39,6 +39,7 @@ function startDecodePumps(
   mediaById: ReadonlyMap<string, EditorMediaItem>,
   timelineTime: number,
   generation: number,
+  previewLoadQuality: number = DEFAULT_PREVIEW_LOAD_QUALITY,
 ): void {
   const slice = sliceAt(plan, timelineTime);
   const samples = [...slice.video, ...slice.preload];
@@ -47,7 +48,7 @@ function startDecodePumps(
     const assetId = sample.clip.assetId;
     if (!assetId || seen.has(assetId)) continue;
     const media = mediaById.get(assetId);
-    const url = media?.proxyUrl ?? media?.url;
+    const url = playbackUrlForMedia(media, previewLoadQuality);
     if (!media || media.kind !== "video" || !url) continue;
     seen.add(assetId);
     decoder.startPlayback({
@@ -171,6 +172,7 @@ class EngineConsumer implements FrameConsumer {
   private readonly compositor: CompositorClient;
   private readonly audio: AudioMixer;
   private readonly mediaRef: React.MutableRefObject<ReadonlyMap<string, EditorMediaItem>>;
+  private readonly previewLoadQualityRef: React.MutableRefObject<number>;
   private readonly playingRef: React.MutableRefObject<boolean>;
   private readonly onAudioReady: () => void;
   private readonly onSourceSize: (size: {
@@ -189,6 +191,7 @@ class EngineConsumer implements FrameConsumer {
     compositor: CompositorClient;
     audio: AudioMixer;
     mediaRef: React.MutableRefObject<ReadonlyMap<string, EditorMediaItem>>;
+    previewLoadQualityRef: React.MutableRefObject<number>;
     playingRef: React.MutableRefObject<boolean>;
     onAudioReady: () => void;
     onSourceSize: (size: {
@@ -201,6 +204,7 @@ class EngineConsumer implements FrameConsumer {
     this.compositor = args.compositor;
     this.audio = args.audio;
     this.mediaRef = args.mediaRef;
+    this.previewLoadQualityRef = args.previewLoadQualityRef;
     this.playingRef = args.playingRef;
     this.onAudioReady = args.onAudioReady;
     this.onSourceSize = args.onSourceSize;
@@ -226,7 +230,7 @@ class EngineConsumer implements FrameConsumer {
         const assetId = sample.clip.assetId;
         if (!assetId) return null;
         const media = this.mediaRef.current.get(assetId);
-        const url = media?.proxyUrl ?? media?.url;
+        const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
         if (!media || !url) return null;
         if (media.kind === "image") {
           const frame = await this.imageFrame(assetId, url);
@@ -303,7 +307,7 @@ class EngineConsumer implements FrameConsumer {
     for (const sample of [...slice.video, ...slice.preload]) {
       if (!sample.clip.assetId) continue;
       const media = this.mediaRef.current.get(sample.clip.assetId);
-      const url = media?.proxyUrl ?? media?.url;
+      const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
       if (url && media?.kind === "video") {
         this.decoder.prefetch(
           sample.clip.assetId,
@@ -319,7 +323,7 @@ class EngineConsumer implements FrameConsumer {
     for (const sample of slice.preload) {
       if (!sample.clip.assetId) continue;
       const media = this.mediaRef.current.get(sample.clip.assetId);
-      const url = media?.proxyUrl ?? media?.url;
+      const url = playbackUrlForMedia(media, this.previewLoadQualityRef.current);
       if (url && media?.kind === "video") {
         this.decoder.warm(sample.clip.assetId, url, sample.sourceTime, generation);
       }
@@ -440,6 +444,8 @@ export function usePlaybackEngine(args: {
   mediaById: ReadonlyMap<string, EditorMediaItem>;
   /** Natural atempo+EQ preview URLs for sped clips. */
   naturalAudioByClipId?: ReadonlyMap<string, string>;
+  /** 40–100; ≥80 prefers 1080 edit proxy, lower prefers faster 720. */
+  previewLoadQuality?: number;
   width: number;
   height: number;
   onPlayheadChange: (time: number) => void;
@@ -451,6 +457,7 @@ export function usePlaybackEngine(args: {
     playing,
     mediaById,
     naturalAudioByClipId,
+    previewLoadQuality = DEFAULT_PREVIEW_LOAD_QUALITY,
     width,
     height,
     onPlayheadChange,
@@ -467,6 +474,7 @@ export function usePlaybackEngine(args: {
   const capabilities = detectDecoderCapabilities();
   const runtimeRef = useRef<EngineRuntime | null>(null);
   const mediaRef = useRef<ReadonlyMap<string, EditorMediaItem>>(mediaById);
+  const previewLoadQualityRef = useRef(previewLoadQuality);
   const playingRef = useRef(playing);
   const callbacksRef = useRef({ onPlayheadChange, onPlayingChange });
   const emittedTimeRef = useRef(playhead);
@@ -474,6 +482,7 @@ export function usePlaybackEngine(args: {
   const disposeTimerRef = useRef<number | null>(null);
   const metricsTimerRef = useRef<number | null>(null);
   mediaRef.current = mediaById;
+  previewLoadQualityRef.current = previewLoadQuality;
   playingRef.current = playing;
   callbacksRef.current = { onPlayheadChange, onPlayingChange };
   projectRef.current = project;
@@ -542,6 +551,7 @@ export function usePlaybackEngine(args: {
         compositor,
         audio,
         mediaRef,
+        previewLoadQualityRef,
         playingRef,
         onAudioReady: syncAudioNow,
         onSourceSize: (next) => {
@@ -686,13 +696,11 @@ export function usePlaybackEngine(args: {
     // Project edit invalidates decode generation — restart pumps if playing.
     runtime.decoder.stopPlayback();
     if (playingRef.current) {
-      startDecodePumps(
-        runtime.decoder,
+      startDecodePumps(runtime.decoder,
         plan,
         mediaRef.current,
         time,
-        runtime.clock.generation,
-      );
+        runtime.clock.generation, previewLoadQualityRef.current);
     }
     // Newly added audio beds decode async — resync once buffers land.
     void runtime.audio.prepare(slice, mediaRef.current).then(() => {
@@ -735,13 +743,11 @@ export function usePlaybackEngine(args: {
           if (!playingRef.current) return;
           const time = runtime.clock.currentTime();
           // Continuous decode pump — fill ahead of the playhead, then sample.
-          startDecodePumps(
-            runtime.decoder,
+          startDecodePumps(runtime.decoder,
             runtime.plan,
             mediaRef.current,
             time,
-            runtime.clock.generation,
-          );
+            runtime.clock.generation, previewLoadQualityRef.current);
           // Kick bed decode before the first paint; don't block play on it.
           void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
             if (!playingRef.current || runtimeRef.current !== runtime) return;
@@ -788,7 +794,7 @@ export function usePlaybackEngine(args: {
       const assetId = sample.clip.assetId;
       if (!assetId) continue;
       const media = mediaRef.current.get(assetId);
-      const url = media?.proxyUrl ?? media?.url;
+      const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
       if (!media || media.kind !== "video" || !url) continue;
       runtime.decoder.scrub({
         assetId,
@@ -803,15 +809,39 @@ export function usePlaybackEngine(args: {
     });
   }, [playhead, playing]);
 
-  // Proxy URLs and signed URLs arrive asynchronously after the project is
-  // hydrated. Repaint a paused preview when media resolution changes, and
-  // re-prepare/sync audio beds while playing so late URLs still start.
+  // Proxy URLs, signed URLs, and preview load quality can change after hydrate.
+  // Restart decode pumps / scrub so the chosen 720/1080 proxy is used.
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
     setError(null);
     const time = runtime.clock.currentTime();
     const slice = sliceAt(runtime.plan, time);
+    runtime.decoder.stopPlayback();
+    if (playingRef.current) {
+      startDecodePumps(
+        runtime.decoder,
+        runtime.plan,
+        mediaRef.current,
+        time,
+        runtime.clock.generation,
+        previewLoadQualityRef.current,
+      );
+    } else {
+      for (const sample of slice.video) {
+        const assetId = sample.clip.assetId;
+        if (!assetId) continue;
+        const media = mediaRef.current.get(assetId);
+        const url = playbackUrlForMedia(media, previewLoadQualityRef.current);
+        if (!media || media.kind !== "video" || !url) continue;
+        runtime.decoder.scrub({
+          assetId,
+          url,
+          sourceTime: sample.sourceTime,
+          generation: runtime.clock.generation,
+        });
+      }
+    }
     void runtime.audio.prepare(slice, mediaRef.current).then(() => {
       if (runtimeRef.current !== runtime) return;
       if (playingRef.current) {
@@ -829,7 +859,7 @@ export function usePlaybackEngine(args: {
         setError(reason instanceof Error ? reason.message : String(reason));
       });
     }
-  }, [mediaById]);
+  }, [mediaById, previewLoadQuality]);
 
   useEffect(() => {
     runtimeRef.current?.audio.setNaturalAudioUrls(naturalAudioByClipId);
