@@ -157,17 +157,23 @@ export class CompositorClient {
     }
     await this.ready;
     const requestId = ++this.requestId;
+    let frameA = args.frameA;
+    let frameB = args.frameB;
+    // postMessage transfer list cannot contain the same VideoFrame twice.
+    if (frameA && frameB && frameA === frameB) {
+      frameB = frameA.clone();
+    }
     const transfer: Transferable[] = [];
-    if (args.frameA) transfer.push(args.frameA);
-    if (args.frameB) transfer.push(args.frameB);
+    if (frameA) transfer.push(frameA);
+    if (frameB) transfer.push(frameB);
     return await new Promise<void>((resolve, reject) => {
       this.pending.set(requestId, { resolve, reject });
       this.worker.postMessage(
         {
           type: "render",
           requestId,
-          frameA: args.frameA,
-          frameB: args.frameB,
+          frameA,
+          frameB,
           transformA: args.transformA ?? [1, 0, 0, 0],
           transformB: args.transformB ?? [1, 0, 0, 0],
           transition: args.transition ?? "none",

@@ -65,8 +65,6 @@ type Session = {
   streamOpen: boolean;
   frames: Map<number, VideoFrame>;
   waiters: FrameWaiter[];
-  /** Latest frame request wins — older chained jobs are skipped. */
-  pendingFrame: FrameMessage | null;
   touchedAt: number;
   abortController: AbortController;
   init: Promise<void>;
@@ -185,7 +183,6 @@ function createSession(assetId: string, url: string): Session {
     streamOpen: false,
     frames: new Map(),
     waiters: [],
-    pendingFrame: null,
     touchedAt: performance.now(),
     abortController: new AbortController(),
     init: Promise.resolve(),
@@ -568,22 +565,10 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     session.abortController.abort();
     session.abortController = new AbortController();
   }
-  // Latest frame request wins — skip superseded jobs on the serial chain.
-  session.pendingFrame = message;
+  // Process every frame request. Do not supersede — parallel transition legs
+  // (or same-asset overlaps) each need their own transferred VideoFrame clone.
   session.chain = session.chain
-    .then(async () => {
-      const latest = session.pendingFrame;
-      if (!latest || latest.requestId !== message.requestId) {
-        post({
-          type: "error",
-          requestId: message.requestId,
-          error: "superseded",
-        });
-        return;
-      }
-      session.pendingFrame = null;
-      await decodeFrame(latest);
-    })
+    .then(() => decodeFrame(message))
     .catch((error) => {
       post({
         type: "error",

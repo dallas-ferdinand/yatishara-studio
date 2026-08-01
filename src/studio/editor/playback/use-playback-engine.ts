@@ -236,11 +236,17 @@ class EngineConsumer implements FrameConsumer {
           }
         : null,
     );
+    const frameA = valid[0]?.frame;
+    let frameB = valid[1]?.frame;
+    // Distinct transferables required for compositor postMessage.
+    if (frameA && frameB && frameA === frameB) {
+      frameB = frameA.clone();
+    }
     this.prepared = {
       slice,
       generation,
-      frameA: valid[0]?.frame,
-      frameB: valid[1]?.frame,
+      frameA,
+      frameB,
     };
 
     // Pre-roll an upcoming transition partner from MP4 sample offsets.
