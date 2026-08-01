@@ -33,8 +33,11 @@ const requestFrameDefault = (callback: FrameRequestCallback): number =>
   requestAnimationFrame(callback);
 const cancelFrameDefault = (id: number): void => cancelAnimationFrame(id);
 
-/** Signal buffering UI/audio soft-pause quickly; clock is held for every prepare. */
-const STALL_UI_MS = 32;
+/**
+ * Only hold the clock on a true underrun (prepare returned false / took too
+ * long). While the continuous decode pump is healthy, time keeps advancing.
+ */
+const UNDERRUN_HOLD_MS = 80;
 
 export class FrameScheduler {
   private plan: PlaybackPlan;
@@ -140,6 +143,7 @@ export class FrameScheduler {
     }
 
     if (this.renderPending) {
+      // Drop this display frame — clock keeps running (real player behavior).
       this.metricsValue.droppedFrames += 1;
       this.queueFrame();
       return;
@@ -147,19 +151,24 @@ export class FrameScheduler {
 
     this.renderPending = true;
     const workStarted = performance.now();
-    // Freeze transport for the whole prepare so sourceTime cannot walk off the
-    // decode-ahead window while WebCodecs catches up (critical at clip speed > 1×).
     const wasPlaying = this.clock.playing;
-    if (wasPlaying) this.clock.hold();
-    const stallTimer = setTimeout(() => {
+    // Only freeze transport on a lasting underrun — not on every prepare.
+    let heldForUnderrun = false;
+    const underrunTimer = setTimeout(() => {
+      if (!this.clock.playing) return;
+      this.clock.hold();
+      heldForUnderrun = true;
       this.beginBuffering(performance.now());
-    }, STALL_UI_MS);
+    }, UNDERRUN_HOLD_MS);
     try {
       const slice = sliceAt(this.plan, timelineTime);
       const ready = await this.consumer.prepare(slice, generation);
       if (!this.started || generation !== this.clock.generation) return;
       if (!ready) {
-        // Immediate hold UI — do not let the clock run ahead of a cache miss.
+        if (wasPlaying && this.clock.playing) {
+          this.clock.hold();
+          heldForUnderrun = true;
+        }
         this.beginBuffering(performance.now());
         return;
       }
@@ -169,12 +178,12 @@ export class FrameScheduler {
       if (generation === this.clock.generation) {
         this.metricsValue.renderedFrames += 1;
       }
-      // Resume after this prepare's hold, or after leaving a not-ready buffer.
       if (
         this.started &&
         !this.clock.ended() &&
-        (wasPlaying || wasBuffering) &&
-        !this.clock.playing
+        (heldForUnderrun || wasBuffering) &&
+        !this.clock.playing &&
+        (wasPlaying || wasBuffering)
       ) {
         this.clock.play();
       }
@@ -185,7 +194,7 @@ export class FrameScheduler {
         );
       }
     } finally {
-      clearTimeout(stallTimer);
+      clearTimeout(underrunTimer);
       const elapsed = Math.max(0, performance.now() - workStarted);
       this.metricsValue.maxLatenessMs = Math.max(
         this.metricsValue.maxLatenessMs,

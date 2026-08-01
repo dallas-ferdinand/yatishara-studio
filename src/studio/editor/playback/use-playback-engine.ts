@@ -21,6 +21,36 @@ import { compileTimeline, sliceAt } from "./timeline-compiler";
 import type { PlaybackPlan, RenderSlice } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
+import { clipSpeed } from "../projectContract";
+
+/** Kick the continuous decode pump for video assets in/near the playhead. */
+function startDecodePumps(
+  decoder: MediaDecoderClient,
+  plan: PlaybackPlan,
+  mediaById: ReadonlyMap<string, EditorMediaItem>,
+  timelineTime: number,
+  generation: number,
+): void {
+  const slice = sliceAt(plan, timelineTime);
+  const samples = [...slice.video, ...slice.preload];
+  const seen = new Set<string>();
+  for (const sample of samples) {
+    const assetId = sample.clip.assetId;
+    if (!assetId || seen.has(assetId)) continue;
+    const media = mediaById.get(assetId);
+    const url = media?.proxyUrl ?? media?.url;
+    if (!media || media.kind !== "video" || !url) continue;
+    seen.add(assetId);
+    decoder.startPlayback({
+      assetId,
+      url,
+      sourceTime: sample.sourceTime,
+      generation,
+      speed: clipSpeed(sample.clip.clip.effects),
+      aheadSec: 0.75,
+    });
+  }
+}
 
 function transformTuple(
   effects: ClipEffects | undefined,
@@ -203,6 +233,10 @@ class EngineConsumer implements FrameConsumer {
           url,
           sample.sourceTime,
           generation,
+          {
+            speed: clipSpeed(sample.clip.clip.effects),
+            aheadSec: this.playingRef.current ? 0.75 : 0.5,
+          },
         );
       }),
     );
@@ -632,6 +666,17 @@ export function usePlaybackEngine(args: {
     runtime.audio.stopAll();
     const time = runtime.clock.currentTime();
     const slice = sliceAt(plan, time);
+    // Project edit invalidates decode generation — restart pumps if playing.
+    runtime.decoder.stopPlayback();
+    if (playingRef.current) {
+      startDecodePumps(
+        runtime.decoder,
+        plan,
+        mediaRef.current,
+        time,
+        runtime.clock.generation,
+      );
+    }
     // Newly added audio beds decode async — resync once buffers land.
     void runtime.audio.prepare(slice, mediaRef.current).then(() => {
       if (!playingRef.current || runtimeRef.current !== runtime) return;
@@ -670,6 +715,14 @@ export function usePlaybackEngine(args: {
         .then(async () => {
           if (!playingRef.current) return;
           const time = runtime.clock.currentTime();
+          // Continuous decode pump — fill ahead of the playhead, then sample.
+          startDecodePumps(
+            runtime.decoder,
+            runtime.plan,
+            mediaRef.current,
+            time,
+            runtime.clock.generation,
+          );
           // Kick bed decode before the first paint; don't block play on it.
           void runtime.audio.prepare(sliceAt(runtime.plan, time), mediaRef.current).then(() => {
             if (!playingRef.current || runtimeRef.current !== runtime) return;
@@ -680,7 +733,7 @@ export function usePlaybackEngine(args: {
               true,
             );
           });
-          // Decode the first frame before starting the monotonic clock.
+          // Paint the primed frame, then let the clock run (pump keeps filling).
           await runtime.scheduler.renderNow(time);
           if (!playingRef.current) return;
           runtime.clock.play();
@@ -691,6 +744,7 @@ export function usePlaybackEngine(args: {
           callbacksRef.current.onPlayingChange(false);
         });
     } else {
+      runtime.decoder.stopPlayback();
       runtime.clock.pause();
       runtime.scheduler.stop();
       runtime.audio.stopAll();
@@ -704,9 +758,25 @@ export function usePlaybackEngine(args: {
     // While playing, the transport clock owns time. Echoed onPlayheadChange
     // updates must not seek/stopAll — that continuously kills audio beds.
     if (playing) return;
+    runtime.decoder.stopPlayback();
     runtime.clock.seek(playhead);
     runtime.audio.stopAll();
     emittedTimeRef.current = playhead;
+    // Scrub active videos to the new playhead (keyframe path).
+    const slice = sliceAt(runtime.plan, playhead);
+    for (const sample of slice.video) {
+      const assetId = sample.clip.assetId;
+      if (!assetId) continue;
+      const media = mediaRef.current.get(assetId);
+      const url = media?.proxyUrl ?? media?.url;
+      if (!media || media.kind !== "video" || !url) continue;
+      runtime.decoder.scrub({
+        assetId,
+        url,
+        sourceTime: sample.sourceTime,
+        generation: runtime.clock.generation,
+      });
+    }
     void runtime.scheduler.renderNow(playhead).catch((reason) => {
       setError(reason instanceof Error ? reason.message : String(reason));
     });

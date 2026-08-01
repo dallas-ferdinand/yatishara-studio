@@ -17,6 +17,33 @@ type FrameMessage = {
   url: string;
   sourceTime: number;
   generation: number;
+  /** Clip speed — scales how far the pump should stay ahead. */
+  speed?: number;
+  /** Seconds of source media to keep decoded ahead of the playhead. */
+  aheadSec?: number;
+};
+
+type PlayMessage = {
+  type: "play";
+  assetId: string;
+  url: string;
+  sourceTime: number;
+  generation: number;
+  speed?: number;
+  aheadSec?: number;
+};
+
+type PauseMessage = {
+  type: "pause";
+  assetId?: string;
+};
+
+type ScrubMessage = {
+  type: "scrub";
+  assetId: string;
+  url: string;
+  sourceTime: number;
+  generation: number;
 };
 
 type PrefetchMessage = {
@@ -40,6 +67,9 @@ type DisposeMessage = { type: "dispose"; assetId?: string };
 type Incoming =
   | InitMessage
   | FrameMessage
+  | PlayMessage
+  | PauseMessage
+  | ScrubMessage
   | PrefetchMessage
   | WarmMessage
   | DisposeMessage;
@@ -63,6 +93,15 @@ type Session = {
   decodedThrough: number;
   /** True when the decoder can accept forward delta chunks without reset. */
   streamOpen: boolean;
+  /** Last sample index requested by the playhead. */
+  playheadIndex: number;
+  /** Decode pump should keep filling until this sample index. */
+  pumpTargetIndex: number;
+  /** Clip speed used to size the ahead window. */
+  pumpSpeed: number;
+  aheadSec: number;
+  pumping: boolean;
+  pumpScheduled: boolean;
   frames: Map<number, VideoFrame>;
   waiters: FrameWaiter[];
   touchedAt: number;
@@ -72,10 +111,13 @@ type Session = {
 };
 
 const sessions = new Map<string, Session>();
-const MAX_FRAMES_PER_ASSET = 48;
+/** ~3s at 30fps so the pump buffer survives 1.5×–2× source advances. */
+const MAX_FRAMES_PER_ASSET = 90;
 const MAX_DECODER_SESSIONS = 6;
-const DECODE_LOOKAHEAD = 24;
+const DECODE_CHUNK = 24;
+const DEFAULT_AHEAD_SEC = 0.75;
 const FRAME_WAIT_MS = 2_500;
+const PLAY_WAIT_MS = 120;
 
 function totalCacheBytes(): number {
   let total = 0;
@@ -105,9 +147,14 @@ function closeFrames(session: Session): void {
 
 function evictFrames(session: Session, aroundIndex: number): void {
   if (session.frames.size <= MAX_FRAMES_PER_ASSET) return;
-  const indexes = [...session.frames.keys()].sort(
-    (a, b) => Math.abs(b - aroundIndex) - Math.abs(a - aroundIndex),
-  );
+  const keepBehind = Math.max(0, session.playheadIndex - 8);
+  const indexes = [...session.frames.keys()].sort((a, b) => {
+    // Prefer keeping frames at/after the playhead.
+    const aBehind = a < keepBehind ? 1 : 0;
+    const bBehind = b < keepBehind ? 1 : 0;
+    if (aBehind !== bBehind) return bBehind - aBehind;
+    return Math.abs(b - aroundIndex) - Math.abs(a - aroundIndex);
+  });
   while (session.frames.size > MAX_FRAMES_PER_ASSET) {
     const index = indexes.shift();
     if (index == null) break;
@@ -146,7 +193,11 @@ function notifyWaiters(session: Session): void {
   session.waiters = remaining;
 }
 
-function waitForFrame(session: Session, targetIndex: number): Promise<VideoFrame> {
+function waitForFrame(
+  session: Session,
+  targetIndex: number,
+  timeoutMs: number,
+): Promise<VideoFrame> {
   const existing = nearestFrame(session, targetIndex);
   if (existing) return Promise.resolve(existing);
   return new Promise<VideoFrame>((resolve, reject) => {
@@ -157,10 +208,9 @@ function waitForFrame(session: Session, targetIndex: number): Promise<VideoFrame
       timer: setTimeout(() => {
         session.waiters = session.waiters.filter((item) => item !== waiter);
         reject(new Error("Frame decode timeout."));
-      }, FRAME_WAIT_MS),
+      }, timeoutMs),
     };
     session.waiters.push(waiter);
-    // Output may have landed between the miss check and waiter registration.
     notifyWaiters(session);
   });
 }
@@ -181,6 +231,12 @@ function createSession(assetId: string, url: string): Session {
     generation: -1,
     decodedThrough: -1,
     streamOpen: false,
+    playheadIndex: 0,
+    pumpTargetIndex: -1,
+    pumpSpeed: 1,
+    aheadSec: DEFAULT_AHEAD_SEC,
+    pumping: false,
+    pumpScheduled: false,
     frames: new Map(),
     waiters: [],
     touchedAt: performance.now(),
@@ -209,8 +265,6 @@ function createSession(assetId: string, url: string): Session {
       { config: baseConfig, annexB: false },
       ...(track.codec.startsWith("avc")
         ? [
-            // Some Chromium builds reject otherwise valid avcC metadata.
-            // Without a description WebCodecs expects Annex-B chunks.
             {
               config: {
                 codec: track.codec,
@@ -276,6 +330,7 @@ function getSession(assetId: string, url: string): Session {
     return existing;
   }
   if (existing) {
+    existing.pumping = false;
     existing.abortController.abort();
     existing.decoder?.close();
     closeFrames(existing);
@@ -289,6 +344,7 @@ function getSession(assetId: string, url: string): Session {
     while (sessions.size > MAX_DECODER_SESSIONS) {
       const victim = candidates.shift();
       if (!victim) break;
+      victim.pumping = false;
       victim.decoder?.close();
       victim.abortController.abort();
       closeFrames(victim);
@@ -360,6 +416,7 @@ async function feedSamples(
 ): Promise<void> {
   const track = session.demuxer.videoTrack;
   if (!track) throw new Error("Decoder did not initialize.");
+  if (first > last) return;
   for (let index = first; index <= last; index += 1) {
     const sample = track.samples[index]!;
     const isBatchKey =
@@ -390,14 +447,128 @@ async function feedSamples(
   session.streamOpen = true;
 }
 
+function indexAheadOf(
+  session: Session,
+  sourceTime: number,
+  speed: number,
+  aheadSec: number,
+): number {
+  const track = session.demuxer.videoTrack;
+  if (!track) return -1;
+  const aheadTime = sourceTime + Math.max(0.25, aheadSec) * Math.max(1, speed);
+  const index = session.demuxer.nearestSampleIndex(aheadTime);
+  return Math.min(track.samples.length - 1, Math.max(0, index));
+}
+
+function extendPumpTarget(
+  session: Session,
+  sourceTime: number,
+  speed: number,
+  aheadSec: number,
+): void {
+  session.pumpSpeed = Math.max(0.1, speed);
+  session.aheadSec = Math.max(0.25, aheadSec);
+  const target = indexAheadOf(session, sourceTime, session.pumpSpeed, session.aheadSec);
+  session.pumpTargetIndex = Math.max(session.pumpTargetIndex, target);
+}
+
+function schedulePump(session: Session): void {
+  if (!session.pumping || session.pumpScheduled) return;
+  session.pumpScheduled = true;
+  session.chain = session.chain
+    .then(async () => {
+      session.pumpScheduled = false;
+      await runPump(session);
+    })
+    .catch(() => {
+      session.pumpScheduled = false;
+    });
+}
+
+async function runPump(session: Session): Promise<void> {
+  await session.init;
+  const decoder = session.decoder;
+  const track = session.demuxer.videoTrack;
+  if (!decoder || !track || !session.pumping) return;
+
+  // Keep filling until the ahead target is covered.
+  let guard = 0;
+  while (
+    session.pumping &&
+    session.streamOpen &&
+    session.decodedThrough < session.pumpTargetIndex &&
+    guard < 40
+  ) {
+    guard += 1;
+    const first = session.decodedThrough + 1;
+    if (first >= track.samples.length) break;
+    const last = Math.min(
+      track.samples.length - 1,
+      first + DECODE_CHUNK - 1,
+      session.pumpTargetIndex,
+    );
+    try {
+      const sample = track.samples[first]!;
+      const time = sample.cts / sample.timescale;
+      void session.demuxer.prefetchWindow(
+        time,
+        Math.max(1, session.aheadSec * session.pumpSpeed),
+        session.abortController.signal,
+      );
+      await feedSamples(session, decoder, first, last, false);
+    } catch {
+      // Recover with a keyframe at the playhead, then continue pumping.
+      try {
+        const resetDecoder = configureSessionDecoder(session);
+        closeFrames(session);
+        const sync = session.demuxer.precedingSyncIndex(session.playheadIndex);
+        const last = Math.min(
+          track.samples.length - 1,
+          Math.max(sync + DECODE_CHUNK, session.pumpTargetIndex),
+        );
+        await feedSamples(session, resetDecoder, sync, last, true);
+      } catch {
+        session.pumping = false;
+        return;
+      }
+    }
+  }
+
+  if (
+    session.pumping &&
+    session.streamOpen &&
+    session.decodedThrough < session.pumpTargetIndex
+  ) {
+    schedulePump(session);
+  }
+}
+
+async function keyframeEnsure(
+  session: Session,
+  targetIndex: number,
+  generation: number,
+): Promise<VideoFrame> {
+  const track = session.demuxer.videoTrack;
+  if (!track) throw new Error("Decoder did not initialize.");
+  const resetDecoder = configureSessionDecoder(session);
+  closeFrames(session);
+  session.generation = generation;
+  const first = session.demuxer.precedingSyncIndex(targetIndex);
+  const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
+  await feedSamples(session, resetDecoder, first, last, true);
+  return waitForFrame(session, targetIndex, FRAME_WAIT_MS);
+}
+
 /**
- * Continuous forward decode: on a forward miss, feed only new samples into the
- * open decoder (no reset/flush). Keyframe reset only for seek/generation/cold.
+ * Sample the stream buffer. Playpath: cache hit or short forward feed.
+ * Scrub/cold: keyframe seek. Pump keeps the buffer ahead independently.
  */
 async function ensureFrame(
   session: Session,
   sourceTime: number,
   generation: number,
+  speed = 1,
+  aheadSec = DEFAULT_AHEAD_SEC,
 ): Promise<VideoFrame> {
   await session.init;
   const decoder = session.decoder;
@@ -407,13 +578,8 @@ async function ensureFrame(
   const targetIndex = session.demuxer.nearestSampleIndex(sourceTime);
   if (targetIndex < 0) throw new Error("No video sample at requested time.");
 
-  // Decoded frames are immutable; a pause/seek generation bump must not
-  // throw away a cache hit and force a keyframe re-decode.
-  const cached = nearestFrame(session, targetIndex);
-  if (cached) {
-    session.generation = generation;
-    return cached;
-  }
+  session.playheadIndex = targetIndex;
+  extendPumpTarget(session, sourceTime, speed, aheadSec);
 
   if (session.generation !== generation) {
     closeFrames(session);
@@ -422,10 +588,12 @@ async function ensureFrame(
     session.generation = generation;
   }
 
-  let frame = nearestFrame(session, targetIndex);
-  if (frame) return frame;
+  const cached = nearestFrame(session, targetIndex);
+  if (cached) {
+    if (session.pumping) schedulePump(session);
+    return cached;
+  }
 
-  const last = Math.min(track.samples.length - 1, targetIndex + DECODE_LOOKAHEAD);
   const canForward =
     session.streamOpen &&
     session.decodedThrough >= 0 &&
@@ -434,44 +602,64 @@ async function ensureFrame(
   try {
     if (canForward) {
       const first = session.decodedThrough + 1;
+      const last = Math.min(
+        track.samples.length - 1,
+        Math.max(targetIndex + DECODE_CHUNK, session.pumpTargetIndex),
+      );
       if (first <= last) {
         await feedSamples(session, decoder, first, last, false);
       }
-      frame = await waitForFrame(session, targetIndex);
-    } else {
-      // Backward seek, eviction miss, or cold start — keyframe batch, no flush
-      // so the stream stays open for subsequent forward ticks.
-      const resetDecoder = configureSessionDecoder(session);
-      closeFrames(session);
-      session.generation = generation;
-      const first = session.demuxer.precedingSyncIndex(targetIndex);
-      await feedSamples(session, resetDecoder, first, last, true);
-      frame = await waitForFrame(session, targetIndex);
+      const frame = await waitForFrame(
+        session,
+        targetIndex,
+        session.pumping ? PLAY_WAIT_MS : FRAME_WAIT_MS,
+      );
+      if (session.pumping) schedulePump(session);
+      return frame;
     }
+
+    // Backward / cold / eviction — keyframe, then keep pumping if playing.
+    const frame = await keyframeEnsure(session, targetIndex, generation);
+    if (session.pumping) schedulePump(session);
+    return frame;
   } catch (error) {
-    // Latency path failed — fall back to classic flush after keyframe batch.
     session.streamOpen = false;
     const resetDecoder = configureSessionDecoder(session);
     closeFrames(session);
     session.generation = generation;
     const first = session.demuxer.precedingSyncIndex(targetIndex);
+    const last = Math.min(track.samples.length - 1, targetIndex + DECODE_CHUNK);
     await feedSamples(session, resetDecoder, first, last, true);
     await resetDecoder.flush();
     session.streamOpen = false;
     session.decodedThrough = Math.max(session.decodedThrough, last);
-    frame = nearestFrame(session, targetIndex);
+    const frame = nearestFrame(session, targetIndex);
     if (!frame) {
       throw error instanceof Error ? error : new Error(String(error));
     }
+    if (session.pumping) {
+      // Re-open stream after flush recovery so the pump can continue.
+      session.streamOpen = false;
+      try {
+        await keyframeEnsure(session, targetIndex, generation);
+      } catch {
+        /* keep the flushed frame */
+      }
+      schedulePump(session);
+    }
+    return frame;
   }
-
-  if (!frame) throw new Error("Decoder produced no frame.");
-  return frame;
 }
 
 async function decodeFrame(message: FrameMessage): Promise<void> {
   const session = getSession(message.assetId, message.url);
-  const frame = await ensureFrame(session, message.sourceTime, message.generation);
+  const frame = await ensureFrame(
+    session,
+    message.sourceTime,
+    message.generation,
+    message.speed ?? session.pumpSpeed,
+    message.aheadSec ?? session.aheadSec,
+  );
   const output = frame.clone();
   post(
     {
@@ -487,6 +675,41 @@ async function decodeFrame(message: FrameMessage): Promise<void> {
   );
 }
 
+async function startPlay(message: PlayMessage): Promise<void> {
+  const session = getSession(message.assetId, message.url);
+  await session.init;
+  session.generation = message.generation;
+  session.pumping = true;
+  extendPumpTarget(
+    session,
+    message.sourceTime,
+    message.speed ?? 1,
+    message.aheadSec ?? DEFAULT_AHEAD_SEC,
+  );
+  // Prime at the playhead if the buffer is cold or behind.
+  const targetIndex = session.demuxer.nearestSampleIndex(message.sourceTime);
+  session.playheadIndex = Math.max(0, targetIndex);
+  if (!nearestFrame(session, session.playheadIndex)) {
+    await ensureFrame(
+      session,
+      message.sourceTime,
+      message.generation,
+      message.speed ?? 1,
+      message.aheadSec ?? DEFAULT_AHEAD_SEC,
+    );
+  }
+  schedulePump(session);
+}
+
+function stopPump(assetId?: string): void {
+  const targets = assetId
+    ? [sessions.get(assetId)].filter(Boolean)
+    : [...sessions.values()];
+  for (const session of targets as Session[]) {
+    session.pumping = false;
+  }
+}
+
 self.onmessage = (event: MessageEvent<Incoming>) => {
   const message = event.data;
   if (message.type === "dispose") {
@@ -494,12 +717,34 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
       ? [sessions.get(message.assetId)].filter(Boolean)
       : [...sessions.values()];
     for (const session of targets as Session[]) {
+      session.pumping = false;
       session.abortController.abort();
       session.decoder?.close();
       closeFrames(session);
       session.demuxer.source.clear();
       sessions.delete(session.assetId);
     }
+    return;
+  }
+  if (message.type === "pause") {
+    stopPump(message.assetId);
+    return;
+  }
+  if (message.type === "play") {
+    const session = getSession(message.assetId, message.url);
+    session.chain = session.chain
+      .then(() => startPlay(message))
+      .catch(() => undefined);
+    return;
+  }
+  if (message.type === "scrub") {
+    const session = getSession(message.assetId, message.url);
+    session.pumping = false;
+    session.chain = session.chain
+      .then(async () => {
+        await ensureFrame(session, message.sourceTime, message.generation, 1, 0.5);
+      })
+      .catch(() => undefined);
     return;
   }
   if (message.type === "prefetch") {
@@ -518,8 +763,6 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     return;
   }
   if (message.type === "warm") {
-    // Decode ahead into the session frame cache so the clip boundary render
-    // is a cache hit instead of a network + keyframe decode stall.
     const session = getSession(message.assetId, message.url);
     session.chain = session.chain
       .then(async () => {
@@ -565,8 +808,6 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     session.abortController.abort();
     session.abortController = new AbortController();
   }
-  // Process every frame request. Do not supersede — parallel transition legs
-  // (or same-asset overlaps) each need their own transferred VideoFrame clone.
   session.chain = session.chain
     .then(() => decodeFrame(message))
     .catch((error) => {

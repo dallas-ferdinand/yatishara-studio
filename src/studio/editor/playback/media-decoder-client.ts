@@ -43,6 +43,7 @@ export class MediaDecoderClient {
     string,
     { sourceTime: number; generation: number; requestedAt: number }
   >();
+  private readonly playingAssets = new Set<string>();
   private metricsValue: MediaDecoderMetrics = {
     pendingRequests: 0,
     framesReceived: 0,
@@ -116,20 +117,77 @@ export class MediaDecoderClient {
     }>;
   }
 
+  /**
+   * Start the continuous decode pump for an asset. Play samples the buffer;
+   * the pump keeps filling ahead of the playhead.
+   */
+  startPlayback(args: {
+    assetId: string;
+    url: string;
+    sourceTime: number;
+    generation: number;
+    speed?: number;
+    aheadSec?: number;
+  }): void {
+    if (this.disposed) return;
+    this.playingAssets.add(args.assetId);
+    this.worker.postMessage({
+      type: "play",
+      assetId: args.assetId,
+      url: args.url,
+      sourceTime: args.sourceTime,
+      generation: args.generation,
+      speed: args.speed ?? 1,
+      aheadSec: args.aheadSec ?? 0.75,
+    });
+  }
+
+  /** Stop the decode pump (keeps cached frames). Omit assetId to stop all. */
+  stopPlayback(assetId?: string): void {
+    if (this.disposed) return;
+    if (assetId) {
+      this.playingAssets.delete(assetId);
+      this.worker.postMessage({ type: "pause", assetId });
+      return;
+    }
+    this.playingAssets.clear();
+    this.worker.postMessage({ type: "pause" });
+  }
+
+  /** Scrub: stop pump and keyframe-seek to sourceTime. */
+  scrub(args: {
+    assetId: string;
+    url: string;
+    sourceTime: number;
+    generation: number;
+  }): void {
+    if (this.disposed) return;
+    this.playingAssets.delete(args.assetId);
+    this.worker.postMessage({
+      type: "scrub",
+      assetId: args.assetId,
+      url: args.url,
+      sourceTime: args.sourceTime,
+      generation: args.generation,
+    });
+  }
+
   requestFrame(
     assetId: string,
     url: string,
     sourceTime: number,
     generation: number,
+    opts?: { speed?: number; aheadSec?: number },
   ): Promise<DecodedFrame> {
     // One promise per call — never share a VideoFrame across consumers.
-    // Sharing caused compositor postMessage: "VideoFrame at Index 1 is a duplicate".
     return this.request({
       type: "frame",
       assetId,
       url,
       sourceTime,
       generation,
+      speed: opts?.speed ?? 1,
+      aheadSec: opts?.aheadSec ?? (this.playingAssets.has(assetId) ? 0.75 : 0.5),
     }) as Promise<DecodedFrame>;
   }
 
@@ -182,6 +240,7 @@ export class MediaDecoderClient {
 
   disposeAsset(assetId: string): void {
     this.prefetchState.delete(assetId);
+    this.playingAssets.delete(assetId);
     if (!this.disposed) this.worker.postMessage({ type: "dispose", assetId });
   }
 
@@ -192,6 +251,7 @@ export class MediaDecoderClient {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.playingAssets.clear();
     this.worker.postMessage({ type: "dispose" });
     this.worker.terminate();
     const error = new Error("Media decoder was disposed.");

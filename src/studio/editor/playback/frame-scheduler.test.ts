@@ -4,12 +4,12 @@ import { FrameScheduler } from "./frame-scheduler";
 import { compileTimeline } from "./timeline-compiler";
 import { TransportClock } from "./transport-clock";
 
-async function settle(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
+async function settle(ms = 0): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 describe("FrameScheduler", () => {
-  it("reports buffering and resumes rendering without advancing media clocks", async () => {
+  it("reports buffering on underrun and resumes rendering", async () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.duration = 5;
     const plan = compileTimeline(project);
@@ -58,7 +58,43 @@ describe("FrameScheduler", () => {
     scheduler.stop();
   });
 
-  it("holds the clock during prepare so time cannot run ahead of decode", async () => {
+  it("does not hold the clock during a fast prepare (pump-fed play)", async () => {
+    const project = createEmptyProject({ name: "test", folderId: "folder" });
+    project.duration = 5;
+    const plan = compileTimeline(project);
+    let nowSeconds = 0;
+    const clock = new TransportClock(5, () => nowSeconds);
+    clock.seek(1);
+    clock.play();
+    const callbacks: FrameRequestCallback[] = [];
+    const scheduler = new FrameScheduler(
+      plan,
+      clock,
+      {
+        prepare: async () => true,
+        render: () => undefined,
+      },
+      {
+        requestFrame: (next) => {
+          callbacks.push(next);
+          return callbacks.length;
+        },
+        cancelFrame: () => undefined,
+      },
+    );
+
+    scheduler.start();
+    const first = callbacks.shift();
+    first!(0);
+    await settle();
+    // Fast prepare — clock keeps playing (continuous decode model).
+    expect(clock.playing).toBe(true);
+    nowSeconds = 0.2;
+    expect(clock.currentTime()).toBeCloseTo(1.2);
+    scheduler.stop();
+  });
+
+  it("holds the clock only after a lasting underrun", async () => {
     const project = createEmptyProject({ name: "test", folderId: "folder" });
     project.duration = 5;
     const plan = compileTimeline(project);
@@ -92,17 +128,16 @@ describe("FrameScheduler", () => {
     scheduler.start();
     const first = callbacks.shift();
     first!(0);
-    await settle();
+    // Still within underrun grace — clock should still be playing.
+    await settle(20);
+    expect(clock.playing).toBe(true);
+    // Past UNDERRUN_HOLD_MS — transport freezes until prepare completes.
+    await settle(100);
     expect(clock.playing).toBe(false);
-    expect(clock.currentTime()).toBeCloseTo(1);
-    nowSeconds = 1;
-    // Wall clock advanced while held — timeline must stay put.
     expect(clock.currentTime()).toBeCloseTo(1);
     gate.release?.(true);
     await settle();
     expect(clock.playing).toBe(true);
-    nowSeconds = 1.2;
-    expect(clock.currentTime()).toBeCloseTo(1.2);
     scheduler.stop();
   });
 });
