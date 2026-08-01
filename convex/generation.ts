@@ -771,7 +771,10 @@ export const createQueuedJob = authedMutation({
     audioLoop: v.optional(v.boolean()),
     promptInfluence: v.optional(v.number()),
     forceInstrumental: v.optional(v.boolean()),
-    /** Current Studio folder — overrides stale thread.linkedFolderId for this job. */
+    /**
+     * Optional per-job save folder. Defaults to thread.linkedFolderId.
+     * Does not retarget the chat — browsing the explorer must not move a thread's home.
+     */
     folderId: v.optional(v.id("folders")),
   },
   returns: v.id("generationJobs"),
@@ -779,12 +782,6 @@ export const createQueuedJob = authedMutation({
     const thread = await requireThreadOwner(ctx, args.threadId);
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderOwner(ctx, saveFolderId);
-    if (args.folderId && args.folderId !== thread.linkedFolderId) {
-      await ctx.db.patch(thread._id, {
-        linkedFolderId: args.folderId,
-        updatedAt: Date.now(),
-      });
-    }
     if (args.mode === "video" && args.resolution === "3840x2160") {
       throw new Error("4K video is not available yet. Video generation supports up to 1080p.");
     }
@@ -916,7 +913,10 @@ export const approveAssistedMedia = internalMutation({
     briefId: v.id("guidedBriefs"),
     expectedRevision: v.number(),
     planFingerprint: v.string(),
-    /** Current Studio folder — overrides stale thread.linkedFolderId for this job. */
+    /**
+     * Optional per-job save folder. Defaults to thread.linkedFolderId.
+     * Does not retarget the chat — browsing the explorer must not move a thread's home.
+     */
     folderId: v.optional(v.id("folders")),
   },
   returns: v.object({
@@ -959,12 +959,6 @@ export const approveAssistedMedia = internalMutation({
     const thread = await requireThreadForUser(ctx, args.userId, brief.threadId);
     const saveFolderId = args.folderId ?? thread.linkedFolderId;
     await requireFolderForUser(ctx, args.userId, saveFolderId);
-    if (args.folderId && args.folderId !== thread.linkedFolderId) {
-      await ctx.db.patch(thread._id, {
-        linkedFolderId: args.folderId,
-        updatedAt: Date.now(),
-      });
-    }
     const stylePresetId = plan.settings.stylePresetId as Id<"stylePresets"> | undefined;
     if (!stylePresetId) throw new Error("Select a style before approving.");
     const preset = await ctx.db.get("stylePresets", stylePresetId);

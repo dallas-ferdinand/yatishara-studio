@@ -1101,8 +1101,6 @@ export function StudioShell({
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
-  const folderSyncTimerRef = useRef(null);
-  const lastFolderSyncKeyRef = useRef("");
 
   const [activeFolderId, setActiveFolderId] = useState(
     () => readPersistedTabSession().activeFolderId,
@@ -2106,41 +2104,6 @@ export function StudioShell({
       setLoadingEarlierChat(false);
     }
   }
-
-  // Keep the open chat's save folder in sync with the explorer so generations
-  // land in the folder the user is currently viewing. Debounced + deduped so
-  // multi-tab / reactive thread updates cannot thrash folder_switched events.
-  useEffect(() => {
-    if (!hasCurrentUser || !activeThreadId || !activeFolder?._id || isTrashView) return;
-    const thread = threads?.find((item) => item._id === activeThreadId);
-    if (!thread || thread.linkedFolderId === activeFolder._id) return;
-    const syncKey = `${activeThreadId}:${activeFolder._id}`;
-    if (lastFolderSyncKeyRef.current === syncKey) return;
-    if (folderSyncTimerRef.current) {
-      clearTimeout(folderSyncTimerRef.current);
-    }
-    folderSyncTimerRef.current = setTimeout(() => {
-      folderSyncTimerRef.current = null;
-      lastFolderSyncKeyRef.current = syncKey;
-      void switchThreadFolder({
-        threadId: activeThreadId,
-        folderId: activeFolder._id,
-      });
-    }, 600);
-    return () => {
-      if (folderSyncTimerRef.current) {
-        clearTimeout(folderSyncTimerRef.current);
-        folderSyncTimerRef.current = null;
-      }
-    };
-  }, [
-    activeFolder?._id,
-    activeThreadId,
-    hasCurrentUser,
-    isTrashView,
-    switchThreadFolder,
-    threads,
-  ]);
 
   useEffect(() => {
     // Assistance stays on unless the thread/user explicitly opted out (stored false).
@@ -5908,7 +5871,8 @@ export function StudioShell({
   }
 
   async function uploadComposerFiles(files) {
-    if (!activeFolder) return;
+    const saveFolderId = generationSaveFolderId(activeThreadId);
+    if (!saveFolderId) return;
     try {
       for (const file of Array.from(files ?? [])) {
         const isMarkdown =
@@ -5924,7 +5888,7 @@ export function StudioShell({
         const kind = kindFromMime(file.type);
         const assetId = await uploadStudioAsset({
           file,
-          folderId: activeFolder._id,
+          folderId: saveFolderId,
           kind,
           reserveUpload,
           commitStagingUpload,
@@ -6092,6 +6056,15 @@ export function StudioShell({
     return rows;
   }
 
+  /** Chat outputs save to the thread's pinned folder, not the explorer browse folder. */
+  function generationSaveFolderId(threadId) {
+    if (threadId && threads?.length) {
+      const linked = threads.find((item) => item._id === threadId)?.linkedFolderId;
+      if (linked) return linked;
+    }
+    return activeFolder?._id;
+  }
+
   async function handleGenerateVideoFromImage(entry) {
     if (!activeFolder || !entry || assistBusy || flowPending) return;
     const fullEntry = pathToEntry.get(entry.path) ?? entry;
@@ -6195,7 +6168,7 @@ export function StudioShell({
         await submitAssistedTurn({
           clientTurnId,
           threadId,
-          folderId: activeFolder._id,
+          folderId: generationSaveFolderId(threadId),
           mode: "video",
           entryPoint: "image_to_video",
           videoType,
@@ -6365,7 +6338,7 @@ export function StudioShell({
         aspectRatio: aspectForRun,
         resolution: "4K",
         quality: "high",
-        folderId: activeFolder._id,
+        folderId: generationSaveFolderId(threadId),
         referenceUrls: [referenceUrl],
         skipPromptEnhancement: true,
         referenceIntent: "match_reference",
@@ -6586,7 +6559,7 @@ export function StudioShell({
           const result = await submitAssistedTurn({
             clientTurnId,
             threadId,
-            folderId: activeFolder._id,
+            folderId: generationSaveFolderId(threadId),
             mode,
             videoType: mode === "video" ? videoType : undefined,
             userPrompt,
@@ -6729,7 +6702,7 @@ export function StudioShell({
         setFlowPending(false);
         void runAudioFlow({
           threadId,
-          folderId: activeFolder._id,
+          folderId: generationSaveFolderId(threadId),
           userPrompt,
           audioType,
           elevenVoiceId: selectedVoice?.voiceId,
@@ -6823,7 +6796,7 @@ export function StudioShell({
           }
         }
         const result = await generateScript({
-          folderId: activeFolder._id,
+          folderId: generationSaveFolderId(activeThreadId) ?? activeFolder._id,
           stylePresetId: directPreset._id,
           styleSheetElementId: composerStyleMode === "styled" ? activeStyleSheetId : undefined,
           userPrompt: buildPromptWithAttachments(liveDraft, attachments),
@@ -6920,7 +6893,7 @@ export function StudioShell({
         resolution: genMode === "image" ? normalizeImageResolution(imageResolution) : resolution,
         quality: genMode === "image" ? imageQuality : undefined,
         durationSeconds: genMode === "video" ? Number(durationSeconds) : undefined,
-        folderId: activeFolder._id,
+        folderId: generationSaveFolderId(threadId),
         referenceUrls: genMode === "image"
           ? [
               ...(activeStyleSheetReference ? [activeStyleSheetReference.url] : []),
@@ -20525,7 +20498,7 @@ export function StudioShell({
                 const result = await approveAndGenerate({
                   briefId: activeGuidedBrief._id,
                   expectedRevision: activeGuidedBrief.revision,
-                  folderId: activeFolder._id,
+                  folderId: generationSaveFolderId(activeThreadId),
                   stylePresetId: directPreset?._id,
                   stylePresetSlug: selectedStylePreset?.slug ?? "unstyled",
                 });
@@ -20599,6 +20572,7 @@ export function StudioShell({
               }
             }}
             onSwitchThreadFolder={(threadId) => {
+              // Explicit only — never auto-bind chat save folder to explorer browse.
               if (!activeFolder) return;
               void switchThreadFolder({ threadId, folderId: activeFolder._id });
             }}
