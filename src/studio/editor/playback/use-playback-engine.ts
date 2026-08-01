@@ -23,6 +23,12 @@ import { TransportClock } from "./transport-clock";
 import { isLegacySystemFont, loadGoogleFont } from "../loadGoogleFont";
 import { clipSpeed } from "../projectContract";
 
+/** Transient decode waits — buffer/underrun, never a red preview banner. */
+function isSoftDecodeFailure(reason: unknown): boolean {
+  const message = reason instanceof Error ? reason.message : String(reason ?? "");
+  return /frame decode timeout/i.test(message);
+}
+
 /** Kick the continuous decode pump for video assets in/near the playhead. */
 function startDecodePumps(
   decoder: MediaDecoderClient,
@@ -228,16 +234,25 @@ class EngineConsumer implements FrameConsumer {
             frame: frame.clone(),
           };
         }
-        return await this.decoder.requestFrame(
-          assetId,
-          url,
-          sample.sourceTime,
-          generation,
-          {
-            speed: clipSpeed(sample.clip.clip.effects),
-            aheadSec: this.playingRef.current ? 0.75 : 0.5,
-          },
-        );
+        try {
+          return await this.decoder.requestFrame(
+            assetId,
+            url,
+            sample.sourceTime,
+            generation,
+            {
+              speed: clipSpeed(sample.clip.clip.effects),
+              aheadSec: this.playingRef.current ? 0.75 : 0.5,
+            },
+          );
+        } catch (reason) {
+          // Underrun / slow keyframe — same as a missing frame: buffer, don't
+          // paint a hard "Frame decode timeout." alert over the preview.
+          if (isSoftDecodeFailure(reason) || this.playingRef.current) {
+            return null;
+          }
+          throw reason;
+        }
       }),
     );
     // Touch the promise so failures aren't unhandled; do not await for readiness.
@@ -591,6 +606,7 @@ export function usePlaybackEngine(args: {
         },
         onEnded: () => callbacksRef.current.onPlayingChange(false),
         onError: (reason) => {
+          if (isSoftDecodeFailure(reason)) return;
           if (runtimeRef.current) setError(reason.message);
           callbacksRef.current.onPlayingChange(false);
         },
@@ -637,12 +653,13 @@ export function usePlaybackEngine(args: {
         );
       }, 10_000);
       void scheduler.renderNow(playhead).catch((reason) => {
-        if (runtimeRef.current) {
-          setError(reason instanceof Error ? reason.message : String(reason));
-        }
+        if (!runtimeRef.current || isSoftDecodeFailure(reason)) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      if (!isSoftDecodeFailure(reason)) {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      }
     }
     return () => {
       bufferHold.resumeAfterBuffer = false;
@@ -688,6 +705,7 @@ export function usePlaybackEngine(args: {
       );
     });
     void runtime.scheduler.renderNow(time).catch((reason) => {
+      if (isSoftDecodeFailure(reason)) return;
       setError(reason instanceof Error ? reason.message : String(reason));
     });
   }, [project]);
@@ -701,6 +719,7 @@ export function usePlaybackEngine(args: {
     void runtime.scheduler
       .renderNow(runtime.clock.currentTime())
       .catch((reason) => {
+        if (isSoftDecodeFailure(reason)) return;
         setError(reason instanceof Error ? reason.message : String(reason));
       });
   }, [width, height]);
@@ -740,6 +759,7 @@ export function usePlaybackEngine(args: {
           runtime.scheduler.start();
         })
         .catch((reason) => {
+          if (isSoftDecodeFailure(reason)) return;
           setError(reason instanceof Error ? reason.message : String(reason));
           callbacksRef.current.onPlayingChange(false);
         });
@@ -778,6 +798,7 @@ export function usePlaybackEngine(args: {
       });
     }
     void runtime.scheduler.renderNow(playhead).catch((reason) => {
+      if (isSoftDecodeFailure(reason)) return;
       setError(reason instanceof Error ? reason.message : String(reason));
     });
   }, [playhead, playing]);
@@ -804,6 +825,7 @@ export function usePlaybackEngine(args: {
     });
     if (!playingRef.current) {
       void runtime.scheduler.renderNow(time).catch((reason) => {
+        if (isSoftDecodeFailure(reason)) return;
         setError(reason instanceof Error ? reason.message : String(reason));
       });
     }

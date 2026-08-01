@@ -117,7 +117,8 @@ const MAX_DECODER_SESSIONS = 6;
 const DECODE_CHUNK = 24;
 const DEFAULT_AHEAD_SEC = 0.75;
 const FRAME_WAIT_MS = 2_500;
-const PLAY_WAIT_MS = 120;
+/** Playpath wait — short, but not so short a single slow chunk becomes a hard UI error. */
+const PLAY_WAIT_MS = 400;
 
 function totalCacheBytes(): number {
   let total = 0;
