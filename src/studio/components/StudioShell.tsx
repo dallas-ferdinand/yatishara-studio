@@ -7974,29 +7974,37 @@ export function StudioShell({
         body.is-grabbing-cursor {
           cursor: var(--studio-cursor-grabbing, grabbing) !important;
         }
-        .desk-file-list-row.is-drag-over,
+        .desk-file-list-row.is-drag-over {
+          outline: none !important;
+          border-radius: 10px !important;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 55%, transparent) !important;
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 16%, var(--mos-plate, var(--color-cursor-sidebar, transparent))) !important;
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 28%, transparent),
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, transparent);
+        }
         .desk-file-grid-item.is-drag-over,
         .desk-file-preview-item.is-drag-over {
           outline: none !important;
-          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 90%, var(--cursor-accent) 10%) !important;
-          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
+          border: none !important;
+          background: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          box-shadow: none !important;
+        }
+        .desk-file-grid-item.is-drag-over .desk-file-thumb-visual,
+        .desk-file-preview-item.is-drag-over .desk-file-thumb-visual {
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 60%, transparent) !important;
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, var(--mos-plate, var(--studio-grid-tile-hover, transparent))) !important;
           box-shadow:
-            0 12px 32px color-mix(in srgb, #000 30%, transparent),
-            0 4px 12px color-mix(in srgb, #000 18%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.07);
-          border-radius: 10px;
+            0 0 0 2px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 35%, transparent),
+            0 10px 24px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, transparent) !important;
         }
         .desk-file-breadcrumbs-chip.is-drag-over {
           outline: none !important;
-          border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-          background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 88%, var(--cursor-accent) 12%) !important;
-          backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-          -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-          box-shadow:
-            0 10px 24px color-mix(in srgb, #000 28%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.07);
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 55%, transparent) !important;
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, transparent) !important;
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 30%, transparent);
         }
         .desk-file-drag-preview {
           border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
@@ -13284,10 +13292,21 @@ export function StudioShell({
           -webkit-backdrop-filter: none !important;
           box-shadow: none !important;
         }
+        /* Accent drop-target (was plain tile hover — read as “no hover”) */
         .studio-polish .desk-file-grid-item.is-drag-over .desk-file-thumb-visual,
         .studio-polish .desk-file-preview-item.is-drag-over .desk-file-thumb-visual {
-          background: var(--studio-grid-tile-hover) !important;
-          box-shadow: none !important;
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 60%, transparent) !important;
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, var(--mos-plate, var(--studio-grid-tile-hover))) !important;
+          box-shadow:
+            0 0 0 2px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 35%, transparent),
+            0 10px 24px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, transparent) !important;
+        }
+        .studio-polish .desk-file-list-row.is-drag-over {
+          border: 1px solid color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 55%, transparent) !important;
+          background: color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 16%, var(--mos-plate, transparent)) !important;
+          box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 28%, transparent),
+            inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent, var(--mos-accent, #6b8afd)) 18%, transparent) !important;
         }
         .studio-folder-pathbar {
           display: flex;

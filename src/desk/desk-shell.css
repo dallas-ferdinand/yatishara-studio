@@ -4514,30 +4514,36 @@ input[type="search"]:focus-visible {
   }
 }
 
-.desk-file-list-row.is-drag-over,
+/* Folder drop hover — accent (StudioShell polish may override; keep fallback here) */
+.desk-file-list-row.is-drag-over {
+  outline: none !important;
+  border-radius: 10px !important;
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #6b8afd) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--cursor-accent, #6b8afd) 16%, var(--mos-plate, var(--color-cursor-sidebar, transparent))) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--cursor-accent, #6b8afd) 28%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--cursor-accent, #6b8afd) 18%, transparent);
+}
 .desk-file-grid-item.is-drag-over,
 .desk-file-preview-item.is-drag-over {
   outline: none !important;
-  border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-  background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 90%, var(--cursor-accent, #6b8afd) 10%) !important;
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  box-shadow:
-    0 12px 32px color-mix(in srgb, #000 30%, transparent),
-    0 4px 12px color-mix(in srgb, #000 18%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
-
+.desk-file-grid-item.is-drag-over .desk-file-thumb-visual,
+.desk-file-preview-item.is-drag-over .desk-file-thumb-visual {
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #6b8afd) 60%, transparent) !important;
+  background: color-mix(in srgb, var(--cursor-accent, #6b8afd) 18%, var(--mos-plate, transparent)) !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--cursor-accent, #6b8afd) 35%, transparent),
+    0 10px 24px color-mix(in srgb, var(--cursor-accent, #6b8afd) 18%, transparent);
+}
 .desk-file-breadcrumbs-chip.is-drag-over {
   outline: none !important;
-  border: 1px solid var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-  background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 88%, var(--cursor-accent, #6b8afd) 12%) !important;
-  backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
-  box-shadow:
-    0 10px 24px color-mix(in srgb, #000 28%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  border: 1px solid color-mix(in srgb, var(--cursor-accent, #6b8afd) 55%, transparent) !important;
+  background: color-mix(in srgb, var(--cursor-accent, #6b8afd) 18%, transparent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cursor-accent, #6b8afd) 30%, transparent);
 }
 
 .desk-explorer-dialog-backdrop {

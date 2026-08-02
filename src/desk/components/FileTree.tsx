@@ -1260,6 +1260,10 @@ function FileEntryButton({
       onPointerLeave={() => {
         buttonRef.current?.classList.remove("is-pressed");
       }}
+      onDragEnter={isDir && onDropEntry ? (e) => {
+        e.preventDefault();
+        setDragOver(true);
+      } : undefined}
       onDragOver={isDir && onDropEntry ? (e) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = Array.from(e.dataTransfer.types).includes("Files")
@@ -1267,7 +1271,9 @@ function FileEntryButton({
           : "move";
         setDragOver(true);
       } : undefined}
-      onDragLeave={isDir && onDropEntry ? () => setDragOver(false) : undefined}
+      onDragLeave={isDir && onDropEntry ? (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false);
+      } : undefined}
       onDrop={isDir && onDropEntry ? (e) => {
         e.preventDefault();
         e.stopPropagation();
