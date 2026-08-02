@@ -82,12 +82,12 @@ from `--mos-plate`:
   mix for hover/selected (hover darkens in light, lifts in dark).
 - `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
   `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
-- **Tile edges** use `--desk-folder-edge`, which **aliases** the default chrome
-  border (`--color-cursor-border` / `--mos-border`) — same stroke as cards and
-  controls everywhere. Applied as `::after` inset ring on
-  `.desk-file-thumb-peek-wrap` (above the title band so it is not covered),
-  solid border on peek cards, and the title-band / peek-label divider. Stay on
-  L2 plate fill — never bump folders to L3 for “more contrast.”
+- **Tile edges** use `--desk-folder-edge`, which **aliases** soft chrome
+  (`--color-cursor-border-soft` / `--mos-border-soft`) — same hairline as
+  sidebar / shell dividers (`--studio-shell-border`). Applied as `::after`
+  inset ring on `.desk-file-thumb-peek-wrap` (above the title band so it is
+  not covered), solid border on peek cards, and the title-band / peek-label
+  divider. Stay on L2 plate fill — never bump folders to L3 for “more contrast.”
 - File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
   pill + ink glyph** for folders, images, and audio — never dark glass on media
   only. **System folders** (Trash / Messages / Purchased / My Public): center glyph
