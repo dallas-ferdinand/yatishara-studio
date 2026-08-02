@@ -30,9 +30,12 @@
 .studio-file-reaction-emoji {
   appearance: none;
   border: 0;
-  border-radius: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  aspect-ratio: 1 / 1;
+  width: 100%;
   background: color-mix(in srgb, var(--mos-page, #f5f5f7) 70%, transparent);
-  min-height: 48px;
+  min-height: 0;
   font-size: 26px;
   line-height: 1;
   cursor: pointer;
