@@ -116,6 +116,10 @@ const FRIENDLY_BY_PATTERN: Array<{ match: RegExp; message: string }> = [
     message: "Connection blipped. Try again.",
   },
   {
+    match: /cdn blocked the request|bunny cors/i,
+    message: "Download was blocked by storage. Try again in a moment.",
+  },
+  {
     match: /network|failed to fetch|timed out|timeout/i,
     message: "Connection problem. Check your network and try again.",
   },

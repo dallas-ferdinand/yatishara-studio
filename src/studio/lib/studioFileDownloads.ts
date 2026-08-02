@@ -53,12 +53,30 @@ async function manifest(
   });
 }
 
+function isFetchNetworkError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === "AbortError") return false;
+  if (error instanceof TypeError) return true;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /failed to fetch|networkerror|load failed/i.test(message);
+}
+
 async function readRemote(
   url: string,
   signal: AbortSignal | undefined,
   onChunk: (chunk: Uint8Array) => void,
 ): Promise<void> {
-  const response = await fetch(url, { signal });
+  let response: Response;
+  try {
+    // Bunny signed URLs are cross-origin; omit cookies so wildcard CORS is allowed.
+    response = await fetch(url, { signal, mode: "cors", credentials: "omit" });
+  } catch (error) {
+    if (isFetchNetworkError(error)) {
+      throw new Error(
+        "Could not download from storage (CDN blocked the request). Try again, or ask an admin to check Bunny CORS for this file type.",
+      );
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(`Download failed (${response.status})`);
   if (!response.body) {
     onChunk(new Uint8Array(await response.arrayBuffer()));
@@ -70,6 +88,18 @@ async function readRemote(
     if (done) return;
     if (value) onChunk(value);
   }
+}
+
+/** Last-resort single-file save when CORS fetch is blocked (opens the signed URL). */
+function saveViaAnchor(url: string, name: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.rel = "noopener";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 export async function downloadStudioEntry(args: {
@@ -98,11 +128,28 @@ export async function downloadStudioEntry(args: {
   const chunks: Uint8Array[] = [];
   let loaded = 0;
   const total = file.byteSize ?? 0;
-  await readRemote(file.url, args.signal, (chunk) => {
-    chunks.push(chunk);
-    loaded += chunk.byteLength;
-    args.onProgress?.({ loaded, total, fileName, phase: "downloading" });
-  });
+  try {
+    await readRemote(file.url, args.signal, (chunk) => {
+      chunks.push(chunk);
+      loaded += chunk.byteLength;
+      args.onProgress?.({ loaded, total, fileName, phase: "downloading" });
+    });
+  } catch (error) {
+    if (args.signal?.aborted) throw error;
+    const message = error instanceof Error ? error.message : String(error ?? "");
+    if (!/cdn blocked the request|bunny cors|failed to fetch/i.test(message)) {
+      throw error;
+    }
+    // Browser may still navigate/save via download attribute when fetch CORS fails.
+    saveViaAnchor(file.url, fileName);
+    args.onProgress?.({
+      loaded: total || 1,
+      total: total || 1,
+      fileName,
+      phase: "downloading",
+    });
+    return fileName;
+  }
   saveBlob(bytesToBlob(chunks), fileName);
   return fileName;
 }
