@@ -82,8 +82,9 @@ from `--mos-plate`:
   mix for hover/selected (hover darkens in light, lifts in dark).
 - `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
   `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
-- **Folder edges** use `--desk-folder-edge` (`color-mix(mos-text 22%, transparent)`) —
-  darker grey than soft chrome hairlines. Applied as inset ring on folder tiles,
+- **Tile edges** use `--desk-folder-edge` (`color-mix(mos-text 12%, transparent)`) —
+  soft hairline (not harsh 22%). Applied as `::after` inset ring on
+  `.desk-file-thumb-peek-wrap` (above the title band so it is not covered),
   solid border on peek cards, and the title-band / peek-label divider. Stay on
   L2 plate fill — never bump folders to L3 for “more contrast.”
 - File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
