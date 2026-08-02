@@ -82,13 +82,10 @@ from `--mos-plate`:
   mix for hover/selected (hover darkens in light, lifts in dark).
 - `.desk-file-thumb-peek-wrap`, `.desk-folder-peek-card`, peek label bands,
   `.desk-file-thumb-audio`, `.desk-file-thumb-visual` light overrides = `--mos-plate`.
-- **Tile edges** use `--desk-folder-edge` (`color-mix(mos-text 22%, transparent)`) —
-  darker grey than soft chrome hairlines. Default inset ring on **folders and
-  files** via `.desk-file-thumb-peek-wrap` (not on `.desk-file-thumb-visual` —
-  the peek surface covers visual inset rings). Same token for peek cards and
-  title-band / peek-label dividers. Media thumbs always `object-fit: cover`
-  (absolute fill inside progressive). Stay on L2 plate fill — never bump
-  folders to L3 for “more contrast.”
+- **Folder edges** use `--desk-folder-edge` (`color-mix(mos-text 22%, transparent)`) —
+  darker grey than soft chrome hairlines. Applied as inset ring on folder tiles,
+  solid border on peek cards, and the title-band / peek-label divider. Stay on
+  L2 plate fill — never bump folders to L3 for “more contrast.”
 - File-manager type chips (`.desk-file-thumb-badge` on peek wraps): **same white
   pill + ink glyph** for folders, images, and audio — never dark glass on media
   only. **System folders** (Trash / Messages / Purchased / My Public): center glyph
