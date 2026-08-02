@@ -8557,9 +8557,10 @@ export function StudioShell({
           position: relative;
           overflow: hidden;
         }
-        .studio-polish :where(.desk-file-grid-item, .desk-file-preview-item) {
+        .studio-polish .desk-file-grid-item,
+        .studio-polish .desk-file-preview-item {
           position: relative;
-          overflow: visible;
+          overflow: visible !important;
         }
         @media (hover: hover) {
           .studio-polish .cursor-tree-row:hover {
@@ -12992,6 +12993,8 @@ export function StudioShell({
           min-height: 0;
           overflow: hidden;
           border-radius: 10px;
+          /* Resting tile edge — visual inset is covered by this fill */
+          box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent)) !important;
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-image,

@@ -1333,6 +1333,8 @@ select.cursor-select:focus {
   overflow: hidden;
   border-radius: inherit;
   background: var(--mos-panel);
+  /* Edge on this surface — inset on .desk-file-thumb-visual is covered by peek-wrap fill */
+  box-shadow: inset 0 0 0 1px var(--desk-folder-edge, color-mix(in srgb, var(--mos-text) 22%, transparent));
 }
 
 [data-appearance="light"] .desk-file-thumb-peek-wrap {

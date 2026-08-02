@@ -6960,7 +6960,8 @@
 .cursor-explorer-panel .desk-file-grid-item {
   min-height: 0;
   height: auto;
-  overflow: hidden;
+  /* Must stay visible — overflow:hidden clips tile edge rings + folder peeks */
+  overflow: visible;
   border-radius: 16px;
   transition:
     transform 150ms ease-out,
@@ -6970,7 +6971,7 @@
 }
 
 .cursor-explorer-panel .desk-file-thumb {
-  overflow: hidden;
+  overflow: visible;
   border-radius: inherit;
 }
 
