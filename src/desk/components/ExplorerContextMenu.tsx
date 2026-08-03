@@ -551,7 +551,7 @@ export function ExplorerContextMenu({
     );
     if (!parentBtn) return;
     const rect = parentBtn.getBoundingClientRect();
-    const gap = 4;
+    const gap = 2;
     const isEmoji = openSubmenuItem.submenuKind === "emoji-grid";
     const estimatedWidth = isEmoji ? 132 : openSubmenuItem.submenuKind === "share-recipients" ? 220 : 180;
     const estimatedHeight = isEmoji

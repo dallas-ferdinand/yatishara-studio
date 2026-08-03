@@ -8464,23 +8464,25 @@ textarea.cursor-input {
 }
 .desk-explorer-context-submenu {
   z-index: 651;
-  /* Slightly darker than primary context menu so nested menus read as secondary. */
-  background: color-mix(
-    in srgb,
-    var(--cursor-surface-raised, var(--mos-plate, #2a2a2c)) 78%,
-    #000 22%
-  );
+  /* Same panel grey as primary (.cursor-tab-context-menu uses --mos-plate). */
+  background: var(--mos-plate, var(--mos-bg, #ececf0));
 }
 
 .desk-explorer-context-submenu .cursor-tab-context-sep {
   display: none;
 }
 
-[data-appearance="light"] .desk-explorer-context-submenu {
+/* Secondary menu row buttons = darker grey (level-3 plates). */
+.desk-explorer-context-submenu .cursor-tab-context-item {
+  background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
+}
+
+.desk-explorer-context-submenu .cursor-tab-context-item:hover,
+.desk-explorer-context-submenu .cursor-tab-context-item.is-active {
   background: color-mix(
     in srgb,
-    var(--cursor-surface-raised, var(--mos-plate, #f5f5f7)) 88%,
-    #000 12%
+    var(--mos-plate-strong, var(--mos-raised, #d4d4da)) 72%,
+    var(--color-cursor-text, #111) 8%
   );
 }
 
