@@ -449,7 +449,11 @@ export function ExplorerContextMenu({
     ready: false,
     forId: null,
   });
-  const [portalRoot, setPortalRoot] = useState(null);
+  const portalRoot = open
+    ? isSheet
+      ? document.querySelector(".studio-polish") ?? document.body
+      : document.body
+    : null;
 
   function clearSubmenuCloseTimer() {
     if (submenuCloseTimerRef.current != null) {
@@ -527,18 +531,6 @@ export function ExplorerContextMenu({
     entry?.path,
     entry?.type,
   ]);
-
-  useEffect(() => {
-    if (!open) {
-      setPortalRoot(null);
-      return;
-    }
-    if (isSheet) {
-      setPortalRoot(document.querySelector(".studio-polish") ?? document.body);
-    } else {
-      setPortalRoot(document.body);
-    }
-  }, [open, isSheet]);
 
   useEffect(() => {
     clearSubmenuCloseTimer();
