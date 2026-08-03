@@ -1356,8 +1356,10 @@ select.cursor-select:focus {
 }
 
 .desk-file-thumb-peek-wrap {
-  --desk-peek-label-band: calc(10px * 1.15 + 4px + 5px + 2px);
+  /* Label band = font line-height + vertical padding only (keep in sync with .desk-file-thumb-peek-label). */
+  --desk-peek-label-band: calc(10px * 1.15 + 4px);
   --desk-peek-tile-radius: 10px;
+  --desk-thumb-badge-inset: 6px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1433,7 +1435,7 @@ select.cursor-select:focus {
 }
 
 .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
-  inset: auto auto calc(var(--desk-peek-label-band) + 6px) 6px;
+  inset: auto auto calc(var(--desk-peek-label-band) + var(--desk-thumb-badge-inset, 6px)) var(--desk-thumb-badge-inset, 6px);
   width: 20px;
   height: 20px;
   align-items: center;

@@ -13305,7 +13305,7 @@ export function StudioShell({
         }
         .studio-polish .desk-file-grid-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge,
         .studio-polish .desk-file-preview-item .desk-file-thumb-peek-wrap .desk-file-thumb-badge {
-          inset: auto auto calc(var(--desk-peek-label-band) + 6px) 6px;
+          inset: auto auto calc(var(--desk-peek-label-band) + var(--desk-thumb-badge-inset, 6px)) var(--desk-thumb-badge-inset, 6px);
           width: 20px;
           height: 20px;
           border-radius: 999px;
