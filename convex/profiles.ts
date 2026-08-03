@@ -386,8 +386,14 @@ async function signAvatarUrl(
   // (same pattern as feed author thumbs).
   const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
   if (!thumbPath) return undefined;
-  const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM);
-  return signed.get(thumbPath);
+  try {
+    const signed = await signBunnyCdnUrls([thumbPath], expiresUnix, THUMB_TRANSFORM);
+    return signed.get(thumbPath);
+  } catch {
+    // Hot paths (getMine) must stay under the 1s isolate budget even if
+    // Bunny env/signing hiccups — profile fields still return without avatar.
+    return undefined;
+  }
 }
 
 type HydratedMentionChip = {
@@ -524,6 +530,26 @@ async function adjustProfileCounts(
   });
 }
 
+/** Handle only — no Bunny signing / seller lookup. Shell boot uses this. */
+export const getMyHandle = authedQuery({
+  args: {},
+  returns: v.union(
+    v.null(),
+    v.object({
+      username: v.string(),
+      publicUrlPath: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const profile = await getProfileByUser(ctx, ctx.user._id);
+    if (!profile) return null;
+    return {
+      username: profile.username,
+      publicUrlPath: publicUrlPath(profile.username),
+    };
+  },
+});
+
 export const getMine = authedQuery({
   args: {
     expiresUnix: v.optional(v.number()),
@@ -534,12 +560,12 @@ export const getMine = authedQuery({
     if (!profile) return null;
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    let avatarUrl: string | undefined;
-    if (profile.avatarAssetId) {
-      const avatar = await ctx.db.get("assets", profile.avatarAssetId);
-      avatarUrl = await signAvatarUrl(avatar, expiresUnix);
-    }
-    const seller = await getMarketplaceSellerForUser(ctx, ctx.user._id);
+    const avatarId = profile.avatarAssetId;
+    const [avatar, seller] = await Promise.all([
+      avatarId ? ctx.db.get("assets", avatarId) : Promise.resolve(null),
+      getMarketplaceSellerForUser(ctx, ctx.user._id),
+    ]);
+    const avatarUrl = await signAvatarUrl(avatar, expiresUnix);
     const approved = seller?.status === "approved";
     const sellerBusinessName =
       approved && seller.businessName.trim()
@@ -804,7 +830,7 @@ export const listMySharedAssetIds = authedQuery({
     const posts = await ctx.db
       .query("profilePosts")
       .withIndex("by_owner", (q) => q.eq("ownerId", ctx.user._id))
-      .collect();
+      .take(500);
     return {
       hasProfile: true,
       username: profile.username,
@@ -2438,12 +2464,12 @@ export const getMineForApi = internalQuery({
     if (!profile) return null;
     const expiresUnix =
       args.expiresUnix ?? Math.floor(Date.now() / 1000) + PUBLIC_URL_TTL_SECONDS;
-    let avatarUrl: string | undefined;
-    if (profile.avatarAssetId) {
-      const avatar = await ctx.db.get("assets", profile.avatarAssetId);
-      avatarUrl = await signAvatarUrl(avatar, expiresUnix);
-    }
-    const seller = await getMarketplaceSellerForUser(ctx, user._id);
+    const avatarId = profile.avatarAssetId;
+    const [avatar, seller] = await Promise.all([
+      avatarId ? ctx.db.get("assets", avatarId) : Promise.resolve(null),
+      getMarketplaceSellerForUser(ctx, user._id),
+    ]);
+    const avatarUrl = await signAvatarUrl(avatar, expiresUnix);
     const approved = seller?.status === "approved";
     const sellerBusinessName =
       approved && seller.businessName.trim()
@@ -3047,7 +3073,7 @@ export const listMySharedAssetIdsForApi = internalQuery({
     const posts = await ctx.db
       .query("profilePosts")
       .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
-      .collect();
+      .take(500);
     return {
       hasProfile: true,
       username: profile.username,

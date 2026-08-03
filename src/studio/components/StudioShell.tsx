@@ -1627,10 +1627,10 @@ export function StudioShell({
     api.notifications.listMine,
     hasCurrentUser && (settingsOpen || historyOpen) ? {} : "skip",
   );
-  // Always load own profile handle so View profile can open the tab (not settings).
+  // Handle only — full getMine (avatar signing) is reserved for settings/DM/compose.
   const myPublicProfile = useQuery(
-    api.profiles.getMine,
-    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
+    api.profiles.getMyHandle,
+    hasCurrentUser ? {} : "skip",
   );
   const sharedProfileAssets = useQuery(
     api.profiles.listMySharedAssetIds,

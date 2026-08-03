@@ -1998,7 +1998,10 @@ export function StudioMessagesPane({
   useLayoutEffect(() => {
     bindDmCacheOwner(me?.userId ?? null);
   }, [me?.userId]);
-  const myProfile = useQuery(api.profiles.getMine, { expiresUnix });
+  const myProfile = useQuery(
+    api.profiles.getMine,
+    cacheReady ? { expiresUnix } : "skip",
+  );
   const conversationsLive = useQuery(api.dms.listMyConversations, { expiresUnix });
   const messagesLive = useQuery(
     api.dms.listMessages,
