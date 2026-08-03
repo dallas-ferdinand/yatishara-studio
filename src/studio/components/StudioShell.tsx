@@ -100,6 +100,10 @@ import { toast } from "sonner";
 import { AttachmentPreviewSheet } from "@/desk/components/AttachmentPreviewSheet";
 import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { FileReactionPicker } from "@/studio/components/FileReactionPicker";
+import {
+  StudioSharePeoplePanel,
+  type SharePeoplePeer,
+} from "@/studio/components/StudioSharePeoplePanel";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
 import { isAllowedReactionEmoji } from "@/studio/lib/itemReactions";
 import { MediaLoadFrame, MediaLoadWave } from "./media-load-frame";
@@ -1112,6 +1116,10 @@ export function StudioShell({
   const ensurePublicAssetsFolderForMe = useMutation(
     api.folders.ensurePublicAssetsFolderForMe,
   );
+  const ensureSharedWithMeFolderForMe = useMutation(
+    api.folders.ensureSharedWithMeFolderForMe,
+  );
+  const shareStudioItems = useMutation(api.studioShares.shareItems);
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
@@ -1332,6 +1340,10 @@ export function StudioShell({
   // assets and Confirm. Cleared on confirm / cancel / tab change.
   const [assetPickRequest, setAssetPickRequest] = useState(null);
   const [assetPickSelected, setAssetPickSelected] = useState([]);
+  /** Files-rail share-to-people session (context Share → multi-select peers). */
+  const [sharePeopleRequest, setSharePeopleRequest] = useState(null);
+  const [sharePeopleSelected, setSharePeopleSelected] = useState([]);
+  const [sharePeopleBusy, setSharePeopleBusy] = useState(false);
   /** Deep-link slug for Creative Network offer detail inside Studio. */
   const [networkInitialSlug, setNetworkInitialSlug] = useState(null);
   /** Deep-link seller filter for Creative Network browse. */
@@ -1347,6 +1359,60 @@ export function StudioShell({
     },
     [assetPickRequest],
   );
+  const endSharePeople = useCallback(() => {
+    setSharePeopleRequest(null);
+    setSharePeopleSelected([]);
+    setSharePeopleBusy(false);
+  }, []);
+
+  function entryToShareItem(entry) {
+    if (!entry?.studioId || entry.type === "parent") return null;
+    if (entry.studioKind === "folder" || entry.type === "dir") {
+      if (entry.systemKind) return null;
+      return { itemKind: "folder", itemId: String(entry.studioId) };
+    }
+    if (entry.studioKind === "asset") {
+      return { itemKind: "asset", itemId: String(entry.studioId) };
+    }
+    if (entry.studioKind === "document") {
+      return { itemKind: "document", itemId: String(entry.studioId) };
+    }
+    if (entry.studioKind === "element") {
+      return { itemKind: "element", itemId: String(entry.studioId) };
+    }
+    if (entry.studioKind === "videoEdit") {
+      return { itemKind: "videoEdit", itemId: String(entry.studioId) };
+    }
+    return null;
+  }
+
+  function openSharePeopleForEntries(entries) {
+    const items = [];
+    const labels = [];
+    for (const entry of entries ?? []) {
+      const item = entryToShareItem(entry);
+      if (!item) continue;
+      items.push(item);
+      labels.push(entry.name || "item");
+    }
+    if (!items.length) {
+      toast.message("That item can’t be shared");
+      return;
+    }
+    setSharePeopleSelected([]);
+    setSharePeopleBusy(false);
+    setSharePeopleRequest({
+      items,
+      label:
+        labels.length === 1
+          ? labels[0]
+          : `${labels.length} items`,
+    });
+    if (isMobile) {
+      setMobileSection("files");
+      setFilesDockExpanded(true);
+    }
+  }
   const deferredSearch = useDeferredValue(search);
   const fileInputRef = useRef(null);
   const composerUploadInputRef = useRef(null);
@@ -1412,6 +1478,7 @@ export function StudioShell({
   // the user opens Files (first expand pays one Convex round-trip).
   const needsExplorerFolderContents =
     Boolean(assetPickRequest) ||
+    Boolean(sharePeopleRequest) ||
     (isMobile
       ? mobileSection === "files" ||
         filesDockExpanded ||
@@ -1800,9 +1867,42 @@ export function StudioShell({
       observer.disconnect();
     };
   }, [isMobile]);
+  const isSharedWithMeRoot = activeFolder?.systemKind === "shared_with_me";
+  const isSharedForeignBrowse = Boolean(
+    activeFolder &&
+      currentUser?.userId &&
+      activeFolder.ownerId &&
+      activeFolder.ownerId !== currentUser.userId,
+  );
+  const useSharedListing = isSharedWithMeRoot || isSharedForeignBrowse;
+  const sharedWithMeItems = useQuery(
+    api.studioShares.listSharedWithMe,
+    hasCurrentUser &&
+      isSharedWithMeRoot &&
+      needsExplorerFolderContents
+      ? { expiresUnix: assetUrlExpiresUnix }
+      : "skip",
+  );
+  const sharedFolderChildren = useQuery(
+    api.studioShares.listSharedFolderChildren,
+    hasCurrentUser &&
+      isSharedForeignBrowse &&
+      activeFolder &&
+      needsExplorerFolderContents
+      ? {
+          folderId: activeFolder._id,
+          expiresUnix: assetUrlExpiresUnix,
+        }
+      : "skip",
+  );
   const childFoldersQuery = useQuery(
     api.folders.listWithPeeks,
-    hasCurrentUser && activeFolder && !isTrashView && !isRecentsView && needsExplorerFolderContents
+    hasCurrentUser &&
+      activeFolder &&
+      !isTrashView &&
+      !isRecentsView &&
+      !useSharedListing &&
+      needsExplorerFolderContents
       ? {
           parentId: activeFolder._id,
           expiresUnix: assetUrlExpiresUnix,
@@ -1863,6 +1963,7 @@ export function StudioShell({
       activeFolder &&
       !isTrashView &&
       !isRecentsView &&
+      !useSharedListing &&
       needsExplorerFolderContents
       ? {
           folderId: activeFolder._id,
@@ -1888,6 +1989,7 @@ export function StudioShell({
       activeFolder &&
       !isTrashView &&
       !isRecentsView &&
+      !useSharedListing &&
       needsExplorerFolderContents
       ? { folderId: activeFolder._id, includeDeleted: isTrashBrowse }
       : "skip",
@@ -1910,6 +2012,7 @@ export function StudioShell({
       activeFolder &&
       !isTrashView &&
       !isRecentsView &&
+      !useSharedListing &&
       videoEditorEnabled &&
       needsExplorerFolderContents
       ? {
@@ -2929,6 +3032,11 @@ export function StudioShell({
   }, [mySellerStatus?.status, ensurePublicAssetsFolderForMe]);
 
   useEffect(() => {
+    if (!hasCurrentUser) return;
+    void ensureSharedWithMeFolderForMe({}).catch(() => {});
+  }, [hasCurrentUser, ensureSharedWithMeFolderForMe]);
+
+  useEffect(() => {
     if (!activeFolderId && topFolders?.[0]) {
       setActiveFolderId(topFolders[0]._id);
       setNavTrail([{ id: topFolders[0]._id, name: "Files" }]);
@@ -3164,6 +3272,33 @@ export function StudioShell({
       });
     }
 
+    if (isSharedWithMeRoot) {
+      const loading = sharedWithMeItems === undefined;
+      return {
+        loading,
+        entries: loading
+          ? []
+          : (sharedWithMeItems ?? []).map((item) => sharedListItemToEntry(item)),
+      };
+    }
+    if (isSharedForeignBrowse) {
+      const loading = sharedFolderChildren === undefined;
+      const children = sharedFolderChildren?.children ?? [];
+      return {
+        loading,
+        entries: loading
+          ? []
+          : children.map((item) =>
+              sharedListItemToEntry({
+                ...item,
+                shareId: `live:${item.itemKind}:${item.itemId}`,
+                fromUserId: sharedFolderChildren?.folder.ownerId,
+                createdAt: item.updatedAt,
+              }),
+            ),
+      };
+    }
+
     const entries = buildFlatEntries({
       folder: activeFolder,
       parent: parentEntry,
@@ -3188,6 +3323,9 @@ export function StudioShell({
       const publicIdx = rest.findIndex((entry) => entry.studioKind === "public");
       const publicEntry =
         publicIdx >= 0 ? rest.splice(publicIdx, 1)[0] : null;
+      const sharedIdx = rest.findIndex((entry) => entry.studioKind === "shared");
+      const sharedEntry =
+        sharedIdx >= 0 ? rest.splice(sharedIdx, 1)[0] : null;
       return {
         ...entries,
         entries: [
@@ -3196,6 +3334,7 @@ export function StudioShell({
           ...(messagesEntry ? [messagesEntry] : []),
           ...(purchasedEntry ? [purchasedEntry] : []),
           ...(publicEntry ? [publicEntry] : []),
+          ...(sharedEntry ? [sharedEntry] : []),
           ...rest,
         ],
       };
@@ -3223,6 +3362,10 @@ export function StudioShell({
     recentFileRows,
     recentReadyAssets,
     explorerUserId,
+    isSharedWithMeRoot,
+    isSharedForeignBrowse,
+    sharedWithMeItems,
+    sharedFolderChildren,
   ]);
 
   const rootEntries = useMemo(
@@ -4796,6 +4939,34 @@ export function StudioShell({
       }
       const kind = entry.kind ?? entry.mediaKind;
       const kinds = assetPickRequest.kinds ?? ["image"];
+      if (assetPickRequest.pickAnyStudio) {
+        const shareItem = entryToShareItem(entry);
+        if (shareItem) {
+          const pick = {
+            _id: entry.studioId,
+            name: entry.name,
+            kind: kind || entry.studioKind || "file",
+            mimeType: entry.mimeType || "",
+            signedThumbnailUrl:
+              entry.thumbnailUrl || entry.thumbnailLqipUrl || undefined,
+            path: entry.path,
+            itemKind: shareItem.itemKind,
+            itemId: shareItem.itemId,
+            studioKind: entry.studioKind,
+          };
+          const max = assetPickRequest.maxSelected ?? 10;
+          setAssetPickSelected((prev) => {
+            const exists = prev.some((item) => item._id === pick._id);
+            if (exists) return prev.filter((item) => item._id !== pick._id);
+            if (prev.length >= max) {
+              toast.message(`You can pick up to ${max} items`);
+              return prev;
+            }
+            return [...prev, pick];
+          });
+          return;
+        }
+      }
       if (entry.studioKind === "asset" && kinds.includes(kind)) {
         const pick = {
           _id: entry.studioId,
@@ -4805,6 +4976,9 @@ export function StudioShell({
           signedThumbnailUrl:
             entry.thumbnailUrl || entry.thumbnailLqipUrl || undefined,
           path: entry.path,
+          itemKind: "asset",
+          itemId: String(entry.studioId),
+          studioKind: "asset",
         };
         const max = assetPickRequest.maxSelected ?? 10;
         setAssetPickSelected((prev) => {
@@ -4819,9 +4993,11 @@ export function StudioShell({
         return;
       }
       toast.message(
-        kinds.includes("image") && kinds.length === 1
-          ? "Pick an image from your Files"
-          : "That file type isn’t allowed here",
+        assetPickRequest.pickAnyStudio
+          ? "Pick a Studio file or folder"
+          : kinds.includes("image") && kinds.length === 1
+            ? "Pick an image from your Files"
+            : "That file type isn’t allowed here",
       );
       return;
     }
@@ -5782,7 +5958,8 @@ export function StudioShell({
     if (
       targetFolder?.systemKind === "purchased_assets" ||
       targetFolder?.systemKind === "public_assets" ||
-      targetFolder?.systemKind === "messages"
+      targetFolder?.systemKind === "messages" ||
+      targetFolder?.systemKind === "shared_with_me"
     ) {
       toast.error("You can’t upload into this system folder.");
       return;
@@ -6986,6 +7163,7 @@ export function StudioShell({
   // Desktop pick-from-Files temporarily restores the owner file explorer in the
   // left rail even while Messages/Feed is the active pane.
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
+  const sharingToPeople = Boolean(sharePeopleRequest);
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
   /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages. */
@@ -7018,6 +7196,15 @@ export function StudioShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [assetPickRequest, endAssetPick]);
+
+  useEffect(() => {
+    if (!sharePeopleRequest) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape" && !sharePeopleBusy) endSharePeople();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sharePeopleRequest, sharePeopleBusy, endSharePeople]);
 
   // Mobile touch-drag dismisses any explorer context sheet that may have armed.
   useEffect(() => {
@@ -20149,6 +20336,50 @@ export function StudioShell({
               toast.success("Removed from Quick access");
             }}
           />
+        ) : sharingToPeople ? (
+          <StudioSharePeoplePanel
+            itemLabel={sharePeopleRequest.label || "files"}
+            selectedPeers={sharePeopleSelected}
+            expiresUnix={assetUrlExpiresUnix}
+            busy={sharePeopleBusy}
+            onTogglePeer={(peer) => {
+              setSharePeopleSelected((prev) => {
+                const exists = prev.some((item) => item.userId === peer.userId);
+                if (exists) {
+                  return prev.filter((item) => item.userId !== peer.userId);
+                }
+                return [...prev, peer];
+              });
+            }}
+            onCancel={endSharePeople}
+            onShare={() => {
+              if (!sharePeopleRequest?.items?.length || !sharePeopleSelected.length) {
+                return;
+              }
+              setSharePeopleBusy(true);
+              void shareStudioItems({
+                peerUserIds: sharePeopleSelected.map((peer) => peer.userId),
+                items: sharePeopleRequest.items,
+              })
+                .then((result) => {
+                  const n = sharePeopleSelected.length;
+                  toast.success(
+                    n === 1
+                      ? "Shared — they’ll see it in Shared with me"
+                      : `Shared with ${n} people`,
+                  );
+                  endSharePeople();
+                  if (result.conversationIds?.[0]) {
+                    setActiveDmConversationId(result.conversationIds[0]);
+                    openTab(MESSAGES_TAB);
+                  }
+                })
+                .catch((error) => {
+                  setSharePeopleBusy(false);
+                  toast.error(friendlyConvexError(error, "Could not share"));
+                });
+            }}
+          />
         ) : (
           <StudioFilesExplorerBody
             search={search}
@@ -20263,6 +20494,46 @@ export function StudioShell({
                   ? `${assetPickSelected.length} selected`
                   : assetPickRequest.title || "Pick files from your Files"}
               </span>
+              {assetPickRequest.pickAnyStudio &&
+              activeFolder &&
+              !activeFolder.systemKind &&
+              navTrail.length > 1 ? (
+                <button
+                  type="button"
+                  className="studio-asset-pick-footer-cancel"
+                  onClick={() => {
+                    const folderId = activeFolder._id;
+                    const max = assetPickRequest.maxSelected ?? 10;
+                    setAssetPickSelected((prev) => {
+                      const exists = prev.some((item) => item._id === folderId);
+                      if (exists) {
+                        return prev.filter((item) => item._id !== folderId);
+                      }
+                      if (prev.length >= max) {
+                        toast.message(`You can pick up to ${max} items`);
+                        return prev;
+                      }
+                      return [
+                        ...prev,
+                        {
+                          _id: folderId,
+                          name: activeFolder.name,
+                          kind: "folder",
+                          mimeType: "",
+                          path: studioPathForFolder(activeFolder),
+                          itemKind: "folder",
+                          itemId: String(folderId),
+                          studioKind: "folder",
+                        },
+                      ];
+                    });
+                  }}
+                >
+                  {assetPickSelected.some((item) => item._id === activeFolder._id)
+                    ? "Folder added"
+                    : "Add this folder"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="studio-asset-pick-footer-cancel"
@@ -20735,6 +21006,7 @@ export function StudioShell({
                     setAssetPickSelected([]);
                     setAssetPickRequest({
                       kinds: request.kinds ?? ["image"],
+                      pickAnyStudio: Boolean(request.pickAnyStudio),
                       title: request.title ?? "Pick files to send",
                       maxSelected: request.maxSelected ?? 10,
                       startedOnTab: activeTab,
@@ -20756,6 +21028,35 @@ export function StudioShell({
                     });
                   }
             }
+            onOpenStudioShareItem={(item) => {
+              if (!item?.itemId || !item?.itemKind) return;
+              if (item.itemKind === "folder") {
+                setActiveFolderId(item.itemId);
+                setNavTrail(() => {
+                  const root = topFolders?.[0];
+                  const shared = (topFolders ?? []).find(
+                    (folder) => folder.systemKind === "shared_with_me",
+                  );
+                  const crumbs = [];
+                  if (root) crumbs.push({ id: root._id, name: "Files" });
+                  if (shared) {
+                    crumbs.push({ id: shared._id, name: "Shared with me" });
+                  }
+                  crumbs.push({ id: item.itemId, name: item.name || "Folder" });
+                  return crumbs;
+                });
+                if (isMobile) {
+                  setMobileSection("files");
+                  setFilesDockExpanded(true);
+                }
+                return;
+              }
+              const entry = sharedListItemToEntry(item);
+              const key = `${entry.studioKind}:${entry.studioId}`;
+              setTabEntrySnapshots((snapshots) => ({ ...snapshots, [key]: entry }));
+              openTab(key);
+              if (isMobile) setMobileSection("composer");
+            }}
           />
         </section>
         {typeof activeTab === "string" &&
@@ -20931,6 +21232,53 @@ export function StudioShell({
           setTypeFilter={setTypeFilter}
           viewMode={viewMode}
           onToggleViewMode={() => setViewMode((mode) => (mode === "grid" ? "list" : "grid"))}
+          sharePeopleSlot={
+            sharingToPeople ? (
+              <StudioSharePeoplePanel
+                itemLabel={sharePeopleRequest.label || "files"}
+                selectedPeers={sharePeopleSelected}
+                expiresUnix={assetUrlExpiresUnix}
+                busy={sharePeopleBusy}
+                onTogglePeer={(peer) => {
+                  setSharePeopleSelected((prev) => {
+                    const exists = prev.some((item) => item.userId === peer.userId);
+                    if (exists) {
+                      return prev.filter((item) => item.userId !== peer.userId);
+                    }
+                    return [...prev, peer];
+                  });
+                }}
+                onCancel={endSharePeople}
+                onShare={() => {
+                  if (!sharePeopleRequest?.items?.length || !sharePeopleSelected.length) {
+                    return;
+                  }
+                  setSharePeopleBusy(true);
+                  void shareStudioItems({
+                    peerUserIds: sharePeopleSelected.map((peer) => peer.userId),
+                    items: sharePeopleRequest.items,
+                  })
+                    .then((result) => {
+                      const n = sharePeopleSelected.length;
+                      toast.success(
+                        n === 1
+                          ? "Shared — they’ll see it in Shared with me"
+                          : `Shared with ${n} people`,
+                      );
+                      endSharePeople();
+                      if (result.conversationIds?.[0]) {
+                        setActiveDmConversationId(result.conversationIds[0]);
+                        openTab(MESSAGES_TAB);
+                      }
+                    })
+                    .catch((error) => {
+                      setSharePeopleBusy(false);
+                      toast.error(friendlyConvexError(error, "Could not share"));
+                    });
+                }}
+              />
+            ) : null
+          }
         />
       ) : null}
       {isMobile && filesNavSheetOpen ? (
@@ -21163,15 +21511,19 @@ export function StudioShell({
           presentation={isMobile ? "sheet" : "menu"}
           canCreateFile={
             !isTrashNav &&
+            !useSharedListing &&
             activeFolder?.systemKind !== "purchased_assets" &&
             activeFolder?.systemKind !== "public_assets" &&
-            activeFolder?.systemKind !== "messages"
+            activeFolder?.systemKind !== "messages" &&
+            activeFolder?.systemKind !== "shared_with_me"
           }
           canCreateFolder={
             !isTrashNav &&
+            !useSharedListing &&
             activeFolder?.systemKind !== "purchased_assets" &&
             activeFolder?.systemKind !== "public_assets" &&
-            activeFolder?.systemKind !== "messages"
+            activeFolder?.systemKind !== "messages" &&
+            activeFolder?.systemKind !== "shared_with_me"
           }
           inTrashView={isTrashNav}
           createItems={getCreateMenuItems()}
@@ -21231,6 +21583,10 @@ export function StudioShell({
               return;
             }
             if (action === "attach") attachEntry(entry);
+            if (action === "share-people") {
+              openSharePeopleForEntries([entry]);
+              return;
+            }
             if (action === "delete-forever") void deleteEntryForever(entry);
             if (action === "empty-trash") void handleEmptyTrash();
             if (action.startsWith("new-") || action === "upload") runCreateAction(action);
@@ -26353,6 +26709,7 @@ function ActivePane({
   onOpenOffersJobs,
   showDmChatListWhenEmpty = false,
   onRequestPickAsset,
+  onOpenStudioShareItem,
 }) {
   const profilePostMatch = activeTab.match(/^profilePost:([^:]+):(.+)$/);
   const feedPostId = activeTab.startsWith("feed:")
@@ -26511,6 +26868,7 @@ function ActivePane({
           onOpenOffersJobs={onOpenOffersJobs}
           showChatListWhenEmpty={showDmChatListWhenEmpty}
           onRequestPickAsset={onRequestPickAsset}
+          onOpenStudioShareItem={onOpenStudioShareItem}
         />
       )}
     </div>
@@ -28444,6 +28802,7 @@ function StudioFilesMobileSheet({
   onBreadcrumbDrop,
   viewMode = "grid",
   onToggleViewMode,
+  sharePeopleSlot = null,
   ...explorerProps
 }) {
   const dockRef = useRef(null);
@@ -28668,52 +29027,56 @@ function StudioFilesMobileSheet({
         <span className="studio-files-dock-grab" aria-hidden="true" />
       </div>
       <div className="studio-files-dock-body">
-        <StudioFilesExplorerBody
-          {...explorerProps}
-          search={search}
-          setSearch={setSearch}
-          typeFilter={typeFilter}
-          setTypeFilter={setTypeFilter}
-          breadcrumbPath={breadcrumbPath}
-          onBreadcrumbNavigate={onBreadcrumbNavigate}
-          onBreadcrumbDrop={onBreadcrumbDrop}
-          isMobile
-          showSearch
-          showPathbar
-          chromeLayout="sidebar"
-          viewMode={viewMode}
-          onDropFiles={onUploadFiles}
-          pathbarTools={(
-            <>
-              {onToggleViewMode ? (
-                <button
-                  type="button"
-                  className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
-                  title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                  aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                  onClick={onToggleViewMode}
-                >
-                  {viewMode === "grid" ? (
-                    <List className="h-3.5 w-3.5" aria-hidden="true" />
-                  ) : (
-                    <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                  )}
-                </button>
-              ) : null}
-              <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                type="file"
-                multiple
-                onChange={(event) => {
-                  void onUploadFiles(event.currentTarget.files);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </>
-          )}
-        />
+        {sharePeopleSlot ? (
+          sharePeopleSlot
+        ) : (
+          <StudioFilesExplorerBody
+            {...explorerProps}
+            search={search}
+            setSearch={setSearch}
+            typeFilter={typeFilter}
+            setTypeFilter={setTypeFilter}
+            breadcrumbPath={breadcrumbPath}
+            onBreadcrumbNavigate={onBreadcrumbNavigate}
+            onBreadcrumbDrop={onBreadcrumbDrop}
+            isMobile
+            showSearch
+            showPathbar
+            chromeLayout="sidebar"
+            viewMode={viewMode}
+            onDropFiles={onUploadFiles}
+            pathbarTools={(
+              <>
+                {onToggleViewMode ? (
+                  <button
+                    type="button"
+                    className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
+                    title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                    aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                    onClick={onToggleViewMode}
+                  >
+                    {viewMode === "grid" ? (
+                      <List className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </button>
+                ) : null}
+                <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
+                <input
+                  ref={fileInputRef}
+                  className="hidden"
+                  type="file"
+                  multiple
+                  onChange={(event) => {
+                    void onUploadFiles(event.currentTarget.files);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </>
+            )}
+          />
+        )}
       </div>
     </div>
   );
@@ -30552,9 +30915,11 @@ function isLockedSystemFolder(entry) {
     entry?.studioKind === "messages" ||
     entry?.studioKind === "purchased" ||
     entry?.studioKind === "public" ||
+    entry?.studioKind === "shared" ||
     entry?.systemKind === "messages" ||
     entry?.systemKind === "purchased_assets" ||
-    entry?.systemKind === "public_assets"
+    entry?.systemKind === "public_assets" ||
+    entry?.systemKind === "shared_with_me"
   );
 }
 
@@ -30574,6 +30939,7 @@ function systemFolderDisplayName(folder) {
   if (folder?.systemKind === "public_assets") return "My Public";
   if (folder?.systemKind === "purchased_assets") return "Purchased";
   if (folder?.systemKind === "messages") return "Messages";
+  if (folder?.systemKind === "shared_with_me") return "Shared with me";
   // Workspace root is stored as "Studio" in Convex — always show Files in UI.
   if (
     folder &&
@@ -30591,6 +30957,7 @@ function folderToEntry(folder) {
   const isMessages = folder.systemKind === "messages";
   const isPurchased = folder.systemKind === "purchased_assets";
   const isPublic = folder.systemKind === "public_assets";
+  const isShared = folder.systemKind === "shared_with_me";
   const name = systemFolderDisplayName(folder) || folder.name;
   return {
     type: "dir",
@@ -30605,11 +30972,104 @@ function folderToEntry(folder) {
         ? "purchased"
         : isPublic
           ? "public"
-          : "folder",
+          : isShared
+            ? "shared"
+            : "folder",
     studioId: folder._id,
     systemKind: folder.systemKind,
     peekItems: folder.peekItems ?? [],
     reactionEmoji: folder.reactionEmoji,
+  };
+}
+
+function sharedListItemToEntry(item) {
+  const itemKind = item.itemKind;
+  const itemId = item.itemId;
+  const name = item.name || "Shared item";
+  const sharedMeta = {
+    isSharedLive: true,
+    sharedFromUserId: item.fromUserId,
+    sharedFromUsername: item.fromUsername,
+    shareId: item.shareId,
+  };
+  if (itemKind === "folder") {
+    return {
+      type: "dir",
+      name,
+      path: `/Studio/shared/${itemId}`,
+      displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
+      modified: item.createdAt ?? item.updatedAt,
+      mtimeMs: item.createdAt ?? item.updatedAt,
+      studioKind: "folder",
+      studioId: itemId,
+      folderId: item.folderId ?? itemId,
+      thumbnailUrl: item.thumbnailUrl,
+      ...sharedMeta,
+    };
+  }
+  if (itemKind === "document") {
+    return {
+      type: "file",
+      name: name.endsWith(".md") ? name : `${name}.md`,
+      path: `/Studio/shared/docs/${itemId}.md`,
+      displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
+      modified: item.createdAt ?? item.updatedAt,
+      mtimeMs: item.createdAt ?? item.updatedAt,
+      ext: ".md",
+      studioKind: "document",
+      studioId: itemId,
+      folderId: item.folderId,
+      kindLabel: "Ad copy",
+      ...sharedMeta,
+    };
+  }
+  if (itemKind === "element") {
+    return {
+      type: "file",
+      name: name.startsWith("@") ? name : `@${name}`,
+      path: `/Studio/shared/elements/${itemId}`,
+      displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
+      modified: item.createdAt ?? item.updatedAt,
+      mtimeMs: item.createdAt ?? item.updatedAt,
+      studioKind: "element",
+      studioId: itemId,
+      folderId: item.folderId,
+      elementType: item.elementType,
+      thumbnailUrl: item.thumbnailUrl,
+      ...sharedMeta,
+    };
+  }
+  if (itemKind === "videoEdit") {
+    return {
+      type: "file",
+      name: name.endsWith(".edit") ? name : `${name}.edit`,
+      path: `/Studio/shared/edits/${itemId}.edit`,
+      displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
+      modified: item.createdAt ?? item.updatedAt,
+      mtimeMs: item.createdAt ?? item.updatedAt,
+      ext: ".edit",
+      studioKind: "videoEdit",
+      studioId: itemId,
+      folderId: item.folderId,
+      thumbnailUrl: item.thumbnailUrl,
+      ...sharedMeta,
+    };
+  }
+  return {
+    type: "file",
+    name,
+    path: `/Studio/shared/assets/${itemId}`,
+    displayPath: displayWorkspacePath(`/Studio/Shared with me/${name}`),
+    modified: item.createdAt ?? item.updatedAt,
+    mtimeMs: item.createdAt ?? item.updatedAt,
+    studioKind: "asset",
+    studioId: itemId,
+    folderId: item.folderId,
+    kind: item.assetKind,
+    mediaKind: item.assetKind,
+    mimeType: item.mimeType,
+    thumbnailUrl: item.thumbnailUrl,
+    ...sharedMeta,
   };
 }
 

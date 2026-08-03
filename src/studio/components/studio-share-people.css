@@ -1,0 +1,182 @@
+/* Share-to-people panel — lives in the Files rail / mobile sheet. */
+
+.studio-share-people-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  background: var(--mos-page, var(--cursor-surface));
+}
+
+.studio-share-people-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+}
+
+.studio-share-people-top-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio-share-people-top-copy strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-share-people-top-copy span {
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-share-people-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.studio-share-people-cancel,
+.studio-share-people-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: var(--cursor-radius-md, 8px);
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-share-people-cancel > svg,
+.studio-share-people-confirm > svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2;
+}
+
+.studio-share-people-confirm {
+  background: var(--color-cursor-accent, #3b82f6);
+  border-color: transparent;
+  color: #fff;
+}
+
+.studio-share-people-confirm:disabled,
+.studio-share-people-cancel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.studio-share-people-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-cursor-border-soft);
+}
+
+.studio-share-people-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 2px 8px 2px 2px;
+  border-radius: var(--cursor-radius-pill, 999px);
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-share-people-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-share-people-chip > svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+}
+
+.studio-share-people-chrome {
+  flex: 0 0 auto;
+}
+
+.studio-share-people-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.studio-share-people-row {
+  position: relative;
+}
+
+.studio-share-people-row.is-selected {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 12%, transparent);
+}
+
+.studio-share-people-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: #fff;
+}
+
+.studio-share-people-row.is-selected .studio-share-people-check {
+  background: var(--color-cursor-accent, #3b82f6);
+  border-color: transparent;
+}
+
+.studio-share-people-check > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.5;
+}
+
+.studio-dm-chat-list .studio-share-people-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.studio-dm-chat-list .studio-share-people-row:hover {
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+}

@@ -1373,10 +1373,13 @@ function renderEntryRows({
       e.studioKind === "messages" ||
       e.studioKind === "purchased" ||
       e.studioKind === "public" ||
+      e.studioKind === "shared" ||
       e.studioKind === "recents" ||
       e.systemKind === "messages" ||
       e.systemKind === "purchased_assets" ||
-      e.systemKind === "public_assets"
+      e.systemKind === "public_assets" ||
+      e.systemKind === "shared_with_me" ||
+      e.isSharedLive
     ) {
       return false;
     }

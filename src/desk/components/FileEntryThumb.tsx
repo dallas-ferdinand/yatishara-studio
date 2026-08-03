@@ -588,7 +588,9 @@ export function FileEntryThumb({
       entry?.studioKind === "purchased" || entry?.systemKind === "purchased_assets";
     const isPublic =
       entry?.studioKind === "public" || entry?.systemKind === "public_assets";
-    if (isTrash || isMessages || isPurchased || isPublic) {
+    const isShared =
+      entry?.studioKind === "shared" || entry?.systemKind === "shared_with_me";
+    if (isTrash || isMessages || isPurchased || isPublic || isShared) {
       // System folders: big center glyph only — no bottom-left type chip.
       const systemIcon = isTrash
         ? "trash"
@@ -596,14 +598,18 @@ export function FileEntryThumb({
           ? "message"
           : isPurchased
             ? "shoppingBag"
-            : "globe";
+            : isShared
+              ? "users"
+              : "globe";
       const systemMod = isTrash
         ? "trash"
         : isMessages
           ? "messages"
           : isPurchased
             ? "purchased"
-            : "public";
+            : isShared
+              ? "shared"
+              : "public";
       visual = (
         <div
           className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder desk-file-thumb-peek-wrap--system desk-file-thumb-peek-wrap--${systemMod}`}

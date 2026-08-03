@@ -94,9 +94,12 @@ function buildMenuItems(entry, {
     entry.studioKind === "purchased" || entry.systemKind === "purchased_assets";
   const isPublicFolder =
     entry.studioKind === "public" || entry.systemKind === "public_assets";
+  const isSharedWithMeFolder =
+    entry.studioKind === "shared" || entry.systemKind === "shared_with_me";
   const isPurchasedNetworkAsset = entry.licenseKind === "purchased_network";
   const isListedNetworkAsset = entry.licenseKind === "listed_network";
   const isLockedNetworkAsset = isPurchasedNetworkAsset || isListedNetworkAsset;
+  const isSharedLiveItem = Boolean(entry.sharedFromUserId || entry.isSharedLive);
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -109,7 +112,13 @@ function buildMenuItems(entry, {
         ...(canCreateFolder ? [{ id: "new-folder", label: "Folder" }] : []),
       ];
 
-  if (isTrashFolder || isMessagesFolder || isPurchasedFolder || isPublicFolder) {
+  if (
+    isTrashFolder ||
+    isMessagesFolder ||
+    isPurchasedFolder ||
+    isPublicFolder ||
+    isSharedWithMeFolder
+  ) {
     return [{ id: "open", label: "Open folder" }];
   }
 
@@ -175,80 +184,93 @@ function buildMenuItems(entry, {
     label: isDir ? "Use folder in chat" : "Use in chat",
   });
 
-  // —— React ——
-  items.push({ id: "sep-react", sep: true });
-  if (presentation === "sheet") {
-    items.push({ id: "react-open", label: "React" });
-  } else {
-    const reactChildren = REACTION_EMOJIS.map((emoji) => ({
-      id: `react:${emoji}`,
-      label: emoji,
-    }));
-    if (entry.reactionEmoji) {
-      reactChildren.push({ id: "react:clear", label: "Clear reaction" });
-    }
+  // Live share to people (any Studio item). Shared-with-me receipts stay read-only.
+  if (!isSharedLiveItem && !isLockedNetworkAsset) {
     items.push({
-      id: "react",
-      label: "React",
-      children: reactChildren,
+      id: "share-people",
+      label: "Share",
+      iconKey: "share",
     });
   }
 
-  // —— Organize ——
-  items.push({ id: "sep-organize", sep: true });
-  if (isDir && canPin) {
-    const pinnedHere =
-      pinnedPaths?.has?.(entry.path) ||
-      pinnedPaths?.has?.(
-        String(entry.path ?? "")
-          .trim()
-          .replace(/^\/+|\/+$/g, ""),
-      );
-    if (pinnedHere) {
-      items.push({ id: "unpin", label: "Unpin folder" });
-    } else if (currentPath) {
-      items.push({
-        id: "organize",
-        label: "Pin",
-        children: [
-          { id: "pin-here", label: "Pin here" },
-          { id: "pin-root", label: "Pin to home" },
-        ],
-      });
+  // —— React ——
+  if (!isSharedLiveItem) {
+    items.push({ id: "sep-react", sep: true });
+    if (presentation === "sheet") {
+      items.push({ id: "react-open", label: "React" });
     } else {
-      items.push({ id: "pin-here", label: "Pin folder" });
+      const reactChildren = REACTION_EMOJIS.map((emoji) => ({
+        id: `react:${emoji}`,
+        label: emoji,
+      }));
+      if (entry.reactionEmoji) {
+        reactChildren.push({ id: "react:clear", label: "Clear reaction" });
+      }
+      items.push({
+        id: "react",
+        label: "React",
+        children: reactChildren,
+      });
     }
   }
-  if (onRequestRename) {
-    items.push({ id: "rename", label: "Rename" });
+
+  // —— Organize ——
+  if (!isSharedLiveItem) {
+    items.push({ id: "sep-organize", sep: true });
+    if (isDir && canPin) {
+      const pinnedHere =
+        pinnedPaths?.has?.(entry.path) ||
+        pinnedPaths?.has?.(
+          String(entry.path ?? "")
+            .trim()
+            .replace(/^\/+|\/+$/g, ""),
+        );
+      if (pinnedHere) {
+        items.push({ id: "unpin", label: "Unpin folder" });
+      } else if (currentPath) {
+        items.push({
+          id: "organize",
+          label: "Pin",
+          children: [
+            { id: "pin-here", label: "Pin here" },
+            { id: "pin-root", label: "Pin to home" },
+          ],
+        });
+      } else {
+        items.push({ id: "pin-here", label: "Pin folder" });
+      }
+    }
+    if (onRequestRename) {
+      items.push({ id: "rename", label: "Rename" });
+    }
   }
   items.push({ id: "copy-path", label: "Copy item link" });
 
   // —— Media extras (images/videos only) ——
-  if (isImageAsset || isShareableMedia) {
+  if (!isSharedLiveItem && (isImageAsset || isShareableMedia)) {
     items.push({ id: "sep-media", sep: true });
     if (isImageAsset) {
       items.push({ id: "upscale", label: "Upscale" });
       items.push({ id: "generate-video", label: "Generate video" });
     }
-    const shareChildren = [];
+    const profileChildren = [];
     if (isImageAsset) {
-      shareChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
-      shareChildren.push({ id: "set-profile-image", label: "Set as profile image" });
+      profileChildren.push({ id: "use-wallpaper", label: "Use as wallpaper" });
+      profileChildren.push({ id: "set-profile-image", label: "Set as profile image" });
     }
     if (isShareableMedia) {
       const alreadyShared = sharedAssetIds?.has?.(entry.studioId);
-      shareChildren.push({
+      profileChildren.push({
         id: alreadyShared ? "unshare-profile" : "share-profile",
         label: alreadyShared ? "Remove from profile" : "Create post",
       });
     }
-    if (shareChildren.length) {
+    if (profileChildren.length) {
       items.push({
-        id: "share",
-        label: "Share",
+        id: "post-profile",
+        label: "Post / profile",
         iconKey: "share-profile",
-        children: shareChildren,
+        children: profileChildren,
       });
     }
   }
@@ -303,7 +325,7 @@ function buildMenuItems(entry, {
   }
 
   // —— Danger ——
-  if (onRequestDelete && !isLockedNetworkAsset) {
+  if (onRequestDelete && !isLockedNetworkAsset && !isSharedLiveItem) {
     items.push({ id: "sep-danger", sep: true });
     items.push({
       id: "delete",
