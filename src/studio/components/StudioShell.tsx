@@ -79,6 +79,7 @@ import {
   UserRound,
   Video,
   Zap,
+  Bell,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
@@ -531,6 +532,8 @@ function resolveMobileBottomNavSection(activeTab, mobileSection) {
   return mobileSection || null;
 }
 const STUDIO_CUSTOM_CURSOR_KEY = "yatishara-studio-custom-cursor";
+/** localStorage: dismissed | enabled — controls auto fullscreen push prompt. */
+const STUDIO_PUSH_PROMPT_KEY = "yatishara-studio-push-prompt-v1";
 const ACTIVE_STYLE_SHEET_KEY = "mercuryos-studio-active-style-sheet-v1";
 const COMPOSER_STYLE_MODE_KEY = "mercuryos-studio-composer-style-mode-v1";
 const STUDIO_MAIN_PANEL_SIZES_KEY = "yatishara-studio-main-panel-sizes";
@@ -1299,6 +1302,8 @@ export function StudioShell({
   const [paymentCelebration, setPaymentCelebration] = useState(null);
   /** Full-screen handoff while creating checkout + leaving for PayWise. */
   const [paywiseHandoff, setPaywiseHandoff] = useState(null);
+  /** Full-screen ask to enable browser push (gens / DMs / followed posts). */
+  const [pushPromptOpen, setPushPromptOpen] = useState(false);
   const [mobileSection, setMobileSection] = useState("composer");
   /**
    * Files dock stays mounted on mobile so open is height-only.
@@ -4390,6 +4395,31 @@ export function StudioShell({
   useEffect(() => {
     void registerDeskServiceWorker();
   }, []);
+
+  useEffect(() => {
+    if (!hasCurrentUser) return;
+    if (typeof window === "undefined") return;
+    if (paymentCelebration || paywiseHandoff) return;
+    if (!isStudioWebPushAvailable()) return;
+    if (window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) === "dismissed") return;
+    if (getNotificationPermission() === "denied") return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        if (cancelled) return;
+        if (await hasStudioWebPushSubscription()) return;
+        if (cancelled) return;
+        if (window.localStorage.getItem(STUDIO_PUSH_PROMPT_KEY) === "dismissed") return;
+        setPushPromptOpen(true);
+      })();
+    }, 1800);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [hasCurrentUser, paymentCelebration, paywiseHandoff]);
 
   const applyStudioOpenParams = useCallback(
     (search) => {
@@ -12126,6 +12156,26 @@ export function StudioShell({
         .studio-payment-celebration-btn:focus-visible {
           outline: 2px solid var(--cursor-accent);
           outline-offset: 3px;
+        }
+        .studio-payment-celebration-btn.is-secondary {
+          background: color-mix(in srgb, var(--color-cursor-muted) 18%, transparent);
+          color: var(--color-cursor-text-bright, var(--mos-text));
+        }
+        .studio-payment-celebration-actions {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 10px;
+          margin-top: 8px;
+        }
+        .studio-payment-celebration-actions .studio-payment-celebration-btn {
+          margin-top: 0;
+        }
+        .studio-push-prompt-icon {
+          width: 72px;
+          height: 72px;
+          color: var(--cursor-accent);
+          filter: drop-shadow(0 8px 24px color-mix(in srgb, var(--cursor-accent) 28%, transparent));
         }
         .studio-paywise-handoff-kicker {
           margin: 0;
@@ -22232,6 +22282,17 @@ export function StudioShell({
             document.body,
           )
         : null}
+      {pushPromptOpen &&
+      !paymentCelebration &&
+      !paywiseHandoff &&
+      typeof document !== "undefined"
+        ? createPortal(
+            <PushNotificationsPromptOverlay
+              onClose={() => setPushPromptOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
       {paywiseHandoff && typeof document !== "undefined"
         ? createPortal(
             <PaywiseCheckoutHandoffOverlay handoff={paywiseHandoff} />,
@@ -30346,6 +30407,91 @@ function PaymentReceivedOverlay({ celebration, creditPriceCents, onClose }) {
             Thanks
           </button>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PushNotificationsPromptOverlay({ onClose }) {
+  const savePushSubscription = useMutation(api.notifications.savePushSubscription);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape" && !busy) onClose?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  function dismiss() {
+    try {
+      window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "dismissed");
+    } catch {
+      /* ignore */
+    }
+    onClose?.();
+  }
+
+  return (
+    <div
+      className="studio-payment-celebration"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="studio-push-prompt-title"
+      aria-busy={busy}
+    >
+      <div className="studio-payment-celebration-inner">
+        <Bell className="studio-push-prompt-icon" aria-hidden="true" strokeWidth={1.75} />
+        <h2 id="studio-push-prompt-title" className="studio-payment-celebration-title">
+          Turn on notifications
+        </h2>
+        <p className="studio-payment-celebration-copy">
+          Get alerted when generations finish, someone messages you, or people you follow post.
+        </p>
+        <div className="studio-payment-celebration-actions">
+          <button
+            type="button"
+            className="studio-payment-celebration-btn is-secondary"
+            disabled={busy}
+            onClick={dismiss}
+          >
+            Not now
+          </button>
+          <button
+            type="button"
+            className="studio-payment-celebration-btn"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void enableStudioWebPush({ save: savePushSubscription })
+                .then(() => {
+                  try {
+                    window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "enabled");
+                  } catch {
+                    /* ignore */
+                  }
+                  toast.success("Browser notifications enabled");
+                  onClose?.();
+                })
+                .catch((err) => {
+                  toast.error(friendlyConvexError(err, "Could not enable notifications"));
+                  if (getNotificationPermission() === "denied") {
+                    try {
+                      window.localStorage.setItem(STUDIO_PUSH_PROMPT_KEY, "dismissed");
+                    } catch {
+                      /* ignore */
+                    }
+                    onClose?.();
+                  }
+                })
+                .finally(() => setBusy(false));
+            }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            <span>{busy ? "Enabling…" : "Enable"}</span>
+          </button>
+        </div>
       </div>
     </div>
   );
