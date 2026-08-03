@@ -8,6 +8,15 @@ const VAPID_PUBLIC =
     ? process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY ?? ""
     : "";
 
+type CapacitorBridge = {
+  isNativePlatform?: () => boolean;
+};
+
+function getCapacitor(): CapacitorBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as Window & { Capacitor?: CapacitorBridge }).Capacitor;
+}
+
 function isPreviewHost() {
   if (typeof window === "undefined") return true;
   const host = window.location.hostname || "";
@@ -16,7 +25,7 @@ function isPreviewHost() {
 
 function isNativeShell() {
   if (typeof window === "undefined") return false;
-  const cap = window.Capacitor;
+  const cap = getCapacitor();
   if (cap?.isNativePlatform?.()) return true;
   const ua = String(navigator.userAgent || "");
   return /\bwv\b/i.test(ua) && /Android/i.test(ua);
@@ -38,7 +47,7 @@ export function getNotificationPermission() {
   return Notification.permission;
 }
 
-function urlBase64ToUint8Array(base64String) {
+function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const raw = atob(base64);
@@ -59,12 +68,16 @@ async function getPushRegistration() {
   });
 }
 
-/**
- * @param {{
- *   save: (args: { endpoint: string; p256dh: string; auth: string; userAgent?: string }) => Promise<unknown>;
- * }} opts
- */
-export async function enableStudioWebPush({ save }) {
+type PushSubscriptionKeys = {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent?: string;
+};
+
+export async function enableStudioWebPush(opts: {
+  save: (args: PushSubscriptionKeys) => Promise<unknown>;
+}) {
   if (!isStudioWebPushAvailable()) {
     throw new Error("Browser notifications are not available here");
   }
@@ -93,7 +106,7 @@ export async function enableStudioWebPush({ save }) {
   if (!endpoint || !p256dh || !auth) {
     throw new Error("Push subscription was incomplete");
   }
-  await save({
+  await opts.save({
     endpoint,
     p256dh,
     auth,
@@ -102,12 +115,9 @@ export async function enableStudioWebPush({ save }) {
   return { endpoint };
 }
 
-/**
- * @param {{
- *   remove: (args: { endpoint: string }) => Promise<unknown>;
- * }} opts
- */
-export async function disableStudioWebPush({ remove }) {
+export async function disableStudioWebPush(opts: {
+  remove: (args: { endpoint: string }) => Promise<unknown>;
+}) {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
     return { disabled: true };
   }
@@ -121,7 +131,7 @@ export async function disableStudioWebPush({ remove }) {
       /* ignore */
     }
     if (endpoint) {
-      await remove({ endpoint });
+      await opts.remove({ endpoint });
     }
   }
   return { disabled: true };
