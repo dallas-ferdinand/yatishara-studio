@@ -10,9 +10,13 @@ function readAppearance(): "light" | "dark" {
   return value === "light" ? "light" : "dark";
 }
 
-/** Sit just under the studio header / mobile top chrome. */
+/** Sit just under the studio header on desktop. */
 const TOAST_TOP_OFFSET =
   "calc(var(--studio-toast-top, 52px) + env(safe-area-inset-top, 0px) + 8px)";
+
+/** Sit above mobile bottom nav + home indicator. */
+const TOAST_BOTTOM_OFFSET =
+  "calc(var(--studio-mobile-nav-height, 44px) + env(safe-area-inset-bottom, 0px) + 12px)";
 
 export function StudioToaster() {
   const { isMobile } = useMobileLayout();
@@ -32,24 +36,32 @@ export function StudioToaster() {
   return (
     <Toaster
       theme={theme}
-      position={isMobile ? "top-center" : "top-right"}
+      position={isMobile ? "bottom-center" : "top-right"}
       richColors={false}
-      closeButton
+      closeButton={!isMobile}
       expand={false}
-      visibleToasts={3}
-      gap={8}
-      offset={{
-        top: TOAST_TOP_OFFSET,
-        right: isMobile ? 12 : 16,
-        left: isMobile ? 12 : 16,
-      }}
+      visibleToasts={isMobile ? 2 : 3}
+      gap={isMobile ? 6 : 8}
+      offset={
+        isMobile
+          ? {
+              bottom: TOAST_BOTTOM_OFFSET,
+              right: 14,
+              left: 14,
+            }
+          : {
+              top: TOAST_TOP_OFFSET,
+              right: 16,
+              left: 16,
+            }
+      }
       mobileOffset={{
-        top: TOAST_TOP_OFFSET,
-        right: 12,
-        left: 12,
+        bottom: TOAST_BOTTOM_OFFSET,
+        right: 14,
+        left: 14,
       }}
       toastOptions={{
-        duration: 3200,
+        duration: isMobile ? 2800 : 3200,
         classNames: {
           toast: "studio-sonner-toast",
           title: "studio-sonner-title",

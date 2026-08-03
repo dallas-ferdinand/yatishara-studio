@@ -4397,7 +4397,7 @@ export function StudioShell({
   }, []);
 
   useEffect(() => {
-    if (!hasCurrentUser) return;
+    if (!currentUser?._id) return;
     if (typeof window === "undefined") return;
     if (paymentCelebration || paywiseHandoff) return;
     if (!isStudioWebPushAvailable()) return;
@@ -4419,7 +4419,7 @@ export function StudioShell({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [hasCurrentUser, paymentCelebration, paywiseHandoff]);
+  }, [currentUser?._id, paymentCelebration, paywiseHandoff]);
 
   const applyStudioOpenParams = useCallback(
     (search) => {
@@ -12139,6 +12139,10 @@ export function StudioShell({
         }
         .studio-payment-celebration-btn {
           margin-top: 8px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
           min-width: 148px;
           height: 42px;
           border: 0;
@@ -12149,6 +12153,7 @@ export function StudioShell({
           font-size: 14px;
           font-weight: 650;
           cursor: pointer;
+          white-space: nowrap;
         }
         .studio-payment-celebration-btn:hover {
           filter: brightness(1.05);
@@ -30488,8 +30493,11 @@ function PushNotificationsPromptOverlay({ onClose }) {
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
-            <span>{busy ? "Enabling…" : "Enable"}</span>
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <span>Enable</span>
+            )}
           </button>
         </div>
       </div>
@@ -31299,16 +31307,11 @@ function BrowserNotificationsCard() {
               .finally(() => setBusy(false));
           }}
         >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-          <span>
-            {busy
-              ? enabled
-                ? "Turning off…"
-                : "Enabling…"
-              : enabled
-                ? "Turn off"
-                : "Enable"}
-          </span>
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          ) : (
+            <span>{enabled ? "Turn off" : "Enable"}</span>
+          )}
         </button>
       </div>
     </section>
