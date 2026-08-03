@@ -7,6 +7,9 @@ import {
   ChevronRight,
   Check,
   CheckCheck,
+  Clapperboard,
+  File as FileIcon,
+  FileText,
   FolderOpen,
   ImageIcon,
   Loader2,
@@ -14,6 +17,7 @@ import {
   MessageCircle,
   Mic,
   Copy,
+  Music,
   Paperclip,
   Pencil,
   Reply,
@@ -22,6 +26,7 @@ import {
   Tags,
   Trash2,
   Upload,
+  Video,
   X,
   ZoomIn,
   ZoomOut,
@@ -467,6 +472,70 @@ function ReplyKindIcon({
   return null;
 }
 
+function DmStudioShareItemIcon({
+  item,
+}: {
+  item: DmStudioShare["items"][number];
+}) {
+  if (item.itemKind === "folder") {
+    return <FolderOpen className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.itemKind === "document") {
+    return <FileText className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.itemKind === "element") {
+    return <ImageIcon className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.itemKind === "videoEdit") {
+    return <Clapperboard className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.assetKind === "video") {
+    return <Video className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.assetKind === "audio") {
+    return <Music className="h-4 w-4" aria-hidden="true" />;
+  }
+  if (item.assetKind === "image") {
+    return <ImageIcon className="h-4 w-4" aria-hidden="true" />;
+  }
+  return <FileIcon className="h-4 w-4" aria-hidden="true" />;
+}
+
+function studioShareKindLabel(item: DmStudioShare["items"][number]): string {
+  if (item.itemKind === "folder") return "Folder";
+  if (item.itemKind === "document") return "Script";
+  if (item.itemKind === "element") return "Element";
+  if (item.itemKind === "videoEdit") return "Edit";
+  if (item.assetKind === "video") return "Video";
+  if (item.assetKind === "audio") return "Audio";
+  if (item.assetKind === "image") return "Image";
+  if (item.assetKind === "document") return "File";
+  return "File";
+}
+
+function DmStudioShareThumb({
+  item,
+}: {
+  item: DmStudioShare["items"][number];
+}) {
+  const [broken, setBroken] = useState(false);
+  const showImg = Boolean(item.thumbnailUrl) && !broken && !item.unavailable;
+  return (
+    <span className="studio-dm-studio-share-thumb">
+      {showImg ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.thumbnailUrl}
+          alt=""
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <DmStudioShareItemIcon item={item} />
+      )}
+    </span>
+  );
+}
+
 function DmStudioShareCard({
   share,
   onOpenItem,
@@ -478,20 +547,6 @@ function DmStudioShareCard({
     <div className="studio-dm-studio-share" role="group" aria-label="Shared Studio files">
       {share.items.map((item) => {
         const unavailable = Boolean(item.unavailable);
-        const kindLabel =
-          item.itemKind === "folder"
-            ? "Folder"
-            : item.itemKind === "document"
-              ? "Script"
-              : item.itemKind === "element"
-                ? "Element"
-                : item.itemKind === "videoEdit"
-                  ? "Edit"
-                  : item.assetKind === "video"
-                    ? "Video"
-                    : item.assetKind === "audio"
-                      ? "Audio"
-                      : "File";
         return (
           <button
             key={`${item.itemKind}:${item.itemId}`}
@@ -503,17 +558,12 @@ function DmStudioShareCard({
               if (!unavailable) onOpenItem?.(item);
             }}
           >
-            <span className="studio-dm-studio-share-thumb">
-              {item.thumbnailUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.thumbnailUrl} alt="" />
-              ) : (
-                <FolderOpen className="h-4 w-4" aria-hidden="true" />
-              )}
-            </span>
+            <DmStudioShareThumb item={item} />
             <span className="studio-dm-studio-share-copy">
               <strong>{unavailable ? "Unavailable" : item.name}</strong>
-              <span>{unavailable ? "No longer shared" : kindLabel}</span>
+              <span>
+                {unavailable ? "No longer shared" : studioShareKindLabel(item)}
+              </span>
             </span>
           </button>
         );

@@ -344,6 +344,11 @@ async function signedThumbForAsset(
   expiresUnix: number | undefined,
 ): Promise<string | undefined> {
   if (!asset || !expiresUnix) return undefined;
+  // File-share copies set bunnyPath before the Bunny object exists — signing that
+  // path yields a broken <img> in DM cards until finalizeSharedMediaCopy.
+  if (asset.storageStatus !== undefined && asset.storageStatus !== "ready") {
+    return undefined;
+  }
   const path = assetThumbnailPath(asset);
   if (!path) return undefined;
   return await signBunnyCdnUrl(path, expiresUnix, THUMB_TRANSFORM);
