@@ -25,6 +25,7 @@ const folderReturn = v.object({
       v.literal("messages"),
       v.literal("purchased_assets"),
       v.literal("public_assets"),
+      v.literal("shared_with_me"),
     ),
   ),
   reactionEmoji: v.optional(v.string()),
@@ -424,13 +425,23 @@ export const get = authedQuery({
   returns: v.union(folderReturn, v.null()),
   handler: async (ctx, args) => {
     const folder = await ctx.db.get("folders", args.folderId);
-    if (!folder || folder.ownerId !== ctx.user._id) {
+    if (!folder) {
       return null;
     }
     if (folder.deletedAt && !args.includeDeleted) {
       return null;
     }
-    return folder;
+    if (folder.ownerId === ctx.user._id) {
+      return folder;
+    }
+    const { viewerCanAccessSharedItem } = await import("./studioShares");
+    const ok = await viewerCanAccessSharedItem(
+      ctx,
+      ctx.user._id,
+      "folder",
+      args.folderId,
+    );
+    return ok ? folder : null;
   },
 });
 
@@ -572,6 +583,11 @@ function assertSystemFolderMutable(folder: Doc<"folders">) {
   }
   if (folder.systemKind === "public_assets") {
     throw new Error("My Public cannot be renamed, moved, or deleted");
+  }
+  if (folder.systemKind === "shared_with_me") {
+    throw new Error(
+      "Shared with me cannot be renamed, moved, or deleted",
+    );
   }
 }
 
@@ -745,9 +761,69 @@ async function workspaceRootForUser(
       !folder.deletedAt &&
       folder.systemKind !== "messages" &&
       folder.systemKind !== "purchased_assets" &&
-      folder.systemKind !== "public_assets",
+      folder.systemKind !== "public_assets" &&
+      folder.systemKind !== "shared_with_me",
   );
   return root?._id;
+}
+
+const SHARED_WITH_ME_FOLDER_NAME = "Shared with me";
+
+/**
+ * Idempotent Shared with me folder for live-link grants from other users.
+ * Contents are virtual (studioShares) — the folder itself is a navigation root.
+ */
+export async function ensureSharedWithMeFolder(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  parentId?: Id<"folders">,
+): Promise<Id<"folders">> {
+  const existing = await ctx.db
+    .query("folders")
+    .withIndex("by_owner_and_system_kind", (q) =>
+      q.eq("ownerId", userId).eq("systemKind", "shared_with_me"),
+    )
+    .first();
+  if (existing && !existing.deletedAt) {
+    const patch: {
+      parentId?: Id<"folders">;
+      name?: string;
+      updatedAt: number;
+    } = { updatedAt: Date.now() };
+    let needsPatch = false;
+    if (parentId && existing.parentId !== parentId) {
+      patch.parentId = parentId;
+      needsPatch = true;
+    }
+    if (existing.name !== SHARED_WITH_ME_FOLDER_NAME) {
+      patch.name = SHARED_WITH_ME_FOLDER_NAME;
+      needsPatch = true;
+    }
+    if (needsPatch) {
+      await ctx.db.patch(existing._id, patch);
+    }
+    return existing._id;
+  }
+  if (existing?.deletedAt) {
+    await ctx.db.patch(existing._id, {
+      deletedAt: undefined,
+      name: SHARED_WITH_ME_FOLDER_NAME,
+      ...(parentId ? { parentId } : {}),
+      updatedAt: Date.now(),
+    });
+    return existing._id;
+  }
+  const now = Date.now();
+  return await ctx.db.insert("folders", {
+    ownerId: userId,
+    ...(parentId ? { parentId } : {}),
+    name: SHARED_WITH_ME_FOLDER_NAME,
+    icon: "users",
+    sortOrder: 3,
+    systemKind: "shared_with_me",
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 /** Public mutation so the DM client can reserve uploads into Messages. */
@@ -776,5 +852,14 @@ export const ensurePublicAssetsFolderForMe = authedMutation({
   handler: async (ctx) => {
     const rootId = await workspaceRootForUser(ctx, ctx.user._id);
     return await ensurePublicAssetsFolder(ctx, ctx.user._id, rootId);
+  },
+});
+
+export const ensureSharedWithMeFolderForMe = authedMutation({
+  args: {},
+  returns: v.id("folders"),
+  handler: async (ctx) => {
+    const rootId = await workspaceRootForUser(ctx, ctx.user._id);
+    return await ensureSharedWithMeFolder(ctx, ctx.user._id, rootId);
   },
 });

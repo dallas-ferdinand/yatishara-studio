@@ -155,6 +155,17 @@ export const folderSystemKind = v.union(
   v.literal("purchased_assets"),
   /** Seller catalog copies of listed stock audio (locked). */
   v.literal("public_assets"),
+  /** Live-link items others shared with this user (virtual listing). */
+  v.literal("shared_with_me"),
+);
+
+/** Studio item kinds that can be live-shared to another user. */
+export const studioShareItemKind = v.union(
+  v.literal("asset"),
+  v.literal("document"),
+  v.literal("element"),
+  v.literal("videoEdit"),
+  v.literal("folder"),
 );
 
 /** Locked Creative Network asset licenses. */
@@ -1290,6 +1301,8 @@ export default defineSchema({
         v.literal("image"),
         v.literal("post"),
         v.literal("comment"),
+        /** Live Studio file/folder share ping. */
+        v.literal("studio_share"),
       ),
     ),
     /** Billable Studio asset (Bunny) in the sender's Messages folder. */
@@ -1304,6 +1317,16 @@ export default defineSchema({
     sharedPostId: v.optional(v.id("profilePosts")),
     /** Shared profile comment (kind comment). */
     sharedCommentId: v.optional(v.id("profileComments")),
+    /** Live Studio items shared in this message (kind studio_share). */
+    sharedItems: v.optional(
+      v.array(
+        v.object({
+          itemKind: studioShareItemKind,
+          itemId: v.string(),
+          name: v.string(),
+        }),
+      ),
+    ),
     /** Set when sender edits text/caption. */
     editedAt: v.optional(v.number()),
     /** Delete-for-everyone tombstone (row kept for reply integrity). */
@@ -1317,6 +1340,23 @@ export default defineSchema({
     .searchIndex("search_body", {
       searchField: "body",
     }),
+
+  /**
+   * Live-link grants: recipient sees the sender's original in Shared with me.
+   * No Bunny copy — if the owner trashes/deletes the source, it disappears.
+   */
+  studioShares: defineTable({
+    fromUserId: v.id("users"),
+    toUserId: v.id("users"),
+    itemKind: studioShareItemKind,
+    itemId: v.string(),
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_to_and_created", ["toUserId", "createdAt"])
+    .index("by_from_and_to", ["fromUserId", "toUserId"])
+    .index("by_item", ["itemKind", "itemId"])
+    .index("by_to_and_item", ["toUserId", "itemKind", "itemId"]),
 
   /**
    * WhatsApp-style DM labels (lists). Owner-scoped; people can sit in

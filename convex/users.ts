@@ -1,7 +1,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { ensureMessagesFolder, ensurePurchasedAssetsFolder } from "./folders";
+import {
+  ensureMessagesFolder,
+  ensurePurchasedAssetsFolder,
+  ensureSharedWithMeFolder,
+} from "./folders";
 import { adminQuery, authedMutation, authedQuery } from "./lib/customFunctions";
 import { ensureProfileForUser } from "./lib/profileEnsure";
 import { toNameCase } from "./lib/profileIdentity";
@@ -320,7 +324,8 @@ export const ensureStudioDefaults = authedMutation({
         !folder.deletedAt &&
         folder.systemKind !== "messages" &&
         folder.systemKind !== "purchased_assets" &&
-        folder.systemKind !== "public_assets",
+        folder.systemKind !== "public_assets" &&
+        folder.systemKind !== "shared_with_me",
     );
 
     const rootFolderId =
@@ -338,6 +343,7 @@ export const ensureStudioDefaults = authedMutation({
 
     await ensureMessagesFolder(ctx, ctx.user._id, rootFolderId);
     await ensurePurchasedAssetsFolder(ctx, ctx.user._id, rootFolderId);
+    await ensureSharedWithMeFolder(ctx, ctx.user._id, rootFolderId);
 
     const existingBilling = await ctx.db
       .query("billingAccounts")

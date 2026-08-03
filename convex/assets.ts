@@ -275,7 +275,8 @@ export const signedReadUrl = authedQuery({
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    const asset = await requireAssetOwner(ctx, args.assetId);
+    const { requireAssetOwnerOrShare } = await import("./studioShares");
+    const asset = await requireAssetOwnerOrShare(ctx, args.assetId);
     if (!asset.bunnyPath) {
       throw new Error("Asset has no Bunny path");
     }

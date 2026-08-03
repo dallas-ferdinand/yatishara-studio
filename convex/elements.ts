@@ -90,10 +90,18 @@ export const get = authedQuery({
   returns: v.union(v.null(), elementReturn),
   handler: async (ctx, args) => {
     const element = await ctx.db.get("elements", args.elementId);
-    if (!element || element.ownerId !== ctx.user._id || element.deletedAt) {
+    if (!element || element.deletedAt) {
       return null;
     }
-    return element;
+    if (element.ownerId === ctx.user._id) return element;
+    const { viewerCanAccessSharedItem } = await import("./studioShares");
+    const ok = await viewerCanAccessSharedItem(
+      ctx,
+      ctx.user._id,
+      "element",
+      args.elementId,
+    );
+    return ok ? element : null;
   },
 });
 

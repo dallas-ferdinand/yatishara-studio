@@ -24,6 +24,11 @@ import {
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { hydrateSocialPeople } from "./profiles";
+import {
+  hydrateStudioShareCard,
+  type StudioShareItemKind,
+} from "./studioShares";
+import { studioShareItemKind } from "./schema";
 
 const DM_BODY_MAX = 4000;
 const DM_PREVIEW_MAX = 120;
@@ -33,6 +38,7 @@ const VOICE_PREVIEW = "Voice message";
 const IMAGE_PREVIEW = "Photo";
 const POST_PREVIEW = "Post";
 const COMMENT_PREVIEW = "Comment";
+const STUDIO_SHARE_PREVIEW = "Shared files";
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 const dmMessageKind = v.union(
@@ -41,6 +47,7 @@ const dmMessageKind = v.union(
   v.literal("image"),
   v.literal("post"),
   v.literal("comment"),
+  v.literal("studio_share"),
 );
 
 const replySnippet = v.object({
@@ -63,6 +70,26 @@ const feedShareCard = v.object({
   body: v.optional(v.string()),
   thumbnailUrl: v.optional(v.string()),
   unavailable: v.optional(v.boolean()),
+});
+
+const studioShareCard = v.object({
+  items: v.array(
+    v.object({
+      itemKind: studioShareItemKind,
+      itemId: v.string(),
+      name: v.string(),
+      thumbnailUrl: v.optional(v.string()),
+      unavailable: v.optional(v.boolean()),
+      assetKind: v.optional(
+        v.union(
+          v.literal("image"),
+          v.literal("video"),
+          v.literal("audio"),
+          v.literal("document"),
+        ),
+      ),
+    }),
+  ),
 });
 
 async function resolveReplyToMessageId(
@@ -100,6 +127,25 @@ function replyPreviewBody(row: Doc<"dmMessages">): string {
         ? `${caption.slice(0, REPLY_BODY_MAX)}…`
         : caption;
     return `${IMAGE_PREVIEW} · ${clipped}`;
+  }
+  if (kind === "studio_share") {
+    const note = row.body.trim();
+    if (note) {
+      return note.length > REPLY_BODY_MAX
+        ? `${note.slice(0, REPLY_BODY_MAX)}…`
+        : note;
+    }
+    const count = row.sharedItems?.length ?? 0;
+    if (count === 1) {
+      const name = row.sharedItems?.[0]?.name?.trim();
+      if (name) {
+        return name.length > REPLY_BODY_MAX
+          ? `${name.slice(0, REPLY_BODY_MAX)}…`
+          : name;
+      }
+    }
+    if (count > 1) return `${count} shared items`;
+    return STUDIO_SHARE_PREVIEW;
   }
   const body = row.body.trim();
   if (!body) return "";
@@ -410,6 +456,25 @@ function conversationPreviewFromMessage(row: Doc<"dmMessages">): string {
       ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
       : caption;
   }
+  if (kind === "studio_share") {
+    const note = row.body.trim();
+    if (note) {
+      return note.length > DM_PREVIEW_MAX
+        ? `${note.slice(0, DM_PREVIEW_MAX)}…`
+        : note;
+    }
+    const count = row.sharedItems?.length ?? 0;
+    if (count === 1) {
+      const name = row.sharedItems?.[0]?.name?.trim();
+      if (name) {
+        return name.length > DM_PREVIEW_MAX
+          ? `${name.slice(0, DM_PREVIEW_MAX)}…`
+          : name;
+      }
+    }
+    if (count > 1) return `${count} shared items`;
+    return STUDIO_SHARE_PREVIEW;
+  }
   const body = row.body.trim();
   if (!body) return "";
   return body.length > DM_PREVIEW_MAX
@@ -432,10 +497,21 @@ async function isLatestConversationMessage(
   return latest?._id === messageId;
 }
 
+type StudioShareCard = {
+  items: Array<{
+    itemKind: StudioShareItemKind;
+    itemId: string;
+    name: string;
+    thumbnailUrl?: string;
+    unavailable?: boolean;
+    assetKind?: "image" | "video" | "audio" | "document";
+  }>;
+};
+
 type ListedDmMessage = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment";
+  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
   audioUrl?: string;
   imageUrl?: string;
   contentType?: string;
@@ -445,13 +521,14 @@ type ListedDmMessage = {
   replyTo?: {
     _id: Id<"dmMessages">;
     body: string;
-    kind: "text" | "voice" | "image" | "post" | "comment";
+    kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
     fromMe: boolean;
     audioUrl?: string;
     imageUrl?: string;
     durationSec?: number;
   };
   feedShare?: FeedShareCard;
+  studioShare?: StudioShareCard;
   createdAt: number;
   editedAt?: number;
   deleted?: boolean;
@@ -540,6 +617,7 @@ async function listConversationMessages(
       }
       const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
       const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
+      const studioShare = await hydrateStudioShareCard(ctx, row, expiresUnix);
       return {
         _id: row._id,
         body: row.body,
@@ -560,6 +638,7 @@ async function listConversationMessages(
           ? replyById.get(row.replyToMessageId)
           : undefined,
         feedShare,
+        studioShare,
         createdAt: row.createdAt,
         ...(row.editedAt !== undefined ? { editedAt: row.editedAt } : {}),
       };
@@ -1128,6 +1207,7 @@ const listMessagesReturn = v.array(
     receipt: receiptStatus,
     replyTo: v.optional(replySnippet),
     feedShare: v.optional(feedShareCard),
+    studioShare: v.optional(studioShareCard),
     createdAt: v.number(),
     editedAt: v.optional(v.number()),
     deleted: v.optional(v.boolean()),

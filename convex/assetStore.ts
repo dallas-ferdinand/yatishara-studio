@@ -141,7 +141,8 @@ async function workspaceRootId(
       !folder.deletedAt &&
       folder.systemKind !== "messages" &&
       folder.systemKind !== "purchased_assets" &&
-      folder.systemKind !== "public_assets",
+      folder.systemKind !== "public_assets" &&
+      folder.systemKind !== "shared_with_me",
   )?._id;
 }
 

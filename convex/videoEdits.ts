@@ -336,8 +336,16 @@ export const get = authedQuery({
   returns: v.union(v.null(), projectReturn),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.projectId);
-    if (!row || row.ownerId !== ctx.user._id || row.deletedAt) return null;
-    return toProjectReturn(row);
+    if (!row || row.deletedAt) return null;
+    if (row.ownerId === ctx.user._id) return toProjectReturn(row);
+    const { viewerCanAccessSharedItem } = await import("./studioShares");
+    const ok = await viewerCanAccessSharedItem(
+      ctx,
+      ctx.user._id,
+      "videoEdit",
+      args.projectId,
+    );
+    return ok ? toProjectReturn(row) : null;
   },
 });
 
