@@ -27,6 +27,10 @@ export type FileReactionPickerProps = {
   presentation?: "sheet" | "menu";
   /** Anchor for menu presentation (viewport coords). */
   anchor?: { x: number; y: number } | null;
+  /** Desktop menu: keep open while pointer is over picker (badge hover bridge). */
+  onHoverKeep?: () => void;
+  /** Desktop menu: schedule close when pointer leaves picker. */
+  onHoverLeave?: () => void;
 };
 
 /**
@@ -39,15 +43,47 @@ export function FileReactionPicker({
   onClose,
   presentation = "sheet",
   anchor = null,
+  onHoverKeep,
+  onHoverLeave,
 }: FileReactionPickerProps) {
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const leaveTimerRef = useRef<number | null>(null);
   const [entered, setEntered] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [menuPos, setMenuPos] = useState({ left: 0, top: 0 });
   const dragRef = useRef<SheetDragState | null>(null);
   const offsetRef = useRef(0);
   const isMenu = presentation === "menu";
+
+  function clearLeaveTimer() {
+    if (leaveTimerRef.current != null) {
+      window.clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  }
+
+  function scheduleLeaveClose() {
+    if (onHoverLeave) {
+      onHoverLeave();
+      return;
+    }
+    clearLeaveTimer();
+    leaveTimerRef.current = window.setTimeout(() => {
+      leaveTimerRef.current = null;
+      onClose();
+    }, 160);
+  }
+
+  function keepOpen() {
+    if (onHoverKeep) {
+      onHoverKeep();
+      return;
+    }
+    clearLeaveTimer();
+  }
+
+  useEffect(() => () => clearLeaveTimer(), []);
 
   useEffect(() => {
     if (!open) {
@@ -219,6 +255,8 @@ export function FileReactionPicker({
         aria-label="React"
         onContextMenu={(event) => event.preventDefault()}
         onMouseDown={(event) => event.stopPropagation()}
+        onMouseEnter={keepOpen}
+        onMouseLeave={scheduleLeaveClose}
       >
         {emojiGrid}
         {clearBtn}

@@ -1403,6 +1403,7 @@ function renderEntryRows({
       ? {
           onReactionPick: (entry, anchor) => onOpenReactionPicker(entry, anchor),
           onReactionHover: (entry, anchor) => onOpenReactionPicker(entry, anchor),
+          onReactionHoverLeave: () => onOpenReactionPicker(null),
         }
       : {};
     if (!renaming) {
@@ -1498,6 +1499,7 @@ function renderEntryRows({
                           onOpenReactionPicker(entry, anchor),
                         onReactionHover: (entry, anchor) =>
                           onOpenReactionPicker(entry, anchor),
+                        onReactionHoverLeave: () => onOpenReactionPicker(null),
                       }
                     : {})}
                 />

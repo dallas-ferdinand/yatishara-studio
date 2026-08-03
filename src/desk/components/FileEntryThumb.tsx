@@ -541,6 +541,7 @@ export function FileEntryThumb({
   onLabelDoubleClick,
   onReactionPick,
   onReactionHover,
+  onReactionHoverLeave,
 }) {
   const name = entry?.name ?? entry?.path?.split("/").pop() ?? "?";
   const label = name;
@@ -866,6 +867,9 @@ export function FileEntryThumb({
                 x: rect.left,
                 y: rect.bottom + 4,
               });
+            }}
+            onMouseLeave={() => {
+              onReactionHoverLeave?.();
             }}
             onMouseDown={(event) => {
               // Keep parent FileEntryButton from treating this as open/drag.

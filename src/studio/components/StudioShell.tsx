@@ -4871,8 +4871,31 @@ export function StudioShell({
     setReactionPickerAnchor(null);
   });
 
+  const reactionHoverLeaveTimerRef = useRef(null);
+
+  function cancelReactionHoverLeave() {
+    if (reactionHoverLeaveTimerRef.current != null) {
+      window.clearTimeout(reactionHoverLeaveTimerRef.current);
+      reactionHoverLeaveTimerRef.current = null;
+    }
+  }
+
+  function scheduleReactionHoverLeave() {
+    cancelReactionHoverLeave();
+    reactionHoverLeaveTimerRef.current = window.setTimeout(() => {
+      reactionHoverLeaveTimerRef.current = null;
+      setReactionPickerEntry(null);
+      setReactionPickerAnchor(null);
+    }, 160);
+  }
+
   function openReactionPickerForEntry(entry, anchor) {
-    if (!entry) return;
+    // null entry = hover-left badge; schedule close (cancelled if picker receives hover).
+    if (!entry) {
+      scheduleReactionHoverLeave();
+      return;
+    }
+    cancelReactionHoverLeave();
     setReactionPickerAnchor(anchor ?? null);
     setReactionPickerEntry(entry);
   }
@@ -21945,12 +21968,16 @@ export function StudioShell({
             ? { x: window.innerWidth / 2 - 80, y: window.innerHeight / 2 - 80 }
             : { x: 24, y: 24 })
         }
+        onHoverKeep={cancelReactionHoverLeave}
+        onHoverLeave={scheduleReactionHoverLeave}
         onClose={() => {
+          cancelReactionHoverLeave();
           setReactionPickerEntry(null);
           setReactionPickerAnchor(null);
         }}
         onSelect={(emoji) => {
           const entry = reactionPickerEntry;
+          cancelReactionHoverLeave();
           setReactionPickerEntry(null);
           setReactionPickerAnchor(null);
           if (entry) void applyEntryReaction(entry, emoji);
