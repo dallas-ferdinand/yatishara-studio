@@ -530,22 +530,32 @@ async function adjustProfileCounts(
   });
 }
 
-/** Handle only — no Bunny signing / seller lookup. Shell boot uses this. */
+/** Handle + optional signed avatar for chrome (header / bottom nav). No seller lookup. */
 export const getMyHandle = authedQuery({
-  args: {},
+  args: {
+    /** When set, also return a signed avatar thumb for nav chrome. */
+    expiresUnix: v.optional(v.number()),
+  },
   returns: v.union(
     v.null(),
     v.object({
       username: v.string(),
       publicUrlPath: v.string(),
+      avatarUrl: v.optional(v.string()),
     }),
   ),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const profile = await getProfileByUser(ctx, ctx.user._id);
     if (!profile) return null;
+    let avatarUrl: string | undefined;
+    if (args.expiresUnix && profile.avatarAssetId) {
+      const avatar = await ctx.db.get("assets", profile.avatarAssetId);
+      avatarUrl = await signAvatarUrl(avatar, args.expiresUnix);
+    }
     return {
       username: profile.username,
       publicUrlPath: publicUrlPath(profile.username),
+      avatarUrl,
     };
   },
 });

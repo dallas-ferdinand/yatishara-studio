@@ -6,6 +6,7 @@ import type {
   HTMLAttributes,
   ReactNode,
 } from "react";
+import { useEffect, useState } from "react";
 import {
   profileAvatarStyle,
   profileNameInitials,
@@ -80,7 +81,12 @@ export function StudioProfileAvatar(props: StudioProfileAvatarProps) {
     name,
     displayName,
   });
-  const hasImage = Boolean(src?.trim());
+  const trimmedSrc = src?.trim() || "";
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [trimmedSrc]);
+  const hasImage = Boolean(trimmedSrc) && !broken;
   const fallbackStyle =
     hasImage || placeholder ? undefined : profileAvatarStyle(initials);
   const classes = [
@@ -97,17 +103,21 @@ export function StudioProfileAvatar(props: StudioProfileAvatarProps) {
       {hasImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={src!}
+          src={trimmedSrc}
           alt={alt}
           className="studio-profile-avatar-media"
           draggable={false}
+          onError={() => setBroken(true)}
         />
       ) : placeholder ? (
         <span className="studio-profile-avatar-fallback is-placeholder">
           {placeholder}
         </span>
       ) : (
-        <span className="studio-profile-avatar-fallback" style={fallbackStyle}>
+        <span
+          className="studio-profile-avatar-fallback"
+          style={fallbackStyle ?? profileAvatarStyle(initials)}
+        >
           {initials}
         </span>
       )}

@@ -1627,10 +1627,10 @@ export function StudioShell({
     api.notifications.listMine,
     hasCurrentUser && (settingsOpen || historyOpen) ? {} : "skip",
   );
-  // Handle only — full getMine (avatar signing) is reserved for settings/DM/compose.
+  // Handle + signed nav avatar (no seller). Full getMine stays for settings/DM.
   const myPublicProfile = useQuery(
     api.profiles.getMyHandle,
-    hasCurrentUser ? {} : "skip",
+    hasCurrentUser ? { expiresUnix: assetUrlExpiresUnix } : "skip",
   );
   const sharedProfileAssets = useQuery(
     api.profiles.listMySharedAssetIds,
