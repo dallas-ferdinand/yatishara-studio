@@ -11,6 +11,7 @@ import { inferElementSourceMode } from "./lib/elementSheetGuides";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
+import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
 
 const elementType = v.union(
   v.literal("character"),
@@ -94,7 +95,6 @@ export const get = authedQuery({
       return null;
     }
     if (element.ownerId === ctx.user._id) return element;
-    const { viewerCanAccessSharedItem } = await import("./studioShares");
     const ok = await viewerCanAccessSharedItem(
       ctx,
       ctx.user._id,

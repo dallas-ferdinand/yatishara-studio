@@ -14,6 +14,7 @@ import {
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { assertUploadsAllowed, beginAssetPurge } from "./lib/storageBilling";
+import { requireAssetOwnerOrShare } from "./lib/studioShareAccess";
 
 const assetKind = v.union(
   v.literal("image"),
@@ -275,7 +276,6 @@ export const signedReadUrl = authedQuery({
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    const { requireAssetOwnerOrShare } = await import("./studioShares");
     const asset = await requireAssetOwnerOrShare(ctx, args.assetId);
     if (!asset.bunnyPath) {
       throw new Error("Asset has no Bunny path");

@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
+import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
 
 const documentReturn = v.object({
   _id: v.id("documents"),
@@ -45,7 +46,6 @@ export const get = authedQuery({
       return null;
     }
     if (doc.ownerId === ctx.user._id) return doc;
-    const { viewerCanAccessSharedItem } = await import("./studioShares");
     const ok = await viewerCanAccessSharedItem(
       ctx,
       ctx.user._id,

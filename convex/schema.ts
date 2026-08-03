@@ -1355,6 +1355,7 @@ export default defineSchema({
   })
     .index("by_to_and_created", ["toUserId", "createdAt"])
     .index("by_from_and_to", ["fromUserId", "toUserId"])
+    .index("by_from_and_created", ["fromUserId", "createdAt"])
     .index("by_item", ["itemKind", "itemId"])
     .index("by_to_and_item", ["toUserId", "itemKind", "itemId"]),
 

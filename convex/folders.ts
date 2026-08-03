@@ -10,6 +10,7 @@ import {
   signBunnyCdnUrl,
 } from "./lib/bunny";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
+import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -434,7 +435,6 @@ export const get = authedQuery({
     if (folder.ownerId === ctx.user._id) {
       return folder;
     }
-    const { viewerCanAccessSharedItem } = await import("./studioShares");
     const ok = await viewerCanAccessSharedItem(
       ctx,
       ctx.user._id,
@@ -511,7 +511,9 @@ export const setReaction = authedMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const folder = await requireFolderOwner(ctx, args.folderId);
-    assertSystemFolderMutable(folder);
+    if (folder.systemKind) {
+      throw new Error("Cannot react to system folders");
+    }
     const reactionEmoji = normalizeReactionEmoji(args.emoji);
     await ctx.db.patch(args.folderId, {
       reactionEmoji,

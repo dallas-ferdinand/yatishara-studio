@@ -16,6 +16,22 @@ import {
 import { resolveElementAssets } from "./lib/elementAssetModel";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { studioShareItemKind } from "./schema";
+import {
+  findActiveGrant,
+  folderAncestorIds,
+  requireAssetOwnerOrShare,
+  viewerCanAccessSharedItem,
+  viewerHasFolderGrantCovering,
+} from "./lib/studioShareAccess";
+
+export {
+  findActiveGrant,
+  folderAncestorIds,
+  requireAssetOwnerOrShare,
+  viewerCanAccessSharedItem,
+  viewerHasFolderGrantCovering,
+};
+
 
 const DM_BODY_MAX = 4000;
 const DM_PREVIEW_MAX = 120;
@@ -121,7 +137,7 @@ async function workspaceRootForUser(
 }
 
 async function requireOwnedShareable(
-  ctx: MutationCtx & { user: Doc<"users"> & { _id: Id<"users"> } },
+  ctx: (QueryCtx | MutationCtx) & { user: Doc<"users"> & { _id: Id<"users"> } },
   itemKind: StudioShareItemKind,
   itemId: string,
 ): Promise<{ name: string }> {
@@ -170,21 +186,6 @@ async function requireOwnedShareable(
     throw new Error("System folders cannot be shared");
   }
   return { name: folder.name };
-}
-
-async function findActiveGrant(
-  ctx: QueryCtx | MutationCtx,
-  toUserId: Id<"users">,
-  itemKind: StudioShareItemKind,
-  itemId: string,
-): Promise<Doc<"studioShares"> | null> {
-  const rows = await ctx.db
-    .query("studioShares")
-    .withIndex("by_to_and_item", (q) =>
-      q.eq("toUserId", toUserId).eq("itemKind", itemKind).eq("itemId", itemId),
-    )
-    .collect();
-  return rows.find((row) => !row.revokedAt) ?? null;
 }
 
 async function upsertGrant(
@@ -286,104 +287,6 @@ function studioShareListPreview(
     return `${items.length} shared items`;
   }
   return STUDIO_SHARE_PREVIEW;
-}
-
-async function folderAncestorIds(
-  ctx: QueryCtx | MutationCtx,
-  folderId: Id<"folders">,
-): Promise<Id<"folders">[]> {
-  const ids: Id<"folders">[] = [];
-  let current: Id<"folders"> | undefined = folderId;
-  const seen = new Set<string>();
-  while (current && !seen.has(current)) {
-    seen.add(current);
-    ids.push(current);
-    const folder: Doc<"folders"> | null = await ctx.db.get("folders", current);
-    if (!folder || folder.deletedAt) break;
-    current = folder.parentId;
-  }
-  return ids;
-}
-
-/**
- * True when viewer owns the item OR has an active live-link grant
- * (direct or via an ancestor folder grant).
- */
-export async function viewerCanAccessSharedItem(
-  ctx: QueryCtx | MutationCtx,
-  viewerId: Id<"users">,
-  itemKind: StudioShareItemKind,
-  itemId: string,
-): Promise<boolean> {
-  if (itemKind === "asset") {
-    const asset = await ctx.db.get("assets", itemId as Id<"assets">);
-    if (!asset || asset.deletedAt) return false;
-    if (asset.ownerId === viewerId) return true;
-    if (await findActiveGrant(ctx, viewerId, "asset", itemId)) return true;
-    return await viewerHasFolderGrantCovering(ctx, viewerId, asset.folderId);
-  }
-  if (itemKind === "document") {
-    const doc = await ctx.db.get("documents", itemId as Id<"documents">);
-    if (!doc || doc.deletedAt) return false;
-    if (doc.ownerId === viewerId) return true;
-    if (await findActiveGrant(ctx, viewerId, "document", itemId)) return true;
-    return await viewerHasFolderGrantCovering(ctx, viewerId, doc.folderId);
-  }
-  if (itemKind === "element") {
-    const element = await ctx.db.get("elements", itemId as Id<"elements">);
-    if (!element || element.deletedAt) return false;
-    if (element.ownerId === viewerId) return true;
-    if (await findActiveGrant(ctx, viewerId, "element", itemId)) return true;
-    if (!element.folderId) return false;
-    return await viewerHasFolderGrantCovering(ctx, viewerId, element.folderId);
-  }
-  if (itemKind === "videoEdit") {
-    const project = await ctx.db.get(
-      "videoEditProjects",
-      itemId as Id<"videoEditProjects">,
-    );
-    if (!project || project.deletedAt) return false;
-    if (project.ownerId === viewerId) return true;
-    if (await findActiveGrant(ctx, viewerId, "videoEdit", itemId)) return true;
-    return await viewerHasFolderGrantCovering(ctx, viewerId, project.folderId);
-  }
-  const folder = await ctx.db.get("folders", itemId as Id<"folders">);
-  if (!folder || folder.deletedAt) return false;
-  if (folder.ownerId === viewerId) return true;
-  return await viewerHasFolderGrantCovering(ctx, viewerId, folder._id);
-}
-
-export async function viewerHasFolderGrantCovering(
-  ctx: QueryCtx | MutationCtx,
-  viewerId: Id<"users">,
-  folderId: Id<"folders">,
-): Promise<boolean> {
-  const ancestors = await folderAncestorIds(ctx, folderId);
-  for (const id of ancestors) {
-    if (await findActiveGrant(ctx, viewerId, "folder", id)) return true;
-  }
-  return false;
-}
-
-export async function requireAssetOwnerOrShare(
-  ctx: (QueryCtx | MutationCtx) & {
-    user: Doc<"users"> & { _id: Id<"users"> };
-  },
-  assetId: Id<"assets">,
-): Promise<Doc<"assets">> {
-  const asset = await ctx.db.get("assets", assetId);
-  if (!asset || asset.deletedAt) {
-    throw new Error("Asset not found");
-  }
-  if (asset.ownerId === ctx.user._id) return asset;
-  const ok = await viewerCanAccessSharedItem(
-    ctx,
-    ctx.user._id,
-    "asset",
-    assetId,
-  );
-  if (!ok) throw new Error("Unauthorized");
-  return asset;
 }
 
 async function signedThumbForAsset(
@@ -875,3 +778,175 @@ export async function hydrateStudioShareCard(
   );
   return { items: hydrated };
 }
+
+const peerShareRowReturn = v.object({
+  shareId: v.id("studioShares"),
+  itemKind: studioShareItemKind,
+  itemId: v.string(),
+  name: v.string(),
+  createdAt: v.number(),
+  thumbnailUrl: v.optional(v.string()),
+  assetKind: v.optional(
+    v.union(
+      v.literal("image"),
+      v.literal("video"),
+      v.literal("audio"),
+      v.literal("document"),
+    ),
+  ),
+});
+
+/** Active shares I sent to one peer (for DM peer sidebar). */
+export const listOutgoingToPeer = authedQuery({
+  args: {
+    peerUserId: v.id("users"),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(peerShareRowReturn),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("studioShares")
+      .withIndex("by_from_and_to", (q) =>
+        q.eq("fromUserId", ctx.user._id).eq("toUserId", args.peerUserId),
+      )
+      .collect();
+    const active = rows
+      .filter((row) => !row.revokedAt)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, LIST_MAX);
+    const out: Array<{
+      shareId: Id<"studioShares">;
+      itemKind: StudioShareItemKind;
+      itemId: string;
+      name: string;
+      createdAt: number;
+      thumbnailUrl?: string;
+      assetKind?: "image" | "video" | "audio" | "document";
+    }> = [];
+    for (const row of active) {
+      const live = await hydrateLiveItem(
+        ctx,
+        row.itemKind,
+        row.itemId,
+        args.expiresUnix,
+      );
+      if (!live) continue;
+      out.push({
+        shareId: row._id,
+        itemKind: row.itemKind,
+        itemId: row.itemId,
+        name: live.name,
+        createdAt: row.createdAt,
+        thumbnailUrl: live.thumbnailUrl,
+        assetKind: live.assetKind,
+      });
+    }
+    return out;
+  },
+});
+
+const recipientReturn = v.object({
+  shareId: v.id("studioShares"),
+  userId: v.id("users"),
+  username: v.string(),
+  displayName: v.optional(v.string()),
+  avatarUrl: v.optional(v.string()),
+  createdAt: v.number(),
+});
+
+/** Who currently has an active grant for one of my items. */
+export const listRecipientsForItem = authedQuery({
+  args: {
+    itemKind: studioShareItemKind,
+    itemId: v.string(),
+    expiresUnix: v.optional(v.number()),
+  },
+  returns: v.array(recipientReturn),
+  handler: async (ctx, args) => {
+    await requireOwnedShareable(ctx, args.itemKind, args.itemId);
+    const rows = await ctx.db
+      .query("studioShares")
+      .withIndex("by_item", (q) =>
+        q.eq("itemKind", args.itemKind).eq("itemId", args.itemId),
+      )
+      .collect();
+    const active = rows.filter(
+      (row) => !row.revokedAt && row.fromUserId === ctx.user._id,
+    );
+    const out: Array<{
+      shareId: Id<"studioShares">;
+      userId: Id<"users">;
+      username: string;
+      displayName?: string;
+      avatarUrl?: string;
+      createdAt: number;
+    }> = [];
+    for (const row of active) {
+      const profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_user", (q) => q.eq("userId", row.toUserId))
+        .unique();
+      if (!profile) continue;
+      let avatarUrl: string | undefined;
+      if (args.expiresUnix && profile.avatarAssetId) {
+        const asset = await ctx.db.get("assets", profile.avatarAssetId);
+        avatarUrl = await signedThumbForAsset(asset, args.expiresUnix);
+      }
+      out.push({
+        shareId: row._id,
+        userId: row.toUserId,
+        username: profile.username,
+        displayName: profile.displayName,
+        avatarUrl,
+        createdAt: row.createdAt,
+      });
+    }
+    out.sort((a, b) => b.createdAt - a.createdAt);
+    return out;
+  },
+});
+
+/** Compact keys for explorer shared badges on my items. */
+export const listMyOutgoingShareKeys = authedQuery({
+  args: {},
+  returns: v.array(
+    v.object({
+      itemKind: studioShareItemKind,
+      itemId: v.string(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("studioShares")
+      .withIndex("by_from_and_created", (q) => q.eq("fromUserId", ctx.user._id))
+      .order("desc")
+      .take(500);
+    const seen = new Set<string>();
+    const out: Array<{ itemKind: StudioShareItemKind; itemId: string }> = [];
+    for (const row of rows) {
+      if (row.revokedAt) continue;
+      const key = `${row.itemKind}:${row.itemId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ itemKind: row.itemKind, itemId: row.itemId });
+    }
+    return out;
+  },
+});
+
+export const revokeShare = authedMutation({
+  args: {
+    shareId: v.id("studioShares"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get("studioShares", args.shareId);
+    if (!row || row.revokedAt) return null;
+    if (row.fromUserId !== ctx.user._id) {
+      throw new Error("Only the sharer can stop sharing");
+    }
+    await ctx.db.patch(args.shareId, { revokedAt: Date.now() });
+    return null;
+  },
+});
+

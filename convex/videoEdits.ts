@@ -11,6 +11,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { isFolderInSandbox } from "./lib/studioApi/folderScope";
+import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
 import {
   addTextClip,
   appendClips,
@@ -338,7 +339,6 @@ export const get = authedQuery({
     const row = await ctx.db.get(args.projectId);
     if (!row || row.deletedAt) return null;
     if (row.ownerId === ctx.user._id) return toProjectReturn(row);
-    const { viewerCanAccessSharedItem } = await import("./studioShares");
     const ok = await viewerCanAccessSharedItem(
       ctx,
       ctx.user._id,
