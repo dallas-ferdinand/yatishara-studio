@@ -34,6 +34,7 @@ import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
+import { placeShareConfirmNearButton } from "@/studio/lib/place-share-confirm-menu.js";
 import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 import "./studio-messages.css";
@@ -301,17 +302,18 @@ export function StudioSharePeoplePanel({
     const btn = shareBtnRef.current;
     if (!btn) return;
     const place = () => {
-      const rect = btn.getBoundingClientRect();
-      const width = 240;
-      const left = Math.min(
-        Math.max(8, rect.right - width),
-        window.innerWidth - width - 8,
-      );
-      setConfirmPos({ top: rect.bottom + 4, left });
+      const next = placeShareConfirmNearButton(btn, confirmMenuRef.current);
+      setConfirmPos({ top: next.top, left: next.left });
     };
     place();
+    const frame = window.requestAnimationFrame(place);
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [confirmOpen, isMobile]);
 
   useEffect(() => {

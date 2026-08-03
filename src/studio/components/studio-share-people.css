@@ -161,7 +161,7 @@
   cursor: not-allowed;
 }
 
-/* Confirm Access/File — desktop dropdown under Share / mobile bottom sheet. */
+/* Confirm Access/File — desktop popover (opens above when below is tight) / mobile sheet. */
 .studio-share-confirm-dropdown-anchor {
   position: fixed;
   z-index: 720;

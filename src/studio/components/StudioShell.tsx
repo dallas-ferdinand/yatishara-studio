@@ -192,6 +192,7 @@ import {
 } from "@/studio/lib/studioPaintMarks";
 import { StudioPerfHud } from "@/studio/components/StudioPerfHud";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { placeShareConfirmNearButton } from "@/studio/lib/place-share-confirm-menu.js";
 import {
   insertPlainTextAtSelection,
   plainTextFromClipboard,
@@ -7352,17 +7353,21 @@ export function StudioShell({
     const btn = assetPickShareBtnRef.current;
     if (!btn) return undefined;
     const place = () => {
-      const rect = btn.getBoundingClientRect();
-      const width = 240;
-      const left = Math.min(
-        Math.max(8, rect.right - width),
-        window.innerWidth - width - 8,
+      const next = placeShareConfirmNearButton(
+        btn,
+        assetPickShareMenuRef.current,
       );
-      setAssetPickSharePos({ top: rect.bottom + 4, left });
+      setAssetPickSharePos({ top: next.top, left: next.left });
     };
     place();
+    const frame = window.requestAnimationFrame(place);
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [assetPickShareOpen, isMobile]);
 
   useEffect(() => {
