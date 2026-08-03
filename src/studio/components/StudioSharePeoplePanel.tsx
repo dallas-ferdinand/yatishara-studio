@@ -3,11 +3,18 @@
 import { useQuery } from "convex/react";
 import {
   Check,
+  Clapperboard,
+  File,
+  FileText,
+  Folder,
+  Image,
   MessageCircle,
+  Music,
   SearchX,
   Share2,
   Tags,
   Users,
+  Video,
   X,
 } from "lucide-react";
 import {
@@ -42,6 +49,15 @@ export type SharePeoplePeer = {
 
 type StudioSharePeoplePanelProps = {
   itemLabel: string;
+  itemKind?:
+    | "folder"
+    | "image"
+    | "video"
+    | "videoEdit"
+    | "document"
+    | "audio"
+    | "file"
+    | "items";
   selectedPeers: SharePeoplePeer[];
   onTogglePeer: (peer: SharePeoplePeer) => void;
   onShare: (opts: {
@@ -56,6 +72,17 @@ type StudioSharePeoplePanelProps = {
 };
 
 type LabelId = Id<"dmLabels">;
+
+const SHARE_ITEM_ICONS = {
+  folder: Folder,
+  image: Image,
+  video: Video,
+  videoEdit: Clapperboard,
+  document: FileText,
+  audio: Music,
+  file: File,
+  items: File,
+};
 
 function SearchResultSection({
   title,
@@ -215,6 +242,7 @@ function ShareConfirmMenu({
  */
 export function StudioSharePeoplePanel({
   itemLabel,
+  itemKind = "file",
   selectedPeers,
   onTogglePeer,
   onShare,
@@ -224,6 +252,7 @@ export function StudioSharePeoplePanel({
   allowFileDelivery = true,
 }: StudioSharePeoplePanelProps) {
   const isMobile = useMobileLayout();
+  const ItemIcon = SHARE_ITEM_ICONS[itemKind] ?? File;
   const [search, setSearch] = useState("");
   const [searchNow] = useState(() => Date.now());
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
@@ -424,7 +453,10 @@ export function StudioSharePeoplePanel({
               ? `${selectedPeers.length} selected`
               : "Select people"}
           </strong>
-          <span>Share {itemLabel}</span>
+          <span className="studio-share-people-item-line">
+            <ItemIcon aria-hidden="true" />
+            <span>Share {itemLabel}</span>
+          </span>
         </div>
         <div className="studio-share-people-top-actions">
           <button

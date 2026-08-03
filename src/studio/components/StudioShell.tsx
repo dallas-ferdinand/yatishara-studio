@@ -1399,11 +1399,27 @@ export function StudioShell({
   function openSharePeopleForEntries(entries) {
     const items = [];
     const labels = [];
+    const displayKinds = [];
     for (const entry of entries ?? []) {
       const item = entryToShareItem(entry);
       if (!item) continue;
       items.push(item);
       labels.push(entry.name || "item");
+      displayKinds.push(
+        item.itemKind === "folder"
+          ? "folder"
+          : item.itemKind === "videoEdit"
+            ? "videoEdit"
+            : item.itemKind === "document"
+              ? "document"
+              : item.itemKind === "element"
+                ? "image"
+                : entry.kind === "image" ||
+                    entry.kind === "video" ||
+                    entry.kind === "audio"
+                  ? entry.kind
+                  : "file",
+      );
     }
     if (!items.length) {
       toast.message("That item can’t be shared");
@@ -1413,6 +1429,7 @@ export function StudioShell({
     setSharePeopleBusy(false);
     setSharePeopleRequest({
       items,
+      displayKind: displayKinds.length === 1 ? displayKinds[0] : "items",
       label:
         labels.length === 1
           ? labels[0]
@@ -20479,6 +20496,7 @@ export function StudioShell({
         ) : sharingToPeople ? (
           <StudioSharePeoplePanel
             itemLabel={sharePeopleRequest.label || "files"}
+            itemKind={sharePeopleRequest.displayKind || "file"}
             selectedPeers={sharePeopleSelected}
             expiresUnix={assetUrlExpiresUnix}
             busy={sharePeopleBusy}
