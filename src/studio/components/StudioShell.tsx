@@ -20911,7 +20911,7 @@ export function StudioShell({
                         asSheet
                       />
                     </>,
-                    document.querySelector(".studio-polish") ?? document.body,
+                    document.body,
                   )
                 : createPortal(
                     <div
@@ -26849,7 +26849,7 @@ function StudioChatResultCard({
   onContextMenuEntry,
   generateBusy = false,
 }) {
-  const isMobile = useMobileLayout();
+  const { isMobile } = useMobileLayout();
   const isVideo = entry.kind === "video";
   const isImage = entry.kind === "image";
   const isAudio = entry.kind === "audio";

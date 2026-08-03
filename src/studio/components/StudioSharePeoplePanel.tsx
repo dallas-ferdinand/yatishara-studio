@@ -252,7 +252,7 @@ export function StudioSharePeoplePanel({
   expiresUnix,
   allowFileDelivery = true,
 }: StudioSharePeoplePanelProps) {
-  const isMobile = useMobileLayout();
+  const { isMobile } = useMobileLayout();
   const ItemIcon = SHARE_ITEM_ICONS[itemKind] ?? File;
   const [search, setSearch] = useState("");
   const [searchNow] = useState(() => Date.now());
@@ -382,7 +382,7 @@ export function StudioSharePeoplePanel({
               asSheet
             />
           </>,
-          document.querySelector(".studio-polish") ?? document.body,
+          document.body,
         )
       : createPortal(
           <div

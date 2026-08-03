@@ -58,6 +58,7 @@ import {
 } from "@/desk/lib/explorer-dnd.js";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
+import { placeShareConfirmNearButton } from "@/studio/lib/place-share-confirm-menu.js";
 import {
   bindDmCacheOwner,
   dmLiveOrCached,
@@ -2123,6 +2124,8 @@ export function StudioMessagesPane({
       }
     >
   >([]);
+  const shareTypeMenuRef = useRef<HTMLDivElement | null>(null);
+  const [shareTypePos, setShareTypePos] = useState({ top: 0, left: 0 });
   const [studioDropActive, setStudioDropActive] = useState(false);
   const [filesPickerExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
@@ -2139,6 +2142,49 @@ export function StudioMessagesPane({
     setShareTypeOpen(false);
     setPendingSharePicks([]);
   });
+
+  useEffect(() => {
+    if (!shareTypeOpen || isMobile) return undefined;
+    const btn = attachBtnRef.current;
+    if (!btn) return undefined;
+    const place = () => {
+      const next = placeShareConfirmNearButton(btn, shareTypeMenuRef.current);
+      setShareTypePos({ top: next.top, left: next.left });
+    };
+    place();
+    const frame = window.requestAnimationFrame(place);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [shareTypeOpen, isMobile]);
+
+  useEffect(() => {
+    if (!shareTypeOpen || isMobile) return undefined;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (attachBtnRef.current?.contains(t)) return;
+      if (shareTypeMenuRef.current?.contains(t)) return;
+      if (filesPickBusy) return;
+      setShareTypeOpen(false);
+      setPendingSharePicks([]);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || filesPickBusy) return;
+      setShareTypeOpen(false);
+      setPendingSharePicks([]);
+    };
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [shareTypeOpen, isMobile, filesPickBusy]);
+
   useMobileBackLayer("dm-list-context", Boolean(listContext), () => {
     setListContext(null);
   });
@@ -3446,44 +3492,77 @@ export function StudioMessagesPane({
       ) : null}
 
       {shareTypeOpen
-        ? createPortal(
-            <>
-              <button
-                type="button"
-                className="studio-share-confirm-backdrop"
-                aria-label="Dismiss"
-                onClick={() => {
-                  if (filesPickBusy) return;
-                  setShareTypeOpen(false);
-                  setPendingSharePicks([]);
-                }}
-              />
-              <ShareConfirmMenu
-                delivery={shareTypeDelivery}
-                setDelivery={setShareTypeDelivery}
-                permission={shareTypePermission}
-                setPermission={setShareTypePermission}
-                allowFileDelivery={pendingSharePicks.every(
-                  (item) => (item.itemKind ?? "asset") === "asset",
-                )}
-                busy={filesPickBusy}
-                onConfirm={() => {
-                  const picked = pendingSharePicks;
-                  void sendStudioPicks(picked, {
-                    delivery: shareTypeDelivery,
-                    permission: shareTypePermission,
-                  });
-                }}
-                onDismiss={() => {
-                  if (filesPickBusy) return;
-                  setShareTypeOpen(false);
-                  setPendingSharePicks([]);
-                }}
-                asSheet
-              />
-            </>,
-            document.querySelector(".studio-polish") ?? document.body,
-          )
+        ? isMobile
+          ? createPortal(
+              <>
+                <button
+                  type="button"
+                  className="studio-share-confirm-backdrop"
+                  aria-label="Dismiss"
+                  onClick={() => {
+                    if (filesPickBusy) return;
+                    setShareTypeOpen(false);
+                    setPendingSharePicks([]);
+                  }}
+                />
+                <ShareConfirmMenu
+                  delivery={shareTypeDelivery}
+                  setDelivery={setShareTypeDelivery}
+                  permission={shareTypePermission}
+                  setPermission={setShareTypePermission}
+                  allowFileDelivery={pendingSharePicks.every(
+                    (item) => (item.itemKind ?? "asset") === "asset",
+                  )}
+                  busy={filesPickBusy}
+                  onConfirm={() => {
+                    const picked = pendingSharePicks;
+                    void sendStudioPicks(picked, {
+                      delivery: shareTypeDelivery,
+                      permission: shareTypePermission,
+                    });
+                  }}
+                  onDismiss={() => {
+                    if (filesPickBusy) return;
+                    setShareTypeOpen(false);
+                    setPendingSharePicks([]);
+                  }}
+                  asSheet
+                />
+              </>,
+              document.body,
+            )
+          : createPortal(
+              <div
+                ref={shareTypeMenuRef}
+                className="studio-share-confirm-dropdown-anchor"
+                style={{ top: shareTypePos.top, left: shareTypePos.left }}
+              >
+                <ShareConfirmMenu
+                  delivery={shareTypeDelivery}
+                  setDelivery={setShareTypeDelivery}
+                  permission={shareTypePermission}
+                  setPermission={setShareTypePermission}
+                  allowFileDelivery={pendingSharePicks.every(
+                    (item) => (item.itemKind ?? "asset") === "asset",
+                  )}
+                  busy={filesPickBusy}
+                  onConfirm={() => {
+                    const picked = pendingSharePicks;
+                    void sendStudioPicks(picked, {
+                      delivery: shareTypeDelivery,
+                      permission: shareTypePermission,
+                    });
+                  }}
+                  onDismiss={() => {
+                    if (filesPickBusy) return;
+                    setShareTypeOpen(false);
+                    setPendingSharePicks([]);
+                  }}
+                  asSheet={false}
+                />
+              </div>,
+              document.body,
+            )
         : null}
 
     </div>
