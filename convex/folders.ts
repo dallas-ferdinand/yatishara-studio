@@ -323,7 +323,7 @@ async function peekCandidatesToItems(
 }
 
 /** Breadth-first peek: surfaces nested media even when direct children are subfolders only. */
-async function collectFolderPeekItems(
+export async function collectFolderPeekItems(
   ctx: QueryCtx,
   ownerId: Id<"users">,
   folderId: Id<"folders">,

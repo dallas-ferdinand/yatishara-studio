@@ -1922,7 +1922,11 @@ export function StudioShell({
   );
   const contextShareRecipients = useQuery(
     api.studioShares.listRecipientsForItem,
-    hasCurrentUser && contextShareItem
+    hasCurrentUser &&
+      contextShareItem &&
+      // Only owners with an outgoing grant need this — never for Shared-with-me receipts.
+      !contextMenu?.entry?.isSharedLive &&
+      Boolean(contextMenu?.entry?.hasOutgoingShare)
       ? {
           itemKind: contextShareItem.itemKind,
           itemId: contextShareItem.itemId,
@@ -3167,6 +3171,7 @@ export function StudioShell({
     : Boolean(
         activeFolder &&
           needsExplorerFolderContents &&
+          !useSharedListing &&
           assets === undefined &&
           documents === undefined &&
           childFolders === undefined,
@@ -3316,6 +3321,7 @@ export function StudioShell({
       const loading = sharedWithMeItems === undefined;
       return {
         loading,
+        parent: parentEntry,
         entries: loading
           ? []
           : (sharedWithMeItems ?? []).map((item) => sharedListItemToEntry(item)),
@@ -3326,6 +3332,7 @@ export function StudioShell({
       const children = sharedFolderChildren?.children ?? [];
       return {
         loading,
+        parent: parentEntry,
         entries: loading
           ? []
           : children.map((item) =>
@@ -3473,7 +3480,9 @@ export function StudioShell({
   );
   const folderPrefetchQueries = useMemo(() => {
     const queries = {};
-    if (!hasCurrentUser || !needsExplorerFolderContents) return queries;
+    if (!hasCurrentUser || !needsExplorerFolderContents || useSharedListing) {
+      return queries;
+    }
     // Prefetch only child folder names for the first few visible folders —
     // full asset/document fan-out was creating ~40 speculative subscriptions.
     for (const folderId of visibleFolderIds) {
@@ -3483,7 +3492,12 @@ export function StudioShell({
       };
     }
     return queries;
-  }, [hasCurrentUser, needsExplorerFolderContents, visibleFolderIds]);
+  }, [
+    hasCurrentUser,
+    needsExplorerFolderContents,
+    useSharedListing,
+    visibleFolderIds,
+  ]);
   useQueries(folderPrefetchQueries);
 
   const tabs = useMemo(() => {
@@ -3590,7 +3604,17 @@ export function StudioShell({
     if (!q) return { entries: [], truncated: false };
     const entries = [];
     let truncated = false;
+    // Include parent tile when its label matches (e.g. "Files") so search
+    // still feels navigable inside Shared with me.
+    const parent = filteredCurrentEntries.parent;
+    if (
+      parent &&
+      String(parent.name ?? "").toLowerCase().includes(q)
+    ) {
+      entries.push(parent);
+    }
     for (const entry of filteredCurrentEntries.entries ?? []) {
+      if (entry.type === "parent") continue;
       if (!String(entry.name ?? "").toLowerCase().includes(q)) continue;
       if (entries.length >= 80) {
         truncated = true;
@@ -31202,6 +31226,7 @@ function sharedListItemToEntry(item) {
       studioId: itemId,
       folderId: item.folderId ?? itemId,
       thumbnailUrl: item.thumbnailUrl,
+      peekItems: item.peekItems ?? [],
       ...sharedMeta,
     };
   }

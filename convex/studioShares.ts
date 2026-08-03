@@ -10,6 +10,7 @@ import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { assertCanMessagePeer } from "./dmPeerPanel";
 import {
+  collectFolderPeekItems,
   ensureMessagesFolder,
   ensureSharedWithMeFolder,
 } from "./folders";
@@ -60,6 +61,33 @@ const shareItemArg = v.object({
   itemId: v.string(),
 });
 
+const sharedPeekItem = v.object({
+  kind: v.union(
+    v.literal("image"),
+    v.literal("video"),
+    v.literal("audio"),
+    v.literal("document"),
+    v.literal("element"),
+    v.literal("file"),
+  ),
+  thumbnailUrl: v.optional(v.string()),
+  thumbnailLqipUrl: v.optional(v.string()),
+  label: v.string(),
+  elementType: v.optional(
+    v.union(
+      v.literal("character"),
+      v.literal("prop"),
+      v.literal("location"),
+      v.literal("doc"),
+      v.literal("style_sheet"),
+    ),
+  ),
+  icon: v.optional(v.string()),
+});
+
+/** Cap signed folder peeks in shared listings (Bunny signing / 1s isolate). */
+const SHARED_SIGNED_PEEK_FOLDERS = 8;
+
 const sharedEntryReturn = v.object({
   shareId: v.id("studioShares"),
   itemKind: studioShareItemKind,
@@ -91,6 +119,7 @@ const sharedEntryReturn = v.object({
       v.literal("style_sheet"),
     ),
   ),
+  peekItems: v.optional(v.array(sharedPeekItem)),
 });
 
 const sharedChildReturn = v.object({
@@ -118,6 +147,7 @@ const sharedChildReturn = v.object({
     ),
   ),
   updatedAt: v.number(),
+  peekItems: v.optional(v.array(sharedPeekItem)),
 });
 
 function sortPair(a: Id<"users">, b: Id<"users">) {
@@ -658,8 +688,22 @@ export const listSharedWithMe = authedQuery({
         | "location"
         | "doc"
         | "style_sheet";
+      peekItems?: Array<{
+        kind: "image" | "video" | "audio" | "document" | "element" | "file";
+        thumbnailUrl?: string;
+        thumbnailLqipUrl?: string;
+        label: string;
+        elementType?:
+          | "character"
+          | "prop"
+          | "location"
+          | "doc"
+          | "style_sheet";
+        icon?: string;
+      }>;
     }> = [];
 
+    let signedPeekFolders = 0;
     for (const row of rows) {
       if (row.revokedAt) continue;
       const live = await hydrateLiveItem(
@@ -675,6 +719,37 @@ export const listSharedWithMe = authedQuery({
         .query("profiles")
         .withIndex("by_user", (q) => q.eq("userId", row.fromUserId))
         .unique();
+      let peekItems:
+        | Array<{
+            kind: "image" | "video" | "audio" | "document" | "element" | "file";
+            thumbnailUrl?: string;
+            thumbnailLqipUrl?: string;
+            label: string;
+            elementType?:
+              | "character"
+              | "prop"
+              | "location"
+              | "doc"
+              | "style_sheet";
+            icon?: string;
+          }>
+        | undefined;
+      if (row.itemKind === "folder" && args.expiresUnix) {
+        const folder = await ctx.db.get("folders", row.itemId as Id<"folders">);
+        if (
+          folder &&
+          !folder.deletedAt &&
+          signedPeekFolders < SHARED_SIGNED_PEEK_FOLDERS
+        ) {
+          peekItems = await collectFolderPeekItems(
+            ctx,
+            folder.ownerId,
+            folder._id,
+            args.expiresUnix,
+          );
+          signedPeekFolders += 1;
+        }
+      }
       out.push({
         shareId: row._id,
         itemKind: row.itemKind,
@@ -690,6 +765,7 @@ export const listSharedWithMe = authedQuery({
         thumbnailUrl: live.thumbnailUrl,
         folderId: live.folderId,
         elementType: live.elementType,
+        peekItems,
       });
     }
     return out;
@@ -745,6 +821,19 @@ export const listSharedFolderChildren = authedQuery({
         | "doc"
         | "style_sheet";
       updatedAt: number;
+      peekItems?: Array<{
+        kind: "image" | "video" | "audio" | "document" | "element" | "file";
+        thumbnailUrl?: string;
+        thumbnailLqipUrl?: string;
+        label: string;
+        elementType?:
+          | "character"
+          | "prop"
+          | "location"
+          | "doc"
+          | "style_sheet";
+        icon?: string;
+      }>;
     }> = [];
 
     const childFolders = await ctx.db
@@ -753,14 +842,43 @@ export const listSharedFolderChildren = authedQuery({
         q.eq("ownerId", folder.ownerId).eq("parentId", folder._id),
       )
       .collect();
+    let signedPeekFolders = 0;
     for (const child of childFolders) {
       if (child.deletedAt || child.systemKind) continue;
+      let peekItems:
+        | Array<{
+            kind: "image" | "video" | "audio" | "document" | "element" | "file";
+            thumbnailUrl?: string;
+            thumbnailLqipUrl?: string;
+            label: string;
+            elementType?:
+              | "character"
+              | "prop"
+              | "location"
+              | "doc"
+              | "style_sheet";
+            icon?: string;
+          }>
+        | undefined;
+      if (
+        args.expiresUnix &&
+        signedPeekFolders < SHARED_SIGNED_PEEK_FOLDERS
+      ) {
+        peekItems = await collectFolderPeekItems(
+          ctx,
+          folder.ownerId,
+          child._id,
+          args.expiresUnix,
+        );
+        signedPeekFolders += 1;
+      }
       children.push({
         itemKind: "folder",
         itemId: child._id,
         name: child.name,
         folderId: child._id,
         updatedAt: child.updatedAt,
+        peekItems,
       });
     }
 
@@ -990,7 +1108,13 @@ export const listRecipientsForItem = authedQuery({
   },
   returns: v.array(recipientReturn),
   handler: async (ctx, args) => {
-    await requireOwnedShareable(ctx, args.itemKind, args.itemId);
+    // Recipients browsing Shared with me must not hit requireOwnedShareable —
+    // return empty instead of throwing (context menu opens on shared items).
+    try {
+      await requireOwnedShareable(ctx, args.itemKind, args.itemId);
+    } catch {
+      return [];
+    }
     const rows = await ctx.db
       .query("studioShares")
       .withIndex("by_item", (q) =>
