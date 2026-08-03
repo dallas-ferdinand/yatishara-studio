@@ -122,10 +122,11 @@ export function ThemeSettings() {
     let resolved = url ?? undefined;
     if (!resolved) {
       try {
-        resolved = await convex.query(api.assets.signedReadUrl, {
-          assetId: assetId as Id<"assets">,
-          expiresUnix,
-        });
+        resolved =
+          (await convex.query(api.assets.signedReadUrl, {
+            assetId: assetId as Id<"assets">,
+            expiresUnix,
+          })) ?? undefined;
       } catch {
         resolved = undefined;
       }
