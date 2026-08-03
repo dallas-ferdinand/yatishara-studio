@@ -18,6 +18,7 @@ import {
   PinOff,
   RefreshCw,
   Share2,
+  SmilePlus,
   Sparkles,
   Trash2,
   Undo2,
@@ -65,6 +66,8 @@ const EXPLORER_MENU_ICONS = {
   new: FolderPlus,
   organize: Pin,
   share: Share2,
+  react: SmilePlus,
+  "react-open": SmilePlus,
   more: Sparkles,
 };
 
