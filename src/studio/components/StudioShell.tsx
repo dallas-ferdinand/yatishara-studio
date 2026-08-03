@@ -2494,9 +2494,11 @@ export function StudioShell({
     api.assets.listByIds,
     hasCurrentUser && styleSheetSheetAssetIds.length
       ? {
-          assetIds: styleSheetSheetAssetIds,
+          // Thumb-only — preview-quality signing blew the Convex 1s isolate budget
+          // when many Style Sheets load at once and took down the whole shell.
+          assetIds: styleSheetSheetAssetIds.slice(0, 48),
           expiresUnix: assetUrlExpiresUnix,
-          quality: "preview",
+          quality: "thumb",
         }
       : "skip",
   );
@@ -2530,7 +2532,10 @@ export function StudioShell({
   const linkedElementAssets = useQuery(
     api.assets.listByIds,
     hasCurrentUser && elementLinkedAssetIds.length
-      ? { assetIds: elementLinkedAssetIds, expiresUnix: assetUrlExpiresUnix }
+      ? {
+          assetIds: elementLinkedAssetIds.slice(0, 48),
+          expiresUnix: assetUrlExpiresUnix,
+        }
       : "skip",
   );
   // Prompt reference chips store durable /Studio/assets/{id} paths — fetch those
@@ -2548,7 +2553,7 @@ export function StudioShell({
         if (known.has(assetId) || seen.has(assetId) || elementIds.has(assetId)) continue;
         seen.add(assetId);
         missing.push(assetId);
-        if (missing.length >= 80) return missing;
+        if (missing.length >= 48) return missing;
       }
     }
     return missing;

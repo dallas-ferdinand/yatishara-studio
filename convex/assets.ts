@@ -316,6 +316,8 @@ export const ensureEditProxy = authedMutation({
 });
 
 /** Resolve assets by ID regardless of folder — for element sheet/ref lookups after reorganize. */
+const LIST_BY_IDS_CAP = 48;
+
 export const listByIds = authedQuery({
   args: {
     assetIds: v.array(v.id("assets")),
@@ -324,7 +326,8 @@ export const listByIds = authedQuery({
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
-    const uniqueIds = [...new Set(args.assetIds)];
+    // Cap to stay under self-hosted isolate 1s (Bunny signing dominates).
+    const uniqueIds = [...new Set(args.assetIds)].slice(0, LIST_BY_IDS_CAP);
     const results: Doc<"assets">[] = [];
     for (const assetId of uniqueIds) {
       const asset = await ctx.db.get("assets", assetId);
@@ -338,7 +341,10 @@ export const listByIds = authedQuery({
       }
       results.push(asset);
     }
-    return await withSignedThumbnails(results, args.expiresUnix, args.quality ?? "thumb");
+    // Prefer thumb signing unless caller needs preview; never do preview+proxy for big batches.
+    const quality =
+      args.quality === "preview" && results.length <= 12 ? "preview" : "thumb";
+    return await withSignedThumbnails(results, args.expiresUnix, quality);
   },
 });
 

@@ -47,15 +47,19 @@ type StudioShellBootProps = {
 
 class StudioShellErrorBoundary extends Component<
   { children: ReactNode; onFailed?: () => void },
-  { failed: boolean; message: string }
+  { failed: boolean; message: string; autoReload: boolean }
 > {
-  state = { failed: false, message: "" };
+  state = { failed: false, message: "", autoReload: false };
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getDerivedStateFromError(error: Error) {
-    return {
-      failed: true,
-      message: error?.message ? String(error.message).slice(0, 280) : "Studio crashed while loading.",
-    };
+    const message = error?.message
+      ? String(error.message).slice(0, 280)
+      : "Studio crashed while loading.";
+    const autoReload = /timed out|timeout|out_of_retention|try again later/i.test(
+      message,
+    );
+    return { failed: true, message, autoReload };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
@@ -81,6 +85,26 @@ class StudioShellErrorBoundary extends Component<
       body: JSON.stringify(payload),
       keepalive: true,
     }).catch(() => {});
+
+    // Transient Convex isolate timeouts should not leave a sticky recovery wall.
+    if (this.state.autoReload) {
+      try {
+        const key = "ys-shell-timeout-reload";
+        const last = Number(sessionStorage.getItem(key) || "0");
+        if (Date.now() - last > 20_000) {
+          sessionStorage.setItem(key, String(Date.now()));
+          this.reloadTimer = setTimeout(() => {
+            window.location.reload();
+          }, 900);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.reloadTimer) clearTimeout(this.reloadTimer);
   }
 
   render() {
@@ -97,7 +121,9 @@ class StudioShellErrorBoundary extends Component<
           recovery={
             <div className="mt-6 flex max-w-sm flex-col items-center gap-3 px-4 text-center">
               <p className="text-xs font-medium text-slate-900/70">
-                Studio hit a load error and stopped here.
+                {this.state.autoReload
+                  ? "Studio backend was busy — reloading…"
+                  : "Studio hit a load error and stopped here."}
               </p>
               {this.state.message ? (
                 <p className="rounded-lg bg-slate-900/5 px-3 py-2 font-mono text-[11px] leading-snug text-slate-900/55 break-words">
