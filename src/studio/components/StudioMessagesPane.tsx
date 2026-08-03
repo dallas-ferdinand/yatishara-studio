@@ -570,7 +570,7 @@ function DmStudioShareCard({
             <span className="studio-dm-studio-share-copy">
               <strong>{unavailable ? "Unavailable" : item.name}</strong>
               <span>
-                {unavailable ? "No longer shared" : studioShareKindLabel(item)}
+                {unavailable ? "No access" : studioShareKindLabel(item)}
               </span>
             </span>
           </button>

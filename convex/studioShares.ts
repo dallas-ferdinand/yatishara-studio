@@ -1041,6 +1041,8 @@ export async function hydrateStudioShareCard(
   row: Doc<"dmMessages">,
   expiresUnix: number,
   viewerId?: Id<"users">,
+  /** Non-sender in the DM — used to detect revoked Access grants for both sides. */
+  recipientId?: Id<"users">,
 ): Promise<
   | {
       items: Array<{
@@ -1065,7 +1067,27 @@ export async function hydrateStudioShareCard(
           ),
         ),
       ];
+      // Access shares (no sourceItemId) die when the recipient grant is revoked —
+      // show Unavailable to both peers, even though the sender still owns the file.
+      const isAccessShare = !item.sourceItemId;
+      if (isAccessShare && recipientId) {
+        const recipientCan = await viewerCanAccessSharedItem(
+          ctx,
+          recipientId,
+          item.itemKind,
+          item.itemId,
+        );
+        if (!recipientCan) {
+          return {
+            itemKind: item.itemKind,
+            itemId: item.itemId,
+            name: item.name,
+            unavailable: true as const,
+          };
+        }
+      }
       // Prefer an id the viewer owns / has a grant on (file copies store peer id).
+      // When viewerId is set, never fall back to unauthorized hydrate.
       let chosenId: string | null = null;
       let live: Awaited<ReturnType<typeof hydrateLiveItem>> = null;
       if (viewerId) {
@@ -1088,8 +1110,7 @@ export async function hydrateStudioShareCard(
           live = next;
           break;
         }
-      }
-      if (!live) {
+      } else {
         for (const candidate of candidates) {
           const next = await hydrateLiveItem(
             ctx,

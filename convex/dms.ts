@@ -654,6 +654,7 @@ async function listConversationMessages(
         row,
         expiresUnix,
         args.viewerId,
+        peerIdOf(args.conversation, row.senderId),
       );
       return {
         _id: row._id,

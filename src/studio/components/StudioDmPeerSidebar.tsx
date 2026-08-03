@@ -25,6 +25,7 @@ import {
   Tags,
   UserRound,
   Users,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -408,6 +409,8 @@ export function StudioDmPeerSidebar({
   const [editingBody, setEditingBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [unshareConfirmId, setUnshareConfirmId] =
+    useState<Id<"studioShares"> | null>(null);
   const [bookingOfferId, setBookingOfferId] =
     useState<Id<"marketplaceOffers"> | null>(null);
 
@@ -456,17 +459,27 @@ export function StudioDmPeerSidebar({
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (unshareConfirmId) {
+        setUnshareConfirmId(null);
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, unshareConfirmId]);
 
   useEffect(() => {
     setJobDetailId(null);
     setEditingNoteId(null);
+    setUnshareConfirmId(null);
     setError("");
   }, [peerUserId]);
+
+  useEffect(() => {
+    setUnshareConfirmId(null);
+  }, [tab]);
 
   // Keep hidden until both queries resolve — showing it optimistically makes the
   // Jobs tab flash in and then disappear for peers who have no jobs/offers.
@@ -786,31 +799,53 @@ export function StudioDmPeerSidebar({
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="studio-dm-peer-unshare"
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          `Stop sharing “${row.name}” with @${peerUsername}?`,
-                        )
-                      ) {
-                        return;
+                  <div className="studio-dm-peer-unshare-group">
+                    {unshareConfirmId === row.shareId ? (
+                      <button
+                        type="button"
+                        className="studio-dm-peer-unshare-cancel"
+                        disabled={busy}
+                        aria-label="Cancel unshare"
+                        title="Cancel"
+                        onClick={() => setUnshareConfirmId(null)}
+                      >
+                        <X aria-hidden="true" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`studio-dm-peer-unshare${
+                        unshareConfirmId === row.shareId ? " is-confirm" : ""
+                      }`}
+                      disabled={busy}
+                      aria-label={
+                        unshareConfirmId === row.shareId
+                          ? `Confirm stop sharing ${row.name}`
+                          : `Unshare ${row.name}`
                       }
-                      setBusy(true);
-                      setError("");
-                      void revokeShare({ shareId: row.shareId })
-                        .catch((err) =>
-                          setError(
-                            friendlyConvexError(err, "Could not stop sharing"),
-                          ),
-                        )
-                        .finally(() => setBusy(false));
-                    }}
-                  >
-                    Unshare
-                  </button>
+                      onClick={() => {
+                        if (unshareConfirmId !== row.shareId) {
+                          setUnshareConfirmId(row.shareId);
+                          return;
+                        }
+                        setBusy(true);
+                        setError("");
+                        void revokeShare({ shareId: row.shareId })
+                          .then(() => setUnshareConfirmId(null))
+                          .catch((err) =>
+                            setError(
+                              friendlyConvexError(
+                                err,
+                                "Could not stop sharing",
+                              ),
+                            ),
+                          )
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      {unshareConfirmId === row.shareId ? "Confirm" : "Unshare"}
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>

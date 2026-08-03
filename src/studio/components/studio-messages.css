@@ -646,9 +646,15 @@
   cursor: pointer;
 }
 
-.studio-dm-studio-share-item:disabled {
+.studio-dm-studio-share-item:disabled,
+.studio-dm-studio-share-item.is-unavailable {
   opacity: 0.55;
   cursor: default;
+  pointer-events: none;
+}
+
+.studio-dm-studio-share-item.is-unavailable .studio-dm-studio-share-thumb {
+  filter: grayscale(0.35);
 }
 
 .studio-dm-studio-share-thumb {
@@ -3251,6 +3257,39 @@
   background: var(--mos-plate, var(--cursor-surface-raised));
 }
 
+.studio-dm-peer-unshare-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.studio-dm-peer-unshare-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-muted);
+  cursor: pointer;
+}
+
+.studio-dm-peer-unshare-cancel > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.studio-dm-peer-unshare-cancel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .studio-dm-peer-unshare {
   appearance: none;
   flex: 0 0 auto;
@@ -3269,6 +3308,11 @@
 
 .studio-dm-peer-unshare:hover:not(:disabled) {
   background: color-mix(in srgb, #ef4444 10%, transparent);
+}
+
+.studio-dm-peer-unshare.is-confirm {
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: color-mix(in srgb, #ef4444 92%, var(--mos-text, #111));
 }
 
 .studio-dm-peer-unshare:disabled {
