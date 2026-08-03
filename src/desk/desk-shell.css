@@ -8472,20 +8472,6 @@ textarea.cursor-input {
   display: none;
 }
 
-/* Secondary menu row buttons = darker grey (level-3 plates). */
-.desk-explorer-context-submenu .cursor-tab-context-item {
-  background: var(--mos-plate-strong, var(--mos-raised, #d4d4da));
-}
-
-.desk-explorer-context-submenu .cursor-tab-context-item:hover,
-.desk-explorer-context-submenu .cursor-tab-context-item.is-active {
-  background: color-mix(
-    in srgb,
-    var(--mos-plate-strong, var(--mos-raised, #d4d4da)) 72%,
-    var(--color-cursor-text, #111) 8%
-  );
-}
-
 .desk-explorer-context-submenu.is-emoji-grid {
   min-width: 0;
   padding: 6px;
