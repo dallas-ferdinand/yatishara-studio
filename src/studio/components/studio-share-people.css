@@ -309,18 +309,20 @@
 .studio-share-people-selected {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 10px;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
   border-bottom: 1px solid var(--color-cursor-border-soft);
 }
 
 .studio-share-people-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   max-width: 100%;
-  min-height: 26px;
-  padding: 2px 8px 2px 2px;
+  min-height: 20px;
+  height: 20px;
+  padding: 0 6px 0 1px;
   border-radius: var(--cursor-radius-pill, 999px);
   border: 1px solid var(--color-cursor-border-soft);
   background: var(--mos-plate, var(--cursor-surface-raised));
@@ -328,7 +330,15 @@
   font: inherit;
   font-size: 11px;
   font-weight: 650;
+  line-height: 1;
   cursor: pointer;
+}
+
+.studio-share-people-chip .studio-profile-avatar {
+  --spa-size: 16px;
+  --spa-font: 7px;
+  width: 16px;
+  height: 16px;
 }
 
 .studio-share-people-chip > span {
@@ -338,11 +348,12 @@
 }
 
 .studio-share-people-chip > svg {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   stroke-width: 2;
   flex: 0 0 auto;
-  opacity: 0.7;
+  opacity: 0.55;
+  color: var(--color-cursor-muted);
 }
 
 .studio-share-people-body {
