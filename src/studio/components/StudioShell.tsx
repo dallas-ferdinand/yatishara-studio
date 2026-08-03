@@ -20330,7 +20330,7 @@ export function StudioShell({
       <aside
         className={`${STYLE.sidebar}${pickingFromFiles ? " is-asset-picking" : ""}${
           effectiveFilesRail ? " is-files-nav" : ""
-        }`}
+        }${sharingToPeople ? " is-share-people" : ""}`}
       >
         <div className={STYLE.panelHead}>
           {effectiveFilesRail ? (
