@@ -59,7 +59,11 @@ export function ExplorerDeleteConfirm({
     <div
       ref={panelRef}
       className="desk-explorer-delete-confirm"
-      style={{ left: pos.left, top: pos.top }}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        visibility: pos.ready ? "visible" : "hidden",
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="desk-explorer-delete-title"

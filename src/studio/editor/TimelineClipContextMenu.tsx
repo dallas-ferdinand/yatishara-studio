@@ -118,7 +118,11 @@ export function TimelineClipContextMenu({
     <div
       ref={menuRef}
       className="cursor-tab-context-menu"
-      style={{ left: pos.left, top: pos.top }}
+      style={{
+        left: pos.left,
+        top: pos.top,
+        visibility: pos.ready ? "visible" : "hidden",
+      }}
       role="menu"
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => e.stopPropagation()}

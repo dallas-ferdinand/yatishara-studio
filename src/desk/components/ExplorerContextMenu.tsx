@@ -443,7 +443,12 @@ export function ExplorerContextMenu({
   const open = Boolean(entry) && typeof document !== "undefined";
   const isSheet = presentation === "sheet";
   const [openSubmenuId, setOpenSubmenuId] = useState(null);
-  const [submenuPos, setSubmenuPos] = useState({ left: 0, top: 0 });
+  const [submenuPos, setSubmenuPos] = useState({
+    left: 0,
+    top: 0,
+    ready: false,
+    forId: null,
+  });
   const [portalRoot, setPortalRoot] = useState(null);
 
   function clearSubmenuCloseTimer() {
@@ -516,11 +521,11 @@ export function ExplorerContextMenu({
     [items, openSubmenuId],
   );
 
+  // Do not re-clamp when a submenu opens — that remeasure was jumping the primary.
   const pos = useFloatingMenuPosition(x, y, menuRef, open && !isSheet, [
     items.length,
     entry?.path,
     entry?.type,
-    openSubmenuId,
   ]);
 
   useEffect(() => {
@@ -543,32 +548,22 @@ export function ExplorerContextMenu({
   useEffect(() => () => clearSubmenuCloseTimer(), []);
 
   useLayoutEffect(() => {
-    if (isSheet || !openSubmenuItem || !menuRef.current) return;
+    if (isSheet || !openSubmenuItem || !menuRef.current) {
+      setSubmenuPos((prev) =>
+        prev.ready || prev.forId
+          ? { left: 0, top: 0, ready: false, forId: null }
+          : prev,
+      );
+      return;
+    }
+    const submenuId = openSubmenuItem.id;
     const parentBtn = menuRef.current.querySelector(
-      `[data-submenu-id="${openSubmenuItem.id}"]`,
+      `[data-submenu-id="${submenuId}"]`,
     );
     if (!parentBtn) return;
-    const rect = parentBtn.getBoundingClientRect();
     const gap = 2;
-    const isEmoji = openSubmenuItem.submenuKind === "emoji-grid";
-    const estimatedWidth = isEmoji ? 160 : openSubmenuItem.submenuKind === "share-recipients" ? 220 : 180;
-    const estimatedHeight = isEmoji
-      ? 180
-      : Math.min(
-          window.innerHeight - 16,
-          openSubmenuItem.children.length * 28 + 16,
-        );
-    let left = rect.right + gap;
-    let top = rect.top;
-    if (left + estimatedWidth > window.innerWidth - VIEWPORT_EDGE_PAD) {
-      left = Math.max(VIEWPORT_EDGE_PAD, rect.left - estimatedWidth - gap);
-    }
-    setSubmenuPos(
-      clampFloatingPosition(left, top, estimatedWidth, estimatedHeight),
-    );
 
-    // Remeasure after paint — emoji grid / recipient lists differ from estimates.
-    const frame = window.requestAnimationFrame(() => {
+    const place = () => {
       const el = submenuRef.current;
       if (!el || !parentBtn.isConnected) return;
       const btn = parentBtn.getBoundingClientRect();
@@ -577,11 +572,33 @@ export function ExplorerContextMenu({
       if (nextLeft + box.width > window.innerWidth - VIEWPORT_EDGE_PAD) {
         nextLeft = Math.max(VIEWPORT_EDGE_PAD, btn.left - box.width - gap);
       }
-      setSubmenuPos(
-        clampFloatingPosition(nextLeft, btn.top, box.width, box.height),
+      const next = clampFloatingPosition(
+        nextLeft,
+        btn.top,
+        box.width,
+        box.height,
       );
-    });
-    return () => window.cancelAnimationFrame(frame);
+      setSubmenuPos((prev) => {
+        if (
+          prev.ready &&
+          prev.forId === submenuId &&
+          prev.left === next.left &&
+          prev.top === next.top
+        ) {
+          return prev;
+        }
+        return { ...next, ready: true, forId: submenuId };
+      });
+    };
+
+    // Measure before paint; stay hidden until forId matches this submenu.
+    place();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const el = submenuRef.current;
+    if (!el) return undefined;
+    const ro = new ResizeObserver(place);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [isSheet, openSubmenuItem, pos.left, pos.top, shareRecipients]);
 
   useEffect(() => {
@@ -796,7 +813,11 @@ export function ExplorerContextMenu({
       <div
         ref={menuRef}
         className="cursor-tab-context-menu desk-explorer-context-menu"
-        style={{ left: pos.left, top: pos.top }}
+        style={{
+          left: pos.left,
+          top: pos.top,
+          visibility: pos.ready ? "visible" : "hidden",
+        }}
         role="menu"
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -842,7 +863,14 @@ export function ExplorerContextMenu({
                 ? " is-share-recipients"
                 : ""
           }`}
-          style={{ left: submenuPos.left, top: submenuPos.top }}
+          style={{
+            left: submenuPos.left,
+            top: submenuPos.top,
+            visibility:
+              submenuPos.ready && submenuPos.forId === openSubmenuItem.id
+                ? "visible"
+                : "hidden",
+          }}
           role="menu"
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={(e) => e.stopPropagation()}
