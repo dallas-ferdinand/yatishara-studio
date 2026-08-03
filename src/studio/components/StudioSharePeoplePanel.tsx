@@ -448,14 +448,15 @@ export function StudioSharePeoplePanel({
 
       <div className="studio-share-people-top" role="status">
         <div className="studio-share-people-top-copy">
-          <strong>
-            {selectedPeers.length
-              ? `${selectedPeers.length} selected`
-              : "Select people"}
-          </strong>
-          <span className="studio-share-people-item-line">
-            <ItemIcon aria-hidden="true" />
-            <span>Share {itemLabel}</span>
+          <span
+            className="studio-share-people-count"
+            aria-label={`${selectedPeers.length} selected`}
+          >
+            {selectedPeers.length}
+          </span>
+          <ItemIcon aria-hidden="true" />
+          <span className="studio-share-people-item-label">
+            Share {itemLabel}
           </span>
         </div>
         <div className="studio-share-people-top-actions">
