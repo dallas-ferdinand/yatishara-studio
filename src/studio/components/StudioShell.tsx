@@ -8762,6 +8762,18 @@ export function StudioShell({
           min-height: 36px;
           font-size: 13px;
         }
+        .studio-explorer-context-sheet-submenu.is-emoji-grid {
+          padding: 4px 0 8px 8px;
+          border-left: 0;
+        }
+        .studio-explorer-context-sheet .desk-explorer-react-grid {
+          width: min(100%, 132px);
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 4px;
+        }
+        .studio-explorer-context-sheet .desk-explorer-react-emoji {
+          font-size: 18px;
+        }
         .studio-polish main {
           position: relative;
           background: transparent !important;

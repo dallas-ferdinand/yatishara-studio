@@ -11,20 +11,23 @@
 
 .studio-mobile-app-menu-sheet.studio-file-reaction-sheet {
   z-index: 85;
-  max-height: min(42vh, 320px);
+  max-height: min(34vh, 260px);
 }
 
 .studio-file-reaction-sheet-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 16px 22px;
+  gap: 8px;
+  padding: 2px 14px 16px;
 }
 
 .studio-file-reaction-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 220px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .studio-file-reaction-emoji {
@@ -36,7 +39,7 @@
   width: 100%;
   background: color-mix(in srgb, var(--mos-page, #f5f5f7) 70%, transparent);
   min-height: 0;
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1;
   cursor: pointer;
   display: grid;
@@ -53,9 +56,9 @@
   border: 0;
   background: transparent;
   color: color-mix(in srgb, var(--color-cursor-text, #0f172a) 62%, transparent);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 8px 4px;
+  padding: 4px 4px 0;
   cursor: pointer;
   text-align: center;
 }

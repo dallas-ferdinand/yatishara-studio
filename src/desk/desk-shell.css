@@ -8468,14 +8468,14 @@ textarea.cursor-input {
 
 .desk-explorer-context-submenu.is-emoji-grid {
   min-width: 0;
-  padding: 8px;
+  padding: 6px;
 }
 
 .desk-explorer-react-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  width: 196px;
+  width: 120px;
 }
 
 .desk-explorer-react-emoji {
@@ -8486,8 +8486,9 @@ textarea.cursor-input {
   aspect-ratio: 1 / 1;
   width: 100%;
   min-height: 0;
+  padding: 0;
   background: color-mix(in srgb, var(--mos-page, #f5f5f7) 70%, transparent);
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   display: grid;

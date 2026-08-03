@@ -24,9 +24,13 @@ import {
   Upload,
   Wallpaper,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFloatingMenuPosition } from "@/desk/lib/use-floating-menu-position";
+import {
+  VIEWPORT_EDGE_PAD,
+  clampFloatingPosition,
+} from "@/desk/lib/context-menu-position.js";
 import { REACTION_EMOJIS } from "@/studio/lib/itemReactions";
 
 const EXPLORER_MENU_ICONS = {
@@ -516,7 +520,7 @@ export function ExplorerContextMenu({
     setOpenSubmenuId(null);
   }, [entry?.path, entry?.type, x, y]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isSheet || !openSubmenuItem || !menuRef.current) return;
     const parentBtn = menuRef.current.querySelector(
       `[data-submenu-id="${openSubmenuItem.id}"]`,
@@ -524,21 +528,39 @@ export function ExplorerContextMenu({
     if (!parentBtn) return;
     const rect = parentBtn.getBoundingClientRect();
     const gap = 4;
-    const estimatedWidth = 180;
-    const estimatedHeight = Math.min(
-      window.innerHeight - 16,
-      openSubmenuItem.children.length * 28 + 16,
-    );
+    const isEmoji = openSubmenuItem.submenuKind === "emoji-grid";
+    const estimatedWidth = isEmoji ? 132 : openSubmenuItem.submenuKind === "share-recipients" ? 220 : 180;
+    const estimatedHeight = isEmoji
+      ? 160
+      : Math.min(
+          window.innerHeight - 16,
+          openSubmenuItem.children.length * 28 + 16,
+        );
     let left = rect.right + gap;
     let top = rect.top;
-    if (left + estimatedWidth > window.innerWidth - 8) {
-      left = Math.max(8, rect.left - estimatedWidth - gap);
+    if (left + estimatedWidth > window.innerWidth - VIEWPORT_EDGE_PAD) {
+      left = Math.max(VIEWPORT_EDGE_PAD, rect.left - estimatedWidth - gap);
     }
-    if (top + estimatedHeight > window.innerHeight - 8) {
-      top = Math.max(8, window.innerHeight - estimatedHeight - 8);
-    }
-    setSubmenuPos({ left, top });
-  }, [isSheet, openSubmenuItem, pos.left, pos.top]);
+    setSubmenuPos(
+      clampFloatingPosition(left, top, estimatedWidth, estimatedHeight),
+    );
+
+    // Remeasure after paint — emoji grid / recipient lists differ from estimates.
+    const frame = window.requestAnimationFrame(() => {
+      const el = submenuRef.current;
+      if (!el || !parentBtn.isConnected) return;
+      const btn = parentBtn.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      let nextLeft = btn.right + gap;
+      if (nextLeft + box.width > window.innerWidth - VIEWPORT_EDGE_PAD) {
+        nextLeft = Math.max(VIEWPORT_EDGE_PAD, btn.left - box.width - gap);
+      }
+      setSubmenuPos(
+        clampFloatingPosition(nextLeft, btn.top, box.width, box.height),
+      );
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isSheet, openSubmenuItem, pos.left, pos.top, shareRecipients]);
 
   useEffect(() => {
     if (!entry) return;
