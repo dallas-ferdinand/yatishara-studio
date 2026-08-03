@@ -11,7 +11,12 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { isFolderInSandbox } from "./lib/studioApi/folderScope";
-import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
+import {
+  requireFolderOwnerOrEditShare,
+  requireFolderOwnerOrShare,
+  requireShareEdit,
+  viewerCanAccessSharedItem,
+} from "./lib/studioShareAccess";
 import {
   addTextClip,
   appendClips,
@@ -275,7 +280,7 @@ export const listByFolder = authedQuery({
   },
   returns: v.array(listRowReturn),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId, ctx.user._id, {
+    await requireFolderOwnerOrShare(ctx, args.folderId, {
       allowDeleted: Boolean(args.includeDeleted),
     });
     const rows = await ctx.db
@@ -408,8 +413,9 @@ export const save = authedMutation({
     const PLACEHOLDER = new Set(["untitled", "new edit"]);
     let name = args.name.trim() || "Untitled";
     if (args.projectId) {
-      const existing = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
-      if (existing.deletedAt) {
+      await requireShareEdit(ctx, "videoEdit", args.projectId);
+      const existing = await ctx.db.get("videoEditProjects", args.projectId);
+      if (!existing || existing.deletedAt) {
         throw new Error("Edit project is in trash.");
       }
       // Stale editor autosave can still carry the bootstrap "Untitled" after a
@@ -432,7 +438,7 @@ export const save = authedMutation({
       });
       return { projectId: args.projectId };
     }
-    await requireFolderOwner(ctx, args.folderId, ctx.user._id);
+    await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const projectPayload = { ...args.project, name, folderId: args.folderId };
     const projectId = await ctx.db.insert("videoEditProjects", {
       ownerId: ctx.user._id,
@@ -455,11 +461,15 @@ export const update = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
-    if (row.deletedAt) {
+    await requireShareEdit(ctx, "videoEdit", args.projectId);
+    const row = await ctx.db.get("videoEditProjects", args.projectId);
+    if (!row || row.deletedAt) {
       throw new Error("Edit project is in trash.");
     }
     if (args.folderId !== undefined) {
+      if (row.ownerId !== ctx.user._id) {
+        throw new Error("Only the owner can move this edit");
+      }
       await requireFolderOwner(ctx, args.folderId, ctx.user._id);
     }
     const nextName = args.name?.trim();
@@ -490,8 +500,9 @@ export const setReaction = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const row = await requireProjectOwner(ctx, args.projectId, ctx.user._id);
-    if (row.deletedAt) {
+    await requireShareEdit(ctx, "videoEdit", args.projectId);
+    const row = await ctx.db.get("videoEditProjects", args.projectId);
+    if (!row || row.deletedAt) {
       throw new Error("Edit project is in trash.");
     }
     const reactionEmoji = normalizeReactionEmoji(args.emoji);

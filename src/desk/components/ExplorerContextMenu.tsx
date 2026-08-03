@@ -101,6 +101,7 @@ function buildMenuItems(entry, {
   const isListedNetworkAsset = entry.licenseKind === "listed_network";
   const isLockedNetworkAsset = isPurchasedNetworkAsset || isListedNetworkAsset;
   const isSharedLiveItem = Boolean(entry.sharedFromUserId || entry.isSharedLive);
+  const canEditShared = isSharedLiveItem && entry.sharePermission === "edit";
   const isDir = entry.type === "dir" || isParent;
   const isFile = !isDir && !isBlank;
 
@@ -185,7 +186,7 @@ function buildMenuItems(entry, {
     label: isDir ? "Use folder in chat" : "Use in chat",
   });
 
-  // Live share to people (any Studio item). Shared-with-me receipts stay read-only.
+  // Live share to people (any Studio item). Shared-with-me receipts stay read-only for re-share.
   if (!isSharedLiveItem && !isLockedNetworkAsset) {
     items.push({
       id: "share-people",
@@ -203,8 +204,21 @@ function buildMenuItems(entry, {
     }
   }
 
+  if (
+    isSharedLiveItem &&
+    isFile &&
+    entry.studioKind === "asset" &&
+    entry.studioId
+  ) {
+    items.push({
+      id: "copy-to-folder",
+      label: "Copy to…",
+      iconKey: "copy-path",
+    });
+  }
+
   // —— React ——
-  if (!isSharedLiveItem) {
+  if (!isSharedLiveItem || canEditShared) {
     items.push({ id: "sep-react", sep: true });
     if (presentation === "sheet") {
       items.push({ id: "react-open", label: "React" });
@@ -254,6 +268,9 @@ function buildMenuItems(entry, {
     if (onRequestRename) {
       items.push({ id: "rename", label: "Rename" });
     }
+  } else if (canEditShared && onRequestRename) {
+    items.push({ id: "sep-organize", sep: true });
+    items.push({ id: "rename", label: "Rename" });
   }
   items.push({ id: "copy-path", label: "Copy item link" });
 

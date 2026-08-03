@@ -10,7 +10,10 @@ import {
   signBunnyCdnUrl,
 } from "./lib/bunny";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
-import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
+import {
+  requireShareEdit,
+  viewerCanAccessSharedItem,
+} from "./lib/studioShareAccess";
 
 const folderReturn = v.object({
   _id: v.id("folders"),
@@ -481,9 +484,14 @@ export const update = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const folder = await requireFolderOwner(ctx, args.folderId);
+    await requireShareEdit(ctx, "folder", args.folderId);
+    const folder = await ctx.db.get("folders", args.folderId);
+    if (!folder || folder.deletedAt) throw new Error("Folder not found");
     assertSystemFolderMutable(folder);
     if (args.parentId !== undefined && args.parentId !== null) {
+      if (folder.ownerId !== ctx.user._id) {
+        throw new Error("Only the owner can move this folder");
+      }
       if (args.parentId === folder._id) {
         throw new Error("Folder cannot be moved into itself");
       }
@@ -510,7 +518,9 @@ export const setReaction = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const folder = await requireFolderOwner(ctx, args.folderId);
+    await requireShareEdit(ctx, "folder", args.folderId);
+    const folder = await ctx.db.get("folders", args.folderId);
+    if (!folder || folder.deletedAt) throw new Error("Folder not found");
     if (folder.systemKind) {
       throw new Error("Cannot react to system folders");
     }

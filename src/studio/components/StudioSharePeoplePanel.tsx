@@ -42,10 +42,15 @@ type StudioSharePeoplePanelProps = {
   itemLabel: string;
   selectedPeers: SharePeoplePeer[];
   onTogglePeer: (peer: SharePeoplePeer) => void;
-  onShare: () => void;
+  onShare: (opts: {
+    delivery: "access" | "file";
+    permission: "view" | "edit";
+  }) => void;
   onCancel: () => void;
   busy?: boolean;
   expiresUnix: number;
+  /** When false, hide File delivery (e.g. folders-only selection). */
+  allowFileDelivery?: boolean;
 };
 
 type LabelId = Id<"dmLabels">;
@@ -110,12 +115,15 @@ export function StudioSharePeoplePanel({
   onCancel,
   busy = false,
   expiresUnix,
+  allowFileDelivery = true,
 }: StudioSharePeoplePanelProps) {
   const [search, setSearch] = useState("");
   const [searchNow] = useState(() => Date.now());
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
   const searching = deferredSearch.length >= 1;
   const [activeLabelId, setActiveLabelId] = useState<LabelId | null>(null);
+  const [delivery, setDelivery] = useState<"access" | "file">("access");
+  const [permission, setPermission] = useState<"view" | "edit">("view");
   const labelRailRef = useRef<HTMLDivElement | null>(null);
   useHorizontalWheelScroll(labelRailRef);
   useHorizontalScrollFade(labelRailRef);
@@ -224,7 +232,12 @@ export function StudioSharePeoplePanel({
           <button
             type="button"
             className="studio-share-people-confirm"
-            onClick={onShare}
+            onClick={() =>
+              onShare({
+                delivery: allowFileDelivery ? delivery : "access",
+                permission: delivery === "file" ? "view" : permission,
+              })
+            }
             disabled={busy || selectedPeers.length === 0}
           >
             <Share2 aria-hidden="true" />
@@ -232,6 +245,56 @@ export function StudioSharePeoplePanel({
           </button>
         </div>
       </div>
+
+      <div className="studio-share-people-modes" role="group" aria-label="Share type">
+        <button
+          type="button"
+          className={`studio-share-people-mode${delivery === "access" ? " is-active" : ""}`}
+          onClick={() => setDelivery("access")}
+          disabled={busy}
+        >
+          Access
+        </button>
+        {allowFileDelivery ? (
+          <button
+            type="button"
+            className={`studio-share-people-mode${delivery === "file" ? " is-active" : ""}`}
+            onClick={() => setDelivery("file")}
+            disabled={busy}
+          >
+            File
+          </button>
+        ) : null}
+      </div>
+      {delivery === "access" ? (
+        <div className="studio-share-people-modes is-secondary" role="group" aria-label="Permission">
+          <button
+            type="button"
+            className={`studio-share-people-mode${permission === "view" ? " is-active" : ""}`}
+            onClick={() => setPermission("view")}
+            disabled={busy}
+          >
+            View
+          </button>
+          <button
+            type="button"
+            className={`studio-share-people-mode${permission === "edit" ? " is-active" : ""}`}
+            onClick={() => setPermission("edit")}
+            disabled={busy}
+          >
+            Edit
+          </button>
+          <span className="studio-share-people-mode-hint">
+            {permission === "edit"
+              ? "Can edit live originals — not delete"
+              : "Read, download, copy"}
+          </span>
+        </div>
+      ) : (
+        <p className="studio-share-people-mode-hint studio-share-people-mode-hint-block">
+          Sends a copy into their Messages folder
+        </p>
+      )}
 
       {selectedPeers.length > 0 ? (
         <div className="studio-share-people-selected" aria-label="Selected people">

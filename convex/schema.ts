@@ -1350,6 +1350,8 @@ export default defineSchema({
     toUserId: v.id("users"),
     itemKind: studioShareItemKind,
     itemId: v.string(),
+    /** Live-link permission. Missing = view (legacy grants). */
+    permission: v.optional(v.union(v.literal("view"), v.literal("edit"))),
     createdAt: v.number(),
     revokedAt: v.optional(v.number()),
   })

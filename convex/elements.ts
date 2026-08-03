@@ -11,7 +11,11 @@ import { inferElementSourceMode } from "./lib/elementSheetGuides";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
-import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
+import {
+  requireFolderOwnerOrEditShare,
+  requireShareEdit,
+  viewerCanAccessSharedItem,
+} from "./lib/studioShareAccess";
 
 const elementType = v.union(
   v.literal("character"),
@@ -130,7 +134,7 @@ export const create = authedMutation({
   returns: v.id("elements"),
   handler: async (ctx, args) => {
     if (args.folderId) {
-      await requireFolderOwner(ctx, args.folderId);
+      await requireFolderOwnerOrEditShare(ctx, args.folderId);
     }
     const referenceAssetIds = referenceAssetIdsFromInput(args);
     assertReferenceCount(referenceAssetIds.length);
@@ -179,8 +183,13 @@ export const update = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const element = await requireElementOwner(ctx, args.elementId);
+    await requireShareEdit(ctx, "element", args.elementId);
+    const element = await ctx.db.get("elements", args.elementId);
+    if (!element || element.deletedAt) throw new Error("Element not found");
     if (args.folderId !== undefined) {
+      if (element.ownerId !== ctx.user._id) {
+        throw new Error("Only the owner can move this element");
+      }
       await requireFolderOwner(ctx, args.folderId);
     }
     const nextReferenceAssetIds =
@@ -288,7 +297,7 @@ export const setReaction = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireElementOwner(ctx, args.elementId);
+    await requireShareEdit(ctx, "element", args.elementId);
     const reactionEmoji = normalizeReactionEmoji(args.emoji);
     await ctx.db.patch(args.elementId, {
       reactionEmoji,

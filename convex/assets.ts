@@ -14,7 +14,12 @@ import {
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
 import { assertUploadsAllowed, beginAssetPurge } from "./lib/storageBilling";
-import { requireAssetOwnerOrShare } from "./lib/studioShareAccess";
+import {
+  requireAssetOwnerOrShare,
+  requireFolderOwnerOrEditShare,
+  requireFolderOwnerOrShare,
+  requireShareEdit,
+} from "./lib/studioShareAccess";
 
 const assetKind = v.union(
   v.literal("image"),
@@ -158,7 +163,9 @@ export const listByFolder = authedQuery({
   },
   returns: v.array(assetReturn),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId);
+    await requireFolderOwnerOrShare(ctx, args.folderId, {
+      allowDeleted: Boolean(args.includeDeleted),
+    });
     const assets = await ctx.db
       .query("assets")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
@@ -215,7 +222,7 @@ export const reserveUpload = authedMutation({
     bunnyPath: v.string(),
   }),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId);
+    await requireFolderOwnerOrEditShare(ctx, args.folderId);
     await assertUploadsAllowed(ctx, ctx.user._id);
     const now = Date.now();
     const assetId = await ctx.db.insert("assets", {
@@ -343,8 +350,13 @@ export const update = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const asset = await requireAssetOwner(ctx, args.assetId);
+    await requireShareEdit(ctx, "asset", args.assetId);
+    const asset = await ctx.db.get("assets", args.assetId);
+    if (!asset || asset.deletedAt) throw new Error("Asset not found");
     if (args.folderId !== undefined) {
+      if (asset.ownerId !== ctx.user._id) {
+        throw new Error("Only the owner can move this file");
+      }
       await requireFolderOwner(ctx, args.folderId);
       if (asset.licenseKind === "purchased_network") {
         throw new Error("Purchased Creative Network audio cannot be moved.");
@@ -377,7 +389,7 @@ export const setReaction = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAssetOwner(ctx, args.assetId);
+    await requireShareEdit(ctx, "asset", args.assetId);
     const reactionEmoji = normalizeReactionEmoji(args.emoji);
     await ctx.db.patch(args.assetId, {
       reactionEmoji,

@@ -3,7 +3,12 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
 import { normalizeReactionEmoji } from "./lib/itemReactions";
-import { viewerCanAccessSharedItem } from "./lib/studioShareAccess";
+import {
+  requireFolderOwnerOrEditShare,
+  requireFolderOwnerOrShare,
+  requireShareEdit,
+  viewerCanAccessSharedItem,
+} from "./lib/studioShareAccess";
 
 const documentReturn = v.object({
   _id: v.id("documents"),
@@ -23,7 +28,9 @@ export const listByFolder = authedQuery({
   args: { folderId: v.id("folders"), includeDeleted: v.optional(v.boolean()) },
   returns: v.array(documentReturn),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId);
+    await requireFolderOwnerOrShare(ctx, args.folderId, {
+      allowDeleted: Boolean(args.includeDeleted),
+    });
     const docs = await ctx.db
       .query("documents")
       .withIndex("by_folder", (q) => q.eq("folderId", args.folderId))
@@ -64,7 +71,7 @@ export const create = authedMutation({
   },
   returns: v.id("documents"),
   handler: async (ctx, args) => {
-    await requireFolderOwner(ctx, args.folderId);
+    await requireFolderOwnerOrEditShare(ctx, args.folderId);
     const now = Date.now();
     return await ctx.db.insert("documents", {
       ownerId: ctx.user._id,
@@ -86,8 +93,14 @@ export const update = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const doc = await requireDocumentOwner(ctx, args.documentId);
+    await requireShareEdit(ctx, "document", args.documentId);
+    const doc = await ctx.db.get("documents", args.documentId);
+    if (!doc || doc.deletedAt) throw new Error("Document not found");
     if (args.folderId !== undefined) {
+      // Moving requires ownership of destination; edit-share cannot re-home.
+      if (doc.ownerId !== ctx.user._id) {
+        throw new Error("Only the owner can move this document");
+      }
       await requireFolderOwner(ctx, args.folderId);
     }
     await ctx.db.patch(doc._id, {
@@ -110,7 +123,7 @@ export const setReaction = authedMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireDocumentOwner(ctx, args.documentId);
+    await requireShareEdit(ctx, "document", args.documentId);
     const reactionEmoji = normalizeReactionEmoji(args.emoji);
     await ctx.db.patch(args.documentId, {
       reactionEmoji,

@@ -1120,6 +1120,7 @@ export function StudioShell({
     api.folders.ensureSharedWithMeFolderForMe,
   );
   const shareStudioItems = useMutation(api.studioShares.shareItems);
+  const copySharedToFolder = useMutation(api.studioShares.copySharedItemToFolder);
   const revokeStudioShare = useMutation(api.studioShares.revokeShare);
   const convex = useConvex();
 
@@ -1345,6 +1346,8 @@ export function StudioShell({
   const [sharePeopleRequest, setSharePeopleRequest] = useState(null);
   const [sharePeopleSelected, setSharePeopleSelected] = useState([]);
   const [sharePeopleBusy, setSharePeopleBusy] = useState(false);
+  const [copyDestRequest, setCopyDestRequest] = useState(null);
+  const [copyDestBusy, setCopyDestBusy] = useState(false);
   /** Deep-link slug for Creative Network offer detail inside Studio. */
   const [networkInitialSlug, setNetworkInitialSlug] = useState(null);
   /** Deep-link seller filter for Creative Network browse. */
@@ -1364,6 +1367,11 @@ export function StudioShell({
     setSharePeopleRequest(null);
     setSharePeopleSelected([]);
     setSharePeopleBusy(false);
+  }, []);
+
+  const endCopyDest = useCallback(() => {
+    setCopyDestRequest(null);
+    setCopyDestBusy(false);
   }, []);
 
   function entryToShareItem(entry) {
@@ -1480,6 +1488,7 @@ export function StudioShell({
   const needsExplorerFolderContents =
     Boolean(assetPickRequest) ||
     Boolean(sharePeopleRequest) ||
+    Boolean(copyDestRequest) ||
     (isMobile
       ? mobileSection === "files" ||
         filesDockExpanded ||
@@ -3320,6 +3329,7 @@ export function StudioShell({
                 shareId: `live:${item.itemKind}:${item.itemId}`,
                 fromUserId: sharedFolderChildren?.folder.ownerId,
                 createdAt: item.updatedAt,
+                permission: sharedFolderChildren?.permission,
               }),
             ),
       };
@@ -7210,6 +7220,7 @@ export function StudioShell({
   // left rail even while Messages/Feed is the active pane.
   const pickingFromFiles = Boolean(assetPickRequest) && !isMobile;
   const sharingToPeople = Boolean(sharePeopleRequest);
+  const copyingToFolder = Boolean(copyDestRequest);
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
   /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages. */
@@ -7251,6 +7262,15 @@ export function StudioShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [sharePeopleRequest, sharePeopleBusy, endSharePeople]);
+
+  useEffect(() => {
+    if (!copyDestRequest) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape" && !copyDestBusy) endCopyDest();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [copyDestRequest, copyDestBusy, endCopyDest]);
 
   // Mobile touch-drag dismisses any explorer context sheet that may have armed.
   useEffect(() => {
@@ -20388,6 +20408,9 @@ export function StudioShell({
             selectedPeers={sharePeopleSelected}
             expiresUnix={assetUrlExpiresUnix}
             busy={sharePeopleBusy}
+            allowFileDelivery={(sharePeopleRequest.items ?? []).every(
+              (item) => item.itemKind === "asset",
+            )}
             onTogglePeer={(peer) => {
               setSharePeopleSelected((prev) => {
                 const exists = prev.some((item) => item.userId === peer.userId);
@@ -20398,21 +20421,31 @@ export function StudioShell({
               });
             }}
             onCancel={endSharePeople}
-            onShare={() => {
+            onShare={({ delivery, permission }) => {
               if (!sharePeopleRequest?.items?.length || !sharePeopleSelected.length) {
                 return;
               }
               setSharePeopleBusy(true);
+              const fileOnly = (sharePeopleRequest.items ?? []).every(
+                (item) => item.itemKind === "asset",
+              );
               void shareStudioItems({
                 peerUserIds: sharePeopleSelected.map((peer) => peer.userId),
                 items: sharePeopleRequest.items,
+                delivery: fileOnly ? delivery : "access",
+                permission: delivery === "file" ? "view" : permission,
               })
                 .then((result) => {
                   const n = sharePeopleSelected.length;
+                  const asFile = delivery === "file" && fileOnly;
                   toast.success(
-                    n === 1
-                      ? "Shared — they’ll see it in Shared with me"
-                      : `Shared with ${n} people`,
+                    asFile
+                      ? n === 1
+                        ? "Sent as file to Messages"
+                        : `Sent files to ${n} people`
+                      : n === 1
+                        ? "Shared — they’ll see it in Shared with me"
+                        : `Shared with ${n} people`,
                   );
                   endSharePeople();
                   if (result.conversationIds?.[0]) {
@@ -20427,6 +20460,61 @@ export function StudioShell({
             }}
           />
         ) : (
+          <>
+            {copyingToFolder ? (
+              <div className="studio-share-people-top" role="status">
+                <div className="studio-share-people-top-copy">
+                  <strong>Copy to folder</strong>
+                  <span>
+                    {copyDestRequest?.name
+                      ? `Choose a folder for ${copyDestRequest.name}`
+                      : "Open a folder, then Done"}
+                  </span>
+                </div>
+                <div className="studio-share-people-top-actions">
+                  <button
+                    type="button"
+                    className="studio-share-people-cancel"
+                    onClick={endCopyDest}
+                    disabled={copyDestBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="studio-share-people-confirm"
+                    disabled={
+                      copyDestBusy ||
+                      !activeFolder ||
+                      activeFolder.systemKind === "shared_with_me" ||
+                      (currentUser?.userId &&
+                        activeFolder.ownerId &&
+                        activeFolder.ownerId !== currentUser.userId)
+                    }
+                    onClick={() => {
+                      if (!copyDestRequest?.assetId || !activeFolder?._id) return;
+                      setCopyDestBusy(true);
+                      void copySharedToFolder({
+                        assetId: copyDestRequest.assetId,
+                        targetFolderId: activeFolder._id,
+                      })
+                        .then(() => {
+                          toast.success("Copy started — landing in this folder");
+                          endCopyDest();
+                        })
+                        .catch((error) => {
+                          setCopyDestBusy(false);
+                          toast.error(
+                            friendlyConvexError(error, "Could not copy"),
+                          );
+                        });
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : null}
           <StudioFilesExplorerBody
             search={search}
             setSearch={setSearch}
@@ -20486,6 +20574,7 @@ export function StudioShell({
             }}
             onNeedTopUp={openCreditsPane}
           />
+          </>
         )}
         {pickingFromFiles ? (
           <div className="studio-asset-pick-chrome">
@@ -21285,6 +21374,9 @@ export function StudioShell({
                 selectedPeers={sharePeopleSelected}
                 expiresUnix={assetUrlExpiresUnix}
                 busy={sharePeopleBusy}
+                allowFileDelivery={(sharePeopleRequest.items ?? []).every(
+                  (item) => item.itemKind === "asset",
+                )}
                 onTogglePeer={(peer) => {
                   setSharePeopleSelected((prev) => {
                     const exists = prev.some((item) => item.userId === peer.userId);
@@ -21295,21 +21387,31 @@ export function StudioShell({
                   });
                 }}
                 onCancel={endSharePeople}
-                onShare={() => {
+                onShare={({ delivery, permission }) => {
                   if (!sharePeopleRequest?.items?.length || !sharePeopleSelected.length) {
                     return;
                   }
                   setSharePeopleBusy(true);
+                  const fileOnly = (sharePeopleRequest.items ?? []).every(
+                    (item) => item.itemKind === "asset",
+                  );
                   void shareStudioItems({
                     peerUserIds: sharePeopleSelected.map((peer) => peer.userId),
                     items: sharePeopleRequest.items,
+                    delivery: fileOnly ? delivery : "access",
+                    permission: delivery === "file" ? "view" : permission,
                   })
                     .then((result) => {
                       const n = sharePeopleSelected.length;
+                      const asFile = delivery === "file" && fileOnly;
                       toast.success(
-                        n === 1
-                          ? "Shared — they’ll see it in Shared with me"
-                          : `Shared with ${n} people`,
+                        asFile
+                          ? n === 1
+                            ? "Sent as file to Messages"
+                            : `Sent files to ${n} people`
+                          : n === 1
+                            ? "Shared — they’ll see it in Shared with me"
+                            : `Shared with ${n} people`,
                       );
                       endSharePeople();
                       if (result.conversationIds?.[0]) {
@@ -21648,6 +21750,21 @@ export function StudioShell({
             if (action === "attach") attachEntry(entry);
             if (action === "share-people") {
               openSharePeopleForEntries([entry]);
+              return;
+            }
+            if (action === "copy-to-folder") {
+              if (entry?.studioKind === "asset" && entry.studioId) {
+                endSharePeople();
+                setCopyDestBusy(false);
+                setCopyDestRequest({
+                  assetId: entry.studioId,
+                  name: entry.name || "file",
+                });
+                if (isMobile) {
+                  setMobileSection("files");
+                  setFilesDockExpanded(true);
+                }
+              }
               return;
             }
             if (action === "delete-forever") void deleteEntryForever(entry);
@@ -31054,6 +31171,7 @@ function sharedListItemToEntry(item) {
     sharedFromUserId: item.fromUserId,
     sharedFromUsername: item.fromUsername,
     shareId: item.shareId,
+    sharePermission: item.permission === "edit" ? "edit" : "view",
   };
   if (itemKind === "folder") {
     return {

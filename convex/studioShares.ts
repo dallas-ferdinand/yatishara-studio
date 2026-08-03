@@ -6,15 +6,22 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { assertCanMessagePeer } from "./dmPeerPanel";
-import { ensureSharedWithMeFolder } from "./folders";
+import {
+  ensureMessagesFolder,
+  ensureSharedWithMeFolder,
+} from "./folders";
 import {
   assetThumbnailPath,
+  buildAssetPath,
   signBunnyCdnUrl,
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { resolveElementAssets } from "./lib/elementAssetModel";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { applyStorageBytesDelta } from "./lib/storageBilling";
 import { studioShareItemKind } from "./schema";
 import {
   findActiveGrant,
@@ -22,6 +29,8 @@ import {
   requireAssetOwnerOrShare,
   viewerCanAccessSharedItem,
   viewerHasFolderGrantCovering,
+  viewerSharePermission,
+  type StudioSharePermission,
 } from "./lib/studioShareAccess";
 
 export {
@@ -30,6 +39,7 @@ export {
   requireAssetOwnerOrShare,
   viewerCanAccessSharedItem,
   viewerHasFolderGrantCovering,
+  viewerSharePermission,
 };
 
 
@@ -55,6 +65,7 @@ const sharedEntryReturn = v.object({
   itemKind: studioShareItemKind,
   itemId: v.string(),
   name: v.string(),
+  permission: v.union(v.literal("view"), v.literal("edit")),
   fromUserId: v.id("users"),
   fromUsername: v.optional(v.string()),
   fromDisplayName: v.optional(v.string()),
@@ -195,6 +206,7 @@ async function upsertGrant(
     toUserId: Id<"users">;
     itemKind: StudioShareItemKind;
     itemId: string;
+    permission: StudioSharePermission;
   },
 ): Promise<Id<"studioShares">> {
   const existing = await findActiveGrant(
@@ -207,6 +219,12 @@ async function upsertGrant(
     if (existing.fromUserId !== args.fromUserId) {
       // Another sharer already granted — keep first active grant.
       return existing._id;
+    }
+    const current: StudioSharePermission =
+      existing.permission === "edit" ? "edit" : "view";
+    // Upgrade view → edit; never downgrade on re-share.
+    if (args.permission === "edit" && current !== "edit") {
+      await ctx.db.patch(existing._id, { permission: "edit" });
     }
     return existing._id;
   }
@@ -227,6 +245,7 @@ async function upsertGrant(
     await ctx.db.patch(revoked._id, {
       revokedAt: undefined,
       createdAt: now,
+      permission: args.permission,
     });
     return revoked._id;
   }
@@ -235,6 +254,7 @@ async function upsertGrant(
     toUserId: args.toUserId,
     itemKind: args.itemKind,
     itemId: args.itemId,
+    permission: args.permission,
     createdAt: now,
   });
 }
@@ -391,6 +411,10 @@ export const shareItems = authedMutation({
     note: v.optional(v.string()),
     /** When set, only ping this conversation (must include that peer). */
     conversationId: v.optional(v.id("dmConversations")),
+    /** access = live grant; file = Bunny copy into peer Messages. */
+    delivery: v.optional(v.union(v.literal("access"), v.literal("file"))),
+    /** Live-link permission (ignored for file delivery). */
+    permission: v.optional(v.union(v.literal("view"), v.literal("edit"))),
   },
   returns: v.object({
     sharedCount: v.number(),
@@ -414,10 +438,25 @@ export const shareItems = authedMutation({
       throw new Error("You can share with at most 40 people at once");
     }
 
+    const delivery = args.delivery ?? "access";
+    const permission: StudioSharePermission =
+      args.permission === "edit" ? "edit" : "view";
+
+    if (delivery === "file") {
+      for (const item of args.items) {
+        if (item.itemKind !== "asset") {
+          throw new Error(
+            "Send as file supports media files only — use Access for folders/docs/edits",
+          );
+        }
+      }
+    }
+
     const resolvedItems: Array<{
       itemKind: StudioShareItemKind;
       itemId: string;
       name: string;
+      sourceAsset?: Doc<"assets">;
     }> = [];
     for (const item of args.items) {
       const owned = await requireOwnedShareable(
@@ -425,10 +464,23 @@ export const shareItems = authedMutation({
         item.itemKind,
         item.itemId,
       );
+      let sourceAsset: Doc<"assets"> | undefined;
+      if (item.itemKind === "asset") {
+        const asset = await ctx.db.get("assets", item.itemId as Id<"assets">);
+        if (
+          !asset?.bunnyPath ||
+          asset.deletedAt ||
+          (asset.storageStatus !== undefined && asset.storageStatus !== "ready")
+        ) {
+          throw new Error(`File not ready to share: ${owned.name}`);
+        }
+        sourceAsset = asset;
+      }
       resolvedItems.push({
         itemKind: item.itemKind,
         itemId: item.itemId,
         name: owned.name,
+        sourceAsset,
       });
     }
 
@@ -443,17 +495,6 @@ export const shareItems = authedMutation({
 
     for (const peerUserId of peerIds) {
       const rootId = await workspaceRootForUser(ctx, peerUserId);
-      await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
-
-      for (const item of resolvedItems) {
-        await upsertGrant(ctx, {
-          fromUserId: ctx.user._id,
-          toUserId: peerUserId,
-          itemKind: item.itemKind,
-          itemId: item.itemId,
-        });
-        sharedCount += 1;
-      }
 
       let conversationId: Id<"dmConversations">;
       if (args.conversationId) {
@@ -479,24 +520,98 @@ export const shareItems = authedMutation({
         conversationId = await openConversationWithUser(ctx, peerUserId);
       }
 
+      let dmItems: Array<{
+        itemKind: StudioShareItemKind;
+        itemId: string;
+        name: string;
+      }>;
+
+      if (delivery === "file") {
+        const messagesFolderId = await ensureMessagesFolder(
+          ctx,
+          peerUserId,
+          rootId,
+        );
+        dmItems = [];
+        for (const item of resolvedItems) {
+          const source = item.sourceAsset!;
+          const now = Date.now();
+          const assetId = await ctx.db.insert("assets", {
+            ownerId: peerUserId,
+            folderId: messagesFolderId,
+            name: source.name,
+            kind: source.kind,
+            mimeType: source.mimeType,
+            storageStatus: "pending",
+            durationSeconds: source.durationSeconds,
+            width: source.width,
+            height: source.height,
+            frameRate: source.frameRate,
+            videoCodec: source.videoCodec,
+            videoProfile: source.videoProfile,
+            audioCodec: source.audioCodec,
+            createdAt: now,
+            updatedAt: now,
+          });
+          const bunnyPath = buildAssetPath({
+            userId: peerUserId,
+            folderId: messagesFolderId,
+            assetId,
+            filename: source.name,
+          });
+          await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+          await ctx.scheduler.runAfter(
+            0,
+            internal.studioShareActions.copySharedMedia,
+            {
+              destAssetId: assetId,
+              destOwnerId: peerUserId,
+              sourceBunnyPath: source.bunnyPath!,
+              destBunnyPath: bunnyPath,
+              mimeType: source.mimeType || "application/octet-stream",
+              sourceThumbnailPath: source.thumbnailPath,
+            },
+          );
+          dmItems.push({
+            itemKind: "asset",
+            itemId: assetId,
+            name: source.name,
+          });
+          sharedCount += 1;
+        }
+      } else {
+        await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
+        for (const item of resolvedItems) {
+          await upsertGrant(ctx, {
+            fromUserId: ctx.user._id,
+            toUserId: peerUserId,
+            itemKind: item.itemKind,
+            itemId: item.itemId,
+            permission,
+          });
+          sharedCount += 1;
+        }
+        dmItems = resolvedItems.map((item) => ({
+          itemKind: item.itemKind,
+          itemId: item.itemId,
+          name: item.name,
+        }));
+      }
+
       const now = Date.now();
       const messageId = await ctx.db.insert("dmMessages", {
         conversationId,
         senderId: ctx.user._id,
         body: note,
         kind: "studio_share",
-        sharedItems: resolvedItems.map((item) => ({
-          itemKind: item.itemKind,
-          itemId: item.itemId,
-          name: item.name,
-        })),
+        sharedItems: dmItems,
         createdAt: now,
       });
 
       const isLow = (await ctx.db.get(conversationId))!.userLowId === ctx.user._id;
       await ctx.db.patch(conversationId, {
         lastMessageAt: now,
-        lastMessagePreview: studioShareListPreview(resolvedItems, note),
+        lastMessagePreview: studioShareListPreview(dmItems, note),
         lastMessageSenderId: ctx.user._id,
         ...(isLow
           ? { lowLastReadAt: now, lowTypingAt: 0 }
@@ -528,6 +643,7 @@ export const listSharedWithMe = authedQuery({
       itemKind: StudioShareItemKind;
       itemId: string;
       name: string;
+      permission: StudioSharePermission;
       fromUserId: Id<"users">;
       fromUsername?: string;
       fromDisplayName?: string;
@@ -564,6 +680,7 @@ export const listSharedWithMe = authedQuery({
         itemKind: row.itemKind,
         itemId: row.itemId,
         name: live.name,
+        permission: row.permission === "edit" ? "edit" : "view",
         fromUserId: row.fromUserId,
         fromUsername: profile?.username,
         fromDisplayName: profile?.displayName,
@@ -591,6 +708,7 @@ export const listSharedFolderChildren = authedQuery({
       parentId: v.optional(v.id("folders")),
       ownerId: v.id("users"),
     }),
+    permission: v.union(v.literal("view"), v.literal("edit")),
     children: v.array(sharedChildReturn),
   }),
   handler: async (ctx, args) => {
@@ -598,12 +716,19 @@ export const listSharedFolderChildren = authedQuery({
     if (!folder || folder.deletedAt) {
       throw new Error("Folder not found");
     }
+    const level = await viewerSharePermission(
+      ctx,
+      ctx.user._id,
+      "folder",
+      folder._id,
+    );
     const canBrowse =
-      folder.ownerId === ctx.user._id ||
-      (await viewerHasFolderGrantCovering(ctx, ctx.user._id, folder._id));
+      folder.ownerId === ctx.user._id || level === "view" || level === "edit";
     if (!canBrowse) {
       throw new Error("Unauthorized");
     }
+    const permission: StudioSharePermission =
+      level === "edit" || level === "owner" ? "edit" : "view";
 
     const children: Array<{
       itemKind: StudioShareItemKind;
@@ -726,6 +851,7 @@ export const listSharedFolderChildren = authedQuery({
         parentId: folder.parentId,
         ownerId: folder.ownerId,
       },
+      permission,
       children,
     };
   },
@@ -851,6 +977,7 @@ const recipientReturn = v.object({
   username: v.string(),
   displayName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
+  permission: v.union(v.literal("view"), v.literal("edit")),
   createdAt: v.number(),
 });
 
@@ -879,6 +1006,7 @@ export const listRecipientsForItem = authedQuery({
       username: string;
       displayName?: string;
       avatarUrl?: string;
+      permission: StudioSharePermission;
       createdAt: number;
     }> = [];
     for (const row of active) {
@@ -898,6 +1026,7 @@ export const listRecipientsForItem = authedQuery({
         username: profile.username,
         displayName: profile.displayName,
         avatarUrl,
+        permission: row.permission === "edit" ? "edit" : "view",
         createdAt: row.createdAt,
       });
     }
@@ -947,6 +1076,138 @@ export const revokeShare = authedMutation({
     }
     await ctx.db.patch(args.shareId, { revokedAt: Date.now() });
     return null;
+  },
+});
+
+/** Finalize Bunny copy for a file-share or Copy-to destination asset. */
+export const finalizeSharedMediaCopy = internalMutation({
+  args: {
+    destAssetId: v.id("assets"),
+    destOwnerId: v.id("users"),
+    bunnyPath: v.string(),
+    byteSize: v.number(),
+    mimeType: v.string(),
+    thumbnailPath: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get("assets", args.destAssetId);
+    if (!asset || asset.ownerId !== args.destOwnerId) {
+      throw new Error("Destination asset not found");
+    }
+    if (asset.storageStatus === "ready" && asset.bunnyPath) {
+      return null;
+    }
+    const now = Date.now();
+    const prevBytes = asset.byteSize ?? 0;
+    await ctx.db.patch(asset._id, {
+      bunnyPath: args.bunnyPath,
+      byteSize: args.byteSize,
+      mimeType: args.mimeType,
+      storageStatus: "ready",
+      ...(args.thumbnailPath ? { thumbnailPath: args.thumbnailPath } : {}),
+      updatedAt: now,
+    });
+    const delta = Math.max(0, args.byteSize - prevBytes);
+    if (delta > 0) {
+      await applyStorageBytesDelta(ctx, {
+        userId: args.destOwnerId,
+        deltaBytes: delta,
+        reason: "Studio shared file copy",
+      });
+    }
+    return null;
+  },
+});
+
+export const failSharedMediaCopy = internalMutation({
+  args: {
+    destAssetId: v.id("assets"),
+    destOwnerId: v.id("users"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get("assets", args.destAssetId);
+    if (!asset || asset.ownerId !== args.destOwnerId) return null;
+    if (asset.storageStatus === "ready") return null;
+    await ctx.db.patch(asset._id, {
+      storageStatus: "failed",
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Copy a shared (or owned) asset into one of my folders via Bunny server copy.
+ * Schedules the copy; returns the new pending asset id.
+ */
+export const copySharedItemToFolder = authedMutation({
+  args: {
+    assetId: v.id("assets"),
+    targetFolderId: v.id("folders"),
+    name: v.optional(v.string()),
+  },
+  returns: v.id("assets"),
+  handler: async (ctx, args) => {
+    const source = await requireAssetOwnerOrShare(ctx, args.assetId);
+    if (
+      source.licenseKind === "purchased_network" ||
+      source.licenseKind === "listed_network"
+    ) {
+      throw new Error("Creative Network catalog files cannot be copied this way");
+    }
+    if (
+      !source.bunnyPath ||
+      (source.storageStatus !== undefined && source.storageStatus !== "ready")
+    ) {
+      throw new Error("File is not ready to copy");
+    }
+    const destFolder = await ctx.db.get("folders", args.targetFolderId);
+    if (!destFolder || destFolder.deletedAt) {
+      throw new Error("Folder not found");
+    }
+    if (destFolder.ownerId !== ctx.user._id) {
+      throw new Error("You can only copy into your own folders");
+    }
+    if (destFolder.systemKind === "shared_with_me") {
+      throw new Error("Cannot copy into Shared with me");
+    }
+    const now = Date.now();
+    const name = args.name?.trim() || source.name;
+    const assetId = await ctx.db.insert("assets", {
+      ownerId: ctx.user._id,
+      folderId: args.targetFolderId,
+      name,
+      kind: source.kind,
+      mimeType: source.mimeType,
+      storageStatus: "pending",
+      durationSeconds: source.durationSeconds,
+      width: source.width,
+      height: source.height,
+      frameRate: source.frameRate,
+      videoCodec: source.videoCodec,
+      videoProfile: source.videoProfile,
+      audioCodec: source.audioCodec,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const bunnyPath = buildAssetPath({
+      userId: ctx.user._id,
+      folderId: args.targetFolderId,
+      assetId,
+      filename: name,
+    });
+    await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+    await ctx.scheduler.runAfter(0, internal.studioShareActions.copySharedMedia, {
+      destAssetId: assetId,
+      destOwnerId: ctx.user._id,
+      sourceBunnyPath: source.bunnyPath,
+      destBunnyPath: bunnyPath,
+      mimeType: source.mimeType || "application/octet-stream",
+      sourceThumbnailPath: source.thumbnailPath,
+    });
+    return assetId;
   },
 });
 

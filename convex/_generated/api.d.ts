@@ -119,6 +119,7 @@ import type * as studioApiInternal from "../studioApiInternal.js";
 import type * as studioApiNetworkHttp from "../studioApiNetworkHttp.js";
 import type * as studioApiSocialHttp from "../studioApiSocialHttp.js";
 import type * as studioDownloads from "../studioDownloads.js";
+import type * as studioShareActions from "../studioShareActions.js";
 import type * as studioShares from "../studioShares.js";
 import type * as stylePresetActions from "../stylePresetActions.js";
 import type * as stylePresets from "../stylePresets.js";
@@ -248,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   studioApiNetworkHttp: typeof studioApiNetworkHttp;
   studioApiSocialHttp: typeof studioApiSocialHttp;
   studioDownloads: typeof studioDownloads;
+  studioShareActions: typeof studioShareActions;
   studioShares: typeof studioShares;
   stylePresetActions: typeof stylePresetActions;
   stylePresets: typeof stylePresets;
