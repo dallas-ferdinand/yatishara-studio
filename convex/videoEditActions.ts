@@ -196,8 +196,24 @@ async function buildSegmentVideoFilters(
   fontCacheDir: string,
 ): Promise<string> {
   const parts: string[] = [];
-  // Picture edge fades removed — effects.fadeIn/fadeOut are audio-only (afade).
-  // Transitions handle visual dissolves between clips.
+  // Per-clip picture fades (independent of transitions between clips).
+  const dur = Math.max(0.05, duration);
+  let fadeIn = Math.max(0, Number(clip.effects?.fadeIn) || 0);
+  let fadeOut = Math.max(0, Number(clip.effects?.fadeOut) || 0);
+  fadeIn = Math.min(dur, fadeIn);
+  fadeOut = Math.min(dur, fadeOut);
+  if (fadeIn + fadeOut > dur) {
+    const scale = dur / (fadeIn + fadeOut);
+    fadeIn *= scale;
+    fadeOut *= scale;
+  }
+  if (fadeIn > 0.001) {
+    parts.push(`fade=t=in:st=0:d=${fadeIn.toFixed(3)}:curve=qsin`);
+  }
+  if (fadeOut > 0.001) {
+    const st = Math.max(0, dur - fadeOut);
+    parts.push(`fade=t=out:st=${st.toFixed(3)}:d=${fadeOut.toFixed(3)}:curve=qsin`);
+  }
 
   const clipStart = clip.startTime;
   const clipEnd = clip.startTime + duration;

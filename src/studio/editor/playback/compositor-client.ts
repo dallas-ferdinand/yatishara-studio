@@ -74,6 +74,8 @@ export class CompositorClient {
     frameB?: VideoFrame;
     transformA?: [number, number, number, number];
     transformB?: [number, number, number, number];
+    opacityA?: number;
+    opacityB?: number;
     transition?: TransitionType;
     progress?: number;
     background?: [number, number, number, number];
@@ -176,6 +178,8 @@ export class CompositorClient {
           frameB,
           transformA: args.transformA ?? [1, 0, 0, 0],
           transformB: args.transformB ?? [1, 0, 0, 0],
+          opacityA: args.opacityA ?? 1,
+          opacityB: args.opacityB ?? 1,
           transition: args.transition ?? "none",
           progress: args.progress ?? 0,
           background: args.background ?? [0, 0, 0, 1],

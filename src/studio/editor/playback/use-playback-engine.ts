@@ -355,11 +355,21 @@ class EngineConsumer implements FrameConsumer {
     // Document + worker FontFace sets are separate — load both before paint.
     await Promise.all(families.map((family) => loadGoogleFont(family)));
     await this.compositor.ensureFonts(families);
+    const sampleA = prepared.slice.video[0];
+    const sampleB = prepared.slice.video[1];
+    const opacityFor = (sample: typeof sampleA | undefined) => {
+      if (!sample) return 1;
+      const duration = sample.clip.timelineEnd - sample.clip.timelineStart;
+      const local = slice.timelineTime - sample.clip.timelineStart;
+      return clipOpacityAtLocalTime(sample.clip.clip.effects, duration, local);
+    };
     await this.compositor.render({
       frameA: prepared.frameA,
       frameB: prepared.frameB,
-      transformA: transformTuple(prepared.slice.video[0]?.clip.clip.effects),
-      transformB: transformTuple(prepared.slice.video[1]?.clip.clip.effects),
+      transformA: transformTuple(sampleA?.clip.clip.effects),
+      transformB: transformTuple(sampleB?.clip.clip.effects),
+      opacityA: opacityFor(sampleA),
+      opacityB: opacityFor(sampleB),
       transition: slice.transition?.type,
       progress: slice.transition?.progress,
       textsUnder,

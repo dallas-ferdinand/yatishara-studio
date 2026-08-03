@@ -376,7 +376,8 @@ function TimelineClipBlock({
   const [lifted, setLifted] = useState(false);
   const isVideo = clip.kind === "video" || clip.kind === "image";
   const isText = clip.kind === "text";
-  const supportsAudioFade = clip.kind === "audio" || clip.kind === "video";
+  const supportsAudioFade =
+    clip.kind === "audio" || clip.kind === "video" || clip.kind === "image";
   const thresholdSec = snapThresholdSec(pps);
   const widthPx = Math.max(width, 28);
   const fadePair = clampAudioFadePair(

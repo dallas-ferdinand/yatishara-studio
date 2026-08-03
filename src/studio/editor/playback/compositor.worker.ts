@@ -67,6 +67,9 @@ type RenderMessage = {
   frameB?: VideoFrame;
   transformA?: TransformTuple;
   transformB?: TransformTuple;
+  /** Per-clip picture opacity (edge fade in/out). Defaults to 1. */
+  opacityA?: number;
+  opacityB?: number;
   transition: TransitionName;
   progress: number;
   background: [number, number, number, number];
@@ -179,6 +182,8 @@ uniform vec2 u_canvasSize;
 uniform vec4 u_aTransform;
 uniform vec4 u_bTransform;
 uniform float u_progress;
+uniform float u_opacityA;
+uniform float u_opacityB;
 uniform int u_effect;
 uniform bool u_hasA;
 uniform bool u_hasB;
@@ -195,7 +200,7 @@ vec2 containedSize(vec2 sourceSize) {
   return vec2(sourceAspect / canvasAspect, 1.0);
 }
 
-vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform) {
+vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float opacity) {
   vec2 objectSize = containedSize(sourceSize) * max(transform.x, 0.05);
   // CSS/editor Y grows downward; WebGL UV Y grows upward after texture flip.
   vec2 objectCenter = vec2(0.5 + transform.y, 0.5 - transform.z);
@@ -213,20 +218,20 @@ vec4 sampleFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform) {
     // Transparent outside so under-lane text can show in letterbox / around PiP.
     return vec4(0.0);
   }
-  return texture(tex, local);
+  return texture(tex, local) * clamp(opacity, 0.0, 1.0);
 }
 
-vec4 blurFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float radius) {
+vec4 blurFrame(sampler2D tex, vec2 uv, vec2 sourceSize, vec4 transform, float radius, float opacity) {
   vec2 px = radius / max(sourceSize, vec2(1.0));
-  vec4 color = sampleFrame(tex, uv, sourceSize, transform) * 0.2;
-  color += sampleFrame(tex, uv + vec2(px.x, 0.0), sourceSize, transform) * 0.12;
-  color += sampleFrame(tex, uv - vec2(px.x, 0.0), sourceSize, transform) * 0.12;
-  color += sampleFrame(tex, uv + vec2(0.0, px.y), sourceSize, transform) * 0.12;
-  color += sampleFrame(tex, uv - vec2(0.0, px.y), sourceSize, transform) * 0.12;
-  color += sampleFrame(tex, uv + px, sourceSize, transform) * 0.08;
-  color += sampleFrame(tex, uv - px, sourceSize, transform) * 0.08;
-  color += sampleFrame(tex, uv + vec2(px.x, -px.y), sourceSize, transform) * 0.08;
-  color += sampleFrame(tex, uv + vec2(-px.x, px.y), sourceSize, transform) * 0.08;
+  vec4 color = sampleFrame(tex, uv, sourceSize, transform, opacity) * 0.2;
+  color += sampleFrame(tex, uv + vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.12;
+  color += sampleFrame(tex, uv - vec2(px.x, 0.0), sourceSize, transform, opacity) * 0.12;
+  color += sampleFrame(tex, uv + vec2(0.0, px.y), sourceSize, transform, opacity) * 0.12;
+  color += sampleFrame(tex, uv - vec2(0.0, px.y), sourceSize, transform, opacity) * 0.12;
+  color += sampleFrame(tex, uv + px, sourceSize, transform, opacity) * 0.08;
+  color += sampleFrame(tex, uv - px, sourceSize, transform, opacity) * 0.08;
+  color += sampleFrame(tex, uv + vec2(px.x, -px.y), sourceSize, transform, opacity) * 0.08;
+  color += sampleFrame(tex, uv + vec2(-px.x, px.y), sourceSize, transform, opacity) * 0.08;
   return color;
 }
 
@@ -236,8 +241,10 @@ void main() {
   layer = underText + layer * (1.0 - underText.a);
 
   if (u_hasA || u_hasB) {
-    vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform) : vec4(0.0);
-    vec4 b = u_hasB ? sampleFrame(u_b, v_uv, u_bSize, u_bTransform) : a;
+    float opa = clamp(u_opacityA, 0.0, 1.0);
+    float opb = clamp(u_opacityB, 0.0, 1.0);
+    vec4 a = u_hasA ? sampleFrame(u_a, v_uv, u_aSize, u_aTransform, opa) : vec4(0.0);
+    vec4 b = u_hasB ? sampleFrame(u_b, v_uv, u_bSize, u_bTransform, opb) : a;
     float p = clamp(u_progress, 0.0, 1.0);
     vec4 base;
 
@@ -253,21 +260,21 @@ void main() {
     } else if (u_effect == 6) {
       base = v_uv.y > 1.0 - p ? b : a;
     } else if (u_effect == 7) {
-      vec4 movedA = sampleFrame(u_a, v_uv + vec2(p, 0.0), u_aSize, u_aTransform);
-      vec4 movedB = sampleFrame(u_b, v_uv - vec2(1.0 - p, 0.0), u_bSize, u_bTransform);
+      vec4 movedA = sampleFrame(u_a, v_uv + vec2(p, 0.0), u_aSize, u_aTransform, opa);
+      vec4 movedB = sampleFrame(u_b, v_uv - vec2(1.0 - p, 0.0), u_bSize, u_bTransform, opb);
       base = v_uv.x < 1.0 - p ? movedA : movedB;
     } else if (u_effect == 8) {
       vec2 aUv = (v_uv - 0.5) / (1.0 + p * 0.28) + 0.5;
       vec2 bUv = (v_uv - 0.5) / (0.88 + p * 0.12) + 0.5;
       base = mix(
-        sampleFrame(u_a, aUv, u_aSize, u_aTransform),
-        sampleFrame(u_b, bUv, u_bSize, u_bTransform),
+        sampleFrame(u_a, aUv, u_aSize, u_aTransform, opa),
+        sampleFrame(u_b, bUv, u_bSize, u_bTransform, opb),
         p
       );
     } else if (u_effect == 9) {
       base = mix(
-        blurFrame(u_a, v_uv, u_aSize, u_aTransform, p * 10.0),
-        blurFrame(u_b, v_uv, u_bSize, u_bTransform, (1.0 - p) * 10.0),
+        blurFrame(u_a, v_uv, u_aSize, u_aTransform, p * 10.0, opa),
+        blurFrame(u_b, v_uv, u_bSize, u_bTransform, (1.0 - p) * 10.0, opb),
         p
       );
     } else {
@@ -730,6 +737,14 @@ function render(message: RenderMessage): void {
       transformB[3],
     );
     gl.uniform1f(uniform("u_progress"), message.progress);
+    gl.uniform1f(
+      uniform("u_opacityA"),
+      Number.isFinite(message.opacityA) ? Number(message.opacityA) : 1,
+    );
+    gl.uniform1f(
+      uniform("u_opacityB"),
+      Number.isFinite(message.opacityB) ? Number(message.opacityB) : 1,
+    );
     gl.uniform1i(uniform("u_effect"), transitionShaderIdFor(message.transition));
     gl.uniform1i(uniform("u_hasA"), a ? 1 : 0);
     gl.uniform1i(uniform("u_hasB"), b ? 1 : 0);

@@ -19,7 +19,9 @@ export type EditorMode = "select" | "transition" | "text";
 export type EditorSidePanel = "inspect" | "export";
 
 export type ClipEffects = {
+  /** Edge fade-in seconds — picture opacity + audio gain for this clip. */
   fadeIn?: number;
+  /** Edge fade-out seconds — picture opacity + audio gain for this clip. */
   fadeOut?: number;
   volume?: number;
   /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */

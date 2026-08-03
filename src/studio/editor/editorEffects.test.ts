@@ -3,7 +3,20 @@ import {
   audioFadeGainAtLocalTime,
   clampAudioFadePair,
   clampAudioFadeSec,
+  clipOpacityAtLocalTime,
 } from "./editorEffects";
+
+describe("clipOpacityAtLocalTime", () => {
+  it("matches the audio fade envelope for picture opacity", () => {
+    const effects = { fadeIn: 1, fadeOut: 1 };
+    expect(clipOpacityAtLocalTime(effects, 4, 0)).toBeCloseTo(0);
+    expect(clipOpacityAtLocalTime(effects, 4, 0.5)).toBeCloseTo(
+      audioFadeGainAtLocalTime(effects, 4, 0.5),
+    );
+    expect(clipOpacityAtLocalTime(effects, 4, 2)).toBeCloseTo(1);
+    expect(clipOpacityAtLocalTime(effects, 4, 4)).toBeCloseTo(0);
+  });
+});
 
 describe("audioFadeGainAtLocalTime", () => {
   it("returns 1 when no fades are set", () => {

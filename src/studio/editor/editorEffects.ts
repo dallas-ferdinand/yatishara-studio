@@ -47,6 +47,9 @@ export const EDITOR_MODES = [
   { id: "text", label: "Text", icon: "type" },
 ] as const;
 
+/** Quick fade lengths offered in the inspector when a clip is selected. */
+export const FADE_LENGTH_PRESETS = [0, 0.25, 0.5, 1, 1.5, 2] as const;
+
 export const DEFAULT_TEXT_STYLE: TextClipContent = {
   text: "Your text",
   fontSize: 42,
@@ -87,16 +90,16 @@ export const DEFAULT_TEXT_EFFECTS = {
   rotation: 0,
 } as const;
 
-/** Clip picture edge fades were removed — transitions handle dissolves. Kept for call sites. */
+/**
+ * Picture opacity envelope for clip-local time (same curve as audio fades).
+ * Independent of transitions — fades the single clip against the background.
+ */
 export function clipOpacityAtLocalTime(
   effects: ClipEffects | undefined,
   clipDurationSec: number,
   localTime: number,
 ): number {
-  void effects;
-  void clipDurationSec;
-  void localTime;
-  return 1;
+  return audioFadeGainAtLocalTime(effects, clipDurationSec, localTime);
 }
 
 /**
