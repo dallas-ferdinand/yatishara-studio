@@ -265,12 +265,11 @@ async function resolveDmMediaUrls(
     return { contentType: row.contentType };
   }
   const asset = await ctx.db.get(row.assetId);
-  if (
-    asset &&
-    !asset.purgedAt &&
-    asset.bunnyPath &&
-    (asset.storageStatus === "ready" || asset.byteSize != null)
-  ) {
+  // Legacy Studio assets often lack storageStatus/byteSize but still have Bunny
+  // objects — only skip explicit pending/failed (same gate as shareItems).
+  const notReady =
+    asset?.storageStatus === "pending" || asset?.storageStatus === "failed";
+  if (asset && !asset.purgedAt && !asset.deletedAt && asset.bunnyPath && !notReady) {
     const url = await signBunnyFullUrl(
       asset.bunnyPath,
       expiresUnix,
