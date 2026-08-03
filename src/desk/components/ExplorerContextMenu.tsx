@@ -441,11 +441,32 @@ export function ExplorerContextMenu({
 }) {
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
+  const submenuCloseTimerRef = useRef(null);
   const open = Boolean(entry) && typeof document !== "undefined";
   const isSheet = presentation === "sheet";
   const [openSubmenuId, setOpenSubmenuId] = useState(null);
   const [submenuPos, setSubmenuPos] = useState({ left: 0, top: 0 });
   const [portalRoot, setPortalRoot] = useState(null);
+
+  function clearSubmenuCloseTimer() {
+    if (submenuCloseTimerRef.current != null) {
+      window.clearTimeout(submenuCloseTimerRef.current);
+      submenuCloseTimerRef.current = null;
+    }
+  }
+
+  function scheduleSubmenuClose() {
+    clearSubmenuCloseTimer();
+    submenuCloseTimerRef.current = window.setTimeout(() => {
+      submenuCloseTimerRef.current = null;
+      setOpenSubmenuId(null);
+    }, 120);
+  }
+
+  function openSubmenu(id) {
+    clearSubmenuCloseTimer();
+    setOpenSubmenuId(id);
+  }
 
   const items = useMemo(
     () =>
@@ -517,8 +538,11 @@ export function ExplorerContextMenu({
   }, [open, isSheet]);
 
   useEffect(() => {
+    clearSubmenuCloseTimer();
     setOpenSubmenuId(null);
   }, [entry?.path, entry?.type, x, y]);
+
+  useEffect(() => () => clearSubmenuCloseTimer(), []);
 
   useLayoutEffect(() => {
     if (isSheet || !openSubmenuItem || !menuRef.current) return;
@@ -743,14 +767,9 @@ export function ExplorerContextMenu({
                           />
                         </div>
                       ) : (
-                        item.children.map((child) =>
-                          child.sep ? (
-                            <div
-                              key={child.id}
-                              className="cursor-tab-context-sep"
-                              role="separator"
-                            />
-                          ) : (
+                        item.children
+                          .filter((child) => !child.sep)
+                          .map((child) => (
                             <MenuItemButton
                               key={child.id}
                               item={child}
@@ -760,8 +779,7 @@ export function ExplorerContextMenu({
                                 onClose();
                               }}
                             />
-                          ),
-                        )
+                          ))
                       )}
                     </div>
                   ) : null}
@@ -784,6 +802,15 @@ export function ExplorerContextMenu({
         role="menu"
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={(e) => e.stopPropagation()}
+        onMouseLeave={(e) => {
+          const next = e.relatedTarget;
+          if (next instanceof Node && submenuRef.current?.contains(next)) {
+            clearSubmenuCloseTimer();
+            return;
+          }
+          scheduleSubmenuClose();
+        }}
+        onMouseEnter={clearSubmenuCloseTimer}
       >
         {items.map((item) =>
           item.sep ? (
@@ -794,7 +821,11 @@ export function ExplorerContextMenu({
                 item={item}
                 active={openSubmenuId === item.id}
                 onHover={(hovered) => {
-                  if (hovered.children?.length) setOpenSubmenuId(hovered.id);
+                  if (hovered.children?.length) openSubmenu(hovered.id);
+                  else {
+                    clearSubmenuCloseTimer();
+                    setOpenSubmenuId(null);
+                  }
                 }}
                 onActivate={activateItem}
               />
@@ -816,6 +847,15 @@ export function ExplorerContextMenu({
           role="menu"
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={(e) => e.stopPropagation()}
+          onMouseEnter={clearSubmenuCloseTimer}
+          onMouseLeave={(e) => {
+            const next = e.relatedTarget;
+            if (next instanceof Node && menuRef.current?.contains(next)) {
+              clearSubmenuCloseTimer();
+              return;
+            }
+            scheduleSubmenuClose();
+          }}
         >
           {openSubmenuItem.submenuKind === "emoji-grid" ? (
             <div className="desk-explorer-react-grid" role="group" aria-label="Reactions">
@@ -887,18 +927,16 @@ export function ExplorerContextMenu({
               </button>
             </div>
           ) : (
-            openSubmenuItem.children.map((child) =>
-              child.sep ? (
-                <div key={child.id} className="cursor-tab-context-sep" role="separator" />
-              ) : (
+            openSubmenuItem.children
+              .filter((child) => !child.sep)
+              .map((child) => (
                 <MenuItemButton
                   key={child.id}
                   item={child}
                   active={false}
                   onActivate={(picked) => runAction(picked.id)}
                 />
-              ),
-            )
+              ))
           )}
         </div>
       ) : null}

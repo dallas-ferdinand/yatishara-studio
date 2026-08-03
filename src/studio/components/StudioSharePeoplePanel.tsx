@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import {
   Check,
+  ChevronDown,
   MessageCircle,
   SearchX,
   Share2,
@@ -19,11 +20,13 @@ import {
   useState,
 } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { PanelSearchBar } from "@/desk/components/PanelSearchBar";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
+import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
@@ -103,9 +106,113 @@ function LabelChip({
   );
 }
 
+function ShareConfirmMenu({
+  delivery,
+  setDelivery,
+  permission,
+  setPermission,
+  allowFileDelivery,
+  busy,
+  onConfirm,
+  onDismiss,
+  asSheet,
+}: {
+  delivery: "access" | "file";
+  setDelivery: (v: "access" | "file") => void;
+  permission: "view" | "edit";
+  setPermission: (v: "view" | "edit") => void;
+  allowFileDelivery: boolean;
+  busy: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+  asSheet: boolean;
+}) {
+  return (
+    <div
+      className={`studio-share-confirm-menu${asSheet ? " is-sheet" : ""}`}
+      role="dialog"
+      aria-label="Choose share type"
+    >
+      {asSheet ? (
+        <div className="studio-share-confirm-sheet-grab" aria-hidden="true" />
+      ) : null}
+      <p className="studio-share-confirm-title">Share as</p>
+      <div className="studio-share-confirm-modes" role="group" aria-label="Share type">
+        <button
+          type="button"
+          className={`studio-share-confirm-mode${delivery === "access" ? " is-active" : ""}`}
+          onClick={() => setDelivery("access")}
+          disabled={busy}
+        >
+          Access
+        </button>
+        {allowFileDelivery ? (
+          <button
+            type="button"
+            className={`studio-share-confirm-mode${delivery === "file" ? " is-active" : ""}`}
+            onClick={() => setDelivery("file")}
+            disabled={busy}
+          >
+            File
+          </button>
+        ) : null}
+      </div>
+      {delivery === "access" ? (
+        <>
+          <div className="studio-share-confirm-modes" role="group" aria-label="Permission">
+            <button
+              type="button"
+              className={`studio-share-confirm-mode${permission === "view" ? " is-active" : ""}`}
+              onClick={() => setPermission("view")}
+              disabled={busy}
+            >
+              View
+            </button>
+            <button
+              type="button"
+              className={`studio-share-confirm-mode${permission === "edit" ? " is-active" : ""}`}
+              onClick={() => setPermission("edit")}
+              disabled={busy}
+            >
+              Edit
+            </button>
+          </div>
+          <p className="studio-share-confirm-hint">
+            {permission === "edit"
+              ? "Can edit live originals — not delete"
+              : "Read, download, copy"}
+          </p>
+        </>
+      ) : (
+        <p className="studio-share-confirm-hint">
+          Sends a copy into their Messages folder
+        </p>
+      )}
+      <div className="studio-share-confirm-actions">
+        <button
+          type="button"
+          className="studio-share-confirm-dismiss"
+          onClick={onDismiss}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="studio-share-confirm-submit"
+          onClick={onConfirm}
+          disabled={busy}
+        >
+          Confirm
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Files-rail people picker for Share — DM search/labels chrome with multi-select
- * and a top Share CTA (select-mode style).
+ * and a compact header + confirm dropdown/sheet for Access/File.
  */
 export function StudioSharePeoplePanel({
   itemLabel,
@@ -117,6 +224,7 @@ export function StudioSharePeoplePanel({
   expiresUnix,
   allowFileDelivery = true,
 }: StudioSharePeoplePanelProps) {
+  const isMobile = useMobileLayout();
   const [search, setSearch] = useState("");
   const [searchNow] = useState(() => Date.now());
   const deferredSearch = useDeferredValue(search.trim().replace(/^@+/, ""));
@@ -124,6 +232,10 @@ export function StudioSharePeoplePanel({
   const [activeLabelId, setActiveLabelId] = useState<LabelId | null>(null);
   const [delivery, setDelivery] = useState<"access" | "file">("access");
   const [permission, setPermission] = useState<"view" | "edit">("view");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const shareBtnRef = useRef<HTMLButtonElement | null>(null);
+  const confirmMenuRef = useRef<HTMLDivElement | null>(null);
+  const [confirmPos, setConfirmPos] = useState({ top: 0, right: 0 });
   const labelRailRef = useRef<HTMLDivElement | null>(null);
   useHorizontalWheelScroll(labelRailRef);
   useHorizontalScrollFade(labelRailRef);
@@ -156,6 +268,36 @@ export function StudioSharePeoplePanel({
     }
   }, [activeLabelId, labels]);
 
+  useEffect(() => {
+    if (!confirmOpen || isMobile) return;
+    const btn = shareBtnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setConfirmPos({
+      top: rect.bottom + 4,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, [confirmOpen, isMobile]);
+
+  useEffect(() => {
+    if (!confirmOpen || isMobile) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (shareBtnRef.current?.contains(t)) return;
+      if (confirmMenuRef.current?.contains(t)) return;
+      setConfirmOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [confirmOpen, isMobile]);
+
   function toggleFromPerson(person: {
     userId: Id<"users">;
     username: string;
@@ -171,6 +313,66 @@ export function StudioSharePeoplePanel({
       sellerTag: person.sellerTag ?? null,
     });
   }
+
+  function runConfirm() {
+    onShare({
+      delivery: allowFileDelivery ? delivery : "access",
+      permission: delivery === "file" ? "view" : permission,
+    });
+    setConfirmOpen(false);
+  }
+
+  const confirmMenu = confirmOpen ? (
+    isMobile ? (
+      createPortal(
+        <>
+          <button
+            type="button"
+            className="studio-share-confirm-backdrop"
+            aria-label="Dismiss"
+            onClick={() => setConfirmOpen(false)}
+          />
+          <ShareConfirmMenu
+            delivery={delivery}
+            setDelivery={setDelivery}
+            permission={permission}
+            setPermission={setPermission}
+            allowFileDelivery={allowFileDelivery}
+            busy={busy}
+            onConfirm={runConfirm}
+            onDismiss={() => setConfirmOpen(false)}
+            asSheet
+          />
+        </>,
+        document.querySelector(".studio-polish") ?? document.body,
+      )
+    ) : (
+      createPortal(
+        <div
+          ref={confirmMenuRef}
+          style={{
+            position: "fixed",
+            top: confirmPos.top,
+            right: confirmPos.right,
+            zIndex: 720,
+          }}
+        >
+          <ShareConfirmMenu
+            delivery={delivery}
+            setDelivery={setDelivery}
+            permission={permission}
+            setPermission={setPermission}
+            allowFileDelivery={allowFileDelivery}
+            busy={busy}
+            onConfirm={runConfirm}
+            onDismiss={() => setConfirmOpen(false)}
+            asSheet={false}
+          />
+        </div>,
+        document.body,
+      )
+    )
+  ) : null;
 
   return (
     <div className="studio-share-people-panel">
@@ -216,85 +418,45 @@ export function StudioSharePeoplePanel({
 
       <div className="studio-share-people-top" role="status">
         <div className="studio-share-people-top-copy">
-          <strong>{selectedPeers.length ? `${selectedPeers.length} selected` : "Select people"}</strong>
+          <strong>
+            {selectedPeers.length
+              ? `${selectedPeers.length} selected`
+              : "Select people"}
+          </strong>
           <span>Share {itemLabel}</span>
         </div>
         <div className="studio-share-people-top-actions">
           <button
             type="button"
-            className="studio-share-people-cancel"
+            className="studio-share-people-icon-btn"
             onClick={onCancel}
             disabled={busy}
+            title="Cancel"
+            aria-label="Cancel"
           >
             <X aria-hidden="true" />
-            Cancel
           </button>
           <button
+            ref={shareBtnRef}
             type="button"
-            className="studio-share-people-confirm"
-            onClick={() =>
-              onShare({
-                delivery: allowFileDelivery ? delivery : "access",
-                permission: delivery === "file" ? "view" : permission,
-              })
-            }
+            className="studio-share-people-icon-btn is-share"
+            onClick={() => {
+              if (busy || selectedPeers.length === 0) return;
+              setConfirmOpen((open) => !open);
+            }}
             disabled={busy || selectedPeers.length === 0}
+            title="Share"
+            aria-label="Share"
+            aria-expanded={confirmOpen}
+            aria-haspopup="dialog"
           >
             <Share2 aria-hidden="true" />
-            Share
+            <ChevronDown aria-hidden="true" />
           </button>
         </div>
       </div>
 
-      <div className="studio-share-people-modes" role="group" aria-label="Share type">
-        <button
-          type="button"
-          className={`studio-share-people-mode${delivery === "access" ? " is-active" : ""}`}
-          onClick={() => setDelivery("access")}
-          disabled={busy}
-        >
-          Access
-        </button>
-        {allowFileDelivery ? (
-          <button
-            type="button"
-            className={`studio-share-people-mode${delivery === "file" ? " is-active" : ""}`}
-            onClick={() => setDelivery("file")}
-            disabled={busy}
-          >
-            File
-          </button>
-        ) : null}
-      </div>
-      {delivery === "access" ? (
-        <div className="studio-share-people-modes is-secondary" role="group" aria-label="Permission">
-          <button
-            type="button"
-            className={`studio-share-people-mode${permission === "view" ? " is-active" : ""}`}
-            onClick={() => setPermission("view")}
-            disabled={busy}
-          >
-            View
-          </button>
-          <button
-            type="button"
-            className={`studio-share-people-mode${permission === "edit" ? " is-active" : ""}`}
-            onClick={() => setPermission("edit")}
-            disabled={busy}
-          >
-            Edit
-          </button>
-          <span className="studio-share-people-mode-hint">
-            {permission === "edit"
-              ? "Can edit live originals — not delete"
-              : "Read, download, copy"}
-          </span>
-        </div>
-      ) : (
-        <p className="studio-share-people-mode-hint studio-share-people-mode-hint-block">
-          Sends a copy into their Messages folder
-        </p>
-      )}
+      {confirmMenu}
 
       {selectedPeers.length > 0 ? (
         <div className="studio-share-people-selected" aria-label="Selected people">
@@ -345,28 +507,34 @@ export function StudioSharePeoplePanel({
                     <button
                       key={person.profileId}
                       type="button"
-                      className={`studio-dm-search-result studio-share-people-row${selected ? " is-selected" : ""}`}
+                      className={`studio-dm-row studio-share-people-bubble${selected ? " is-active" : ""}`}
                       onClick={() => toggleFromPerson(person)}
                       aria-pressed={selected}
                     >
-                      <span className="studio-share-people-check" aria-hidden="true">
-                        {selected ? <Check /> : null}
-                      </span>
-                      <StudioProfileAvatar
-                        size="sm"
-                        src={person.avatarUrl}
-                        displayName={person.displayName}
-                        name={person.username}
-                        alt=""
-                      />
-                      <span className="studio-dm-search-result-copy">
-                        <strong>
-                          <span className="studio-dm-name-text">
-                            {person.displayName?.trim() || person.username}
+                      <span className="studio-dm-row-main">
+                        <span className="studio-dm-row-avatar-wrap">
+                          <StudioProfileAvatar
+                            size="sm"
+                            src={person.avatarUrl}
+                            displayName={person.displayName}
+                            name={person.username}
+                            alt=""
+                          />
+                        </span>
+                        <span className="studio-dm-row-copy">
+                          <strong>
+                            <span className="studio-dm-name-text">
+                              {person.displayName?.trim() || person.username}
+                            </span>
+                            <StudioDmProviderTag tag={person.sellerTag} />
+                          </strong>
+                          <span>@{person.username}</span>
+                        </span>
+                        {selected ? (
+                          <span className="studio-share-people-bubble-check" aria-hidden="true">
+                            <Check />
                           </span>
-                          <StudioDmProviderTag tag={person.sellerTag} />
-                        </strong>
-                        <span>@{person.username}</span>
+                        ) : null}
                       </span>
                     </button>
                   );
@@ -384,7 +552,7 @@ export function StudioSharePeoplePanel({
                     <button
                       key={chat.conversationId}
                       type="button"
-                      className={`studio-dm-search-result is-chat studio-share-people-row${selected ? " is-selected" : ""}`}
+                      className={`studio-dm-row studio-share-people-bubble${selected ? " is-active" : ""}`}
                       onClick={() =>
                         toggleFromPerson({
                           userId: chat.peer.userId,
@@ -396,23 +564,29 @@ export function StudioSharePeoplePanel({
                       }
                       aria-pressed={selected}
                     >
-                      <span className="studio-share-people-check" aria-hidden="true">
-                        {selected ? <Check /> : null}
-                      </span>
-                      <StudioProfileAvatar
-                        size="sm"
-                        src={chat.peer.avatarUrl}
-                        displayName={chat.peer.displayName}
-                        name={chat.peer.username}
-                        alt=""
-                      />
-                      <span className="studio-dm-search-result-copy">
-                        <strong>
-                          <span className="studio-dm-name-text">
-                            {chat.peer.displayName?.trim() || chat.peer.username}
+                      <span className="studio-dm-row-main">
+                        <span className="studio-dm-row-avatar-wrap">
+                          <StudioProfileAvatar
+                            size="sm"
+                            src={chat.peer.avatarUrl}
+                            displayName={chat.peer.displayName}
+                            name={chat.peer.username}
+                            alt=""
+                          />
+                        </span>
+                        <span className="studio-dm-row-copy">
+                          <strong>
+                            <span className="studio-dm-name-text">
+                              {chat.peer.displayName?.trim() || chat.peer.username}
+                            </span>
+                          </strong>
+                          <span>@{chat.peer.username}</span>
+                        </span>
+                        {selected ? (
+                          <span className="studio-share-people-bubble-check" aria-hidden="true">
+                            <Check />
                           </span>
-                        </strong>
-                        <span>@{chat.peer.username}</span>
+                        ) : null}
                       </span>
                     </button>
                   );
@@ -455,46 +629,52 @@ export function StudioSharePeoplePanel({
             <span>Search for someone by username to share.</span>
           </div>
         ) : (
-          <div className="studio-dm-chat-list" role="list">
+          <ul className="studio-dm-conversations studio-share-people-chat-list">
             {conversations.map((row) => {
               const selected = selectedIds.has(row.peer.userId);
               return (
-                <button
-                  key={row.conversationId}
-                  type="button"
-                  role="listitem"
-                  className={`studio-dm-conversation-row studio-share-people-row${selected ? " is-selected" : ""}`}
-                  onClick={() =>
-                    toggleFromPerson({
-                      userId: row.peer.userId,
-                      username: row.peer.username,
-                      displayName: row.peer.displayName,
-                      avatarUrl: row.peer.avatarUrl ?? undefined,
-                      sellerTag: row.peer.sellerTag,
-                    })
-                  }
-                  aria-pressed={selected}
-                >
-                  <span className="studio-share-people-check" aria-hidden="true">
-                    {selected ? <Check /> : null}
-                  </span>
-                  <StudioProfileAvatar
-                    size="sm"
-                    src={row.peer.avatarUrl}
-                    displayName={row.peer.displayName}
-                    name={row.peer.username}
-                    alt=""
-                  />
-                  <span className="studio-dm-conversation-copy">
-                    <strong>
-                      {row.peer.displayName?.trim() || row.peer.username}
-                    </strong>
-                    <span>@{row.peer.username}</span>
-                  </span>
-                </button>
+                <li key={row.conversationId}>
+                  <button
+                    type="button"
+                    className={`studio-dm-row studio-share-people-bubble${selected ? " is-active" : ""}`}
+                    onClick={() =>
+                      toggleFromPerson({
+                        userId: row.peer.userId,
+                        username: row.peer.username,
+                        displayName: row.peer.displayName,
+                        avatarUrl: row.peer.avatarUrl ?? undefined,
+                        sellerTag: row.peer.sellerTag,
+                      })
+                    }
+                    aria-pressed={selected}
+                  >
+                    <span className="studio-dm-row-main">
+                      <span className="studio-dm-row-avatar-wrap">
+                        <StudioProfileAvatar
+                          size="sm"
+                          src={row.peer.avatarUrl}
+                          displayName={row.peer.displayName}
+                          name={row.peer.username}
+                          alt=""
+                        />
+                      </span>
+                      <span className="studio-dm-row-copy">
+                        <strong>
+                          {row.peer.displayName?.trim() || row.peer.username}
+                        </strong>
+                        <span>@{row.peer.username}</span>
+                      </span>
+                      {selected ? (
+                        <span className="studio-share-people-bubble-check" aria-hidden="true">
+                          <Check />
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
       </div>
     </div>

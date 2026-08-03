@@ -13,14 +13,16 @@
   flex: 0 0 auto;
 }
 
+/* One compact header — same height band as other rail heads. */
 .studio-share-people-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   flex: 0 0 auto;
-  min-height: 36px;
-  padding: 4px 10px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--color-cursor-border-soft);
   background: transparent;
 }
@@ -28,15 +30,19 @@
 .studio-share-people-top-copy {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0;
   min-width: 0;
+  line-height: 1.15;
 }
 
 .studio-share-people-top-copy strong {
   font-size: 11px;
   font-weight: 650;
   color: var(--color-cursor-text-bright);
-  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-share-people-top-copy span {
@@ -45,94 +51,179 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.2;
 }
 
 .studio-share-people-top-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   flex: 0 0 auto;
 }
 
-.studio-share-people-cancel,
-.studio-share-people-confirm {
+.studio-share-people-icon-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 26px;
-  padding: 0 8px;
-  border-radius: var(--cursor-radius-md, 8px);
-  border: 1px solid var(--color-cursor-border-soft);
-  background: var(--mos-plate, var(--cursor-surface-raised));
-  color: var(--color-cursor-text-bright);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
+  justify-content: center;
+  gap: 1px;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-cursor-muted);
   cursor: pointer;
 }
 
-.studio-share-people-cancel > svg,
-.studio-share-people-confirm > svg {
-  width: 12px;
-  height: 12px;
+.studio-share-people-icon-btn > svg {
+  width: 14px;
+  height: 14px;
   stroke-width: 2;
 }
 
-.studio-share-people-confirm {
-  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 16%, transparent);
-  border-color: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 42%, var(--color-cursor-border-soft));
+.studio-share-people-icon-btn.is-share {
+  width: auto;
+  min-width: 36px;
+  padding: 0 6px;
+  border-color: var(--color-cursor-border-soft);
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 12%, transparent);
   color: var(--color-cursor-text-bright);
 }
 
-.studio-share-people-confirm:disabled,
-.studio-share-people-cancel:disabled {
-  opacity: 0.45;
+.studio-share-people-icon-btn.is-share > svg:last-child {
+  width: 11px;
+  height: 11px;
+  opacity: 0.75;
+}
+
+.studio-share-people-icon-btn:hover:not(:disabled) {
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-share-people-icon-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.studio-share-people-modes {
+/* Confirm Access/File dropdown (desktop) / bottom sheet (mobile). */
+.studio-share-confirm-menu {
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  box-shadow: 0 10px 28px color-mix(in srgb, #000 18%, transparent);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-share-confirm-menu.is-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  max-width: none;
+  min-width: 0;
+  border-radius: 16px 16px 0 0;
+  padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 32px color-mix(in srgb, #000 22%, transparent);
+}
+
+.studio-share-confirm-sheet-grab {
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-cursor-muted) 35%, transparent);
+}
+
+.studio-share-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: color-mix(in srgb, #000 28%, transparent);
+  cursor: pointer;
+}
+
+.studio-share-confirm-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-cursor-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.studio-share-confirm-modes {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  flex: 0 0 auto;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--color-cursor-border-soft);
 }
 
-.studio-share-people-modes.is-secondary {
-  border-bottom-color: transparent;
-  padding-top: 0;
-}
-
-.studio-share-people-mode {
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: var(--cursor-radius-md, 8px);
+.studio-share-confirm-mode {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
   border: 1px solid var(--color-cursor-border-soft);
   background: transparent;
   color: var(--color-cursor-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   cursor: pointer;
 }
 
-.studio-share-people-mode.is-active {
-  background: var(--mos-plate, var(--cursor-surface-raised));
+.studio-share-confirm-mode.is-active {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 40%, var(--color-cursor-border-soft));
   color: var(--color-cursor-text-bright);
 }
 
-.studio-share-people-mode-hint {
-  font-size: 10px;
+.studio-share-confirm-hint {
+  margin: 0;
+  font-size: 11px;
   color: var(--color-cursor-muted);
-  margin-left: 4px;
+  line-height: 1.35;
 }
 
-.studio-share-people-mode-hint-block {
-  margin: 0;
-  padding: 0 10px 6px;
-  border-bottom: 1px solid var(--color-cursor-border-soft);
+.studio-share-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.studio-share-confirm-dismiss,
+.studio-share-confirm-submit {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-cursor-border-soft);
+  background: transparent;
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-share-confirm-submit {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 42%, var(--color-cursor-border-soft));
+}
+
+.studio-share-confirm-dismiss:disabled,
+.studio-share-confirm-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .studio-share-people-selected {
@@ -178,7 +269,54 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 6px 8px 12px;
+  padding: 0;
+}
+
+.studio-share-people-chat-list {
+  /* reuse .studio-dm-conversations padding/gap */
+}
+
+.studio-share-people-bubble .studio-dm-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.studio-share-people-bubble .studio-dm-row-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--color-cursor-text-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-share-people-bubble .studio-dm-row-copy > span {
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-share-people-bubble-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 22%, transparent);
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-share-people-bubble-check > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.5;
 }
 
 .studio-share-people-section-label {
@@ -205,4 +343,40 @@
   width: 22px;
   height: 22px;
   opacity: 0.7;
+}
+
+/* Legacy class names kept for Copy-to header in Shell. */
+.studio-share-people-cancel,
+.studio-share-people-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: var(--cursor-radius-md, 8px);
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  color: var(--color-cursor-text-bright);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-share-people-cancel > svg,
+.studio-share-people-confirm > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.studio-share-people-confirm {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 42%, var(--color-cursor-border-soft));
+}
+
+.studio-share-people-confirm:disabled,
+.studio-share-people-cancel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

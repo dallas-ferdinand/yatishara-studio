@@ -7252,8 +7252,9 @@ export function StudioShell({
   const copyingToFolder = Boolean(copyDestRequest);
   const effectiveMessagesRail = isMessagesRail && !pickingFromFiles;
   const effectiveSocialRail = isSocialRail && !pickingFromFiles;
-  /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages. */
-  const effectiveFilesRail = isFilesTab && !pickingFromFiles;
+  /** Files workspace tab owns the left rail (Windows-style nav), same Panel as Messages.
+   * Share-to-people temporarily replaces that nav (must not stay stuck behind FilesNavPane). */
+  const effectiveFilesRail = isFilesTab && !pickingFromFiles && !sharingToPeople;
   // My Assets uses the file manager rail (list from Files); Network = filters;
   // My offers/jobs = Messages.
   const effectiveNetworkRail =
@@ -20343,7 +20344,8 @@ export function StudioShell({
           {!effectiveSocialRail &&
           !effectiveMessagesRail &&
           !effectiveNetworkRail &&
-          !effectiveFilesRail ? (
+          !effectiveFilesRail &&
+          !sharingToPeople ? (
             <div className="flex items-center gap-1">
               <StudioAddMenu
                 open={addMenuOpen}
@@ -21207,6 +21209,7 @@ export function StudioShell({
             onOpenStudioShareItem={(item) => {
               if (!item?.itemId || !item?.itemKind) return;
               if (item.itemKind === "folder") {
+                openFiles();
                 setActiveFolderId(item.itemId);
                 setNavTrail(() => {
                   const root = topFolders?.[0];

@@ -8464,6 +8464,24 @@ textarea.cursor-input {
 }
 .desk-explorer-context-submenu {
   z-index: 651;
+  /* Slightly darker than primary context menu so nested menus read as secondary. */
+  background: color-mix(
+    in srgb,
+    var(--cursor-surface-raised, var(--mos-plate, #2a2a2c)) 78%,
+    #000 22%
+  );
+}
+
+.desk-explorer-context-submenu .cursor-tab-context-sep {
+  display: none;
+}
+
+[data-appearance="light"] .desk-explorer-context-submenu {
+  background: color-mix(
+    in srgb,
+    var(--cursor-surface-raised, var(--mos-plate, #f5f5f7)) 88%,
+    #000 12%
+  );
 }
 
 .desk-explorer-context-submenu.is-emoji-grid {
