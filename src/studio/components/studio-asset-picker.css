@@ -6,6 +6,11 @@
   gap: 8px;
   min-height: 32px;
   margin-bottom: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 2px;
+  background: var(--mos-plate, var(--mos-panel, #ececf0));
 }
 
 .studio-asset-picker-back {
@@ -281,20 +286,69 @@
   stroke-width: 2;
 }
 
-/* Desktop: center as a dialog instead of the mobile full-bleed sheet. */
-@media (min-width: 900px) {
-  .studio-asset-picker-sheet.studio-mobile-app-menu-sheet {
-    top: 50%;
-    left: 50%;
-    right: auto;
-    bottom: auto;
-    transform: translate(-50%, -50%);
-    width: min(480px, 92vw);
-    height: min(70vh, 640px);
-    max-height: min(70vh, 640px);
-    border-radius: var(--cursor-radius-xl, 12px);
-    box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.28));
-  }
+/* Mobile pick sheet: fill height under grab handle; body scrolls. */
+.studio-asset-picker-sheet.studio-mobile-app-menu-sheet {
+  z-index: 130;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.studio-asset-picker-body.studio-mobile-app-menu-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0;
+  padding: 0 12px 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.studio-asset-picker-action-bar.studio-asset-pick-footer {
+  border-top: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+}
+
+.studio-asset-picker-desk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  padding: 0 10px;
+  border-bottom: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-page, var(--mos-panel, #f5f5f7));
+}
+
+.studio-asset-picker-desk-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-cursor-text-bright);
+}
+
+/* Desktop: center as a dialog instead of the mobile bottom sheet. */
+.studio-asset-picker-sheet.is-desktop-dialog {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  width: min(480px, 92vw);
+  height: min(70vh, 640px);
+  max-height: min(70vh, 640px);
+  border-radius: var(--cursor-radius-xl, 12px);
+  box-shadow: var(--cursor-shadow-pop, 0 18px 48px rgba(0, 0, 0, 0.28));
+  animation: none;
 }
 
 /* —— Desktop left-rail pick chrome: selected previews + action footer —— */

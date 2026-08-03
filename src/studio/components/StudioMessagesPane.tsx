@@ -3561,7 +3561,7 @@ export function StudioMessagesPane({
                   asSheet
                 />
               </>,
-              document.body,
+              document.querySelector(".studio-polish") ?? document.body,
             )
           : createPortal(
               <div
