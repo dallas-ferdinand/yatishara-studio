@@ -3429,7 +3429,7 @@ export function StudioMessagesPane({
               label: "Choose from Studio Files",
               icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
               onSelect: () => {
-                if (onRequestPickAsset && !isMobile) {
+                if (onRequestPickAsset) {
                   onRequestPickAsset({
                     pickMode: "choose",
                     kinds: ["image", "video", "audio", "document"],
@@ -3450,7 +3450,7 @@ export function StudioMessagesPane({
               label: "Share from Studio Files",
               icon: <Share2 className="h-3.5 w-3.5" aria-hidden="true" />,
               onSelect: () => {
-                if (onRequestPickAsset && !isMobile) {
+                if (onRequestPickAsset) {
                   onRequestPickAsset({
                     pickMode: "share",
                     pickAnyStudio: true,

@@ -1352,6 +1352,8 @@ export function StudioShell({
   const assetPickShareBtnRef = useRef(null);
   const assetPickShareMenuRef = useRef(null);
   const [assetPickSharePos, setAssetPickSharePos] = useState({ top: 0, left: 0 });
+  const assetPickRequestRef = useRef(null);
+  assetPickRequestRef.current = assetPickRequest;
   /** Files-rail share-to-people session (context Share → multi-select peers). */
   const [sharePeopleRequest, setSharePeopleRequest] = useState(null);
   const [sharePeopleSelected, setSharePeopleSelected] = useState([]);
@@ -1365,15 +1367,58 @@ export function StudioShell({
   useStudioBackground();
 
   const endAssetPick = useCallback(
-    (reason = "cancel", request = assetPickRequest) => {
-      const req = request;
+    (reason = "cancel", request = assetPickRequestRef.current) => {
+      const req = request ?? assetPickRequestRef.current;
       setAssetPickRequest(null);
       setAssetPickSelected([]);
       setAssetPickShareOpen(false);
+      if (isMobile) {
+        filesDockRestoreAfterKeyboardRef.current = false;
+        filesDockOpenGenRef.current += 1;
+        paintMobileFilesDock(false);
+        mobileBackStack.release("files-dock");
+        setFilesDockExpanded(false);
+        setMobileSection((section) =>
+          section === "files" ? "composer" : section,
+        );
+      }
       if (reason === "cancel") req?.onCancel?.();
     },
-    [assetPickRequest],
+    [isMobile],
   );
+
+  function startAssetPick(request) {
+    const rootFolder = topFolders?.[0];
+    if (rootFolder) {
+      setActiveFolderId(rootFolder._id);
+      setNavTrail([{ id: rootFolder._id, name: "Files" }]);
+    }
+    setAssetPickSelected([]);
+    setAssetPickShareOpen(false);
+    setAssetPickRequest({
+      kinds: request.kinds ?? ["image"],
+      pickAnyStudio: Boolean(request.pickAnyStudio),
+      pickMode: request.pickMode ?? "choose",
+      title: request.title ?? "Pick files to send",
+      maxSelected: request.maxSelected ?? 10,
+      startedOnTab: activeTab,
+      onConfirm: (assets, opts) => {
+        if (request.onConfirm) {
+          request.onConfirm(assets, opts);
+        } else if (assets[0]) {
+          request.onPick?.(assets[0]);
+        }
+      },
+      onPick: request.onPick,
+      onCancel: () => {
+        request.onCancel?.();
+      },
+    });
+    if (isMobile) {
+      setFilesDockMounted(true);
+      openMobileSection("files");
+    }
+  }
   const endSharePeople = useCallback(() => {
     setSharePeopleRequest(null);
     setSharePeopleSelected([]);
@@ -4763,6 +4808,15 @@ export function StudioShell({
       return;
     }
     if (section === "composer") {
+      // Back / Folder close during DM Choose|Share must cancel pick, not leave
+      // a dangling assetPickRequest while the Generate Files dock is gone.
+      if (assetPickRequestRef.current) {
+        endAssetPick("cancel", assetPickRequestRef.current);
+        setSettingsOpen(false);
+        setHistoryOpen(false);
+        setMobileAppMenuOpen(false);
+        return;
+      }
       // Paint close first (same as open) — sync Shell setState on the tap frame
       // is what made close feel like it "loads".
       const closeGen = (filesDockOpenGenRef.current += 1);
@@ -9720,6 +9774,15 @@ export function StudioShell({
         .studio-files-mobile-sheet .studio-files-dock-body > .cursor-explorer-body {
           flex: 1 1 auto;
           min-height: 0;
+        }
+        .studio-files-dock .studio-asset-pick-chrome,
+        .studio-files-mobile-sheet .studio-asset-pick-chrome {
+          flex: 0 0 auto;
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
+        }
+        .studio-files-dock .studio-asset-pick-selected,
+        .studio-files-mobile-sheet .studio-asset-pick-selected {
+          background: var(--mos-plate, var(--mos-panel, #ececf0));
         }
         .studio-files-dock .cursor-panel-search,
         .studio-files-mobile-sheet .cursor-panel-search {
@@ -20902,9 +20965,9 @@ export function StudioShell({
                           const delivery = assetPickShareDelivery;
                           const permission = assetPickSharePermission;
                           setAssetPickShareOpen(false);
-                          setAssetPickRequest(null);
-                          setAssetPickSelected([]);
-                          req?.onConfirm?.(picked, { delivery, permission });
+                          const onConfirm = req?.onConfirm;
+                          endAssetPick("confirm", req);
+                          onConfirm?.(picked, { delivery, permission });
                         }}
                         onDismiss={() => setAssetPickShareOpen(false)}
                         asSheet
@@ -20936,9 +20999,9 @@ export function StudioShell({
                           const delivery = assetPickShareDelivery;
                           const permission = assetPickSharePermission;
                           setAssetPickShareOpen(false);
-                          setAssetPickRequest(null);
-                          setAssetPickSelected([]);
-                          req?.onConfirm?.(picked, { delivery, permission });
+                          const onConfirm = req?.onConfirm;
+                          endAssetPick("confirm", req);
+                          onConfirm?.(picked, { delivery, permission });
                         }}
                         onDismiss={() => setAssetPickShareOpen(false)}
                         asSheet={false}
@@ -21380,46 +21443,9 @@ export function StudioShell({
             onOpenChat={openChatWith}
             onOpenOffersJobs={() => openNetworkTab()}
             showDmChatListWhenEmpty={isMobile}
-            onRequestPickAsset={
-              isMobile
-                ? undefined
-                : (request) => {
-                    // Always start at the signed-in user's root — never another
-                    // client's tree (queries are owner-scoped; root resets the trail).
-                    const rootFolder = topFolders?.[0];
-                    if (rootFolder) {
-                      setActiveFolderId(rootFolder._id);
-                      setNavTrail([{ id: rootFolder._id, name: "Files" }]);
-                    }
-                    setAssetPickSelected([]);
-                    setAssetPickShareOpen(false);
-                    setAssetPickRequest({
-                      kinds: request.kinds ?? ["image"],
-                      pickAnyStudio: Boolean(request.pickAnyStudio),
-                      pickMode: request.pickMode ?? "choose",
-                      title: request.title ?? "Pick files to send",
-                      maxSelected: request.maxSelected ?? 10,
-                      startedOnTab: activeTab,
-                      onConfirm: (assets, opts) => {
-                        setAssetPickRequest(null);
-                        setAssetPickSelected([]);
-                        setAssetPickShareOpen(false);
-                        if (request.onConfirm) {
-                          request.onConfirm(assets, opts);
-                        } else if (assets[0]) {
-                          request.onPick?.(assets[0]);
-                        }
-                      },
-                      onPick: request.onPick,
-                      onCancel: () => {
-                        setAssetPickRequest(null);
-                        setAssetPickSelected([]);
-                        setAssetPickShareOpen(false);
-                        request.onCancel?.();
-                      },
-                    });
-                  }
-            }
+            onRequestPickAsset={(request) => {
+              startAssetPick(request);
+            }}
             onOpenStudioShareItem={(item) => {
               if (!item?.itemId || !item?.itemKind) return;
               if (item.itemKind === "folder") {
@@ -21543,12 +21569,221 @@ export function StudioShell({
       {isMobile && filesDockMounted ? (
         <StudioFilesMobileSheet
           expanded={filesDockExpanded}
+          picking={Boolean(assetPickRequest)}
           onClose={() => {
+            if (assetPickRequest) {
+              endAssetPick("cancel", assetPickRequest);
+              return;
+            }
             filesDockRestoreAfterKeyboardRef.current = false;
             deferMobileFilesBusyRef.current = false;
             composerWantedKeyboardRef.current = true;
             openMobileSection("composer");
           }}
+          pickChromeSlot={
+            assetPickRequest ? (
+              <div className="studio-asset-pick-chrome">
+                {assetPickSelected.length > 0 ? (
+                  <div
+                    className="studio-asset-pick-selected"
+                    aria-label={`${assetPickSelected.length} selected`}
+                  >
+                    <div className="studio-asset-pick-selected-scroller">
+                      {assetPickSelected.map((item) => {
+                        const thumb = item.signedThumbnailUrl;
+                        return (
+                          <div
+                            key={item._id}
+                            className="studio-asset-pick-selected-thumb"
+                            title={item.name}
+                          >
+                            {thumb && item.kind !== "audio" ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={thumb} alt="" />
+                            ) : item.kind === "audio" ? (
+                              <StudioOrbAvatar
+                                seed={orbSeedForVoice(String(item._id), item.name)}
+                                className="studio-asset-pick-audio-orb"
+                              />
+                            ) : item.kind === "video" ? (
+                              <Video aria-hidden="true" />
+                            ) : item.kind === "folder" ||
+                              item.itemKind === "folder" ? (
+                              <Folder aria-hidden="true" />
+                            ) : (
+                              <ImageIcon aria-hidden="true" />
+                            )}
+                            <button
+                              type="button"
+                              className="studio-asset-pick-selected-remove"
+                              aria-label={`Remove ${item.name}`}
+                              onClick={() =>
+                                setAssetPickSelected((prev) =>
+                                  prev.filter((picked) => picked._id !== item._id),
+                                )
+                              }
+                            >
+                              <X aria-hidden="true" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="studio-asset-pick-footer" role="status">
+                  <span
+                    className="studio-asset-pick-count"
+                    aria-label={`${assetPickSelected.length} selected`}
+                  >
+                    {assetPickSelected.length}
+                  </span>
+                  <span className="studio-asset-pick-footer-copy">
+                    {assetPickSelected.length === 1
+                      ? assetPickSelected[0]?.name || "1 item"
+                      : assetPickSelected.length > 1
+                        ? `${assetPickSelected.length} items`
+                        : assetPickRequest.title || "Pick files from your Files"}
+                  </span>
+                  {assetPickRequest.pickMode === "share" &&
+                  assetPickRequest.pickAnyStudio &&
+                  activeFolder &&
+                  !activeFolder.systemKind &&
+                  navTrail.length > 1 ? (
+                    <button
+                      type="button"
+                      className="studio-asset-pick-folder-btn"
+                      onClick={() => {
+                        const folderId = activeFolder._id;
+                        const max = assetPickRequest.maxSelected ?? 10;
+                        setAssetPickSelected((prev) => {
+                          const exists = prev.some((item) => item._id === folderId);
+                          if (exists) {
+                            return prev.filter((item) => item._id !== folderId);
+                          }
+                          if (prev.length >= max) {
+                            toast.message(`You can pick up to ${max} items`);
+                            return prev;
+                          }
+                          return [
+                            ...prev,
+                            {
+                              _id: folderId,
+                              name: activeFolder.name,
+                              kind: "folder",
+                              mimeType: "",
+                              path: studioPathForFolder(activeFolder),
+                              itemKind: "folder",
+                              itemId: String(folderId),
+                              studioKind: "folder",
+                            },
+                          ];
+                        });
+                      }}
+                    >
+                      {assetPickSelected.some(
+                        (item) => item._id === activeFolder._id,
+                      )
+                        ? "Folder added"
+                        : "This folder"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="studio-asset-pick-icon-btn is-close"
+                    onClick={() => endAssetPick("cancel", assetPickRequest)}
+                    title="Close"
+                    aria-label="Close"
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                  <button
+                    ref={assetPickShareBtnRef}
+                    type="button"
+                    className="studio-asset-pick-icon-btn is-primary"
+                    disabled={assetPickSelected.length === 0}
+                    onClick={() => {
+                      if (assetPickSelected.length === 0) return;
+                      const req = assetPickRequest;
+                      const picked = assetPickSelected;
+                      if (req?.pickMode === "share") {
+                        setAssetPickShareDelivery("access");
+                        setAssetPickSharePermission("view");
+                        setAssetPickShareOpen((open) => !open);
+                        return;
+                      }
+                      const onConfirm = req?.onConfirm;
+                      endAssetPick("confirm", req);
+                      if (onConfirm) {
+                        onConfirm(picked, {
+                          delivery: "file",
+                          permission: "view",
+                        });
+                      } else if (picked[0]) {
+                        req?.onPick?.(picked[0]);
+                      }
+                    }}
+                    title={
+                      assetPickRequest.pickMode === "share" ? "Share" : "Send"
+                    }
+                    aria-label={
+                      assetPickRequest.pickMode === "share" ? "Share" : "Send"
+                    }
+                    aria-expanded={
+                      assetPickRequest.pickMode === "share"
+                        ? assetPickShareOpen
+                        : undefined
+                    }
+                    aria-haspopup={
+                      assetPickRequest.pickMode === "share" ? "dialog" : undefined
+                    }
+                  >
+                    {assetPickRequest.pickMode === "share" ? (
+                      <Share2 aria-hidden="true" />
+                    ) : null}
+                    <span>
+                      {assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                    </span>
+                  </button>
+                </div>
+                {assetPickShareOpen
+                  ? createPortal(
+                      <>
+                        <button
+                          type="button"
+                          className="studio-share-confirm-backdrop"
+                          aria-label="Dismiss"
+                          onClick={() => setAssetPickShareOpen(false)}
+                        />
+                        <ShareConfirmMenu
+                          delivery={assetPickShareDelivery}
+                          setDelivery={setAssetPickShareDelivery}
+                          permission={assetPickSharePermission}
+                          setPermission={setAssetPickSharePermission}
+                          allowFileDelivery={assetPickSelected.every(
+                            (item) => (item.itemKind ?? "asset") === "asset",
+                          )}
+                          busy={false}
+                          onConfirm={() => {
+                            const req = assetPickRequest;
+                            const picked = assetPickSelected;
+                            const delivery = assetPickShareDelivery;
+                            const permission = assetPickSharePermission;
+                            setAssetPickShareOpen(false);
+                            const onConfirm = req?.onConfirm;
+                            endAssetPick("confirm", req);
+                            onConfirm?.(picked, { delivery, permission });
+                          }}
+                          onDismiss={() => setAssetPickShareOpen(false)}
+                          asSheet
+                        />
+                      </>,
+                      document.querySelector(".studio-polish") ?? document.body,
+                    )
+                  : null}
+              </div>
+            ) : null
+          }
           addMenuOpen={addMenuOpen}
           setAddMenuOpen={setAddMenuOpen}
           onCreateAction={runCreateAction}
@@ -21568,7 +21803,10 @@ export function StudioShell({
           setNavTrail={setNavTrail}
           onOpenPath={handleOpenPath}
           onEntryOpen={handleEntryOpen}
-          onMobileAttach={(entry, intentOrX, maybeY) => {
+          onMobileAttach={
+            assetPickRequest
+              ? undefined
+              : (entry, intentOrX, maybeY) => {
             // Never attach synchronously from touchend — Android Chrome drops
             // that work. Use FileTree's snapshotted drop intent (projected
             // caret coords). Files dock stays open so multi-attach is easy.
@@ -21588,7 +21826,8 @@ export function StudioShell({
               }, 0);
             });
             return true;
-          }}
+          }
+          }
           searchState={searchState}
           deferredSearch={deferredSearch}
           setContextMenu={setContextMenu}
@@ -21615,6 +21854,11 @@ export function StudioShell({
           onCancelTransfer={cancelFileTransfer}
           onDismissTransfer={dismissFileTransfer}
           onRetryTransfer={retryFileTransfer}
+          pickedPaths={
+            assetPickRequest
+              ? assetPickSelected.map((item) => item.path).filter(Boolean)
+              : null
+          }
           filesBrowseMode={filesBrowseMode}
           onFilesBrowseModeChange={setFilesBrowseMode}
           assetUrlExpiresUnix={assetUrlExpiresUnix}
@@ -29253,6 +29497,7 @@ function StudioMobileStage({ enabled, children }) {
 /** In-flow Files dock under Generate — height peek↔full via handle drag (landing menu parity). */
 function StudioFilesMobileSheet({
   expanded = false,
+  picking = false,
   onClose,
   addMenuOpen,
   setAddMenuOpen,
@@ -29269,6 +29514,7 @@ function StudioFilesMobileSheet({
   viewMode = "grid",
   onToggleViewMode,
   sharePeopleSlot = null,
+  pickChromeSlot = null,
   ...explorerProps
 }) {
   const dockRef = useRef(null);
@@ -29474,11 +29720,11 @@ function StudioFilesMobileSheet({
   return (
     <div
       ref={dockRef}
-      className={`studio-files-dock studio-files-mobile-sheet${expanded ? " is-expanded" : ""}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}`}
+      className={`studio-files-dock studio-files-mobile-sheet${expanded ? " is-expanded" : ""}${isFull ? " is-full" : ""}${dragging ? " is-dragging" : ""}${settling ? " is-settling" : ""}${picking ? " is-picking" : ""}`}
       role="dialog"
       aria-modal={expanded ? "true" : undefined}
       aria-hidden={expanded ? undefined : "true"}
-      aria-label="Files"
+      aria-label={picking ? "Pick files" : "Files"}
     >
       <div
         className="studio-files-dock-handle"
@@ -29496,52 +29742,57 @@ function StudioFilesMobileSheet({
         {sharePeopleSlot ? (
           sharePeopleSlot
         ) : (
-          <StudioFilesExplorerBody
-            {...explorerProps}
-            search={search}
-            setSearch={setSearch}
-            typeFilter={typeFilter}
-            setTypeFilter={setTypeFilter}
-            breadcrumbPath={breadcrumbPath}
-            onBreadcrumbNavigate={onBreadcrumbNavigate}
-            onBreadcrumbDrop={onBreadcrumbDrop}
-            isMobile
-            showSearch
-            showPathbar
-            chromeLayout="sidebar"
-            viewMode={viewMode}
-            onDropFiles={onUploadFiles}
-            pathbarTools={(
-              <>
-                {onToggleViewMode ? (
-                  <button
-                    type="button"
-                    className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
-                    title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                    aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
-                    onClick={onToggleViewMode}
-                  >
-                    {viewMode === "grid" ? (
-                      <List className="h-3.5 w-3.5" aria-hidden="true" />
-                    ) : (
-                      <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
-                    )}
-                  </button>
-                ) : null}
-                <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
-                <input
-                  ref={fileInputRef}
-                  className="hidden"
-                  type="file"
-                  multiple
-                  onChange={(event) => {
-                    void onUploadFiles(event.currentTarget.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </>
-            )}
-          />
+          <>
+            <StudioFilesExplorerBody
+              {...explorerProps}
+              search={search}
+              setSearch={setSearch}
+              typeFilter={typeFilter}
+              setTypeFilter={setTypeFilter}
+              breadcrumbPath={breadcrumbPath}
+              onBreadcrumbNavigate={onBreadcrumbNavigate}
+              onBreadcrumbDrop={onBreadcrumbDrop}
+              isMobile
+              showSearch
+              showPathbar
+              chromeLayout="sidebar"
+              viewMode={viewMode}
+              onDropFiles={onUploadFiles}
+              pathbarTools={(
+                <>
+                  {onToggleViewMode ? (
+                    <button
+                      type="button"
+                      className="studio-settings-pill studio-settings-trigger studio-file-view-toggle"
+                      title={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                      aria-label={viewMode === "grid" ? "Switch to list" : "Switch to grid"}
+                      onClick={onToggleViewMode}
+                    >
+                      {viewMode === "grid" ? (
+                        <List className="h-3.5 w-3.5" aria-hidden="true" />
+                      ) : (
+                        <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                      )}
+                    </button>
+                  ) : null}
+                  {!picking ? (
+                    <StudioAddMenu open={addMenuOpen} setOpen={setAddMenuOpen} onAction={onCreateAction} />
+                  ) : null}
+                  <input
+                    ref={fileInputRef}
+                    className="hidden"
+                    type="file"
+                    multiple
+                    onChange={(event) => {
+                      void onUploadFiles(event.currentTarget.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </>
+              )}
+            />
+            {pickChromeSlot}
+          </>
         )}
       </div>
     </div>
