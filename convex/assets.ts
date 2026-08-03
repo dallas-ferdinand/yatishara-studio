@@ -281,11 +281,20 @@ export const signedReadUrl = authedQuery({
     /** Bunny Optimizer quality 1–100 for images. Default 100 (downloads / gen). */
     quality: v.optional(v.number()),
   },
-  returns: v.string(),
+  returns: v.union(v.string(), v.null()),
   handler: async (ctx, args) => {
-    const asset = await requireAssetOwnerOrShare(ctx, args.assetId);
+    let asset: Doc<"assets">;
+    try {
+      asset = await requireAssetOwnerOrShare(ctx, args.assetId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message === "Unauthorized" || message === "Asset not found") {
+        return null;
+      }
+      throw error;
+    }
     if (!asset.bunnyPath) {
-      throw new Error("Asset has no Bunny path");
+      return null;
     }
     return await signBunnyFullUrl(
       asset.bunnyPath,

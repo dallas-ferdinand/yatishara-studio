@@ -555,23 +555,28 @@ export const shareItems = authedMutation({
         conversationId = await openConversationWithUser(ctx, peerUserId);
       }
 
-      let dmItems: Array<{
-        itemKind: StudioShareItemKind;
-        itemId: string;
-        name: string;
-      }>;
-
       if (delivery === "file") {
         const messagesFolderId = await ensureMessagesFolder(
           ctx,
           peerUserId,
           rootId,
         );
-        dmItems = [];
+        const cardItems: Array<{
+          itemKind: StudioShareItemKind;
+          itemId: string;
+          sourceItemId: string;
+          name: string;
+        }> = [];
+        let peerNote = note;
+        let lastMediaPreview = studioShareListPreview(
+          resolvedItems.map((item) => ({ name: item.name })),
+          peerNote,
+        );
+
         for (const item of resolvedItems) {
           const source = item.sourceAsset!;
           const now = Date.now();
-          const assetId = await ctx.db.insert("assets", {
+          const destAssetId = await ctx.db.insert("assets", {
             ownerId: peerUserId,
             folderId: messagesFolderId,
             name: source.name,
@@ -591,15 +596,15 @@ export const shareItems = authedMutation({
           const bunnyPath = buildAssetPath({
             userId: peerUserId,
             folderId: messagesFolderId,
-            assetId,
+            assetId: destAssetId,
             filename: source.name,
           });
-          await ctx.db.patch(assetId, { bunnyPath, updatedAt: now });
+          await ctx.db.patch(destAssetId, { bunnyPath, updatedAt: now });
           await ctx.scheduler.runAfter(
             0,
             internal.studioShareActions.copySharedMedia,
             {
-              destAssetId: assetId,
+              destAssetId,
               destOwnerId: peerUserId,
               sourceBunnyPath: source.bunnyPath!,
               destBunnyPath: bunnyPath,
@@ -607,31 +612,81 @@ export const shareItems = authedMutation({
               sourceThumbnailPath: source.thumbnailPath,
             },
           );
-          dmItems.push({
-            itemKind: "asset",
-            itemId: assetId,
-            name: source.name,
-          });
           sharedCount += 1;
+
+          // Chat shows real media bubbles for images/videos (source asset —
+          // both peers can sign). Peer still gets a Messages-folder copy.
+          if (source.kind === "image" || source.kind === "video") {
+            const messageId = await ctx.db.insert("dmMessages", {
+              conversationId,
+              senderId: ctx.user._id,
+              body: peerNote,
+              kind: source.kind,
+              assetId: source._id,
+              contentType: source.mimeType,
+              createdAt: now,
+            });
+            messageIds.push(messageId);
+            lastMediaPreview =
+              source.kind === "image"
+                ? peerNote.trim() || "Photo"
+                : peerNote.trim() || "Video";
+            peerNote = "";
+          } else {
+            cardItems.push({
+              itemKind: "asset",
+              itemId: destAssetId,
+              sourceItemId: source._id,
+              name: source.name,
+            });
+          }
         }
-      } else {
-        await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
-        for (const item of resolvedItems) {
-          await upsertGrant(ctx, {
-            fromUserId: ctx.user._id,
-            toUserId: peerUserId,
-            itemKind: item.itemKind,
-            itemId: item.itemId,
-            permission,
+
+        if (cardItems.length > 0) {
+          const now = Date.now();
+          const messageId = await ctx.db.insert("dmMessages", {
+            conversationId,
+            senderId: ctx.user._id,
+            body: peerNote,
+            kind: "studio_share",
+            sharedItems: cardItems,
+            createdAt: now,
           });
-          sharedCount += 1;
+          messageIds.push(messageId);
+          lastMediaPreview = studioShareListPreview(cardItems, peerNote);
         }
-        dmItems = resolvedItems.map((item) => ({
+
+        const patchNow = Date.now();
+        const isLow =
+          (await ctx.db.get(conversationId))!.userLowId === ctx.user._id;
+        await ctx.db.patch(conversationId, {
+          lastMessageAt: patchNow,
+          lastMessagePreview: lastMediaPreview,
+          lastMessageSenderId: ctx.user._id,
+          ...(isLow
+            ? { lowLastReadAt: patchNow, lowTypingAt: 0 }
+            : { highLastReadAt: patchNow, highTypingAt: 0 }),
+        });
+        conversationIds.push(conversationId);
+        continue;
+      }
+
+      await ensureSharedWithMeFolder(ctx, peerUserId, rootId);
+      for (const item of resolvedItems) {
+        await upsertGrant(ctx, {
+          fromUserId: ctx.user._id,
+          toUserId: peerUserId,
           itemKind: item.itemKind,
           itemId: item.itemId,
-          name: item.name,
-        }));
+          permission,
+        });
+        sharedCount += 1;
       }
+      const dmItems = resolvedItems.map((item) => ({
+        itemKind: item.itemKind,
+        itemId: item.itemId,
+        name: item.name,
+      }));
 
       const now = Date.now();
       const messageId = await ctx.db.insert("dmMessages", {
@@ -985,6 +1040,7 @@ export async function hydrateStudioShareCard(
   ctx: QueryCtx,
   row: Doc<"dmMessages">,
   expiresUnix: number,
+  viewerId?: Id<"users">,
 ): Promise<
   | {
       items: Array<{
@@ -1002,13 +1058,52 @@ export async function hydrateStudioShareCard(
   const items = row.sharedItems ?? [];
   const hydrated = await Promise.all(
     items.map(async (item) => {
-      const live = await hydrateLiveItem(
-        ctx,
-        item.itemKind,
-        item.itemId,
-        expiresUnix,
-      );
+      const candidates = [
+        ...new Set(
+          [item.itemId, item.sourceItemId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ];
+      // Prefer an id the viewer owns / has a grant on (file copies store peer id).
+      let chosenId: string | null = null;
+      let live: Awaited<ReturnType<typeof hydrateLiveItem>> = null;
+      if (viewerId) {
+        for (const candidate of candidates) {
+          const level = await viewerSharePermission(
+            ctx,
+            viewerId,
+            item.itemKind,
+            candidate,
+          );
+          if (!level) continue;
+          const next = await hydrateLiveItem(
+            ctx,
+            item.itemKind,
+            candidate,
+            expiresUnix,
+          );
+          if (!next) continue;
+          chosenId = candidate;
+          live = next;
+          break;
+        }
+      }
       if (!live) {
+        for (const candidate of candidates) {
+          const next = await hydrateLiveItem(
+            ctx,
+            item.itemKind,
+            candidate,
+            expiresUnix,
+          );
+          if (!next) continue;
+          chosenId = candidate;
+          live = next;
+          break;
+        }
+      }
+      if (!live || !chosenId) {
         return {
           itemKind: item.itemKind,
           itemId: item.itemId,
@@ -1018,7 +1113,7 @@ export async function hydrateStudioShareCard(
       }
       return {
         itemKind: item.itemKind,
-        itemId: item.itemId,
+        itemId: chosenId,
         name: live.name,
         thumbnailUrl: live.thumbnailUrl,
         assetKind: live.assetKind,

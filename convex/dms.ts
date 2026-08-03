@@ -39,12 +39,14 @@ const IMAGE_PREVIEW = "Photo";
 const POST_PREVIEW = "Post";
 const COMMENT_PREVIEW = "Comment";
 const STUDIO_SHARE_PREVIEW = "Shared files";
+const VIDEO_PREVIEW = "Video";
 const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 const dmMessageKind = v.union(
   v.literal("text"),
   v.literal("voice"),
   v.literal("image"),
+  v.literal("video"),
   v.literal("post"),
   v.literal("comment"),
   v.literal("studio_share"),
@@ -57,6 +59,7 @@ const replySnippet = v.object({
   fromMe: v.boolean(),
   audioUrl: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
+  videoUrl: v.optional(v.string()),
   durationSec: v.optional(v.number()),
 });
 
@@ -127,6 +130,15 @@ function replyPreviewBody(row: Doc<"dmMessages">): string {
         ? `${caption.slice(0, REPLY_BODY_MAX)}…`
         : caption;
     return `${IMAGE_PREVIEW} · ${clipped}`;
+  }
+  if (kind === "video") {
+    const caption = row.body.trim();
+    if (!caption) return VIDEO_PREVIEW;
+    const clipped =
+      caption.length > REPLY_BODY_MAX
+        ? `${caption.slice(0, REPLY_BODY_MAX)}…`
+        : caption;
+    return `${VIDEO_PREVIEW} · ${clipped}`;
   }
   if (kind === "studio_share") {
     const note = row.body.trim();
@@ -242,7 +254,12 @@ async function resolveDmMediaUrls(
   ctx: QueryCtx,
   row: Doc<"dmMessages">,
   expiresUnix: number,
-): Promise<{ audioUrl?: string; imageUrl?: string; contentType?: string }> {
+): Promise<{
+  audioUrl?: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  contentType?: string;
+}> {
   const kind = row.kind ?? "text";
   if (!row.assetId) {
     return { contentType: row.contentType };
@@ -265,6 +282,12 @@ async function resolveDmMediaUrls(
     if (kind === "image") {
       return {
         imageUrl: url,
+        contentType: row.contentType ?? asset.mimeType,
+      };
+    }
+    if (kind === "video") {
+      return {
+        videoUrl: url,
         contentType: row.contentType ?? asset.mimeType,
       };
     }
@@ -456,6 +479,13 @@ function conversationPreviewFromMessage(row: Doc<"dmMessages">): string {
       ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
       : caption;
   }
+  if (kind === "video") {
+    const caption = row.body.trim();
+    if (!caption) return VIDEO_PREVIEW;
+    return caption.length > DM_PREVIEW_MAX
+      ? `${caption.slice(0, DM_PREVIEW_MAX)}…`
+      : caption;
+  }
   if (kind === "studio_share") {
     const note = row.body.trim();
     if (note) {
@@ -511,9 +541,10 @@ type StudioShareCard = {
 type ListedDmMessage = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
+  kind: "text" | "voice" | "image" | "video" | "post" | "comment" | "studio_share";
   audioUrl?: string;
   imageUrl?: string;
+  videoUrl?: string;
   contentType?: string;
   durationSec?: number;
   fromMe: boolean;
@@ -521,10 +552,11 @@ type ListedDmMessage = {
   replyTo?: {
     _id: Id<"dmMessages">;
     body: string;
-    kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
+    kind: "text" | "voice" | "image" | "video" | "post" | "comment" | "studio_share";
     fromMe: boolean;
     audioUrl?: string;
     imageUrl?: string;
+    videoUrl?: string;
     durationSec?: number;
   };
   feedShare?: FeedShareCard;
@@ -587,6 +619,7 @@ async function listConversationMessages(
         fromMe: doc.senderId === args.viewerId,
         audioUrl: media.audioUrl,
         imageUrl: media.imageUrl,
+        videoUrl: media.videoUrl,
         durationSec: deleted ? undefined : doc.durationSec,
       });
     }),
@@ -617,13 +650,19 @@ async function listConversationMessages(
       }
       const media = await resolveDmMediaUrls(ctx, row, expiresUnix);
       const feedShare = await hydrateFeedShareCard(ctx, row, expiresUnix);
-      const studioShare = await hydrateStudioShareCard(ctx, row, expiresUnix);
+      const studioShare = await hydrateStudioShareCard(
+        ctx,
+        row,
+        expiresUnix,
+        args.viewerId,
+      );
       return {
         _id: row._id,
         body: row.body,
         kind: row.kind ?? "text",
         audioUrl: media.audioUrl,
         imageUrl: media.imageUrl,
+        videoUrl: media.videoUrl,
         contentType: media.contentType,
         durationSec: row.durationSec,
         fromMe,
@@ -1197,6 +1236,7 @@ const listMessagesReturn = v.array(
     kind: dmMessageKind,
     audioUrl: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    videoUrl: v.optional(v.string()),
     contentType: v.optional(v.string()),
     durationSec: v.optional(v.number()),
     fromMe: v.boolean(),

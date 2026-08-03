@@ -28034,6 +28034,15 @@ function StudioAssetPreview({ entry }) {
     if (!mediaUrl) return;
     void downloadMediaUrl(mediaUrl, entry.name ?? "download");
   };
+  if (!mediaUrl && needsImagePreviewSign) {
+    return (
+      <div className="studio-asset-preview">
+        <div className="studio-asset-lightbox is-empty">
+          <p>Preview unavailable</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="studio-asset-preview">
       <div className="studio-asset-lightbox">

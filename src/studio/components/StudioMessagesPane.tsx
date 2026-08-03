@@ -247,10 +247,11 @@ function DmMessageMeta({
 type DmReplySnippet = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
+  kind: "text" | "voice" | "image" | "video" | "post" | "comment" | "studio_share";
   fromMe: boolean;
   audioUrl?: string;
   imageUrl?: string;
+  videoUrl?: string;
   durationSec?: number;
 };
 
@@ -280,9 +281,10 @@ type DmStudioShare = {
 type DmMessageRow = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
+  kind: "text" | "voice" | "image" | "video" | "post" | "comment" | "studio_share";
   audioUrl?: string;
   imageUrl?: string;
+  videoUrl?: string;
   contentType?: string;
   durationSec?: number;
   fromMe: boolean;
@@ -310,6 +312,11 @@ function replySnippetLabel(
     // Server may already prefix "Photo · …"
     if (caption.startsWith("Photo")) return caption;
     return caption ? `Photo · ${caption}` : "Photo";
+  }
+  if (snippet.kind === "video") {
+    const caption = snippet.body.trim();
+    if (caption.startsWith("Video")) return caption;
+    return caption ? `Video · ${caption}` : "Video";
   }
   if (snippet.kind === "studio_share") {
     return snippet.body.trim() || "Shared files";
@@ -1449,6 +1456,7 @@ const DmMessageBubble = memo(function DmMessageBubble({
     message.deleted ? "is-deleted" : "",
     message.kind === "voice" ? "is-voice" : "",
     message.kind === "image" ? "is-image" : "",
+    message.kind === "video" ? "is-video" : "",
     message.kind === "post" || message.kind === "comment" ? "is-feed-share" : "",
     message.kind === "studio_share" ? "is-studio-share" : "",
     message.replyTo ? "has-reply" : "",
@@ -1664,9 +1672,33 @@ const DmMessageBubble = memo(function DmMessageBubble({
                       </button>
                     </div>
                   </div>
-                ) : message.body ? (
+                ) : message.body.trim() ? (
                   <p>{message.body}</p>
                 ) : null}
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
+                />
+              </>
+            ) : message.kind === "video" ? (
+              <>
+                {message.videoUrl ? (
+                  <div className="studio-dm-video-wrap">
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <video
+                      className="studio-dm-video"
+                      src={message.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
+                  </div>
+                ) : (
+                  <p className="studio-dm-voice-missing">Video unavailable</p>
+                )}
+                {message.body.trim() ? <p>{message.body}</p> : null}
                 <DmMessageMeta
                   createdAt={message.createdAt}
                   fromMe={message.fromMe}

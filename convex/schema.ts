@@ -1299,6 +1299,7 @@ export default defineSchema({
         v.literal("text"),
         v.literal("voice"),
         v.literal("image"),
+        v.literal("video"),
         v.literal("post"),
         v.literal("comment"),
         /** Live Studio file/folder share ping. */
@@ -1324,6 +1325,8 @@ export default defineSchema({
           itemKind: studioShareItemKind,
           itemId: v.string(),
           name: v.string(),
+          /** File-delivery: original asset id (sender) when itemId is the peer copy. */
+          sourceItemId: v.optional(v.string()),
         }),
       ),
     ),
