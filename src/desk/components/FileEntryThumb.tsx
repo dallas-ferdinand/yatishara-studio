@@ -847,12 +847,24 @@ export function FileEntryThumb({
           </span>
         ) : null}
         {entry?.reactionEmoji ? (
-          <button
-            type="button"
+          // span (not button) — FileEntryThumb sits inside FileEntryButton <button>.
+          <span
             className="desk-file-thumb-reaction"
+            role="button"
+            tabIndex={0}
             aria-label={`Change reaction ${entry.reactionEmoji}`}
             title="Change reaction"
             onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              onReactionPick?.(entry, {
+                x: rect.left,
+                y: rect.bottom + 4,
+              });
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
               event.preventDefault();
               event.stopPropagation();
               const rect = event.currentTarget.getBoundingClientRect();
@@ -877,7 +889,7 @@ export function FileEntryThumb({
             }}
           >
             {entry.reactionEmoji}
-          </button>
+          </span>
         ) : null}
       </div>
       {showLabel && !inlinePeekLabel ? (
