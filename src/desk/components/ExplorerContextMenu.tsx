@@ -223,7 +223,6 @@ function buildMenuItems(entry, {
 
   // —— React ——
   if (!isSharedLiveItem || canEditShared) {
-    items.push({ id: "sep-react", sep: true });
     if (presentation === "sheet") {
       items.push({ id: "react-open", label: "React" });
     } else {
@@ -245,7 +244,6 @@ function buildMenuItems(entry, {
 
   // —— Organize ——
   if (!isSharedLiveItem) {
-    items.push({ id: "sep-organize", sep: true });
     if (isDir && canPin) {
       const pinnedHere =
         pinnedPaths?.has?.(entry.path) ||
@@ -273,7 +271,6 @@ function buildMenuItems(entry, {
       items.push({ id: "rename", label: "Rename" });
     }
   } else if (canEditShared && onRequestRename) {
-    items.push({ id: "sep-organize", sep: true });
     items.push({ id: "rename", label: "Rename" });
   }
   items.push({ id: "copy-path", label: "Copy item link" });
@@ -358,7 +355,6 @@ function buildMenuItems(entry, {
 
   // —— Danger ——
   if (onRequestDelete && !isLockedNetworkAsset && !isSharedLiveItem) {
-    items.push({ id: "sep-danger", sep: true });
     items.push({
       id: "delete",
       label: isDir ? "Delete folder" : "Delete",
