@@ -748,6 +748,12 @@
   border-color: color-mix(in srgb, var(--cursor-accent) 40%, var(--color-cursor-border-soft));
 }
 
+.studio-dm-chat-column.is-studio-drop {
+  outline: 1px dashed color-mix(in srgb, var(--cursor-accent) 50%, transparent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--cursor-accent) 5%, transparent);
+}
+
 
 .studio-dm-reply-quote.is-voice {
   padding-bottom: 4px;

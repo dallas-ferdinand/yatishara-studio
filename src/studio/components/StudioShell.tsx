@@ -63,6 +63,7 @@ import {
   Award,
   HandCoins,
   Search,
+  Share2,
   SlidersHorizontal,
   RectangleHorizontal,
   Settings,
@@ -102,6 +103,7 @@ import { ExplorerContextMenu } from "@/desk/components/ExplorerContextMenu";
 import { FileReactionPicker } from "@/studio/components/FileReactionPicker";
 import {
   StudioSharePeoplePanel,
+  ShareConfirmMenu,
   type SharePeoplePeer,
 } from "@/studio/components/StudioSharePeoplePanel";
 import { warmThumbUrl } from "@/desk/components/FileEntryThumb";
@@ -1343,6 +1345,12 @@ export function StudioShell({
   // assets and Confirm. Cleared on confirm / cancel / tab change.
   const [assetPickRequest, setAssetPickRequest] = useState(null);
   const [assetPickSelected, setAssetPickSelected] = useState([]);
+  const [assetPickShareOpen, setAssetPickShareOpen] = useState(false);
+  const [assetPickShareDelivery, setAssetPickShareDelivery] = useState("access");
+  const [assetPickSharePermission, setAssetPickSharePermission] = useState("view");
+  const assetPickShareBtnRef = useRef(null);
+  const assetPickShareMenuRef = useRef(null);
+  const [assetPickSharePos, setAssetPickSharePos] = useState({ top: 0, left: 0 });
   /** Files-rail share-to-people session (context Share → multi-select peers). */
   const [sharePeopleRequest, setSharePeopleRequest] = useState(null);
   const [sharePeopleSelected, setSharePeopleSelected] = useState([]);
@@ -1360,6 +1368,7 @@ export function StudioShell({
       const req = request;
       setAssetPickRequest(null);
       setAssetPickSelected([]);
+      setAssetPickShareOpen(false);
       if (reason === "cancel") req?.onCancel?.();
     },
     [assetPickRequest],
@@ -7326,11 +7335,48 @@ export function StudioShell({
   useEffect(() => {
     if (!assetPickRequest) return undefined;
     const onKey = (event) => {
-      if (event.key === "Escape") endAssetPick("cancel", assetPickRequest);
+      if (event.key === "Escape") {
+        if (assetPickShareOpen) {
+          setAssetPickShareOpen(false);
+          return;
+        }
+        endAssetPick("cancel", assetPickRequest);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [assetPickRequest, endAssetPick]);
+  }, [assetPickRequest, assetPickShareOpen, endAssetPick]);
+
+  useEffect(() => {
+    if (!assetPickShareOpen || isMobile) return undefined;
+    const btn = assetPickShareBtnRef.current;
+    if (!btn) return undefined;
+    const place = () => {
+      const rect = btn.getBoundingClientRect();
+      const width = 240;
+      const left = Math.min(
+        Math.max(8, rect.right - width),
+        window.innerWidth - width - 8,
+      );
+      setAssetPickSharePos({ top: rect.bottom + 4, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [assetPickShareOpen, isMobile]);
+
+  useEffect(() => {
+    if (!assetPickShareOpen) return undefined;
+    const onDoc = (event) => {
+      if (isMobile) return;
+      const t = event.target;
+      if (assetPickShareBtnRef.current?.contains(t)) return;
+      if (assetPickShareMenuRef.current?.contains(t)) return;
+      setAssetPickShareOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [assetPickShareOpen, isMobile]);
 
   useEffect(() => {
     if (!sharePeopleRequest) return undefined;
@@ -20695,6 +20741,8 @@ export function StudioShell({
                           />
                         ) : item.kind === "video" ? (
                           <Video aria-hidden="true" />
+                        ) : item.kind === "folder" || item.itemKind === "folder" ? (
+                          <Folder aria-hidden="true" />
                         ) : (
                           <ImageIcon aria-hidden="true" />
                         )}
@@ -20717,18 +20765,27 @@ export function StudioShell({
               </div>
             ) : null}
             <div className="studio-asset-pick-footer" role="status">
-              <span className="studio-asset-pick-footer-copy">
-                {assetPickSelected.length > 0
-                  ? `${assetPickSelected.length} selected`
-                  : assetPickRequest.title || "Pick files from your Files"}
+              <span
+                className="studio-asset-pick-count"
+                aria-label={`${assetPickSelected.length} selected`}
+              >
+                {assetPickSelected.length}
               </span>
-              {assetPickRequest.pickAnyStudio &&
+              <span className="studio-asset-pick-footer-copy">
+                {assetPickSelected.length === 1
+                  ? assetPickSelected[0]?.name || "1 item"
+                  : assetPickSelected.length > 1
+                    ? `${assetPickSelected.length} items`
+                    : assetPickRequest.title || "Pick files from your Files"}
+              </span>
+              {assetPickRequest.pickMode === "share" &&
+              assetPickRequest.pickAnyStudio &&
               activeFolder &&
               !activeFolder.systemKind &&
               navTrail.length > 1 ? (
                 <button
                   type="button"
-                  className="studio-asset-pick-footer-cancel"
+                  className="studio-asset-pick-folder-btn"
                   onClick={() => {
                     const folderId = activeFolder._id;
                     const max = assetPickRequest.maxSelected ?? 10;
@@ -20759,35 +20816,133 @@ export function StudioShell({
                 >
                   {assetPickSelected.some((item) => item._id === activeFolder._id)
                     ? "Folder added"
-                    : "Add this folder"}
+                    : "This folder"}
                 </button>
               ) : null}
               <button
                 type="button"
-                className="studio-asset-pick-footer-cancel"
+                className="studio-asset-pick-icon-btn is-close"
                 onClick={() => endAssetPick("cancel", assetPickRequest)}
+                title="Close"
+                aria-label="Close"
               >
-                Cancel
+                <X aria-hidden="true" />
               </button>
               <button
+                ref={assetPickShareBtnRef}
                 type="button"
-                className="studio-asset-pick-footer-confirm"
+                className="studio-asset-pick-icon-btn is-primary"
                 disabled={assetPickSelected.length === 0}
                 onClick={() => {
+                  if (assetPickSelected.length === 0) return;
                   const req = assetPickRequest;
                   const picked = assetPickSelected;
+                  if (req?.pickMode === "share") {
+                    const fileOnly = picked.every(
+                      (item) => (item.itemKind ?? "asset") === "asset",
+                    );
+                    setAssetPickShareDelivery("access");
+                    setAssetPickSharePermission("view");
+                    if (!fileOnly) setAssetPickShareDelivery("access");
+                    setAssetPickShareOpen((open) => !open);
+                    return;
+                  }
                   setAssetPickRequest(null);
                   setAssetPickSelected([]);
+                  setAssetPickShareOpen(false);
                   if (req?.onConfirm) {
-                    req.onConfirm(picked);
+                    req.onConfirm(picked, { delivery: "file", permission: "view" });
                   } else if (picked[0]) {
                     req?.onPick?.(picked[0]);
                   }
                 }}
+                title={assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                aria-label={assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                aria-expanded={
+                  assetPickRequest.pickMode === "share" ? assetPickShareOpen : undefined
+                }
+                aria-haspopup={
+                  assetPickRequest.pickMode === "share" ? "dialog" : undefined
+                }
               >
-                Confirm
+                {assetPickRequest.pickMode === "share" ? (
+                  <Share2 aria-hidden="true" />
+                ) : null}
+                <span>
+                  {assetPickRequest.pickMode === "share" ? "Share" : "Send"}
+                </span>
               </button>
             </div>
+            {assetPickShareOpen
+              ? isMobile
+                ? createPortal(
+                    <>
+                      <button
+                        type="button"
+                        className="studio-share-confirm-backdrop"
+                        aria-label="Dismiss"
+                        onClick={() => setAssetPickShareOpen(false)}
+                      />
+                      <ShareConfirmMenu
+                        delivery={assetPickShareDelivery}
+                        setDelivery={setAssetPickShareDelivery}
+                        permission={assetPickSharePermission}
+                        setPermission={setAssetPickSharePermission}
+                        allowFileDelivery={assetPickSelected.every(
+                          (item) => (item.itemKind ?? "asset") === "asset",
+                        )}
+                        busy={false}
+                        onConfirm={() => {
+                          const req = assetPickRequest;
+                          const picked = assetPickSelected;
+                          const delivery = assetPickShareDelivery;
+                          const permission = assetPickSharePermission;
+                          setAssetPickShareOpen(false);
+                          setAssetPickRequest(null);
+                          setAssetPickSelected([]);
+                          req?.onConfirm?.(picked, { delivery, permission });
+                        }}
+                        onDismiss={() => setAssetPickShareOpen(false)}
+                        asSheet
+                      />
+                    </>,
+                    document.querySelector(".studio-polish") ?? document.body,
+                  )
+                : createPortal(
+                    <div
+                      ref={assetPickShareMenuRef}
+                      className="studio-share-confirm-dropdown-anchor"
+                      style={{
+                        top: assetPickSharePos.top,
+                        left: assetPickSharePos.left,
+                      }}
+                    >
+                      <ShareConfirmMenu
+                        delivery={assetPickShareDelivery}
+                        setDelivery={setAssetPickShareDelivery}
+                        permission={assetPickSharePermission}
+                        setPermission={setAssetPickSharePermission}
+                        allowFileDelivery={assetPickSelected.every(
+                          (item) => (item.itemKind ?? "asset") === "asset",
+                        )}
+                        busy={false}
+                        onConfirm={() => {
+                          const req = assetPickRequest;
+                          const picked = assetPickSelected;
+                          const delivery = assetPickShareDelivery;
+                          const permission = assetPickSharePermission;
+                          setAssetPickShareOpen(false);
+                          setAssetPickRequest(null);
+                          setAssetPickSelected([]);
+                          req?.onConfirm?.(picked, { delivery, permission });
+                        }}
+                        onDismiss={() => setAssetPickShareOpen(false)}
+                        asSheet={false}
+                      />
+                    </div>,
+                    document.body,
+                  )
+              : null}
           </div>
         ) : null}
       </aside>
@@ -21233,17 +21388,20 @@ export function StudioShell({
                       setNavTrail([{ id: rootFolder._id, name: "Files" }]);
                     }
                     setAssetPickSelected([]);
+                    setAssetPickShareOpen(false);
                     setAssetPickRequest({
                       kinds: request.kinds ?? ["image"],
                       pickAnyStudio: Boolean(request.pickAnyStudio),
+                      pickMode: request.pickMode ?? "choose",
                       title: request.title ?? "Pick files to send",
                       maxSelected: request.maxSelected ?? 10,
                       startedOnTab: activeTab,
-                      onConfirm: (assets) => {
+                      onConfirm: (assets, opts) => {
                         setAssetPickRequest(null);
                         setAssetPickSelected([]);
+                        setAssetPickShareOpen(false);
                         if (request.onConfirm) {
-                          request.onConfirm(assets);
+                          request.onConfirm(assets, opts);
                         } else if (assets[0]) {
                           request.onPick?.(assets[0]);
                         }
@@ -21252,6 +21410,7 @@ export function StudioShell({
                       onCancel: () => {
                         setAssetPickRequest(null);
                         setAssetPickSelected([]);
+                        setAssetPickShareOpen(false);
                         request.onCancel?.();
                       },
                     });

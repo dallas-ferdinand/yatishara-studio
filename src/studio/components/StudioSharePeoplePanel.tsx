@@ -132,7 +132,7 @@ function LabelChip({
   );
 }
 
-function ShareConfirmMenu({
+export function ShareConfirmMenu({
   delivery,
   setDelivery,
   permission,

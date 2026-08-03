@@ -18,6 +18,7 @@ import {
   Pencil,
   Reply,
   SendHorizontal,
+  Share2,
   Tags,
   Trash2,
   Upload,
@@ -34,14 +35,22 @@ import {
   useState,
   memo,
   type CSSProperties,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type TouchEvent as ReactTouchEvent,
 } from "react";
+import { createPortal } from "react-dom";
+import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { MicrophoneWaveform } from "@/components/ui/waveform";
 import { useLongPress } from "@/desk/hooks/use-long-press";
+import {
+  EXPLORER_DND_TYPE,
+  peekActiveExplorerDrag,
+  readExplorerDragData,
+} from "@/desk/lib/explorer-dnd.js";
 import { useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import {
@@ -81,7 +90,9 @@ import {
   StudioAssetPickerSheet,
   type StudioAssetPick,
 } from "./StudioAssetPickerSheet";
+import { ShareConfirmMenu } from "./StudioSharePeoplePanel";
 import "./studio-messages.css";
+import "./studio-share-people.css";
 
 const PEER_SIDEBAR_OPEN_KEY = "studio-dm-peer-sidebar-open";
 
@@ -105,6 +116,59 @@ type PendingImage = {
 
 function revokePendingPreview(url: string) {
   if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+}
+
+type StudioShareDelivery = "access" | "file";
+type StudioSharePermission = "view" | "edit";
+
+function entryToDmSharePayload(entry: {
+  studioId?: string | null;
+  studioKind?: string | null;
+  type?: string | null;
+  systemKind?: string | null;
+}) {
+  if (!entry?.studioId) return null;
+  if (entry.studioKind === "folder" || entry.type === "dir") {
+    if (entry.systemKind) return null;
+    return {
+      itemKind: "folder" as const,
+      itemId: String(entry.studioId),
+      delivery: "access" as StudioShareDelivery,
+    };
+  }
+  if (entry.studioKind === "asset") {
+    return {
+      itemKind: "asset" as const,
+      itemId: String(entry.studioId),
+      delivery: "file" as StudioShareDelivery,
+    };
+  }
+  if (entry.studioKind === "document") {
+    return {
+      itemKind: "document" as const,
+      itemId: String(entry.studioId),
+      delivery: "access" as StudioShareDelivery,
+    };
+  }
+  if (entry.studioKind === "element") {
+    return {
+      itemKind: "element" as const,
+      itemId: String(entry.studioId),
+      delivery: "access" as StudioShareDelivery,
+    };
+  }
+  if (entry.studioKind === "videoEdit") {
+    return {
+      itemKind: "videoEdit" as const,
+      itemId: String(entry.studioId),
+      delivery: "access" as StudioShareDelivery,
+    };
+  }
+  return null;
+}
+
+function explorerDragHasStudioEntry(types: ReadonlyArray<string>) {
+  return types.includes(EXPLORER_DND_TYPE);
 }
 
 const MAX_PENDING_IMAGES = 10;
@@ -1721,13 +1785,22 @@ type StudioMessagesPaneProps = {
   onRequestPickAsset?: (request: {
     kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
     pickAnyStudio?: boolean;
+    pickMode?: "choose" | "share";
     title?: string;
     maxSelected?: number;
-    onConfirm?: (assets: Array<StudioAssetPick & {
-      itemKind?: string;
-      itemId?: string;
-      studioKind?: string;
-    }>) => void;
+    onConfirm?: (
+      assets: Array<
+        StudioAssetPick & {
+          itemKind?: string;
+          itemId?: string;
+          studioKind?: string;
+        }
+      >,
+      opts?: {
+        delivery?: "access" | "file";
+        permission?: "view" | "edit";
+      },
+    ) => void;
     onPick?: (asset: StudioAssetPick) => void;
     onCancel?: () => void;
   }) => void;
@@ -1978,10 +2051,26 @@ export function StudioMessagesPane({
     null,
   );
   const [filesPickerOpen, setFilesPickerOpen] = useState(false);
+  const [filesPickMode, setFilesPickMode] = useState<"choose" | "share">("choose");
   const [filesPickBusy, setFilesPickBusy] = useState(false);
   const [mobilePickSelected, setMobilePickSelected] = useState<
     StudioAssetPick[]
   >([]);
+  const [shareTypeOpen, setShareTypeOpen] = useState(false);
+  const [shareTypeDelivery, setShareTypeDelivery] =
+    useState<StudioShareDelivery>("access");
+  const [shareTypePermission, setShareTypePermission] =
+    useState<StudioSharePermission>("view");
+  const [pendingSharePicks, setPendingSharePicks] = useState<
+    Array<
+      StudioAssetPick & {
+        itemKind?: string;
+        itemId?: string;
+        studioKind?: string;
+      }
+    >
+  >([]);
+  const [studioDropActive, setStudioDropActive] = useState(false);
   const [filesPickerExpiresUnix] = useState(
     () => Math.floor(Date.now() / 1000) + 60 * 60,
   );
@@ -1991,6 +2080,11 @@ export function StudioMessagesPane({
   });
   useMobileBackLayer("dm-attach-menu", Boolean(attachMenu), () => {
     setAttachMenu(null);
+  });
+  useMobileBackLayer("dm-share-type", shareTypeOpen, () => {
+    if (filesPickBusy) return;
+    setShareTypeOpen(false);
+    setPendingSharePicks([]);
   });
   useMobileBackLayer("dm-list-context", Boolean(listContext), () => {
     setListContext(null);
@@ -2464,6 +2558,10 @@ export function StudioMessagesPane({
         studioKind?: string;
       }
     >,
+    opts?: {
+      delivery?: StudioShareDelivery;
+      permission?: StudioSharePermission;
+    },
   ) {
     if (!conversationId || !activeRow?.peer.userId || picked.length === 0) return;
     const items = picked
@@ -2486,6 +2584,15 @@ export function StudioMessagesPane({
       })
       .filter((item) => item.itemId);
     if (!items.length) return;
+    const fileOnly = items.every((item) => item.itemKind === "asset");
+    const delivery =
+      opts?.delivery === "file" && fileOnly
+        ? "file"
+        : opts?.delivery === "file"
+          ? "access"
+          : (opts?.delivery ?? "access");
+    const permission =
+      delivery === "file" ? "view" : (opts?.permission ?? "view");
     setFilesPickBusy(true);
     setSendError("");
     try {
@@ -2493,14 +2600,112 @@ export function StudioMessagesPane({
         peerUserIds: [activeRow.peer.userId],
         items,
         conversationId,
+        delivery,
+        permission,
       });
       setFilesPickerOpen(false);
       setMobilePickSelected([]);
+      setShareTypeOpen(false);
+      setPendingSharePicks([]);
+      const n = items.length;
+      toast.success(
+        delivery === "file"
+          ? n === 1
+            ? "Sent as file to Messages"
+            : `Sent ${n} files`
+          : n === 1
+            ? "Shared — they’ll see it in Shared with me"
+            : `Shared ${n} items`,
+      );
     } catch (error) {
       setSendError(friendlyConvexError(error, "Could not share files"));
     } finally {
       setFilesPickBusy(false);
     }
+  }
+
+  function openMobileStudioPick(mode: "choose" | "share") {
+    setFilesPickMode(mode);
+    setMobilePickSelected([]);
+    setFilesPickerOpen(true);
+  }
+
+  function beginShareTypeForPicks(
+    picked: Array<
+      StudioAssetPick & {
+        itemKind?: string;
+        itemId?: string;
+        studioKind?: string;
+      }
+    >,
+  ) {
+    if (!picked.length) return;
+    const fileOnly = picked.every(
+      (item) => (item.itemKind ?? "asset") === "asset",
+    );
+    setPendingSharePicks(picked);
+    setShareTypeDelivery(fileOnly ? "access" : "access");
+    setShareTypePermission("view");
+    setShareTypeOpen(true);
+  }
+
+  async function shareDroppedStudioEntry(entry: Record<string, unknown>) {
+    if (!conversationId || !activeRow?.peer.userId || filesPickBusy) return;
+    const mapped = entryToDmSharePayload(entry as {
+      studioId?: string | null;
+      studioKind?: string | null;
+      type?: string | null;
+      systemKind?: string | null;
+    });
+    if (!mapped) {
+      setSendError("That item can’t be shared here");
+      return;
+    }
+    await sendStudioPicks(
+      [
+        {
+          _id: mapped.itemId,
+          name: String(entry.name ?? "item"),
+          kind: String(entry.kind ?? entry.studioKind ?? "file"),
+          mimeType: String(entry.mimeType ?? ""),
+          itemKind: mapped.itemKind,
+          itemId: mapped.itemId,
+          studioKind: mapped.itemKind,
+        },
+      ],
+      { delivery: mapped.delivery, permission: "view" },
+    );
+  }
+
+  function onStudioChatDragOver(event: ReactDragEvent) {
+    const types = Array.from(event.dataTransfer.types);
+    const feed = feedShareDragTypes(types);
+    const studio = explorerDragHasStudioEntry(types) || Boolean(peekActiveExplorerDrag());
+    if (!feed && !studio) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    if (studio) setStudioDropActive(true);
+  }
+
+  function onStudioChatDragLeave(event: ReactDragEvent) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setStudioDropActive(false);
+  }
+
+  async function onStudioChatDrop(event: ReactDragEvent) {
+    setStudioDropActive(false);
+    const feedPayload = readFeedShareDataTransfer(event.dataTransfer);
+    if (feedPayload && conversationId) {
+      event.preventDefault();
+      clearPendingImages();
+      setPendingDmFeedShare({ conversationId, payload: feedPayload });
+      return;
+    }
+    const entry =
+      readExplorerDragData(event.dataTransfer) ?? peekActiveExplorerDrag();
+    if (!entry) return;
+    event.preventDefault();
+    await shareDroppedStudioEntry(entry as Record<string, unknown>);
   }
 
   async function handleSend() {
@@ -2667,7 +2872,15 @@ export function StudioMessagesPane({
     "You";
 
   const chatColumn = (
-    <div className="studio-dm-chat-column">
+    <div
+      className={`studio-dm-chat-column${studioDropActive ? " is-studio-drop" : ""}`}
+      onDragEnter={onStudioChatDragOver}
+      onDragOver={onStudioChatDragOver}
+      onDragLeave={onStudioChatDragLeave}
+      onDrop={(event) => {
+        void onStudioChatDrop(event);
+      }}
+    >
       <header className="studio-dm-chat-head">
         {showBack ? (
           <button
@@ -3023,19 +3236,10 @@ export function StudioMessagesPane({
                 }
               }}
               onDrop={(event) => {
-                const payload = readFeedShareDataTransfer(event.dataTransfer);
-                if (!payload || !conversationId) return;
-                event.preventDefault();
-                clearPendingImages();
-                setPendingDmFeedShare({ conversationId, payload });
+                void onStudioChatDrop(event);
               }}
-              onDragOver={(event) => {
-                if (!feedShareDragTypes(Array.from(event.dataTransfer.types))) {
-                  return;
-                }
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-              }}
+              onDragOver={onStudioChatDragOver}
+              onDragLeave={onStudioChatDragLeave}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -3090,25 +3294,44 @@ export function StudioMessagesPane({
               onSelect: () => fileInputRef.current?.click(),
             },
             {
-              key: "studio-files",
+              key: "choose-studio-files",
               label: "Choose from Studio Files",
               icon: <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />,
               onSelect: () => {
-                // Desktop: open the left Files rail in pick mode (owner root only).
-                // Mobile: keep the sheet picker.
                 if (onRequestPickAsset && !isMobile) {
                   onRequestPickAsset({
-                    pickAnyStudio: true,
-                    title: "Share Studio files",
+                    pickMode: "choose",
+                    kinds: ["image", "video", "audio", "document"],
+                    pickAnyStudio: false,
+                    title: "Choose Studio files",
                     maxSelected: MAX_PENDING_IMAGES,
                     onConfirm: (picked) => {
-                      void sendStudioPicks(picked);
+                      void sendStudioPicks(picked, { delivery: "file" });
                     },
                   });
                   return;
                 }
-                setMobilePickSelected([]);
-                setFilesPickerOpen(true);
+                openMobileStudioPick("choose");
+              },
+            },
+            {
+              key: "share-studio-files",
+              label: "Share from Studio Files",
+              icon: <Share2 className="h-3.5 w-3.5" aria-hidden="true" />,
+              onSelect: () => {
+                if (onRequestPickAsset && !isMobile) {
+                  onRequestPickAsset({
+                    pickMode: "share",
+                    pickAnyStudio: true,
+                    title: "Share Studio files",
+                    maxSelected: MAX_PENDING_IMAGES,
+                    onConfirm: (picked, opts) => {
+                      void sendStudioPicks(picked, opts);
+                    },
+                  });
+                  return;
+                }
+                openMobileStudioPick("share");
               },
             },
           ]}
@@ -3117,13 +3340,23 @@ export function StudioMessagesPane({
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet
-          title="Share Studio files"
-          pickAnyStudio
+          title={
+            filesPickMode === "share"
+              ? "Share Studio files"
+              : "Choose Studio files"
+          }
+          pickAnyStudio={filesPickMode === "share"}
+          allowFolderPick={filesPickMode === "share"}
+          kinds={
+            filesPickMode === "choose"
+              ? ["image", "video", "audio", "document"]
+              : ["image"]
+          }
           multi
           stayOpen
           maxSelected={MAX_PENDING_IMAGES}
           countLabel={`${mobilePickSelected.length}/${MAX_PENDING_IMAGES}`}
-          doneLabel="Share"
+          doneLabel={filesPickMode === "share" ? "Share" : "Send"}
           expiresUnix={filesPickerExpiresUnix}
           selectedIds={mobilePickSelected.map((item) => String(item._id))}
           onPick={(asset) => {
@@ -3138,15 +3371,18 @@ export function StudioMessagesPane({
             if (filesPickBusy) return;
             const picked = mobilePickSelected.map((asset) => ({
               ...asset,
-              itemKind:
-                asset.itemKind ??
-                ("asset" as const),
+              itemKind: asset.itemKind ?? ("asset" as const),
               itemId: String(asset.itemId ?? asset._id),
               studioKind: asset.studioKind ?? asset.itemKind ?? "asset",
             }));
             setMobilePickSelected([]);
             setFilesPickerOpen(false);
-            if (picked.length > 0) void sendStudioPicks(picked);
+            if (!picked.length) return;
+            if (filesPickMode === "share") {
+              beginShareTypeForPicks(picked);
+              return;
+            }
+            void sendStudioPicks(picked, { delivery: "file" });
           }}
           onClose={() => {
             if (filesPickBusy) return;
@@ -3155,6 +3391,47 @@ export function StudioMessagesPane({
           }}
         />
       ) : null}
+
+      {shareTypeOpen
+        ? createPortal(
+            <>
+              <button
+                type="button"
+                className="studio-share-confirm-backdrop"
+                aria-label="Dismiss"
+                onClick={() => {
+                  if (filesPickBusy) return;
+                  setShareTypeOpen(false);
+                  setPendingSharePicks([]);
+                }}
+              />
+              <ShareConfirmMenu
+                delivery={shareTypeDelivery}
+                setDelivery={setShareTypeDelivery}
+                permission={shareTypePermission}
+                setPermission={setShareTypePermission}
+                allowFileDelivery={pendingSharePicks.every(
+                  (item) => (item.itemKind ?? "asset") === "asset",
+                )}
+                busy={filesPickBusy}
+                onConfirm={() => {
+                  const picked = pendingSharePicks;
+                  void sendStudioPicks(picked, {
+                    delivery: shareTypeDelivery,
+                    permission: shareTypePermission,
+                  });
+                }}
+                onDismiss={() => {
+                  if (filesPickBusy) return;
+                  setShareTypeOpen(false);
+                  setPendingSharePicks([]);
+                }}
+                asSheet
+              />
+            </>,
+            document.querySelector(".studio-polish") ?? document.body,
+          )
+        : null}
 
     </div>
   );

@@ -305,13 +305,13 @@
   flex: 0 0 auto;
   min-width: 0;
   border-top: 1px solid var(--color-cursor-border-soft);
-  background: var(--mos-plate, var(--cursor-surface-raised));
+  background: var(--mos-page, var(--color-cursor-bg));
 }
 
 .studio-asset-pick-selected {
   flex: 0 0 auto;
   min-width: 0;
-  padding: 8px 10px 6px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--color-cursor-border-soft);
   background: var(--mos-page, var(--color-cursor-bg));
 }
@@ -319,10 +319,9 @@
 .studio-asset-pick-selected-scroller {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 2px;
   scrollbar-width: thin;
 }
 
@@ -332,12 +331,12 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--cursor-radius-md, 8px);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--color-cursor-border-soft);
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  background: var(--mos-plate, var(--cursor-surface-raised));
   color: var(--color-cursor-muted);
 }
 
@@ -349,52 +348,63 @@
 }
 
 .studio-asset-pick-selected-thumb > svg {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   stroke-width: 1.75;
 }
 
 .studio-asset-pick-selected-remove {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -2px;
+  right: -2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 1px solid var(--color-cursor-border-soft);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--mos-page) 82%, transparent);
-  color: var(--color-cursor-text-bright);
-  backdrop-filter: blur(4px);
+  background: var(--mos-page, #f5f5f7);
+  color: var(--color-cursor-muted);
   cursor: pointer;
 }
 
 .studio-asset-pick-selected-remove > svg {
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
   stroke-width: 2.5;
 }
 
 .studio-asset-pick-selected-remove:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--cursor-accent) 40%,
-    var(--color-cursor-border-soft)
-  );
-  background: var(--color-cursor-hover);
+  color: var(--color-cursor-text);
+  background: var(--mos-hover, var(--color-cursor-hover));
 }
 
 .studio-asset-pick-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   flex: 0 0 auto;
-  min-height: 44px;
-  padding: 8px 10px;
+  box-sizing: border-box;
+  min-height: var(--cursor-head-h, 32px);
+  height: var(--cursor-head-h, 32px);
+  padding: 0 8px;
   color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-pick-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 16%, transparent);
+  color: var(--color-cursor-text-bright);
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .studio-asset-pick-footer-copy {
@@ -405,51 +415,88 @@
   white-space: nowrap;
   font-size: 11px;
   font-weight: 650;
-  color: var(--color-cursor-muted);
+  color: var(--color-cursor-text-bright);
 }
 
-.studio-asset-pick-footer-cancel,
-.studio-asset-pick-footer-confirm {
+.studio-asset-pick-folder-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 0 12px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
   border: 1px solid var(--color-cursor-border-soft);
-  border-radius: var(--cursor-radius-pill, 999px);
-  background: var(--mos-plate-strong, var(--cursor-surface-raised));
-  color: var(--color-cursor-text-bright);
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.studio-asset-pick-folder-btn:hover {
+  color: var(--color-cursor-text);
+  background: var(--mos-hover, var(--color-cursor-hover));
+}
+
+.studio-asset-pick-icon-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--color-cursor-border-soft);
+  background: var(--mos-page, var(--color-cursor-panel, #f5f5f7));
+  color: var(--color-cursor-muted);
   font: inherit;
   font-size: 11px;
   font-weight: 650;
+  line-height: 1;
+  box-shadow: none;
   cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease;
 }
 
-.studio-asset-pick-footer-cancel:hover,
-.studio-asset-pick-footer-confirm:hover:not(:disabled) {
+.studio-asset-pick-icon-btn > svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+  flex: 0 0 auto;
+}
+
+.studio-asset-pick-icon-btn.is-primary {
+  width: auto;
+  min-width: 0;
+  padding: 0 9px;
   border-color: color-mix(
     in srgb,
-    var(--cursor-accent) 40%,
+    var(--color-cursor-accent, #3b82f6) 28%,
     var(--color-cursor-border-soft)
   );
-  background: var(--color-cursor-hover);
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 10%, var(--mos-page, #f5f5f7));
+  color: var(--color-cursor-text-bright);
 }
 
-.studio-asset-pick-footer-confirm {
-  border-color: color-mix(
-    in srgb,
-    var(--cursor-accent) 42%,
-    var(--color-cursor-border-soft)
-  );
-  background: color-mix(in srgb, var(--cursor-accent) 14%, transparent);
+.studio-asset-pick-icon-btn:hover:not(:disabled) {
+  background: var(--mos-hover, var(--color-cursor-hover));
+  color: var(--color-cursor-text);
 }
 
-.studio-asset-pick-footer-confirm:disabled {
-  opacity: 0.45;
+.studio-asset-pick-icon-btn.is-primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 16%, var(--mos-page, #f5f5f7));
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-asset-pick-icon-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 

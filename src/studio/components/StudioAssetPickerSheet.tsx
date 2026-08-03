@@ -35,6 +35,8 @@ type StudioAssetPickerSheetProps = {
   kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
   /** Pick any Studio entry (assets, docs, elements, edits, folders). */
   pickAnyStudio?: boolean;
+  /** Allow selecting folders (share mode). Defaults to pickAnyStudio. */
+  allowFolderPick?: boolean;
   /** Currently selected ids (highlight). */
   selectedIds?: ReadonlyArray<string>;
   /** Multi-select (toggle). Single-select closes after pick unless `stayOpen`. */
@@ -61,6 +63,7 @@ export function StudioAssetPickerSheet({
   title,
   kinds = ["image"],
   pickAnyStudio = false,
+  allowFolderPick = pickAnyStudio,
   selectedIds = [],
   multi = false,
   stayOpen = false,
@@ -232,7 +235,7 @@ export function StudioAssetPickerSheet({
                           aria-hidden="true"
                         />
                       </button>
-                      {pickAnyStudio ? (
+                      {allowFolderPick ? (
                         <button
                           type="button"
                           className="studio-asset-picker-folder-select"
@@ -429,7 +432,7 @@ export function StudioAssetPickerSheet({
       </div>
       {multi || stayOpen ? (
         <div className="studio-asset-picker-foot">
-          {pickAnyStudio && current.id ? (
+          {allowFolderPick && current.id ? (
             <button
               type="button"
               className="studio-asset-picker-done is-secondary"
