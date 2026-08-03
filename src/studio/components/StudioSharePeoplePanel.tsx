@@ -166,6 +166,46 @@ export function StudioSharePeoplePanel({
 
   return (
     <div className="studio-share-people-panel">
+      <div className="studio-dm-sidebar-chrome studio-share-people-chrome">
+        <PanelSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search people, chats & labels"
+          aria-label="Search people, chats, and labels"
+        />
+        <div className="studio-dm-rail-row">
+          <div
+            ref={labelRailRef}
+            className="studio-dm-label-rail"
+            role="tablist"
+            aria-label="Labels"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeLabelId === null}
+              className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
+              onClick={() => setActiveLabelId(null)}
+            >
+              <Tags aria-hidden="true" />
+              <span>All</span>
+            </button>
+            {(labels ?? []).map((label) => (
+              <LabelChip
+                key={label.labelId}
+                label={label}
+                active={activeLabelId === label.labelId}
+                onSelect={() =>
+                  setActiveLabelId(
+                    activeLabelId === label.labelId ? null : label.labelId,
+                  )
+                }
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="studio-share-people-top" role="status">
         <div className="studio-share-people-top-copy">
           <strong>{selectedPeers.length ? `${selectedPeers.length} selected` : "Select people"}</strong>
@@ -216,46 +256,6 @@ export function StudioSharePeoplePanel({
           ))}
         </div>
       ) : null}
-
-      <div className="studio-dm-sidebar-chrome studio-share-people-chrome">
-        <PanelSearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder="Search people, chats & labels"
-          aria-label="Search people, chats, and labels"
-        />
-        <div className="studio-dm-rail-row">
-          <div
-            ref={labelRailRef}
-            className="studio-dm-label-rail"
-            role="tablist"
-            aria-label="Labels"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeLabelId === null}
-              className={`studio-dm-label-chip${activeLabelId === null ? " is-active" : ""}`}
-              onClick={() => setActiveLabelId(null)}
-            >
-              <Tags aria-hidden="true" />
-              <span>All</span>
-            </button>
-            {(labels ?? []).map((label) => (
-              <LabelChip
-                key={label.labelId}
-                label={label}
-                active={activeLabelId === label.labelId}
-                onSelect={() =>
-                  setActiveLabelId(
-                    activeLabelId === label.labelId ? null : label.labelId,
-                  )
-                }
-              />
-            ))}
-          </div>
-        </div>
-      </div>
 
       <div className="studio-dm-sidebar-body studio-share-people-body">
         {searching ? (

@@ -599,7 +599,7 @@ export function FileEntryThumb({
           : isPurchased
             ? "shoppingBag"
             : isShared
-              ? "users"
+              ? "share"
               : "globe";
       const systemMod = isTrash
         ? "trash"
@@ -636,6 +636,7 @@ export function FileEntryThumb({
     } else {
       const hasFolderPeek = entry?.type === "dir" && (entry?.peekItems ?? []).length > 0;
       const isParent = entry?.type === "parent";
+      const showSharedBadge = Boolean(entry?.hasOutgoingShare);
       visual = (
         <div
           className={`desk-file-thumb-peek-wrap desk-file-thumb-peek-wrap--folder${hasFolderPeek ? " desk-file-thumb-peek-wrap--folder-peek" : ""}`}
@@ -646,6 +647,11 @@ export function FileEntryThumb({
             folderIconClass={folderIconClass}
             size={size}
           />
+          {showSharedBadge ? (
+            <span className="desk-file-thumb-shared" aria-label="Shared">
+              <Icon name="share" size={11} />
+            </span>
+          ) : null}
           {!isParent ? (
             <span className="desk-file-thumb-badge" aria-hidden="true">
               <Icon
@@ -831,6 +837,12 @@ export function FileEntryThumb({
     <div className={`desk-file-thumb desk-file-thumb--${size}`}>
       <div className="desk-file-thumb-visual">
         {visual}
+        {entry?.hasOutgoingShare &&
+        !(kind === "dir" || kind === "parent") ? (
+          <span className="desk-file-thumb-shared" aria-label="Shared">
+            <Icon name="share" size={11} />
+          </span>
+        ) : null}
         {entry?.reactionEmoji ? (
           <span
             className="desk-file-thumb-reaction"

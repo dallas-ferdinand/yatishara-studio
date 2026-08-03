@@ -1120,6 +1120,7 @@ export function StudioShell({
     api.folders.ensureSharedWithMeFolderForMe,
   );
   const shareStudioItems = useMutation(api.studioShares.shareItems);
+  const revokeStudioShare = useMutation(api.studioShares.revokeShare);
   const convex = useConvex();
 
   const lastGenerationModeRef = useRef("image");
@@ -1891,6 +1892,31 @@ export function StudioShell({
       needsExplorerFolderContents
       ? {
           folderId: activeFolder._id,
+          expiresUnix: assetUrlExpiresUnix,
+        }
+      : "skip",
+  );
+  const outgoingShareKeys = useQuery(
+    api.studioShares.listMyOutgoingShareKeys,
+    hasCurrentUser ? {} : "skip",
+  );
+  const outgoingShareKeySet = useMemo(() => {
+    const set = new Set();
+    for (const row of outgoingShareKeys ?? []) {
+      set.add(`${row.itemKind}:${row.itemId}`);
+    }
+    return set;
+  }, [outgoingShareKeys]);
+  const contextShareItem = useMemo(
+    () => entryToShareItem(contextMenu?.entry),
+    [contextMenu?.entry],
+  );
+  const contextShareRecipients = useQuery(
+    api.studioShares.listRecipientsForItem,
+    hasCurrentUser && contextShareItem
+      ? {
+          itemKind: contextShareItem.itemKind,
+          itemId: contextShareItem.itemId,
           expiresUnix: assetUrlExpiresUnix,
         }
       : "skip",
@@ -3519,14 +3545,30 @@ export function StudioShell({
 
   const explorerCurrentEntries = useMemo(() => {
     const base = filteredCurrentEntries;
-    if (!inlineRenameStudioId || !inlineRenamePinToTop) return base;
-    const entries = [...(base.entries ?? [])];
-    const idx = entries.findIndex((entry) => entry.studioId === inlineRenameStudioId);
-    if (idx < 0) return base;
-    if (idx === 0) return base;
-    const [item] = entries.splice(idx, 1);
-    return { ...base, entries: [item, ...entries] };
-  }, [filteredCurrentEntries, inlineRenameStudioId, inlineRenamePinToTop]);
+    let entries = [...(base.entries ?? [])];
+    if (inlineRenameStudioId && inlineRenamePinToTop) {
+      const idx = entries.findIndex((entry) => entry.studioId === inlineRenameStudioId);
+      if (idx > 0) {
+        const [item] = entries.splice(idx, 1);
+        entries = [item, ...entries];
+      }
+    }
+    entries = entries.map((entry) => {
+      const item = entryToShareItem(entry);
+      if (!item) return entry;
+      const hasOutgoingShare = outgoingShareKeySet.has(
+        `${item.itemKind}:${item.itemId}`,
+      );
+      if (Boolean(entry.hasOutgoingShare) === hasOutgoingShare) return entry;
+      return { ...entry, hasOutgoingShare };
+    });
+    return { ...base, entries };
+  }, [
+    filteredCurrentEntries,
+    inlineRenameStudioId,
+    inlineRenamePinToTop,
+    outgoingShareKeySet,
+  ]);
 
   const searchState = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
@@ -5543,16 +5585,20 @@ export function StudioShell({
     }
     const next =
       emoji === null || emoji === entry.reactionEmoji ? null : emoji;
+    const kind =
+      entry.studioKind === "folder" || entry.type === "dir"
+        ? "folder"
+        : entry.studioKind;
     try {
-      if (entry.studioKind === "folder") {
+      if (kind === "folder") {
         await setFolderReaction({ folderId: entry.studioId, emoji: next });
-      } else if (entry.studioKind === "document") {
+      } else if (kind === "document") {
         await setDocumentReaction({ documentId: entry.studioId, emoji: next });
-      } else if (entry.studioKind === "asset") {
+      } else if (kind === "asset") {
         await setAssetReaction({ assetId: entry.studioId, emoji: next });
-      } else if (entry.studioKind === "element") {
+      } else if (kind === "element") {
         await setElementReaction({ elementId: entry.studioId, emoji: next });
-      } else if (entry.studioKind === "videoEdit") {
+      } else if (kind === "videoEdit") {
         await setVideoEditReaction({ projectId: entry.studioId, emoji: next });
       } else {
         return;
@@ -21537,6 +21583,20 @@ export function StudioShell({
           networkListingStatus={myListingForContextAsset?.status ?? null}
           networkPurchaseCount={myListingForContextAsset?.purchaseCount ?? 0}
           networkPlatformOwned={Boolean(myListingForContextAsset?.platformOwnedAt)}
+          hasOutgoingShare={Boolean(
+            contextShareItem &&
+              outgoingShareKeySet.has(
+                `${contextShareItem.itemKind}:${contextShareItem.itemId}`,
+              ),
+          )}
+          shareRecipients={contextShareRecipients ?? []}
+          onRevokeShare={(shareId) => {
+            void revokeStudioShare({ shareId })
+              .then(() => toast.success("Stopped sharing"))
+              .catch((error) =>
+                toast.error(friendlyConvexError(error, "Could not stop sharing")),
+              );
+          }}
           onClose={() => setContextMenu(null)}
           onRequestRename={(entry) => {
             if (isTrashNav) return;
@@ -21549,6 +21609,9 @@ export function StudioShell({
             else void trashEntry(entry);
           }}
           onAction={(action, entry) => {
+            if (action === "shared-with:revoked") {
+              return;
+            }
             if (action === "react-open") {
               setContextMenu(null);
               setReactionPickerEntry(entry);

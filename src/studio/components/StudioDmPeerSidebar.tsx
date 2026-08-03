@@ -20,6 +20,7 @@ import {
   Package,
   Phone,
   Plus,
+  Share2,
   Star,
   Tags,
   UserRound,
@@ -36,7 +37,7 @@ import { StudioDmLabelEditorDialog } from "./StudioDmLabelDialogs";
 import { StudioDmProviderTag } from "./StudioDmProviderTag";
 import { StudioProfileAvatar } from "./StudioProfileAvatar";
 
-type PeerTab = "notes" | "jobs" | "labels" | "about";
+type PeerTab = "notes" | "jobs" | "labels" | "about" | "shared";
 
 type StudioDmPeerSidebarProps = {
   peerUserId: Id<"users">;
@@ -432,6 +433,10 @@ export function StudioDmPeerSidebar({
     api.marketplace.getJob,
     open && jobDetailId ? { jobId: jobDetailId } : "skip",
   );
+  const sharedWithPeer = useQuery(
+    api.studioShares.listOutgoingToPeer,
+    open ? { peerUserId, expiresUnix } : "skip",
+  );
 
   const addNote = useMutation(api.dmPeerPanel.addNote);
   const updateNote = useMutation(api.dmPeerPanel.updateNote);
@@ -440,6 +445,7 @@ export function StudioDmPeerSidebar({
   const unblockPeer = useMutation(api.dmPeerPanel.unblock);
   const setPeerLabels = useMutation(api.dmLabels.setPeerLabels);
   const bookOffer = useMutation(api.marketplace.bookOffer);
+  const revokeShare = useMutation(api.studioShares.revokeShare);
 
   useEffect(() => {
     setPortalRoot(
@@ -572,6 +578,11 @@ export function StudioDmPeerSidebar({
       id: "notes",
       label: "Notes",
       icon: <NotebookPen className="h-3.5 w-3.5" aria-hidden="true" />,
+    },
+    {
+      id: "shared",
+      label: "Shared",
+      icon: <Share2 className="h-3.5 w-3.5" aria-hidden="true" />,
     },
     ...(showJobsTab
       ? [
@@ -732,6 +743,83 @@ export function StudioDmPeerSidebar({
               ))}
             </ul>
           )}
+        </div>
+      ) : null}
+
+      {tab === "shared" ? (
+        <div className="studio-dm-peer-stack">
+          <Section
+            title="Files you shared"
+            icon={<Share2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          >
+            {sharedWithPeer === undefined ? (
+              <p className="studio-settings-empty">Loading…</p>
+            ) : sharedWithPeer.length === 0 ? (
+              <p className="studio-settings-empty">
+                Nothing shared with @{peerUsername} yet.
+              </p>
+            ) : (
+              <ul className="studio-dm-peer-shared-list">
+                {sharedWithPeer.map((row) => (
+                  <li key={row.shareId} className="studio-dm-peer-shared-row">
+                    <div className="studio-dm-peer-shared-copy">
+                      {row.thumbnailUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={row.thumbnailUrl} alt="" />
+                      ) : (
+                        <span className="studio-dm-peer-shared-fallback">
+                          <Share2 aria-hidden="true" />
+                        </span>
+                      )}
+                      <div>
+                        <strong>{row.name}</strong>
+                        <span>
+                          {row.itemKind === "folder"
+                            ? "Folder"
+                            : row.itemKind === "document"
+                              ? "Script"
+                              : row.itemKind === "element"
+                                ? "Element"
+                                : row.itemKind === "videoEdit"
+                                  ? "Edit"
+                                  : row.assetKind === "video"
+                                    ? "Video"
+                                    : row.assetKind === "audio"
+                                      ? "Audio"
+                                      : "File"}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="cursor-settings-action is-danger"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `Stop sharing “${row.name}” with @${peerUsername}?`,
+                          )
+                        ) {
+                          return;
+                        }
+                        setBusy(true);
+                        setError("");
+                        void revokeShare({ shareId: row.shareId })
+                          .catch((err) =>
+                            setError(
+                              friendlyConvexError(err, "Could not stop sharing"),
+                            ),
+                          )
+                          .finally(() => setBusy(false));
+                      }}
+                    >
+                      Unshare
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
         </div>
       ) : null}
 

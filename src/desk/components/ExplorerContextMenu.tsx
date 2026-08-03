@@ -82,6 +82,7 @@ function buildMenuItems(entry, {
   networkPurchaseCount = 0,
   networkPlatformOwned = false,
   presentation = "menu",
+  hasOutgoingShare = false,
 }) {
   if (!entry) return [];
 
@@ -191,6 +192,15 @@ function buildMenuItems(entry, {
       label: "Share",
       iconKey: "share",
     });
+    if (hasOutgoingShare) {
+      items.push({
+        id: "shared-with",
+        label: "Shared with",
+        iconKey: "share",
+        children: [{ id: "shared-with:lazy", label: "…" }],
+        submenuKind: "share-recipients",
+      });
+    }
   }
 
   // —— React ——
@@ -204,12 +214,13 @@ function buildMenuItems(entry, {
         label: emoji,
       }));
       if (entry.reactionEmoji) {
-        reactChildren.push({ id: "react:clear", label: "Clear reaction" });
+        reactChildren.push({ id: "react:clear", label: "Clear" });
       }
       items.push({
         id: "react",
         label: "React",
         children: reactChildren,
+        submenuKind: "emoji-grid",
       });
     }
   }
@@ -403,6 +414,9 @@ export function ExplorerContextMenu({
   networkPlatformOwned = false,
   /** "menu" = floating desktop menu; "sheet" = mobile half-height panel above Files. */
   presentation = "menu",
+  hasOutgoingShare = false,
+  shareRecipients = null,
+  onRevokeShare = null,
 }) {
   const menuRef = useRef(null);
   const submenuRef = useRef(null);
@@ -432,6 +446,7 @@ export function ExplorerContextMenu({
         networkPurchaseCount,
         networkPlatformOwned,
         presentation,
+        hasOutgoingShare,
       }),
     [
       entry,
@@ -452,6 +467,7 @@ export function ExplorerContextMenu({
       networkPurchaseCount,
       networkPlatformOwned,
       presentation,
+      hasOutgoingShare,
     ],
   );
 
@@ -608,25 +624,105 @@ export function ExplorerContextMenu({
                     onActivate={activateItem}
                   />
                   {openSubmenuId === item.id && item.children?.length ? (
-                    <div className="studio-explorer-context-sheet-submenu" role="group">
-                      {item.children.map((child) =>
-                        child.sep ? (
-                          <div
-                            key={child.id}
-                            className="cursor-tab-context-sep"
-                            role="separator"
-                          />
-                        ) : (
+                    <div
+                      className={`studio-explorer-context-sheet-submenu${
+                        item.submenuKind === "emoji-grid"
+                          ? " is-emoji-grid"
+                          : item.submenuKind === "share-recipients"
+                            ? " is-share-recipients"
+                            : ""
+                      }`}
+                      role="group"
+                    >
+                      {item.submenuKind === "emoji-grid" ? (
+                        <div className="desk-explorer-react-grid">
+                          {item.children
+                            .filter((child) => child.id !== "react:clear")
+                            .map((child) => (
+                              <button
+                                key={child.id}
+                                type="button"
+                                className={`desk-explorer-react-emoji${
+                                  entry?.reactionEmoji &&
+                                  child.label === entry.reactionEmoji
+                                    ? " is-active"
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  runAction(child.id);
+                                  onClose();
+                                }}
+                              >
+                                {child.label}
+                              </button>
+                            ))}
+                          {item.children.some((child) => child.id === "react:clear") ? (
+                            <button
+                              type="button"
+                              className="desk-explorer-react-clear"
+                              onClick={() => {
+                                runAction("react:clear");
+                                onClose();
+                              }}
+                            >
+                              Clear
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : item.submenuKind === "share-recipients" ? (
+                        <div className="desk-explorer-share-recipients">
+                          {(shareRecipients ?? []).length === 0 ? (
+                            <p className="desk-explorer-share-recipients-empty">
+                              Not shared with anyone
+                            </p>
+                          ) : (
+                            (shareRecipients ?? []).map((peer) => (
+                              <div
+                                key={peer.shareId}
+                                className="desk-explorer-share-recipient"
+                              >
+                                <span>@{peer.username}</span>
+                                <button
+                                  type="button"
+                                  className="desk-explorer-share-unshare"
+                                  onClick={() => {
+                                    onRevokeShare?.(peer.shareId);
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))
+                          )}
                           <MenuItemButton
-                            key={child.id}
-                            item={child}
+                            item={{ id: "share-people", label: "Add people…" }}
                             active={false}
-                            onActivate={(picked) => {
-                              runAction(picked.id);
+                            onActivate={() => {
+                              runAction("share-people");
                               onClose();
                             }}
                           />
-                        ),
+                        </div>
+                      ) : (
+                        item.children.map((child) =>
+                          child.sep ? (
+                            <div
+                              key={child.id}
+                              className="cursor-tab-context-sep"
+                              role="separator"
+                            />
+                          ) : (
+                            <MenuItemButton
+                              key={child.id}
+                              item={child}
+                              active={false}
+                              onActivate={(picked) => {
+                                runAction(picked.id);
+                                onClose();
+                              }}
+                            />
+                          ),
+                        )
                       )}
                     </div>
                   ) : null}
@@ -670,23 +766,100 @@ export function ExplorerContextMenu({
       {openSubmenuItem ? (
         <div
           ref={submenuRef}
-          className="cursor-tab-context-menu desk-explorer-context-menu desk-explorer-context-submenu"
+          className={`cursor-tab-context-menu desk-explorer-context-menu desk-explorer-context-submenu${
+            openSubmenuItem.submenuKind === "emoji-grid"
+              ? " is-emoji-grid"
+              : openSubmenuItem.submenuKind === "share-recipients"
+                ? " is-share-recipients"
+                : ""
+          }`}
           style={{ left: submenuPos.left, top: submenuPos.top }}
           role="menu"
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {openSubmenuItem.children.map((child) =>
-            child.sep ? (
-              <div key={child.id} className="cursor-tab-context-sep" role="separator" />
-            ) : (
-              <MenuItemButton
-                key={child.id}
-                item={child}
-                active={false}
-                onActivate={(picked) => runAction(picked.id)}
-              />
-            ),
+          {openSubmenuItem.submenuKind === "emoji-grid" ? (
+            <div className="desk-explorer-react-grid" role="group" aria-label="Reactions">
+              {openSubmenuItem.children
+                .filter((child) => child.id !== "react:clear")
+                .map((child) => (
+                  <button
+                    key={child.id}
+                    type="button"
+                    className={`desk-explorer-react-emoji${
+                      entry?.reactionEmoji && child.label === entry.reactionEmoji
+                        ? " is-active"
+                        : ""
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      runAction(child.id);
+                    }}
+                  >
+                    {child.label}
+                  </button>
+                ))}
+              {openSubmenuItem.children.some((child) => child.id === "react:clear") ? (
+                <button
+                  type="button"
+                  className="desk-explorer-react-clear"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    runAction("react:clear");
+                  }}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          ) : openSubmenuItem.submenuKind === "share-recipients" ? (
+            <div className="desk-explorer-share-recipients" role="group" aria-label="Shared with">
+              {(shareRecipients ?? []).length === 0 ? (
+                <p className="desk-explorer-share-recipients-empty">Not shared with anyone</p>
+              ) : (
+                (shareRecipients ?? []).map((peer) => (
+                  <div key={peer.shareId} className="desk-explorer-share-recipient">
+                    <span>@{peer.username}</span>
+                    <button
+                      type="button"
+                      className="desk-explorer-share-unshare"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRevokeShare?.(peer.shareId);
+                        runAction("shared-with:revoked");
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              )}
+              <button
+                type="button"
+                className="cursor-tab-context-item"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  runAction("share-people");
+                }}
+              >
+                <Share2 aria-hidden="true" />
+                <span className="cursor-tab-context-item-label">Add people…</span>
+              </button>
+            </div>
+          ) : (
+            openSubmenuItem.children.map((child) =>
+              child.sep ? (
+                <div key={child.id} className="cursor-tab-context-sep" role="separator" />
+              ) : (
+                <MenuItemButton
+                  key={child.id}
+                  item={child}
+                  active={false}
+                  onActivate={(picked) => runAction(picked.id)}
+                />
+              ),
+            )
           )}
         </div>
       ) : null}

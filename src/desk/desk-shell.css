@@ -847,6 +847,37 @@ select.cursor-select:focus {
     0 2px 6px color-mix(in srgb, #000 12%, transparent);
 }
 
+.desk-file-thumb-shared {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  z-index: 6;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  pointer-events: none;
+  color: var(--color-cursor-muted);
+  background: color-mix(in srgb, var(--mos-plate, #fff) 88%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-cursor-border, rgba(0, 0, 0, 0.12)) 70%, transparent),
+    0 2px 6px color-mix(in srgb, #000 12%, transparent);
+}
+
+.desk-file-thumb-shared .icon-inline {
+  display: flex;
+}
+
+[data-appearance="dark"] .desk-file-thumb-shared,
+:root:not([data-appearance="light"]) .desk-file-thumb-shared {
+  background: color-mix(in srgb, var(--mos-plate, #1a2333) 90%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 14%, transparent),
+    0 2px 8px color-mix(in srgb, #000 35%, transparent);
+}
+
 [data-appearance="dark"] .desk-file-thumb-reaction,
 :root:not([data-appearance="light"]) .desk-file-thumb-reaction {
   background: color-mix(in srgb, var(--mos-plate, #1a2333) 90%, transparent);
@@ -8431,6 +8462,97 @@ textarea.cursor-input {
 }
 .desk-explorer-context-submenu {
   z-index: 651;
+}
+
+.desk-explorer-context-submenu.is-emoji-grid {
+  min-width: 0;
+  padding: 8px;
+}
+
+.desk-explorer-react-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  width: 196px;
+}
+
+.desk-explorer-react-emoji {
+  appearance: none;
+  border: 0;
+  box-sizing: border-box;
+  border-radius: 50%;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  min-height: 0;
+  background: color-mix(in srgb, var(--mos-page, #f5f5f7) 70%, transparent);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.desk-explorer-react-emoji:hover,
+.desk-explorer-react-emoji.is-active {
+  background: color-mix(in srgb, var(--cursor-accent, #3b82f6) 16%, var(--mos-page, #f5f5f7));
+}
+
+.desk-explorer-react-clear {
+  grid-column: 1 / -1;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 4px 2px 0;
+  cursor: pointer;
+}
+
+.desk-explorer-context-submenu.is-share-recipients {
+  min-width: 180px;
+  max-width: 220px;
+  padding: 6px;
+}
+
+.desk-explorer-share-recipients {
+  display: grid;
+  gap: 4px;
+}
+
+.desk-explorer-share-recipients-empty {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+}
+
+.desk-explorer-share-recipient {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-cursor-text);
+}
+
+.desk-explorer-share-unshare {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-cursor-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.desk-explorer-share-unshare:hover {
+  color: #f08080;
 }
 
 .desk-explorer-delete-confirm {

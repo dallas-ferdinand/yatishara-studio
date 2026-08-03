@@ -3195,6 +3195,65 @@
 
 /* —— Peer right sidebar (Settings/admin chrome; thin layout helpers only) —— */
 
+.studio-dm-peer-shared-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.studio-dm-peer-shared-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+}
+
+.studio-dm-peer-shared-copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-dm-peer-shared-copy img,
+.studio-dm-peer-shared-fallback {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-cursor-muted);
+}
+
+.studio-dm-peer-shared-fallback > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.studio-dm-peer-shared-copy strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-peer-shared-copy span {
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+}
+
 .studio-dm-peer-sidebar {
   background: var(--mos-page, var(--color-cursor-bg));
 }
