@@ -177,7 +177,7 @@ function DmMessageMeta({
 type DmReplySnippet = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment";
+  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
   fromMe: boolean;
   audioUrl?: string;
   imageUrl?: string;
@@ -196,10 +196,21 @@ type DmFeedShare = {
   unavailable?: boolean;
 };
 
+type DmStudioShare = {
+  items: Array<{
+    itemKind: "asset" | "document" | "element" | "videoEdit" | "folder";
+    itemId: string;
+    name: string;
+    thumbnailUrl?: string;
+    unavailable?: boolean;
+    assetKind?: "image" | "video" | "audio" | "document";
+  }>;
+};
+
 type DmMessageRow = {
   _id: Id<"dmMessages">;
   body: string;
-  kind: "text" | "voice" | "image" | "post" | "comment";
+  kind: "text" | "voice" | "image" | "post" | "comment" | "studio_share";
   audioUrl?: string;
   imageUrl?: string;
   contentType?: string;
@@ -208,6 +219,7 @@ type DmMessageRow = {
   receipt: DmReceipt;
   replyTo?: DmReplySnippet;
   feedShare?: DmFeedShare;
+  studioShare?: DmStudioShare;
   createdAt: number;
   editedAt?: number;
   deleted?: boolean;
@@ -228,6 +240,9 @@ function replySnippetLabel(
     // Server may already prefix "Photo · …"
     if (caption.startsWith("Photo")) return caption;
     return caption ? `Photo · ${caption}` : "Photo";
+  }
+  if (snippet.kind === "studio_share") {
+    return snippet.body.trim() || "Shared files";
   }
   return snippet.body.trim() || "Message";
 }
@@ -386,6 +401,61 @@ function ReplyKindIcon({
     return <MessageCircle className={className} aria-hidden="true" />;
   }
   return null;
+}
+
+function DmStudioShareCard({
+  share,
+  onOpenItem,
+}: {
+  share: DmStudioShare;
+  onOpenItem?: (item: DmStudioShare["items"][number]) => void;
+}) {
+  return (
+    <div className="studio-dm-studio-share" role="group" aria-label="Shared Studio files">
+      {share.items.map((item) => {
+        const unavailable = Boolean(item.unavailable);
+        const kindLabel =
+          item.itemKind === "folder"
+            ? "Folder"
+            : item.itemKind === "document"
+              ? "Script"
+              : item.itemKind === "element"
+                ? "Element"
+                : item.itemKind === "videoEdit"
+                  ? "Edit"
+                  : item.assetKind === "video"
+                    ? "Video"
+                    : item.assetKind === "audio"
+                      ? "Audio"
+                      : "File";
+        return (
+          <button
+            key={`${item.itemKind}:${item.itemId}`}
+            type="button"
+            className={`studio-dm-studio-share-item${unavailable ? " is-unavailable" : ""}`}
+            disabled={unavailable || !onOpenItem}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!unavailable) onOpenItem?.(item);
+            }}
+          >
+            <span className="studio-dm-studio-share-thumb">
+              {item.thumbnailUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.thumbnailUrl} alt="" />
+              ) : (
+                <FolderOpen className="h-4 w-4" aria-hidden="true" />
+              )}
+            </span>
+            <span className="studio-dm-studio-share-copy">
+              <strong>{unavailable ? "Unavailable" : item.name}</strong>
+              <span>{unavailable ? "No longer shared" : kindLabel}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function DmFeedShareCard({
@@ -1215,12 +1285,14 @@ const DmMessageBubble = memo(function DmMessageBubble({
   peerLabel,
   onOpenGallery,
   onOpenFeedPost,
+  onOpenStudioShareItem,
   actions,
 }: {
   message: DmMessageRow;
   peerLabel: string;
   onOpenGallery: (items: DmLightboxItem[], index: number) => void;
   onOpenFeedPost?: (postId: Id<"profilePosts">) => void;
+  onOpenStudioShareItem?: (item: DmStudioShare["items"][number]) => void;
   actions: DmMessageActionHandlers;
 }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -1263,6 +1335,7 @@ const DmMessageBubble = memo(function DmMessageBubble({
     message.kind === "voice" ? "is-voice" : "",
     message.kind === "image" ? "is-image" : "",
     message.kind === "post" || message.kind === "comment" ? "is-feed-share" : "",
+    message.kind === "studio_share" ? "is-studio-share" : "",
     message.replyTo ? "has-reply" : "",
   ]
     .filter(Boolean)
@@ -1506,6 +1579,24 @@ const DmMessageBubble = memo(function DmMessageBubble({
                   edited={Boolean(message.editedAt)}
                 />
               </div>
+            ) : message.kind === "studio_share" ? (
+              <div className="studio-dm-bubble-body">
+                {message.studioShare ? (
+                  <DmStudioShareCard
+                    share={message.studioShare}
+                    onOpenItem={onOpenStudioShareItem}
+                  />
+                ) : (
+                  <p className="studio-dm-voice-missing">Shared files unavailable</p>
+                )}
+                {message.body.trim() ? <p>{message.body.trim()}</p> : null}
+                <DmMessageMeta
+                  createdAt={message.createdAt}
+                  fromMe={message.fromMe}
+                  receipt={message.receipt}
+                  edited={Boolean(message.editedAt)}
+                />
+              </div>
             ) : (
               <div className="studio-dm-bubble-body">
                 {isEditing ? (
@@ -1629,11 +1720,22 @@ type StudioMessagesPaneProps = {
    */
   onRequestPickAsset?: (request: {
     kinds?: ReadonlyArray<"image" | "video" | "audio" | "document">;
+    pickAnyStudio?: boolean;
     title?: string;
     maxSelected?: number;
-    onConfirm?: (assets: StudioAssetPick[]) => void;
+    onConfirm?: (assets: Array<StudioAssetPick & {
+      itemKind?: string;
+      itemId?: string;
+      studioKind?: string;
+    }>) => void;
     onPick?: (asset: StudioAssetPick) => void;
     onCancel?: () => void;
+  }) => void;
+  /** Open a shared Studio file from a DM studio_share card. */
+  onOpenStudioShareItem?: (item: {
+    itemKind: string;
+    itemId: string;
+    name: string;
   }) => void;
 };
 
@@ -1742,6 +1844,7 @@ export function StudioMessagesPane({
   showChatListWhenEmpty = false,
   embeddedInRail = false,
   onRequestPickAsset,
+  onOpenStudioShareItem,
 }: StudioMessagesPaneProps) {
   const { isMobile } = useMobileLayout();
   const showBack = showChatListWhenEmpty || embeddedInRail;
@@ -1814,6 +1917,7 @@ export function StudioMessagesPane({
   const sendVoiceMessage = useMutation(api.dms.sendVoiceMessage);
   const sendImageMessage = useMutation(api.dms.sendImageMessage);
   const sendFeedShare = useMutation(api.dms.sendFeedShare);
+  const shareStudioItems = useMutation(api.studioShares.shareItems);
   const editMessage = useMutation(api.dms.editMessage);
   const deleteMessageForMe = useMutation(api.dms.deleteMessageForMe);
   const deleteMessageForEveryone = useMutation(api.dms.deleteMessageForEveryone);
@@ -2352,6 +2456,53 @@ export function StudioMessagesPane({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }
 
+  async function sendStudioPicks(
+    picked: Array<
+      StudioAssetPick & {
+        itemKind?: string;
+        itemId?: string;
+        studioKind?: string;
+      }
+    >,
+  ) {
+    if (!conversationId || !activeRow?.peer.userId || picked.length === 0) return;
+    const items = picked
+      .map((item) => {
+        if (item.itemKind && item.itemId) {
+          return {
+            itemKind: item.itemKind as
+              | "asset"
+              | "document"
+              | "element"
+              | "videoEdit"
+              | "folder",
+            itemId: item.itemId,
+          };
+        }
+        return {
+          itemKind: "asset" as const,
+          itemId: String(item._id),
+        };
+      })
+      .filter((item) => item.itemId);
+    if (!items.length) return;
+    setFilesPickBusy(true);
+    setSendError("");
+    try {
+      await shareStudioItems({
+        peerUserIds: [activeRow.peer.userId],
+        items,
+        conversationId,
+      });
+      setFilesPickerOpen(false);
+      setMobilePickSelected([]);
+    } catch (error) {
+      setSendError(friendlyConvexError(error, "Could not share files"));
+    } finally {
+      setFilesPickBusy(false);
+    }
+  }
+
   async function handleSend() {
     if (!conversationId || sendBusy || recState !== "idle") return;
     const body = draft.trim();
@@ -2625,6 +2776,7 @@ export function StudioMessagesPane({
                     peerLabel={peerLabel}
                     onOpenGallery={openGallery}
                     onOpenFeedPost={onOpenFeedPost}
+                    onOpenStudioShareItem={onOpenStudioShareItem}
                     actions={messageActions}
                   />
                 </div>
@@ -2946,11 +3098,11 @@ export function StudioMessagesPane({
                 // Mobile: keep the sheet picker.
                 if (onRequestPickAsset && !isMobile) {
                   onRequestPickAsset({
-                    kinds: ["image"],
-                    title: "Attach photos",
+                    pickAnyStudio: true,
+                    title: "Share Studio files",
                     maxSelected: MAX_PENDING_IMAGES,
-                    onConfirm: (assets) => {
-                      stageStudioFileAssets(assets);
+                    onConfirm: (picked) => {
+                      void sendStudioPicks(picked);
                     },
                   });
                   return;
@@ -2965,29 +3117,36 @@ export function StudioMessagesPane({
 
       {filesPickerOpen ? (
         <StudioAssetPickerSheet
-          title="Attach photos"
-          kinds={["image"]}
+          title="Share Studio files"
+          pickAnyStudio
           multi
           stayOpen
           maxSelected={MAX_PENDING_IMAGES}
           countLabel={`${mobilePickSelected.length}/${MAX_PENDING_IMAGES}`}
-          doneLabel="Confirm"
+          doneLabel="Share"
           expiresUnix={filesPickerExpiresUnix}
-          selectedIds={mobilePickSelected.map((item) => item._id)}
+          selectedIds={mobilePickSelected.map((item) => String(item._id))}
           onPick={(asset) => {
             setMobilePickSelected((prev) => {
-              const exists = prev.some((item) => item._id === asset._id);
-              if (exists) return prev.filter((item) => item._id !== asset._id);
+              const exists = prev.some((item) => String(item._id) === String(asset._id));
+              if (exists) return prev.filter((item) => String(item._id) !== String(asset._id));
               if (prev.length >= MAX_PENDING_IMAGES) return prev;
               return [...prev, asset];
             });
           }}
           onDone={() => {
             if (filesPickBusy) return;
-            const picked = mobilePickSelected;
+            const picked = mobilePickSelected.map((asset) => ({
+              ...asset,
+              itemKind:
+                asset.itemKind ??
+                ("asset" as const),
+              itemId: String(asset.itemId ?? asset._id),
+              studioKind: asset.studioKind ?? asset.itemKind ?? "asset",
+            }));
             setMobilePickSelected([]);
             setFilesPickerOpen(false);
-            if (picked.length > 0) stageStudioFileAssets(picked);
+            if (picked.length > 0) void sendStudioPicks(picked);
           }}
           onClose={() => {
             if (filesPickBusy) return;

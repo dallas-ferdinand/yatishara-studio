@@ -618,6 +618,78 @@
   overflow: hidden;
 }
 
+.studio-dm-bubble.is-studio-share {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: min(78%, 20rem);
+  padding: 4px;
+}
+
+.studio-dm-studio-share {
+  display: grid;
+  gap: 6px;
+}
+
+.studio-dm-studio-share-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--color-cursor-border-soft);
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, var(--cursor-surface-raised));
+  color: inherit;
+  font: inherit;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.studio-dm-studio-share-item:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.studio-dm-studio-share-thumb {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mos-plate-strong, var(--cursor-surface-raised));
+  color: var(--color-cursor-muted);
+}
+
+.studio-dm-studio-share-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-dm-studio-share-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio-dm-studio-share-copy strong {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-dm-studio-share-copy span {
+  font-size: 11px;
+  color: var(--color-cursor-muted);
+}
+
 /* Feed share bubbles — same containment as image bubbles (card + optional note). */
 .studio-dm-bubble.is-feed-share {
   flex-direction: column;
