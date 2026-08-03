@@ -509,7 +509,7 @@ export function StudioSharePeoplePanel({
                 name={peer.username}
                 alt=""
               />
-              <span>@{peer.username}</span>
+              <span>{peer.displayName?.trim() || peer.username}</span>
               <X aria-hidden="true" />
             </button>
           ))}
