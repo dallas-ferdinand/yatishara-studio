@@ -1,16 +1,5 @@
 /* Share-to-people panel — lives in the Files rail / mobile sheet. */
 
-.studio-share-people-shell {
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  min-height: 0;
-  flex: 1 1 auto;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-}
-
 .studio-share-people-panel {
   display: flex;
   flex-direction: column;
@@ -19,23 +8,6 @@
   flex: 1 1 auto;
   height: 100%;
   background: var(--mos-page, var(--cursor-surface));
-}
-
-/* Desktop: Access/File confirm as a second rail beside the people list. */
-.studio-share-confirm-rail {
-  flex: 0 0 196px;
-  width: 196px;
-  min-width: 180px;
-  max-width: 220px;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid var(--color-cursor-border-soft);
-  background: var(--mos-page, var(--cursor-surface));
-}
-
-.studio-polish .studio-main-panels > [data-panel-id="studio-sidebar"]:has(.studio-share-confirm-rail) {
-  min-width: min(420px, 46vw);
 }
 
 .studio-share-people-chrome {
@@ -151,40 +123,26 @@
   cursor: not-allowed;
 }
 
-/* Confirm Access/File — desktop rail / mobile bottom sheet. */
+/* Confirm Access/File — desktop dropdown under Share / mobile bottom sheet. */
+.studio-share-confirm-dropdown-anchor {
+  position: fixed;
+  z-index: 720;
+  width: 240px;
+}
+
 .studio-share-confirm-menu {
-  min-width: 0;
-  max-width: none;
-  padding: 10px;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
+  padding: 10px;
+  border-radius: var(--cursor-radius-md, 8px);
+  background: var(--mos-plate, var(--mos-bg, #ececf0));
+  box-shadow: var(--cursor-shadow-menu, var(--cursor-shadow-pop));
 }
 
-.studio-share-confirm-menu.is-rail {
-  height: 100%;
-  padding: 8px 10px 12px;
-}
-
-.studio-share-confirm-rail-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 28px;
-  margin: 0 0 2px;
-}
-
-.studio-share-confirm-rail-head strong {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-cursor-text-bright);
+.studio-share-confirm-menu.is-dropdown {
+  min-width: 220px;
+  max-width: 240px;
 }
 
 .studio-share-confirm-menu.is-sheet {
@@ -193,7 +151,6 @@
   right: 0;
   bottom: 0;
   z-index: 90;
-  flex: none;
   max-width: none;
   min-width: 0;
   border-radius: 16px 16px 0 0;
@@ -296,8 +253,13 @@
 }
 
 .studio-share-confirm-submit {
-  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 18%, transparent);
-  border-color: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 42%, var(--color-cursor-border-soft));
+  background: transparent;
+  border-color: var(--color-cursor-border-soft);
+  color: var(--color-cursor-text-bright);
+}
+
+.studio-share-confirm-submit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-cursor-accent, #3b82f6) 10%, transparent);
 }
 
 .studio-share-confirm-dismiss:disabled,

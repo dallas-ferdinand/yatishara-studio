@@ -115,7 +115,6 @@ function ShareConfirmMenu({
   onConfirm,
   onDismiss,
   asSheet,
-  asRail,
 }: {
   delivery: "access" | "file";
   setDelivery: (v: "access" | "file") => void;
@@ -126,31 +125,15 @@ function ShareConfirmMenu({
   onConfirm: () => void;
   onDismiss: () => void;
   asSheet: boolean;
-  asRail?: boolean;
 }) {
   return (
     <div
-      className={`studio-share-confirm-menu${asSheet ? " is-sheet" : ""}${asRail ? " is-rail" : ""}`}
+      className={`studio-share-confirm-menu${asSheet ? " is-sheet" : " is-dropdown"}`}
       role="dialog"
       aria-label="Choose share type"
     >
       {asSheet ? (
         <div className="studio-share-confirm-sheet-grab" aria-hidden="true" />
-      ) : null}
-      {asRail ? (
-        <header className="studio-share-confirm-rail-head">
-          <strong>Share</strong>
-          <button
-            type="button"
-            className="studio-share-people-icon-btn is-close"
-            onClick={onDismiss}
-            disabled={busy}
-            title="Close"
-            aria-label="Close"
-          >
-            <X aria-hidden="true" />
-          </button>
-        </header>
       ) : null}
       <p className="studio-share-confirm-title">Share as</p>
       <div className="studio-share-confirm-modes" role="group" aria-label="Share type">
@@ -249,6 +232,9 @@ export function StudioSharePeoplePanel({
   const [delivery, setDelivery] = useState<"access" | "file">("access");
   const [permission, setPermission] = useState<"view" | "edit">("view");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const shareBtnRef = useRef<HTMLButtonElement | null>(null);
+  const confirmMenuRef = useRef<HTMLDivElement | null>(null);
+  const [confirmPos, setConfirmPos] = useState({ top: 0, left: 0 });
   const labelRailRef = useRef<HTMLDivElement | null>(null);
   useHorizontalWheelScroll(labelRailRef);
   useHorizontalScrollFade(labelRailRef);
@@ -282,13 +268,42 @@ export function StudioSharePeoplePanel({
   }, [activeLabelId, labels]);
 
   useEffect(() => {
+    if (!confirmOpen || isMobile) return;
+    const btn = shareBtnRef.current;
+    if (!btn) return;
+    const place = () => {
+      const rect = btn.getBoundingClientRect();
+      const width = 240;
+      const left = Math.min(
+        Math.max(8, rect.right - width),
+        window.innerWidth - width - 8,
+      );
+      setConfirmPos({ top: rect.bottom + 4, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [confirmOpen, isMobile]);
+
+  useEffect(() => {
     if (!confirmOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (isMobile) return;
+      const t = e.target as Node;
+      if (shareBtnRef.current?.contains(t)) return;
+      if (confirmMenuRef.current?.contains(t)) return;
+      setConfirmOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setConfirmOpen(false);
     };
+    document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [confirmOpen]);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [confirmOpen, isMobile]);
 
   function toggleFromPerson(person: {
     userId: Id<"users">;
@@ -314,8 +329,8 @@ export function StudioSharePeoplePanel({
     setConfirmOpen(false);
   }
 
-  const mobileConfirmSheet =
-    confirmOpen && isMobile
+  const confirmOverlay = confirmOpen
+    ? isMobile
       ? createPortal(
           <>
             <button
@@ -338,15 +353,30 @@ export function StudioSharePeoplePanel({
           </>,
           document.querySelector(".studio-polish") ?? document.body,
         )
-      : null;
+      : createPortal(
+          <div
+            ref={confirmMenuRef}
+            className="studio-share-confirm-dropdown-anchor"
+            style={{ top: confirmPos.top, left: confirmPos.left }}
+          >
+            <ShareConfirmMenu
+              delivery={delivery}
+              setDelivery={setDelivery}
+              permission={permission}
+              setPermission={setPermission}
+              allowFileDelivery={allowFileDelivery}
+              busy={busy}
+              onConfirm={runConfirm}
+              onDismiss={() => setConfirmOpen(false)}
+              asSheet={false}
+            />
+          </div>,
+          document.body,
+        )
+    : null;
 
   return (
-    <div
-      className={`studio-share-people-shell${
-        confirmOpen && !isMobile ? " is-confirm-open" : ""
-      }`}
-    >
-      <div className="studio-share-people-panel">
+    <div className="studio-share-people-panel">
       <div className="studio-dm-sidebar-chrome studio-share-people-chrome">
         <PanelSearchBar
           value={search}
@@ -408,6 +438,7 @@ export function StudioSharePeoplePanel({
             <X aria-hidden="true" />
           </button>
           <button
+            ref={shareBtnRef}
             type="button"
             className="studio-share-people-icon-btn is-share"
             onClick={() => {
@@ -426,7 +457,7 @@ export function StudioSharePeoplePanel({
         </div>
       </div>
 
-      {mobileConfirmSheet}
+      {confirmOverlay}
 
       {selectedPeers.length > 0 ? (
         <div className="studio-share-people-selected" aria-label="Selected people">
@@ -647,24 +678,6 @@ export function StudioSharePeoplePanel({
           </ul>
         )}
       </div>
-      </div>
-
-      {confirmOpen && !isMobile ? (
-        <aside className="studio-share-confirm-rail" aria-label="Share options">
-          <ShareConfirmMenu
-            delivery={delivery}
-            setDelivery={setDelivery}
-            permission={permission}
-            setPermission={setPermission}
-            allowFileDelivery={allowFileDelivery}
-            busy={busy}
-            onConfirm={runConfirm}
-            onDismiss={() => setConfirmOpen(false)}
-            asSheet={false}
-            asRail
-          />
-        </aside>
-      ) : null}
     </div>
   );
 }
