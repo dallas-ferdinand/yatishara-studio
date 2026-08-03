@@ -9317,9 +9317,8 @@ export function StudioShell({
           background: color-mix(in srgb, #1c1c1e 22%, transparent);
         }
         /*
-          Bottom sheets: canvas = L2 plate; drag-handle top band = L1 page
-          (whitish in light — same as menu handle). Other way from continuous
-          same-grey handle+body.
+          Bottom sheets: canvas + drag-handle top band = same L2 plate grey
+          (continuous sheet, not a whitish L1 strip).
         */
         .studio-mobile-app-menu-sheet-handle,
         .studio-history-mobile-sheet-handle,
@@ -9327,7 +9326,7 @@ export function StudioShell({
         .studio-files-nav-mobile-sheet-handle,
         .studio-explorer-context-sheet .studio-mobile-app-menu-sheet-handle,
         .profile-comments-sheet .studio-mobile-app-menu-sheet-handle {
-          background: var(--mos-page, var(--mos-panel, #f5f5f7)) !important;
+          background: var(--mos-plate, var(--mos-panel, #ececf0)) !important;
           border: 0 !important;
           box-shadow: none !important;
         }
@@ -9338,7 +9337,7 @@ export function StudioShell({
         .studio-dm-peer-mobile-sheet {
           background: var(--mos-plate, var(--mos-panel, #ececf0));
         }
-        /* Files sheet chrome under handle: plate canvas shows; only handle is whitish. */
+        /* Files sheet chrome under handle: transparent so plate shows through. */
         .studio-polish .studio-files-mobile-sheet .studio-files-source-toggle,
         .studio-polish .studio-files-mobile-sheet .studio-files-search-row,
         .studio-polish .studio-files-mobile-sheet .studio-files-chrome,
@@ -9551,7 +9550,7 @@ export function StudioShell({
         .studio-polish[data-files-open="1"] .studio-files-dock {
           pointer-events: auto;
         }
-        /* Handle = whitish L1 page band (shared rule above); canvas = plate. */
+        /* Handle + canvas = same plate grey (shared rule above). */
         .studio-files-dock-handle {
           position: relative;
           z-index: 2;
@@ -18537,7 +18536,7 @@ export function StudioShell({
           padding: 0;
           border: none;
           border-radius: 18px 18px 0 0;
-          /* L2 plate canvas; whitish L1 handle band (shared rule). */
+          /* L2 plate canvas; handle matches (shared rule). */
           background: var(--mos-plate, var(--mos-panel, #ececf0));
           box-shadow: var(--studio-mobile-sheet-shadow);
           overflow: hidden;
