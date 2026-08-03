@@ -1,7 +1,7 @@
 /** Place the desktop Share Access/File menu near a trigger, edge-aware. */
 
-const MENU_WIDTH = 240;
-const MENU_HEIGHT_ESTIMATE = 220;
+const MENU_WIDTH = 260;
+const MENU_HEIGHT_ESTIMATE = 250;
 const GAP = 4;
 const PAD = 8;
 

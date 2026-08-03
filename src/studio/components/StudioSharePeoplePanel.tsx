@@ -154,6 +154,13 @@ export function ShareConfirmMenu({
   onDismiss: () => void;
   asSheet: boolean;
 }) {
+  const hint =
+    delivery === "file"
+      ? "Sends a copy into their Messages folder"
+      : permission === "edit"
+        ? "Can edit live originals — not delete"
+        : "Read, download, and copy";
+
   return (
     <div
       className={`studio-share-confirm-menu${asSheet ? " is-sheet" : " is-dropdown"}`}
@@ -164,10 +171,15 @@ export function ShareConfirmMenu({
         <div className="studio-share-confirm-sheet-grab" aria-hidden="true" />
       ) : null}
       <p className="studio-share-confirm-title">Share as</p>
-      <div className="studio-share-confirm-modes" role="group" aria-label="Share type">
+      <div
+        className={`studio-share-confirm-segment${allowFileDelivery ? "" : " is-single"}`}
+        role="group"
+        aria-label="Share type"
+      >
         <button
           type="button"
-          className={`studio-share-confirm-mode${delivery === "access" ? " is-active" : ""}`}
+          className={`studio-share-confirm-seg${delivery === "access" ? " is-active" : ""}`}
+          aria-pressed={delivery === "access"}
           onClick={() => setDelivery("access")}
           disabled={busy}
         >
@@ -176,7 +188,8 @@ export function ShareConfirmMenu({
         {allowFileDelivery ? (
           <button
             type="button"
-            className={`studio-share-confirm-mode${delivery === "file" ? " is-active" : ""}`}
+            className={`studio-share-confirm-seg${delivery === "file" ? " is-active" : ""}`}
+            aria-pressed={delivery === "file"}
             onClick={() => setDelivery("file")}
             disabled={busy}
           >
@@ -185,11 +198,17 @@ export function ShareConfirmMenu({
         ) : null}
       </div>
       {delivery === "access" ? (
-        <>
-          <div className="studio-share-confirm-modes" role="group" aria-label="Permission">
+        <div className="studio-share-confirm-block">
+          <p className="studio-share-confirm-label">Permission</p>
+          <div
+            className="studio-share-confirm-segment"
+            role="group"
+            aria-label="Permission"
+          >
             <button
               type="button"
-              className={`studio-share-confirm-mode${permission === "view" ? " is-active" : ""}`}
+              className={`studio-share-confirm-seg${permission === "view" ? " is-active" : ""}`}
+              aria-pressed={permission === "view"}
               onClick={() => setPermission("view")}
               disabled={busy}
             >
@@ -197,24 +216,17 @@ export function ShareConfirmMenu({
             </button>
             <button
               type="button"
-              className={`studio-share-confirm-mode${permission === "edit" ? " is-active" : ""}`}
+              className={`studio-share-confirm-seg${permission === "edit" ? " is-active" : ""}`}
+              aria-pressed={permission === "edit"}
               onClick={() => setPermission("edit")}
               disabled={busy}
             >
               Edit
             </button>
           </div>
-          <p className="studio-share-confirm-hint">
-            {permission === "edit"
-              ? "Can edit live originals — not delete"
-              : "Read, download, copy"}
-          </p>
-        </>
-      ) : (
-        <p className="studio-share-confirm-hint">
-          Sends a copy into their Messages folder
-        </p>
-      )}
+        </div>
+      ) : null}
+      <p className="studio-share-confirm-hint">{hint}</p>
       <div className="studio-share-confirm-actions">
         <button
           type="button"
@@ -230,7 +242,7 @@ export function ShareConfirmMenu({
           onClick={onConfirm}
           disabled={busy}
         >
-          Confirm
+          Share
         </button>
       </div>
     </div>
