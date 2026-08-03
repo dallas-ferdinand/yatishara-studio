@@ -50,18 +50,37 @@ self.addEventListener("push", (e) => {
 
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  const rawUrl =
+    (e.notification.data && e.notification.data.url) || "/?open=activity";
+  const targetUrl = (() => {
+    try {
+      return new URL(rawUrl, self.location.origin).href;
+    } catch {
+      return new URL("/?open=activity", self.location.origin).href;
+    }
+  })();
+
   e.waitUntil(
     (async () => {
       const clientsList = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
-      const existing = clientsList.find((client) => "focus" in client);
-      if (existing) {
-        await existing.focus();
-        return;
+      for (const client of clientsList) {
+        if (!("focus" in client)) continue;
+        try {
+          await client.focus();
+          if ("navigate" in client) {
+            await client.navigate(targetUrl);
+          } else {
+            client.postMessage({ type: "studio-open-url", url: targetUrl });
+          }
+          return;
+        } catch {
+          /* try next client */
+        }
       }
-      await self.clients.openWindow("./");
+      await self.clients.openWindow(targetUrl);
     })(),
   );
 });

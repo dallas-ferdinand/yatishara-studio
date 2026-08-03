@@ -22,6 +22,7 @@ import {
   parseAssistanceGenerationPlan,
 } from "./lib/assistanceGenerationPlan";
 import { applyStorageBytesDelta } from "./lib/storageBilling";
+import { createNotificationAndPush } from "./lib/notify";
 
 const generationMode = v.union(
   v.literal("image"),
@@ -48,17 +49,6 @@ const generationStage = v.union(
   v.literal("done"),
   v.literal("failed"),
 );
-
-const sendPushForNotificationRef = makeFunctionReference<
-  "action",
-  { notificationId: Id<"notifications"> },
-  number
->("notificationsActions:sendPushForNotification") as unknown as FunctionReference<
-  "action",
-  "internal",
-  { notificationId: Id<"notifications"> },
-  number
->;
 
 const enqueueMediaProxyRef = makeFunctionReference<
   "mutation",
@@ -2148,16 +2138,12 @@ export const completeWithOutputs = internalMutation({
         updatedAt: now,
       });
     }
-    const notificationId = await ctx.db.insert("notifications", {
+    await createNotificationAndPush(ctx, {
       userId: job.ownerId,
       kind: "generation_completed",
       title: "Generation complete",
       body: "Your generated media is ready.",
       generationJobId: job._id,
-      createdAt: now,
-    });
-    await ctx.scheduler.runAfter(0, sendPushForNotificationRef, {
-      notificationId,
     });
     return null;
   },
@@ -2203,16 +2189,12 @@ export const failJob = internalMutation({
       generationJobId: job._id,
       createdAt: now,
     });
-    const notificationId = await ctx.db.insert("notifications", {
+    await createNotificationAndPush(ctx, {
       userId: job.ownerId,
       kind: "generation_failed",
       title: "Generation failed",
       body: "Credits were refunded automatically.",
       generationJobId: job._id,
-      createdAt: now,
-    });
-    await ctx.scheduler.runAfter(0, sendPushForNotificationRef, {
-      notificationId,
     });
     return null;
   },

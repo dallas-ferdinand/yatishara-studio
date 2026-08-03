@@ -95,6 +95,14 @@ import {
 import { MOBILE_BREAKPOINT, useMobileLayout } from "@/hooks/use-mobile-layout";
 import { useMobileBackLayer } from "@/studio/components/MobileBackStackHost";
 import { mobileBackStack } from "@/studio/lib/mobileBackStack";
+import { registerDeskServiceWorker } from "@/desk/lib/register-sw";
+import {
+  disableStudioWebPush,
+  enableStudioWebPush,
+  getNotificationPermission,
+  hasStudioWebPushSubscription,
+  isStudioWebPushAvailable,
+} from "@/studio/lib/webPush";
 import { useLongPress } from "@/desk/hooks/use-long-press";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -4379,6 +4387,66 @@ export function StudioShell({
     setSettingsOpen(true);
   }, [isMobile]);
 
+  useEffect(() => {
+    void registerDeskServiceWorker();
+  }, []);
+
+  const applyStudioOpenParams = useCallback(
+    (search) => {
+      const params = new URLSearchParams(search);
+      const open = params.get("open");
+      if (!open) return false;
+      if (open === "messages") {
+        const conversationId = params.get("c");
+        openMessages();
+        if (conversationId) {
+          setActiveDmConversationId(conversationId);
+        }
+      } else if (open === "post") {
+        const postId = params.get("p");
+        if (postId) openProfilePost("", postId);
+      } else if (open === "activity") {
+        setSettingsSection("activity");
+        setSettingsOpen(true);
+      } else if (open === "settings") {
+        setSettingsSection(params.get("section") || "general");
+        setSettingsOpen(true);
+      } else {
+        return false;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete("open");
+      url.searchParams.delete("c");
+      url.searchParams.delete("p");
+      url.searchParams.delete("section");
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      window.history.replaceState({}, "", next || "/");
+      return true;
+    },
+    // openMessages / openSettingsTab / openProfilePost are stable enough for boot deep-links
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isMobile],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    applyStudioOpenParams(window.location.search);
+    const onMessage = (event) => {
+      if (event?.data?.type !== "studio-open-url" || !event.data.url) return;
+      try {
+        const url = new URL(event.data.url, window.location.origin);
+        if (url.origin !== window.location.origin) return;
+        applyStudioOpenParams(url.search);
+      } catch {
+        /* ignore */
+      }
+    };
+    navigator.serviceWorker?.addEventListener?.("message", onMessage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener?.("message", onMessage);
+    };
+  }, [applyStudioOpenParams]);
+
   const openedInitialProfileRef = useRef(false);
   useEffect(() => {
     if (openedInitialProfileRef.current) return;
@@ -4445,6 +4513,16 @@ export function StudioShell({
     onCustomCursorChange: setCustomCursorEnabled,
     onPaymentCelebration: setPaymentCelebration,
     onPaywiseHandoff: setPaywiseHandoff,
+    onActivityOpenMessages: (conversationId) => {
+      openMessages();
+      if (conversationId) setActiveDmConversationId(conversationId);
+    },
+    onActivityOpenPost: (postId) => {
+      openProfilePost("", postId);
+    },
+    onActivityOpenBilling: () => {
+      openSettingsTab("billing");
+    },
   };
 
   const openCreditsPane = useCallback(() => {
@@ -12152,6 +12230,12 @@ export function StudioShell({
           gap: 12px;
           align-items: start;
           padding: 12px 16px;
+        }
+        .studio-settings-activity-row.is-clickable {
+          cursor: pointer;
+        }
+        .studio-settings-activity-row.is-clickable:hover {
+          background: color-mix(in srgb, var(--color-cursor-muted) 8%, transparent);
         }
         .studio-settings-activity-tone {
           width: 8px;
@@ -30155,6 +30239,9 @@ function SettingsSidePanel({
   onCustomCursorChange,
   onPaymentCelebration,
   onPaywiseHandoff,
+  onActivityOpenMessages,
+  onActivityOpenPost,
+  onActivityOpenBilling,
   isMobile = false,
 }) {
   useEffect(() => {
@@ -30181,6 +30268,9 @@ function SettingsSidePanel({
       onCustomCursorChange={onCustomCursorChange}
       onPaymentCelebration={onPaymentCelebration}
       onPaywiseHandoff={onPaywiseHandoff}
+      onActivityOpenMessages={onActivityOpenMessages}
+      onActivityOpenPost={onActivityOpenPost}
+      onActivityOpenBilling={onActivityOpenBilling}
     />
   );
 
@@ -30316,6 +30406,9 @@ function SettingsWorkspacePane({
   onCustomCursorChange,
   onPaymentCelebration,
   onPaywiseHandoff,
+  onActivityOpenMessages,
+  onActivityOpenPost,
+  onActivityOpenBilling,
 }) {
   const [section, setSection] = useState(tab === "top-up" ? "billing" : tab || "general");
   const [selectedPlanKey, setSelectedPlanKey] = useState("custom");
@@ -30683,7 +30776,13 @@ function SettingsWorkspacePane({
         ) : null}
 
         {settingsSectionId === "activity" ? (
-          <StudioActivityFeed notifications={notifications} payments={payments} />
+          <StudioActivityFeed
+            notifications={notifications}
+            payments={payments}
+            onOpenMessages={onActivityOpenMessages}
+            onOpenPost={onActivityOpenPost}
+            onOpenBilling={onActivityOpenBilling}
+          />
         ) : null}
 
         {settingsSectionId === "general" ? (
@@ -30976,6 +31075,100 @@ function DefaultStudioTabSettings({ value }) {
   );
 }
 
+function BrowserNotificationsCard() {
+  const savePushSubscription = useMutation(api.notifications.savePushSubscription);
+  const removePushSubscription = useMutation(api.notifications.removePushSubscription);
+  const available = isStudioWebPushAvailable();
+  const [permission, setPermission] = useState(() => getNotificationPermission());
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const next = await hasStudioWebPushSubscription();
+      if (!cancelled) {
+        setSubscribed(next);
+        setPermission(getNotificationPermission());
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!available) {
+    return (
+      <section className="cursor-settings-section studio-account-card">
+        <div className="studio-account-fields">
+          <strong>Browser notifications</strong>
+          <p className="studio-settings-field-hint">
+            Available on the live HTTPS site in a supporting browser — not on localhost or the Android app shell.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  const denied = permission === "denied";
+  const enabled = subscribed && permission === "granted";
+
+  return (
+    <section className="cursor-settings-section studio-account-card">
+      <div className="studio-account-fields">
+        <strong>Browser notifications</strong>
+        <p className="studio-settings-field-hint">
+          Get alerts for finished generations, DMs, and posts from people you follow.
+        </p>
+        {denied ? (
+          <p className="studio-settings-field-hint">
+            Notifications are blocked in this browser. Allow them in site settings, then enable again.
+          </p>
+        ) : null}
+        {error ? <p className="studio-settings-field-hint">{error}</p> : null}
+      </div>
+      <div className="studio-account-actions">
+        <button
+          type="button"
+          className={`studio-account-save${error ? " is-error" : ""}`}
+          disabled={busy || denied}
+          onClick={() => {
+            setError("");
+            setBusy(true);
+            const run = enabled
+              ? disableStudioWebPush({ remove: removePushSubscription })
+              : enableStudioWebPush({ save: savePushSubscription });
+            void run
+              .then(async () => {
+                setPermission(getNotificationPermission());
+                setSubscribed(await hasStudioWebPushSubscription());
+                if (!enabled) toast.success("Browser notifications enabled");
+                else toast.message("Browser notifications turned off");
+              })
+              .catch((err) => {
+                setError(friendlyConvexError(err, "Could not update notifications"));
+                setPermission(getNotificationPermission());
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+          <span>
+            {busy
+              ? enabled
+                ? "Turning off…"
+                : "Enabling…"
+              : enabled
+                ? "Turn off"
+                : "Enable"}
+          </span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function AccountDetailsCard({ currentUser, onSave }) {
   const { signOut } = useAuthActions();
   const setPassword = useAction(api.passwordAuth.setPassword);
@@ -31142,6 +31335,8 @@ function AccountDetailsCard({ currentUser, onSave }) {
           </button>
         </div>
       </section>
+
+      <BrowserNotificationsCard />
 
       <section className="cursor-settings-section studio-account-card studio-account-password">
         <button
@@ -31427,6 +31622,7 @@ function activityToneForKind(kind, status) {
     return "danger";
   }
   if (kind === "payment_status" || kind === "payment") return "payment";
+  if (kind === "dm_message" || kind === "followed_post") return "neutral";
   return "neutral";
 }
 
@@ -31502,6 +31698,11 @@ function buildStudioActivityItems(notifications = [], payments = []) {
       body: item.body,
       createdAt: item.createdAt ?? item._creationTime,
       tone: activityToneForKind(item.kind),
+      conversationId: item.conversationId,
+      postId: item.postId,
+      generationJobId: item.generationJobId,
+      paymentId: item.paymentId,
+      notificationId: item._id,
     })),
     ...(payments ?? []).map((item) => ({
       id: `p:${item._id}`,
@@ -31529,7 +31730,13 @@ function buildStudioActivityItems(notifications = [], payments = []) {
   return collapsed.slice(0, 12);
 }
 
-function StudioActivityFeed({ notifications = [], payments = [] }) {
+function StudioActivityFeed({
+  notifications = [],
+  payments = [],
+  onOpenMessages,
+  onOpenPost,
+  onOpenBilling,
+}) {
   const items = useMemo(
     () => buildStudioActivityItems(notifications, payments),
     [notifications, payments],
@@ -31543,10 +31750,39 @@ function StudioActivityFeed({ notifications = [], payments = [] }) {
       </div>
       {items.length ? (
         <div className="studio-settings-activity-list">
-          {items.map((item) => (
+          {items.map((item) => {
+            const clickable =
+              (item.kind === "dm_message" && item.conversationId && onOpenMessages) ||
+              (item.kind === "followed_post" && item.postId && onOpenPost) ||
+              ((item.kind === "payment_status" || item.kind === "payment") && onOpenBilling);
+            return (
             <article
               key={item.id}
-              className={`studio-settings-activity-row is-${item.tone}`}
+              className={`studio-settings-activity-row is-${item.tone}${clickable ? " is-clickable" : ""}`}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={
+                clickable
+                  ? () => {
+                      if (item.kind === "dm_message" && item.conversationId) {
+                        onOpenMessages?.(item.conversationId);
+                      } else if (item.kind === "followed_post" && item.postId) {
+                        onOpenPost?.(item.postId);
+                      } else if (item.kind === "payment_status" || item.kind === "payment") {
+                        onOpenBilling?.();
+                      }
+                    }
+                  : undefined
+              }
+              onKeyDown={
+                clickable
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      event.currentTarget.click();
+                    }
+                  : undefined
+              }
             >
               <span className="studio-settings-activity-tone" aria-hidden="true" />
               <div className="studio-settings-activity-copy">
@@ -31564,10 +31800,13 @@ function StudioActivityFeed({ notifications = [], payments = [] }) {
                 {item.body ? <p>{item.body}</p> : null}
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <p className="studio-settings-activity-empty">No recent billing or generation activity.</p>
+        <p className="studio-settings-activity-empty">
+          No recent generations, messages, posts, or billing activity.
+        </p>
       )}
     </section>
   );

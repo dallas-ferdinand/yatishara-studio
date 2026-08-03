@@ -6,6 +6,8 @@ const notificationKind = v.union(
   v.literal("generation_completed"),
   v.literal("generation_failed"),
   v.literal("payment_status"),
+  v.literal("dm_message"),
+  v.literal("followed_post"),
 );
 
 const notificationReturn = v.object({
@@ -18,6 +20,8 @@ const notificationReturn = v.object({
   readAt: v.optional(v.number()),
   generationJobId: v.optional(v.id("generationJobs")),
   paymentId: v.optional(v.id("payments")),
+  conversationId: v.optional(v.id("dmConversations")),
+  postId: v.optional(v.id("profilePosts")),
   createdAt: v.number(),
 });
 
@@ -81,12 +85,28 @@ export const savePushSubscription = authedMutation({
   },
 });
 
+export const removePushSubscription = authedMutation({
+  args: { endpoint: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_endpoint", (q) => q.eq("endpoint", args.endpoint))
+      .unique();
+    if (existing && existing.userId === ctx.user._id) {
+      await ctx.db.delete(existing._id);
+    }
+    return null;
+  },
+});
+
 export const getPushDelivery = internalQuery({
   args: { notificationId: v.id("notifications") },
   returns: v.object({
     notification: notificationReturn,
     subscriptions: v.array(
       v.object({
+        _id: v.id("pushSubscriptions"),
         endpoint: v.string(),
         p256dh: v.string(),
         auth: v.string(),
@@ -105,11 +125,24 @@ export const getPushDelivery = internalQuery({
     return {
       notification,
       subscriptions: subscriptions.map((subscription) => ({
+        _id: subscription._id,
         endpoint: subscription.endpoint,
         p256dh: subscription.p256dh,
         auth: subscription.auth,
       })),
     };
+  },
+});
+
+export const deletePushSubscriptionById = internalMutation({
+  args: { subscriptionId: v.id("pushSubscriptions") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.subscriptionId);
+    if (row) {
+      await ctx.db.delete(row._id);
+    }
+    return null;
   },
 });
 
@@ -148,4 +181,3 @@ export const markReadForApi = internalMutation({
     return null;
   },
 });
-

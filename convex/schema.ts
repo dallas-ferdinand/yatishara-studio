@@ -256,6 +256,8 @@ export const notificationKind = v.union(
   v.literal("generation_completed"),
   v.literal("generation_failed"),
   v.literal("payment_status"),
+  v.literal("dm_message"),
+  v.literal("followed_post"),
 );
 
 const modelHints = v.record(
@@ -970,6 +972,8 @@ export default defineSchema({
     readAt: v.optional(v.number()),
     generationJobId: v.optional(v.id("generationJobs")),
     paymentId: v.optional(v.id("payments")),
+    conversationId: v.optional(v.id("dmConversations")),
+    postId: v.optional(v.id("profilePosts")),
     createdAt: v.number(),
   })
     .index("by_user", ["userId"])

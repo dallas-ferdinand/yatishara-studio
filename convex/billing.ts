@@ -25,6 +25,7 @@ import {
 } from "./lib/generationPricing";
 import { PAYWISE_CURRENCY } from "./lib/paywise";
 import { settleOutstandingStorage } from "./lib/storageBilling";
+import { createNotificationAndPush } from "./lib/notify";
 
 const paymentMethod = v.union(v.literal("bank"), v.literal("card"), v.literal("paywise"));
 
@@ -53,17 +54,6 @@ const creditTransactionKind = v.union(
   v.literal("storage_charge"),
   v.literal("asset_purchase"),
 );
-
-const sendPushForNotificationRef = makeFunctionReference<
-  "action",
-  { notificationId: Id<"notifications"> },
-  number
->("notificationsActions:sendPushForNotification") as unknown as FunctionReference<
-  "action",
-  "internal",
-  { notificationId: Id<"notifications"> },
-  number
->;
 
 const settlePaywiseCallbackRef = makeFunctionReference<
   "action",
@@ -1954,7 +1944,6 @@ async function notifyPaymentStatus(
     rejectionReason?: string;
   },
 ) {
-  const now = Date.now();
   const body =
     args.status === "payment_completed"
       ? "Your payment was confirmed and your balance was topped up."
@@ -1965,16 +1954,12 @@ async function notifyPaymentStatus(
           : args.status === "receipt_received"
             ? "Your receipt was received and is being reviewed."
             : "Your payment status was updated.";
-  const notificationId = await ctx.db.insert("notifications", {
+  await createNotificationAndPush(ctx, {
     userId: args.userId,
     kind: "payment_status",
     title: "Payment status updated",
     body,
     paymentId: args.paymentId,
-    createdAt: now,
-  });
-  await ctx.scheduler.runAfter(0, sendPushForNotificationRef, {
-    notificationId,
   });
 }
 

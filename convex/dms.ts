@@ -23,6 +23,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { createNotificationAndPush } from "./lib/notify";
 import { hydrateSocialPeople } from "./profiles";
 import {
   hydrateStudioShareCard,
@@ -397,6 +398,46 @@ function peerIdOf(conversation: Doc<"dmConversations">, me: Id<"users">) {
   return conversation.userLowId === me
     ? conversation.userHighId
     : conversation.userLowId;
+}
+
+async function senderDisplayLabel(
+  ctx: MutationCtx,
+  senderId: Id<"users">,
+): Promise<string> {
+  const profile = await ctx.db
+    .query("profiles")
+    .withIndex("by_user", (q) => q.eq("userId", senderId))
+    .unique();
+  if (profile?.username) return `@${profile.username}`;
+  const user = await ctx.db.get("users", senderId);
+  const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user?.name?.trim()) return user.name.trim();
+  return "Someone";
+}
+
+async function notifyDmPeer(
+  ctx: MutationCtx,
+  args: {
+    conversation: Doc<"dmConversations">;
+    senderId: Id<"users">;
+    body: string;
+  },
+) {
+  const peerId = peerIdOf(args.conversation, args.senderId);
+  if (peerId === args.senderId) return;
+  const title = await senderDisplayLabel(ctx, args.senderId);
+  const body =
+    args.body.length > DM_PREVIEW_MAX
+      ? `${args.body.slice(0, DM_PREVIEW_MAX)}…`
+      : args.body;
+  await createNotificationAndPush(ctx, {
+    userId: peerId,
+    kind: "dm_message",
+    title,
+    body: body || "New message",
+    conversationId: args.conversation._id,
+  });
 }
 
 function peerTypingAtOf(
@@ -1326,6 +1367,11 @@ export const sendMessage = authedMutation({
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
     });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: ctx.user._id,
+      body,
+    });
     return messageId;
   },
 });
@@ -1411,6 +1457,11 @@ export const sendFeedShare = authedMutation({
       });
     }
 
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: ctx.user._id,
+      body: feedShareListPreview(kind, body || previewFallback),
+    });
     return messageId;
   },
 });
@@ -1468,6 +1519,11 @@ export const sendVoiceMessage = authedMutation({
       ...(isLow
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: ctx.user._id,
+      body: VOICE_PREVIEW,
     });
     return messageId;
   },
@@ -1535,6 +1591,11 @@ export const sendImageMessage = authedMutation({
       ...(isLow
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: ctx.user._id,
+      body: preview,
     });
     return messageId;
   },
@@ -2381,6 +2442,11 @@ export const sendMessageForApi = internalMutation({
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
     });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: args.userId,
+      body,
+    });
     return messageId;
   },
 });
@@ -2465,6 +2531,11 @@ export const sendFeedShareForApi = internalMutation({
       });
     }
 
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: args.userId,
+      body: feedShareListPreview(kind, body || previewFallback),
+    });
     return messageId;
   },
 });
@@ -2538,6 +2609,11 @@ export const sendImageMessageForApi = internalMutation({
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
     });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: args.userId,
+      body: preview,
+    });
     return messageId;
   },
 });
@@ -2597,6 +2673,11 @@ export const sendVoiceMessageForApi = internalMutation({
       ...(isLow
         ? { lowLastReadAt: now, lowTypingAt: 0 }
         : { highLastReadAt: now, highTypingAt: 0 }),
+    });
+    await notifyDmPeer(ctx, {
+      conversation,
+      senderId: args.userId,
+      body: VOICE_PREVIEW,
     });
     return messageId;
   },

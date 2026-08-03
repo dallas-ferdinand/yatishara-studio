@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import webpush from "web-push";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { notificationDeepLink } from "./lib/notify";
 
 export const sendPushForNotification = internalAction({
   args: { notificationId: v.id("notifications") },
@@ -20,12 +21,24 @@ export const sendPushForNotification = internalAction({
     const delivery = await ctx.runQuery(internal.notifications.getPushDelivery, {
       notificationId: args.notificationId,
     });
+    const n = delivery.notification;
+    const url = notificationDeepLink({
+      kind: n.kind,
+      conversationId: n.conversationId,
+      postId: n.postId,
+      generationJobId: n.generationJobId,
+    });
     const payload = JSON.stringify({
-      title: delivery.notification.title,
-      body: delivery.notification.body,
+      title: n.title,
+      body: n.body,
       data: {
         notificationId: args.notificationId,
-        kind: delivery.notification.kind,
+        kind: n.kind,
+        url,
+        conversationId: n.conversationId,
+        postId: n.postId,
+        generationJobId: n.generationJobId,
+        paymentId: n.paymentId,
       },
     });
     let sent = 0;
@@ -43,7 +56,20 @@ export const sendPushForNotification = internalAction({
         );
         sent += 1;
       } catch (error) {
+        const statusCode =
+          error &&
+          typeof error === "object" &&
+          "statusCode" in error &&
+          typeof (error as { statusCode?: unknown }).statusCode === "number"
+            ? (error as { statusCode: number }).statusCode
+            : undefined;
+        if (statusCode === 404 || statusCode === 410) {
+          await ctx.runMutation(internal.notifications.deletePushSubscriptionById, {
+            subscriptionId: subscription._id,
+          });
+        }
         console.warn("Web push send failed", {
+          statusCode,
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }

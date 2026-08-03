@@ -71,6 +71,7 @@ import type * as lib_itemReactions from "../lib/itemReactions.js";
 import type * as lib_klingGatewayPrompt from "../lib/klingGatewayPrompt.js";
 import type * as lib_marketplaceEscrow from "../lib/marketplaceEscrow.js";
 import type * as lib_naturalAudioSpeed from "../lib/naturalAudioSpeed.js";
+import type * as lib_notify from "../lib/notify.js";
 import type * as lib_passwordCrypto from "../lib/passwordCrypto.js";
 import type * as lib_paywise from "../lib/paywise.js";
 import type * as lib_presetThumbnails from "../lib/presetThumbnails.js";
@@ -201,6 +202,7 @@ declare const fullApi: ApiFromModules<{
   "lib/klingGatewayPrompt": typeof lib_klingGatewayPrompt;
   "lib/marketplaceEscrow": typeof lib_marketplaceEscrow;
   "lib/naturalAudioSpeed": typeof lib_naturalAudioSpeed;
+  "lib/notify": typeof lib_notify;
   "lib/passwordCrypto": typeof lib_passwordCrypto;
   "lib/paywise": typeof lib_paywise;
   "lib/presetThumbnails": typeof lib_presetThumbnails;

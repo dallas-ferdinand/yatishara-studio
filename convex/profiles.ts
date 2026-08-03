@@ -18,6 +18,7 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import { createNotificationAndPush } from "./lib/notify";
 import {
   accountNameFromUser,
   ensureProfileForUser,
@@ -501,6 +502,72 @@ async function getProfileByUser(
     .unique();
 }
 
+const FOLLOWED_POST_NOTIFY_BATCH = 50;
+
+async function scheduleFollowedPostNotifications(
+  ctx: MutationCtx,
+  args: {
+    profileId: Id<"profiles">;
+    postId: Id<"profilePosts">;
+    authorUserId: Id<"users">;
+    username: string;
+  },
+) {
+  await ctx.scheduler.runAfter(0, internal.profiles.notifyFollowersOfPostBatch, {
+    profileId: args.profileId,
+    postId: args.postId,
+    authorUserId: args.authorUserId,
+    username: args.username,
+    cursor: null,
+  });
+}
+
+export const notifyFollowersOfPostBatch = internalMutation({
+  args: {
+    profileId: v.id("profiles"),
+    postId: v.id("profilePosts"),
+    authorUserId: v.id("users"),
+    username: v.string(),
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const page = await ctx.db
+      .query("profileFollows")
+      .withIndex("by_following", (q) =>
+        q.eq("followingProfileId", args.profileId),
+      )
+      .paginate({
+        numItems: FOLLOWED_POST_NOTIFY_BATCH,
+        cursor: args.cursor,
+      });
+
+    const title = `@${args.username}`;
+    const body = "shared a post";
+    for (const follow of page.page) {
+      if (follow.followerUserId === args.authorUserId) continue;
+      await createNotificationAndPush(ctx, {
+        userId: follow.followerUserId,
+        kind: "followed_post",
+        title,
+        body,
+        postId: args.postId,
+      });
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.profiles.notifyFollowersOfPostBatch, {
+        profileId: args.profileId,
+        postId: args.postId,
+        authorUserId: args.authorUserId,
+        username: args.username,
+        cursor: page.continueCursor,
+      });
+    }
+    return null;
+  },
+});
+
 async function getActivePostByAsset(
   ctx: QueryCtx | MutationCtx,
   assetId: Id<"assets">,
@@ -931,6 +998,12 @@ export const shareAsset = authedMutation({
       await adjustProfileCounts(ctx, profile._id, {
         postCount: profile.postCount + 1,
       });
+      await scheduleFollowedPostNotifications(ctx, {
+        profileId: profile._id,
+        postId: existing._id,
+        authorUserId: ctx.user._id,
+        username: profile.username,
+      });
       return {
         postId: existing._id,
         publicUrlPath: publicUrlPath(profile.username),
@@ -952,6 +1025,12 @@ export const shareAsset = authedMutation({
     await attachMeta(postId);
     await adjustProfileCounts(ctx, profile._id, {
       postCount: profile.postCount + 1,
+    });
+    await scheduleFollowedPostNotifications(ctx, {
+      profileId: profile._id,
+      postId,
+      authorUserId: ctx.user._id,
+      username: profile.username,
     });
     return {
       postId,
@@ -2919,6 +2998,12 @@ export const shareAssetForApi = internalMutation({
       await adjustProfileCounts(ctx, profile._id, {
         postCount: profile.postCount + 1,
       });
+      await scheduleFollowedPostNotifications(ctx, {
+        profileId: profile._id,
+        postId: existing._id,
+        authorUserId: user._id,
+        username: profile.username,
+      });
       return {
         postId: existing._id,
         publicUrlPath: publicUrlPath(profile.username),
@@ -2940,6 +3025,12 @@ export const shareAssetForApi = internalMutation({
     await attachMeta(postId);
     await adjustProfileCounts(ctx, profile._id, {
       postCount: profile.postCount + 1,
+    });
+    await scheduleFollowedPostNotifications(ctx, {
+      profileId: profile._id,
+      postId,
+      authorUserId: user._id,
+      username: profile.username,
     });
     return {
       postId,
