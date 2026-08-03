@@ -21,10 +21,18 @@ export const REACTION_EMOJIS = [
 
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
-const ALLOWED = new Set<string>(REACTION_EMOJIS);
+/** Strip emoji presentation selectors so ❤️ / ❤ match the same allowlist entry. */
+function emojiKey(value: string): string {
+  return String(value).trim().replace(/\uFE0F/g, "");
+}
+
+const ALLOWED = new Set<string>(REACTION_EMOJIS.map(emojiKey));
+const CANONICAL = new Map<string, ReactionEmoji>(
+  REACTION_EMOJIS.map((emoji) => [emojiKey(emoji), emoji]),
+);
 
 export function isAllowedReactionEmoji(emoji: string): emoji is ReactionEmoji {
-  return ALLOWED.has(emoji);
+  return ALLOWED.has(emojiKey(emoji));
 }
 
 /** Returns cleared `undefined` or a validated emoji; throws on unknown. */
@@ -32,9 +40,9 @@ export function normalizeReactionEmoji(
   emoji: string | null,
 ): ReactionEmoji | undefined {
   if (emoji === null) return undefined;
-  const trimmed = String(emoji).trim();
-  if (!isAllowedReactionEmoji(trimmed)) {
+  const canonical = CANONICAL.get(emojiKey(String(emoji)));
+  if (!canonical) {
     throw new Error("That reaction is not available");
   }
-  return trimmed;
+  return canonical;
 }
