@@ -14,6 +14,12 @@
   flex: 0 0 auto;
 }
 
+/* Panel head already draws the divider above — don't stack search border-top. */
+.studio-polish aside.is-share-people .studio-share-people-chrome .cursor-panel-search,
+.studio-share-people-chrome .cursor-panel-search {
+  border-top: none;
+}
+
 /* Same height band as .cursor-panel-head. */
 .studio-share-people-top {
   display: flex;
