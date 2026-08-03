@@ -1310,6 +1310,7 @@ export function StudioShell({
   });
   const [contextMenu, setContextMenu] = useState(null);
   const [reactionPickerEntry, setReactionPickerEntry] = useState(null);
+  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [fileSelectionMode, setFileSelectionMode] = useState(false);
   const [selectedFileEntries, setSelectedFileEntries] = useState([]);
   const [fileTransfers, setFileTransfers] = useState([]);
@@ -4867,7 +4868,14 @@ export function StudioShell({
   });
   useMobileBackLayer("file-reaction-picker", Boolean(reactionPickerEntry), () => {
     setReactionPickerEntry(null);
+    setReactionPickerAnchor(null);
   });
+
+  function openReactionPickerForEntry(entry, anchor) {
+    if (!entry) return;
+    setReactionPickerAnchor(anchor ?? null);
+    setReactionPickerEntry(entry);
+  }
   useMobileBackLayer("feed-mode-menu", feedModeMenuOpen, () => {
     setFeedModeMenuOpen(false);
     setFeedModeMenuKey(null);
@@ -20588,6 +20596,7 @@ export function StudioShell({
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
             onStartInlineRename={startInlineRename}
+            onOpenReactionPicker={openReactionPickerForEntry}
             onDropFiles={uploadFiles}
             selectionMode={fileSelectionMode}
             selectedPaths={selectedFilePaths}
@@ -20947,6 +20956,7 @@ export function StudioShell({
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
             onStartInlineRename={startInlineRename}
+                onOpenReactionPicker={openReactionPickerForEntry}
                 onDropFiles={uploadFiles}
                 selectionMode={fileSelectionMode}
                 selectedPaths={selectedFilePaths}
@@ -21386,6 +21396,7 @@ export function StudioShell({
             onInlineRenameCommit={commitInlineRename}
             onInlineRenameDismiss={dismissInlineRename}
             onStartInlineRename={startInlineRename}
+          onOpenReactionPicker={openReactionPickerForEntry}
           selectionMode={fileSelectionMode}
           selectedPaths={selectedFilePaths}
           selectedCount={selectedFileEntries.length}
@@ -21760,6 +21771,7 @@ export function StudioShell({
             }
             if (action === "react-open") {
               setContextMenu(null);
+              setReactionPickerAnchor(null);
               setReactionPickerEntry(entry);
               return;
             }
@@ -21926,10 +21938,21 @@ export function StudioShell({
       <FileReactionPicker
         open={Boolean(reactionPickerEntry)}
         currentEmoji={reactionPickerEntry?.reactionEmoji ?? null}
-        onClose={() => setReactionPickerEntry(null)}
+        presentation={isMobile ? "sheet" : "menu"}
+        anchor={
+          reactionPickerAnchor ??
+          (typeof window !== "undefined"
+            ? { x: window.innerWidth / 2 - 80, y: window.innerHeight / 2 - 80 }
+            : { x: 24, y: 24 })
+        }
+        onClose={() => {
+          setReactionPickerEntry(null);
+          setReactionPickerAnchor(null);
+        }}
         onSelect={(emoji) => {
           const entry = reactionPickerEntry;
           setReactionPickerEntry(null);
+          setReactionPickerAnchor(null);
           if (entry) void applyEntryReaction(entry, emoji);
         }}
       />
@@ -28767,6 +28790,7 @@ function StudioFilesExplorerBody({
   onInlineRenameCommit,
   onInlineRenameDismiss,
   onStartInlineRename,
+  onOpenReactionPicker,
 }) {
   const filterActive = typeFilter !== "all";
   const isNetworkMode = filesBrowseMode === "network";
@@ -28785,6 +28809,7 @@ function StudioFilesExplorerBody({
         onEntrySelect={onEntrySelect}
         pinnedPaths={pinnedPaths}
         pinnedShortcuts={pinnedShortcuts}
+        onOpenReactionPicker={onOpenReactionPicker}
         onNavigate={(path, navEntry) => {
           if (navEntry?.type === "parent" && navEntry.studioId) {
             setActiveFolderId(navEntry.studioId);

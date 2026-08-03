@@ -539,6 +539,8 @@ export function FileEntryThumb({
   onRenameCommit,
   onRenameDismiss,
   onLabelDoubleClick,
+  onReactionPick,
+  onReactionHover,
 }) {
   const name = entry?.name ?? entry?.path?.split("/").pop() ?? "?";
   const label = name;
@@ -844,12 +846,34 @@ export function FileEntryThumb({
           </span>
         ) : null}
         {entry?.reactionEmoji ? (
-          <span
+          <button
+            type="button"
             className="desk-file-thumb-reaction"
-            aria-label={`Reaction ${entry.reactionEmoji}`}
+            aria-label={`Change reaction ${entry.reactionEmoji}`}
+            title="Change reaction"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              onReactionPick?.(entry, {
+                x: rect.left,
+                y: rect.bottom + 4,
+              });
+            }}
+            onMouseEnter={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              onReactionHover?.(entry, {
+                x: rect.left,
+                y: rect.bottom + 4,
+              });
+            }}
+            onMouseDown={(event) => {
+              // Keep parent FileEntryButton from treating this as open/drag.
+              event.stopPropagation();
+            }}
           >
             {entry.reactionEmoji}
-          </span>
+          </button>
         ) : null}
       </div>
       {showLabel && !inlinePeekLabel ? (

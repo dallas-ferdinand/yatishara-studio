@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -22,22 +23,31 @@ export type FileReactionPickerProps = {
   currentEmoji?: string | null;
   onSelect: (emoji: string | null) => void;
   onClose: () => void;
+  /** sheet = mobile bottom sheet; menu = desktop floating picker */
+  presentation?: "sheet" | "menu";
+  /** Anchor for menu presentation (viewport coords). */
+  anchor?: { x: number; y: number } | null;
 };
 
 /**
- * Mobile bottom sheet: grab handle + ~10 emoji reactions for file-manager items.
+ * File-manager reaction picker — mobile bottom sheet or desktop floating menu.
  */
 export function FileReactionPicker({
   open,
   currentEmoji,
   onSelect,
   onClose,
+  presentation = "sheet",
+  anchor = null,
 }: FileReactionPickerProps) {
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [entered, setEntered] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [menuPos, setMenuPos] = useState({ left: 0, top: 0 });
   const dragRef = useRef<SheetDragState | null>(null);
   const offsetRef = useRef(0);
+  const isMenu = presentation === "menu";
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +66,43 @@ export function FileReactionPicker({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  useLayoutEffect(() => {
+    if (!open || !isMenu || !anchor) return;
+    const width = 168;
+    const height = 220;
+    let left = anchor.x;
+    let top = anchor.y;
+    left = Math.min(Math.max(8, left), window.innerWidth - width - 8);
+    top = Math.min(Math.max(8, top), window.innerHeight - height - 8);
+    setMenuPos({ left, top });
+    const frame = window.requestAnimationFrame(() => {
+      const el = menuRef.current;
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      let nextLeft = anchor.x;
+      let nextTop = anchor.y;
+      if (nextLeft + box.width > window.innerWidth - 8) {
+        nextLeft = Math.max(8, anchor.x - box.width);
+      }
+      if (nextTop + box.height > window.innerHeight - 8) {
+        nextTop = Math.max(8, anchor.y - box.height);
+      }
+      setMenuPos({ left: nextLeft, top: nextTop });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open, isMenu, anchor?.x, anchor?.y]);
+
+  useEffect(() => {
+    if (!open || !isMenu) return;
+    const onDoc = (event: MouseEvent) => {
+      const t = event.target as Node;
+      if (menuRef.current?.contains(t)) return;
+      onClose();
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, isMenu, onClose]);
 
   const applyOffset = (px: number) => {
     offsetRef.current = px;
@@ -129,6 +176,57 @@ export function FileReactionPicker({
     else onSelect(emoji);
   };
 
+  const emojiGrid = (
+    <div
+      className={isMenu ? "desk-explorer-react-grid" : "studio-file-reaction-grid"}
+      role="listbox"
+      aria-label="Reactions"
+    >
+      {REACTION_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          role="option"
+          aria-selected={currentEmoji === emoji}
+          className={`${isMenu ? "desk-explorer-react-emoji" : "studio-file-reaction-emoji"}${
+            currentEmoji === emoji ? " is-active" : ""
+          }`}
+          onClick={() => pick(emoji)}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+
+  const clearBtn = currentEmoji ? (
+    <button
+      type="button"
+      className={isMenu ? "desk-explorer-react-clear" : "studio-file-reaction-clear"}
+      onClick={() => onSelect(null)}
+    >
+      Clear reaction
+    </button>
+  ) : null;
+
+  if (isMenu) {
+    return createPortal(
+      <div
+        ref={menuRef}
+        className="cursor-tab-context-menu desk-explorer-context-menu desk-explorer-context-submenu is-emoji-grid studio-file-reaction-menu"
+        style={{ left: menuPos.left, top: menuPos.top }}
+        role="dialog"
+        aria-label="React"
+        onContextMenu={(event) => event.preventDefault()}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        {emojiGrid}
+        {clearBtn}
+      </div>,
+      document.body,
+    );
+  }
+
   return createPortal(
     <>
       <button
@@ -158,29 +256,8 @@ export function FileReactionPicker({
           <span className="studio-mobile-app-menu-sheet-grab" aria-hidden="true" />
         </div>
         <div className="studio-file-reaction-sheet-body">
-          <div className="studio-file-reaction-grid" role="listbox" aria-label="Reactions">
-            {REACTION_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                role="option"
-                aria-selected={currentEmoji === emoji}
-                className={`studio-file-reaction-emoji${currentEmoji === emoji ? " is-active" : ""}`}
-                onClick={() => pick(emoji)}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-          {currentEmoji ? (
-            <button
-              type="button"
-              className="studio-file-reaction-clear"
-              onClick={() => onSelect(null)}
-            >
-              Clear reaction
-            </button>
-          ) : null}
+          {emojiGrid}
+          {clearBtn}
         </div>
       </div>
     </>,

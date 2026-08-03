@@ -9,6 +9,19 @@
   cursor: pointer;
 }
 
+.studio-file-reaction-menu {
+  z-index: 720;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.studio-file-reaction-menu .desk-explorer-react-clear {
+  width: 100%;
+}
+
 .studio-mobile-app-menu-sheet.studio-file-reaction-sheet {
   z-index: 85;
   max-height: min(34vh, 260px);

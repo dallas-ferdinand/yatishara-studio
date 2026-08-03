@@ -825,6 +825,8 @@ select.cursor-select:focus {
 }
 
 .desk-file-thumb-reaction {
+  appearance: none;
+  border: 0;
   position: absolute;
   top: 5px;
   right: 5px;
@@ -840,11 +842,16 @@ select.cursor-select:focus {
   aspect-ratio: 1 / 1;
   font-size: 13px;
   line-height: 1;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   background: color-mix(in srgb, var(--mos-plate, #fff) 88%, transparent);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-cursor-border, rgba(0, 0, 0, 0.12)) 70%, transparent),
     0 2px 6px color-mix(in srgb, #000 12%, transparent);
+}
+
+.desk-file-thumb-reaction:hover {
+  transform: scale(1.08);
 }
 
 .desk-file-thumb-shared {

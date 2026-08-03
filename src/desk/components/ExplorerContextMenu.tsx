@@ -233,9 +233,8 @@ function buildMenuItems(entry, {
         id: `react:${emoji}`,
         label: emoji,
       }));
-      if (entry.reactionEmoji) {
-        reactChildren.push({ id: "react:clear", label: "Clear" });
-      }
+      // Always include Clear slot so the flyout matches FileReactionPicker.
+      reactChildren.push({ id: "react:clear", label: "Clear reaction" });
       items.push({
         id: "react",
         label: "React",
@@ -454,12 +453,12 @@ export function ExplorerContextMenu({
     }
   }
 
-  function scheduleSubmenuClose() {
+  function scheduleSubmenuClose(delayMs = 220) {
     clearSubmenuCloseTimer();
     submenuCloseTimerRef.current = window.setTimeout(() => {
       submenuCloseTimerRef.current = null;
       setOpenSubmenuId(null);
-    }, 120);
+    }, delayMs);
   }
 
   function openSubmenu(id) {
@@ -718,7 +717,7 @@ export function ExplorerContextMenu({
                                 {child.label}
                               </button>
                             ))}
-                          {item.children.some((child) => child.id === "react:clear") ? (
+                          {entry?.reactionEmoji ? (
                             <button
                               type="button"
                               className="desk-explorer-react-clear"
@@ -727,7 +726,7 @@ export function ExplorerContextMenu({
                                 onClose();
                               }}
                             >
-                              Clear
+                              Clear reaction
                             </button>
                           ) : null}
                         </div>
@@ -820,8 +819,9 @@ export function ExplorerContextMenu({
                 item={item}
                 active={openSubmenuId === item.id}
                 onHover={(hovered) => {
-                  if (hovered.children?.length) openSubmenu(hovered.id);
-                  else {
+                  if (hovered.children?.length || hovered.submenuKind === "emoji-grid") {
+                    openSubmenu(hovered.id);
+                  } else {
                     clearSubmenuCloseTimer();
                     setOpenSubmenuId(null);
                   }
@@ -877,7 +877,7 @@ export function ExplorerContextMenu({
                     {child.label}
                   </button>
                 ))}
-              {openSubmenuItem.children.some((child) => child.id === "react:clear") ? (
+              {entry?.reactionEmoji ? (
                 <button
                   type="button"
                   className="desk-explorer-react-clear"
@@ -886,7 +886,7 @@ export function ExplorerContextMenu({
                     runAction("react:clear");
                   }}
                 >
-                  Clear
+                  Clear reaction
                 </button>
               ) : null}
             </div>

@@ -1353,6 +1353,7 @@ function renderEntryRows({
   onInlineRenameCommit,
   onInlineRenameDismiss,
   onStartInlineRename,
+  onOpenReactionPicker,
 }) {
   const isRenaming = (e) =>
     Boolean(renamingStudioId && e?.studioId && e.studioId === renamingStudioId);
@@ -1398,14 +1399,23 @@ function renderEntryRows({
       canInlineRename(e) && onStartInlineRename
         ? () => onStartInlineRename(e)
         : undefined;
+    const reactionProps = onOpenReactionPicker
+      ? {
+          onReactionPick: (entry, anchor) => onOpenReactionPicker(entry, anchor),
+          onReactionHover: (entry, anchor) => onOpenReactionPicker(entry, anchor),
+        }
+      : {};
     if (!renaming) {
-      return labelDbl ? { renaming: false, onLabelDoubleClick: labelDbl } : { renaming: false };
+      return labelDbl
+        ? { renaming: false, onLabelDoubleClick: labelDbl, ...reactionProps }
+        : { renaming: false, ...reactionProps };
     }
     return {
       renaming: true,
       renameInitialName: renameSeedName(e),
       onRenameCommit: (next) => onInlineRenameCommit?.(e, next),
       onRenameDismiss: () => onInlineRenameDismiss?.(e),
+      ...reactionProps,
     };
   };
 
@@ -1478,7 +1488,19 @@ function renderEntryRows({
                 selectionMode={selectionMode}
                 onSelect={onEntrySelect}
               >
-                <FileEntryThumb entry={e} workspaceId={workspaceId} size="grid" />
+                <FileEntryThumb
+                  entry={e}
+                  workspaceId={workspaceId}
+                  size="grid"
+                  {...(onOpenReactionPicker
+                    ? {
+                        onReactionPick: (entry, anchor) =>
+                          onOpenReactionPicker(entry, anchor),
+                        onReactionHover: (entry, anchor) =>
+                          onOpenReactionPicker(entry, anchor),
+                      }
+                    : {})}
+                />
               </FileEntryButton>
             );
           }
@@ -1630,6 +1652,7 @@ export function FileTree({
   onInlineRenameCommit,
   onInlineRenameDismiss,
   onStartInlineRename,
+  onOpenReactionPicker,
 }) {
   void listDir;
   const searchActive = Boolean(searchQuery.trim());
@@ -1744,10 +1767,10 @@ export function FileTree({
     selectedSet,
     selectionMode,
     onEntrySelect,
-  enableLongPress,
-  longPressDelay,
-  pickupDelay,
-  rowClass,
+    enableLongPress,
+    longPressDelay,
+    pickupDelay,
+    rowClass,
     pinnedFolderIconClass,
     entryLabel,
     entryMeta,
@@ -1755,6 +1778,7 @@ export function FileTree({
     onInlineRenameCommit,
     onInlineRenameDismiss,
     onStartInlineRename,
+    onOpenReactionPicker,
   });
 
   return (
