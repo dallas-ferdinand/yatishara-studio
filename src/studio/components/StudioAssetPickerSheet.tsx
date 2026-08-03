@@ -362,7 +362,11 @@ export function StudioAssetPickerSheet({
                           name,
                           kind: "videoEdit",
                           mimeType: "",
-                          signedThumbnailUrl: edit.signedThumbnailUrl,
+                          signedThumbnailUrl:
+                            "signedThumbnailUrl" in edit &&
+                            typeof edit.signedThumbnailUrl === "string"
+                              ? edit.signedThumbnailUrl
+                              : undefined,
                           itemKind: "videoEdit",
                           itemId: edit._id,
                           studioKind: "videoEdit",

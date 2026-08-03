@@ -2421,7 +2421,7 @@ export function StudioMessagesPane({
         continue;
       }
       accepted.push({
-        assetId: asset._id,
+        assetId: asset._id as Id<"assets">,
         name: asset.name,
         previewUrl: (asset.signedThumbnailUrl || "").trim(),
       });

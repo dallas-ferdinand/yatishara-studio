@@ -291,14 +291,15 @@ export function OfferMediaEditor({
           expiresUnix={expiresUnix}
           onPick={(asset) => {
             if (pickerTarget === "banner") {
-              onCover(asset._id);
+              onCover(asset._id as Id<"assets">);
               return;
             }
+            const assetId = asset._id as Id<"assets">;
             if (
-              sampleAssetIds.includes(asset._id) ||
+              sampleAssetIds.includes(assetId) ||
               sampleAssetIds.length < MAX_SAMPLES
             ) {
-              onToggleSample(asset._id);
+              onToggleSample(assetId);
             }
           }}
           onClose={() => setPickerTarget(null)}

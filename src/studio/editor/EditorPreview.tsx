@@ -62,7 +62,7 @@ function usePreviewLoadQuality(): [
   const quality = useSyncExternalStore(
     subscribePreviewLoadQuality,
     readPreviewLoadQuality,
-    () => DEFAULT_PREVIEW_LOAD_QUALITY,
+    (): PreviewLoadQuality => DEFAULT_PREVIEW_LOAD_QUALITY,
   );
   return [quality, writePreviewLoadQuality];
 }
