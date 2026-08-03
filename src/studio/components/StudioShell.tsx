@@ -8797,9 +8797,9 @@ export function StudioShell({
           border-left: 0;
         }
         .studio-explorer-context-sheet .desk-explorer-react-grid {
-          width: min(100%, 132px);
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 4px;
+          width: min(100%, 160px);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 2px;
         }
         .studio-explorer-context-sheet .desk-explorer-react-emoji {
           font-size: 18px;

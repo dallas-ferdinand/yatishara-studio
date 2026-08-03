@@ -552,9 +552,9 @@ export function ExplorerContextMenu({
     const rect = parentBtn.getBoundingClientRect();
     const gap = 2;
     const isEmoji = openSubmenuItem.submenuKind === "emoji-grid";
-    const estimatedWidth = isEmoji ? 132 : openSubmenuItem.submenuKind === "share-recipients" ? 220 : 180;
+    const estimatedWidth = isEmoji ? 160 : openSubmenuItem.submenuKind === "share-recipients" ? 220 : 180;
     const estimatedHeight = isEmoji
-      ? 160
+      ? 180
       : Math.min(
           window.innerHeight - 16,
           openSubmenuItem.children.length * 28 + 16,
