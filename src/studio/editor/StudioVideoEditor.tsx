@@ -47,7 +47,7 @@ import {
   clipSpeed,
   sourceTrimSec,
 } from "./projectContract";
-import { clampAudioFadePair } from "./editorEffects";
+import { clampAudioFadePair, resolveAudioFadePair } from "./editorEffects";
 import { MAX_PPS, MIN_PPS } from "./types";
 
 const TRASH_FOLDER_ID = "__trash__";
@@ -508,10 +508,15 @@ export function StudioVideoEditor({
       if (typeof actionId === "string" && actionId.startsWith("speed:")) {
         const nextSpeed = clampClipSpeed(Number(actionId.slice("speed:".length)));
         const nextDuration = Math.max(0.05, sourceTrimSec(clip) / nextSpeed);
-        const fades = clampAudioFadePair(
+        const pictureFades = clampAudioFadePair(
           clip.effects?.fadeIn ?? 0,
           clip.effects?.fadeOut ?? 0,
           nextDuration,
+        );
+        const audioFades = resolveAudioFadePair(
+          clip.effects,
+          nextDuration,
+          clip.kind,
         );
         dispatch({
           type: "update_clip",
@@ -520,8 +525,10 @@ export function StudioVideoEditor({
             effects: {
               ...(clip.effects ?? {}),
               speed: nextSpeed,
-              fadeIn: fades.fadeIn,
-              fadeOut: fades.fadeOut,
+              fadeIn: pictureFades.fadeIn,
+              fadeOut: pictureFades.fadeOut,
+              audioFadeIn: audioFades.fadeIn,
+              audioFadeOut: audioFades.fadeOut,
             },
           },
         });

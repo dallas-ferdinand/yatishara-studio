@@ -22,7 +22,21 @@ describe("export audio mute / volume / fade", () => {
     );
   });
 
-  it("applies afade in/out from clip effects", () => {
+  it("applies afade from audioFadeIn/Out, not picture fadeIn/Out", () => {
+    const af = videoClipAudioFilter(
+      {
+        effects: { fadeIn: 2, fadeOut: 2, audioFadeIn: 0.5, audioFadeOut: 1 },
+        trimIn: 0,
+        trimOut: 4,
+      },
+      false,
+      4,
+    );
+    expect(af).toContain("afade=t=in:st=0:d=0.5:curve=qsin");
+    expect(af).toContain("afade=t=out:st=3:d=1:curve=qsin");
+  });
+
+  it("ignores picture-only fades on video audio export", () => {
     const af = videoClipAudioFilter(
       {
         effects: { fadeIn: 0.5, fadeOut: 1 },
@@ -32,8 +46,7 @@ describe("export audio mute / volume / fade", () => {
       false,
       4,
     );
-    expect(af).toContain("afade=t=in:st=0:d=0.5:curve=qsin");
-    expect(af).toContain("afade=t=out:st=3:d=1:curve=qsin");
+    expect(af).not.toContain("afade=");
   });
 
   it("ignores draft speed on export (Process bakes a 1× asset)", () => {

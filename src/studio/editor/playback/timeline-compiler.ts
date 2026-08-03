@@ -222,7 +222,7 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
         sourceTime: sourceAt(clip, time),
         gain:
           clip.volume *
-          audioFadeGainAtLocalTime(clip.clip.effects, duration, local),
+          audioFadeGainAtLocalTime(clip.clip.effects, duration, local, clip.kind),
       };
     });
   const activeAudioIds = new Set(audio.map((item) => item.clip.clipId));
@@ -238,7 +238,12 @@ export function sliceAt(plan: PlaybackPlan, timelineTime: number): RenderSlice {
       sourceTime: clip.sourceStart,
       gain:
         clip.volume *
-        audioFadeGainAtLocalTime(clip.clip.effects, clip.timelineEnd - clip.timelineStart, 0),
+        audioFadeGainAtLocalTime(
+          clip.clip.effects,
+          clip.timelineEnd - clip.timelineStart,
+          0,
+          clip.kind,
+        ),
     }));
   const activeText = plan.text
     .filter((clip) => contains(clip.timelineStart, clip.timelineEnd, time))

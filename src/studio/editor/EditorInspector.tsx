@@ -54,6 +54,7 @@ import {
   TRANSITION_LIBRARY,
   clampAudioFadePair,
   clampAudioFadeSec,
+  resolveAudioFadePair,
   transitionLabel,
 } from "./editorEffects";
 import {
@@ -693,9 +694,9 @@ export function EditorInspector({
   const showTransition = Boolean(joint) && (editorMode === "transition" || editorMode === "select");
   const showAudio = Boolean(clip) && (clip.kind === "audio" || clip.kind === "video");
   const showVideo = Boolean(clip) && (clip.kind === "video" || clip.kind === "image");
+  /** Picture edge fades — video/image only (audio fades live in Audio panel). */
   const showFade =
-    Boolean(clip) &&
-    (clip.kind === "audio" || clip.kind === "video" || clip.kind === "image");
+    Boolean(clip) && (clip.kind === "video" || clip.kind === "image");
   const showText = editorMode === "text" || clip?.kind === "text";
   const resolution = normalizeExportResolution(exportResolution);
 
@@ -832,12 +833,14 @@ function ClipTimingCard({ clip, project }) {
   const hasOut =
     Boolean(clip.transitionOut?.type) && clip.transitionOut.type !== "none";
   const outLabel = hasOut ? transitionLabel(clip.transitionOut.type) : null;
-  const fadePair = clampAudioFadePair(
+  const pictureFade = clampAudioFadePair(
     clip.effects?.fadeIn ?? 0,
     clip.effects?.fadeOut ?? 0,
     length,
   );
-  const hasFade = fadePair.fadeIn > 0.01 || fadePair.fadeOut > 0.01;
+  const audioFade = resolveAudioFadePair(clip.effects, length, clip.kind);
+  const hasPictureFade = pictureFade.fadeIn > 0.01 || pictureFade.fadeOut > 0.01;
+  const hasAudioFade = audioFade.fadeIn > 0.01 || audioFade.fadeOut > 0.01;
 
   return (
     <InspectorSection title="Timing">
@@ -874,16 +877,27 @@ function ClipTimingCard({ clip, project }) {
           </div>
         </div>
 
-        {hasFade || hasOut ? (
+        {hasPictureFade || hasAudioFade || hasOut ? (
           <div className="studio-editor-timing-chip-row">
-            {hasFade ? (
+            {hasPictureFade ? (
               <span className="studio-editor-timing-chip">
-                Fade
-                {fadePair.fadeIn > 0.01
-                  ? ` in ${Number(fadePair.fadeIn).toFixed(2)}s`
+                Picture fade
+                {pictureFade.fadeIn > 0.01
+                  ? ` in ${Number(pictureFade.fadeIn).toFixed(2)}s`
                   : ""}
-                {fadePair.fadeOut > 0.01
-                  ? ` out ${Number(fadePair.fadeOut).toFixed(2)}s`
+                {pictureFade.fadeOut > 0.01
+                  ? ` out ${Number(pictureFade.fadeOut).toFixed(2)}s`
+                  : ""}
+              </span>
+            ) : null}
+            {hasAudioFade ? (
+              <span className="studio-editor-timing-chip">
+                Audio fade
+                {audioFade.fadeIn > 0.01
+                  ? ` in ${Number(audioFade.fadeIn).toFixed(2)}s`
+                  : ""}
+                {audioFade.fadeOut > 0.01
+                  ? ` out ${Number(audioFade.fadeOut).toFixed(2)}s`
                   : ""}
               </span>
             ) : null}
@@ -973,6 +987,74 @@ function TransformPanel({ clip, onUpdateClip }) {
 
 const SPEED_PRESETS = [0.75, 1, 1.1, 1.25, 1.5, 2];
 
+function FadeLengthControls({
+  fadeIn,
+  fadeOut,
+  fadeInMax,
+  fadeOutMax,
+  fadeStep,
+  inLabel,
+  outLabel,
+  onFadeIn,
+  onFadeOut,
+}) {
+  const presetActive = (side, seconds) => {
+    const current = side === "in" ? fadeIn : fadeOut;
+    return Math.abs(current - seconds) < 0.02;
+  };
+
+  return (
+    <>
+      <SliderRow
+        label={inLabel}
+        min={0}
+        max={Math.max(0.05, fadeInMax)}
+        step={fadeStep}
+        value={fadeIn}
+        defaultValue={0}
+        formatValue={(v) => `${Number(v).toFixed(2)}s`}
+        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
+        onValueChange={onFadeIn}
+      />
+      <div className="studio-editor-chip-row" role="group" aria-label={`${inLabel} length`}>
+        {FADE_LENGTH_PRESETS.filter((sec) => sec <= fadeInMax + 0.001).map((sec) => (
+          <button
+            key={`in-${sec}`}
+            type="button"
+            className={`studio-editor-chip${presetActive("in", sec) ? " is-active" : ""}`}
+            onClick={() => onFadeIn(sec)}
+          >
+            {sec === 0 ? "Off" : `${sec}s`}
+          </button>
+        ))}
+      </div>
+      <SliderRow
+        label={outLabel}
+        min={0}
+        max={Math.max(0.05, fadeOutMax)}
+        step={fadeStep}
+        value={fadeOut}
+        defaultValue={0}
+        formatValue={(v) => `${Number(v).toFixed(2)}s`}
+        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
+        onValueChange={onFadeOut}
+      />
+      <div className="studio-editor-chip-row" role="group" aria-label={`${outLabel} length`}>
+        {FADE_LENGTH_PRESETS.filter((sec) => sec <= fadeOutMax + 0.001).map((sec) => (
+          <button
+            key={`out-${sec}`}
+            type="button"
+            className={`studio-editor-chip${presetActive("out", sec) ? " is-active" : ""}`}
+            onClick={() => onFadeOut(sec)}
+          >
+            {sec === 0 ? "Off" : `${sec}s`}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function FadePanel({ clip, onUpdateClip }) {
   const effects = clip.effects ?? {};
   const duration = clipDuration(clip);
@@ -984,7 +1066,6 @@ function FadePanel({ clip, onUpdateClip }) {
   const fadeInMax = Math.max(0, duration - fadeOut);
   const fadeOutMax = Math.max(0, duration - fadeIn);
   const fadeStep = Math.min(0.05, Math.max(0.05, duration));
-  const isPicture = clip.kind === "video" || clip.kind === "image";
 
   const patchEffects = (next) => {
     onUpdateClip(clip.id, {
@@ -995,79 +1076,27 @@ function FadePanel({ clip, onUpdateClip }) {
     });
   };
 
-  const applyPreset = (side, seconds) => {
-    if (side === "in") {
-      patchEffects({ fadeIn: clampAudioFadeSec(seconds, duration, fadeOut) });
-      return;
-    }
-    patchEffects({ fadeOut: clampAudioFadeSec(seconds, duration, fadeIn) });
-  };
-
-  const presetActive = (side, seconds) => {
-    const current = side === "in" ? fadeIn : fadeOut;
-    return Math.abs(current - seconds) < 0.02;
-  };
-
   return (
     <InspectorSection
       title="Fade"
-      hint={
-        isPicture
-          ? "Fades this clip’s picture and audio. Separate from transitions between clips."
-          : "Fades this clip’s audio. Drag diamonds on the timeline or set length here."
-      }
+      hint="Picture only — fades this clip’s image against the background. Audio fades are under Audio. Separate from transitions."
       onReset={() => patchEffects({ fadeIn: 0, fadeOut: 0 })}
     >
-      <SliderRow
-        label="Fade in"
-        min={0}
-        max={Math.max(0.05, fadeInMax)}
-        step={fadeStep}
-        value={fadeIn}
-        defaultValue={0}
-        formatValue={(v) => `${Number(v).toFixed(2)}s`}
-        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
-        onValueChange={(next) =>
+      <FadeLengthControls
+        fadeIn={fadeIn}
+        fadeOut={fadeOut}
+        fadeInMax={fadeInMax}
+        fadeOutMax={fadeOutMax}
+        fadeStep={fadeStep}
+        inLabel="Fade in"
+        outLabel="Fade out"
+        onFadeIn={(next) =>
           patchEffects({ fadeIn: clampAudioFadeSec(next, duration, fadeOut) })
         }
-      />
-      <div className="studio-editor-chip-row" role="group" aria-label="Fade in length">
-        {FADE_LENGTH_PRESETS.filter((sec) => sec <= fadeInMax + 0.001).map((sec) => (
-          <button
-            key={`in-${sec}`}
-            type="button"
-            className={`studio-editor-chip${presetActive("in", sec) ? " is-active" : ""}`}
-            onClick={() => applyPreset("in", sec)}
-          >
-            {sec === 0 ? "Off" : `${sec}s`}
-          </button>
-        ))}
-      </div>
-      <SliderRow
-        label="Fade out"
-        min={0}
-        max={Math.max(0.05, fadeOutMax)}
-        step={fadeStep}
-        value={fadeOut}
-        defaultValue={0}
-        formatValue={(v) => `${Number(v).toFixed(2)}s`}
-        parseInput={(raw) => parseNumberInput(raw, { suffix: "s" })}
-        onValueChange={(next) =>
+        onFadeOut={(next) =>
           patchEffects({ fadeOut: clampAudioFadeSec(next, duration, fadeIn) })
         }
       />
-      <div className="studio-editor-chip-row" role="group" aria-label="Fade out length">
-        {FADE_LENGTH_PRESETS.filter((sec) => sec <= fadeOutMax + 0.001).map((sec) => (
-          <button
-            key={`out-${sec}`}
-            type="button"
-            className={`studio-editor-chip${presetActive("out", sec) ? " is-active" : ""}`}
-            onClick={() => applyPreset("out", sec)}
-          >
-            {sec === 0 ? "Off" : `${sec}s`}
-          </button>
-        ))}
-      </div>
     </InspectorSection>
   );
 }
@@ -1079,8 +1108,17 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
   const effects = clip.effects ?? {};
   const volume = effects.volume ?? 1;
   const speed = clipSpeed(effects);
+  const duration = clipDuration(clip);
   const pendingDuration = pendingSpeedDurationSec(clip, speed);
   const needsProcess = !isIdentitySpeed(speed) && Boolean(clip.assetId);
+  const { fadeIn: audioFadeIn, fadeOut: audioFadeOut } = resolveAudioFadePair(
+    effects,
+    duration,
+    clip.kind,
+  );
+  const audioFadeInMax = Math.max(0, duration - audioFadeOut);
+  const audioFadeOutMax = Math.max(0, duration - audioFadeIn);
+  const fadeStep = Math.min(0.05, Math.max(0.05, duration));
 
   const patchEffects = (next) => {
     onUpdateClip(clip.id, {
@@ -1110,11 +1148,12 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
         speed,
         mode: clip.kind === "audio" ? "audio" : "video",
       });
-      const fades = clampAudioFadePair(
+      const pictureFades = clampAudioFadePair(
         effects.fadeIn ?? 0,
         effects.fadeOut ?? 0,
         result.durationSec,
       );
+      const audioFades = resolveAudioFadePair(effects, result.durationSec, clip.kind);
       onUpdateClip(clip.id, {
         assetId: result.assetId,
         trimIn: 0,
@@ -1123,8 +1162,10 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
         effects: {
           ...effects,
           speed: 1,
-          fadeIn: fades.fadeIn,
-          fadeOut: fades.fadeOut,
+          fadeIn: pictureFades.fadeIn,
+          fadeOut: pictureFades.fadeOut,
+          audioFadeIn: audioFades.fadeIn,
+          audioFadeOut: audioFades.fadeOut,
         },
       });
     } catch (reason) {
@@ -1139,10 +1180,13 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
   return (
     <InspectorSection
       title="Audio"
+      hint="Audio fade is separate from picture fade. Set length here — no timeline diamonds."
       onReset={() =>
         patchEffects({
           volume: 1,
           speed: 1,
+          audioFadeIn: 0,
+          audioFadeOut: 0,
         })
       }
     >
@@ -1212,6 +1256,25 @@ function AudioPanel({ clip, folderId, onUpdateClip }) {
         formatValue={(v) => `${Math.round(Number(v) * 100)}%`}
         parseInput={(raw) => parseNumberInput(raw, { scale: 100, suffix: "%" })}
         onValueChange={(next) => patchEffects({ volume: next })}
+      />
+      <FadeLengthControls
+        fadeIn={audioFadeIn}
+        fadeOut={audioFadeOut}
+        fadeInMax={audioFadeInMax}
+        fadeOutMax={audioFadeOutMax}
+        fadeStep={fadeStep}
+        inLabel="Audio fade in"
+        outLabel="Audio fade out"
+        onFadeIn={(next) =>
+          patchEffects({
+            audioFadeIn: clampAudioFadeSec(next, duration, audioFadeOut),
+          })
+        }
+        onFadeOut={(next) =>
+          patchEffects({
+            audioFadeOut: clampAudioFadeSec(next, duration, audioFadeIn),
+          })
+        }
       />
     </InspectorSection>
   );

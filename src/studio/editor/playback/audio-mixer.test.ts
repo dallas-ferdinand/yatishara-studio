@@ -82,7 +82,7 @@ function bedSlice(assetId: string, gain = 1, fadeIn = 0): RenderSlice {
             trimOut: 4,
             label: "bed",
             kind: "audio",
-            effects: fadeIn > 0 ? { fadeIn } : undefined,
+            effects: fadeIn > 0 ? { audioFadeIn: fadeIn } : undefined,
           },
         },
         sourceTime: 0.25,

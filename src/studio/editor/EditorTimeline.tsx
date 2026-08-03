@@ -17,7 +17,12 @@ import {
   ZoomOut,
   Sparkles,
 } from "lucide-react";
-import { transitionLabel, clampAudioFadePair, clampAudioFadeSec } from "./editorEffects";
+import {
+  transitionLabel,
+  clampAudioFadePair,
+  clampAudioFadeSec,
+  resolveAudioFadePair,
+} from "./editorEffects";
 import { transitionJointsOnTrack, visibleTracks } from "./editorTimelineUtils";
 import { computeRippleLayout, isMainStoryTrack, collapsePlacementsForTrack } from "./editorRipple";
 import { clipDuration, formatTimecodeFull, formatTimecodeRuler } from "./editorState";
@@ -235,8 +240,12 @@ function RippleGhostClip({ clip, startTime, pps, media, isDragged }) {
         <>
           <ClipAudioWaveform clipId={clip.id} widthPx={width} />
           <ClipAudioFadeMask
-            fadeInSec={clip.effects?.fadeIn ?? 0}
-            fadeOutSec={clip.effects?.fadeOut ?? 0}
+            fadeInSec={
+              resolveAudioFadePair(clip.effects, clipDuration(clip), "audio").fadeIn
+            }
+            fadeOutSec={
+              resolveAudioFadePair(clip.effects, clipDuration(clip), "audio").fadeOut
+            }
             clipDurationSec={clipDuration(clip)}
             pps={pps}
           />
@@ -292,8 +301,12 @@ function FloatingPickupClip({ pickup }) {
           <>
             <ClipAudioWaveform clipId={clip.id} widthPx={widthPx} />
             <ClipAudioFadeMask
-              fadeInSec={clip.effects?.fadeIn ?? 0}
-              fadeOutSec={clip.effects?.fadeOut ?? 0}
+              fadeInSec={
+                resolveAudioFadePair(clip.effects, durationSec, "audio").fadeIn
+              }
+              fadeOutSec={
+                resolveAudioFadePair(clip.effects, durationSec, "audio").fadeOut
+              }
               clipDurationSec={durationSec}
               pps={pps}
             />
@@ -376,17 +389,19 @@ function TimelineClipBlock({
   const [lifted, setLifted] = useState(false);
   const isVideo = clip.kind === "video" || clip.kind === "image";
   const isText = clip.kind === "text";
-  const supportsAudioFade =
-    clip.kind === "audio" || clip.kind === "video" || clip.kind === "image";
+  /** Timeline diamonds edit picture fades only — audio fades are inspector-only. */
+  const supportsPictureFade = clip.kind === "video" || clip.kind === "image";
   const thresholdSec = snapThresholdSec(pps);
   const widthPx = Math.max(width, 28);
-  const fadePair = clampAudioFadePair(
+  const pictureFadePair = clampAudioFadePair(
     clip.effects?.fadeIn ?? 0,
     clip.effects?.fadeOut ?? 0,
     durationSec,
   );
-  const fadeInSec = fadePair.fadeIn;
-  const fadeOutSec = fadePair.fadeOut;
+  const audioFadePair = resolveAudioFadePair(clip.effects, durationSec, clip.kind);
+  // Video/image: show picture fade wedges + diamonds. Audio: show audio wedges only (no drag).
+  const fadeInSec = supportsPictureFade ? pictureFadePair.fadeIn : audioFadePair.fadeIn;
+  const fadeOutSec = supportsPictureFade ? pictureFadePair.fadeOut : audioFadePair.fadeOut;
   const fadeHandles = fadeHandleCentersPx(fadeInSec, fadeOutSec, widthPx, pps);
 
   const onPointerDown = (event, mode) => {
@@ -751,12 +766,12 @@ function TimelineClipBlock({
               onPointerDown(event, "trim-right");
             }}
           />
-          {supportsAudioFade && !isPickedUp ? (
+          {supportsPictureFade && !isPickedUp ? (
             <>
               <span
                 className={`studio-editor-clip-fade-handle is-in${fadeInSec > 0 ? " is-active" : ""}`}
                 style={{ left: fadeHandles.inX }}
-                title="Fade in"
+                title="Picture fade in"
                 onPointerDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -766,7 +781,7 @@ function TimelineClipBlock({
               <span
                 className={`studio-editor-clip-fade-handle is-out${fadeOutSec > 0 ? " is-active" : ""}`}
                 style={{ left: fadeHandles.outX }}
-                title="Fade out"
+                title="Picture fade out"
                 onPointerDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

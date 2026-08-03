@@ -19,10 +19,14 @@ export type EditorMode = "select" | "transition" | "text";
 export type EditorSidePanel = "inspect" | "export";
 
 export type ClipEffects = {
-  /** Edge fade-in seconds — picture opacity + audio gain for this clip. */
+  /** Picture edge fade-in seconds (timeline diamonds + preview/export opacity). */
   fadeIn?: number;
-  /** Edge fade-out seconds — picture opacity + audio gain for this clip. */
+  /** Picture edge fade-out seconds (timeline diamonds + preview/export opacity). */
   fadeOut?: number;
+  /** Audio edge fade-in seconds (inspector only — not timeline diamonds). */
+  audioFadeIn?: number;
+  /** Audio edge fade-out seconds (inspector only — not timeline diamonds). */
+  audioFadeOut?: number;
   volume?: number;
   /** CapCut-style playback rate. Timeline duration = sourceTrim / speed. Default 1. */
   speed?: number;

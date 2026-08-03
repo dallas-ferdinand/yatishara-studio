@@ -27,6 +27,7 @@ type DesiredVoice = {
   volume: number;
   effects: ClipEffects | undefined;
   transitionGain: number;
+  kind?: "video" | "audio" | "image" | "text";
 };
 
 function applyGainNow(param: AudioParam, gain: number, when: number): void {
@@ -47,7 +48,12 @@ function scheduleFadeLookahead(
 ): void {
   const nowGain =
     voice.volume *
-    audioFadeGainAtLocalTime(voice.effects, voice.clipDuration, voice.localTime) *
+    audioFadeGainAtLocalTime(
+      voice.effects,
+      voice.clipDuration,
+      voice.localTime,
+      voice.kind,
+    ) *
     voice.transitionGain;
   applyGainNow(param, nowGain, when);
   const remain = Math.max(0, voice.clipDuration - voice.localTime);
@@ -59,7 +65,7 @@ function scheduleFadeLookahead(
     const local = voice.localTime + dt;
     const g =
       voice.volume *
-      audioFadeGainAtLocalTime(voice.effects, voice.clipDuration, local) *
+      audioFadeGainAtLocalTime(voice.effects, voice.clipDuration, local, voice.kind) *
       voice.transitionGain;
     param.linearRampToValueAtTime(Math.max(0, Math.min(2, g)), when + dt);
   }
@@ -244,6 +250,7 @@ export class AudioMixer {
           volume: item.clip.volume,
           effects: item.clip.clip.effects,
           transitionGain: 1,
+          kind: item.clip.kind,
         });
       }
     }
@@ -265,7 +272,12 @@ export class AudioMixer {
         sample.role,
         slice.transition?.progress ?? (sample.role === "incoming" ? 1 : 0),
       );
-      const fade = audioFadeGainAtLocalTime(clip.clip.effects, clipDuration, localTime);
+      const fade = audioFadeGainAtLocalTime(
+        clip.clip.effects,
+        clipDuration,
+        localTime,
+        clip.kind,
+      );
       const sped = !isIdentitySpeed(clipSpeed(clip.clip.effects));
       desired.set(`video:${clip.clipId}`, {
         sourceTime: sped ? localTime : sample.sourceTime,
@@ -276,6 +288,7 @@ export class AudioMixer {
         volume: clip.volume,
         effects: clip.clip.effects,
         transitionGain,
+        kind: clip.kind,
       });
     }
 

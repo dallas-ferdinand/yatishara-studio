@@ -91,19 +91,55 @@ export const DEFAULT_TEXT_EFFECTS = {
 } as const;
 
 /**
- * Picture opacity envelope for clip-local time (same curve as audio fades).
- * Independent of transitions — fades the single clip against the background.
+ * Resolve audio fade lengths. Prefer dedicated audioFadeIn/Out.
+ * Legacy audio-only clips stored fades on fadeIn/fadeOut — honor that when
+ * kind is "audio" and the dedicated fields were never set.
+ */
+export function resolveAudioFadePair(
+  effects: ClipEffects | undefined,
+  clipDurationSec: number,
+  kind?: ClipEffectsKind,
+): { fadeIn: number; fadeOut: number } {
+  const dedicated =
+    effects?.audioFadeIn != null || effects?.audioFadeOut != null;
+  if (dedicated) {
+    return clampAudioFadePair(
+      effects?.audioFadeIn ?? 0,
+      effects?.audioFadeOut ?? 0,
+      clipDurationSec,
+    );
+  }
+  if (kind === "audio") {
+    return clampAudioFadePair(
+      effects?.fadeIn ?? 0,
+      effects?.fadeOut ?? 0,
+      clipDurationSec,
+    );
+  }
+  return { fadeIn: 0, fadeOut: 0 };
+}
+
+type ClipEffectsKind = "video" | "audio" | "image" | "text";
+
+/**
+ * Picture opacity envelope for clip-local time (fadeIn/fadeOut only).
+ * Independent of audio fades and of transitions between clips.
  */
 export function clipOpacityAtLocalTime(
   effects: ClipEffects | undefined,
   clipDurationSec: number,
   localTime: number,
 ): number {
-  return audioFadeGainAtLocalTime(effects, clipDurationSec, localTime);
+  return fadeEnvelopeAtLocalTime(
+    effects?.fadeIn ?? 0,
+    effects?.fadeOut ?? 0,
+    clipDurationSec,
+    localTime,
+  );
 }
 
 /**
- * Smooth audio volume envelope for clip-local time.
+ * Smooth audio volume envelope for clip-local time (audioFadeIn/Out).
  * Ease-out (fast early, settles late). Fade-in and fade-out do not overlap
  * (sum is clamped to clip duration).
  */
@@ -111,14 +147,21 @@ export function audioFadeGainAtLocalTime(
   effects: ClipEffects | undefined,
   clipDurationSec: number,
   localTime: number,
+  kind?: ClipEffectsKind,
+): number {
+  const { fadeIn, fadeOut } = resolveAudioFadePair(effects, clipDurationSec, kind);
+  return fadeEnvelopeAtLocalTime(fadeIn, fadeOut, clipDurationSec, localTime);
+}
+
+function fadeEnvelopeAtLocalTime(
+  fadeInSec: number,
+  fadeOutSec: number,
+  clipDurationSec: number,
+  localTime: number,
 ): number {
   const duration = Math.max(0.05, clipDurationSec);
   const t = Math.max(0, Math.min(duration, localTime));
-  const { fadeIn, fadeOut } = clampAudioFadePair(
-    effects?.fadeIn ?? 0,
-    effects?.fadeOut ?? 0,
-    duration,
-  );
+  const { fadeIn, fadeOut } = clampAudioFadePair(fadeInSec, fadeOutSec, duration);
   let gain = 1;
   if (fadeIn > 0 && t < fadeIn) {
     gain *= fadeEaseOut(t / fadeIn);

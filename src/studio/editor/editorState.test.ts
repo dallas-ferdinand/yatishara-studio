@@ -343,7 +343,7 @@ describe("detach_audio", () => {
     expect(audio.trimIn).toBe(0.5);
     expect(audio.trimOut).toBe(3.5);
     expect(audio.effects?.volume).toBe(0.8);
-    expect(audio.effects?.fadeIn).toBe(0.2);
+    expect(audio.effects?.audioFadeIn).toBe(0.2);
     expect(state.ui.selectedClipId).toBe(audio.id);
   });
 

@@ -19,11 +19,20 @@ function sourceTrimSec(
  * Timeline duration for export. Draft effects.speed is ignored —
  * Process bakes a new asset at 1× before length changes.
  */
+type ExportAudioEffects = {
+  speed?: number;
+  volume?: number;
+  fadeIn?: number;
+  fadeOut?: number;
+  audioFadeIn?: number;
+  audioFadeOut?: number;
+};
+
 export function timelineDurationSec(
   clip: {
     trimIn?: number;
     trimOut?: number;
-    effects?: { speed?: number; volume?: number; fadeIn?: number; fadeOut?: number };
+    effects?: ExportAudioEffects;
   },
   fallback = 0.05,
 ): number {
@@ -31,13 +40,41 @@ export function timelineDurationSec(
   return sourceTrimSec(clip, fallback);
 }
 
+/** Prefer dedicated audio fades; legacy audio beds may still use fadeIn/fadeOut. */
+function resolveExportAudioFades(
+  effects: ExportAudioEffects | undefined,
+  duration: number,
+  legacySharedFields: boolean,
+): { fadeIn: number; fadeOut: number } {
+  const dedicated =
+    effects?.audioFadeIn != null || effects?.audioFadeOut != null;
+  let fadeIn = 0;
+  let fadeOut = 0;
+  if (dedicated) {
+    fadeIn = Number(effects?.audioFadeIn) || 0;
+    fadeOut = Number(effects?.audioFadeOut) || 0;
+  } else if (legacySharedFields) {
+    fadeIn = Number(effects?.fadeIn) || 0;
+    fadeOut = Number(effects?.fadeOut) || 0;
+  }
+  fadeIn = Math.max(0, Math.min(duration, fadeIn));
+  fadeOut = Math.max(0, Math.min(duration, fadeOut));
+  if (fadeIn + fadeOut > duration && fadeIn + fadeOut > 0) {
+    const scale = duration / (fadeIn + fadeOut);
+    fadeIn *= scale;
+    fadeOut *= scale;
+  }
+  return { fadeIn, fadeOut };
+}
+
 /**
  * Build ffmpeg -af chain for a video clip's embedded audio.
  * Volume + afade in timeline time (speed is baked via processClipSpeed).
+ * Uses audioFadeIn/Out only — picture fadeIn/Out do not affect audio.
  */
 export function videoClipAudioFilter(
   clip: {
-    effects?: { volume?: number; fadeIn?: number; fadeOut?: number; speed?: number };
+    effects?: ExportAudioEffects;
     trimIn?: number;
     trimOut?: number;
   },
@@ -53,8 +90,7 @@ export function videoClipAudioFilter(
       ? durationSec
       : timelineDurationSec(clip),
   );
-  const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
-  const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
+  const { fadeIn, fadeOut } = resolveExportAudioFades(clip.effects, duration, false);
 
   let af = "aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo";
   if (fadeIn > 0) af += `,afade=t=in:st=0:d=${fadeIn}:curve=qsin`;
@@ -68,7 +104,7 @@ export function videoClipAudioFilter(
 /** Fragment for bed mix after atrim/asetpts (no aresample). */
 export function bedClipAudioFilters(
   clip: {
-    effects?: { volume?: number; fadeIn?: number; fadeOut?: number; speed?: number };
+    effects?: ExportAudioEffects;
     trimIn?: number;
     trimOut?: number;
   },
@@ -81,8 +117,7 @@ export function bedClipAudioFilters(
       ? durationSec
       : timelineDurationSec(clip),
   );
-  const fadeIn = Math.max(0, Math.min(duration, clip.effects?.fadeIn ?? 0));
-  const fadeOut = Math.max(0, Math.min(duration, clip.effects?.fadeOut ?? 0));
+  const { fadeIn, fadeOut } = resolveExportAudioFades(clip.effects, duration, true);
   const parts: string[] = [];
   if (fadeIn > 0) parts.push(`afade=t=in:st=0:d=${fadeIn}:curve=qsin`);
   if (fadeOut > 0) {

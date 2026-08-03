@@ -36,6 +36,8 @@ const execFileAsync = promisify(execFile);
 type ClipEffects = {
   fadeIn?: number;
   fadeOut?: number;
+  audioFadeIn?: number;
+  audioFadeOut?: number;
   volume?: number;
   speed?: number;
   scale?: number;

@@ -846,8 +846,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         label: `${clip.label} audio`,
         kind: "audio",
         effects: {
-          fadeIn: clip.effects?.fadeIn,
-          fadeOut: clip.effects?.fadeOut,
+          audioFadeIn: clip.effects?.audioFadeIn ?? clip.effects?.fadeIn,
+          audioFadeOut: clip.effects?.audioFadeOut ?? clip.effects?.fadeOut,
           volume: priorVolume > 0.0005 ? priorVolume : 1,
         },
       };

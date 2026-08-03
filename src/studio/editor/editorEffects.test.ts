@@ -4,17 +4,21 @@ import {
   clampAudioFadePair,
   clampAudioFadeSec,
   clipOpacityAtLocalTime,
+  resolveAudioFadePair,
 } from "./editorEffects";
 
 describe("clipOpacityAtLocalTime", () => {
-  it("matches the audio fade envelope for picture opacity", () => {
-    const effects = { fadeIn: 1, fadeOut: 1 };
+  it("uses picture fadeIn/fadeOut only", () => {
+    const effects = { fadeIn: 1, fadeOut: 1, audioFadeIn: 0, audioFadeOut: 0 };
     expect(clipOpacityAtLocalTime(effects, 4, 0)).toBeCloseTo(0);
-    expect(clipOpacityAtLocalTime(effects, 4, 0.5)).toBeCloseTo(
-      audioFadeGainAtLocalTime(effects, 4, 0.5),
-    );
     expect(clipOpacityAtLocalTime(effects, 4, 2)).toBeCloseTo(1);
     expect(clipOpacityAtLocalTime(effects, 4, 4)).toBeCloseTo(0);
+  });
+
+  it("ignores audioFade fields for picture opacity", () => {
+    const effects = { audioFadeIn: 1, audioFadeOut: 1 };
+    expect(clipOpacityAtLocalTime(effects, 4, 0)).toBeCloseTo(1);
+    expect(clipOpacityAtLocalTime(effects, 4, 4)).toBeCloseTo(1);
   });
 });
 
@@ -24,33 +28,56 @@ describe("audioFadeGainAtLocalTime", () => {
     expect(audioFadeGainAtLocalTime({}, 4, 1)).toBe(1);
   });
 
-  it("ramps fade-in from 0 to 1", () => {
-    const effects = { fadeIn: 1 };
-    expect(audioFadeGainAtLocalTime(effects, 4, 0)).toBeCloseTo(0);
-    expect(audioFadeGainAtLocalTime(effects, 4, 0.5)).toBeCloseTo(Math.sin(Math.PI / 4));
-    expect(audioFadeGainAtLocalTime(effects, 4, 1)).toBeCloseTo(1);
-    expect(audioFadeGainAtLocalTime(effects, 4, 2)).toBeCloseTo(1);
+  it("uses dedicated audioFadeIn/Out on video clips", () => {
+    const effects = { fadeIn: 2, fadeOut: 2, audioFadeIn: 1, audioFadeOut: 0 };
+    expect(audioFadeGainAtLocalTime(effects, 4, 0, "video")).toBeCloseTo(0);
+    expect(audioFadeGainAtLocalTime(effects, 4, 1, "video")).toBeCloseTo(1);
+    // Picture fade must not drive video audio when audioFade* is set.
+    expect(audioFadeGainAtLocalTime(effects, 4, 3.5, "video")).toBeCloseTo(1);
   });
 
-  it("ramps fade-out from 1 to 0", () => {
-    const effects = { fadeOut: 1 };
-    expect(audioFadeGainAtLocalTime(effects, 4, 2)).toBeCloseTo(1);
-    expect(audioFadeGainAtLocalTime(effects, 4, 3)).toBeCloseTo(1);
-    expect(audioFadeGainAtLocalTime(effects, 4, 3.5)).toBeCloseTo(Math.sin(Math.PI / 4));
-    expect(audioFadeGainAtLocalTime(effects, 4, 4)).toBeCloseTo(0);
+  it("does not apply picture fadeIn to video audio when audioFade* unset", () => {
+    const effects = { fadeIn: 1, fadeOut: 1 };
+    expect(audioFadeGainAtLocalTime(effects, 4, 0, "video")).toBeCloseTo(1);
+    expect(audioFadeGainAtLocalTime(effects, 4, 4, "video")).toBeCloseTo(1);
+  });
+
+  it("legacy audio beds still honor fadeIn/fadeOut", () => {
+    const effects = { fadeIn: 1 };
+    expect(audioFadeGainAtLocalTime(effects, 4, 0, "audio")).toBeCloseTo(0);
+    expect(audioFadeGainAtLocalTime(effects, 4, 0.5, "audio")).toBeCloseTo(
+      Math.sin(Math.PI / 4),
+    );
+    expect(audioFadeGainAtLocalTime(effects, 4, 1, "audio")).toBeCloseTo(1);
+  });
+
+  it("ramps dedicated audio fade-out", () => {
+    const effects = { audioFadeOut: 1 };
+    expect(audioFadeGainAtLocalTime(effects, 4, 2, "video")).toBeCloseTo(1);
+    expect(audioFadeGainAtLocalTime(effects, 4, 3.5, "video")).toBeCloseTo(
+      Math.sin(Math.PI / 4),
+    );
+    expect(audioFadeGainAtLocalTime(effects, 4, 4, "video")).toBeCloseTo(0);
   });
 
   it("does not multiply overlapping fades — pair is clamped first", () => {
-    const effects = { fadeIn: 3, fadeOut: 3 };
-    // Clamped to 2s + 2s on a 4s clip; midpoint is the junction at full level.
-    expect(audioFadeGainAtLocalTime(effects, 4, 2)).toBeCloseTo(1);
+    const effects = { audioFadeIn: 3, audioFadeOut: 3 };
+    expect(audioFadeGainAtLocalTime(effects, 4, 2, "video")).toBeCloseTo(1);
   });
 
   it("rises faster than linear in the early part of a fade", () => {
-    const effects = { fadeIn: 1 };
-    const early = audioFadeGainAtLocalTime(effects, 4, 0.25);
+    const effects = { audioFadeIn: 1 };
+    const early = audioFadeGainAtLocalTime(effects, 4, 0.25, "video");
     expect(early).toBeGreaterThan(0.25);
     expect(early).toBeLessThan(1);
+  });
+});
+
+describe("resolveAudioFadePair", () => {
+  it("prefers dedicated audio fields", () => {
+    expect(
+      resolveAudioFadePair({ fadeIn: 9, audioFadeIn: 0.5, audioFadeOut: 0.25 }, 4, "video"),
+    ).toEqual({ fadeIn: 0.5, fadeOut: 0.25 });
   });
 });
 
