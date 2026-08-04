@@ -5,11 +5,13 @@
     <comment xml:lang="en">Yatishara Studio project</comment>
     <acronym>STUDIO</acronym>
     <expanded-acronym>Yatishara Studio project package</expanded-acronym>
-    <glob pattern="*.studio"/>
-    <!-- Prefer magic over zip sniffing (YSTUDIO\0 + u16le version). -->
-    <magic priority="80">
-      <match type="string" offset="0" value="YSTUDIO&#x00;"/>
+    <glob weight="80" pattern="*.studio"/>
+    <!-- YSTUDIO magic (envelope); weight beats weak octet-stream -->
+    <magic priority="90">
+      <match type="string" offset="0" value="YSTUDIO"/>
     </magic>
+    <alias type="application/x-yatishara-studio"/>
     <icon name="application-vnd.yatishara.studio"/>
+    <generic-icon name="package-x-generic"/>
   </mime-type>
 </mime-info>
