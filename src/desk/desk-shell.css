@@ -4289,14 +4289,19 @@ input[type="search"]:focus-visible {
 
 .cursor-composer-box.is-drop-target {
   border-style: solid !important;
-  border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-  background: var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) !important;
+  border-color: color-mix(in srgb, var(--cursor-accent, #6b8afd) 48%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
+  background: color-mix(
+    in srgb,
+    var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) 86%,
+    var(--cursor-accent, #6b8afd) 14%
+  ) !important;
   backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
   box-shadow:
     0 16px 40px color-mix(in srgb, #000 32%, transparent),
-    0 6px 16px color-mix(in srgb, #000 20%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 0 0 1.5px color-mix(in srgb, var(--cursor-accent, #6b8afd) 42%, transparent),
+    0 8px 28px color-mix(in srgb, var(--cursor-accent, #6b8afd) 18%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .cursor-explorer-panel.is-drop-target {

@@ -8583,22 +8583,28 @@ export function StudioShell({
         }
         .cursor-composer-box.is-drop-target {
           border-style: solid !important;
-          border-color: var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14)) !important;
-          background: var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) !important;
+          border-color: color-mix(in srgb, var(--cursor-accent) 48%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) 86%,
+            var(--cursor-accent) 14%
+          ) !important;
           backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
           -webkit-backdrop-filter: var(--studio-composer-glass-blur, saturate(150%) blur(5px));
           box-shadow:
             0 16px 40px color-mix(in srgb, #000 32%, transparent),
-            0 6px 16px color-mix(in srgb, #000 20%, transparent),
-            var(--studio-composer-glass-shadow, inset 0 1px 0 rgba(255, 255, 255, 0.08)) !important;
+            0 0 0 1.5px color-mix(in srgb, var(--cursor-accent) 42%, transparent),
+            0 8px 28px color-mix(in srgb, var(--cursor-accent) 18%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
         }
         .cursor-composer-shell.is-drop-target-hit .cursor-composer-box,
         .cursor-composer-box.is-drop-target-hit {
-          border-color: color-mix(in srgb, var(--cursor-accent) 28%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
+          border-color: color-mix(in srgb, var(--cursor-accent) 58%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
           box-shadow:
             0 20px 48px color-mix(in srgb, #000 34%, transparent),
-            0 8px 20px color-mix(in srgb, var(--cursor-accent) 16%, transparent),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+            0 0 0 2px color-mix(in srgb, var(--cursor-accent) 55%, transparent),
+            0 10px 32px color-mix(in srgb, var(--cursor-accent) 24%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
         }
         .cursor-explorer-panel.is-drop-target {
           background: color-mix(in srgb, var(--studio-composer-glass-muted, rgba(7, 17, 31, 0.44)) 92%, var(--cursor-accent) 8%);
@@ -8968,14 +8974,42 @@ export function StudioShell({
           overflow: hidden !important;
           overscroll-behavior: none !important;
         }
-        /* Shell is normally pointer-events:none; during touch-drag make it hittable
-           so elementFromPoint / drop targeting can resolve data-drop-target=composer. */
+        /* Soft “drop here” invite while a touch file-drag is in flight. */
+        body.is-touch-file-drag .cursor-composer-shell[data-drop-target="composer"] .cursor-composer-box {
+          outline: 1.5px dashed color-mix(in srgb, var(--cursor-accent, #7dd3fc) 38%, transparent);
+          outline-offset: 3px;
+          transition:
+            box-shadow 140ms ease,
+            border-color 140ms ease,
+            background-color 140ms ease,
+            outline-color 140ms ease,
+            outline-offset 140ms ease;
+        }
+        /* Strong hover when finger is over the composer (drop will attach). */
         body.is-touch-file-drag .cursor-composer-shell[data-drop-target="composer"] {
           pointer-events: auto !important;
         }
+        body.is-touch-file-drag .cursor-composer-shell.is-drop-target .cursor-composer-box,
+        body.is-touch-file-drag .cursor-composer-shell.is-touch-drop-hover .cursor-composer-box,
+        .cursor-composer-shell.is-touch-drop-hover .cursor-composer-box,
+        .cursor-composer-box.is-touch-drop-hover {
+          outline: 2px solid color-mix(in srgb, var(--cursor-accent, #7dd3fc) 72%, transparent);
+          outline-offset: 2px;
+          border-color: color-mix(in srgb, var(--cursor-accent) 55%, var(--studio-composer-glass-border, rgba(255, 255, 255, 0.14))) !important;
+          background: color-mix(
+            in srgb,
+            var(--studio-composer-glass, color-mix(in srgb, rgba(7, 17, 31, 0.58) 88%, transparent)) 78%,
+            var(--cursor-accent) 22%
+          ) !important;
+          box-shadow:
+            0 18px 44px color-mix(in srgb, #000 34%, transparent),
+            0 0 0 2px color-mix(in srgb, var(--cursor-accent) 48%, transparent),
+            0 10px 36px color-mix(in srgb, var(--cursor-accent) 28%, transparent),
+            inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+        }
         body.is-touch-file-drag .cursor-composer-shell.is-drop-target,
         .cursor-composer-shell.is-touch-drop-hover {
-          outline: 1px solid color-mix(in srgb, var(--cursor-accent, #7dd3fc) 45%, transparent);
+          outline: none;
         }
         /* Mobile explorer context = fixed overlay sheet above bottom nav (not a
            flex child — .studio-polish > * { position:relative } was pushing layout). */

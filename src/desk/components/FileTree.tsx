@@ -321,10 +321,25 @@ function findDropTargetUnder(x, y, excludeEl) {
 function highlightDropTarget(el) {
   if (typeof document === "undefined") return;
   document.querySelectorAll(".is-touch-drop-hover").forEach((node) => {
-    if (node !== el) node.classList.remove("is-touch-drop-hover", "is-drop-target");
+    if (node === el) return;
+    node.classList.remove("is-touch-drop-hover", "is-drop-target");
+    if (node.classList.contains("cursor-composer-shell")) {
+      node
+        .querySelectorAll(".cursor-composer-box.is-touch-drop-hover")
+        .forEach((box) =>
+          box.classList.remove("is-touch-drop-hover", "is-drop-target"),
+        );
+    }
   });
   if (el) {
     el.classList.add("is-touch-drop-hover", "is-drop-target");
+    // Paint the glass box too — shell-only outline is easy to miss on mobile.
+    if (el.classList.contains("cursor-composer-shell")) {
+      const box = el.querySelector(".cursor-composer-box");
+      if (box instanceof HTMLElement) {
+        box.classList.add("is-touch-drop-hover", "is-drop-target");
+      }
+    }
   }
 }
 
@@ -628,11 +643,11 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       hoverTarget = under;
       highlightDropTarget(under);
     }
+    // Desktop parity: caret + React dragOver only while finger is over composer.
+    // (fromFilesDock used to force active=true for the whole drag, so the
+    // composer stayed "highlighted" and never visibly switched on hover.)
     publishDropCaret(
-      Boolean(
-        fromFilesDock ||
-          under?.getAttribute?.("data-drop-target") === "composer",
-      ),
+      under?.getAttribute?.("data-drop-target") === "composer",
     );
   };
 
@@ -949,12 +964,9 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
       hoverTarget = under;
       highlightDropTarget(under);
     }
-    // Drive the same pulsing drop caret desktop shows on dragover.
+    // Same as desktop dragover: caret + highlight only while over composer.
     publishDropCaret(
-      Boolean(
-        fromFilesDock ||
-          under?.getAttribute?.("data-drop-target") === "composer",
-      ),
+      under?.getAttribute?.("data-drop-target") === "composer",
     );
   };
   handleTouchEnd = (endEvent) => {
@@ -979,12 +991,14 @@ function startFileDragPreview(event, entry, workspaceId, options = {}) {
     document.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     document.addEventListener("touchend", handleTouchEnd, { capture: true });
     document.addEventListener("touchcancel", handleTouchCancel, { capture: true });
-    // Seed highlight only if already over a real target; always seed caret from Files.
+    // Seed highlight/caret only if finger already sits on a real drop target.
     hoverTarget = fromFilesDock
       ? findComposerDropTargetAt(lastX, lastY, 36)
       : findDropTargetUnder(lastX, lastY, chip);
     if (hoverTarget) highlightDropTarget(hoverTarget);
-    publishDropCaret(Boolean(fromFilesDock || hoverTarget));
+    publishDropCaret(
+      hoverTarget?.getAttribute?.("data-drop-target") === "composer",
+    );
   } else {
     document.addEventListener("dragover", handleMove);
     document.addEventListener("drag", handleMove);
