@@ -1,4 +1,34 @@
 /**
+ * Portable `.studio` package format helpers (open zip transport, no encryption).
+ * Shared by Convex package/download builders and client import remap.
+ */
+
+export const STUDIO_PACKAGE_FORMAT = "yatishara.studio";
+export const STUDIO_PACKAGE_FORMAT_VERSION = 1;
+export const PKG_ASSET_PREFIX = "pkg:";
+
+export type StudioPackageMediaKind = "image" | "video" | "audio" | "document";
+
+export type StudioPackageMediaEntry = {
+  key: string;
+  path: string;
+  originalName: string;
+  mime: string;
+  kind: StudioPackageMediaKind;
+};
+
+export type StudioPackageManifest = {
+  format: typeof STUDIO_PACKAGE_FORMAT;
+  formatVersion: number;
+  kind: "videoEdit";
+  name: string;
+  exportedAt: string;
+  icon?: string;
+  media: StudioPackageMediaEntry[];
+  missing?: Array<{ assetId: string; reason: string }>;
+};
+
+/**
  * Package icon.svg — composited clapperboard with real yatishara-logo-dark on
  * light-mode platform grey slate (#ececf0); square bottom corners.
  */
