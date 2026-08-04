@@ -1,7 +1,8 @@
 /**
- * `.studio` on-disk envelope: custom magic + zip payload.
- * Keeps OS content-sniffers from classifying the file as application/zip.
- * Inner payload remains an open zip (no encryption). Legacy raw-zip `.studio` still imports.
+ * Legacy `.studio` on-disk envelope (YSTUDIO magic + zip).
+ * Product downloads are plain zip + `.studio` name — no wrap (OS MIME packs
+ * are not user-friendly). Keep unwrap for older enveloped files; wrap stays
+ * for tests / optional tooling only.
  */
 
 export const STUDIO_PACKAGE_MIME = "application/vnd.yatishara.studio";

@@ -2,10 +2,6 @@ import type { ConvexReactClient } from "convex/react";
 import { Zip, ZipPassThrough, strToU8 } from "fflate";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import {
-  STUDIO_PACKAGE_MIME,
-  wrapStudioPackageZip,
-} from "../../../convex/lib/studioPackageEnvelope";
 
 export type StudioDownloadSelection =
   | { kind: "folder"; id: Id<"folders"> }
@@ -187,15 +183,10 @@ async function packManifestFiles(args: {
     })();
   });
   const blob = await completed;
-  // Lone `.studio` packages get a custom magic envelope so OS sniffers
-  // (Linux/macOS/Windows) do not show the generic ZIP icon.
-  if (/\.studio$/i.test(args.archiveName)) {
-    const zipBytes = new Uint8Array(await blob.arrayBuffer());
-    const wrapped = wrapStudioPackageZip(zipBytes);
-    saveBlob(bytesToBlob([wrapped], STUDIO_PACKAGE_MIME), args.archiveName);
-  } else {
-    saveBlob(blob, args.archiveName);
-  }
+  // `.studio` is an open zip with a custom extension. Do not wrap with a custom
+  // magic envelope — that makes Linux/macOS/Windows show "unknown" until users
+  // install a MIME pack (not user-friendly). Keep unwrap on import for older files.
+  saveBlob(blob, args.archiveName);
   return args.archiveName;
 }
 
