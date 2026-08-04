@@ -21343,17 +21343,19 @@ export function StudioShell({
               )
             : null}
           <div className="cursor-panel-head-tools cursor-workspace-tools">
-            <div className="studio-new-tab-cluster">
-              <button
-                type="button"
-                className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
-                onClick={openNewComposerTab}
-                aria-label="New chat"
-                title="New chat"
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </div>
+            {isComposerContextTabKey(activeTab) ? (
+              <div className="studio-new-tab-cluster">
+                <button
+                  type="button"
+                  className="studio-settings-pill studio-settings-trigger studio-new-tab-btn"
+                  onClick={openNewComposerTab}
+                  aria-label="New generate tab"
+                  title="New generate tab"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ) : null}
             {!isMobile ? (
               <>
                 <CreditPill
