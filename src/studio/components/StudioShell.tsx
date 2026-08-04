@@ -22862,9 +22862,9 @@ export function StudioShell({
                 aria-pressed={browserFullscreen}
               >
                 {browserFullscreen ? (
-                  <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Shrink className="h-3.5 w-3.5" aria-hidden="true" />
                 ) : (
-                  <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Expand className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
               </button>
               <button
@@ -25805,7 +25805,7 @@ function StudioMobileAppMenu({
           {
             label: browserFullscreen ? "Exit FS" : "Full screen",
             ariaLabel: browserFullscreen ? "Exit full screen" : "Enter full screen",
-            Icon: Maximize2,
+            Icon: browserFullscreen ? Shrink : Expand,
             onClick: onToggleFullscreen,
           },
         ]
