@@ -6084,9 +6084,52 @@ export function StudioShell({
     const baseName =
       stripStudioProjectExt(pkg.manifest.name || pkg.project.name || "Imported project") ||
       "Imported project";
-    const exists = entryNamesSet(displayCurrentEntries.entries);
-    const displayName = uniqueName(withStudioProjectExt(baseName), exists);
-    const name = stripStudioProjectExt(displayName);
+    // One new folder per import: media assets + .studio project live together.
+    onProgress?.(0, 1, `Creating folder · ${baseName}`);
+    const [siblingFolders, siblingAssets, siblingEdits] = await Promise.all([
+      convex.query(api.folders.list, { parentId: folderId }),
+      convex.query(api.assets.listByFolder, { folderId }),
+      convex.query(api.videoEdits.listByFolder, { folderId }),
+    ]);
+    const siblingNames = new Set();
+    for (const row of siblingFolders ?? []) {
+      if (row?.name) siblingNames.add(String(row.name).toLowerCase());
+    }
+    for (const row of siblingAssets ?? []) {
+      if (row?.name) siblingNames.add(String(row.name).toLowerCase());
+    }
+    for (const row of siblingEdits ?? []) {
+      if (row?.name) {
+        siblingNames.add(String(row.name).toLowerCase());
+        siblingNames.add(withStudioProjectExt(String(row.name)).toLowerCase());
+      }
+    }
+    if (activeFolder?._id === folderId) {
+      for (const name of entryNamesSet(displayCurrentEntries.entries)) {
+        siblingNames.add(name);
+      }
+    }
+    const folderName = uniqueName(baseName, siblingNames);
+    const projectFolderId = await createFolder({
+      parentId: folderId,
+      name: folderName,
+      icon: "Folder",
+      color: "#22c55e",
+    });
+    setRecentFileRows(
+      recordRecentItem(
+        {
+          type: "dir",
+          studioKind: "folder",
+          studioId: projectFolderId,
+          name: folderName,
+        },
+        explorerUserId,
+        RECENT_ACTIVITY.created,
+      ),
+    );
+    // Project file name can match the folder (same stem); uniqueness is within the new folder.
+    const name = folderName;
     const keyToAssetId = new Map();
     const mediaList = [...pkg.mediaFiles.entries()];
     let uploaded = 0;
@@ -6100,7 +6143,7 @@ export function StudioShell({
       );
       const assetId = await uploadStudioAsset({
         file,
-        folderId,
+        folderId: projectFolderId,
         kind: mediaKindFromPackage(mediaMeta?.kind, file),
         name: mediaMeta?.originalName || file.name,
         reserveUpload,
@@ -6113,11 +6156,11 @@ export function StudioShell({
     const { project, unresolvedClips } = remapImportedStudioProject(
       pkg.project,
       keyToAssetId,
-      folderId,
+      projectFolderId,
       name,
     );
     const result = await saveVideoEdit({
-      folderId,
+      folderId: projectFolderId,
       name,
       project,
       sourceAssetId: typeof project.sourceAssetId === "string" ? project.sourceAssetId : undefined,
@@ -6125,7 +6168,7 @@ export function StudioShell({
     const entry = videoEditToEntry({
       _id: result.projectId,
       name,
-      folderId,
+      folderId: projectFolderId,
       updatedAt: wallClockMs(),
     });
     setTabEntrySnapshots((snapshots) => ({
@@ -6135,7 +6178,14 @@ export function StudioShell({
     setRecentFileRows(
       recordRecentItem(entry, explorerUserId, RECENT_ACTIVITY.created),
     );
-    return { projectId: result.projectId, name, unresolvedClips, entry };
+    return {
+      projectId: result.projectId,
+      name,
+      folderId: projectFolderId,
+      folderName,
+      unresolvedClips,
+      entry,
+    };
   }
 
   async function runFileTransfer(id) {
@@ -6202,10 +6252,12 @@ export function StudioShell({
         );
         if (imported.unresolvedClips > 0) {
           toast.warning(
-            `Imported “${imported.name}” with ${imported.unresolvedClips} clip${imported.unresolvedClips === 1 ? "" : "s"} missing media`,
+            `Imported “${imported.name}” into “${imported.folderName}” with ${imported.unresolvedClips} clip${imported.unresolvedClips === 1 ? "" : "s"} missing media`,
           );
         } else {
-          toast.success(`Imported “${imported.name}${STUDIO_PROJECT_EXT}”`);
+          toast.success(
+            `Imported “${imported.name}${STUDIO_PROJECT_EXT}” into “${imported.folderName}”`,
+          );
         }
         openTab(`videoEdit:${imported.projectId}`);
         finishFileTransfer(id, {

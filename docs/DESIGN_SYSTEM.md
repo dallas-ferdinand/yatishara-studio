@@ -146,8 +146,9 @@ from `--mos-plate`:
 - **`.studio` project packages:** virtual video-edit files show as `{name}.studio`
   in Files (Convex-backed, unbundled in-app). **Download** packs an open zip
   (`manifest.json` + `project.json` + `media/*` + `icon.svg`, no encryption) saved as
-  `Name.studio`. Dropping a `.studio` (or a ZIP that contains package trees)
-  imports a **unique fork** (new assets + new project). Editor **Export as** supports
+  `Name.studio`.   Dropping a `.studio` (or a ZIP that contains package trees)
+  imports a **unique fork**: new folder named after the project, with media
+  assets + `.studio` project file inside. Editor **Export as** supports
   Video (MP4), Audio (MP3/WAV/M4A), and Studio package, with live progress.
   In-app `.studio` thumb: cut-scene clapperboard with real `yatishara-logo-dark`
   on light-mode platform grey slate (`#ececf0` / `--mos-bg`), square bottom
