@@ -9449,19 +9449,23 @@ export function StudioShell({
         }
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
-          --studio-desktop-menu-inset: 4px;
-          --studio-desktop-menu-edge: 8px;
+          --studio-desktop-menu-gap: 4px;
+          --studio-desktop-menu-edge: 12px;
+          --studio-desktop-menu-pad: 12px;
+          box-sizing: border-box;
           left: auto;
           right: var(--studio-desktop-menu-edge);
           top: calc(
-            var(--studio-desktop-top-chrome, 44px) + var(--studio-desktop-menu-inset)
+            var(--studio-desktop-top-chrome, 44px) + var(--studio-desktop-menu-gap)
           );
           bottom: auto;
-          width: min(360px, calc(100vw - (var(--studio-desktop-menu-inset) * 2)));
+          /* Use containing-block %, not 100vw — vw overflow was eating the right gutter. */
+          width: min(320px, calc(100% - (var(--studio-desktop-menu-edge) * 2)));
+          max-width: calc(100% - (var(--studio-desktop-menu-edge) * 2));
           height: auto !important;
           max-height: min(72vh, 560px);
           border-radius: 18px;
-          padding-top: 8px;
+          padding: var(--studio-desktop-menu-pad);
           box-shadow:
             0 1px 0 rgba(255, 255, 255, 0.35) inset,
             0 18px 48px rgba(0, 0, 0, 0.22);
@@ -9484,7 +9488,17 @@ export function StudioShell({
           flex: 1 1 auto;
           min-height: 0;
           overflow-y: auto;
-          padding-bottom: 10px;
+          padding: 0;
+        }
+        .studio-mobile-app-menu-sheet.is-desktop-popover .studio-mobile-app-menu-scroll::before,
+        .studio-mobile-app-menu-sheet.is-desktop-popover .studio-mobile-app-menu-scroll::after {
+          content: none;
+          display: none;
+        }
+        .studio-mobile-app-menu-sheet.is-desktop-popover .studio-mobile-app-menu-body.is-app-grid {
+          /* Sheet padding is the equal inset — don't double-pad unevenly. */
+          padding: 0;
+          gap: 12px 10px;
         }
         /* Studio hamburger menu — History-parity bottom sheet (handle drag, no X). */
         .studio-mobile-app-menu-sheet {
@@ -24912,8 +24926,7 @@ function StudioMobileAppMenu({
         '.cursor-workspace-tools [aria-label="Close menu"], .cursor-workspace-tools [aria-label="Open menu"]',
       ) ?? null;
     const gap = 4;
-    // Keep a real gutter from the viewport edge — never flush/touch the right.
-    const edgeGutter = 8;
+    const edgeGutter = 12;
     const headRect = head?.getBoundingClientRect();
     const triggerRect = trigger?.getBoundingClientRect();
     const topAnchor = Math.max(
@@ -24921,13 +24934,10 @@ function StudioMobileAppMenu({
       triggerRect?.bottom ?? 0,
     );
     const top = Math.round(topAnchor + gap);
-    // Prefer lining up under the Menu button, but never closer than edgeGutter.
-    const underTrigger = triggerRect
-      ? Math.round(window.innerWidth - triggerRect.right)
-      : edgeGutter;
-    const right = Math.max(edgeGutter, underTrigger);
+    // Always a real gutter from the containing block's right — never flush.
     el.style.top = `${top}px`;
-    el.style.right = `${right}px`;
+    el.style.right = `${edgeGutter}px`;
+    el.style.left = "auto";
     if (polish instanceof HTMLElement && headRect) {
       polish.style.setProperty(
         "--studio-desktop-top-chrome",
