@@ -9450,8 +9450,9 @@ export function StudioShell({
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
           --studio-desktop-menu-inset: 4px;
+          --studio-desktop-menu-edge: 8px;
           left: auto;
-          right: var(--studio-desktop-menu-inset);
+          right: var(--studio-desktop-menu-edge);
           top: calc(
             var(--studio-desktop-top-chrome, 44px) + var(--studio-desktop-menu-inset)
           );
@@ -24911,6 +24912,8 @@ function StudioMobileAppMenu({
         '.cursor-workspace-tools [aria-label="Close menu"], .cursor-workspace-tools [aria-label="Open menu"]',
       ) ?? null;
     const gap = 4;
+    // Keep a real gutter from the viewport edge — never flush/touch the right.
+    const edgeGutter = 8;
     const headRect = head?.getBoundingClientRect();
     const triggerRect = trigger?.getBoundingClientRect();
     const topAnchor = Math.max(
@@ -24918,10 +24921,11 @@ function StudioMobileAppMenu({
       triggerRect?.bottom ?? 0,
     );
     const top = Math.round(topAnchor + gap);
-    // Align popover's right edge with the Menu button (flush with tools, not viewport).
-    const right = triggerRect
-      ? Math.round(Math.max(2, window.innerWidth - triggerRect.right))
-      : gap;
+    // Prefer lining up under the Menu button, but never closer than edgeGutter.
+    const underTrigger = triggerRect
+      ? Math.round(window.innerWidth - triggerRect.right)
+      : edgeGutter;
+    const right = Math.max(edgeGutter, underTrigger);
     el.style.top = `${top}px`;
     el.style.right = `${right}px`;
     if (polish instanceof HTMLElement && headRect) {

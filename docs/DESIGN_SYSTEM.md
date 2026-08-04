@@ -353,9 +353,9 @@ Prefer these over bespoke markup. Located in `src/desk/components/`.
 - **Desktop header** keeps New + Credits + Avatar + Menu only. Feed / Network /
   Messages / Files / History / Settings / Admin / Full screen live in the same
   app grid via `.studio-mobile-app-menu-sheet.is-desktop-popover` (top-right
-  floating panel tucked under the Menu control with **4px** gap, right-aligned
-  to that button, no dim overlay, no second close X). Do not re-grow the
-  desktop tools row.
+  floating panel tucked under the Menu control with **4px** gap; keep an
+  **8px** gutter from the viewport right edge (never flush/touching). No dim
+  overlay, no second close X). Do not re-grow the desktop tools row.
 
 **DM peer right sidebar** (`StudioDmPeerSidebar`) reuses this chrome — do not invent a
 second tab/button language: `cursor-panel-head` + `studio-admin-head-tabs` /
