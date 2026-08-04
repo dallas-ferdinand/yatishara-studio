@@ -9449,19 +9449,19 @@ export function StudioShell({
         }
         /* Desktop: same app grid as mobile, tuck under Menu control (no dim overlay). */
         .studio-mobile-app-menu-sheet.is-desktop-popover {
-          --studio-desktop-menu-gap: 4px;
-          --studio-desktop-menu-edge: 12px;
+          /* One inset for header gap + right edge — must stay equal. */
+          --studio-desktop-menu-gap: 8px;
           --studio-desktop-menu-pad: 12px;
           box-sizing: border-box;
           left: auto;
-          right: var(--studio-desktop-menu-edge);
+          right: var(--studio-desktop-menu-gap);
           top: calc(
             var(--studio-desktop-top-chrome, 44px) + var(--studio-desktop-menu-gap)
           );
           bottom: auto;
           /* Use containing-block %, not 100vw — vw overflow was eating the right gutter. */
-          width: min(320px, calc(100% - (var(--studio-desktop-menu-edge) * 2)));
-          max-width: calc(100% - (var(--studio-desktop-menu-edge) * 2));
+          width: min(320px, calc(100% - (var(--studio-desktop-menu-gap) * 2)));
+          max-width: calc(100% - (var(--studio-desktop-menu-gap) * 2));
           height: auto !important;
           max-height: min(72vh, 560px);
           border-radius: 18px;
@@ -24925,8 +24925,8 @@ function StudioMobileAppMenu({
       polish?.querySelector?.(
         '.cursor-workspace-tools [aria-label="Close menu"], .cursor-workspace-tools [aria-label="Open menu"]',
       ) ?? null;
-    const gap = 4;
-    const edgeGutter = 12;
+    // Same px for under-header gap and right-edge gutter.
+    const gap = 8;
     const headRect = head?.getBoundingClientRect();
     const triggerRect = trigger?.getBoundingClientRect();
     const topAnchor = Math.max(
@@ -24934,9 +24934,8 @@ function StudioMobileAppMenu({
       triggerRect?.bottom ?? 0,
     );
     const top = Math.round(topAnchor + gap);
-    // Always a real gutter from the containing block's right — never flush.
     el.style.top = `${top}px`;
-    el.style.right = `${edgeGutter}px`;
+    el.style.right = `${gap}px`;
     el.style.left = "auto";
     if (polish instanceof HTMLElement && headRect) {
       polish.style.setProperty(
