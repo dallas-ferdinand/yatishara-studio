@@ -3,6 +3,7 @@
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Check,
@@ -2206,6 +2207,9 @@ export function StudioMessagesPane({
     avatarUrl?: string | null;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+  const scrolledConversationRef = useRef<string | null>(null);
+  const [showJumpDown, setShowJumpDown] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -2593,10 +2597,87 @@ export function StudioMessagesPane({
     }
   }, [conversationId, dropOptimistic, messages, optimisticMessages]);
 
-  useEffect(() => {
+  const pinDmScrollBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, lastDisplayMessageId]);
+    if (!el) return;
+    stickToBottomRef.current = true;
+    setShowJumpDown(false);
+    if (behavior === "smooth") {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      // Smooth scroll fires mid-way scroll events — keep stick through the glide.
+      window.setTimeout(() => {
+        stickToBottomRef.current = true;
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+        setShowJumpDown(false);
+      }, 420);
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  // Stick to latest: first open often lands short because images/layout settle
+  // after the first scrollHeight write. Mirror Studio chat — layout + rAF +
+  // ResizeObserver + short retries while sticking.
+  useLayoutEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return undefined;
+
+    const NEAR_BOTTOM_PX = 96;
+    const distanceFromBottom = () =>
+      root.scrollHeight - root.scrollTop - root.clientHeight;
+    const updateJump = () => {
+      const near = distanceFromBottom() <= NEAR_BOTTOM_PX;
+      stickToBottomRef.current = near;
+      setShowJumpDown(!near && root.scrollHeight > root.clientHeight + 12);
+    };
+    const pinIfStuck = () => {
+      if (!stickToBottomRef.current) return;
+      root.scrollTop = root.scrollHeight;
+      setShowJumpDown(false);
+    };
+
+    const onScroll = () => updateJump();
+    root.addEventListener("scroll", onScroll, { passive: true });
+
+    const conversationKey = conversationId ?? null;
+    if (scrolledConversationRef.current !== conversationKey) {
+      scrolledConversationRef.current = conversationKey;
+      stickToBottomRef.current = true;
+      setShowJumpDown(false);
+    }
+
+    const last = displayMessages[displayMessages.length - 1];
+    if (last?.fromMe) stickToBottomRef.current = true;
+
+    pinIfStuck();
+    const raf = window.requestAnimationFrame(() => {
+      pinIfStuck();
+      window.requestAnimationFrame(pinIfStuck);
+    });
+    const retryMs = [48, 160, 360, 720];
+    const timers = retryMs.map((ms) => window.setTimeout(pinIfStuck, ms));
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) pinIfStuck();
+      else updateJump();
+    });
+    const inner = root.querySelector(".studio-dm-messages");
+    if (inner) observer.observe(inner);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      for (const id of timers) window.clearTimeout(id);
+      root.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, [
+    conversationId,
+    displayMessages.length,
+    lastDisplayMessageId,
+    messagesPending,
+  ]);
 
   useEffect(() => {
     if (messagesPending || !conversationId || !activeRow?.unread) return;
@@ -3308,65 +3389,78 @@ export function StudioMessagesPane({
         ) : null}
       </header>
 
-      <div
-        className={`studio-dm-scroll${messagesPending && !messages?.length ? " is-pending" : ""}`}
-        ref={scrollRef}
-      >
-        {messages == null && !displayMessages.length ? (
-          messagesPending ? (
-            <div className="studio-dm-scroll-pending" aria-hidden="true" />
-          ) : (
+      <div className="studio-dm-scroll-wrap">
+        <div
+          className={`studio-dm-scroll${messagesPending && !messages?.length ? " is-pending" : ""}`}
+          ref={scrollRef}
+        >
+          {messages == null && !displayMessages.length ? (
+            messagesPending ? (
+              <div className="studio-dm-scroll-pending" aria-hidden="true" />
+            ) : (
+              <div className="studio-dm-empty-state">
+                <MessageCircle aria-hidden="true" />
+                <strong>Say hi</strong>
+                <p>This is the start of your chat with {peerLabel}.</p>
+              </div>
+            )
+          ) : displayMessages.length === 0 ? (
             <div className="studio-dm-empty-state">
               <MessageCircle aria-hidden="true" />
               <strong>Say hi</strong>
               <p>This is the start of your chat with {peerLabel}.</p>
             </div>
-          )
-        ) : displayMessages.length === 0 ? (
-          <div className="studio-dm-empty-state">
-            <MessageCircle aria-hidden="true" />
-            <strong>Say hi</strong>
-            <p>This is the start of your chat with {peerLabel}.</p>
-          </div>
-        ) : (
-          <div className="studio-dm-messages">
-            {buildDmTimeline(displayMessages).map((item) => {
-              if (item.type === "day") {
-                return (
-                  <div key={item.key} className="studio-dm-message-block">
-                    <div className="studio-dm-day" role="separator">
-                      <span>{item.label}</span>
+          ) : (
+            <div className="studio-dm-messages">
+              {buildDmTimeline(displayMessages).map((item) => {
+                if (item.type === "day") {
+                  return (
+                    <div key={item.key} className="studio-dm-message-block">
+                      <div className="studio-dm-day" role="separator">
+                        <span>{item.label}</span>
+                      </div>
                     </div>
-                  </div>
-                );
-              }
-              if (item.type === "album") {
+                  );
+                }
+                if (item.type === "album") {
+                  return (
+                    <div key={item.key} className="studio-dm-message-block">
+                      <DmImageAlbum
+                        messages={item.messages}
+                        peerLabel={peerLabel}
+                        onOpenGallery={openGallery}
+                        actions={messageActions}
+                      />
+                    </div>
+                  );
+                }
                 return (
                   <div key={item.key} className="studio-dm-message-block">
-                    <DmImageAlbum
-                      messages={item.messages}
+                    <DmMessageBubble
+                      message={item.message}
                       peerLabel={peerLabel}
                       onOpenGallery={openGallery}
+                      onOpenFeedPost={onOpenFeedPost}
+                      onOpenStudioShareItem={onOpenStudioShareItem}
                       actions={messageActions}
                     />
                   </div>
                 );
-              }
-              return (
-                <div key={item.key} className="studio-dm-message-block">
-                  <DmMessageBubble
-                    message={item.message}
-                    peerLabel={peerLabel}
-                    onOpenGallery={openGallery}
-                    onOpenFeedPost={onOpenFeedPost}
-                    onOpenStudioShareItem={onOpenStudioShareItem}
-                    actions={messageActions}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        )}
+              })}
+            </div>
+          )}
+        </div>
+        {showJumpDown ? (
+          <button
+            type="button"
+            className="studio-dm-jump-down"
+            aria-label="Scroll to latest messages"
+            title="Latest"
+            onClick={() => pinDmScrollBottom("smooth")}
+          >
+            <ChevronDown aria-hidden="true" strokeWidth={2.35} />
+          </button>
+        ) : null}
       </div>
 
       {sendError ? <p className="studio-dm-error">{sendError}</p> : null}

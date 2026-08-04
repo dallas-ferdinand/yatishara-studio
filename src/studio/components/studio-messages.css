@@ -257,6 +257,15 @@
   }
 }
 
+.studio-dm-scroll-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .studio-dm-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -268,6 +277,52 @@
 
 .studio-dm-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.studio-dm-jump-down {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--color-cursor-border-soft, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mos-plate, #1a2230) 88%, transparent);
+  color: var(--color-cursor-text-bright, #fff);
+  box-shadow:
+    0 8px 22px color-mix(in srgb, #000 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 10%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+.studio-dm-jump-down svg {
+  width: 16px;
+  height: 16px;
+}
+
+.studio-dm-jump-down:hover {
+  border-color: color-mix(in srgb, var(--cursor-accent, #7dd3fc) 45%, transparent);
+  color: var(--cursor-accent, #7dd3fc);
+}
+
+.studio-dm-jump-down:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cursor-accent, #7dd3fc) 55%, transparent);
+  outline-offset: 2px;
+}
+
+[data-appearance="light"] .studio-dm-jump-down {
+  background: color-mix(in srgb, var(--mos-plate, #fff) 92%, transparent);
+  color: var(--color-cursor-text, #111);
+  box-shadow:
+    0 8px 18px color-mix(in srgb, #000 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 70%, transparent);
 }
 
 /* Quiet placeholder while Convex catches up — never show "Loading…" text. */
