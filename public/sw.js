@@ -28,11 +28,11 @@ self.addEventListener("message", (e) => {
 });
 
 self.addEventListener("push", (e) => {
-  const fallbackIcon = new URL(
+  const originIcon = new URL(
     "./branding/yatishara-appicon-192.png",
     self.location.origin,
   ).href;
-  const fallbackBadge = new URL(
+  const originBadge = new URL(
     "./branding/yatishara-appicon-maskable-192.png",
     self.location.origin,
   ).href;
@@ -40,8 +40,8 @@ self.addEventListener("push", (e) => {
     title: "Yatishara Studio",
     body: "New Studio update.",
     data: {},
-    icon: fallbackIcon,
-    badge: fallbackBadge,
+    icon: originIcon,
+    badge: originBadge,
   };
   try {
     payload = { ...payload, ...(e.data?.json() ?? {}) };
@@ -73,18 +73,30 @@ self.addEventListener("push", (e) => {
         /* show notification if prefs unreadable */
       }
 
+      const icon =
+        typeof payload.icon === "string" && /^https:\/\//i.test(payload.icon)
+          ? payload.icon
+          : originIcon;
+      const badge =
+        typeof payload.badge === "string" && /^https:\/\//i.test(payload.badge)
+          ? payload.badge
+          : originBadge;
+
       const options = {
-        body: payload.body,
-        data: payload.data,
-        icon: payload.icon || fallbackIcon,
-        badge: payload.badge || fallbackBadge,
+        body: payload.body || "",
+        data: payload.data || {},
+        icon,
+        badge,
         tag: payload.tag || undefined,
         renotify: Boolean(payload.tag || payload.renotify),
       };
-      if (payload.image) {
+      if (typeof payload.image === "string" && /^https:\/\//i.test(payload.image)) {
         options.image = payload.image;
       }
-      await self.registration.showNotification(payload.title, options);
+      await self.registration.showNotification(
+        payload.title || "Yatishara Studio",
+        options,
+      );
     })(),
   );
 });

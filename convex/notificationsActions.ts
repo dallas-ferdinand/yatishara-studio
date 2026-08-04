@@ -4,7 +4,28 @@ import { v } from "convex/values";
 import webpush from "web-push";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import { notificationDeepLink } from "./lib/notify";
+import { notificationDeepLink, STUDIO_PUSH_ICON } from "./lib/notify";
+
+/** Chrome shows a blank tile if icon/image URLs 404 — probe before send. */
+async function urlFetchable(url: string | undefined): Promise<boolean> {
+  if (!url || !/^https:\/\//i.test(url)) return false;
+  try {
+    const head = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+    });
+    if (head.ok || head.status === 206) return true;
+    // Some CDNs reject HEAD — try a tiny ranged GET.
+    const get = await fetch(url, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+      redirect: "follow",
+    });
+    return get.ok || get.status === 206;
+  } catch {
+    return false;
+  }
+}
 
 export const sendPushForNotification = internalAction({
   args: { notificationId: v.id("notifications") },
@@ -27,12 +48,23 @@ export const sendPushForNotification = internalAction({
     });
     const n = delivery.notification;
     const chrome = delivery.chrome;
+    const brandIcon = chrome.brandIcon || STUDIO_PUSH_ICON;
+
+    let icon = brandIcon;
+    if (chrome.icon && chrome.icon !== brandIcon && (await urlFetchable(chrome.icon))) {
+      icon = chrome.icon;
+    }
+    let image = chrome.image;
+    if (image && !(await urlFetchable(image))) {
+      image = undefined;
+    }
+
     console.info("Web push delivery start", {
       notificationId: args.notificationId,
       kind: n.kind,
       subscriptionCount: delivery.subscriptions.length,
-      hasActorIcon: Boolean(chrome.icon),
-      hasImage: Boolean(chrome.image),
+      iconIsBrand: icon === brandIcon,
+      hasImage: Boolean(image),
     });
     const url = notificationDeepLink({
       kind: n.kind,
@@ -43,9 +75,9 @@ export const sendPushForNotification = internalAction({
     const payload = JSON.stringify({
       title: n.title,
       body: n.body,
-      icon: chrome.icon,
-      badge: chrome.badge,
-      image: chrome.image,
+      icon,
+      badge: chrome.badge || brandIcon,
+      image,
       tag: chrome.tag,
       renotify: true,
       data: {

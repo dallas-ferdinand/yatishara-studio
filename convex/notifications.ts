@@ -220,8 +220,11 @@ async function resolvePushChrome(
     ? await resolveActorAvatarUrl(ctx, actorUserId, expiresUnix)
     : undefined;
 
+  // Prefer a face/photo when we have one; brand icon is the reliable fallback
+  // (Chrome shows a blank tile if a signed CDN icon 404s).
   return {
     icon: avatarUrl ?? STUDIO_PUSH_ICON,
+    brandIcon: STUDIO_PUSH_ICON,
     badge: STUDIO_PUSH_BADGE,
     image,
     tag,
@@ -234,6 +237,7 @@ export const getPushDelivery = internalQuery({
     notification: notificationReturn,
     chrome: v.object({
       icon: v.string(),
+      brandIcon: v.string(),
       badge: v.string(),
       image: v.optional(v.string()),
       tag: v.string(),
