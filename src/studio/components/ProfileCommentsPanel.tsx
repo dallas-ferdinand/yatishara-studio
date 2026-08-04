@@ -20,6 +20,7 @@ import { createPortal } from "react-dom";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { playUiSound } from "@/mos-app/sounds.js";
 import { formatPostWhen } from "@/studio/lib/formatPostWhen";
 import { setFeedShareDataTransfer } from "@/studio/lib/studioFeedShare";
 import { profileNameInitials } from "@/studio/lib/profileAvatar";
@@ -312,6 +313,7 @@ function CommentsBody({
     }
     setBusy(true);
     setError("");
+    playUiSound("send");
     try {
       let imageAssetId: Id<"assets"> | undefined;
       if (pendingImage) {
@@ -343,6 +345,7 @@ function CommentsBody({
         });
       }
     } catch (err) {
+      playUiSound("error");
       setError(friendlyConvexError(err, "Could not post comment"));
     } finally {
       setBusy(false);
@@ -352,10 +355,12 @@ function CommentsBody({
   async function remove(commentId: Id<"profileComments">) {
     setBusy(true);
     setError("");
+    playUiSound("pop");
     try {
       const result = await deleteComment({ commentId });
       onCommentCountChange?.(result.commentCount);
     } catch (err) {
+      playUiSound("error");
       setError(friendlyConvexError(err, "Could not delete comment"));
     } finally {
       setBusy(false);
@@ -372,6 +377,7 @@ function CommentsBody({
       likeCount: comment.likeCount,
     };
     const nextLiked = !prev.liked;
+    playUiSound(nextLiked ? "like" : "unlike");
     setLikeLocal((state) => ({
       ...state,
       [comment._id]: {
@@ -387,6 +393,7 @@ function CommentsBody({
       }));
     } catch (err) {
       setLikeLocal((state) => ({ ...state, [comment._id]: prev }));
+      playUiSound("error");
       setError(friendlyConvexError(err, "Could not like comment"));
     }
   }
@@ -665,6 +672,7 @@ function CommentsBody({
               <button
                 type="button"
                 className={`profile-comments-post-action${postActions.liked ? " is-liked" : ""}`}
+                data-studio-sfx="like"
                 aria-pressed={postActions.liked}
                 aria-label={postActions.liked ? "Unlike" : "Like"}
                 onClick={postActions.onLike}
@@ -675,6 +683,7 @@ function CommentsBody({
               <button
                 type="button"
                 className={`profile-comments-post-action${postActions.saved ? " is-saved" : ""}`}
+                data-studio-sfx="save"
                 aria-pressed={postActions.saved}
                 aria-label={postActions.saved ? "Unsave" : "Save"}
                 onClick={postActions.onSave}

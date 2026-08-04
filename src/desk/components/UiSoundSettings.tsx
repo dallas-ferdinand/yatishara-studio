@@ -16,10 +16,11 @@ import {
 
 const PREVIEW_SOUNDS = [
   { id: "tap", label: "Tap" },
-  { id: "shuffle", label: "Shuffle" },
-  { id: "button", label: "Button" },
-  { id: "select", label: "Select" },
   { id: "send", label: "Send" },
+  { id: "like", label: "Like" },
+  { id: "save", label: "Save" },
+  { id: "follow", label: "Follow" },
+  { id: "share", label: "Share" },
   { id: "success", label: "Success" },
 ] as const;
 
@@ -54,7 +55,7 @@ export function UiSoundSettings() {
         <div className="min-w-0">
           <h3>UI sounds</h3>
           <p className="text-xs text-cursor-muted leading-relaxed">
-            Subtle taps and chimes on buttons, tabs, and the logo shuffle.
+            Subtle taps on buttons, plus send / like / save / follow / share chimes.
           </p>
         </div>
         <button

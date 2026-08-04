@@ -20,6 +20,14 @@ export const UI_SOUND_IDS = [
   "send",
   "error",
   "shuffle",
+  "like",
+  "unlike",
+  "save",
+  "unsave",
+  "follow",
+  "unfollow",
+  "share",
+  "pop",
 ];
 
 /** @typedef {(typeof UI_SOUND_IDS)[number]} UiSoundId */
@@ -207,6 +215,40 @@ const SOUND_PLAYERS = {
     playNoise(gain, { duration: 0.022, volume: 0.055, freq: 2200, q: 1.4 });
     playChord(gain, [523.25, 659.25], 0.018, 0.08, 0.055);
   },
+  /** Heart on — soft rising chime */
+  like: (gain) => {
+    playTone(gain, { freq: 720, freqEnd: 1180, duration: 0.055, volume: 0.05, type: "sine" });
+    playTone(gain, { freq: 1480, duration: 0.04, volume: 0.038, type: "sine", attack: 0.028 });
+    playNoise(gain, { duration: 0.02, volume: 0.018, freq: 2400, q: 1.6 });
+  },
+  /** Heart off — gentle down */
+  unlike: (gain) => {
+    playTone(gain, { freq: 980, freqEnd: 540, duration: 0.05, volume: 0.04, type: "sine" });
+  },
+  /** Bookmark on — crisp tick + soft body */
+  save: (gain) => {
+    playNoise(gain, { duration: 0.018, volume: 0.028, freq: 1900, q: 1.5 });
+    playTone(gain, { freq: 640, freqEnd: 880, duration: 0.048, volume: 0.048, type: "triangle" });
+  },
+  unsave: (gain) => {
+    playTone(gain, { freq: 760, freqEnd: 420, duration: 0.045, volume: 0.038, type: "triangle" });
+  },
+  follow: (gain) => {
+    playChord(gain, [523.25, 659.25], 0.028, 0.09, 0.045);
+    playNoise(gain, { duration: 0.025, volume: 0.02, freq: 1400, q: 1.1 });
+  },
+  unfollow: (gain) => {
+    playTone(gain, { freq: 560, freqEnd: 320, duration: 0.06, volume: 0.04, type: "sine" });
+  },
+  share: (gain) => {
+    playTone(gain, { freq: 540, freqEnd: 980, duration: 0.06, volume: 0.048, type: "sine" });
+    playTone(gain, { freq: 1180, duration: 0.035, volume: 0.035, type: "sine", attack: 0.04 });
+  },
+  /** Soft UI pop — menus, chips, confirms */
+  pop: (gain) => {
+    playTone(gain, { freq: 1240, freqEnd: 880, duration: 0.028, volume: 0.04, type: "sine" });
+    playNoise(gain, { duration: 0.014, volume: 0.016, freq: 2100, q: 1.8 });
+  },
   notify: (gain) => {
     playTone(gain, { freq: 880, duration: 0.07, volume: 0.05, type: "sine" });
     playTone(gain, { freq: 1100, duration: 0.1, volume: 0.055, type: "sine", attack: 0.09 });
@@ -244,6 +286,20 @@ export const sound = {
   notify: () => playUiSound("notify"),
   message: () => playUiSound("message"),
   shuffle: () => playUiSound("shuffle"),
+  like: () => playUiSound("like"),
+  unlike: () => playUiSound("unlike"),
+  save: () => playUiSound("save"),
+  unsave: () => playUiSound("unsave"),
+  follow: () => playUiSound("follow"),
+  unfollow: () => playUiSound("unfollow"),
+  share: () => playUiSound("share"),
+  pop: () => playUiSound("pop"),
+  button: () => playUiSound("button"),
+  toggle: () => playUiSound("toggle"),
+  select: () => playUiSound("select"),
+  nav: () => playUiSound("nav"),
+  navBack: () => playUiSound("navBack"),
+  sheet: () => playUiSound("sheet"),
 };
 
 export function setSounds(on) {

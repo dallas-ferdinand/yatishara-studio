@@ -266,7 +266,7 @@ import { setChipDragImage } from "@/desk/lib/chip-drag-preview.js";
 import { displayWorkspacePath } from "@/desk/lib/display-path";
 import { useHorizontalWheelScroll } from "@/desk/lib/use-horizontal-wheel-scroll";
 import { useHorizontalScrollFade } from "@/desk/lib/use-horizontal-scroll-fade";
-import { playUiSound } from "@/mos-app/sounds.js";
+import { playUiSound, primeUiSounds } from "@/mos-app/sounds.js";
 import {
   fallbackWallpaper,
   getWallpaper,
@@ -7632,7 +7632,17 @@ export function StudioShell({
       className={`${STYLE.shell} studio-polish is-studio-bg-ready${isMobile ? " is-studio-mobile" : ""}${isMobile && mobileSection === "files" ? " is-mobile-files" : ""}${isMobile && mobileSection === "files" && filesDockExpanded ? " is-mobile-files-composer" : ""}${customCursorEnabled ? " is-custom-cursor" : ""}`}
       onPointerDownCapture={(event) => {
         if (event.button !== 0) return;
-        if (event.target?.closest?.("button, [role='button'], .cursor-tree-row, .desk-file-grid-item")) {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        // Priming on first press unlocks AudioContext for later semantic sounds.
+        void primeUiSounds();
+        if (
+          target.closest(
+            "button, [role='button'], a[href], .cursor-tree-row, .desk-file-grid-item, [data-studio-tap], input[type='checkbox'], input[type='radio'], summary, .studio-dm-send, .profile-post-rail-btn, .profile-post-rail-follow",
+          )
+        ) {
+          // Semantic handlers play their own tone when marked.
+          if (target.closest("[data-studio-sfx]")) return;
           playStudioTapFeedback();
         }
       }}
@@ -26116,13 +26126,12 @@ function readComposerEditorText(editor) {
   return parts.join("").replace(/[ \t]+\n/g, "\n").replace(/\s{2,}/g, " ");
 }
 
-let studioTapAudioCtx = null;
 let studioTapLast = 0;
 
 function playStudioTapFeedback() {
   if (typeof window === "undefined") return;
   const now = performance.now();
-  if (now - studioTapLast < 55) return;
+  if (now - studioTapLast < 45) return;
   studioTapLast = now;
   let coarse = false;
   try {
@@ -26130,8 +26139,7 @@ function playStudioTapFeedback() {
   } catch {
     coarse = false;
   }
-  // Haptics only on touch devices, and only while the frame has user activation.
-  // Calling vibrate without activation logs Chrome Intervention noise (iframes / first paint).
+  // Haptics on touch when the frame has user activation.
   if (coarse) {
     try {
       const active = navigator.userActivation?.isActive ?? true;
@@ -26141,27 +26149,9 @@ function playStudioTapFeedback() {
     } catch {
       // best-effort tactile feedback
     }
-    // Coarse pointer: vibrate only — AudioContext oscillator work adds tap lag.
-    return;
   }
-  try {
-    studioTapAudioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = studioTapAudioCtx;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(620, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.045);
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.018, ctx.currentTime + 0.006);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.055);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.06);
-  } catch {
-    // sound unavailable or blocked
-  }
+  // Shared Web Audio pack (prefs + reduced-motion aware) — desktop and mobile.
+  playUiSound("tap");
 }
 
 const GENERATION_PROGRESS_STAGES = new Set(["queued", "generating", "saving"]);

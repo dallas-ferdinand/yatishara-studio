@@ -32,6 +32,7 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { playUiSound } from "@/mos-app/sounds.js";
 import {
   ProfileCommentsPanel,
   type CommentsPanelMode,
@@ -871,6 +872,7 @@ function FeedActions({
           <button
             type="button"
             className={`profile-post-rail-follow${isFollowing ? " is-following" : ""}`}
+            data-studio-sfx="follow"
             onClick={(event) => {
               event.stopPropagation();
               onToggleFollow();
@@ -893,6 +895,7 @@ function FeedActions({
       <button
         type="button"
         className={`profile-post-rail-btn${post.likedByViewer ? " is-liked" : ""}`}
+        data-studio-sfx="like"
         onClick={(event) => {
           event.stopPropagation();
           onLike();
@@ -906,8 +909,10 @@ function FeedActions({
       <button
         type="button"
         className="profile-post-rail-btn"
+        data-studio-sfx="sheet"
         onClick={(event) => {
           event.stopPropagation();
+          playUiSound("sheet");
           onOpenComments();
         }}
         onPointerDown={(event) => event.stopPropagation()}
@@ -919,6 +924,7 @@ function FeedActions({
       <button
         type="button"
         className={`profile-post-rail-btn${saved ? " is-saved" : ""}`}
+        data-studio-sfx="save"
         onClick={(event) => {
           event.stopPropagation();
           onSave();
@@ -932,6 +938,7 @@ function FeedActions({
       <button
         type="button"
         className="profile-post-rail-btn"
+        data-studio-sfx="share"
         onClick={(event) => {
           event.stopPropagation();
           onShare();
@@ -1600,6 +1607,7 @@ export function ProfilePostViewer({
       localLikes[post._id]?.likeCount ?? post.likeCount ?? 0;
     const nextLiked = !prevLiked;
     const snapshot = { liked: prevLiked, likeCount: prevCount };
+    playUiSound(nextLiked ? "like" : "unlike");
     setLocalLikes((prev) => ({
       ...prev,
       [post._id]: {
@@ -1615,6 +1623,7 @@ export function ProfilePostViewer({
       }));
     } catch (error) {
       setLocalLikes((prev) => ({ ...prev, [post._id]: snapshot }));
+      playUiSound("error");
       console.error(friendlyConvexError(error, "Could not update like"));
     }
   }
@@ -1637,6 +1646,7 @@ export function ProfilePostViewer({
       localSaves[post._id]?.saveCount ?? post.saveCount ?? 0;
     const nextSaved = !prevSaved;
     const snapshot = { saved: prevSaved, saveCount: prevCount };
+    playUiSound(nextSaved ? "save" : "unsave");
     setLocalSaves((prev) => ({
       ...prev,
       [post._id]: {
@@ -1652,6 +1662,7 @@ export function ProfilePostViewer({
       }));
     } catch (error) {
       setLocalSaves((prev) => ({ ...prev, [post._id]: snapshot }));
+      playUiSound("error");
       console.error(friendlyConvexError(error, "Could not update save"));
     }
   }
@@ -1678,12 +1689,14 @@ export function ProfilePostViewer({
 
     if (!auth.isAuthenticated) return;
     const prevCount = localShares[post._id] ?? post.shareCount ?? 0;
+    playUiSound("share");
     setLocalShares((prev) => ({ ...prev, [post._id]: prevCount + 1 }));
     try {
       const result = await recordShare({ postId: post._id });
       setLocalShares((prev) => ({ ...prev, [post._id]: result.shareCount }));
     } catch (error) {
       setLocalShares((prev) => ({ ...prev, [post._id]: prevCount }));
+      playUiSound("error");
       console.error(friendlyConvexError(error, "Could not record share"));
     }
   }
@@ -1703,6 +1716,7 @@ export function ProfilePostViewer({
     const currentlyFollowing =
       localFollows[profileId] ?? Boolean(post.isFollowing);
     // Optimistic: flip every slide by this author immediately.
+    playUiSound(currentlyFollowing ? "unfollow" : "follow");
     setLocalFollows((prev) => ({ ...prev, [profileId]: !currentlyFollowing }));
     try {
       if (currentlyFollowing) {
@@ -1713,6 +1727,7 @@ export function ProfilePostViewer({
     } catch (error) {
       // Roll back on failure.
       setLocalFollows((prev) => ({ ...prev, [profileId]: currentlyFollowing }));
+      playUiSound("error");
       console.error(friendlyConvexError(error, "Could not update follow"));
     }
   }

@@ -69,6 +69,7 @@ import {
   rememberDmMessages,
 } from "@/studio/lib/dmClientCache";
 import { friendlyConvexError } from "@/studio/lib/convexUserErrors";
+import { playUiSound } from "@/mos-app/sounds.js";
 import { dmLabelIcon } from "@/studio/lib/dmLabelIcons";
 import {
   dmPhotoAssetName,
@@ -2416,6 +2417,7 @@ export function StudioMessagesPane({
       const reply = replyToRef.current;
       setReplyTo(null);
       setRecState("idle");
+      playUiSound("send");
       pushOptimistic(
         conversationKey,
         makeOptimisticDmMessage({
@@ -2454,6 +2456,7 @@ export function StudioMessagesPane({
         } catch (error) {
           dropOptimistic(conversationKey, clientId);
           URL.revokeObjectURL(audioUrl);
+          playUiSound("error");
           setSendError(friendlyConvexError(error, "Could not send voice note"));
         }
       })();
@@ -3003,6 +3006,7 @@ export function StudioMessagesPane({
     // Keep blob preview URLs alive for optimistic bubbles (don't revoke yet).
     if (images.length > 0) setPendingImages([]);
     inputRef.current?.focus();
+    playUiSound("send");
 
     const conversationKey = conversationId;
     const clientId = newOptimisticClientId();
@@ -3041,6 +3045,7 @@ export function StudioMessagesPane({
         markOptimisticSent(conversationKey, clientId);
       } catch (error) {
         dropOptimistic(conversationKey, clientId);
+        playUiSound("error");
         setSendError(friendlyConvexError(error, "Could not send message"));
         if (body) setDraft(body);
       }
@@ -3100,6 +3105,7 @@ export function StudioMessagesPane({
           dropOptimistic(conversationKey, row.clientId);
           revokePendingPreview(row.pending.previewUrl);
         }
+        playUiSound("error");
         setSendError(friendlyConvexError(error, "Could not send message"));
         if (body) setDraft(body);
       }
@@ -3125,6 +3131,7 @@ export function StudioMessagesPane({
       markOptimisticSent(conversationKey, clientId);
     } catch (error) {
       dropOptimistic(conversationKey, clientId);
+      playUiSound("error");
       setSendError(friendlyConvexError(error, "Could not send message"));
       setDraft(body);
       setReplyTo(reply);
@@ -3525,6 +3532,7 @@ export function StudioMessagesPane({
             <button
               type="button"
               className="studio-dm-send"
+              data-studio-sfx="send"
               onClick={() => finishRecording("send")}
               disabled={recState === "sending"}
               aria-label="Send voice note"
@@ -3614,6 +3622,7 @@ export function StudioMessagesPane({
               <button
                 type="button"
                 className="studio-dm-send"
+                data-studio-sfx="send"
                 onClick={() => void handleSend()}
                 aria-label={
                   pendingImages.length > 1
