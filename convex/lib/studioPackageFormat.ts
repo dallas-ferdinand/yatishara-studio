@@ -28,14 +28,24 @@ export type StudioPackageManifest = {
   missing?: Array<{ assetId: string; reason: string }>;
 };
 
-/** Simple branded SVG included in every .studio package for cross-app recognition when unzipped. */
+/** Cut-scene clapperboard with Yatishara Y mark — bundled in every .studio package. */
 export const STUDIO_PACKAGE_ICON_SVG = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <rect width="128" height="128" rx="28" fill="#111827"/>
-  <rect x="28" y="22" width="72" height="84" rx="14" fill="#1f2937" stroke="#38bdf8" stroke-width="4"/>
-  <path d="M44 46h40M44 62h28" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="64" cy="88" r="16" fill="#0ea5e9"/>
-  <path d="M58 80l16 8-16 8z" fill="#ecfeff"/>
+  <rect width="128" height="128" rx="24" fill="#ffffff"/>
+  <!-- Clapper hinge -->
+  <path d="M22 38 L106 22 L110 36 L26 52 Z" fill="#111827"/>
+  <path d="M34 36 L44 48" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M58 31 L68 43" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M82 26 L92 38" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <!-- Board -->
+  <rect x="22" y="48" width="84" height="58" rx="10" fill="#111827"/>
+  <rect x="28" y="54" width="72" height="46" rx="7" fill="#ffffff"/>
+  <!-- Yatishara Y mark -->
+  <g fill="none" stroke="#111827" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M64 62 v28"/>
+    <path d="M64 74 C58 66 51 62 44 62"/>
+    <path d="M64 74 C70 66 77 62 84 62"/>
+  </g>
 </svg>
 `;
 

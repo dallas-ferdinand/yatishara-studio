@@ -780,7 +780,7 @@ export function FileEntryThumb({
       const editPosterUrl =
         thumbUrl && thumbUrl !== mediaUrl && !isVideoFileUrl(thumbUrl) ? thumbUrl : undefined;
       visual = (
-        <ThumbWithPeek name={label} badge="studioProject"
+        <ThumbWithPeek name={label} badge="clapperboard"
           renaming={renaming}
           renameInitialName={renameInitialName}
           onRenameCommit={onRenameCommit}
@@ -800,8 +800,15 @@ export function FileEntryThumb({
               fallbackIcon="studioProject"
             />
           ) : (
-            <div className="desk-file-thumb-fallback">
-              <Icon name="studioProject" size={size === "preview" ? 36 : 26} className="text-cursor-muted" />
+            <div className="desk-file-thumb-studio" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/branding/yatishara-logo-dark-96.webp"
+                srcSet="/branding/yatishara-logo-dark-96.webp 96w, /branding/yatishara-logo-dark-192.webp 192w"
+                sizes={size === "preview" ? "72px" : "40px"}
+                alt=""
+                decoding="async"
+              />
             </div>
           )}
         </ThumbWithPeek>
