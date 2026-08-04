@@ -13590,12 +13590,37 @@ export function StudioShell({
           background: transparent !important;
           box-shadow: none !important;
         }
+        /* Compact sidebar list: no column headers. Full Files detail list shows them. */
         .studio-polish .desk-file-list-head {
           display: none;
+        }
+        .studio-polish .desk-file-list.is-detail .desk-file-list-head {
+          display: grid;
+          position: sticky;
+          top: 0;
+          z-index: 3;
+          margin: 0 0 2px;
+          padding: 6px 8px 7px;
+          background: var(--mos-page, var(--color-cursor-bg, #05080f));
+          border-bottom: 1px solid var(--studio-chrome-divider, var(--color-cursor-border-soft));
+          color: var(--color-cursor-muted);
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+        .studio-polish .desk-file-list.is-detail .desk-file-list-col-date,
+        .studio-polish .desk-file-list.is-detail .desk-file-list-col-size,
+        .studio-polish .desk-file-list.is-detail .desk-file-list-col-kind {
+          font-size: 11px;
+          opacity: 0.85;
         }
         .studio-polish .desk-file-list {
           padding: 4px 6px 8px;
           gap: 1px;
+        }
+        .studio-polish .desk-file-list.is-detail {
+          padding-top: 0;
         }
         .studio-polish .cursor-file-grid {
           padding: 8px 8px 12px;
