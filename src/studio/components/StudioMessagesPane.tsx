@@ -8,6 +8,7 @@ import {
   Check,
   CheckCheck,
   Clapperboard,
+  Clock,
   File as FileIcon,
   FileText,
   FolderOpen,
@@ -192,13 +193,22 @@ function recordingTimeLabel(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-type DmReceipt = "sent" | "delivered" | "read";
+type DmReceipt = "pending" | "sent" | "delivered" | "read";
 
 /**
  * WhatsApp-style ticks:
- * 1 gray = sent · 2 gray = delivered (peer ACK) · 2 colored = read.
+ * clock = still sending · 1 gray = sent · 2 gray = delivered · 2 colored = read.
  */
 function DmReadReceipt({ receipt }: { receipt: DmReceipt }) {
+  if (receipt === "pending") {
+    return (
+      <Clock
+        className="studio-dm-ticks is-pending"
+        aria-label="Sending"
+        strokeWidth={2.5}
+      />
+    );
+  }
   if (receipt === "read") {
     return (
       <CheckCheck
@@ -295,7 +305,33 @@ type DmMessageRow = {
   createdAt: number;
   editedAt?: number;
   deleted?: boolean;
+  /** Client-only optimistic send id (not a Convex document). */
+  clientId?: string;
 };
+
+function newOptimisticClientId(): string {
+  return `opt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const EMPTY_DM_MESSAGES: DmMessageRow[] = [];
+
+function makeOptimisticDmMessage(
+  partial: Omit<DmMessageRow, "_id" | "fromMe" | "receipt" | "createdAt"> & {
+    clientId: string;
+    createdAt?: number;
+    body?: string;
+  },
+): DmMessageRow {
+  const createdAt = partial.createdAt ?? Date.now();
+  return {
+    ...partial,
+    _id: partial.clientId as Id<"dmMessages">,
+    body: partial.body ?? "",
+    fromMe: true,
+    receipt: "pending",
+    createdAt,
+  };
+}
 
 function replySnippetLabel(
   snippet: Pick<DmReplySnippet, "body" | "kind">,
@@ -2090,8 +2126,47 @@ export function StudioMessagesPane({
   const [presenceNow, setPresenceNow] = useState(() => Date.now());
   const lastTypingPingRef = useRef(0);
   const typingActiveRef = useRef(false);
-  const [sendBusy, setSendBusy] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [optimisticByConversation, setOptimisticByConversation] = useState<
+    Record<string, DmMessageRow[]>
+  >({});
+  const pushOptimistic = useCallback(
+    (conversationKey: string, row: DmMessageRow) => {
+      setOptimisticByConversation((prev) => ({
+        ...prev,
+        [conversationKey]: [...(prev[conversationKey] ?? []), row],
+      }));
+    },
+    [],
+  );
+  const dropOptimistic = useCallback(
+    (conversationKey: string, clientId: string) => {
+      setOptimisticByConversation((prev) => {
+        const list = prev[conversationKey];
+        if (!list?.length) return prev;
+        const next = list.filter((row) => row.clientId !== clientId);
+        if (next.length === list.length) return prev;
+        return { ...prev, [conversationKey]: next };
+      });
+    },
+    [],
+  );
+  const markOptimisticSent = useCallback(
+    (conversationKey: string, clientId: string) => {
+      setOptimisticByConversation((prev) => {
+        const list = prev[conversationKey];
+        if (!list?.length) return prev;
+        let changed = false;
+        const next = list.map((row) => {
+          if (row.clientId !== clientId || row.receipt !== "pending") return row;
+          changed = true;
+          return { ...row, receipt: "sent" as const };
+        });
+        return changed ? { ...prev, [conversationKey]: next } : prev;
+      });
+    },
+    [],
+  );
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const [lightbox, setLightbox] = useState<DmLightboxState | null>(null);
   const openGallery = useCallback((items: DmLightboxItem[], index: number) => {
@@ -2335,6 +2410,25 @@ export function StudioMessagesPane({
         return;
       }
 
+      const conversationKey = conversationId!;
+      const clientId = newOptimisticClientId();
+      const audioUrl = URL.createObjectURL(blob);
+      const reply = replyToRef.current;
+      setReplyTo(null);
+      setRecState("idle");
+      pushOptimistic(
+        conversationKey,
+        makeOptimisticDmMessage({
+          clientId,
+          kind: "voice",
+          body: "",
+          audioUrl,
+          durationSec,
+          contentType: blob.type || "audio/webm",
+          replyTo: reply ?? undefined,
+        }),
+      );
+
       void (async () => {
         try {
           const assetId = await uploadDmMediaAsset({
@@ -2350,18 +2444,17 @@ export function StudioMessagesPane({
             reserveUpload,
             commitStagingUpload,
           });
-          const replyId = replyToRef.current?._id;
           await sendVoiceMessage({
-            conversationId: conversationId!,
+            conversationId: conversationKey,
             assetId,
             durationSec,
-            replyToMessageId: replyId,
+            replyToMessageId: reply?._id,
           });
-          setReplyTo(null);
+          markOptimisticSent(conversationKey, clientId);
         } catch (error) {
+          dropOptimistic(conversationKey, clientId);
+          URL.revokeObjectURL(audioUrl);
           setSendError(friendlyConvexError(error, "Could not send voice note"));
-        } finally {
-          setRecState("idle");
         }
       })();
     };
@@ -2376,8 +2469,11 @@ export function StudioMessagesPane({
   }, [
     conversationId,
     commitStagingUpload,
+    dropOptimistic,
     ensureMessagesFolder,
     finishRecording,
+    markOptimisticSent,
+    pushOptimistic,
     recState,
     reserveUpload,
     sendVoiceMessage,
@@ -2445,10 +2541,59 @@ export function StudioMessagesPane({
     ? messages[messages.length - 1]!._id
     : null;
 
+  const optimisticMessages =
+    (conversationId
+      ? optimisticByConversation[conversationId]
+      : undefined) ?? EMPTY_DM_MESSAGES;
+  const displayMessages = useMemo(() => {
+    const real = (messages ?? EMPTY_DM_MESSAGES) as DmMessageRow[];
+    if (!optimisticMessages.length) return real;
+    return [...real, ...optimisticMessages].sort(
+      (a, b) => a.createdAt - b.createdAt,
+    );
+  }, [messages, optimisticMessages]);
+  const lastDisplayMessageId = displayMessages.length
+    ? displayMessages[displayMessages.length - 1]!._id
+    : null;
+
+  // Drop optimistic rows once the live Convex message is in the list.
+  useEffect(() => {
+    if (!conversationId || !optimisticMessages.length || !messages?.length) return;
+    for (const row of optimisticMessages) {
+      if (!row.clientId) continue;
+      const matched = messages.some((live) => {
+        if (!live.fromMe || live.kind !== row.kind) return false;
+        if (live.createdAt + 2000 < row.createdAt) return false;
+        if (row.kind === "text") return live.body === row.body;
+        if (row.kind === "post" || row.kind === "comment") {
+          return live.body === row.body || Boolean(live.feedShare);
+        }
+        if (row.kind === "voice") {
+          return (
+            Math.abs((live.durationSec ?? 0) - (row.durationSec ?? 0)) < 1.5
+          );
+        }
+        if (row.kind === "image") {
+          return Boolean(live.imageUrl) && live.body === row.body;
+        }
+        return live.body === row.body;
+      });
+      if (matched) {
+        if (row.audioUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(row.audioUrl);
+        }
+        if (row.imageUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(row.imageUrl);
+        }
+        dropOptimistic(conversationId, row.clientId);
+      }
+    }
+  }, [conversationId, dropOptimistic, messages, optimisticMessages]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [conversationId, lastMessageId]);
+  }, [conversationId, lastDisplayMessageId]);
 
   useEffect(() => {
     if (messagesPending || !conversationId || !activeRow?.unread) return;
@@ -2487,6 +2632,7 @@ export function StudioMessagesPane({
   }, [clearPendingImages, pendingFeedShare]);
 
   const armReply = useCallback((message: DmMessageRow) => {
+    if (message.clientId) return;
     setReplyTo({
       _id: message._id,
       body: message.body,
@@ -2499,6 +2645,7 @@ export function StudioMessagesPane({
     window.setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
   const onStartEdit = useCallback((message: DmMessageRow) => {
+    if (message.clientId) return;
     setEditingMessageId(message._id);
     setEditDraft(message.body);
   }, []);
@@ -2840,26 +2987,87 @@ export function StudioMessagesPane({
   }
 
   async function handleSend() {
-    if (!conversationId || sendBusy || recState !== "idle") return;
+    if (!conversationId || recState !== "idle") return;
     const body = draft.trim();
-    if (pendingImages.length === 0 && !pendingFeedShare && !body) return;
+    const feedShare = pendingFeedShare;
+    const images = pendingImages;
+    const reply = replyTo;
+    if (images.length === 0 && !feedShare && !body) return;
 
-    setSendBusy(true);
+    // Instant composer clear — bubble shows with clock until Convex lands.
+    setDraft("");
+    pingTyping(false);
+    setReplyTo(null);
     setSendError("");
-    try {
-      if (pendingFeedShare) {
+    if (feedShare) clearPendingDmFeedShare();
+    // Keep blob preview URLs alive for optimistic bubbles (don't revoke yet).
+    if (images.length > 0) setPendingImages([]);
+    inputRef.current?.focus();
+
+    const conversationKey = conversationId;
+    const clientId = newOptimisticClientId();
+    const createdAt = Date.now();
+
+    if (feedShare) {
+      const optimistic = makeOptimisticDmMessage({
+        clientId,
+        createdAt,
+        kind: feedShare.commentId ? "comment" : "post",
+        body,
+        replyTo: reply ?? undefined,
+        feedShare: {
+          type: feedShare.commentId ? "comment" : "post",
+          postId: feedShare.postId as Id<"profilePosts">,
+          commentId: feedShare.commentId
+            ? (feedShare.commentId as Id<"profileComments">)
+            : undefined,
+          username: feedShare.username,
+          displayName: feedShare.displayName,
+          caption: feedShare.caption,
+          body: feedShare.body,
+          thumbnailUrl: feedShare.thumbnailUrl,
+        },
+      });
+      pushOptimistic(conversationKey, optimistic);
+      try {
         await sendFeedShare({
           conversationId,
-          postId: pendingFeedShare.postId as Id<"profilePosts">,
-          commentId: pendingFeedShare.commentId
-            ? (pendingFeedShare.commentId as Id<"profileComments">)
+          postId: feedShare.postId as Id<"profilePosts">,
+          commentId: feedShare.commentId
+            ? (feedShare.commentId as Id<"profileComments">)
             : undefined,
           note: body || undefined,
         });
-        clearPendingDmFeedShare();
-      } else if (pendingImages.length > 0) {
-        for (let i = 0; i < pendingImages.length; i += 1) {
-          const pending = pendingImages[i]!;
+        markOptimisticSent(conversationKey, clientId);
+      } catch (error) {
+        dropOptimistic(conversationKey, clientId);
+        setSendError(friendlyConvexError(error, "Could not send message"));
+        if (body) setDraft(body);
+      }
+      return;
+    }
+
+    if (images.length > 0) {
+      const batch: Array<{ clientId: string; pending: PendingImage }> = [];
+      for (let i = 0; i < images.length; i += 1) {
+        const pending = images[i]!;
+        const imageClientId = i === 0 ? clientId : newOptimisticClientId();
+        batch.push({ clientId: imageClientId, pending });
+        pushOptimistic(
+          conversationKey,
+          makeOptimisticDmMessage({
+            clientId: imageClientId,
+            createdAt: createdAt + i,
+            kind: "image",
+            body: i === 0 ? body : "",
+            imageUrl: pending.previewUrl,
+            replyTo: i === 0 ? (reply ?? undefined) : undefined,
+          }),
+        );
+      }
+      try {
+        for (let i = 0; i < batch.length; i += 1) {
+          const { pending } = batch[i]!;
           let assetId = pending.assetId;
           if (!assetId) {
             if (!pending.file) {
@@ -2883,25 +3091,43 @@ export function StudioMessagesPane({
             conversationId,
             assetId,
             caption: i === 0 ? body || undefined : undefined,
-            replyToMessageId: i === 0 ? replyTo?._id : undefined,
+            replyToMessageId: i === 0 ? reply?._id : undefined,
           });
+          markOptimisticSent(conversationKey, batch[i]!.clientId);
         }
-        clearPendingImages();
-      } else {
-        await send({
-          conversationId,
-          body,
-          replyToMessageId: replyTo?._id,
-        });
+      } catch (error) {
+        for (const row of batch) {
+          dropOptimistic(conversationKey, row.clientId);
+          revokePendingPreview(row.pending.previewUrl);
+        }
+        setSendError(friendlyConvexError(error, "Could not send message"));
+        if (body) setDraft(body);
       }
-      setDraft("");
-      pingTyping(false);
-      setReplyTo(null);
-      inputRef.current?.focus();
+      return;
+    }
+
+    pushOptimistic(
+      conversationKey,
+      makeOptimisticDmMessage({
+        clientId,
+        createdAt,
+        kind: "text",
+        body,
+        replyTo: reply ?? undefined,
+      }),
+    );
+    try {
+      await send({
+        conversationId,
+        body,
+        replyToMessageId: reply?._id,
+      });
+      markOptimisticSent(conversationKey, clientId);
     } catch (error) {
+      dropOptimistic(conversationKey, clientId);
       setSendError(friendlyConvexError(error, "Could not send message"));
-    } finally {
-      setSendBusy(false);
+      setDraft(body);
+      setReplyTo(reply);
     }
   }
 
@@ -3079,8 +3305,8 @@ export function StudioMessagesPane({
         className={`studio-dm-scroll${messagesPending && !messages?.length ? " is-pending" : ""}`}
         ref={scrollRef}
       >
-        {messages == null || messages.length === 0 ? (
-          messagesPending && messages == null ? (
+        {messages == null && !displayMessages.length ? (
+          messagesPending ? (
             <div className="studio-dm-scroll-pending" aria-hidden="true" />
           ) : (
             <div className="studio-dm-empty-state">
@@ -3089,9 +3315,15 @@ export function StudioMessagesPane({
               <p>This is the start of your chat with {peerLabel}.</p>
             </div>
           )
+        ) : displayMessages.length === 0 ? (
+          <div className="studio-dm-empty-state">
+            <MessageCircle aria-hidden="true" />
+            <strong>Say hi</strong>
+            <p>This is the start of your chat with {peerLabel}.</p>
+          </div>
         ) : (
           <div className="studio-dm-messages">
-            {buildDmTimeline(messages).map((item) => {
+            {buildDmTimeline(displayMessages).map((item) => {
               if (item.type === "day") {
                 return (
                   <div key={item.key} className="studio-dm-message-block">
@@ -3311,7 +3543,7 @@ export function StudioMessagesPane({
               type="button"
               className="studio-dm-attach"
               onClick={openAttachMenu}
-              disabled={sendBusy || filesPickBusy}
+              disabled={filesPickBusy}
               aria-label="Attach a photo"
               aria-haspopup="menu"
               aria-expanded={attachMenu != null}
@@ -3383,7 +3615,6 @@ export function StudioMessagesPane({
                 type="button"
                 className="studio-dm-send"
                 onClick={() => void handleSend()}
-                disabled={sendBusy}
                 aria-label={
                   pendingImages.length > 1
                     ? "Send photos"
@@ -3392,11 +3623,7 @@ export function StudioMessagesPane({
                       : "Send message"
                 }
               >
-                {sendBusy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <SendHorizontal className="h-4 w-4" aria-hidden="true" />
-                )}
+                <SendHorizontal className="h-4 w-4" aria-hidden="true" />
               </button>
             ) : (
               <button

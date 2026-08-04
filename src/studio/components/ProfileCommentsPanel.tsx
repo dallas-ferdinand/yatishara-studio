@@ -75,9 +75,6 @@ type PostActionsInfo = {
   likeCount: number;
   saveCount: number;
   shareCount: number;
-  likeBusy?: boolean;
-  saveBusy?: boolean;
-  shareBusy?: boolean;
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -670,14 +667,9 @@ function CommentsBody({
                 className={`profile-comments-post-action${postActions.liked ? " is-liked" : ""}`}
                 aria-pressed={postActions.liked}
                 aria-label={postActions.liked ? "Unlike" : "Like"}
-                disabled={postActions.likeBusy}
                 onClick={postActions.onLike}
               >
-                {postActions.likeBusy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                )}
+                <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>{formatCount(postActions.likeCount)}</span>
               </button>
               <button
@@ -685,14 +677,9 @@ function CommentsBody({
                 className={`profile-comments-post-action${postActions.saved ? " is-saved" : ""}`}
                 aria-pressed={postActions.saved}
                 aria-label={postActions.saved ? "Unsave" : "Save"}
-                disabled={postActions.saveBusy}
                 onClick={postActions.onSave}
               >
-                {postActions.saveBusy ? (
-                  <Loader2 className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Bookmark aria-hidden="true" fill="currentColor" strokeWidth={0} />
-                )}
+                <Bookmark aria-hidden="true" fill="currentColor" strokeWidth={0} />
                 <span>{formatCount(postActions.saveCount)}</span>
               </button>
               {postAuthor?.isOwner && onEditDescription ? (

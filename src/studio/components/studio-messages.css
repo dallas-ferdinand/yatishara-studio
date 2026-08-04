@@ -1060,6 +1060,10 @@
   flex: 0 0 auto;
 }
 
+.studio-dm-ticks.is-pending {
+  opacity: 0.85;
+}
+
 /* Delivered = double gray ticks (peer came online). */
 .studio-dm-ticks.is-delivered {
   color: var(--color-cursor-muted, var(--mos-muted));

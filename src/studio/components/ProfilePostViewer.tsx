@@ -11,7 +11,6 @@ import {
   ChevronUp,
   Forward,
   Heart,
-  Loader2,
   MessageCircle,
   Pause,
   Play,
@@ -815,10 +814,6 @@ function FeedActions({
   displayName,
   firstName,
   lastName,
-  likeBusy,
-  saveBusy,
-  shareBusy,
-  followBusy,
   showFollow,
   isFollowing,
   localComments,
@@ -837,10 +832,6 @@ function FeedActions({
   displayName?: string;
   firstName?: string;
   lastName?: string;
-  likeBusy: boolean;
-  saveBusy: boolean;
-  shareBusy: boolean;
-  followBusy: boolean;
   showFollow: boolean;
   isFollowing: boolean;
   localComments: number;
@@ -885,16 +876,13 @@ function FeedActions({
               onToggleFollow();
             }}
             onPointerDown={(event) => event.stopPropagation()}
-            disabled={followBusy}
             aria-label={
               isFollowing
                 ? `Unfollow @${username}`
                 : `Follow @${username}`
             }
           >
-            {followBusy ? (
-              <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
-            ) : isFollowing ? (
+            {isFollowing ? (
               <Check aria-hidden="true" strokeWidth={3} />
             ) : (
               <Plus aria-hidden="true" strokeWidth={3} />
@@ -910,14 +898,9 @@ function FeedActions({
           onLike();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        disabled={likeBusy}
         aria-label={post.likedByViewer ? "Unlike" : "Like"}
       >
-        {likeBusy ? (
-          <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
-        ) : (
-          <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
-        )}
+        <Heart aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(post.likeCount)}</span>
       </button>
       <button
@@ -941,14 +924,9 @@ function FeedActions({
           onSave();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        disabled={saveBusy}
         aria-label={saved ? "Unsave" : "Save"}
       >
-        {saveBusy ? (
-          <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
-        ) : (
-          <Bookmark aria-hidden="true" fill="currentColor" strokeWidth={0} />
-        )}
+        <Bookmark aria-hidden="true" fill="currentColor" strokeWidth={0} />
         <span>{formatCount(localSaves)}</span>
       </button>
       <button
@@ -959,18 +937,13 @@ function FeedActions({
           onShare();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        disabled={shareBusy}
         aria-label="Share"
       >
-        {shareBusy ? (
-          <Loader2 className="profile-post-rail-spin" aria-hidden="true" />
-        ) : (
-          <Forward
-            className="profile-post-rail-share"
-            aria-hidden="true"
-            strokeWidth={2.25}
-          />
-        )}
+        <Forward
+          className="profile-post-rail-share"
+          aria-hidden="true"
+          strokeWidth={2.25}
+        />
         <span>{formatCount(localShares)}</span>
       </button>
     </div>
@@ -1032,9 +1005,6 @@ export function ProfilePostViewer({
   const unfollowProfile = useMutation(api.profiles.unfollow);
 
   const [activePostId, setActivePostId] = useState<Id<"profilePosts"> | null>(null);
-  const [likeBusyId, setLikeBusyId] = useState<Id<"profilePosts"> | null>(null);
-  const [saveBusyId, setSaveBusyId] = useState<Id<"profilePosts"> | null>(null);
-  const [shareBusyId, setShareBusyId] = useState<Id<"profilePosts"> | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [sidePanelMode, setSidePanelMode] = useState<CommentsPanelMode>("comments");
   const [localLikes, setLocalLikes] = useState<
@@ -1052,7 +1022,6 @@ export function ProfilePostViewer({
   >({});
   /** Optimistic follow state keyed by profileId — flips all slides from that author. */
   const [localFollows, setLocalFollows] = useState<Record<string, boolean>>({});
-  const [followBusyProfileId, setFollowBusyProfileId] = useState<string | null>(null);
   const [axis, setAxis] = useState<"x" | "y">("y");
   const [animating, setAnimating] = useState(false);
   const [likeBurst, setLikeBurst] = useState(false);
@@ -1625,7 +1594,19 @@ export function ProfilePostViewer({
       window.location.href = `/?next=${encodeURIComponent("/")}`;
       return;
     }
-    setLikeBusyId(post._id);
+    const prevLiked =
+      localLikes[post._id]?.liked ?? Boolean(post.likedByViewer);
+    const prevCount =
+      localLikes[post._id]?.likeCount ?? post.likeCount ?? 0;
+    const nextLiked = !prevLiked;
+    const snapshot = { liked: prevLiked, likeCount: prevCount };
+    setLocalLikes((prev) => ({
+      ...prev,
+      [post._id]: {
+        liked: nextLiked,
+        likeCount: Math.max(0, prevCount + (nextLiked ? 1 : -1)),
+      },
+    }));
     try {
       const result = await toggleLike({ postId: post._id });
       setLocalLikes((prev) => ({
@@ -1633,9 +1614,8 @@ export function ProfilePostViewer({
         [post._id]: { liked: result.liked, likeCount: result.likeCount },
       }));
     } catch (error) {
+      setLocalLikes((prev) => ({ ...prev, [post._id]: snapshot }));
       console.error(friendlyConvexError(error, "Could not update like"));
-    } finally {
-      setLikeBusyId(null);
     }
   }
 
@@ -1651,7 +1631,19 @@ export function ProfilePostViewer({
       window.location.href = `/?next=${encodeURIComponent("/")}`;
       return;
     }
-    setSaveBusyId(post._id);
+    const prevSaved =
+      localSaves[post._id]?.saved ?? Boolean(post.savedByViewer);
+    const prevCount =
+      localSaves[post._id]?.saveCount ?? post.saveCount ?? 0;
+    const nextSaved = !prevSaved;
+    const snapshot = { saved: prevSaved, saveCount: prevCount };
+    setLocalSaves((prev) => ({
+      ...prev,
+      [post._id]: {
+        saved: nextSaved,
+        saveCount: Math.max(0, prevCount + (nextSaved ? 1 : -1)),
+      },
+    }));
     try {
       const result = await toggleSave({ postId: post._id });
       setLocalSaves((prev) => ({
@@ -1659,9 +1651,8 @@ export function ProfilePostViewer({
         [post._id]: { saved: result.saved, saveCount: result.saveCount },
       }));
     } catch (error) {
+      setLocalSaves((prev) => ({ ...prev, [post._id]: snapshot }));
       console.error(friendlyConvexError(error, "Could not update save"));
-    } finally {
-      setSaveBusyId(null);
     }
   }
 
@@ -1686,14 +1677,14 @@ export function ProfilePostViewer({
     }
 
     if (!auth.isAuthenticated) return;
-    setShareBusyId(post._id);
+    const prevCount = localShares[post._id] ?? post.shareCount ?? 0;
+    setLocalShares((prev) => ({ ...prev, [post._id]: prevCount + 1 }));
     try {
       const result = await recordShare({ postId: post._id });
       setLocalShares((prev) => ({ ...prev, [post._id]: result.shareCount }));
     } catch (error) {
+      setLocalShares((prev) => ({ ...prev, [post._id]: prevCount }));
       console.error(friendlyConvexError(error, "Could not record share"));
-    } finally {
-      setShareBusyId(null);
     }
   }
 
@@ -1713,7 +1704,6 @@ export function ProfilePostViewer({
       localFollows[profileId] ?? Boolean(post.isFollowing);
     // Optimistic: flip every slide by this author immediately.
     setLocalFollows((prev) => ({ ...prev, [profileId]: !currentlyFollowing }));
-    setFollowBusyProfileId(profileId);
     try {
       if (currentlyFollowing) {
         await unfollowProfile({ profileId });
@@ -1724,8 +1714,6 @@ export function ProfilePostViewer({
       // Roll back on failure.
       setLocalFollows((prev) => ({ ...prev, [profileId]: currentlyFollowing }));
       console.error(friendlyConvexError(error, "Could not update follow"));
-    } finally {
-      setFollowBusyProfileId(null);
     }
   }
 
@@ -1934,12 +1922,6 @@ export function ProfilePostViewer({
                   displayName={post.displayName}
                   firstName={post.firstName}
                   lastName={post.lastName}
-                  likeBusy={likeBusyId === post._id}
-                  saveBusy={saveBusyId === post._id}
-                  shareBusy={shareBusyId === post._id}
-                  followBusy={
-                    Boolean(post.profileId) && followBusyProfileId === post.profileId
-                  }
                   showFollow={Boolean(post.profileId) && !post.isOwner}
                   isFollowing={Boolean(
                     post.profileId
@@ -2079,9 +2061,6 @@ export function ProfilePostViewer({
             localSaves[activePost._id]?.saveCount ?? activeSlidePost.saveCount ?? 0,
           shareCount:
             localShares[activePost._id] ?? activeSlidePost.shareCount ?? 0,
-          likeBusy: likeBusyId === activePost._id,
-          saveBusy: saveBusyId === activePost._id,
-          shareBusy: shareBusyId === activePost._id,
           onLike: () => void handleLike(activeSlidePost),
           onSave: () => void handleSave(activeSlidePost),
           onShare: () => void handleShare(activeSlidePost),
