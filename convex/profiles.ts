@@ -18,7 +18,10 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
-import { createNotificationAndPush } from "./lib/notify";
+import {
+  createNotificationAndPush,
+  resolveActorDisplayName,
+} from "./lib/notify";
 import {
   accountNameFromUser,
   ensureProfileForUser,
@@ -510,14 +513,14 @@ async function scheduleFollowedPostNotifications(
     profileId: Id<"profiles">;
     postId: Id<"profilePosts">;
     authorUserId: Id<"users">;
-    username: string;
   },
 ) {
+  const displayName = await resolveActorDisplayName(ctx, args.authorUserId);
   await ctx.scheduler.runAfter(0, internal.profiles.notifyFollowersOfPostBatch, {
     profileId: args.profileId,
     postId: args.postId,
     authorUserId: args.authorUserId,
-    username: args.username,
+    displayName,
     cursor: null,
   });
 }
@@ -527,7 +530,7 @@ export const notifyFollowersOfPostBatch = internalMutation({
     profileId: v.id("profiles"),
     postId: v.id("profilePosts"),
     authorUserId: v.id("users"),
-    username: v.string(),
+    displayName: v.string(),
     cursor: v.union(v.string(), v.null()),
   },
   returns: v.null(),
@@ -542,8 +545,8 @@ export const notifyFollowersOfPostBatch = internalMutation({
         cursor: args.cursor,
       });
 
-    const title = `@${args.username}`;
-    const body = "shared a post";
+    const title = args.displayName;
+    const body = "shared a new post";
     for (const follow of page.page) {
       if (follow.followerUserId === args.authorUserId) continue;
       await createNotificationAndPush(ctx, {
@@ -560,7 +563,7 @@ export const notifyFollowersOfPostBatch = internalMutation({
         profileId: args.profileId,
         postId: args.postId,
         authorUserId: args.authorUserId,
-        username: args.username,
+        displayName: args.displayName,
         cursor: page.continueCursor,
       });
     }
@@ -1002,7 +1005,6 @@ export const shareAsset = authedMutation({
         profileId: profile._id,
         postId: existing._id,
         authorUserId: ctx.user._id,
-        username: profile.username,
       });
       return {
         postId: existing._id,
@@ -1030,7 +1032,6 @@ export const shareAsset = authedMutation({
       profileId: profile._id,
       postId,
       authorUserId: ctx.user._id,
-      username: profile.username,
     });
     return {
       postId,
@@ -3002,7 +3003,6 @@ export const shareAssetForApi = internalMutation({
         profileId: profile._id,
         postId: existing._id,
         authorUserId: user._id,
-        username: profile.username,
       });
       return {
         postId: existing._id,
@@ -3030,7 +3030,6 @@ export const shareAssetForApi = internalMutation({
       profileId: profile._id,
       postId,
       authorUserId: user._id,
-      username: profile.username,
     });
     return {
       postId,

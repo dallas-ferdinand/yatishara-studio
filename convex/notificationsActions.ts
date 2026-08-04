@@ -14,7 +14,11 @@ export const sendPushForNotification = internalAction({
     const privateKey = process.env.WEB_PUSH_VAPID_PRIVATE_KEY;
     const subject = process.env.WEB_PUSH_SUBJECT ?? "mailto:support@yatishara.com";
     if (!publicKey || !privateKey) {
-      console.warn("Web push VAPID env not configured");
+      console.warn("Web push VAPID env not configured", {
+        hasPublic: Boolean(publicKey),
+        hasPrivate: Boolean(privateKey),
+        hasSubject: Boolean(subject),
+      });
       return 0;
     }
     webpush.setVapidDetails(subject, publicKey, privateKey);
@@ -22,6 +26,14 @@ export const sendPushForNotification = internalAction({
       notificationId: args.notificationId,
     });
     const n = delivery.notification;
+    const chrome = delivery.chrome;
+    console.info("Web push delivery start", {
+      notificationId: args.notificationId,
+      kind: n.kind,
+      subscriptionCount: delivery.subscriptions.length,
+      hasActorIcon: Boolean(chrome.icon),
+      hasImage: Boolean(chrome.image),
+    });
     const url = notificationDeepLink({
       kind: n.kind,
       conversationId: n.conversationId,
@@ -31,6 +43,11 @@ export const sendPushForNotification = internalAction({
     const payload = JSON.stringify({
       title: n.title,
       body: n.body,
+      icon: chrome.icon,
+      badge: chrome.badge,
+      image: chrome.image,
+      tag: chrome.tag,
+      renotify: true,
       data: {
         notificationId: args.notificationId,
         kind: n.kind,
@@ -70,10 +87,22 @@ export const sendPushForNotification = internalAction({
         }
         console.warn("Web push send failed", {
           statusCode,
+          endpointHost: (() => {
+            try {
+              return new URL(subscription.endpoint).host;
+            } catch {
+              return "invalid";
+            }
+          })(),
           error: error instanceof Error ? error.message : "Unknown error",
         });
       }
     }
+    console.info("Web push delivery done", {
+      notificationId: args.notificationId,
+      sent,
+      attempted: delivery.subscriptions.length,
+    });
     return sent;
   },
 });

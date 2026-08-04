@@ -1,6 +1,20 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type QueryCtx } from "./_generated/server";
+import {
+  assetThumbnailPath,
+  signBunnyCdnUrls,
+  THUMB_TRANSFORM,
+} from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
+import {
+  notificationPushTag,
+  STUDIO_PUSH_BADGE,
+  STUDIO_PUSH_ICON,
+  type NotificationKind,
+} from "./lib/notify";
+
+const PUSH_AVATAR_TTL_SECONDS = 60 * 60;
 
 const notificationKind = v.union(
   v.literal("generation_completed"),
@@ -100,10 +114,104 @@ export const removePushSubscription = authedMutation({
   },
 });
 
+async function signAssetThumbUrl(
+  asset: Doc<"assets"> | null,
+  expiresUnix: number,
+): Promise<string | undefined> {
+  if (!asset || asset.deletedAt || !asset.bunnyPath) return undefined;
+  const thumbPath = assetThumbnailPath(asset) ?? asset.bunnyPath;
+  if (!thumbPath) return undefined;
+  try {
+    const signed = await signBunnyCdnUrls(
+      [thumbPath],
+      expiresUnix,
+      THUMB_TRANSFORM,
+    );
+    return signed.get(thumbPath);
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveActorAvatarUrl(
+  ctx: QueryCtx,
+  actorUserId: Id<"users">,
+  expiresUnix: number,
+): Promise<string | undefined> {
+  const profile = await ctx.db
+    .query("profiles")
+    .withIndex("by_user", (q) => q.eq("userId", actorUserId))
+    .unique();
+  if (!profile?.avatarAssetId) return undefined;
+  const avatar = await ctx.db.get("assets", profile.avatarAssetId);
+  return signAssetThumbUrl(avatar, expiresUnix);
+}
+
+async function resolvePushChrome(
+  ctx: QueryCtx,
+  notification: Doc<"notifications">,
+): Promise<{
+  icon: string;
+  badge: string;
+  image?: string;
+  tag: string;
+}> {
+  const expiresUnix = Math.floor(Date.now() / 1000) + PUSH_AVATAR_TTL_SECONDS;
+  const kind = notification.kind as NotificationKind;
+  const tag = notificationPushTag({
+    kind,
+    conversationId: notification.conversationId,
+    postId: notification.postId,
+    generationJobId: notification.generationJobId,
+    paymentId: notification.paymentId,
+    notificationId: notification._id,
+  });
+
+  let actorUserId: Id<"users"> | undefined;
+  let image: string | undefined;
+
+  if (kind === "dm_message" && notification.conversationId) {
+    const conversation = await ctx.db.get(
+      "dmConversations",
+      notification.conversationId,
+    );
+    if (conversation) {
+      actorUserId =
+        conversation.userLowId === notification.userId
+          ? conversation.userHighId
+          : conversation.userLowId;
+    }
+  } else if (kind === "followed_post" && notification.postId) {
+    const post = await ctx.db.get("profilePosts", notification.postId);
+    if (post) {
+      actorUserId = post.ownerId;
+      const asset = await ctx.db.get("assets", post.assetId);
+      image = await signAssetThumbUrl(asset, expiresUnix);
+    }
+  }
+
+  const avatarUrl = actorUserId
+    ? await resolveActorAvatarUrl(ctx, actorUserId, expiresUnix)
+    : undefined;
+
+  return {
+    icon: avatarUrl ?? STUDIO_PUSH_ICON,
+    badge: STUDIO_PUSH_BADGE,
+    image,
+    tag,
+  };
+}
+
 export const getPushDelivery = internalQuery({
   args: { notificationId: v.id("notifications") },
   returns: v.object({
     notification: notificationReturn,
+    chrome: v.object({
+      icon: v.string(),
+      badge: v.string(),
+      image: v.optional(v.string()),
+      tag: v.string(),
+    }),
     subscriptions: v.array(
       v.object({
         _id: v.id("pushSubscriptions"),
@@ -118,12 +226,16 @@ export const getPushDelivery = internalQuery({
     if (!notification) {
       throw new Error("Notification not found");
     }
-    const subscriptions = await ctx.db
-      .query("pushSubscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", notification.userId))
-      .collect();
+    const [subscriptions, chrome] = await Promise.all([
+      ctx.db
+        .query("pushSubscriptions")
+        .withIndex("by_user", (q) => q.eq("userId", notification.userId))
+        .collect(),
+      resolvePushChrome(ctx, notification),
+    ]);
     return {
       notification,
+      chrome,
       subscriptions: subscriptions.map((subscription) => ({
         _id: subscription._id,
         endpoint: subscription.endpoint,

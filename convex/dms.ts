@@ -23,7 +23,10 @@ import {
   THUMB_TRANSFORM,
 } from "./lib/bunny";
 import { authedMutation, authedQuery } from "./lib/customFunctions";
-import { createNotificationAndPush } from "./lib/notify";
+import {
+  createNotificationAndPush,
+  resolveActorDisplayName,
+} from "./lib/notify";
 import { hydrateSocialPeople } from "./profiles";
 import {
   hydrateStudioShareCard,
@@ -400,22 +403,6 @@ function peerIdOf(conversation: Doc<"dmConversations">, me: Id<"users">) {
     : conversation.userLowId;
 }
 
-async function senderDisplayLabel(
-  ctx: MutationCtx,
-  senderId: Id<"users">,
-): Promise<string> {
-  const profile = await ctx.db
-    .query("profiles")
-    .withIndex("by_user", (q) => q.eq("userId", senderId))
-    .unique();
-  if (profile?.username) return `@${profile.username}`;
-  const user = await ctx.db.get("users", senderId);
-  const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim();
-  if (name) return name;
-  if (user?.name?.trim()) return user.name.trim();
-  return "Someone";
-}
-
 async function notifyDmPeer(
   ctx: MutationCtx,
   args: {
@@ -426,7 +413,7 @@ async function notifyDmPeer(
 ) {
   const peerId = peerIdOf(args.conversation, args.senderId);
   if (peerId === args.senderId) return;
-  const title = await senderDisplayLabel(ctx, args.senderId);
+  const title = await resolveActorDisplayName(ctx, args.senderId);
   const body =
     args.body.length > DM_PREVIEW_MAX
       ? `${args.body.slice(0, DM_PREVIEW_MAX)}…`
@@ -435,7 +422,7 @@ async function notifyDmPeer(
     userId: peerId,
     kind: "dm_message",
     title,
-    body: body || "New message",
+    body: body || "Sent you a message",
     conversationId: args.conversation._id,
   });
 }

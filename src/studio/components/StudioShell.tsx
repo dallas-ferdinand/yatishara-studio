@@ -30467,6 +30467,7 @@ function PushNotificationsPromptOverlay({ onClose }) {
             type="button"
             className="studio-payment-celebration-btn"
             disabled={busy}
+            aria-label={busy ? "Enabling notifications" : "Enable notifications"}
             onClick={() => {
               setBusy(true);
               void enableStudioWebPush({ save: savePushSubscription })

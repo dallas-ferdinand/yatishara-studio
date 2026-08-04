@@ -2141,8 +2141,8 @@ export const completeWithOutputs = internalMutation({
     await createNotificationAndPush(ctx, {
       userId: job.ownerId,
       kind: "generation_completed",
-      title: "Generation complete",
-      body: "Your generated media is ready.",
+      title: "Your creation is ready",
+      body: "Open Studio to view it.",
       generationJobId: job._id,
     });
     return null;
@@ -2192,7 +2192,7 @@ export const failJob = internalMutation({
     await createNotificationAndPush(ctx, {
       userId: job.ownerId,
       kind: "generation_failed",
-      title: "Generation failed",
+      title: "Generation didn’t finish",
       body: "Credits were refunded automatically.",
       generationJobId: job._id,
     });

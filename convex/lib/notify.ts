@@ -1,6 +1,11 @@
 import { makeFunctionReference, type FunctionReference } from "convex/server";
 import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { getMarketplaceSellerForUser } from "./auth";
+import {
+  accountNameFromUser,
+  resolvePublicDisplayName,
+} from "./profileEnsure";
 
 export type NotificationKind =
   | "generation_completed"
@@ -8,6 +13,13 @@ export type NotificationKind =
   | "payment_status"
   | "dm_message"
   | "followed_post";
+
+/** Absolute Studio origin for OS notification icons (must be https). */
+export const STUDIO_PUBLIC_ORIGIN =
+  process.env.STUDIO_PUBLIC_ORIGIN ?? "https://studio.yatishara.com";
+
+export const STUDIO_PUSH_ICON = `${STUDIO_PUBLIC_ORIGIN}/branding/yatishara-appicon-192.png`;
+export const STUDIO_PUSH_BADGE = `${STUDIO_PUBLIC_ORIGIN}/branding/yatishara-appicon-maskable-192.png`;
 
 const sendPushForNotificationRef = makeFunctionReference<
   "action",
@@ -50,6 +62,37 @@ export async function createNotificationAndPush(
   return notificationId;
 }
 
+/**
+ * Human-friendly actor label for notifications: business name when opted in,
+ * otherwise first+last, never a bare @username.
+ */
+export async function resolveActorDisplayName(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+): Promise<string> {
+  const [user, profile, seller] = await Promise.all([
+    ctx.db.get(userId),
+    ctx.db
+      .query("profiles")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique(),
+    getMarketplaceSellerForUser(ctx, userId),
+  ]);
+  if (!profile) {
+    return (
+      accountNameFromUser(user) ||
+      user?.name?.trim() ||
+      "Someone"
+    );
+  }
+  return resolvePublicDisplayName({
+    username: profile.username,
+    useSellerDisplayName: profile.useSellerDisplayName,
+    user,
+    seller,
+  });
+}
+
 /** Deep-link path for SW / OS notification click. */
 export function notificationDeepLink(args: {
   kind: NotificationKind;
@@ -73,4 +116,32 @@ export function notificationDeepLink(args: {
     return "/?open=settings&section=billing";
   }
   return "/?open=activity";
+}
+
+/** Coalesce OS notifications by conversation / post / job. */
+export function notificationPushTag(args: {
+  kind: NotificationKind;
+  conversationId?: Id<"dmConversations">;
+  postId?: Id<"profilePosts">;
+  generationJobId?: Id<"generationJobs">;
+  paymentId?: Id<"payments">;
+  notificationId: Id<"notifications">;
+}): string {
+  if (args.kind === "dm_message" && args.conversationId) {
+    return `dm:${args.conversationId}`;
+  }
+  if (args.kind === "followed_post" && args.postId) {
+    return `post:${args.postId}`;
+  }
+  if (
+    (args.kind === "generation_completed" ||
+      args.kind === "generation_failed") &&
+    args.generationJobId
+  ) {
+    return `gen:${args.generationJobId}`;
+  }
+  if (args.kind === "payment_status" && args.paymentId) {
+    return `pay:${args.paymentId}`;
+  }
+  return `n:${args.notificationId}`;
 }

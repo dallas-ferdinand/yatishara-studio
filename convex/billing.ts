@@ -1944,20 +1944,30 @@ async function notifyPaymentStatus(
     rejectionReason?: string;
   },
 ) {
+  const title =
+    args.status === "payment_completed"
+      ? "Payment confirmed"
+      : args.status === "rejected"
+        ? "Payment rejected"
+        : args.status === "cancelled"
+          ? "Payment cancelled"
+          : args.status === "receipt_received"
+            ? "Receipt received"
+            : "Payment update";
   const body =
     args.status === "payment_completed"
-      ? "Your payment was confirmed and your balance was topped up."
+      ? "Your balance was topped up. You’re ready to create."
       : args.status === "rejected"
         ? args.rejectionReason ?? "Your payment was rejected."
         : args.status === "cancelled"
           ? "Your payment was cancelled."
           : args.status === "receipt_received"
-            ? "Your receipt was received and is being reviewed."
+            ? "We’re reviewing your receipt now."
             : "Your payment status was updated.";
   await createNotificationAndPush(ctx, {
     userId: args.userId,
     kind: "payment_status",
-    title: "Payment status updated",
+    title,
     body,
     paymentId: args.paymentId,
   });

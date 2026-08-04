@@ -28,24 +28,38 @@ self.addEventListener("message", (e) => {
 });
 
 self.addEventListener("push", (e) => {
+  const fallbackIcon = new URL(
+    "./branding/yatishara-appicon-192.png",
+    self.location.origin,
+  ).href;
+  const fallbackBadge = new URL(
+    "./branding/yatishara-appicon-maskable-192.png",
+    self.location.origin,
+  ).href;
   let payload = {
     title: "Yatishara Studio",
     body: "New Studio update.",
     data: {},
+    icon: fallbackIcon,
+    badge: fallbackBadge,
   };
   try {
     payload = { ...payload, ...(e.data?.json() ?? {}) };
   } catch {
     /* ignore malformed push payload */
   }
-  e.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      data: payload.data,
-      icon: "./branding/yatishara-appicon-192.png",
-      badge: "./branding/yatishara-appicon-maskable-192.png",
-    }),
-  );
+  const options = {
+    body: payload.body,
+    data: payload.data,
+    icon: payload.icon || fallbackIcon,
+    badge: payload.badge || fallbackBadge,
+    tag: payload.tag || undefined,
+    renotify: Boolean(payload.tag || payload.renotify),
+  };
+  if (payload.image) {
+    options.image = payload.image;
+  }
+  e.waitUntil(self.registration.showNotification(payload.title, options));
 });
 
 self.addEventListener("notificationclick", (e) => {
